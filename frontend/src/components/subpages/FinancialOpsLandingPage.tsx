@@ -20,6 +20,7 @@ import {
   Upload,
   Waypoints,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -263,6 +264,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "finance agent",
 };
 
+export function FinancialOpsLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function FinancialOpsLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/financial-ops" shell="bare" />;
 }

@@ -2,6 +2,7 @@ import { ListChecks, Users, Receipt, CalendarClock } from "lucide-react";
 import { ICP_PROFILES } from "../../site/site_data";
 import { IcpDetailPage } from "./IcpDetailPage";
 import type { IcpOutcomeCard } from "./IcpDetailPage";
+import { MdxSitePage } from "./MdxSitePage";
 
 const profile = ICP_PROFILES.find((p) => p.slug === "operating")!;
 
@@ -56,9 +57,10 @@ const outcomes: IcpOutcomeCard[] = [
   },
 ];
 
-export function AiNativeOperatorsPage() {
+export function AiNativeOperatorsPageBody() {
   return (
     <IcpDetailPage
+      mdxShell
       profile={profile}
       openingHook={
         <p>
@@ -210,4 +212,8 @@ export function AiNativeOperatorsPage() {
       closingStatement="The tax is re-prompting, re-explaining, and manually syncing context between tools. Neotoma removes that tax and gives you back the attention and continuity it was consuming."
     />
   );
+}
+
+export function AiNativeOperatorsPage() {
+  return <MdxSitePage canonicalPath="/operating" detailTitle={profile.shortName} />;
 }

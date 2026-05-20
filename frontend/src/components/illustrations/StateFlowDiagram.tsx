@@ -1,26 +1,12 @@
 import { Database, Lightbulb } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useLocale } from "@/i18n/LocaleContext";
+import type { HomeStateFlowHeroCopy, HomeStateFlowTechnicalCopy } from "@/i18n/locales/home_body_types";
 
 interface StateFlowDiagramProps {
   className?: string;
   variant?: "hero" | "technical";
 }
-
-const TECHNICAL_LAYERS = [
-  { label: "Source", sub: "structured entities · MCP · CLI · API" },
-  { label: "Observations", sub: "granular facts + provenance" },
-  { label: "Entity Snapshots", sub: "current truth · versioned" },
-  { label: "Memory Graph", sub: "entities · relationships · timeline" },
-] as const;
-
-const TECHNICAL_OPERATIONS = ["record", "reduce", "relate"] as const;
-
-const HERO_LAYERS = [
-  {
-    label: "Stored in invoices",
-    sub: "entity_type: invoice · amount: $3,200 · due_date: 2026-12-15 · status: unpaid · REFERS_TO company: Acme",
-  },
-] as const;
 
 const STAGGER_MS = 120;
 
@@ -53,10 +39,11 @@ function HeroVerticalArrow({ visible, delay }: { visible: boolean; delay: string
   );
 }
 
-function HeroStateFlow({ visible }: { visible: boolean }) {
+function HeroStateFlow({ visible, copy }: { visible: boolean; copy: HomeStateFlowHeroCopy }) {
+  const heroLayers = [{ label: copy.storedLabel, sub: copy.storedSub }] as const;
   const arrowAfterStoreDelay = `${2 * STAGGER_MS}ms`;
   const arrowAfterStoredDelay = `${5 * STAGGER_MS}ms`;
-  const arrowAfterAsksDelay = `${HERO_LAYERS.length * 2 * STAGGER_MS + 60}ms`;
+  const arrowAfterAsksDelay = `${heroLayers.length * 2 * STAGGER_MS + 60}ms`;
 
   return (
     <div className="relative flex min-w-0 max-w-full flex-col gap-3">
@@ -69,16 +56,16 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
         }}
       >
         <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-sky-700 dark:text-sky-300">
-          You tell OpenClaw
+          {copy.youTellProduct}
         </p>
         <p className="mt-2 break-words font-mono text-[12px] leading-6 text-slate-800 dark:text-slate-100 sm:text-[13px]">
-          &rdquo;I've issued Acme $3,200 invoice due Dec 15.&rdquo;
+          {copy.invoiceQuote}
         </p>
       </div>
 
       <HeroVerticalArrow visible={visible} delay={arrowAfterStoreDelay} />
 
-      {HERO_LAYERS.map((layer, index) => {
+      {heroLayers.map((layer, index) => {
         const layerDelay = `${(index + 1) * 2 * STAGGER_MS}ms`;
 
         return (
@@ -114,15 +101,15 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? "translateY(0)" : "translateY(12px)",
-          transitionDelay: `${HERO_LAYERS.length * 2 * STAGGER_MS + 120}ms`,
+          transitionDelay: `${heroLayers.length * 2 * STAGGER_MS + 120}ms`,
         }}
       >
         <div className="min-w-0">
           <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400/80">
-            You ask Claude later
+            {copy.youAskProduct}
           </p>
           <p className="mt-1 break-words font-mono text-[12px] leading-5 text-slate-700 dark:text-slate-200">
-            &ldquo;What&apos;s my total outstanding balance?&rdquo;
+            {copy.balanceQuote}
           </p>
         </div>
       </div>
@@ -134,7 +121,7 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? "translateY(0)" : "translateY(12px)",
-          transitionDelay: `${HERO_LAYERS.length * 2 * STAGGER_MS + 240}ms`,
+          transitionDelay: `${heroLayers.length * 2 * STAGGER_MS + 240}ms`,
         }}
       >
         <div className="flex items-start gap-2.5">
@@ -143,11 +130,11 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
           </div>
           <div className="min-w-0">
             <p className="break-words font-mono text-[13px] leading-snug text-emerald-900 dark:text-emerald-100 sm:text-[14px]">
-              <span className="font-semibold">$16,302</span>
-              <span className="font-medium"> from 4 unpaid invoices, 2 past due</span>
+              <span className="font-semibold">{copy.answerBold}</span>
+              <span className="font-medium">{copy.answerRest}</span>
             </p>
             <p className="mt-0.5 font-mono text-[10px] leading-5 text-emerald-800/80 dark:text-emerald-200/80">
-              Retrieved from stored invoices and relationships
+              {copy.answerFootnote}
             </p>
           </div>
         </div>
@@ -156,8 +143,8 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
   );
 }
 
-function TechnicalStateFlow({ visible }: { visible: boolean }) {
-  const totalRows = TECHNICAL_LAYERS.length * 2;
+function TechnicalStateFlow({ visible, copy }: { visible: boolean; copy: HomeStateFlowTechnicalCopy }) {
+  const totalRows = copy.layers.length * 2;
 
   return (
     <div className="relative flex flex-col gap-0">
@@ -165,10 +152,10 @@ function TechnicalStateFlow({ visible }: { visible: boolean }) {
         className="mb-3 font-mono text-[10px] uppercase tracking-[0.15em] text-slate-400 transition-opacity duration-500 dark:text-slate-500"
         style={{ opacity: visible ? 1 : 0 }}
       >
-        neotoma state pipeline
+        {copy.pipelineKicker}
       </p>
 
-      {TECHNICAL_LAYERS.map((layer, i) => {
+      {copy.layers.map((layer, i) => {
         const layerDelay = `${i * 2 * STAGGER_MS}ms`;
         const connectorDelay = `${(i * 2 + 1) * STAGGER_MS}ms`;
 
@@ -189,12 +176,10 @@ function TechnicalStateFlow({ visible }: { visible: boolean }) {
                 <p className="font-mono text-[13px] font-medium text-slate-800 dark:text-slate-200">
                   {layer.label}
                 </p>
-                <p className="font-mono text-[10px] text-slate-400 dark:text-slate-500">
-                  {layer.sub}
-                </p>
+                <p className="font-mono text-[10px] text-slate-400 dark:text-slate-500">{layer.sub}</p>
               </div>
             </div>
-            {i < TECHNICAL_LAYERS.length - 1 && (
+            {i < copy.layers.length - 1 && (
               <div
                 className="flex items-center gap-2 py-1 pl-7 transition-opacity duration-400 ease-out"
                 style={{
@@ -218,7 +203,7 @@ function TechnicalStateFlow({ visible }: { visible: boolean }) {
                   />
                 </svg>
                 <span className="font-mono text-[10px] text-slate-400/80 dark:text-slate-500/70">
-                  {TECHNICAL_OPERATIONS[i]}
+                  {copy.operations[i]}
                 </span>
               </div>
             )}
@@ -234,15 +219,15 @@ function TechnicalStateFlow({ visible }: { visible: boolean }) {
           transitionDelay: `${totalRows * STAGGER_MS}ms`,
         }}
       >
-        <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400/80">
-          ↻ replay · inspect any past state
-        </span>
+        <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400/80">{copy.replayHint}</span>
       </div>
     </div>
   );
 }
 
 export function StateFlowDiagram({ className, variant = "technical" }: StateFlowDiagramProps) {
+  const { pack } = useLocale();
+  const { stateFlow } = pack.homeBody;
   const containerRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -269,19 +254,25 @@ export function StateFlowDiagram({ className, variant = "technical" }: StateFlow
     return () => observer.disconnect();
   }, []);
 
+  const regionLabel = variant === "hero" ? stateFlow.hero.regionAriaLabel : stateFlow.technical.regionAriaLabel;
+
   return (
     <div
       ref={containerRef}
+      role="region"
+      aria-label={regionLabel}
       className={`relative overflow-hidden rounded-lg border border-slate-300/60 bg-white p-5 dark:border-slate-700/60 dark:bg-slate-950 ${className ?? ""}`}
-      aria-hidden="true"
     >
       {/* Blueprint grid overlay */}
-      <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(148,163,184,1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,1)_1px,transparent_1px)] [background-size:20px_20px] dark:opacity-[0.06]" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(148,163,184,1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,1)_1px,transparent_1px)] [background-size:20px_20px] dark:opacity-[0.06]"
+        aria-hidden
+      />
 
       {variant === "hero" ? (
-        <HeroStateFlow visible={visible} />
+        <HeroStateFlow visible={visible} copy={stateFlow.hero} />
       ) : (
-        <TechnicalStateFlow visible={visible} />
+        <TechnicalStateFlow visible={visible} copy={stateFlow.technical} />
       )}
     </div>
   );

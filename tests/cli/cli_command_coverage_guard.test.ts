@@ -8,8 +8,10 @@ describe("CLI command coverage guard", () => {
     // Commands with behavioral coverage in tests/cli.
     const coveredBehavioral = new Set([
       "api",
+      "access",
       "auth",
       "backup",
+      "cli",
       "cli-instructions",
       "corrections",
       "dev",
@@ -17,6 +19,7 @@ describe("CLI command coverage guard", () => {
       "edit",
       "entities",
       "init",
+      "instructions",
       "interpretations",
       "ingest",
       "logs",
@@ -25,7 +28,9 @@ describe("CLI command coverage guard", () => {
       "mirror",
       "observations",
       "options",
+      "peers",
       "preferences",
+      "processes",
       "recent",
       "relationships",
       "schemas",
@@ -37,12 +42,16 @@ describe("CLI command coverage guard", () => {
       "storage",
       "store",
       "store-turn",
-      "store-structured",
-      "store-unstructured",
       "timeline",
       "discover",
       "ingest-transcript",
+      "issues",
+      "plans",
+      "preflight",
+      "reporter", // neotoma reporter setup covered by tests/cli/reporter_setup.test.ts
       "upload",
+      "db", // subcommands covered by db_migrate_encryption.test.ts (migrate-encryption) and db_repair_schema_lag.test.ts (repair-schema-lag)
+      "onboarding", // subcommands covered by onboarding_import_transcripts.test.ts (import-transcripts)
     ]);
 
     // Commands intentionally help-only due interactivity or generic dispatch.
@@ -56,6 +65,8 @@ describe("CLI command coverage guard", () => {
       "triage", // thin dispatcher over ingest/admin flows covered by feedback pipeline tests
       "list-recent-changes", // read-only reporting command; behavior is covered by recent/activity integration tests
       "agents", // namespace dispatcher; subcommands (e.g. `agents grants import`) are covered by their own integration tests
+      "inspector", // UI launcher namespace; behavior is covered by inspector/server integration flows
+      "compat", // remote version probe; exercised by API compatibility tests and manual release checks
     ]);
 
     const uncovered = commandNames.filter(

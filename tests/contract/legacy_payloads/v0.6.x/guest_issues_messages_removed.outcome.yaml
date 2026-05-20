@@ -1,0 +1,5 @@
+endpoint: "POST /guest/issues/ent_removed/messages"
+outcome: rejected
+notes: |
+  The v0.6 guest issue message URL is intentionally removed. Use
+  POST /issues/add_message with `entity_id` and `guest_access_token` instead.

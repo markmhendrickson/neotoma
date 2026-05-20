@@ -24,10 +24,7 @@ import type {
 import { normaliseClientNameWithReason } from "../crypto/agent_identity.js";
 import type { AttributionPolicySnapshot } from "./attribution_policy.js";
 import { getAttributionPolicySnapshot } from "./attribution_policy.js";
-import type {
-  AAuthAdmissionContext,
-  AAuthAdmissionReason,
-} from "./protected_entity_types.js";
+import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
 
 /** Attribution block surfaced in the session response. */
 export interface SessionAttributionInfo {
@@ -57,14 +54,7 @@ export interface SessionAttributionInfo {
 export interface SessionAttestationRevocationField {
   checked: boolean;
   status?: "good" | "revoked" | "unknown";
-  source?:
-    | "disabled"
-    | "cache"
-    | "apple"
-    | "ocsp"
-    | "crl"
-    | "no_endpoint"
-    | "error";
+  source?: "disabled" | "cache" | "apple" | "ocsp" | "crl" | "no_endpoint" | "error";
   detail?: string;
   mode?: "disabled" | "log_only" | "enforce";
   demoted?: boolean;
@@ -96,11 +86,7 @@ export interface SessionAttributionDecision {
       }
     | {
         verified: false;
-        format:
-          | "apple-secure-enclave"
-          | "webauthn-packed"
-          | "tpm2"
-          | "unknown";
+        format: "apple-secure-enclave" | "webauthn-packed" | "tpm2" | "unknown";
         reason:
           | "not_present"
           | "unsupported_format"
@@ -197,8 +183,7 @@ export function buildSessionInfo(params: {
    */
   admission?: AAuthAdmissionContext | null;
 }): SessionInfo {
-  const { userId, identity, middlewareDecision, rawClientInfoName, admission } =
-    params;
+  const { userId, identity, middlewareDecision, rawClientInfoName, admission } = params;
   const tier: AttributionTier = identity?.tier ?? "anonymous";
 
   const decision = mergeDecision({
@@ -261,7 +246,7 @@ function buildAAuthInfo(params: {
   const info: SessionAAuthInfo = {
     verified,
     admitted: Boolean(admission.admitted),
-    grant_id: admission.admitted ? admission.grant_id ?? null : null,
+    grant_id: admission.admitted ? (admission.grant_id ?? null) : null,
     admission_reason: admission.reason ?? (admission.admitted ? "admitted" : null),
   };
   if (admission.agent_label) info.agent_label = admission.agent_label;
@@ -321,7 +306,7 @@ function mergeDecision(params: {
  */
 function isEligibleForTrustedWrites(
   tier: AttributionTier,
-  policy: AttributionPolicySnapshot,
+  policy: AttributionPolicySnapshot
 ): boolean {
   const mode = policy.per_path?.observations ?? policy.anonymous_writes;
   if (tier === "anonymous") {

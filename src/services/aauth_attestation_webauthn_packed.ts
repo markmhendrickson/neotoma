@@ -44,21 +44,14 @@
  *     FU bundles the necessary roots.
  */
 
-import {
-  X509Certificate,
-  createVerify,
-  type KeyObject,
-} from "node:crypto";
+import { X509Certificate, createVerify, type KeyObject } from "node:crypto";
 import { calculateJwkThumbprint, exportJWK } from "jose";
 
 import {
   applyRevocationPolicy,
   computeBoundChallengeDigest,
 } from "./aauth_attestation_verifier.js";
-import type {
-  AttestationContext,
-  AttestationOutcome,
-} from "./aauth_attestation_verifier.js";
+import type { AttestationContext, AttestationOutcome } from "./aauth_attestation_verifier.js";
 import {
   checkRevocation,
   readFailOpen,
@@ -112,7 +105,7 @@ function resolveCoseAlg(alg: number): SupportedAlg | null {
  */
 export async function verifyWebauthnPackedAttestation(
   envelope: { statement: unknown; challenge: string; format: string },
-  ctx: AttestationContext,
+  ctx: AttestationContext
 ): Promise<AttestationOutcome> {
   const parsed = parseStatement(envelope.statement);
   if (!parsed) {
@@ -131,9 +124,7 @@ export async function verifyWebauthnPackedAttestation(
 
   let chain: X509Certificate[];
   try {
-    chain = parsed.x5c.map(
-      (b64) => new X509Certificate(base64urlDecode(b64)),
-    );
+    chain = parsed.x5c.map((b64) => new X509Certificate(base64urlDecode(b64)));
   } catch {
     return failure("chain_invalid");
   }
@@ -159,9 +150,7 @@ export async function verifyWebauthnPackedAttestation(
   let leafJkt: string;
   try {
     const leafJwk = await exportJWK(leafKey);
-    leafJkt = await calculateJwkThumbprint(
-      leafJwk as Parameters<typeof calculateJwkThumbprint>[0],
-    );
+    leafJkt = await calculateJwkThumbprint(leafJwk as Parameters<typeof calculateJwkThumbprint>[0]);
   } catch {
     return failure("malformed");
   }
@@ -209,7 +198,7 @@ export async function verifyWebauthnPackedAttestation(
       mode,
       failOpen: readFailOpen(),
       revocation,
-    },
+    }
   );
 }
 
@@ -247,7 +236,7 @@ function verifySignatureForAlg(
   alg: number,
   publicKey: KeyObject,
   digest: Buffer,
-  signature: Buffer,
+  signature: Buffer
 ): boolean {
   const resolved = resolveCoseAlg(alg);
   if (!resolved) return false;
@@ -283,7 +272,7 @@ function verifySignatureForAlg(
           padding: 6, // RSA_PKCS1_PSS_PADDING
           saltLength: 32,
         } as Parameters<typeof v.verify>[0],
-        signature,
+        signature
       );
     }
     return false;
@@ -333,10 +322,7 @@ function extractAaguidExtension(cert: X509Certificate): string | null {
       // STRING }`).
       let payloadStart = valueStart;
       let payloadEnd = valueEnd;
-      if (
-        der[valueStart] === 0x04 &&
-        valueStart + 1 < valueEnd
-      ) {
+      if (der[valueStart] === 0x04 && valueStart + 1 < valueEnd) {
         const innerLenInfo = readDerLength(der, valueStart + 1);
         if (innerLenInfo && innerLenInfo.length === 16) {
           payloadStart = valueStart + 1 + innerLenInfo.lengthBytes;
@@ -359,10 +345,7 @@ function extractAaguidExtension(cert: X509Certificate): string | null {
  * trusted (root in the merged trust set) or verifies under one of
  * the trusted roots.
  */
-function walkChainAgainstTrust(
-  chain: X509Certificate[],
-  ctx: AttestationContext,
-): boolean {
+function walkChainAgainstTrust(chain: X509Certificate[], ctx: AttestationContext): boolean {
   for (let i = 0; i < chain.length - 1; i += 1) {
     const cert = chain[i]!;
     const issuer = chain[i + 1]!;
@@ -393,16 +376,11 @@ function certificatesEqual(a: X509Certificate, b: X509Certificate): boolean {
   return a.fingerprint256 === b.fingerprint256;
 }
 
-function failure(
-  reason: AttestationOutcomeReason,
-): AttestationOutcome {
+function failure(reason: AttestationOutcomeReason): AttestationOutcome {
   return { verified: false, format: WEBAUTHN_PACKED_FORMAT, reason };
 }
 
-type AttestationOutcomeReason = Extract<
-  AttestationOutcome,
-  { verified: false }
->["reason"];
+type AttestationOutcomeReason = Extract<AttestationOutcome, { verified: false }>["reason"];
 
 function base64urlDecode(value: string): Buffer {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");

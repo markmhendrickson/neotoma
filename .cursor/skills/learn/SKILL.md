@@ -26,6 +26,7 @@ Use this skill when the user points out an omission, asks why something was not 
 1. Capture the miss
    - Record expected behavior, actual behavior, and impact.
    - Identify whether this is a one-off mistake or a recurring workflow gap.
+   - **Neotoma:** `/learn` runs in normal chat — the full MCP turn lifecycle (bounded retrieval → user-phase store → edits/tools → reply → closing store) applies even when the fix is a one-line doc or rule tweak; "short pass" is never a waiver (see `docs/developer/mcp/instructions.md` [TURN LIFECYCLE]).
 
 2. Choose the smallest durable artifact
    - Rule: global repeated behavior.

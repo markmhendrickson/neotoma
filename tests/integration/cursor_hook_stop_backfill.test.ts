@@ -6,13 +6,14 @@
  *   - Run the compiled `dist/stop.js` against an unreachable Neotoma URL
  *     so the client store/retrieve calls fail fast. The hook is
  *     best-effort: it must not crash, and it must still:
- *       (a) write `followup_message` when no `store_structured` call
+ *       (a) write `followup_message` when no MCP **`store`** call
  *           was observed in the turn and
  *           `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` is `auto` or `on`.
  *       (b) NOT write `followup_message` when the agent already called
- *           store_structured at least once in the same turn.
+ *           **`store`** at least once in the same turn.
  *       (c) NOT write `followup_message` when
- *           `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=off`.
+ *           `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=off` or
+ *           `NEOTOMA_HOOK_COMPLIANCE_PASSES=off`.
  *
  *   - We seed turn-state by running `dist/after_tool_use.js` with the
  *     appropriate tool inputs first, so the stop hook reads the same
@@ -83,7 +84,7 @@ describe("cursor-hooks stop backfill integration", () => {
     }
   });
 
-  it("emits followup_message by default when store_structured was skipped", () => {
+  it("emits followup_message by default when MCP store was skipped", () => {
     if (!existsSync(STOP_HOOK)) {
       throw new Error(
         "cursor-hooks dist not built; run `npm --prefix packages/cursor-hooks run build`"
@@ -106,10 +107,10 @@ describe("cursor-hooks stop backfill integration", () => {
     const out = stop.stdout.trim() ? JSON.parse(stop.stdout) : {};
     expect(typeof out.followup_message).toBe("string");
     expect(out.followup_message).toMatch(/Neotoma compliance pass/);
-    expect(out.followup_message).toMatch(/store_structured/);
+    expect(out.followup_message).toMatch(/\*\*`store`\*\*/);
   });
 
-  it("counts wrapped Neotoma CallMcpTool store_structured as a store", () => {
+  it("counts wrapped Neotoma CallMcpTool store as a store", () => {
     if (!existsSync(AFTER_TOOL_USE) || !existsSync(STOP_HOOK)) {
       throw new Error("cursor-hooks dist not built");
     }
@@ -124,7 +125,7 @@ describe("cursor-hooks stop backfill integration", () => {
         tool_name: "CallMcpTool",
         tool_input: {
           server: "user-neotoma",
-          toolName: "store_structured",
+          toolName: "store",
           arguments: {
             entities: [{ entity_type: "conversation_message", role: "user" }],
           },
@@ -180,20 +181,20 @@ describe("cursor-hooks stop backfill integration", () => {
     expect(out.additional_context).toMatch(/Every turn must interact with Neotoma/);
   });
 
-  it("does NOT emit followup_message when the agent already called store_structured", () => {
+  it("does NOT emit followup_message when the agent already called store", () => {
     if (!existsSync(AFTER_TOOL_USE) || !existsSync(STOP_HOOK)) {
       throw new Error("cursor-hooks dist not built");
     }
     const sessionId = "cursor-stop-backfill-2";
     const turnId = "turn-1";
 
-    // Seed turn state to record one store_structured call.
+    // Seed turn state to record one MCP store call.
     const seed = runHook(
       AFTER_TOOL_USE,
       {
         sessionId,
         turnId,
-        tool_name: "store_structured",
+        tool_name: "store",
         tool_input: {
           entities: [{ entity_type: "task", title: "x" }],
           idempotency_key: "test",
@@ -235,6 +236,29 @@ describe("cursor-hooks stop backfill integration", () => {
         loop_count: 0,
       },
       { ...baseEnv, NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP: "off" }
+    );
+    expect(stop.status).toBe(0);
+    const out = stop.stdout.trim() ? JSON.parse(stop.stdout) : {};
+    expect(out.followup_message).toBeUndefined();
+  });
+
+  it("respects NEOTOMA_HOOK_COMPLIANCE_PASSES=off even when FOLLOWUP=on", () => {
+    const sessionId = "cursor-stop-backfill-passes-off";
+    const stop = runHook(
+      STOP_HOOK,
+      {
+        sessionId,
+        turnId: "turn-1",
+        text: "Hi there.",
+        model: "composer-2",
+        status: "completed",
+        loop_count: 0,
+      },
+      {
+        ...baseEnv,
+        NEOTOMA_HOOK_COMPLIANCE_PASSES: "off",
+        NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP: "on",
+      }
     );
     expect(stop.status).toBe(0);
     const out = stop.stdout.trim() ? JSON.parse(stop.stdout) : {};

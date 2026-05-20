@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { TrackedProductLink } from "../TrackedProductNav";
 import {
@@ -147,12 +147,14 @@ interface IcpDetailPageProps {
   /** Blog post link as supporting evidence. */
   blogPostLink?: { label: string; href: string };
   closingStatement: string;
+  /** When true, omit duplicate SEO/title chrome (used inside {@link MdxSitePage}). */
+  mdxShell?: boolean;
 }
 
 function OutcomeFailIllustration({ human, fail }: { human: string; fail: string }) {
   return (
     <div className="relative overflow-hidden rounded-xl border border-rose-500/25 bg-gradient-to-b from-white via-slate-50 to-rose-50/30 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.06)] dark:border-rose-400/30 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.10),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(239,68,68,0.06),transparent_35%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.14),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(239,68,68,0.10),transparent_35%)]" />
+      <div className="pointer-events-none absolute inset-0 gradient-section-destructive" />
       <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_bottom,rgba(100,116,139,0.2)_1px,transparent_1px)] [background-size:100%_10px] dark:opacity-15 dark:[background-image:linear-gradient(to_bottom,rgba(148,163,184,0.28)_1px,transparent_1px)]" />
       <div className="relative overflow-hidden rounded-lg border border-rose-500/30 bg-white/95 dark:border-rose-400/25 dark:bg-slate-950/90">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center border-b border-rose-500/25 px-3 py-1.5 text-[9px] uppercase tracking-wide text-rose-800/90 dark:border-rose-400/20 dark:text-rose-200/70">
@@ -192,7 +194,7 @@ function OutcomeSuccessIllustration({
 }) {
   return (
     <div className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-gradient-to-b from-white via-slate-50 to-emerald-50/30 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.06)] dark:border-emerald-400/30 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.10),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.06),transparent_35%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.14),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.10),transparent_35%)]" />
+      <div className="pointer-events-none absolute inset-0 gradient-section-success" />
       <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_bottom,rgba(100,116,139,0.2)_1px,transparent_1px)] [background-size:100%_10px] dark:opacity-15 dark:[background-image:linear-gradient(to_bottom,rgba(148,163,184,0.28)_1px,transparent_1px)]" />
       <div className="relative overflow-hidden rounded-lg border border-emerald-500/30 bg-white/95 dark:border-emerald-400/25 dark:bg-slate-950/90">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center border-b border-emerald-500/25 px-3 py-1.5 text-[9px] uppercase tracking-wide text-emerald-800/90 dark:border-emerald-400/20 dark:text-emerald-200/70">
@@ -240,14 +242,19 @@ export function IcpDetailPage({
   credibilityBridge,
   blogPostLink,
   closingStatement,
+  mdxShell = false,
 }: IcpDetailPageProps) {
-  const TitleIcon = getDocPageIcon(`/${profile.slug}`);
+  const TitleIcon = mdxShell ? null : getDocPageIcon(`/${profile.slug}`);
   const otherModes = ICP_PROFILES.filter((p) => p.slug !== profile.slug);
+  const innerClassName = mdxShell
+    ? "post-prose"
+    : "post-prose max-w-[52em] mx-auto px-4 py-10 md:py-16";
+  const outerClassName = mdxShell ? undefined : "min-h-0 bg-background text-foreground";
   return (
     <>
-      <SeoHead routePath={`/${profile.slug}`} />
-      <div className="min-h-0 bg-background text-foreground">
-        <div className="post-prose max-w-[52em] mx-auto px-4 py-10 md:py-16">
+      {!mdxShell ? <SeoHead routePath={`/${profile.slug}`} /> : null}
+      <div className={outerClassName}>
+        <div className={innerClassName}>
           {/* Mode badge */}
           <div className="mb-4">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
@@ -255,12 +262,14 @@ export function IcpDetailPage({
             </span>
           </div>
 
-          <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-2 flex items-start gap-3">
-            {TitleIcon ? (
-              <TitleIcon className="mt-1 size-7 shrink-0 text-muted-foreground" aria-hidden />
-            ) : null}
-            {profile.name}
-          </h1>
+          {!mdxShell ? (
+            <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-2 flex items-start gap-3">
+              {TitleIcon ? (
+                <TitleIcon className="mt-1 size-7 shrink-0 text-muted-foreground" aria-hidden />
+              ) : null}
+              {profile.name}
+            </h1>
+          ) : null}
           <p className="text-[17px] leading-7 text-muted-foreground mb-3">
             {profile.tagline}
           </p>
@@ -436,15 +445,15 @@ export function IcpDetailPage({
                     {linkSingleTerm ? (
                       <>
                         {label.slice(0, termIndex)}
-                        <Link to={href} className={linkClass}>
+                        <MdxI18nLink to={href} className={linkClass}>
                           {linkTerm}
-                        </Link>
+                        </MdxI18nLink>
                         {label.slice(termIndex + linkTerm.length)}
                       </>
                     ) : href ? (
-                      <Link to={href} className={linkClass}>
+                      <MdxI18nLink to={href} className={linkClass}>
                         {label}
-                      </Link>
+                      </MdxI18nLink>
                     ) : (
                       label
                     )}
@@ -488,13 +497,13 @@ export function IcpDetailPage({
                   </>
                 );
                 return sol.href ? (
-                  <Link
+                  <MdxI18nLink
                     key={sol.heading}
                     to={sol.href}
                     className={`${cardClass} text-foreground no-underline hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-colors`}
                   >
                     {content}
-                  </Link>
+                  </MdxI18nLink>
                 ) : (
                   <div key={sol.heading} className={cardClass}>
                     {content}
@@ -544,12 +553,12 @@ export function IcpDetailPage({
                 <p className="text-[15px] leading-7 text-muted-foreground mb-4">
                   How your needs differ from{" "}
                   {keyDifferences.comparedToHref ? (
-                    <Link
+                    <MdxI18nLink
                       to={keyDifferences.comparedToHref}
                       className="text-foreground underline underline-offset-2 hover:no-underline"
                     >
                       {keyDifferences.comparedTo}
-                    </Link>
+                    </MdxI18nLink>
                   ) : (
                     keyDifferences.comparedTo
                   )}
@@ -620,7 +629,7 @@ export function IcpDetailPage({
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {otherModes.map((m) => (
-                <Link
+                <MdxI18nLink
                   key={m.slug}
                   to={`/${m.slug}`}
                   className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-foreground no-underline hover:bg-muted transition-colors"
@@ -632,7 +641,7 @@ export function IcpDetailPage({
                     <p className="text-[14px] font-medium leading-5 mb-1">{m.shortName}</p>
                     <p className="text-[12px] leading-5 text-muted-foreground">{m.tagline}</p>
                   </div>
-                </Link>
+                </MdxI18nLink>
               ))}
             </div>
           </section>
@@ -669,12 +678,12 @@ export function IcpDetailPage({
               >
                 Install in 5 minutes
               </TrackedProductLink>
-              <Link
+              <MdxI18nLink
                 to="/architecture"
                 className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
               >
                 View architecture →
-              </Link>
+              </MdxI18nLink>
             </div>
           </section>
         </div>

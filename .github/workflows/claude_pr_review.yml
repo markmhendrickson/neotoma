@@ -1,0 +1,108 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - ready_for_review
+      - synchronize
+    # Only run when code or contract surfaces change — skip pure docs/config PRs.
+    paths:
+      - "src/**"
+      - "packages/**"
+      - "openapi.yaml"
+      - "package.json"
+      - "tests/**"
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: |
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.draft == false &&
+       !(github.event.action == 'synchronize' && (
+         startsWith(github.event.pull_request.head.ref, 'claude/') ||
+         github.event.pull_request.user.login == 'castor-agent'
+       ))) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '@claude review'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check diff size
+        id: diff_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Explicit @claude review comments always bypass the gate.
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "substantial=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+
+          FILES=$(gh pr view $PR_NUMBER --repo $REPO --json files --jq '.files | length')
+          ADDITIONS=$(gh pr view $PR_NUMBER --repo $REPO --json additions --jq '.additions')
+          DELETIONS=$(gh pr view $PR_NUMBER --repo $REPO --json deletions --jq '.deletions')
+          CHANGED_FILES=$(gh pr view $PR_NUMBER --repo $REPO --json files --jq '[.files[].path] | join("\n")')
+
+          LINES=$((ADDITIONS + DELETIONS))
+          TOUCHES_SRC=$(echo "$CHANGED_FILES" | grep -c "^src/" || true)
+          TOUCHES_PACKAGES=$(echo "$CHANGED_FILES" | grep -c "^packages/" || true)
+          TOUCHES_OPENAPI=$(echo "$CHANGED_FILES" | grep -c "^openapi.yaml" || true)
+          TOUCHES_AUTH=$(echo "$CHANGED_FILES" | grep -cE "(auth|token|session|credential|permission|middleware)" || true)
+
+          echo "files=$FILES lines=$LINES src=$TOUCHES_SRC packages=$TOUCHES_PACKAGES openapi=$TOUCHES_OPENAPI auth=$TOUCHES_AUTH"
+
+          if [ "$FILES" -gt 5 ] || [ "$LINES" -gt 150 ] || \
+             ( [ "$TOUCHES_SRC" -gt 0 ] && [ "$TOUCHES_OPENAPI" -gt 0 ] ) || \
+             [ "$TOUCHES_PACKAGES" -gt 0 ] || \
+             [ "$TOUCHES_AUTH" -gt 0 ]; then
+            echo "substantial=true" >> $GITHUB_OUTPUT
+          else
+            echo "substantial=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: anthropics/claude-code-action@beta
+        if: steps.diff_check.outputs.substantial == 'true'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          model: claude-opus-4-7
+          timeout_minutes: 30
+          max_turns: 30
+          trigger_phrase: "@claude review"
+          allowed_tools: "Edit,MultiEdit,Glob,Grep,LS,Read,Write,mcp__github_comment__update_claude_comment,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git rm:*),Bash(git fetch:*)"
+          direct_prompt: |
+            Before reviewing, read docs/developer/pr_review_reading_list.md.
+            It tells you which docs to always read and which to read based on what paths changed in this PR.
+            Follow it exactly — read the always-read docs first, then load the conditional docs for any touched paths.
+
+            Then review the PR diff against those constraints. Cover:
+            - Correctness and logic errors
+            - Violations of any invariant in the docs you read
+            - Security issues (auth bypasses, PII in logs, unprotected routes, proxy trust)
+            - Missing idempotency_key on mutating operations
+            - Contract surface changes without matching openapi.yaml edits
+            - Test coverage gaps for changed behavior
+            - Breaking changes that need a release supplement entry
+            - Scope creep (production changes bundled into unrelated fixes)
+
+            Be direct and specific. Cite file and line numbers. Skip praise.

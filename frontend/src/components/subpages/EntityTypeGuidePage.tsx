@@ -42,7 +42,7 @@ const ENTITY_TYPE_GUIDES: EntityTypeGuide[] = [
       { field: "title", value: '"VP Engineering"' },
       { field: "relationship", value: '"client"' },
     ],
-    mcpStoreExample: `store_structured({
+    mcpStoreExample: `store({
   entities: [
     {
       entity_type: "contact",
@@ -124,7 +124,7 @@ retrieve_related_entities({
       { field: "date_due", value: '"2026-04-15"' },
       { field: "assignee", value: '"Sarah Chen"' },
     ],
-    mcpStoreExample: `store_structured({
+    mcpStoreExample: `store({
   entities: [
     {
       entity_type: "task",
@@ -205,7 +205,7 @@ list_observations({
       { field: "date_transacted", value: '"2026-03-01"' },
       { field: "category", value: '"infrastructure"' },
     ],
-    mcpStoreExample: `store_structured({
+    mcpStoreExample: `store({
   entities: [
     {
       entity_type: "transaction",
@@ -291,7 +291,7 @@ list_timeline_events({
       { field: "date_effective", value: '"2026-01-15"' },
       { field: "value", value: "48000" },
     ],
-    mcpStoreExample: `store_structured({
+    mcpStoreExample: `store({
   entities: [
     {
       entity_type: "contract",
@@ -380,7 +380,7 @@ retrieve_entity_by_identifier({
       { field: "decided_by", value: '"agent:cursor-session-0a3f"' },
       { field: "alternatives_considered", value: '["SQLite", "DynamoDB"]' },
     ],
-    mcpStoreExample: `store_structured({
+    mcpStoreExample: `store({
   entities: [
     {
       entity_type: "decision",
@@ -464,7 +464,7 @@ list_observations({
       { field: "attendees", value: '["Sarah Chen", "Alex Rivera"]' },
       { field: "outcome", value: '"Agreed on PostgreSQL migration timeline"' },
     ],
-    mcpStoreExample: `store_structured({
+    mcpStoreExample: `store({
   entities: [
     {
       entity_type: "event",

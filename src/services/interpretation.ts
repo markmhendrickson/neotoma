@@ -3,12 +3,13 @@
 // Implements idempotence pattern: canonicalization, hash-based IDs, deduplication
 
 import { db } from "../db.js";
-import { schemaRegistry, type SchemaDefinition, type SchemaRegistryEntry } from "./schema_registry.js";
-import { resolveEntity } from "./entity_resolution.js";
 import {
-  getCurrentAgentIdentity,
-  getCurrentAttribution,
-} from "./request_context.js";
+  schemaRegistry,
+  type SchemaDefinition,
+  type SchemaRegistryEntry,
+} from "./schema_registry.js";
+import { resolveEntity } from "./entity_resolution.js";
+import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import {
   getSchemaDefinition,
@@ -19,10 +20,10 @@ import {
 import { observationReducer } from "../reducers/observation_reducer.js";
 import { randomUUID } from "crypto";
 import { canonicalizeFields, hashCanonicalFields } from "./field_canonicalization.js";
-import { 
-  generateObservationId, 
-  computeCanonicalHash, 
-  checkObservationExistsByHash 
+import {
+  generateObservationId,
+  computeCanonicalHash,
+  checkObservationExistsByHash,
 } from "./observation_identity.js";
 import { validateFieldsWithConverters } from "./field_validation.js";
 import {
@@ -32,7 +33,11 @@ import {
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
-
+import {
+  emitEntitySnapshotChange,
+  emitObservationCreated,
+  shallowFieldsChanged,
+} from "../events/substrate_store_emit.js";
 
 export interface InterpretationConfig {
   provider: string;
@@ -52,10 +57,19 @@ export interface InterpretationOptions {
   config: InterpretationConfig;
 }
 
+export const UNKNOWN_FIELDS_HINT =
+  "Unknown fields were stored in raw_fragments. " +
+  "Call update_schema_incremental to promote them to schema fields, " +
+  "then set migrate_existing: true to backfill existing data.";
+
 export interface InterpretationResult {
   interpretationId: string;
   observationsCreated: number;
   unknownFieldsCount: number;
+  /** The field names that were not recognized by the schema. */
+  unknownFieldNames: string[];
+  /** Actionable guidance surfaced when unknownFieldsCount > 0. */
+  hint?: string;
   observationsDeduplicated?: number; // Count of observations that already existed
   fixedPointReached?: boolean; // Whether fixed-point convergence was achieved
   convergenceIterations?: number; // Number of iterations to reach convergence
@@ -66,6 +80,13 @@ export interface InterpretationResult {
   }>;
   /** Debug: per-entity type refinement (extracted keys, type before/after) for store responses */
   refinement_debug?: Array<{ extracted_keys: string[]; type_before: string; type_after: string }>;
+  /**
+   * Entity types for which no schema was found or could be auto-registered.
+   * Payloads for these types were written as raw_fragments (reason: "no_schema"
+   * or "no_schema_registration_failed") and will not appear in the entities array.
+   * Callers should register a schema for each listed type.
+   */
+  noSchemaEntityTypes?: string[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -100,6 +121,207 @@ function validateAgainstSchema(
 }
 
 /**
+ * Result of flushing buffered raw_fragments. The `insertedUnknown` count is
+ * the number of unknown-field fragments that were *newly inserted* this call —
+ * not the number of pending entries (which over-counts on the dedup path
+ * where the same fragment from an earlier observation only bumps the
+ * existing row's frequency).
+ */
+interface FlushPendingFragmentsResult {
+  insertedUnknown: number;
+  insertedConverted: number;
+}
+
+/**
+ * Write buffered raw_fragments for a single entity after entity resolution and
+ * observation creation have both succeeded (issue #163: do not write fragments
+ * before entity resolution).
+ */
+async function flushPendingFragments(opts: {
+  sourceId: string;
+  interpretationId: string;
+  userId: string;
+  entityType: string;
+  effectiveSchemaVersion: string;
+  validFields: Record<string, unknown>;
+  pendingConvertedFragments: Array<{ key: string; value: unknown }>;
+  pendingUnknownFragments: Array<{ key: string; value: unknown }>;
+}): Promise<FlushPendingFragmentsResult> {
+  const {
+    sourceId,
+    interpretationId,
+    userId,
+    entityType,
+    effectiveSchemaVersion,
+    validFields,
+    pendingConvertedFragments,
+    pendingUnknownFragments,
+  } = opts;
+  let insertedUnknown = 0;
+  let insertedConverted = 0;
+
+  // Write converted-value originals (preserves zero data loss for converter fields).
+  for (const { key, value } of pendingConvertedFragments) {
+    const { data: existing } = await db
+      .from("raw_fragments")
+      .select("id, frequency_count")
+      .eq("source_id", sourceId)
+      .eq("fragment_key", key)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existing) {
+      await db
+        .from("raw_fragments")
+        .update({
+          fragment_value: value,
+          fragment_envelope: {
+            reason: "converted_value_original",
+            entity_type: entityType,
+            schema_version: effectiveSchemaVersion,
+            converted_to: validFields[key],
+          },
+          frequency_count: (existing.frequency_count || 1) + 1,
+          last_seen: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+    } else {
+      await db.from("raw_fragments").insert({
+        id: randomUUID(),
+        source_id: sourceId,
+        interpretation_id: interpretationId,
+        user_id: userId,
+        entity_type: entityType,
+        fragment_key: key,
+        fragment_value: value,
+        fragment_envelope: {
+          reason: "converted_value_original",
+          entity_type: entityType,
+          schema_version: effectiveSchemaVersion,
+          converted_to: validFields[key],
+        },
+      });
+      insertedConverted += 1;
+    }
+  }
+
+  // Write unknown-field fragments.
+  for (const { key, value } of pendingUnknownFragments) {
+    const { data: existing } = await db
+      .from("raw_fragments")
+      .select("id, frequency_count")
+      .eq("source_id", sourceId)
+      .eq("fragment_key", key)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existing) {
+      const newFreq = (existing.frequency_count || 1) + 1;
+      await db
+        .from("raw_fragments")
+        .update({
+          fragment_value: value,
+          fragment_envelope: {
+            reason: "unknown_field",
+            entity_type: entityType,
+            schema_version: effectiveSchemaVersion,
+          },
+          frequency_count: newFreq,
+          last_seen: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+      try {
+        const { schemaRecommendationService } = await import("./schema_recommendation.js");
+        await schemaRecommendationService.queueAutoEnhancementCheck({
+          entity_type: entityType,
+          fragment_key: key,
+          user_id: userId,
+          frequency_count: newFreq,
+        });
+      } catch (queueError: unknown) {
+        logger.warn(
+          `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+          queueError instanceof Error ? queueError.message : String(queueError)
+        );
+      }
+    } else {
+      const { error: insertError } = await db.from("raw_fragments").insert({
+        id: randomUUID(),
+        source_id: sourceId,
+        interpretation_id: interpretationId,
+        user_id: userId,
+        entity_type: entityType,
+        fragment_key: key,
+        fragment_value: value,
+        fragment_envelope: {
+          reason: "unknown_field",
+          entity_type: entityType,
+          schema_version: effectiveSchemaVersion,
+        },
+      });
+      if (insertError?.code === "23505") {
+        // Race condition: another process inserted the same fragment concurrently.
+        const { data: retryExisting } = await db
+          .from("raw_fragments")
+          .select("id, frequency_count")
+          .eq("source_id", sourceId)
+          .eq("fragment_key", key)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (retryExisting) {
+          const retryFreq = (retryExisting.frequency_count || 1) + 1;
+          await db
+            .from("raw_fragments")
+            .update({
+              fragment_value: value,
+              fragment_envelope: {
+                reason: "unknown_field",
+                entity_type: entityType,
+                schema_version: effectiveSchemaVersion,
+              },
+              frequency_count: retryFreq,
+              last_seen: new Date().toISOString(),
+            })
+            .eq("id", retryExisting.id);
+          try {
+            const { schemaRecommendationService } = await import("./schema_recommendation.js");
+            await schemaRecommendationService.queueAutoEnhancementCheck({
+              entity_type: entityType,
+              fragment_key: key,
+              user_id: userId,
+              frequency_count: retryFreq,
+            });
+          } catch (queueError: unknown) {
+            logger.warn(
+              `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+              queueError instanceof Error ? queueError.message : String(queueError)
+            );
+          }
+        }
+      } else if (!insertError) {
+        insertedUnknown += 1;
+        try {
+          const { schemaRecommendationService } = await import("./schema_recommendation.js");
+          await schemaRecommendationService.queueAutoEnhancementCheck({
+            entity_type: entityType,
+            fragment_key: key,
+            user_id: userId,
+            frequency_count: 1,
+          });
+        } catch (queueError: unknown) {
+          logger.warn(
+            `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+            queueError instanceof Error ? queueError.message : String(queueError)
+          );
+        }
+      }
+    }
+  }
+
+  return { insertedUnknown, insertedConverted };
+}
+
+/**
  * Run interpretation on extracted data
  * Creates interpretation run, validates fields, resolves entities, creates observations
  */
@@ -108,6 +330,16 @@ export async function runInterpretation(
 ): Promise<InterpretationResult> {
   enforceAttributionPolicy("interpretations", getCurrentAgentIdentity());
   const { userId, sourceId, extractedData, config } = options;
+
+  // Validate that the source exists before creating an interpretation
+  const { data: sourceCheck, error: sourceCheckError } = await db
+    .from("sources")
+    .select("id")
+    .eq("id", sourceId)
+    .single();
+  if (sourceCheckError || !sourceCheck) {
+    throw new Error(`Source not found: ${sourceId}`);
+  }
 
   // Create interpretation
   const interpretationAttribution = getCurrentAttribution();
@@ -133,19 +365,29 @@ export async function runInterpretation(
   const interpretationId = run.id;
   let observationsCreated = 0;
   let unknownFieldsCount = 0;
+  const unknownFieldNamesSet = new Set<string>();
   const entities: Array<{
     entityId: string;
     entityType: string;
     observationId: string;
   }> = [];
-  const refinementDebug: Array<{ extracted_keys: string[]; type_before: string; type_after: string }> = [];
+  const interpretationInsertedObservationIds = new Set<string>();
+  const refinementDebug: Array<{
+    extracted_keys: string[];
+    type_before: string;
+    type_after: string;
+  }> = [];
+  const noSchemaEntityTypes: string[] = [];
 
   try {
     // Build refinement candidates: DB schemas (user + global) + code-only types so dynamic schemas participate
     const dbSchemas = await schemaRegistry.listActiveSchemas(userId).catch(() => []);
     const dbTypes = new Set(dbSchemas.map((e) => e.entity_type));
     const refinementCandidates = [
-      ...dbSchemas.map((e) => ({ entity_type: e.entity_type, schema_definition: e.schema_definition })),
+      ...dbSchemas.map((e) => ({
+        entity_type: e.entity_type,
+        schema_definition: e.schema_definition,
+      })),
       ...getRegisteredEntityTypes()
         .filter((t) => !dbTypes.has(t))
         .map((t) => getSchemaDefinition(t))
@@ -156,18 +398,25 @@ export async function runInterpretation(
     // Process each extracted entity
     for (const entityData of extractedData) {
       // Support both 'entity_type' and 'type' fields for entity type identification
-      let entityType = (entityData.entity_type as string) ||
-                      (entityData.type as string) ||
-                      "generic";
-      // Resolve to canonical type via schema-defined aliases (no hardcoded map)
-      const resolvedType = resolveEntityTypeFromAlias(entityType);
-      if (resolvedType) entityType = resolvedType;
+      let entityType =
+        (entityData.entity_type as string) || (entityData.type as string) || "generic";
+      // DB-registered schemas take priority over code-defined aliases so a
+      // user-registered type like `organization` is not silently remapped to
+      // the built-in `company` alias.
+      if (!dbTypes.has(entityType) && !getSchemaDefinition(entityType)) {
+        const resolvedType = resolveEntityTypeFromAlias(entityType);
+        if (resolvedType) entityType = resolvedType;
+      }
       // Refine type by field fit (considers dynamic + code schemas when another schema fits better)
       const extractedFieldKeys = Object.keys(entityData).filter(
         (k) => k !== "entity_type" && k !== "type"
       );
       const typeBeforeRefinement = entityType;
-      entityType = refineEntityTypeFromExtractedFields(entityType, extractedFieldKeys, refinementCandidates);
+      entityType = refineEntityTypeFromExtractedFields(
+        entityType,
+        extractedFieldKeys,
+        refinementCandidates
+      );
       refinementDebug.push({
         extracted_keys: extractedFieldKeys,
         type_before: typeBeforeRefinement,
@@ -178,7 +427,9 @@ export async function runInterpretation(
         JSON.stringify(extractedFieldKeys),
         typeBeforeRefinement,
         entityType,
-        typeBeforeRefinement !== entityType ? { refined: `${typeBeforeRefinement} → ${entityType}` } : {}
+        typeBeforeRefinement !== entityType
+          ? { refined: `${typeBeforeRefinement} → ${entityType}` }
+          : {}
       );
       let currentEntityData = entityData;
 
@@ -186,18 +437,26 @@ export async function runInterpretation(
 
       // Load active entity schema (user-scoped first, then global) from database
       // NOTE: Schemas should be initialized in the database via `npm run schema:init`
-      let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(entityType, userId);
+      let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(
+        entityType,
+        userId
+      );
 
       // Fallback to code-defined entity schemas if database schema not found
       if (!schema) {
         if (process.env.NEOTOMA_ENV !== "production") {
           console.warn(
             `[Schema Fallback] No database entity schema found for entity type "${entityType}". ` +
-            `Using code fallback. Run 'npm run schema:init' to register schemas in the database.`
+              `Using code fallback. Run 'npm run schema:init' to register schemas in the database.`
           );
         }
 
-        if (codeSchema && codeSchema.entity_type && codeSchema.schema_definition && codeSchema.reducer_config) {
+        if (
+          codeSchema &&
+          codeSchema.entity_type &&
+          codeSchema.schema_definition &&
+          codeSchema.reducer_config
+        ) {
           schema = {
             id: "",
             entity_type: codeSchema.entity_type,
@@ -211,7 +470,9 @@ export async function runInterpretation(
       }
 
       // When no known schema at all (neither DB nor code): optionally create a user-scoped schema from extracted fields
+      let schemaCreationAttempted = false;
       if (!schema && !codeSchema && config.create_schema_for_unknown !== false) {
+        schemaCreationAttempted = true;
         schema = await schemaRegistry.ensureSchemaForExtractedEntity(
           entityType,
           entityData,
@@ -233,10 +494,16 @@ export async function runInterpretation(
       const effectiveSchemaVersion = schema?.schema_version ?? codeSchema?.schema_version ?? "1.0";
 
       if (Object.keys(effectiveSchemaDefinition.fields).length === 0) {
-        // No schema found - route all fields to raw_fragments (helps debug: log extracted type)
+        // No schema found and auto-registration failed (or was disabled): route all fields to a
+        // raw_fragment so the payload is preserved. Use a distinct reason so callers can tell
+        // whether creation was attempted ("no_schema_registration_failed") or never tried
+        // ("no_schema" — creation disabled via config.create_schema_for_unknown=false).
+        const noSchemaReason = schemaCreationAttempted
+          ? "no_schema_registration_failed"
+          : "no_schema";
         logger.warn(
-          `[Interpretation] No schema for entity_type "${entityType}" (resolved from extracted data); routing to raw_fragments. ` +
-            `Run schema:init or add alias for this type.`
+          `[Interpretation] No schema for entity_type "${entityType}" (resolved from extracted data); ` +
+            `reason=${noSchemaReason}. Register a schema via register_schema to enable observations.`
         );
         const fragmentId = randomUUID();
         await db.from("raw_fragments").insert({
@@ -248,11 +515,18 @@ export async function runInterpretation(
           fragment_key: "full_entity",
           fragment_value: currentEntityData,
           fragment_envelope: {
-            reason: "no_schema",
+            reason: noSchemaReason,
             entity_type: entityType,
           },
         });
         unknownFieldsCount += Object.keys(currentEntityData).length;
+        // Track distinct no-schema entity types so callers can discover and fix them.
+        if (!noSchemaEntityTypes.includes(entityType)) {
+          noSchemaEntityTypes.push(entityType);
+        }
+        for (const k of Object.keys(currentEntityData)) {
+          unknownFieldNamesSet.add(k);
+        }
         continue;
       }
 
@@ -261,194 +535,46 @@ export async function runInterpretation(
       delete fieldsToValidate.entity_type;
       delete fieldsToValidate.type;
 
+      // Extract an explicit canonical_name before schema validation.
+      // validateFieldsWithConverters routes it to unknownFields when the
+      // schema's fields dict doesn't declare it, causing the resolver to fall
+      // back to heuristic derivation (e.g. from `title`) instead of honoring
+      // the caller's intent. We hoist it here so it can be passed to the
+      // resolver regardless of schema declaration.
+      const explicitCanonicalName =
+        typeof (fieldsToValidate as Record<string, unknown>).canonical_name === "string" &&
+        ((fieldsToValidate as Record<string, unknown>).canonical_name as string).trim() !== ""
+          ? ((fieldsToValidate as Record<string, unknown>).canonical_name as string)
+          : undefined;
+
       // Validate fields against schema (with converter support)
       const { validFields, unknownFields, originalValues } = validateAgainstSchema(
         fieldsToValidate,
         effectiveSchemaDefinition
       );
 
-      // Store original values in raw_fragments for converted fields (preserves zero data loss)
-      for (const [key, value] of Object.entries(originalValues)) {
-        // Skip null or undefined values (database constraint)
-        if (value === null || value === undefined) {
-          continue;
-        }
-        
-        // Check if fragment already exists (for idempotence)
-        const { data: existing } = await db
-          .from("raw_fragments")
-          .select("id, frequency_count")
-          .eq("source_id", sourceId)
-          .eq("fragment_key", key)
-          .eq("user_id", userId)
-          .maybeSingle();
-
-        if (existing) {
-          // Update existing fragment
-          await db
-            .from("raw_fragments")
-            .update({
-              fragment_value: value,
-              fragment_envelope: {
-                reason: "converted_value_original",
-                entity_type: entityType,
-                schema_version: effectiveSchemaVersion,
-                converted_to: validFields[key],
-              },
-              frequency_count: (existing.frequency_count || 1) + 1,
-              last_seen: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-        } else {
-          // Insert new fragment
-          const fragmentId = randomUUID();
-          await db.from("raw_fragments").insert({
-            id: fragmentId,
-            source_id: sourceId,
-            interpretation_id: interpretationId,
-            user_id: userId,
-            entity_type: entityType,
-            fragment_key: key,
-            fragment_value: value,
-            fragment_envelope: {
-              reason: "converted_value_original",
-              entity_type: entityType,
-              schema_version: effectiveSchemaVersion,
-              converted_to: validFields[key],
-            },
-          });
-        }
+      // When canonical_name was explicitly supplied but is not a declared schema
+      // field, remove it from unknownFields (so it doesn't inflate
+      // unknown_fields_count or create a raw_fragment) — it is an identity
+      // hint, not a data field the schema doesn't know about.
+      if (explicitCanonicalName && !effectiveSchemaDefinition.fields["canonical_name"]) {
+        delete (unknownFields as Record<string, unknown>)["canonical_name"];
       }
 
-      // Store unknown fields in raw_fragments (with idempotence)
-      // Filter out null/undefined values before storing
-      for (const [key, value] of Object.entries(unknownFields)) {
-        // Skip null or undefined values (database constraint)
-        if (value === null || value === undefined) {
-          continue;
-        }
-        // Check if fragment already exists (for idempotence)
-        const { data: existing } = await db
-          .from("raw_fragments")
-          .select("id, frequency_count")
-          .eq("source_id", sourceId)
-          .eq("fragment_key", key)
-          .eq("user_id", userId)
-          .maybeSingle();
+      // Buffer fragment writes: collect all raw_fragments for this entity so they
+      // can be written AFTER entity resolution succeeds. If resolution fails the
+      // fragments are discarded and no orphaned rows are created (issue #163).
+      const pendingConvertedFragments: Array<{ key: string; value: unknown }> = [];
+      for (const [key, value] of Object.entries(originalValues)) {
+        if (value === null || value === undefined) continue;
+        pendingConvertedFragments.push({ key, value });
+      }
 
-        if (existing) {
-          // Update existing fragment (increment frequency, update last_seen)
-          const newFreq = (existing.frequency_count || 1) + 1;
-          await db
-            .from("raw_fragments")
-            .update({
-              fragment_value: value,
-              fragment_envelope: {
-                reason: "unknown_field",
-                entity_type: entityType,
-                schema_version: effectiveSchemaVersion,
-              },
-              frequency_count: newFreq,
-              last_seen: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-          unknownFieldsCount++;
-          // Queue auto-enhancement so raw_fragments can promote to schema
-          try {
-            const { schemaRecommendationService } =
-              await import("./schema_recommendation.js");
-            await schemaRecommendationService.queueAutoEnhancementCheck({
-              entity_type: entityType,
-              fragment_key: key,
-              user_id: userId,
-              frequency_count: newFreq,
-            });
-          } catch (queueError: unknown) {
-            logger.warn(
-              `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
-              queueError instanceof Error ? queueError.message : String(queueError)
-            );
-          }
-        } else {
-          // Insert new fragment
-          const fragmentId = randomUUID();
-          const { error: insertError } = await db.from("raw_fragments").insert({
-            id: fragmentId,
-            source_id: sourceId,
-            interpretation_id: interpretationId,
-            user_id: userId,
-            entity_type: entityType,
-            fragment_key: key,
-            fragment_value: value,
-            fragment_envelope: {
-              reason: "unknown_field",
-              entity_type: entityType,
-              schema_version: effectiveSchemaVersion,
-            },
-          });
-          
-          // Handle race condition (unique constraint violation)
-          if (insertError?.code === "23505") {
-            // Another process inserted it, retry as update
-            const { data: retryExisting } = await db
-              .from("raw_fragments")
-              .select("id, frequency_count")
-              .eq("source_id", sourceId)
-              .eq("fragment_key", key)
-              .eq("user_id", userId)
-              .maybeSingle();
-            
-            if (retryExisting) {
-              const retryFreq = (retryExisting.frequency_count || 1) + 1;
-              await db
-                .from("raw_fragments")
-                .update({
-                  fragment_value: value,
-                  fragment_envelope: {
-                    reason: "unknown_field",
-                    entity_type: entityType,
-                    schema_version: effectiveSchemaVersion,
-                  },
-                  frequency_count: retryFreq,
-                  last_seen: new Date().toISOString(),
-                })
-                .eq("id", retryExisting.id);
-              try {
-                const { schemaRecommendationService } =
-                  await import("./schema_recommendation.js");
-                await schemaRecommendationService.queueAutoEnhancementCheck({
-                  entity_type: entityType,
-                  fragment_key: key,
-                  user_id: userId,
-                  frequency_count: retryFreq,
-                });
-              } catch (queueError: unknown) {
-                logger.warn(
-                  `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
-                  queueError instanceof Error ? queueError.message : String(queueError)
-                );
-              }
-            }
-          } else if (!insertError) {
-            // New fragment inserted successfully; queue auto-enhancement
-            try {
-              const { schemaRecommendationService } =
-                await import("./schema_recommendation.js");
-              await schemaRecommendationService.queueAutoEnhancementCheck({
-                entity_type: entityType,
-                fragment_key: key,
-                user_id: userId,
-                frequency_count: 1,
-              });
-            } catch (queueError: unknown) {
-              logger.warn(
-                `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
-                queueError instanceof Error ? queueError.message : String(queueError)
-              );
-            }
-          }
-          unknownFieldsCount++;
-        }
+      const pendingUnknownFragments: Array<{ key: string; value: unknown }> = [];
+      for (const [key, value] of Object.entries(unknownFields)) {
+        if (value === null || value === undefined) continue;
+        pendingUnknownFragments.push({ key, value });
+        unknownFieldNamesSet.add(key);
       }
 
       const validFieldKeys = Object.keys(validFields).filter((key) => key !== "schema_version");
@@ -463,6 +589,16 @@ export async function runInterpretation(
       const canonicalFields = canonicalizeFields(validFields, effectiveSchemaDefinition);
       const canonicalHash = computeCanonicalHash(canonicalFields);
 
+      // Build resolver fields: inject explicit canonical_name so the resolver
+      // honors the caller's intent when the schema doesn't declare it as a
+      // schema field (identity_opt_out schemas are the common case here).
+      // The injected key is only used for derivation — canonicalFields (and
+      // thus the stored observation) are unmodified.
+      const fieldsForResolver =
+        explicitCanonicalName && !effectiveSchemaDefinition.fields["canonical_name"]
+          ? { canonical_name: explicitCanonicalName, ...canonicalFields }
+          : canonicalFields;
+
       // Resolve entity (user-scoped). Interpretation runs must not fail the
       // whole pipeline when derivation can't settle — skip this observation
       // and warn so the operator can declare canonical_name_fields.
@@ -470,17 +606,13 @@ export async function runInterpretation(
       try {
         entityId = await resolveEntity({
           entityType,
-          fields: canonicalFields,
+          fields: fieldsForResolver,
           userId,
         });
       } catch (err) {
-        const { CanonicalNameUnresolvedError } = await import(
-          "./entity_resolution.js"
-        );
+        const { CanonicalNameUnresolvedError } = await import("./entity_resolution.js");
         if (err instanceof CanonicalNameUnresolvedError) {
-          logger.warn(
-            `[Interpretation] Skipping observation for ${entityType}: ${err.message}`,
-          );
+          logger.warn(`[Interpretation] Skipping observation for ${entityType}: ${err.message}`);
           continue;
         }
         throw err;
@@ -504,7 +636,23 @@ export async function runInterpretation(
       );
 
       if (existingObservation) {
-        // Observation already exists - don't create duplicate
+        // Observation already exists - don't create duplicate.
+        // Still flush buffered fragments so they are kept current on replay.
+        const flushed = await flushPendingFragments({
+          sourceId,
+          interpretationId,
+          userId,
+          entityType,
+          effectiveSchemaVersion,
+          validFields,
+          pendingConvertedFragments,
+          pendingUnknownFragments,
+        });
+        // Count only newly inserted fragments (not freq-bumped existing rows),
+        // otherwise idempotent replays of a dedup'd observation inflate
+        // `unknown_fields_count` on the interpretations row each time. See
+        // PR #224 review.
+        unknownFieldsCount += flushed.insertedUnknown;
         entities.push({
           entityId,
           entityType,
@@ -530,26 +678,23 @@ export async function runInterpretation(
         user_id: userId,
       };
 
-      let { error: obsError } = await db
-        .from("observations")
-        .insert(observationData);
+      let { error: obsError } = await db.from("observations").insert(observationData);
 
       // If error is about canonical_hash not being in schema cache, retry without it
-      if (obsError && (
-        obsError.message?.includes("canonical_hash") || 
-        obsError.code === "PGRST205" ||
-        obsError.message?.includes("schema cache")
-      )) {
+      if (
+        obsError &&
+        (obsError.message?.includes("canonical_hash") ||
+          obsError.code === "PGRST205" ||
+          obsError.message?.includes("schema cache"))
+      ) {
         console.warn(
           `[WARN] canonical_hash column not in schema cache, inserting without it. ` +
-          `Migration may need to be applied or schema cache refreshed.`
+            `Migration may need to be applied or schema cache refreshed.`
         );
         // Retry without canonical_hash
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { canonical_hash: _canonical_hash, ...observationDataWithoutHash } = observationData;
-        ({ error: obsError } = await db
-          .from("observations")
-          .insert(observationDataWithoutHash));
+        ({ error: obsError } = await db.from("observations").insert(observationDataWithoutHash));
       }
 
       if (obsError) {
@@ -557,16 +702,41 @@ export async function runInterpretation(
       }
 
       observationsCreated++;
+      interpretationInsertedObservationIds.add(observationId);
       entities.push({
         entityId,
         entityType,
         observationId,
       });
+
+      // Flush buffered raw_fragments now that entity resolution and observation
+      // creation have both succeeded (issue #163).
+      const flushed = await flushPendingFragments({
+        sourceId,
+        interpretationId,
+        userId,
+        entityType,
+        effectiveSchemaVersion,
+        validFields,
+        pendingConvertedFragments,
+        pendingUnknownFragments,
+      });
+      // Count only newly inserted fragments (see PR #224 review).
+      unknownFieldsCount += flushed.insertedUnknown;
     }
 
     // Compute snapshots for all entities
     for (const entity of entities) {
       try {
+        const { data: priorSnapRow } = await db
+          .from("entity_snapshots")
+          .select("snapshot")
+          .eq("entity_id", entity.entityId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        const priorSnapshot =
+          (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+
         // Get all observations for entity
         const { data: allObservations, error: fetchError } = await db
           .from("observations")
@@ -609,19 +779,16 @@ export async function runInterpretation(
           });
           const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
 
-          await db.from("entity_snapshots").upsert(
-            toUpsert as Record<string, unknown>,
-            {
-              onConflict: "entity_id",
-            }
-          );
+          await db.from("entity_snapshots").upsert(toUpsert as Record<string, unknown>, {
+            onConflict: "entity_id",
+          });
 
           const sameTypeInBatch = entities.filter((e) => e.entityType === entity.entityType).length;
           let timelineSchema: SchemaDefinition | null = null;
           try {
             const entry = await schemaRegistry.loadActiveSchema(
               snapshot.entity_type,
-              snapshot.user_id || userId,
+              snapshot.user_id || userId
             );
             timelineSchema = entry?.schema_definition ?? null;
           } catch {
@@ -636,6 +803,35 @@ export async function runInterpretation(
             sameTypeInSourceBatch: sameTypeInBatch,
             schema: timelineSchema,
           });
+
+          const newSnapshot =
+            (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
+          const emitTs = snapshot.computed_at || new Date().toISOString();
+          if (interpretationInsertedObservationIds.has(entity.observationId)) {
+            emitObservationCreated({
+              user_id: userId,
+              entity_id: entity.entityId,
+              entity_type: entity.entityType,
+              observation_id: entity.observationId,
+              timestamp: emitTs,
+              source_id: sourceId,
+              observation_source: "llm_summary",
+            });
+            const isNewEntity = snapshot.observation_count === 1;
+            emitEntitySnapshotChange({
+              user_id: userId,
+              entity_id: entity.entityId,
+              entity_type: entity.entityType,
+              event_type: isNewEntity ? "entity.created" : "entity.updated",
+              timestamp: emitTs,
+              observation_id: entity.observationId,
+              fields_changed: isNewEntity
+                ? undefined
+                : shallowFieldsChanged(priorSnapshot, newSnapshot),
+              source_id: sourceId,
+              observation_source: "llm_summary",
+            });
+          }
         }
       } catch (error) {
         console.error(
@@ -661,8 +857,11 @@ export async function runInterpretation(
       interpretationId,
       observationsCreated,
       unknownFieldsCount,
+      unknownFieldNames: Array.from(unknownFieldNamesSet).sort(),
+      hint: unknownFieldsCount > 0 ? UNKNOWN_FIELDS_HINT : undefined,
       entities,
       refinement_debug: refinementDebug.length > 0 ? refinementDebug : undefined,
+      noSchemaEntityTypes: noSchemaEntityTypes.length > 0 ? noSchemaEntityTypes : undefined,
     };
   } catch (error) {
     // Mark interpretation as failed
@@ -682,7 +881,7 @@ export async function runInterpretation(
 /**
  * Run interpretation with fixed-point guarantee
  * Retries interpretation until canonical hash stabilizes
- * 
+ *
  * Per idempotence directive:
  * - Accept output only when canonical hash stabilizes
  * - hash(n) == hash(n-1) means convergence
@@ -695,14 +894,14 @@ export async function runInterpretationWithFixedPoint(
   let lastHash: string | null = null;
   let iteration = 0;
   let result: InterpretationResult | null = null;
-  
+
   while (iteration < maxIterations) {
     // Run interpretation
     result = await runInterpretation(options);
-    
+
     // Compute hash of all canonical fields from result
     let allCanonicalFields: Record<string, unknown> = {};
-    
+
     for (const entity of result.entities) {
       // Get observation to access canonical fields
       const { data: observation } = await db
@@ -710,14 +909,14 @@ export async function runInterpretationWithFixedPoint(
         .select("fields, canonical_hash")
         .eq("id", entity.observationId)
         .single();
-      
+
       if (observation?.fields) {
         allCanonicalFields = { ...allCanonicalFields, ...observation.fields };
       }
     }
-    
+
     const currentHash = hashCanonicalFields(allCanonicalFields);
-    
+
     // Check for fixed point
     if (lastHash === currentHash) {
       // Fixed point reached - same canonical output as previous iteration
@@ -727,17 +926,17 @@ export async function runInterpretationWithFixedPoint(
         convergenceIterations: iteration + 1,
       };
     }
-    
+
     lastHash = currentHash;
     iteration++;
   }
-  
+
   // Fallback: return last result even if not converged
   // Log warning but don't fail (graceful degradation)
   console.warn(
     `Fixed-point convergence not reached after ${maxIterations} iterations for source ${options.sourceId}`
   );
-  
+
   return {
     ...result!,
     fixedPointReached: false,
@@ -793,18 +992,18 @@ export async function createRelationshipObservations(
   sourceId: string,
   interpretationId: string | null,
   userId: string,
-  sourcePriority: number = 0,
+  sourcePriority: number = 0
 ): Promise<number> {
   enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
   const { relationshipReducer } = await import("../reducers/relationship_reducer.js");
   const { createHash } = await import("crypto");
-  
+
   // Get relationship schema for canonicalization
   const relationshipSchema = getSchemaDefinition("relationship");
   if (!relationshipSchema) {
     throw new Error("Relationship schema not found");
   }
-  
+
   let relationshipsCreated = 0;
   const uniqueRelationshipKeys = new Set<string>();
 
@@ -812,9 +1011,14 @@ export async function createRelationshipObservations(
     try {
       // Generate relationship key
       const relationshipKey = `${rel.relationship_type}:${rel.source_entity_id}:${rel.target_entity_id}`;
-      
-      // Canonicalize metadata
-      const canonicalMetadata = canonicalizeFields(rel.metadata || {}, relationshipSchema.schema_definition);
+
+      // Relationship metadata is freeform (varies by relationship type) — do not filter
+      // through canonicalizeFields which would strip fields not in the fixed relationship schema.
+      // Sort keys for a stable canonical hash used for deduplication.
+      const rawMetadata = rel.metadata || {};
+      const canonicalMetadata = Object.fromEntries(
+        Object.entries(rawMetadata).sort(([a], [b]) => a.localeCompare(b))
+      );
       const canonicalHash = hashCanonicalFields(canonicalMetadata);
 
       // Generate deterministic observation ID (UUID format)
@@ -825,10 +1029,10 @@ export async function createRelationshipObservations(
             interpretation_id: interpretationId,
             relationship_key: relationshipKey,
             canonical_hash: canonicalHash,
-          }),
+          })
         )
         .digest("hex");
-      
+
       // Convert hash to UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
       const observationId = [
         hash.substring(0, 8),
@@ -871,9 +1075,7 @@ export async function createRelationshipObservations(
         metadata: canonicalMetadata,
         canonical_hash: canonicalHash,
         user_id: userId,
-        ...(Object.keys(relAttribution).length > 0
-          ? { provenance: relAttribution }
-          : {}),
+        ...(Object.keys(relAttribution).length > 0 ? { provenance: relAttribution } : {}),
       };
 
       let { error: obsError } = await db
@@ -881,18 +1083,20 @@ export async function createRelationshipObservations(
         .insert(relationshipObsData);
 
       // If error is about canonical_hash not being in schema cache, retry without it
-      if (obsError && (
-        obsError.message?.includes("canonical_hash") || 
-        obsError.code === "PGRST205" ||
-        obsError.message?.includes("schema cache")
-      )) {
+      if (
+        obsError &&
+        (obsError.message?.includes("canonical_hash") ||
+          obsError.code === "PGRST205" ||
+          obsError.message?.includes("schema cache"))
+      ) {
         console.warn(
           `[WARN] canonical_hash column not in schema cache for relationship_observations, inserting without it. ` +
-          `Migration may need to be applied or schema cache refreshed.`
+            `Migration may need to be applied or schema cache refreshed.`
         );
         // Retry without canonical_hash
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { canonical_hash: _canonical_hash, ...relationshipObsDataWithoutHash } = relationshipObsData;
+        const { canonical_hash: _canonical_hash, ...relationshipObsDataWithoutHash } =
+          relationshipObsData;
         ({ error: obsError } = await db
           .from("relationship_observations")
           .insert(relationshipObsDataWithoutHash));
@@ -909,9 +1113,7 @@ export async function createRelationshipObservations(
               ? rawDetails
               : JSON.stringify(rawDetails)
             : "";
-        const errMsg = detailsStr
-          ? `${obsError.message} (${detailsStr})`
-          : obsError.message;
+        const errMsg = detailsStr ? `${obsError.message} (${detailsStr})` : obsError.message;
         const fullMsg = `Failed to create relationship observation for ${relationshipKey}: ${errMsg}`;
         console.error(fullMsg);
         throw new Error(fullMsg);
@@ -922,7 +1124,7 @@ export async function createRelationshipObservations(
     } catch (error) {
       console.error(
         `Failed to process relationship observation:`,
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.message : String(error)
       );
     }
   }
@@ -941,7 +1143,7 @@ export async function createRelationshipObservations(
       if (fetchError) {
         console.error(
           `Failed to fetch observations for relationship ${relationshipKey}:`,
-          fetchError.message,
+          fetchError.message
         );
         continue;
       }
@@ -950,7 +1152,7 @@ export async function createRelationshipObservations(
         // Compute snapshot
         const snapshot = await relationshipReducer.computeSnapshot(
           relationshipKey,
-          allObservations as any,
+          allObservations as any
         );
 
         // Save snapshot
@@ -970,13 +1172,13 @@ export async function createRelationshipObservations(
           },
           {
             onConflict: "relationship_key",
-          },
+          }
         );
       }
     } catch (error) {
       console.error(
         `Failed to compute snapshot for relationship ${relationshipKey}:`,
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.message : String(error)
       );
     }
   }

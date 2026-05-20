@@ -1,0 +1,11 @@
+endpoint: "POST /issues/submit"
+outcome: rejected
+error_code: "ERR_REPORTER_ENVIRONMENT_REQUIRED"
+hint_match: "reporter_git_sha"
+notes: |
+  Pre-v0.12 payload that submitted an issue with no reporter environment fields.
+  v0.12 tightens submit_issue to require at least one of `reporter_git_sha` or
+  `reporter_app_version`. Submissions missing both are rejected with a structured
+  `acceptable_field_groups` envelope so MCP clients and CLI users can retry with
+  the right field. Removing this assertion is a breaking-changes flip that must be
+  reflected in the release supplement and tests/contract/legacy_payloads/CHANGES.md.

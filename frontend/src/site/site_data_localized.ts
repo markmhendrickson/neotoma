@@ -1,4 +1,6 @@
+import type { SupportedLocale } from "@/i18n/config";
 import { type LocaleDictionary } from "@/i18n/dictionaries";
+import { getSubpageLocalePack } from "@/i18n/locales/subpage_packs";
 import { type StaticLocalePack } from "@/i18n/locales/static_packs";
 import { SITE_SECTION_CORE } from "@/site/site_data_core";
 import { DOC_NAV_CATEGORIES } from "@/site/site_data";
@@ -31,7 +33,10 @@ export function getLocalizedSiteSections(pack: StaticLocalePack): LocalizedSiteS
   }));
 }
 
-export function getLocalizedDocNavCategories(dict: LocaleDictionary) {
+export function getLocalizedDocNavCategories(dict: LocaleDictionary, locale: SupportedLocale) {
+  const sub = getSubpageLocalePack(locale);
+  const dn = sub.docNav;
+
   const titleMap: Record<string, string> = {
     "Getting started": dict.categoryGettingStarted,
     Reference: dict.categoryReference,
@@ -42,6 +47,7 @@ export function getLocalizedDocNavCategories(dict: LocaleDictionary) {
     External: dict.categoryExternal,
     Compare: dict.categoryCompare,
     "Use Cases": dict.categoryUseCases,
+    Hosted: dn.categoryHosted,
   };
 
   const itemLabelByHref: Record<string, string> = {
@@ -49,6 +55,14 @@ export function getLocalizedDocNavCategories(dict: LocaleDictionary) {
     "/install": dict.install,
     "/meet": dict.meetTheCreator,
     "/architecture": dict.architecture,
+    "/evaluate": dict.evaluate,
+    "/what-to-store": dn.whatToStoreFirst,
+    "/backup": dn.backupRestore,
+    "/connect": sub.connect.title,
+    "/tunnel": dn.exposeTunnel,
+    "/walkthrough": dn.walkthrough,
+    "/hosted": dn.hostedNeotoma,
+    "/sandbox": dn.publicSandbox,
   };
 
   return DOC_NAV_CATEGORIES.map((category) => ({

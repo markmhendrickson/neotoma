@@ -21,12 +21,7 @@ import path from "node:path";
 /** Hook-capable harness identifiers. Broader than `ToolId` since it includes
  * surfaces (opencode, claude-agent-sdk) that don't install the `neotoma`
  * binary but can still consume the hook packages. */
-export type HookHarnessId =
-  | "cursor"
-  | "claude-code"
-  | "codex"
-  | "opencode"
-  | "claude-agent-sdk";
+export type HookHarnessId = "cursor" | "claude-code" | "codex" | "opencode" | "claude-agent-sdk";
 
 export const HOOK_HARNESSES: readonly HookHarnessId[] = [
   "cursor",
@@ -149,10 +144,7 @@ async function detectClaudeCode(cwd: string): Promise<HookStatus> {
       installed?: Array<{ name?: string; id?: string }>;
     }>(candidate);
     if (!parsed) continue;
-    const list = [
-      ...(parsed.plugins ?? []),
-      ...(parsed.installed ?? []),
-    ];
+    const list = [...(parsed.plugins ?? []), ...(parsed.installed ?? [])];
     for (const plugin of list) {
       const name = (plugin.name ?? plugin.id ?? "").toString();
       if (!name) continue;
@@ -175,8 +167,9 @@ async function detectCodex(): Promise<HookStatus> {
     return { present: false, path: file, other_hook_plugins: [] };
   }
   const present = raw.includes("# BEGIN neotoma-codex-hooks");
-  // Best-effort: identify non-Neotoma hook entries by looking for [notify] /
-  // [history] sections that do not fall inside the Neotoma-marked block.
+  // Best-effort: identify non-Neotoma hook entries outside the Neotoma-marked
+  // block. Codex uses root-level `notify = […]` (not `[notify]`); legacy tables
+  // and stray `[history]` still appear in some configs.
   const others = new Set<string>();
   const withoutBlock = raw.replace(
     /# BEGIN neotoma-codex-hooks[\s\S]*?# END neotoma-codex-hooks/,
@@ -186,6 +179,9 @@ async function detectCodex(): Promise<HookStatus> {
   let match: RegExpExecArray | null;
   while ((match = sectionRe.exec(withoutBlock)) !== null) {
     others.add(`[${match[1]}] (external)`);
+  }
+  if (/^\s*notify\s*=/m.test(withoutBlock)) {
+    others.add("notify (root argv, external)");
   }
   return { present, path: file, other_hook_plugins: [...others] };
 }
@@ -234,9 +230,7 @@ export interface DetectHooksOptions {
 }
 
 /** Collect per-harness installation state for activation / `neotoma hooks`. */
-export async function detectHooks(
-  opts: DetectHooksOptions = {}
-): Promise<HooksReport> {
+export async function detectHooks(opts: DetectHooksOptions = {}): Promise<HooksReport> {
   const cwd = opts.cwd ?? process.cwd();
   const [cursor, claudeCode, codex, opencode, claudeAgentSdk] = await Promise.all([
     detectCursor(cwd),
@@ -253,22 +247,15 @@ export async function detectHooks(
     "claude-agent-sdk": claudeAgentSdk,
   };
   const currentTool = opts.currentTool ?? null;
-  const supported_by_tool = Boolean(
-    currentTool && HOOK_HARNESSES.includes(currentTool)
-  );
+  const supported_by_tool = Boolean(currentTool && HOOK_HARNESSES.includes(currentTool));
   const currentInstalled =
-    currentTool && installed[currentTool]
-      ? installed[currentTool].present
-      : false;
-  const eligible_for_offer =
-    supported_by_tool && !currentInstalled && Boolean(opts.mcpConfigured);
+    currentTool && installed[currentTool] ? installed[currentTool].present : false;
+  const eligible_for_offer = supported_by_tool && !currentInstalled && Boolean(opts.mcpConfigured);
   return { supported_by_tool, installed, eligible_for_offer };
 }
 
 /** Narrow an arbitrary string to a `HookHarnessId` or `null`. */
 export function toHookHarness(value: unknown): HookHarnessId | null {
   if (typeof value !== "string") return null;
-  return (HOOK_HARNESSES as readonly string[]).includes(value)
-    ? (value as HookHarnessId)
-    : null;
+  return (HOOK_HARNESSES as readonly string[]).includes(value) ? (value as HookHarnessId) : null;
 }

@@ -137,6 +137,7 @@ describe("agents directory API", () => {
         tier: string;
         total_records: number;
         record_counts: Record<string, number>;
+        observation_entity_type_counts?: Record<string, number>;
       }>;
       total: number;
     };
@@ -153,6 +154,7 @@ describe("agents directory API", () => {
     expect(observation, "seeded observation's agent should appear").toBeDefined();
     expect(observation!.tier).toBe("hardware");
     expect(observation!.record_counts.observation ?? 0).toBeGreaterThanOrEqual(1);
+    expect(observation!.observation_entity_type_counts?.note ?? 0).toBeGreaterThanOrEqual(1);
 
     const relationship = byKey.get(relationshipAgentKey);
     expect(relationship, "seeded relationship's agent should appear").toBeDefined();

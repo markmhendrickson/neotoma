@@ -22,6 +22,16 @@
   <dict>
     <key>PATH</key>
     <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>NEOTOMA_LAUNCHD_NODE</key>
+    <string>NODE_PATH_PLACEHOLDER</string>
+    <key>NEOTOMA_LAUNCHD_NPM_CLI</key>
+    <string>NPM_CLI_PATH_PLACEHOLDER</string>
+    <key>NEOTOMA_LAUNCHD_NPM_BIN</key>
+    <string>NPM_BIN_PATH_PLACEHOLDER</string>
+    <key>TSC_WATCHFILE</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
+    <key>TSC_WATCHDIRECTORY</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
   </dict>
 </dict>
 </plist>

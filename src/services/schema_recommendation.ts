@@ -6,7 +6,12 @@
  */
 
 import { db } from "../db.js";
-import { SchemaRegistryService } from "./schema_registry.js";
+import {
+  loadCodeDefinedSchemaEntry,
+  normalizeEntityTypeForSchema,
+  SchemaRegistryService,
+  type SchemaRegistryEntry,
+} from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
 
 export interface FieldRecommendation {
@@ -38,7 +43,13 @@ export interface AutoEnhancementConfig {
   auto_enhance_high_confidence: boolean; // Auto-enhance high-confidence fields
   user_specific_aggressive: boolean; // More aggressive for user-specific schemas
   global_conservative: boolean; // More conservative for global schemas
+  trusted_source_relaxation: boolean; // Relax thresholds for trusted observation sources on user-scoped schemas
 }
+
+// Observation sources considered "trusted" for threshold relaxation.
+// These represent agent-driven or bulk-import sessions where repeated
+// observations of the same field pattern are high-signal, not noise.
+const TRUSTED_OBSERVATION_SOURCES = new Set(["llm_summary", "import", "sync"]);
 
 // Default configuration (recommended)
 export const DEFAULT_AUTO_ENHANCEMENT_CONFIG: AutoEnhancementConfig = {
@@ -48,6 +59,7 @@ export const DEFAULT_AUTO_ENHANCEMENT_CONFIG: AutoEnhancementConfig = {
   auto_enhance_high_confidence: true, // Auto-enhance high-confidence fields
   user_specific_aggressive: true, // More aggressive for user-specific schemas (user's own data)
   global_conservative: true, // Conservative for global schemas (affects all users)
+  trusted_source_relaxation: true, // Relax thresholds for trusted sources on user-scoped schemas
 };
 
 export class SchemaRecommendationService {
@@ -55,6 +67,21 @@ export class SchemaRecommendationService {
 
   constructor() {
     this.schemaRegistry = new SchemaRegistryService();
+  }
+
+  /** Active registry row, or code-defined ENTITY_SCHEMAS baseline when none. */
+  private async loadSchemaForAutoEnhance(
+    entityType: string,
+    userId?: string
+  ): Promise<SchemaRegistryEntry | null> {
+    const row = await this.schemaRegistry.loadActiveSchema(entityType, userId);
+    if (row) return row;
+    const normalized = normalizeEntityTypeForSchema(entityType);
+    return (
+      (await loadCodeDefinedSchemaEntry(entityType)) ??
+      (await loadCodeDefinedSchemaEntry(normalized)) ??
+      null
+    );
   }
 
   /**
@@ -65,16 +92,11 @@ export class SchemaRecommendationService {
     fragment_key: string;
     user_id?: string;
     config?: AutoEnhancementConfig;
+    observation_source?: string;
   }): Promise<{
     eligible: boolean;
     confidence: number;
-    inferred_type?:
-      | "string"
-      | "number"
-      | "date"
-      | "boolean"
-      | "array"
-      | "object";
+    inferred_type?: "string" | "number" | "date" | "boolean" | "array" | "object";
     reasoning?: string;
     converter_suggestion?: {
       from: "number" | "string" | "boolean" | "array" | "object";
@@ -89,7 +111,7 @@ export class SchemaRecommendationService {
     const isBlacklisted = await this.checkBlacklist(
       options.entity_type,
       options.fragment_key,
-      options.user_id,
+      options.user_id
     );
     if (isBlacklisted) {
       return {
@@ -109,11 +131,8 @@ export class SchemaRecommendationService {
     }
 
     // 3. Load current schema to check if field exists (type mismatch detection)
-    const currentSchema = await this.schemaRegistry.loadActiveSchema(
-      options.entity_type,
-      options.user_id
-    );
-    
+    const currentSchema = await this.loadSchemaForAutoEnhance(options.entity_type, options.user_id);
+
     const fieldExists = currentSchema?.schema_definition.fields[options.fragment_key];
 
     // 4. Query raw_fragments for this field
@@ -123,7 +142,7 @@ export class SchemaRecommendationService {
       .select("fragment_value, frequency_count, source_id, entity_type")
       .eq("entity_type", options.entity_type)
       .eq("fragment_key", options.fragment_key);
-    
+
     // Handle user_id properly: check both the provided user_id and the default UUID
     // Also handle null (for global schemas)
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
@@ -138,7 +157,7 @@ export class SchemaRecommendationService {
       // No user_id provided - check both null and default UUID
       fragmentsQuery = fragmentsQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
     }
-    
+
     const { data: fragments, error } = await fragmentsQuery;
 
     if (error || !fragments || fragments.length === 0) {
@@ -157,7 +176,7 @@ export class SchemaRecommendationService {
         schema_field: fieldExists,
         fragments: fragments,
       });
-      
+
       if (converterNeeded) {
         // Converter detected - eligible for auto-enhancement
         return {
@@ -175,7 +194,7 @@ export class SchemaRecommendationService {
           entity_type: options.entity_type,
           user_id: options.user_id,
         });
-        
+
         const actualType = confidenceResult.inferred_type || "unknown";
         return {
           eligible: false,
@@ -188,18 +207,72 @@ export class SchemaRecommendationService {
     // 6. Sum frequency counts
     const totalFrequency = fragments.reduce(
       (sum: number, f: { frequency_count?: number }) => sum + (f.frequency_count || 1),
-      0,
+      0
     );
 
+    // Derive effective thresholds — two modifiers applied in order:
+    //
+    // 1. global_conservative (tighten): raises threshold 2x and min_confidence +0.05
+    //    for global-scope schemas, protecting all users from premature changes.
+    //
+    // 2. trusted_source_relaxation (loosen): lowers threshold to ceil(base * 0.5)
+    //    (min 1) and min_confidence -0.05 for user-scoped schemas when the dominant
+    //    observation source is trusted (llm_summary, import, sync). Does NOT apply
+    //    to global schemas — global_conservative always wins.
+    const isGlobalSchema =
+      config.global_conservative &&
+      currentSchema != null &&
+      (currentSchema.scope === "global" || currentSchema.user_id == null);
+
+    // Determine trusted-source eligibility: user-scoped schema + trusted observation source
+    let isTrustedSource = false;
+    if (config.trusted_source_relaxation && !isGlobalSchema) {
+      if (
+        options.observation_source &&
+        TRUSTED_OBSERVATION_SOURCES.has(options.observation_source)
+      ) {
+        isTrustedSource = true;
+      } else {
+        // Look up dominant observation_source for this entity_type + user_id
+        const dominantSource = await this.lookupDominantObservationSource(
+          options.entity_type,
+          options.user_id
+        );
+        if (dominantSource && TRUSTED_OBSERVATION_SOURCES.has(dominantSource)) {
+          isTrustedSource = true;
+        }
+      }
+    }
+
+    let effectiveThreshold: number | "pattern";
+    let effectiveMinConfidence: number;
+
+    if (config.threshold === "pattern") {
+      effectiveThreshold = "pattern";
+      effectiveMinConfidence = config.min_confidence;
+    } else if (isGlobalSchema) {
+      effectiveThreshold = (config.threshold as number) * 2;
+      effectiveMinConfidence = config.min_confidence + 0.05;
+    } else if (isTrustedSource) {
+      effectiveThreshold = Math.max(1, Math.ceil((config.threshold as number) * 0.5));
+      effectiveMinConfidence = config.min_confidence - 0.05;
+    } else {
+      effectiveThreshold = config.threshold as number;
+      effectiveMinConfidence = config.min_confidence;
+    }
+
+    const thresholdSuffix = isGlobalSchema
+      ? " (global_conservative)"
+      : isTrustedSource
+        ? " (trusted_source)"
+        : "";
+
     // Check threshold
-    if (
-      config.threshold !== "pattern" &&
-      totalFrequency < (config.threshold as number)
-    ) {
+    if (effectiveThreshold !== "pattern" && totalFrequency < (effectiveThreshold as number)) {
       return {
         eligible: false,
         confidence: 0,
-        reasoning: `Frequency ${totalFrequency} below threshold ${config.threshold}`,
+        reasoning: `Frequency ${totalFrequency} below threshold ${effectiveThreshold}${thresholdSuffix}`,
       };
     }
 
@@ -211,20 +284,20 @@ export class SchemaRecommendationService {
     });
 
     // 8. Check minimum confidence
-    if (confidenceResult.confidence < config.min_confidence) {
+    if (confidenceResult.confidence < effectiveMinConfidence) {
       return {
         eligible: false,
         confidence: confidenceResult.confidence,
-        reasoning: `Confidence ${confidenceResult.confidence.toFixed(2)} below minimum ${config.min_confidence}`,
+        reasoning: `Confidence ${confidenceResult.confidence.toFixed(2)} below minimum ${effectiveMinConfidence.toFixed(2)}${thresholdSuffix}`,
       };
     }
 
     // 9. Check source diversity (2+ different sources) OR row diversity (2+ different rows/observations)
     // This allows structured files (parquet, CSV, JSON arrays) with multiple rows to trigger enhancement
     // while still requiring multiple sources for single-row file types
-    
+
     const uniqueSources = new Set(fragments.map((f: { source_id?: string }) => f.source_id)).size;
-    
+
     // For row diversity: count unique observations per source
     // Each observation represents a row in the structured file
     let uniqueObservations = 0;
@@ -240,7 +313,7 @@ export class SchemaRecommendationService {
           .select("id", { count: "exact", head: true })
           .eq("source_id", sourceId)
           .eq("entity_type", options.entity_type);
-        
+
         // Handle user_id properly: check both default UUID and null
         const defaultUserId = "00000000-0000-0000-0000-000000000000";
         if (options.user_id) {
@@ -254,33 +327,33 @@ export class SchemaRecommendationService {
           // No user_id provided - check both null and default UUID
           obsQuery = obsQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
-        
+
         const { count } = await obsQuery;
         uniqueObservations = count || 0;
       }
     }
-    
+
     // Require EITHER 2+ sources OR 2+ observations
     // This enables auto-enhancement for structured files (parquet, CSV) while preserving
     // source diversity requirement for single-row file types
     const hasDiversity = uniqueSources >= 2 || uniqueObservations >= 2;
-    
+
     if (!hasDiversity) {
       return {
         eligible: false,
         confidence: confidenceResult.confidence,
-        reasoning: uniqueSources < 2 && uniqueObservations < 2
-          ? "Field appears in only one source and one observation (no diversity)"
-          : uniqueSources < 2
-          ? "Field appears in only one source (no diversity)"
-          : "Field appears in only one observation (no diversity)",
+        reasoning:
+          uniqueSources < 2 && uniqueObservations < 2
+            ? "Field appears in only one source and one observation (no diversity)"
+            : uniqueSources < 2
+              ? "Field appears in only one source (no diversity)"
+              : "Field appears in only one observation (no diversity)",
       };
     }
 
     // Eligible for auto-enhancement!
-    const diversityInfo = uniqueSources >= 2 
-      ? `${uniqueSources} sources`
-      : `${uniqueObservations} observations`;
+    const diversityInfo =
+      uniqueSources >= 2 ? `${uniqueSources} sources` : `${uniqueObservations} observations`;
     return {
       eligible: true,
       confidence: confidenceResult.confidence,
@@ -318,32 +391,29 @@ export class SchemaRecommendationService {
 
     if (existing && ["applied", "auto_applied"].includes(existing.status)) {
       logger.error(
-        `[AUTO_ENHANCE] Field ${options.field_name} already enhanced for ${options.entity_type}`,
+        `[AUTO_ENHANCE] Field ${options.field_name} already enhanced for ${options.entity_type}`
       );
       return existing;
     }
 
-    // Check if field already exists in schema
-    const currentSchema = await this.schemaRegistry.loadActiveSchema(
-      options.entity_type,
-      options.user_id,
-    );
-    
+    // Check if field already exists in schema (registry or code-defined baseline)
+    const currentSchema = await this.loadSchemaForAutoEnhance(options.entity_type, options.user_id);
+
     const fieldExists = currentSchema?.schema_definition.fields[options.field_name];
-    
+
     // Determine recommendation type based on field existence and converter suggestion
     let recommendationType: "add_fields" | "add_converters";
-    
+
     if (fieldExists && options.converter_suggestion) {
       // Field exists - add converter to existing field
       recommendationType = "add_converters";
       logger.error(
-        `[AUTO_ENHANCE] Field ${options.field_name} exists in schema, adding converter for ${options.entity_type}`,
+        `[AUTO_ENHANCE] Field ${options.field_name} exists in schema, adding converter for ${options.entity_type}`
       );
     } else if (fieldExists && !options.converter_suggestion) {
       // Field exists but no converter suggestion - shouldn't enhance
       logger.error(
-        `[AUTO_ENHANCE] Field ${options.field_name} already exists in schema for ${options.entity_type} and no converter needed`,
+        `[AUTO_ENHANCE] Field ${options.field_name} already exists in schema for ${options.entity_type} and no converter needed`
       );
       return currentSchema;
     } else {
@@ -356,9 +426,7 @@ export class SchemaRecommendationService {
       // The default UUID '00000000-0000-0000-0000-000000000000' doesn't exist in auth.users
       // So we use NULL instead, which the unique index handles via COALESCE
       const defaultUserId = "00000000-0000-0000-0000-000000000000";
-      const userId = options.user_id && options.user_id !== defaultUserId 
-        ? options.user_id 
-        : null;
+      const userId = options.user_id && options.user_id !== defaultUserId ? options.user_id : null;
 
       // Create recommendation record
       const recommendationData: any = {
@@ -372,7 +440,7 @@ export class SchemaRecommendationService {
         idempotency_key: idempotencyKey,
         can_rollback: true,
       };
-      
+
       // Add type-specific fields
       if (recommendationType === "add_fields") {
         recommendationData.fields_to_add = [
@@ -391,7 +459,7 @@ export class SchemaRecommendationService {
           },
         ];
       }
-      
+
       const { data: recommendation, error: recError } = await db
         .from("schema_recommendations")
         .insert(recommendationData)
@@ -402,20 +470,26 @@ export class SchemaRecommendationService {
         // Check if it's a unique constraint violation (already exists)
         if (recError.code === "23505") {
           logger.error(
-            `[AUTO_ENHANCE] Idempotency key collision - enhancement already in progress`,
+            `[AUTO_ENHANCE] Idempotency key collision - enhancement already in progress`
           );
-          return null;
+          // Return the existing record rather than null so callers get a usable result
+          const { data: existingRec } = await db
+            .from("schema_recommendations")
+            .select("*")
+            .eq("idempotency_key", idempotencyKey)
+            .single();
+          return existingRec ?? null;
         }
         throw recError;
       }
 
       if (recommendationType === "add_converters") {
         logger.error(
-          `[AUTO_ENHANCE] Auto-enhancing ${options.entity_type}.${options.field_name} by adding converter: ${options.converter_suggestion?.function}`,
+          `[AUTO_ENHANCE] Auto-enhancing ${options.entity_type}.${options.field_name} by adding converter: ${options.converter_suggestion?.function}`
         );
       } else {
         logger.error(
-          `[AUTO_ENHANCE] Auto-enhancing ${options.entity_type}.${options.field_name} with type ${options.field_type}`,
+          `[AUTO_ENHANCE] Auto-enhancing ${options.entity_type}.${options.field_name} with type ${options.field_type}`
         );
       }
 
@@ -425,10 +499,7 @@ export class SchemaRecommendationService {
 
       return recommendation;
     } catch (error: any) {
-      logger.error(
-        `[AUTO_ENHANCE] Failed to auto-enhance schema:`,
-        error.message,
-      );
+      logger.error(`[AUTO_ENHANCE] Failed to auto-enhance schema:`, error.message);
       throw error;
     }
   }
@@ -446,13 +517,7 @@ export class SchemaRecommendationService {
     type_consistency: number; // 0-1
     naming_pattern_match: boolean;
     format_consistency: number; // 0-1
-    inferred_type?:
-      | "string"
-      | "number"
-      | "date"
-      | "boolean"
-      | "array"
-      | "object";
+    inferred_type?: "string" | "number" | "date" | "boolean" | "array" | "object";
   }> {
     // Get all samples for this field
     let confidenceQuery = db
@@ -460,7 +525,7 @@ export class SchemaRecommendationService {
       .select("fragment_value, frequency_count")
       .eq("entity_type", options.entity_type)
       .eq("fragment_key", options.fragment_key);
-    
+
     // Handle user_id properly: check both the provided user_id and the default UUID
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
     if (options.user_id) {
@@ -474,7 +539,7 @@ export class SchemaRecommendationService {
       // No user_id provided - check both null and default UUID
       confidenceQuery = confidenceQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
     }
-    
+
     const { data: fragments } = await confidenceQuery;
 
     if (!fragments || fragments.length === 0) {
@@ -496,10 +561,7 @@ export class SchemaRecommendationService {
     const namingPatternMatch = this.checkNamingPattern(options.fragment_key);
 
     // Check format consistency for specific types
-    const formatConsistency = this.checkFormatConsistency(
-      samples,
-      typeAnalysis.dominant_type,
-    );
+    const formatConsistency = this.checkFormatConsistency(samples, typeAnalysis.dominant_type);
 
     // Calculate overall confidence
     const confidence = this.calculateOverallConfidence({
@@ -533,14 +595,12 @@ export class SchemaRecommendationService {
     // Query raw_fragments grouped by entity_type and fragment_key
     let query = db
       .from("raw_fragments")
-      .select(
-        "entity_type, fragment_key, fragment_value, frequency_count, user_id",
-      );
+      .select("entity_type, fragment_key, fragment_value, frequency_count, user_id");
 
     if (options.entity_type) {
       query = query.eq("entity_type", options.entity_type);
     }
-    
+
     // Handle user_id properly: check both the provided user_id and the default UUID
     // Also handle null (for global schemas)
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
@@ -563,10 +623,7 @@ export class SchemaRecommendationService {
     }
 
     // Group by entity_type and fragment_key
-    const grouped = new Map<
-      string,
-      Array<{ fragment_value: unknown; frequency_count: number }>
-    >();
+    const grouped = new Map<string, Array<{ fragment_value: unknown; frequency_count: number }>>();
     for (const fragment of fragments) {
       if (!fragment.entity_type) {
         // Skip fragments without entity type (shouldn't happen, but defensive)
@@ -590,10 +647,7 @@ export class SchemaRecommendationService {
       const user_id = user_id_str === "global" ? undefined : user_id_str;
 
       // Calculate total frequency
-      const totalFrequency = samples.reduce(
-        (sum, s) => sum + s.frequency_count,
-        0,
-      );
+      const totalFrequency = samples.reduce((sum, s) => sum + s.frequency_count, 0);
       if (totalFrequency < minFrequency) {
         continue;
       }
@@ -615,9 +669,7 @@ export class SchemaRecommendationService {
         field_type: confidenceResult.inferred_type || "string",
         required: false,
         frequency: totalFrequency,
-        sample_values: samples
-          .map((s) => s.fragment_value)
-          .slice(0, 10), // Limit sample values
+        sample_values: samples.map((s) => s.fragment_value).slice(0, 10), // Limit sample values
         confidence: confidenceResult.confidence,
         type_consistency: confidenceResult.type_consistency,
         naming_pattern_match: confidenceResult.naming_pattern_match,
@@ -625,14 +677,12 @@ export class SchemaRecommendationService {
       };
 
       // Check if recommendation already exists for this entity type
-      const existingRec = recommendations.find(
-        (r) => r.entity_type === entity_type,
-      );
+      const existingRec = recommendations.find((r) => r.entity_type === entity_type);
       if (existingRec) {
         existingRec.fields.push(fieldRec);
         existingRec.confidence_score = Math.max(
           existingRec.confidence_score,
-          confidenceResult.confidence,
+          confidenceResult.confidence
         );
       } else {
         recommendations.push({
@@ -665,7 +715,7 @@ export class SchemaRecommendationService {
     const fragmentsSummary = options.raw_fragments_sample
       .map(
         (f) =>
-          `- ${f.fragment_key}: appears ${f.frequency_count} times, sample value: ${JSON.stringify(f.fragment_value).slice(0, 100)}`,
+          `- ${f.fragment_key}: appears ${f.frequency_count} times, sample value: ${JSON.stringify(f.fragment_value).slice(0, 100)}`
       )
       .join("\n");
 
@@ -698,11 +748,11 @@ Return your recommendations in JSON format:
       // Use OpenAI directly for LLM-based recommendations
       const OpenAI = (await import("openai")).default;
       const { config } = await import("../config.js");
-      
+
       if (!config.openaiApiKey) {
         throw new Error("OpenAI API key not configured");
       }
-      
+
       const openai = new OpenAI({ apiKey: config.openaiApiKey });
 
       // Call LLM with prompt
@@ -716,7 +766,7 @@ Return your recommendations in JSON format:
           },
         ],
       });
-      
+
       const response = completion.choices[0]?.message?.content || "{}";
 
       // Parse JSON response
@@ -727,13 +777,12 @@ Return your recommendations in JSON format:
         field_name: f.field_name,
         field_type: f.field_type,
         required: f.required || false,
-        frequency: options.raw_fragments_sample.find(
-          (frag) => frag.fragment_key === f.field_name,
-        )?.frequency_count || 0,
+        frequency:
+          options.raw_fragments_sample.find((frag) => frag.fragment_key === f.field_name)
+            ?.frequency_count || 0,
         sample_values: [
-          options.raw_fragments_sample.find(
-            (frag) => frag.fragment_key === f.field_name,
-          )?.fragment_value,
+          options.raw_fragments_sample.find((frag) => frag.fragment_key === f.field_name)
+            ?.fragment_value,
         ],
         confidence: f.confidence,
         type_consistency: f.confidence, // Use confidence as type_consistency
@@ -747,27 +796,20 @@ Return your recommendations in JSON format:
         reasoning: parsed.reasoning,
       };
     } catch (error: any) {
-      logger.error(
-        `[SCHEMA_INFERENCE] Failed to generate LLM recommendations:`,
-        error.message,
-      );
+      logger.error(`[SCHEMA_INFERENCE] Failed to generate LLM recommendations:`, error.message);
 
       // Fallback to deterministic analysis if LLM fails
-      logger.error(
-        `[SCHEMA_INFERENCE] Falling back to deterministic analysis`,
-      );
+      logger.error(`[SCHEMA_INFERENCE] Falling back to deterministic analysis`);
 
-      const fields: FieldRecommendation[] = options.raw_fragments_sample.map(
-        (f) => ({
-          field_name: f.fragment_key,
-          field_type: this.inferType(f.fragment_value) as any,
-          required: false,
-          frequency: f.frequency_count,
-          sample_values: [f.fragment_value],
-          confidence: 0.6, // Lower confidence for fallback
-          type_consistency: 0.8,
-        }),
-      );
+      const fields: FieldRecommendation[] = options.raw_fragments_sample.map((f) => ({
+        field_name: f.fragment_key,
+        field_type: this.inferType(f.fragment_value) as any,
+        required: false,
+        frequency: f.frequency_count,
+        sample_values: [f.fragment_value],
+        confidence: 0.6, // Lower confidence for fallback
+        type_consistency: 0.8,
+      }));
 
       return {
         entity_type: options.entity_type,
@@ -876,30 +918,28 @@ Return your recommendations in JSON format:
       // The default UUID '00000000-0000-0000-0000-000000000000' doesn't exist in auth.users
       // So we use NULL instead, which the unique index handles via COALESCE
       const defaultUserId = "00000000-0000-0000-0000-000000000000";
-      const userId = options.user_id && options.user_id !== defaultUserId 
-        ? options.user_id 
-        : null;
-      
+      const userId = options.user_id && options.user_id !== defaultUserId ? options.user_id : null;
+
       // Check if entry already exists
       let query = db
         .from("auto_enhancement_queue")
         .select("id, status, frequency_count")
         .eq("entity_type", options.entity_type)
         .eq("fragment_key", options.fragment_key);
-      
+
       if (userId) {
         query = query.eq("user_id", userId);
       } else {
         query = query.is("user_id", null);
       }
-      
+
       const { data: existing, error: checkError } = await query.maybeSingle();
-      
+
       if (checkError && checkError.code !== "PGRST116") {
         // PGRST116 is "no rows" which is fine
         throw checkError;
       }
-      
+
       if (existing) {
         // Update existing entry
         const { error: updateError } = await db
@@ -909,36 +949,82 @@ Return your recommendations in JSON format:
             frequency_count: options.frequency_count || existing.frequency_count,
           })
           .eq("id", existing.id);
-        
+
         if (updateError) {
           throw updateError;
         }
       } else {
         // Insert new entry
-        const { error: insertError } = await db
-          .from("auto_enhancement_queue")
-          .insert({
-            entity_type: options.entity_type,
-            fragment_key: options.fragment_key,
-            user_id: userId,
-            status: "pending",
-            frequency_count: options.frequency_count,
-          });
-        
+        const { error: insertError } = await db.from("auto_enhancement_queue").insert({
+          entity_type: options.entity_type,
+          fragment_key: options.fragment_key,
+          user_id: userId,
+          status: "pending",
+          frequency_count: options.frequency_count,
+        });
+
         if (insertError) {
           throw insertError;
         }
       }
     } catch (error: any) {
       // Don't throw - queuing is best-effort
-      logger.error(
-        `[AUTO_ENHANCE] Failed to queue enhancement check:`,
-        error.message,
-      );
+      logger.error(`[AUTO_ENHANCE] Failed to queue enhancement check:`, error.message);
     }
   }
 
   // --- Private helper methods ---
+
+  /**
+   * Look up the most common observation_source for a given entity_type + user_id.
+   * Used to determine if the majority of observations come from trusted sources.
+   */
+  private async lookupDominantObservationSource(
+    entityType: string,
+    userId?: string
+  ): Promise<string | null> {
+    try {
+      const defaultUserId = "00000000-0000-0000-0000-000000000000";
+      let query = db
+        .from("observations")
+        .select("observation_source")
+        .eq("entity_type", entityType)
+        .not("observation_source", "is", null)
+        .order("observed_at", { ascending: false })
+        .limit(20);
+
+      if (userId) {
+        if (userId === defaultUserId) {
+          query = query.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+        } else {
+          query = query.eq("user_id", userId);
+        }
+      } else {
+        query = query.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
+      }
+
+      const { data, error } = await query;
+      if (error || !data || data.length === 0) return null;
+
+      const counts = new Map<string, number>();
+      for (const row of data) {
+        const src = (row as { observation_source?: string }).observation_source;
+        if (src) counts.set(src, (counts.get(src) || 0) + 1);
+      }
+
+      let dominant: string | null = null;
+      let maxCount = 0;
+      for (const [src, count] of counts) {
+        if (count > maxCount) {
+          dominant = src;
+          maxCount = count;
+        }
+      }
+      return dominant;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Detect if a converter is needed for an existing field with type mismatch
@@ -1004,7 +1090,7 @@ Return your recommendations in JSON format:
     }
 
     // Detect converter based on type combination
-    
+
     // Case 1: Schema expects date, data is number (timestamp)
     if (schemaType === "date" && actualType === "number") {
       // Find a numeric sample to determine timestamp format
@@ -1058,7 +1144,7 @@ Return your recommendations in JSON format:
         if (typeof s !== "string") return false;
         return this.isNumericString(s);
       });
-      
+
       if (allNumeric) {
         return {
           converter: {
@@ -1067,7 +1153,7 @@ Return your recommendations in JSON format:
             function: "string_to_number",
             deterministic: true,
           },
-          confidence: 0.90,
+          confidence: 0.9,
           reasoning: "String values are numeric and can be converted to numbers",
         };
       }
@@ -1082,7 +1168,7 @@ Return your recommendations in JSON format:
           function: "number_to_string",
           deterministic: true,
         },
-        confidence: 0.90,
+        confidence: 0.9,
         reasoning: "Number values can be converted to strings",
       };
     }
@@ -1093,7 +1179,7 @@ Return your recommendations in JSON format:
         if (typeof s !== "string") return false;
         return this.isBooleanString(s);
       });
-      
+
       if (allBooleanStrings) {
         return {
           converter: {
@@ -1102,7 +1188,7 @@ Return your recommendations in JSON format:
             function: "string_to_boolean",
             deterministic: true,
           },
-          confidence: 0.90,
+          confidence: 0.9,
           reasoning: "String values are boolean strings (true/false/yes/no)",
         };
       }
@@ -1117,7 +1203,7 @@ Return your recommendations in JSON format:
           function: "boolean_to_string",
           deterministic: true,
         },
-        confidence: 0.90,
+        confidence: 0.9,
         reasoning: "Boolean values can be converted to strings",
       };
     }
@@ -1132,17 +1218,13 @@ Return your recommendations in JSON format:
   private async checkBlacklist(
     entityType: string,
     fieldName: string,
-    userId?: string,
+    userId?: string
   ): Promise<boolean> {
     const { data: blacklist } = await db
       .from("field_blacklist")
       .select("field_pattern")
-      .or(
-        `entity_type.is.null,entity_type.eq.${entityType}`,
-      )
-      .or(
-        `user_id.is.null,user_id.eq.${userId || "00000000-0000-0000-0000-000000000000"}`,
-      );
+      .or(`entity_type.is.null,entity_type.eq.${entityType}`)
+      .or(`user_id.is.null,user_id.eq.${userId || "00000000-0000-0000-0000-000000000000"}`);
 
     if (!blacklist) return false;
 
@@ -1186,13 +1268,7 @@ Return your recommendations in JSON format:
    * Null values are excluded from consistency calculation since they're expected for optional fields
    */
   private analyzeTypes(samples: unknown[]): {
-    dominant_type:
-      | "string"
-      | "number"
-      | "date"
-      | "boolean"
-      | "array"
-      | "object";
+    dominant_type: "string" | "number" | "date" | "boolean" | "array" | "object";
     consistency: number;
   } {
     const typeCounts = new Map<string, number>();
@@ -1233,22 +1309,15 @@ Return your recommendations in JSON format:
    * Infer type from a single value (multi-pass detection)
    */
   private inferType(
-    value: unknown,
-  ):
-    | "string"
-    | "number"
-    | "date"
-    | "boolean"
-    | "array"
-    | "object"
-    | "null" {
+    value: unknown
+  ): "string" | "number" | "date" | "boolean" | "array" | "object" | "null" {
     if (value === null || value === undefined) return "null";
 
     // Pass 1: Detect obvious types
     if (typeof value === "boolean") return "boolean";
     if (Array.isArray(value)) return "array";
     if (typeof value === "object") return "object";
-    
+
     // Pass 1.5: Number analysis - detect timestamps (BigInt or large numbers that are likely dates)
     if (typeof value === "number") {
       // Check if it's a timestamp (reasonable date range)
@@ -1267,7 +1336,7 @@ Return your recommendations in JSON format:
           // Likely nanoseconds, convert to milliseconds
           timestampMs = value / 1000000;
         }
-        
+
         // Check if it's a reasonable date (between 1970 and 2100)
         const date = new Date(timestampMs);
         if (!isNaN(date.getTime()) && date.getFullYear() >= 1970 && date.getFullYear() <= 2100) {
@@ -1329,9 +1398,7 @@ Return your recommendations in JSON format:
    * Check if string is UUID
    */
   private isUUID(str: string): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      str,
-    );
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   }
 
   /**
@@ -1363,28 +1430,28 @@ Return your recommendations in JSON format:
    */
   private checkNamingPattern(fieldName: string): boolean {
     const patterns = [
-      /_id$/i,           // singular ID
-      /_ids$/i,          // plural IDs (e.g., project_ids, section_ids)
-      /_gid$/i,          // global ID (e.g., assignee_gid, asana_source_gid)
-      /_gids$/i,         // plural global IDs (e.g., followers_gids)
+      /_id$/i, // singular ID
+      /_ids$/i, // plural IDs (e.g., project_ids, section_ids)
+      /_gid$/i, // global ID (e.g., assignee_gid, asana_source_gid)
+      /_gids$/i, // plural global IDs (e.g., followers_gids)
       /_date$/i,
       /_time$/i,
       /_at$/i,
       /_amount$/i,
       /_price$/i,
       /_cost$/i,
-      /_name$/i,         // singular name
-      /_names$/i,        // plural names (e.g., follower_names, project_names)
+      /_name$/i, // singular name
+      /_names$/i, // plural names (e.g., follower_names, project_names)
       /_email$/i,
       /_url$/i,
       /_link$/i,
       /_address$/i,
       /_phone$/i,
-      /_path$/i,         // file paths (e.g., execution_plan_path)
-      /_html$/i,         // HTML content (e.g., description_html)
-      /_workspace$/i,    // workspace fields (e.g., asana_workspace)
-      /^urgency$/i,      // urgency/enum fields (exact match)
-      /^recurrence$/i,   // recurrence/enum fields (exact match)
+      /_path$/i, // file paths (e.g., execution_plan_path)
+      /_html$/i, // HTML content (e.g., description_html)
+      /_workspace$/i, // workspace fields (e.g., asana_workspace)
+      /^urgency$/i, // urgency/enum fields (exact match)
+      /^recurrence$/i, // recurrence/enum fields (exact match)
       /^is_/i,
       /^has_/i,
       /^can_/i,
@@ -1398,13 +1465,10 @@ Return your recommendations in JSON format:
    * Check format consistency for specific types
    * Null values are excluded from format consistency calculation since they're expected for optional fields
    */
-  private checkFormatConsistency(
-    samples: unknown[],
-    type: string,
-  ): number {
+  private checkFormatConsistency(samples: unknown[], type: string): number {
     // Filter out null values - they don't affect format consistency
-    const nonNullSamples = samples.filter(s => s !== null && s !== undefined);
-    
+    const nonNullSamples = samples.filter((s) => s !== null && s !== undefined);
+
     if (nonNullSamples.length === 0) {
       // All samples are null - can't assess format consistency
       return 0.9; // Default to high consistency for optional fields

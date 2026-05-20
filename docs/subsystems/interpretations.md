@@ -38,7 +38,7 @@ It exists as a first-class record (rather than a hidden run log) so the system c
 3. **Track extraction quality over time.** `confidence`, `unknown_field_count`, and `extraction_completeness` make it possible to compare runs on the same source.
 4. **Bound non-determinism explicitly.** Neotoma does not promise that two runs of the same model on the same bytes produce identical outputs — it promises that whichever output happened is durably recorded with the config that produced it.
 
-Structured ingestion (`store_structured` with an `entities` array) does not require an interpretation: the source is already structured, observations are written directly, and the `observations.interpretation_id` is `NULL`. Interpretations are produced by AI/parser passes only.
+Structured ingestion (**`store`** with an `entities` array) does not require an interpretation by default: the source is already structured, observations are written directly, and the `observations.interpretation_id` is `NULL`. Interpretations are produced only by explicit AI/parser/agent-authored extraction passes. Agents can opt in by supplying `interpretation` on **`store`**, or by calling `create_interpretation` for a post-hoc extraction against an existing source.
 
 ## 2. Storage
 
@@ -88,7 +88,7 @@ For the live DDL (and any deferred columns such as `timeout_at` / `heartbeat_at`
 
 Interpretations are user-isolated transitively through `source_id`. Read paths defensively load the authenticated user's `sources.id` set first and filter `interpretations.source_id IN (...)`. The `user_id` column is denormalised for indexing but is not the security boundary.
 
-Writes flow only through the MCP server using `service_role`; clients never write interpretations directly.
+Writes flow only through authenticated Neotoma surfaces (**`store`** with an explicit `interpretation` block, `create_interpretation`, server-side interpretation jobs, or CLI commands backed by those APIs). Clients never insert interpretation rows directly.
 
 ## 3. `interpretation_config`
 

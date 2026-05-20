@@ -1,0 +1,29 @@
+Entities conform to defined types and validation rules. Type mismatches are flagged at store time
+and missing required fields generate warnings, so schema drift does not silently degrade state quality.
+
+## Before vs after
+
+Before: one tool stores `age: "thirty"` while another expects a number. After: schema
+validation rejects the invalid write and returns a deterministic error.
+
+```bash
+# Invalid payload example
+neotoma store --json='[{"entity_type":"person","name":"Ana Rivera","age":"thirty"}]'
+
+# Valid payload
+neotoma store --json='[{"entity_type":"person","name":"Ana Rivera","age":30}]'
+```
+
+This protects
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+and reduces
+<MdxI18nLink to="/silent-mutation-risk" className="text-foreground underline hover:text-foreground">
+  silent mutation risk
+</MdxI18nLink>
+. See
+<MdxI18nLink to="/conflicting-facts-risk" className="text-foreground underline hover:text-foreground">
+  conflicting facts risk
+</MdxI18nLink>
+for conflict handling.

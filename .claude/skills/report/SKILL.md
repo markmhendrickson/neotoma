@@ -1,12 +1,5 @@
 ---
 name: report
-description: Report Error Command
----
-
-<!-- Source: foundation/.cursor/skills/report/SKILL.md -->
-
----
-name: report
 description: Generate report per foundation report command.
 triggers:
   - report

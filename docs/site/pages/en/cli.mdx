@@ -1,0 +1,136 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import { CliReferenceCommandsTable } from "@/components/mdx/doc_reference_tables";
+
+The Neotoma CLI provides full access to every operation available in the MCP and REST API, plus administration commands for server lifecycle, storage, backups, and configuration. Run `neotoma` with no arguments for an interactive session (`neotoma> ` prompt), or invoke commands directly (e.g. `neotoma entities list`).
+
+## Installation
+
+```
+# Install globally
+npm install -g neotoma
+
+# Initialize data directory and database
+neotoma init
+
+# Start the API server (development)
+neotoma api start --env dev --background
+```
+
+From a source checkout: `npm run setup:cli` builds and links the global `neotoma` command. Use `npm run dev:types` to keep the global CLI in sync during development.
+
+## Environments
+
+Target a specific environment with `neotoma dev` (port 3080) or `neotoma prod` (port 3180), or pass `--env dev` / `--env prod`. Server lifecycle commands (`api start`, `api stop`, `api logs`) always require `--env`.
+
+## Typical workflow
+
+```
+# Store entities
+neotoma store --json='[{"entity_type":"task","title":"Review API rollout","status":"open"}]'
+
+# List entities by type
+neotoma entities list --type task --limit 10
+
+# Search by identifier
+neotoma entities search "Ana Rivera" --entity-type contact
+
+# Inspect provenance
+neotoma observations list --entity-id <entity_id>
+
+# Ingest a file with AI interpretation
+neotoma ingest ./invoice.pdf
+
+# Ingest locally (no API server needed)
+neotoma ingest --offline ./invoice.pdf
+
+# Stream changes in real time
+neotoma watch --tail --human
+```
+
+## Global options
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--offline</code>: force in-process local transport (no API required)
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--api-only</code>: fail if API server is unavailable
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--base-url &lt;url&gt;</code>: target a specific API instance
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--env dev|prod</code>: environment selector (required for server commands)
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--json</code>: machine-readable JSON output
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--pretty</code>: formatted JSON output
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--tunnel</code>: start HTTPS tunnel (ngrok/cloudflared) with server start
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>--debug</code>: emit detailed initialization logs to stderr
+  </li>
+</ul>
+
+## Offline support
+
+Data commands (`entities`, `relationships`, `sources`, `observations`, `timeline`, `store`, `schemas`, `stats`, `corrections`, `snapshots`) are offline-first and use in-process local transport by default — no API server required. Server lifecycle commands (`api start|stop|status|logs`) manage the API process and are unaffected.
+
+<CliReferenceCommandsTable />
+
+## Authentication
+
+Local CLI commands run without login in development. For production or MCP OAuth:
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>neotoma auth login</code> — OAuth PKCE flow for MCP Connect
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>neotoma auth status</code> — show auth mode and user details
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>neotoma auth mcp-token</code> — print key-derived MCP token (when encryption is enabled)
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>neotoma auth logout</code> — clear stored OAuth credentials
+  </li>
+</ul>
+
+For agent identity (cryptographically verifiable writes), use `neotoma auth keygen` (software or hardware-backed) and `neotoma auth session` to inspect the resolved trust tier. See{" "}
+<MdxI18nLink to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+  AAuth reference
+</MdxI18nLink>{" "}
+for the full agent authentication contract.
+
+## Storage and configuration
+
+CLI config is stored at `~/.config/neotoma/config.json`. Run `neotoma storage info` to see data directory, database path, sources directory, and log paths. Use `neotoma storage set-data-dir` to relocate the data directory with optional DB migration. Use `neotoma storage merge-db` to merge SQLite databases (safe mode by default).
+
+## Backups
+
+`neotoma backup create` creates a timestamped backup of the database, sources, and logs with a `manifest.json` containing checksums. `neotoma backup restore --from <dir>` restores a backup into the data directory. Encrypted data stays encrypted; preserve the key file or mnemonic.
+
+<p className="text-[14px] leading-6 text-muted-foreground">
+  See{" "}
+  <MdxI18nLink to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
+    MCP reference
+  </MdxI18nLink>{" "}
+  for agent-native transport,{" "}
+  <MdxI18nLink to="/api" className="text-foreground underline underline-offset-2 hover:no-underline">
+    REST API reference
+  </MdxI18nLink>{" "}
+  for HTTP endpoints,{" "}
+  <MdxI18nLink to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+    AAuth reference
+  </MdxI18nLink>{" "}
+  for agent identity, and{" "}
+  <MdxI18nLink to="/troubleshooting" className="text-foreground underline underline-offset-2 hover:no-underline">
+    troubleshooting
+  </MdxI18nLink>{" "}
+  for common failure modes.
+</p>

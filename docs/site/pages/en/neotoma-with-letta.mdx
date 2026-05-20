@@ -1,0 +1,78 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+# Neotoma with Letta
+
+Letta is a stateful agent runtime with built-in core, recall, and archival memory. It has first-class MCP support: external MCP servers are registered at agent setup time via the Python or TypeScript SDK, and their tools become callable agent tools alongside Letta's own memory system.
+
+## Install Neotoma
+
+```bash
+npm install -g neotoma
+neotoma init
+neotoma auth login
+```
+
+## Start the Neotoma MCP endpoint
+
+```bash
+neotoma api start --env prod --tunnel
+```
+
+Note the tunnel URL — you will use it as the MCP server URL in your agent setup code.
+
+## Register Neotoma in your Letta agent
+
+```python
+from letta import create_client
+
+client = create_client()
+
+# Register Neotoma MCP server (once per Letta server instance)
+neotoma_mcp = client.mcp_servers.create(config={
+    "mcp_server_type": "streamable_http",
+    "server_url": "https://<tunnel-host>/mcp",
+    "auth_header": "Authorization",
+    "auth_token": "Bearer <your-neotoma-api-token>",
+})
+
+# Get the Neotoma tool definitions
+neotoma_tools = client.tools.list_mcp_tools_by_server(neotoma_mcp.name)
+
+# Create an agent with Neotoma tools attached
+agent = client.agents.create(
+    name="my-agent",
+    tool_ids=[t.id for t in neotoma_tools],
+)
+```
+
+Get your API token with:
+
+```bash
+neotoma auth token
+```
+
+The TypeScript SDK follows the same pattern via `client.mcpServers.create()` and `client.tools.listMcpToolsByServer()`.
+
+## What this gives your agents
+
+Once registered, Neotoma tools appear alongside Letta's built-in memory tools. Your agents can:
+
+- Call `store` to write structured entities with full provenance
+- Call `retrieve_entities` or `retrieve_entity_by_identifier` for targeted recall
+- Call `correct` to update existing records without breaking immutability
+- Share memory across other MCP-connected hosts (Cursor, Claude Code, VS Code, etc.)
+
+Neotoma does not replace Letta's internal core/recall/archival memory — it sits alongside as a portable, cross-host structured memory layer.
+
+## Notes
+
+- MCP server registrations persist on the Letta server instance. Check `client.mcp_servers.list()` before calling `create` to avoid duplicate registrations.
+- For production deployments, use a self-hosted Neotoma instance with a stable HTTPS URL rather than a tunnel.
+- SSE transport is also supported: set `mcp_server_type` to `"sse"` and use the same `server_url`.
+
+## Related
+
+- <MdxI18nLink to="/mcp">MCP reference</MdxI18nLink> — transport modes, authentication, tool definitions
+- <MdxI18nLink to="/tunnel">Tunnel</MdxI18nLink> — expose a local Neotoma instance over HTTPS
+- <MdxI18nLink to="/install">Install</MdxI18nLink> — full Neotoma install guide
+- <MdxI18nLink to="/integrations">Integrations</MdxI18nLink> — all supported hosts

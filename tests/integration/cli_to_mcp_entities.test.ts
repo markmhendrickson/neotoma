@@ -174,7 +174,7 @@ describe("Cross-layer: CLI entity commands → Database", () => {
       });
 
       const storeResult = await execCliJson(
-        `store-structured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
+        `store --file "${filePath}" --user-id "${TEST_USER_ID}"`
       );
 
       const sourceId = extractSourceId(storeResult);

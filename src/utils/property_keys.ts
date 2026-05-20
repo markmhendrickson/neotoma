@@ -32,14 +32,8 @@ export function humanizePropertyKey(key: string): string {
  * Humanizes all property keys in a record's properties object.
  * Preserves nested objects and arrays, only transforming top-level keys.
  */
-export function humanizePropertyKeys(
-  properties: Record<string, unknown>,
-): Record<string, unknown> {
-  if (
-    !properties ||
-    typeof properties !== "object" ||
-    Array.isArray(properties)
-  ) {
+export function humanizePropertyKeys(properties: Record<string, unknown>): Record<string, unknown> {
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) {
     return properties;
   }
 
@@ -50,10 +44,7 @@ export function humanizePropertyKeys(
     const humanized = humanizePropertyKey(key);
 
     // Handle collisions: if humanized key already exists, append original key
-    if (
-      result[humanized] !== undefined &&
-      seenHumanized.get(humanized) !== key
-    ) {
+    if (result[humanized] !== undefined && seenHumanized.get(humanized) !== key) {
       // Collision detected - keep original key to avoid data loss
       result[key] = value;
     } else {

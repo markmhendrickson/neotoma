@@ -164,7 +164,7 @@ Concurrency is serialized through the mirror write queue to avoid interleaved co
 `neotoma memory-export` writes a single bounded markdown file suitable for agent harnesses that expect file-based memory.
 
 - Ordering:
-  - `--order importance` (default): type-weighted signal score `typeWeight × log2(observation_count + 2) × recency_decay` (half-life 30 days). Tier-1 types (`task`, `contact`, `event`, `transaction`, `product_feedback`, `business_opportunity`, `issue`, `user_persona_insight`, `life_tenets`, `architectural_decision`, `agent_decision`, `release`, `feature_unit`) rank above Tier-2 durable artifacts (`note`, `post`, `meeting_transcription`, `email_message`, `location`, `file_asset`, etc.). Chat bookkeeping types score 0.
+  - `--order importance` (default): type-weighted signal score `typeWeight × log2(observation_count + 2) × recency_decay` (half-life 30 days). Tier-1 types (`task`, `contact`, `event`, `transaction`, `business_opportunity`, `issue`, `user_persona_insight`, `life_tenets`, `architectural_decision`, `agent_decision`, `release`, `feature_unit`) rank above Tier-2 durable artifacts (`note`, `post`, `meeting_transcription`, `email_message`, `location`, `file_asset`, etc.). Chat bookkeeping types score 0.
   - `--order recency`: `last_observation_at desc`.
   - Both apply `entity_id` as a final tiebreaker so output is byte-for-byte reproducible.
 - Bookkeeping filter: `conversation` and `agent_message` are excluded by default because they are noise in a memory manifest. Pass `--include-bookkeeping` to opt back in. Any `--exclude-types` list is applied on top of this.

@@ -72,15 +72,19 @@ export function modeCopy(mode: LandingMode): { title: string; subtitle: string; 
 function renderHarnessSection(h: HarnessSnippetResult): string {
   const humanBlock = `<h4>Human-driven</h4>
 <p class="muted">Format: <code>${escapeHtml(h.human.format)}</code></p>
-${h.preflight ? `<details class="inner"><summary>${escapeHtml(h.preflight.title)}</summary>
+${
+  h.preflight
+    ? `<details class="inner"><summary>${escapeHtml(h.preflight.title)}</summary>
 <p class="muted">Format: <code>${escapeHtml(h.preflight.format)}</code></p>
-<pre><button class="copy" type="button" aria-label="Copy preflight snippet">Copy</button><code>${escapeHtml(h.preflight.code)}</code></pre>
-</details>` : ""}
-<pre><button class="copy" type="button" aria-label="Copy config snippet">Copy</button><code>${escapeHtml(h.human.code)}</code></pre>`;
+<pre><button class="copy" type="button" aria-label="Copy preflight snippet">Copy</button><span class="pre-scroll"><code>${escapeHtml(h.preflight.code)}</code></span></pre>
+</details>`
+    : ""
+}
+<pre><button class="copy" type="button" aria-label="Copy config snippet">Copy</button><span class="pre-scroll"><code>${escapeHtml(h.human.code)}</code></span></pre>`;
 
   const agentBlock = `<h4>Agent-driven</h4>
 <p class="muted">Paste this prompt into ${escapeHtml(h.label)} and let it configure the connection.</p>
-<pre><button class="copy" type="button" aria-label="Copy agent prompt">Copy</button><code>${escapeHtml(h.agentPrompt)}</code></pre>`;
+<pre><button class="copy" type="button" aria-label="Copy agent prompt">Copy</button><span class="pre-scroll"><code>${escapeHtml(h.agentPrompt)}</code></span></pre>`;
 
   return `<details class="harness">
 <summary><strong>${escapeHtml(h.label)}</strong> <span class="muted">· ${escapeHtml(h.description)}</span></summary>
@@ -232,17 +236,23 @@ pre {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
-  overflow-x: auto;
+  overflow: visible;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   font-size: 12.5px;
   line-height: 1.5;
   margin: 8px 0;
+}
+pre .pre-scroll {
+  display: block;
+  overflow-x: auto;
+  padding-right: 52px;
 }
 pre code { background: transparent; padding: 0; }
 pre button.copy {
   position: absolute;
   top: 6px;
   right: 8px;
+  z-index: 1;
   font-size: 11px;
   padding: 2px 8px;
   background: var(--card);
@@ -338,7 +348,9 @@ function renderPackPicker(ctx: LandingHtmlContext): string {
   const options = [
     `<optgroup label="Starter">\n${starterOpts}\n</optgroup>`,
     useCaseOpts ? `<optgroup label="Use cases">\n${useCaseOpts}\n</optgroup>` : "",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
   return `
 <section>
 <h2>Start a sandbox session</h2>
@@ -396,7 +408,9 @@ export function renderLandingHtml(ctx: LandingHtmlContext): string {
     `<span class="badge"><strong>version</strong> ${escapeHtml(ctx.version)}</span>`,
   ];
   if (ctx.gitSha) {
-    badges.push(`<span class="badge"><strong>git</strong> ${escapeHtml(ctx.gitSha.slice(0, 7))}</span>`);
+    badges.push(
+      `<span class="badge"><strong>git</strong> ${escapeHtml(ctx.gitSha.slice(0, 7))}</span>`
+    );
   }
 
   const sandboxEndpointsNote =
@@ -413,11 +427,14 @@ export function renderLandingHtml(ctx: LandingHtmlContext): string {
       ? "Config snippets use stdio; connect Neotoma as a local process."
       : `Config snippets below use this host's MCP URL — <code>${escapeHtml(ctx.mcpUrl)}</code> — so you can paste them directly into your harness.`;
 
-  const title = ctx.mode === "sandbox"
-    ? "Neotoma sandbox"
-    : ctx.mode === "local"
-      ? "Neotoma (local)"
-      : "Neotoma MCP server";
+  const connectHarnessCliNote = `<p class="muted">With the Neotoma CLI installed: <code>neotoma setup</code> wires MCP entries and agent instruction files; use <code>neotoma mcp config</code> or <code>neotoma cli config</code> to update one layer only. For read-only help, run <code>neotoma mcp guide</code> or <code>neotoma cli guide</code>.</p>`;
+
+  const title =
+    ctx.mode === "sandbox"
+      ? "Neotoma sandbox"
+      : ctx.mode === "local"
+        ? "Neotoma (local)"
+        : "Neotoma MCP server";
 
   return `<!doctype html>
 <html lang="en">
@@ -443,7 +460,10 @@ ${copy.banner ? `<div class="banner">${escapeHtml(copy.banner)}</div>` : ""}
 <ul class="endpoints">
 <li><code>${escapeHtml(ctx.mcpUrl)}</code> <span class="muted">— MCP endpoint</span></li>
 ${Object.entries(ctx.endpoints)
-  .map(([label, path]) => `<li><code>${escapeHtml(path)}</code> <span class="muted">— <a href="${escapeHtml(ctx.base)}${escapeHtml(path)}">${escapeHtml(label.replace(/_/g, " "))}</a></span></li>`)
+  .map(
+    ([label, path]) =>
+      `<li><code>${escapeHtml(path)}</code> <span class="muted">— <a href="${escapeHtml(ctx.base)}${escapeHtml(path)}">${escapeHtml(label.replace(/_/g, " "))}</a></span></li>`
+  )
   .join("\n")}
 </ul>
 ${inspectorNote}
@@ -455,6 +475,7 @@ ${ctx.mode === "sandbox" ? renderPackPicker(ctx) : ""}
 <section>
 <h2>Connect your harness</h2>
 <p class="muted">${harnessLede}</p>
+${connectHarnessCliNote}
 ${ctx.harnesses.map(renderHarnessSection).join("\n")}
 </section>
 

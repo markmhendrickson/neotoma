@@ -4,7 +4,7 @@
  * Checks that all expected files exist and contain meaningful content
  * so crawlers (Claude, ChatGPT, Googlebot, etc.) see real HTML.
  *
- * Run after `npm run build:pages:site`:
+ * Run after `npm run build:site:pages`:
  *   tsx scripts/validate_site_export.ts
  *
  * Exits 0 when all checks pass, 1 on failure.
@@ -53,7 +53,7 @@ function extractIndexablePaths(): string[] {
 }
 
 if (!fs.existsSync(siteDir)) {
-  fail("site_pages/ directory does not exist — run `npm run build:pages:site` first");
+  fail("site_pages/ directory does not exist — run `npm run build:site:pages` first");
   process.exit(1);
 }
 
@@ -163,6 +163,47 @@ for (const htmlPath of collectHtmlFiles(siteDir)) {
 }
 if (badAssetPaths === 0) {
   pass("All HTML files use root /assets/ for bundled scripts and stylesheets");
+}
+
+// ---------------------------------------------------------------------------
+// 3c. Non-English prerendered homepages must not retain obvious English hero copy
+// ---------------------------------------------------------------------------
+const NON_ENGLISH_SITE_LOCALES = [
+  "es",
+  "ca",
+  "zh",
+  "hi",
+  "ar",
+  "fr",
+  "pt",
+  "ru",
+  "bn",
+  "ur",
+  "id",
+  "de",
+] as const;
+/** Stable English hero lines from `static_packs` / SitePage — if present in locale HTML, prerender likely missed i18n. */
+const ENGLISH_HOME_SENTINELS = [
+  "Your agents forget.",
+  "Without shared memory across your AI tools:",
+] as const;
+
+let englishHomeSentinelHits = 0;
+for (const loc of NON_ENGLISH_SITE_LOCALES) {
+  const homePath = path.join(siteDir, loc, "index.html");
+  if (!fs.existsSync(homePath)) continue;
+  const html = fs.readFileSync(homePath, "utf-8");
+  for (const phrase of ENGLISH_HOME_SENTINELS) {
+    if (html.includes(phrase)) {
+      fail(
+        `site_pages/${loc}/index.html contains English homepage sentinel "${phrase.slice(0, 48)}${phrase.length > 48 ? "…" : ""}" — locale prerender may be wrong`,
+      );
+      englishHomeSentinelHits++;
+    }
+  }
+}
+if (englishHomeSentinelHits === 0) {
+  pass("No non-English homepage HTML contained English hero sentinels");
 }
 
 // ---------------------------------------------------------------------------

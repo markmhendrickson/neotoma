@@ -1,6 +1,18 @@
 {
   "presets": [
     {
+      "id": "mascot",
+      "description": "Small animal mascot in the same restrained editorial line-art style as the packrat hero. Use for agent avatars, bot icons, and character marks. Warm beige palette, transparent background, square 1:1.",
+      "prompt": "Transparent background. Stylized editorial line illustration of a small animal mascot in the same visual language as the Neotoma packrat hero: warm beige and tan palette only (cream #f4ebe0, sand #d9cbb8, taupe #a0907a, deep tan #6e6254). No pure black, no gradients, no shading blocks, no photorealism. Two stroke weights for hierarchy — hairline for interior detail, slightly heavier for silhouette outline. Clean joins, generous negative space, subject slightly off-center or centered. The animal should be recognizable and charming but restrained — no cartoonishly thick outlines, no emoji style, no clipart. Small natural prop or gesture allowed (twig, branch, tool). Square 1:1 composition, subject occupying roughly 50–65% of the canvas.",
+      "output_dir": "frontend/src/assets/images/mascots",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 1
+    },
+    {
       "id": "beige_hero",
       "description": "Editorial beige line-art for hero overlays (default).",
       "prompt": "Transparent background. Editorial-quality abstract line illustration for a serious developer product (Stripe/Linear restraint, not clipart). Palette: warm beige and tan only — use 2–4 closely related tones (#e8dcc8 through #7d6f5f), no other hues, no black, no gradients, no fills except optional whisper-light beige shapes at very low opacity. Composition: strong negative space (roughly half the frame empty), one focal cluster, subtle asymmetry, crisp geometry. Line work: two deliberate weights only — hairline for structure, slightly heavier for emphasis; perfectly clean joins, no sketchy texture, no drop shadow, no 3D, no isometric boxes, no emoji shapes, no stock-icon look. No text, no logos, no mascots, no photorealism.",

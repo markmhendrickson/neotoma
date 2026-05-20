@@ -8,6 +8,7 @@
 
 import { db } from "../db.js";
 import { rewriteObservationEntityId } from "./observation_storage.js";
+import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 export interface MergeEntitiesParams {
   fromEntityId: string;
@@ -27,14 +28,14 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
 
   const { data: fromEntity } = await db
     .from("entities")
-    .select("id, merged_to_entity_id")
+    .select("id, merged_to_entity_id, entity_type")
     .eq("id", fromEntityId)
     .eq("user_id", userId)
     .single();
 
   const { data: toEntity } = await db
     .from("entities")
-    .select("id, merged_to_entity_id")
+    .select("id, merged_to_entity_id, entity_type")
     .eq("id", toEntityId)
     .eq("user_id", userId)
     .single();
@@ -51,11 +52,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
     throw new EntityAlreadyMergedError("Target entity already merged");
   }
 
-  const observations_moved = await rewriteObservationEntityId(
-    fromEntityId,
-    toEntityId,
-    userId
-  );
+  const observations_moved = await rewriteObservationEntityId(fromEntityId, toEntityId, userId);
 
   const merged_at = new Date().toISOString();
 
@@ -76,11 +73,24 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
     observations_rewritten: observations_moved,
   });
 
-  await db
-    .from("entity_snapshots")
-    .delete()
-    .eq("entity_id", fromEntityId)
-    .eq("user_id", userId);
+  await db.from("entity_snapshots").delete().eq("entity_id", fromEntityId).eq("user_id", userId);
+
+  const fromType = (fromEntity as { entity_type: string }).entity_type;
+  const toType = (toEntity as { entity_type: string }).entity_type;
+  emitEntityLifecycle({
+    user_id: userId,
+    entity_id: fromEntityId,
+    entity_type: fromType,
+    event_type: "entity.merged",
+    timestamp: merged_at,
+  });
+  emitEntitySnapshotChange({
+    user_id: userId,
+    entity_id: toEntityId,
+    entity_type: toType,
+    event_type: "entity.updated",
+    timestamp: merged_at,
+  });
 
   return { observations_moved, merged_at };
 }

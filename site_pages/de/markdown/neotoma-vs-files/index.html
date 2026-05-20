@@ -39,10 +39,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Neotoma vs File-Based Memory | Markdown, JSON vs Deterministic State (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
-  
-    <!-- build: local-1777885129871 -->
+    <script type="module" crossorigin="" src="/assets/main-CdQyL3IU.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-AlNK8DFG.css">
+
+    <!-- build: local-1778219015016 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-vs-files">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-vs-files">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-vs-files">
@@ -62,9 +62,11 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/de/neotoma-vs-files
-  Generated: 2026-05-04T09:02:55.006Z
+  Generated: 2026-05-08T05:46:20.221Z
 --&gt;
 # Neotoma vs file-based memory
+
+Translation for de is not available yet; showing English source (translated\_from\_revision=2026-05-07).
 
 File-based memory stores state in Markdown, JSON, or similar artifacts. Three production-scale agent platforms, Manus, Claude Code, and OpenClaw, independently converged on this pattern. It is portable, human-editable, and cache-friendly, but provides no schema enforcement, conflict detection, or auditable provenance unless layered on manually. Neotoma stores structured observations and composes entity state via deterministic reducers with formal guarantees.
 
@@ -79,8 +81,6 @@ File-based memory stores facts as plain text artifacts on disk. Agents read and 
 Neotoma
 
 Neotoma stores append-only observations about entities. Deterministic reducers compose all observations into a single entity snapshot. Every field traces to its source observation, schema validation rejects malformed writes, and conflicting facts are resolved deterministically. MCP-based retrieval of entity snapshots is equally cache-friendly to LLMs, structured text injected into context with the same KV-cache benefits as files, but with state integrity guarantees.
-
-◆
 
 ## Guarantee comparison
 
@@ -101,8 +101,6 @@ Neotoma stores append-only observations about entities. Deterministic reducers c
 | Direct human editability | Guaranteed | Not provided |
 | Privacy-first local storage | Guaranteed | Guaranteed |
 | Full data export and portability | Guaranteed | Guaranteed |
-
-◆
 
 ## When to use which
 
@@ -132,8 +130,8 @@ Structured file formats give you parseable data but not memory guarantees. A mal
 
 Yes. You can use files for human-editable configuration and notes while using Neotoma for entity state that needs formal guarantees. They address different layers of the problem, and this layered approach mirrors what production systems like OpenClaw already do by indexing files with sqlite-vec for retrieval.
 
-[Install Neotoma](/install)[All memory models](/memory-models)[FAQ](/faq)</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
-  
+[Install Neotoma](/install)[All memory models](/de/memory-models)[FAQ](/de/faq)</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+
 
 
 </body></html>

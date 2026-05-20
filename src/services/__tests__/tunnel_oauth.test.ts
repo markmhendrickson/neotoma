@@ -12,7 +12,9 @@ describe("isRedirectUriAllowedForTunnel", () => {
   describe("allowed redirect URIs", () => {
     it("allows cursor:// scheme", () => {
       expect(isRedirectUriAllowedForTunnel("cursor://callback")).toBe(true);
-      expect(isRedirectUriAllowedForTunnel("cursor://anysphere.cursor-deeplink/mcp/install")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("cursor://anysphere.cursor-deeplink/mcp/install")).toBe(
+        true
+      );
     });
 
     it("allows vscode:// scheme", () => {
@@ -59,7 +61,9 @@ describe("isRedirectUriAllowedForTunnel", () => {
     });
 
     it("rejects https://trycloudflare.com", () => {
-      expect(isRedirectUriAllowedForTunnel("https://random.trycloudflare.com/callback")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://random.trycloudflare.com/callback")).toBe(
+        false
+      );
     });
 
     it("rejects ftp:// scheme", () => {

@@ -24,7 +24,7 @@ Expected output: `attribution.tier: hardware` (ES256/EdDSA) or `software` (other
 
 If you see `anonymous` / `unverified_client` or `signature_verified: false`, walk the diagnostics checklist in [`docs/subsystems/agent_attribution_integration.md#6-diagnostics-checklist`](../subsystems/agent_attribution_integration.md#6-diagnostics-checklist) before continuing.
 
-For non-CLI integrators (a local proxy, a custom agent harness), implement the same wire format documented in the integration guide — `Signature`, `Signature-Input`, and `Signature-Key` headers covering `@authority`, `@method`, `@target-uri`, and `content-digest`. The `authority` MUST match `NEOTOMA_AUTH_AUTHORITY`; using the inbound `Host` header is explicitly unsafe.
+For non-CLI integrators (a local proxy, a custom agent harness), implement the same wire format documented in the integration guide — `Signature`, `Signature-Input`, and `Signature-Key` headers covering `@authority`, `@method`, `@target-uri`, and `content-digest`. The `authority` MUST match `NEOTOMA_AAUTH_AUTHORITY`; using the inbound `Host` header is explicitly unsafe.
 
 ### Capability scoping (optional, strongly recommended in production)
 

@@ -61,7 +61,16 @@ Include this section whenever `docs/developer/mcp/instructions.md`, `docs/develo
 
 ## Security hardening
 
-- CSP, rate limits, auth, loopback/local classification, capability registries, and similar defaults changes that change the attack surface or the operator knobs.
+This section is **mandatory** for every release supplement, regardless of whether the diff classifier (`npm run security:classify-diff`) reported `sensitive=true`. When no security-sensitive surfaces were touched, write the literal line `No security-sensitive surfaces touched.` so the trail is explicit (mirrors the **Breaking changes** rule).
+
+When the release IS security-sensitive, include all of:
+
+- CSP, rate limits, auth, loopback / local classification, capability registries, and similar defaults changes that change the attack surface or the operator knobs.
+- Link to `docs/releases/in_progress/<TAG>/security_review.md` (the AI/human review file from `/release` Step 3.5) and `docs/releases/in_progress/<TAG>/post_deploy_security_probes.md` (the deployed-probe report from Step 5).
+- Link to any advisory under `docs/security/advisories/` opened or referenced by this release (cite the dated filename and the GHSA / CVE if assigned).
+- For each material change: surface affected, exposure shape if a regression had landed, the gate (G1–G5) that catches the regression class going forward, and the operator action — typically "upgrade to vX.Y.Z" or "rotate bearer tokens, then upgrade".
+
+See `docs/developer/github_release_process.md` § Security hardening section for the full contract.
 
 ## Docs site & CI / tooling
 

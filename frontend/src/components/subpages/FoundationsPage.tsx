@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Fingerprint, Globe2, ShieldCheck } from "lucide-react";
+import { Fingerprint, Globe2, Lock, ShieldCheck } from "lucide-react";
 import { DetailPage } from "../DetailPage";
 import { useLocale } from "@/i18n/LocaleContext";
 
@@ -10,9 +10,10 @@ export function FoundationsPage() {
   return (
     <DetailPage title={foundations.title}>
       <p className="text-[15px] leading-7 mb-4">
-        Neotoma is built on three architectural commitments: your data stays on your machine, the
-        same input always produces the same output, and your memory works across every AI tool you
-        connect. These are not feature flags; they are structural properties of the system.
+        Neotoma is built on four architectural commitments: your data stays on your machine, the
+        same input always produces the same output, history is append-only and verifiable, and
+        your memory works across every AI tool you connect. These are not feature flags; they are
+        structural properties of the system.
       </p>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
@@ -26,6 +27,11 @@ export function FoundationsPage() {
           <li>
             <a href="#deterministic" className="text-foreground underline hover:text-foreground">
               {foundations.deterministic}
+            </a>
+          </li>
+          <li>
+            <a href="#immutable" className="text-foreground underline hover:text-foreground">
+              {foundations.immutable}
             </a>
           </li>
           <li>
@@ -48,8 +54,9 @@ export function FoundationsPage() {
           on your disk, and the MCP interface exposes only what you choose to connect.
         </p>
         <p className="text-[15px] leading-7 mb-4">
-          Storage is user-controlled at every level. You decide what goes in; nothing is stored
-          implicitly. Observations are append-only and encrypted at rest when configured. Every entity
+          Storage is user-controlled at every level. Nothing is stored unless you approve it: there
+          is no background scanning, no implicit captures, and no opt-out telemetry. You decide what
+          goes in. Observations are append-only and encrypted at rest when configured. Every entity
           traces to a source and timestamp, so you can audit exactly what the system knows and where
           it came from.
         </p>
@@ -121,6 +128,52 @@ export function FoundationsPage() {
             architecture
           </Link>{" "}
           for how determinism is enforced across the pipeline.
+        </p>
+      </section>
+
+      {/* Immutable and verifiable */}
+      <section id="immutable" className="scroll-mt-20 mb-12">
+        <h2 className="flex items-start gap-2 text-[22px] font-medium tracking-[-0.01em] mb-4">
+          <Lock className="mt-1 size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <span>{foundations.immutable}</span>
+        </h2>
+        <p className="text-[15px] leading-7 mb-4">
+          Every observation is append-only. History cannot be rewritten. Corrections add a new
+          observation that supersedes earlier ones in the reducer; the prior values remain on disk
+          and remain replayable, with the agent or user that authored each value attributed on the
+          row.
+        </p>
+        <p className="text-[15px] leading-7 mb-4">
+          Entity IDs are content-addressed hashes derived from canonical identity fields. The same
+          logical record resolves to the same ID across stores, processes, and machines, and any
+          tampering with the underlying observation chain is detectable. There is no mutable
+          surrogate key that can be silently re-pointed at different state.
+        </p>
+        <p className="text-[15px] leading-7 mb-4">
+          Every entity carries a full provenance chain back to its source: the file or tool that
+          produced an observation, the interpretation run (if any) that extracted it, the
+          timestamp, and the priority that won during reduction. You can ask "where did this fact
+          come from?" of any field on any entity and get an exact, reconstructable answer.
+        </p>
+        <p className="text-[15px] leading-7 mb-4">
+          This is what makes Neotoma trustworthy as the state layer underneath agent action. When
+          an agent takes a consequential step, the basis for that step is verifiable after the
+          fact, even if the underlying source moved or the operating environment changed.
+        </p>
+        <p className="text-[15px] leading-7 mb-4">
+          See{" "}
+          <Link to="/memory-guarantees#versioned-history" className="text-foreground underline hover:text-foreground">
+            versioned history
+          </Link>{" "}
+          and{" "}
+          <Link to="/memory-guarantees#auditable-change-log" className="text-foreground underline hover:text-foreground">
+            auditable change log
+          </Link>{" "}
+          for the per-guarantee details, and{" "}
+          <Link to="/architecture" className="text-foreground underline hover:text-foreground">
+            architecture
+          </Link>{" "}
+          for how immutability is enforced across the pipeline.
         </p>
       </section>
 

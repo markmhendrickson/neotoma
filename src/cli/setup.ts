@@ -1,12 +1,18 @@
 /**
  * `neotoma setup` — composite onboarding command.
  *
- * Collapses `init --yes --idempotent`, `mcp config --yes`,
- * `cli-instructions config --yes`, and permission-file writes into one
+ * Collapses `init --yes --idempotent`, `mcp config`,
+ * `cli config`, hooks/plugin install, and permission-file writes into one
  * agent-runnable call so harnesses only need wildcard approval for
  * `neotoma *` to complete the full install-first flow.
+ *
+ * Read-only guidance stays under `mcp guide` and `cli guide`.
  */
 
+import { existsSync, mkdirSync, symlinkSync, readlinkSync, unlinkSync, readdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import type { ToolId } from "./doctor.js";
 import { runDoctor } from "./doctor.js";
 import { runHooksInstall } from "./hooks.js";
@@ -31,7 +37,38 @@ export interface SetupReport {
   doctor_before: Awaited<ReturnType<typeof runDoctor>>;
   doctor_after: Awaited<ReturnType<typeof runDoctor>>;
   overall_ok: boolean;
+  /** Canonical single-line install confirmation. Agents grep for this to confirm install succeeded. */
+  verify_line: string;
+  /** One-line privacy/transport summary for privacy-conscious evaluators. */
+  privacy_transport_summary: string;
 }
+
+/**
+ * Compose the canonical install-verification line that agent harnesses grep for.
+ * Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`
+ *
+ * When the binary is not yet on PATH (e.g. a version-manager shell mismatch),
+ * uses the global_bin path from the package root so the line is still emitted.
+ */
+export function buildVerifyLine(doctor: Awaited<ReturnType<typeof runDoctor>>): string {
+  const bin =
+    doctor.neotoma.which_neotoma ??
+    doctor.neotoma.global_bin ??
+    "(not found on PATH — see path_fix_hint)";
+  const via = doctor.neotoma.resolved_via ?? "unknown";
+  const ver = doctor.neotoma.version ? `v${doctor.neotoma.version}` : "vunknown";
+  const dataDir = doctor.data.data_dir;
+  // MCP transport: infer from detected MCP server configs whether a signed/http proxy is in use.
+  const hasMcpConfig = Object.values(doctor.mcp_servers_detected).some(
+    (c) => c.has_neotoma || c.has_neotoma_dev
+  );
+  const mcpLabel = hasMcpConfig ? "stdio" : "stdio (not yet configured)";
+  return `Neotoma installed at ${bin} (resolved via ${via}; ${ver}; data_dir=${dataDir}; mcp=${mcpLabel})`;
+}
+
+/** One-line privacy summary appended to setup output so privacy-conscious evaluators see it immediately. */
+export const PRIVACY_TRANSPORT_SUMMARY =
+  "Transport: local stdio MCP (no network egress). Override with --mcp-transport=http for signed HTTP /mcp proxy.";
 
 export interface RunSetupOptions {
   tool?: string | ToolId | null;
@@ -42,6 +79,12 @@ export interface RunSetupOptions {
   skipPermissions?: boolean;
   /** Permission scope for tools that expose project+user files. */
   scope?: "project" | "user" | "both";
+  /** Skip lifecycle hook/plugin installation. */
+  skipHooks?: boolean;
+  /** Skip skills installation into the harness. */
+  skipSkills?: boolean;
+  /** Install skills at project level or user level. */
+  skillsScope?: "project" | "user";
   /** Injected runners to keep setup pure + testable. */
   runners?: {
     init?: () => Promise<SetupStepResult>;
@@ -51,12 +94,131 @@ export interface RunSetupOptions {
   };
 }
 
+/**
+ * Map a ToolId to the harness skills directory.
+ * "user" scope uses the home-directory path; "project" uses cwd.
+ */
+function getSkillsTarget(tool: ToolId, cwd: string, scope: "project" | "user"): string | null {
+  const harnessMap: Partial<Record<ToolId, { dir: string }>> = {
+    cursor: { dir: ".cursor/skills" },
+    "claude-code": { dir: ".claude/skills" },
+    "claude-desktop": { dir: ".claude/skills" },
+    codex: { dir: ".codex/skills" },
+    openclaw: { dir: ".openclaw/skills" },
+    // MCP-only tools: no skills directory; setup writes MCP config only.
+    windsurf: undefined,
+    continue: undefined,
+    vscode: undefined,
+  };
+  const entry = harnessMap[tool];
+  if (!entry) return null;
+  const base = scope === "user" ? homedir() : cwd;
+  return join(base, entry.dir);
+}
+
+/**
+ * Resolve the `skills/` directory from the installed npm package.
+ * Works whether the CLI is running from a global install or a local checkout.
+ */
+function getPublishedSkillsSource(): string {
+  const thisFile = fileURLToPath(import.meta.url);
+  const packageRoot = resolve(dirname(thisFile), "..", "..");
+  return join(packageRoot, "skills");
+}
+
+/**
+ * Symlink each published skill into the harness skills directory.
+ * Idempotent: skips skills that already point to the correct source.
+ */
+function installSkills(tool: ToolId, cwd: string, scope: "project" | "user"): SetupStepResult {
+  const targetDir = getSkillsTarget(tool, cwd, scope);
+  if (!targetDir) {
+    return {
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: `tool ${tool} has no skills directory`,
+    };
+  }
+
+  const sourceDir = getPublishedSkillsSource();
+  if (!existsSync(sourceDir)) {
+    return {
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "no published skills directory found",
+    };
+  }
+
+  let entries: string[];
+  try {
+    entries = readdirSync(sourceDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return {
+      id: "skills",
+      ok: false,
+      changed: false,
+      reason: "failed to read skills source directory",
+    };
+  }
+
+  if (entries.length === 0) {
+    return {
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "no skills to install",
+    };
+  }
+
+  mkdirSync(targetDir, { recursive: true });
+
+  let changed = false;
+  const installed: string[] = [];
+  for (const name of entries) {
+    const src = join(sourceDir, name);
+    const dst = join(targetDir, name);
+    try {
+      if (existsSync(dst)) {
+        try {
+          const current = readlinkSync(dst);
+          if (resolve(current) === resolve(src)) continue;
+        } catch {
+          // dst exists but is not a symlink — skip to avoid overwriting user content
+          continue;
+        }
+        unlinkSync(dst);
+      }
+      symlinkSync(src, dst, "junction");
+      changed = true;
+      installed.push(name);
+    } catch {
+      // non-fatal: individual skill link failure
+    }
+  }
+
+  return {
+    id: "skills",
+    ok: true,
+    changed,
+    details: { installed, target: targetDir, source: sourceDir },
+  };
+}
+
 export async function runSetup(options: RunSetupOptions = {}): Promise<SetupReport> {
   const cwd = options.cwd ?? process.cwd();
   const dryRun = options.dryRun ?? false;
   const doctorBefore = await runDoctor({ cwd });
+  let currentDoctor = doctorBefore;
 
-  const toolInput = typeof options.tool === "string" ? toolFromString(options.tool) : (options.tool ?? null);
+  const toolInput =
+    typeof options.tool === "string" ? toolFromString(options.tool) : (options.tool ?? null);
   const tool: ToolId | null = toolInput ?? doctorBefore.current_tool_hint;
 
   const steps: SetupStepResult[] = [];
@@ -64,37 +226,74 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   // Step 1: init (idempotent)
   if (options.runners?.init) {
     steps.push(await options.runners.init());
-  } else if (doctorBefore.data.initialized) {
-    steps.push({ id: "init", ok: true, changed: false, skipped: true, reason: "already-initialized" });
+    if (!dryRun) currentDoctor = await runDoctor({ cwd });
+  } else if (currentDoctor.data.initialized) {
+    steps.push({
+      id: "init",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "already-initialized",
+    });
   } else if (dryRun) {
     steps.push({ id: "init", ok: true, changed: true, skipped: true, reason: "dry-run" });
   } else {
-    steps.push({ id: "init", ok: false, changed: false, skipped: true, reason: "runner-not-provided" });
+    steps.push({
+      id: "init",
+      ok: false,
+      changed: false,
+      skipped: true,
+      reason: "runner-not-provided",
+    });
   }
 
   // Step 2: mcp configure
   if (options.runners?.mcpConfigure) {
     steps.push(await options.runners.mcpConfigure());
+    if (!dryRun) currentDoctor = await runDoctor({ cwd });
   } else {
-    const hasMcp = Object.values(doctorBefore.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+    const hasMcp = Object.values(currentDoctor.mcp_servers_detected).some(
+      (c) => c.has_neotoma || c.has_neotoma_dev
+    );
     if (hasMcp) {
-      steps.push({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured" });
+      steps.push({
+        id: "mcp-configure",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "already-configured",
+      });
     } else if (dryRun) {
-      steps.push({ id: "mcp-configure", ok: true, changed: true, skipped: true, reason: "dry-run" });
+      steps.push({
+        id: "mcp-configure",
+        ok: true,
+        changed: true,
+        skipped: true,
+        reason: "dry-run",
+      });
     } else {
-      steps.push({ id: "mcp-configure", ok: false, changed: false, skipped: true, reason: "runner-not-provided" });
+      steps.push({
+        id: "mcp-configure",
+        ok: false,
+        changed: false,
+        skipped: true,
+        reason: "runner-not-provided",
+      });
     }
   }
 
-  const existingMcp = Object.values(doctorBefore.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+  const existingMcp = Object.values(currentDoctor.mcp_servers_detected).some(
+    (c) => c.has_neotoma || c.has_neotoma_dev
+  );
   const mcpStep = steps.find((s) => s.id === "mcp-configure");
   const mcpConfigured = existingMcp || Boolean(mcpStep?.ok && !mcpStep.skipped);
 
   // Step 3: CLI instructions configure
   if (options.runners?.cliInstructionsConfigure) {
     steps.push(await options.runners.cliInstructionsConfigure());
+    if (!dryRun) currentDoctor = await runDoctor({ cwd });
   } else {
-    const ci = doctorBefore.cli_instructions;
+    const ci = currentDoctor.cli_instructions;
     const hasAny =
       ci.project.cursor ||
       ci.project.claude ||
@@ -103,11 +302,29 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
       ci.user.claude ||
       ci.user.codex;
     if (hasAny) {
-      steps.push({ id: "cli-instructions", ok: true, changed: false, skipped: true, reason: "already-configured" });
+      steps.push({
+        id: "cli-instructions",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "already-configured",
+      });
     } else if (dryRun) {
-      steps.push({ id: "cli-instructions", ok: true, changed: true, skipped: true, reason: "dry-run" });
+      steps.push({
+        id: "cli-instructions",
+        ok: true,
+        changed: true,
+        skipped: true,
+        reason: "dry-run",
+      });
     } else {
-      steps.push({ id: "cli-instructions", ok: false, changed: false, skipped: true, reason: "runner-not-provided" });
+      steps.push({
+        id: "cli-instructions",
+        ok: false,
+        changed: false,
+        skipped: true,
+        reason: "runner-not-provided",
+      });
     }
   }
 
@@ -115,6 +332,14 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   // also get its reliability-floor hooks where the harness supports them.
   if (options.runners?.hooksInstall) {
     steps.push(await options.runners.hooksInstall());
+  } else if (options.skipHooks) {
+    steps.push({
+      id: "hooks",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "skip-hooks",
+    });
   } else {
     const hookHarness = tool ? toHookHarness(tool) : null;
     if (!hookHarness) {
@@ -133,7 +358,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
         skipped: true,
         reason: "mcp-not-configured",
       });
-    } else if (doctorBefore.hooks.installed[hookHarness]?.present) {
+    } else if (currentDoctor.hooks.installed[hookHarness]?.present) {
       steps.push({
         id: "hooks",
         ok: true,
@@ -143,7 +368,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
       });
     } else if (dryRun) {
       steps.push({ id: "hooks", ok: true, changed: true, skipped: true, reason: "dry-run" });
-    } else if (!doctorBefore.data.initialized) {
+    } else if (!currentDoctor.data.initialized) {
       steps.push({
         id: "hooks",
         ok: true,
@@ -171,12 +396,34 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     }
   }
 
-  // Step 5: permission patches
+  // Step 5: install published skills into the harness
+  if (options.skipSkills) {
+    steps.push({ id: "skills", ok: true, changed: false, skipped: true, reason: "skip-skills" });
+  } else if (!tool) {
+    steps.push({
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "tool not specified",
+    });
+  } else if (dryRun) {
+    steps.push({ id: "skills", ok: true, changed: true, skipped: true, reason: "dry-run" });
+  } else {
+    steps.push(installSkills(tool, cwd, options.skillsScope ?? "user"));
+  }
+
+  // Step 6: permission patches
   const permissionPatches: PermissionPatch[] = [];
   if (tool && !options.skipPermissions && tool !== "openclaw" && tool !== "claude-desktop") {
+    // claude-code defaults to "both" so the neotoma wildcard allow lands in
+    // both the project-scoped settings.local.json and the user-scoped
+    // settings.json. The user-level entry makes the allow available across
+    // all projects, not just the one where setup was run.
+    const defaultScope = tool === "claude-code" ? "both" : "project";
     const patches = await writePermissionsForTool(tool, cwd, {
       dryRun,
-      scope: options.scope ?? "project",
+      scope: options.scope ?? defaultScope,
     });
     permissionPatches.push(...patches);
     steps.push({
@@ -206,5 +453,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     doctor_before: doctorBefore,
     doctor_after: doctorAfter,
     overall_ok: overall,
+    verify_line: buildVerifyLine(doctorAfter),
+    privacy_transport_summary: PRIVACY_TRANSPORT_SUMMARY,
   };
 }

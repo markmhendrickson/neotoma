@@ -5,7 +5,11 @@
  */
 
 import { db } from "../db.js";
-import { enforceEntityTypeGuards } from "./entity_type_guard.js";
+import {
+  checkPluralEntityType,
+  enforceEntityTypeGuards,
+  suggestSingular,
+} from "./entity_type_guard.js";
 import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
@@ -21,27 +25,36 @@ function logSchemaRegistryInfo(message: string): void {
 }
 
 async function applyBuiltInSchemaIdentityDefaults(
-  entry: SchemaRegistryEntry | null,
+  entry: SchemaRegistryEntry | null
 ): Promise<SchemaRegistryEntry | null> {
   if (!entry) return entry;
   const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
   const builtIn = ENTITY_SCHEMAS[entry.entity_type];
   const builtInDefinition = builtIn?.schema_definition;
-  if (!builtInDefinition) return entry;
+
+  /** Code-defined default; DB row wins when it already sets guest_access_policy. */
+  function mergeGuestAccessFromCode(base: SchemaRegistryEntry): SchemaRegistryEntry {
+    const guestFromCode = builtIn?.metadata?.guest_access_policy;
+    if (!guestFromCode || base.metadata?.guest_access_policy) {
+      return base;
+    }
+    return {
+      ...base,
+      metadata: { ...(base.metadata ?? {}), guest_access_policy: guestFromCode },
+    };
+  }
+
+  if (!builtInDefinition) {
+    return mergeGuestAccessFromCode(entry);
+  }
 
   const schemaDefinition = { ...entry.schema_definition };
   let changed = false;
-  if (
-    !schemaDefinition.canonical_name_fields &&
-    builtInDefinition.canonical_name_fields
-  ) {
+  if (!schemaDefinition.canonical_name_fields && builtInDefinition.canonical_name_fields) {
     schemaDefinition.canonical_name_fields = builtInDefinition.canonical_name_fields;
     changed = true;
   }
-  if (
-    !schemaDefinition.name_collision_policy &&
-    builtInDefinition.name_collision_policy
-  ) {
+  if (!schemaDefinition.name_collision_policy && builtInDefinition.name_collision_policy) {
     schemaDefinition.name_collision_policy = builtInDefinition.name_collision_policy;
     changed = true;
   }
@@ -50,7 +63,8 @@ async function applyBuiltInSchemaIdentityDefaults(
     changed = true;
   }
 
-  return changed ? { ...entry, schema_definition: schemaDefinition } : entry;
+  const withDef = changed ? { ...entry, schema_definition: schemaDefinition } : entry;
+  return mergeGuestAccessFromCode(withDef);
 }
 
 export interface ConverterDefinition {
@@ -202,12 +216,49 @@ export interface SchemaDefinition {
    * docs/subsystems/entity_merge.md.
    */
   duplicate_detection_threshold?: number;
+
+  /**
+   * Markdown instructions injected into agent context when entities of this
+   * type are retrieved. Agents MUST treat this as behavioral context for the
+   * entity type and apply it to the current turn. Individual entities may
+   * store an `agent_instructions` snapshot field that extends or overrides
+   * this schema-level value.
+   *
+   * Must be a non-empty string when present.
+   */
+  agent_instructions?: string;
+
+  /**
+   * Declarative store-time warnings emitted when an observation payload is
+   * missing expected fields. Each entry describes one warning: if none of the
+   * listed `fields` are present in the stored payload, the `message` is
+   * appended to the response `warnings` array. The store operation is NOT
+   * blocked — warnings are non-fatal and informational only.
+   *
+   * Example: require at least one identity field on `product_feedback`:
+   * ```ts
+   * store_warnings: [{
+   *   code: "MISSING_IDENTITY_FIELDS",
+   *   fields: ["feedback_source", "reporter_email", "reporter_name", "reporter_id"],
+   *   message: "product_feedback stored without identity fields ...",
+   * }]
+   * ```
+   */
+  store_warnings?: Array<{
+    /** Machine-readable warning code surfaced in the response. */
+    code: string;
+    /**
+     * At least one of these fields must be present in the payload to suppress
+     * the warning. If none are found the warning fires.
+     */
+    fields: string[];
+    /** Human-readable warning message included in the response. */
+    message: string;
+  }>;
 }
 
 /** Known opt-out tokens for {@link SchemaDefinition.identity_opt_out}. */
-const VALID_IDENTITY_OPT_OUT_TOKENS = new Set<string>([
-  "heuristic_canonical_name",
-]);
+const VALID_IDENTITY_OPT_OUT_TOKENS = new Set<string>(["heuristic_canonical_name"]);
 
 /**
  * Valid values for the `observation_source` field on observations (kept in
@@ -222,10 +273,10 @@ export const OBSERVATION_SOURCE_RANK_VALUES = [
   "workflow_state",
   "human",
   "import",
+  "sync",
 ] as const;
 
-export type ObservationSourceRankValue =
-  (typeof OBSERVATION_SOURCE_RANK_VALUES)[number];
+export type ObservationSourceRankValue = (typeof OBSERVATION_SOURCE_RANK_VALUES)[number];
 
 /**
  * Default ranking applied by the reducer when a `source_priority` tie
@@ -236,18 +287,20 @@ export type ObservationSourceRankValue =
  * humans should use {@link ../services/correction.ts} for authoritative
  * overrides), which outrank batch imports.
  */
-export const DEFAULT_OBSERVATION_SOURCE_PRIORITY: readonly ObservationSourceRankValue[] =
-  ["sensor", "workflow_state", "llm_summary", "human", "import"] as const;
+export const DEFAULT_OBSERVATION_SOURCE_PRIORITY: readonly ObservationSourceRankValue[] = [
+  "sensor",
+  "workflow_state",
+  "llm_summary",
+  "human",
+  "import",
+  "sync",
+] as const;
 
 export interface ReducerConfig {
   merge_policies: Record<
     string,
     {
-      strategy:
-        | "last_write"
-        | "highest_priority"
-        | "most_specific"
-        | "merge_array";
+      strategy: "last_write" | "highest_priority" | "most_specific" | "merge_array";
       tie_breaker?: "observed_at" | "source_priority";
     }
   >;
@@ -272,13 +325,21 @@ export interface IconMetadata {
   generated_at: string; // ISO timestamp
 }
 
+export type GuestAccessPolicyMode =
+  | "closed"
+  | "read_only"
+  | "submit_only"
+  | "submitter_scoped"
+  | "open";
+
 export interface SchemaMetadata {
   label?: string;
   description?: string;
-  category?: "finance" | "productivity" | "knowledge" | "health" | "media";
+  category?: "finance" | "productivity" | "knowledge" | "health" | "media" | "agent_runtime";
   icon?: IconMetadata;
   test?: boolean; // Mark schemas created for testing
   test_marked_at?: string; // ISO timestamp when test schema was marked
+  guest_access_policy?: GuestAccessPolicyMode;
 }
 
 export interface SchemaRegistryEntry {
@@ -292,6 +353,28 @@ export interface SchemaRegistryEntry {
   user_id?: string | null;
   scope?: "global" | "user";
   metadata?: SchemaMetadata;
+}
+
+export async function loadCodeDefinedSchemaEntry(
+  entityType: string
+): Promise<SchemaRegistryEntry | null> {
+  const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+  const normalized = normalizeEntityTypeForSchema(entityType);
+  const schema = ENTITY_SCHEMAS[entityType] ?? ENTITY_SCHEMAS[normalized];
+  if (!schema) return null;
+
+  return {
+    id: "",
+    entity_type: schema.entity_type,
+    schema_version: schema.schema_version,
+    schema_definition: schema.schema_definition,
+    reducer_config: schema.reducer_config,
+    active: true,
+    created_at: new Date(0).toISOString(),
+    user_id: null,
+    scope: "global",
+    metadata: schema.metadata ?? {},
+  };
 }
 
 /**
@@ -337,7 +420,7 @@ export interface RequiredIdentityFields {
  */
 export async function deriveRequiredIdentityFields(
   entityType: string,
-  userId?: string | null,
+  userId?: string | null
 ): Promise<RequiredIdentityFields | null> {
   const normalized = normalizeEntityTypeForSchema(entityType);
   const entry = await schemaRegistry.loadActiveSchema(normalized, userId ?? undefined);
@@ -380,18 +463,21 @@ export async function deriveRequiredIdentityFields(
 
 /** Normalize entity type for schema registry: snake_case, safe characters, max length */
 export function normalizeEntityTypeForSchema(raw: string): string {
-  const normalized = raw
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "") || "generic";
+  const normalized =
+    raw
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "") || "generic";
   return normalized.slice(0, 64);
 }
 
 /** Infer schema field type from a value (for schema-from-extraction). */
-function inferFieldType(value: unknown): "string" | "number" | "date" | "boolean" | "array" | "object" {
+function inferFieldType(
+  value: unknown
+): "string" | "number" | "date" | "boolean" | "array" | "object" {
   if (value === null || value === undefined) return "string";
   if (typeof value === "number") return "number";
   if (typeof value === "boolean") return "boolean";
@@ -409,9 +495,10 @@ function inferFieldType(value: unknown): "string" | "number" | "date" | "boolean
  * Build schema definition and reducer config from extracted entity data.
  * Used when the entity type has no known schema so a user-scoped schema can be created.
  */
-export function buildSchemaFromExtractedFields(
-  entityData: Record<string, unknown>
-): { schema_definition: SchemaDefinition; reducer_config: ReducerConfig } {
+export function buildSchemaFromExtractedFields(entityData: Record<string, unknown>): {
+  schema_definition: SchemaDefinition;
+  reducer_config: ReducerConfig;
+} {
   const fields: Record<string, FieldDefinition> = {
     schema_version: { type: "string", required: true },
   };
@@ -477,7 +564,7 @@ export class SchemaRegistryService {
         schema_definition: config.schema_definition,
         reducer_config: config.reducer_config,
         active: config.activate || false, // New schemas start inactive unless specified
-        user_id: config.user_specific ? (config.user_id || null) : null,
+        user_id: config.user_specific ? config.user_id || null : null,
         scope: scope,
         metadata: config.metadata || {},
       })
@@ -489,6 +576,35 @@ export class SchemaRegistryService {
     }
 
     const registeredSchema = data as SchemaRegistryEntry;
+
+    // When activating a new schema version, deactivate all previously active
+    // versions for the same entity_type and scope so only one row ever has
+    // active = true. Without this, `loadGlobalSchema` / `loadUserSpecificSchema`
+    // use `.single()` which errors (or non-deterministically returns the old
+    // version) when multiple active rows exist, causing new fields to be routed
+    // to raw_fragments instead of the top-level snapshot. (Fixes #142)
+    if (config.activate) {
+      let deactivateQuery = db
+        .from("schema_registry")
+        .update({ active: false })
+        .eq("entity_type", config.entity_type)
+        .eq("active", true)
+        .not("id", "eq", registeredSchema.id);
+
+      if (scope === "user" && config.user_specific && config.user_id) {
+        deactivateQuery = deactivateQuery.eq("scope", "user").eq("user_id", config.user_id);
+      } else {
+        deactivateQuery = deactivateQuery.eq("scope", "global").is("user_id", null);
+      }
+
+      const { error: deactivateError } = await deactivateQuery;
+      if (deactivateError) {
+        logSchemaRegistryInfo(
+          `[SCHEMA_REGISTRY] Warning: failed to deactivate prior active schemas for ` +
+            `${config.entity_type}: ${deactivateError.message}`
+        );
+      }
+    }
 
     // Auto-generate icon if not provided (non-blocking)
     this.generateIconAsync(registeredSchema.entity_type, config.metadata);
@@ -503,10 +619,7 @@ export class SchemaRegistryService {
    * Load active entity schema for entity type
    * Supports user-specific schemas: tries user-specific first, then falls back to global
    */
-  async loadActiveSchema(
-    entityType: string,
-    userId?: string,
-  ): Promise<SchemaRegistryEntry | null> {
+  async loadActiveSchema(entityType: string, userId?: string): Promise<SchemaRegistryEntry | null> {
     // 1. Try user-specific schema first if userId provided
     if (userId) {
       const userSchema = await this.loadUserSpecificSchema(entityType, userId);
@@ -516,9 +629,7 @@ export class SchemaRegistryService {
     }
 
     // 2. Fall back to global schema
-    return await applyBuiltInSchemaIdentityDefaults(
-      await this.loadGlobalSchema(entityType),
-    );
+    return await applyBuiltInSchemaIdentityDefaults(await this.loadGlobalSchema(entityType));
   }
 
   /**
@@ -529,7 +640,9 @@ export class SchemaRegistryService {
   async listActiveSchemas(userId?: string): Promise<SchemaRegistryEntry[]> {
     const base = db
       .from("schema_registry")
-      .select("id, entity_type, schema_version, schema_definition, reducer_config, active, created_at, user_id, scope, metadata")
+      .select(
+        "id, entity_type, schema_version, schema_definition, reducer_config, active, created_at, user_id, scope, metadata"
+      )
       .eq("active", true);
     const query = userId
       ? base.or(`scope.eq.global,and(scope.eq.user,user_id.eq.${userId})`)
@@ -538,7 +651,9 @@ export class SchemaRegistryService {
     if (error) {
       throw new Error(`Failed to list active schemas: ${error.message}`);
     }
-    return (data ?? []) as SchemaRegistryEntry[];
+    const rows = (data ?? []) as SchemaRegistryEntry[];
+    const applied = await Promise.all(rows.map((row) => applyBuiltInSchemaIdentityDefaults(row)));
+    return applied.filter((e): e is SchemaRegistryEntry => e != null);
   }
 
   /**
@@ -553,10 +668,7 @@ export class SchemaRegistryService {
    * assert or display them. Set `silent: true` to compute the list without
    * writing to stderr (used by the CLI when rendering stats tables).
    */
-  async logIdentityOptOutsAtStartup(options?: {
-    userId?: string;
-    silent?: boolean;
-  }): Promise<{
+  async logIdentityOptOutsAtStartup(options?: { userId?: string; silent?: boolean }): Promise<{
     opt_outs: Array<{ entity_type: string; reason: string }>;
   }> {
     const schemas = await this.listActiveSchemas(options?.userId);
@@ -577,10 +689,47 @@ export class SchemaRegistryService {
         `ℹ️  [SCHEMA_REGISTRY] R2: ${label} opted out of canonical_name_fields ` +
           `(identity_opt_out): ${optOuts.map((o) => o.entity_type).join(", ")}. ` +
           "These resolve via the heuristic canonical_name path. See " +
-          "docs/foundation/schema_agnostic_design_rules.md.",
+          "docs/foundation/schema_agnostic_design_rules.md."
       );
     }
     return { opt_outs: optOuts };
+  }
+
+  /**
+   * Emit a one-time startup log of every active schema whose entity_type name
+   * looks plural (per {@link checkPluralEntityType}), advising the operator to
+   * run `neotoma schemas repair-plural-types` to migrate or alias them.
+   *
+   * Returns the list of plural entity_types. Set `silent: true` to compute the
+   * list without writing to stderr (e.g. for CLI stat tables).
+   */
+  async logPluralTypesAtStartup(options?: {
+    userId?: string;
+    silent?: boolean;
+  }): Promise<{ plural_types: Array<{ entity_type: string; suggested_singular: string }> }> {
+    const schemas = await this.listActiveSchemas(options?.userId);
+    const pluralTypes: Array<{ entity_type: string; suggested_singular: string }> = [];
+    for (const s of schemas) {
+      const guard = checkPluralEntityType(s.entity_type);
+      if (guard.reason === "looks_plural") {
+        const singular = suggestSingular(s.entity_type);
+        if (singular) {
+          pluralTypes.push({ entity_type: s.entity_type, suggested_singular: singular });
+        }
+      }
+    }
+    pluralTypes.sort((a, b) => a.entity_type.localeCompare(b.entity_type));
+    if (!options?.silent && pluralTypes.length > 0) {
+      const label =
+        pluralTypes.length === 1 ? "1 entity type" : `${pluralTypes.length} entity types`;
+      logSchemaRegistryInfo(
+        `⚠️  [SCHEMA_REGISTRY] ${label} appear to use plural names: ` +
+          `${pluralTypes.map((t) => t.entity_type).join(", ")}. ` +
+          "Run `neotoma schemas repair-plural-types` to merge or alias them. " +
+          "See docs/foundation/schema_agnostic_design_rules.md."
+      );
+    }
+    return { plural_types: pluralTypes };
   }
 
   /**
@@ -588,7 +737,7 @@ export class SchemaRegistryService {
    */
   async loadUserSpecificSchema(
     entityType: string,
-    userId: string,
+    userId: string
   ): Promise<SchemaRegistryEntry | null> {
     const { data, error } = await db
       .from("schema_registry")
@@ -604,9 +753,7 @@ export class SchemaRegistryService {
         // Not found
         return null;
       }
-      throw new Error(
-        `Failed to load user-specific schema: ${error.message}`,
-      );
+      throw new Error(`Failed to load user-specific schema: ${error.message}`);
     }
 
     return data as SchemaRegistryEntry;
@@ -615,9 +762,7 @@ export class SchemaRegistryService {
   /**
    * Load global schema for entity type
    */
-  async loadGlobalSchema(
-    entityType: string,
-  ): Promise<SchemaRegistryEntry | null> {
+  async loadGlobalSchema(entityType: string): Promise<SchemaRegistryEntry | null> {
     const { data, error } = await db
       .from("schema_registry")
       .select("*")
@@ -634,7 +779,7 @@ export class SchemaRegistryService {
       throw new Error(`Failed to load global schema: ${error.message}`);
     }
 
-    return data as SchemaRegistryEntry;
+    return applyBuiltInSchemaIdentityDefaults(data as SchemaRegistryEntry);
   }
 
   /**
@@ -696,11 +841,7 @@ export class SchemaRegistryService {
       field_name: string;
       field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
       required?: boolean;
-      reducer_strategy?:
-        | "last_write"
-        | "highest_priority"
-        | "most_specific"
-        | "merge_array";
+      reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
     }>;
     fields_to_remove?: string[];
     converters_to_add?: Array<{
@@ -716,6 +857,13 @@ export class SchemaRegistryService {
     user_specific?: boolean;
     user_id?: string;
     migrate_existing?: boolean; // Only for backfilling historical data
+    /**
+     * When migrate_existing is true, use this user_id as the scope for the
+     * raw_fragments query instead of options.user_id. Needed for global schemas
+     * (user_specific: false) where options.user_id is undefined but raw_fragments
+     * were stored by a specific authenticated user.
+     */
+    migrate_user_id?: string;
     activate?: boolean; // Default: true - activate immediately so new data uses updated schema
     force?: boolean;
   }): Promise<SchemaRegistryEntry> {
@@ -727,15 +875,22 @@ export class SchemaRegistryService {
 
     const activateSchema = options.activate !== false; // Default to true
 
-    // 1. Load current active schema (user-specific or global)
-    const currentSchema = await this.loadActiveSchema(
-      options.entity_type,
-      options.user_id,
-    );
-
+    // 1. Load current active schema (user-specific or global), then fall back to
+    // code-defined ENTITY_SCHEMAS so incremental updates can materialize the
+    // first registry row for built-in types (e.g. conversation_message).
+    let currentSchema = await this.loadActiveSchema(options.entity_type, options.user_id);
     if (!currentSchema) {
-      throw new Error(
-        `No active schema found for entity type: ${options.entity_type}`,
+      const normalized = normalizeEntityTypeForSchema(options.entity_type);
+      const codeDefined =
+        (await loadCodeDefinedSchemaEntry(options.entity_type)) ??
+        (await loadCodeDefinedSchemaEntry(normalized));
+      if (!codeDefined) {
+        throw new Error(`No active schema found for entity type: ${options.entity_type}`);
+      }
+      currentSchema = codeDefined;
+      logSchemaRegistryInfo(
+        `[SCHEMA_REGISTRY] Incremental update: no active registry row for ${options.entity_type}; ` +
+          `using code-defined baseline v${codeDefined.schema_version}`
       );
     }
 
@@ -746,8 +901,7 @@ export class SchemaRegistryService {
       converters_to_add: options.converters_to_add,
     });
     const newVersion =
-      options.schema_version ||
-      this.incrementVersion(currentSchema.schema_version, changeType);
+      options.schema_version || this.incrementVersion(currentSchema.schema_version, changeType);
 
     // 3. Merge fields (add new fields to existing schema)
     const mergedFields = {
@@ -759,7 +913,7 @@ export class SchemaRegistryService {
       // Skip if field already exists
       if (mergedFields[field.field_name]) {
         logSchemaRegistryInfo(
-          `[SCHEMA_REGISTRY] Field ${field.field_name} already exists in schema, skipping`,
+          `[SCHEMA_REGISTRY] Field ${field.field_name} already exists in schema, skipping`
         );
         continue;
       }
@@ -770,22 +924,49 @@ export class SchemaRegistryService {
       };
     }
 
+    // Add converters to existing fields
+    for (const converterSpec of options.converters_to_add || []) {
+      if (!mergedFields[converterSpec.field_name]) {
+        throw new Error(
+          `Field "${converterSpec.field_name}" does not exist in schema for entity type "${options.entity_type}". ` +
+            `Add the field first before adding a converter to it.`
+        );
+      }
+      const existingField = mergedFields[converterSpec.field_name];
+      const existingConverters: ConverterDefinition[] = Array.isArray(existingField.converters)
+        ? [...(existingField.converters as ConverterDefinition[])]
+        : [];
+      // Deduplicate by function name — adding the same converter twice is a no-op
+      const alreadyPresent = existingConverters.some(
+        (c) => c.function === converterSpec.converter.function
+      );
+      if (!alreadyPresent) {
+        existingConverters.push(converterSpec.converter);
+      }
+      mergedFields[converterSpec.field_name] = {
+        ...existingField,
+        converters: existingConverters,
+      };
+    }
+
     // Remove fields (schema-projection: data preserved in observations, just
     // excluded from future snapshots via reducer projection filtering)
     for (const fieldName of options.fields_to_remove || []) {
       if (!mergedFields[fieldName]) {
         logSchemaRegistryInfo(
-          `[SCHEMA_REGISTRY] Field ${fieldName} not found in schema, skipping removal`,
+          `[SCHEMA_REGISTRY] Field ${fieldName} not found in schema, skipping removal`
         );
         continue;
       }
       delete mergedFields[fieldName];
     }
 
-    // Validate that at least one field remains after removal
-    if (Object.keys(mergedFields).length === 0) {
+    // Validate that at least one field remains after removal — but only if
+    // fields were actually removed. An empty schema that started empty is fine.
+    const fieldsWereRemoved = (options.fields_to_remove || []).length > 0;
+    if (fieldsWereRemoved && Object.keys(mergedFields).length === 0) {
       throw new Error(
-        `Cannot remove all fields from schema for entity type: ${options.entity_type}. At least one field must remain.`,
+        `Cannot remove all fields from schema for entity type: ${options.entity_type}. At least one field must remain.`
       );
     }
 
@@ -811,9 +992,8 @@ export class SchemaRegistryService {
 
     // Handle default user ID: convert to undefined for optional parameter
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
-    const userId = options.user_id && options.user_id !== defaultUserId 
-      ? options.user_id 
-      : undefined;
+    const userId =
+      options.user_id && options.user_id !== defaultUserId ? options.user_id : undefined;
 
     // Preserve schema-level declarations that aren't field-maps (canonical_name_fields,
     // temporal_fields, reference_fields, aliases) across incremental updates.
@@ -842,16 +1022,14 @@ export class SchemaRegistryService {
       }
     }
     if (preserved.temporal_fields) {
-      preserved.temporal_fields = preserved.temporal_fields.filter(
-        (t) => !removalSet.has(t.field),
-      );
+      preserved.temporal_fields = preserved.temporal_fields.filter((t) => !removalSet.has(t.field));
       if (preserved.temporal_fields.length === 0) {
         delete preserved.temporal_fields;
       }
     }
     if (preserved.reference_fields) {
       preserved.reference_fields = preserved.reference_fields.filter(
-        (r) => !removalSet.has(r.field),
+        (r) => !removalSet.has(r.field)
       );
       if (preserved.reference_fields.length === 0) {
         delete preserved.reference_fields;
@@ -875,24 +1053,26 @@ export class SchemaRegistryService {
     }
 
     logSchemaRegistryInfo(
-      `[SCHEMA_REGISTRY] Incrementally updated schema for ${options.entity_type} to version ${newVersion}`,
+      `[SCHEMA_REGISTRY] Incrementally updated schema for ${options.entity_type} to version ${newVersion}`
     );
 
     // 7. Migrate raw_fragments if requested (historical data backfill only)
     if (options.migrate_existing) {
       logSchemaRegistryInfo(
-        `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`,
+        `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`
       );
       const fieldNamesToMigrate = [
         ...(options.fields_to_add?.map((f) => f.field_name) || []),
         ...(options.converters_to_add?.map((c) => c.field_name) || []),
       ];
-      
+
       if (fieldNamesToMigrate.length > 0) {
         await this.migrateRawFragmentsToObservations({
           entity_type: options.entity_type,
           field_names: fieldNamesToMigrate,
-          user_id: options.user_id,
+          // migrate_user_id takes precedence: for global schemas the caller passes
+          // the authenticated user's id here while options.user_id is undefined.
+          user_id: options.migrate_user_id ?? options.user_id,
         });
       }
     }
@@ -913,7 +1093,7 @@ export class SchemaRegistryService {
     let totalMigrated = 0;
 
     logSchemaRegistryInfo(
-      `[SCHEMA_REGISTRY] Starting migration for fields: ${options.field_names.join(", ")}`,
+      `[SCHEMA_REGISTRY] Starting migration for fields: ${options.field_names.join(", ")}`
     );
 
     // For each field, get raw_fragments and create observations
@@ -953,7 +1133,7 @@ export class SchemaRegistryService {
         }
 
         logSchemaRegistryInfo(
-          `[SCHEMA_REGISTRY] Processing batch of ${fragments.length} fragments for field ${fieldName}`,
+          `[SCHEMA_REGISTRY] Processing batch of ${fragments.length} fragments for field ${fieldName}`
         );
 
         // Group fragments by (source_id, interpretation_id) to find entities
@@ -976,16 +1156,17 @@ export class SchemaRegistryService {
           const sourceId = firstFragment.source_id;
           const interpretationId = firstFragment.interpretation_id;
 
-          // Find entity_id from existing observations with same source_id
-          // For structured data (parquet), interpretation_id may be null, so match on source_id only
-          let entityId: string | null = null;
-          if (sourceId) {
+          // Prefer explicit fragment ownership. Legacy fragments only carry
+          // source_id + entity_type, which is ambiguous when one source creates
+          // multiple entities of the same type.
+          let entityId: string | null =
+            typeof firstFragment.entity_id === "string" ? firstFragment.entity_id : null;
+          if (!entityId && sourceId) {
             let obsQuery = db
               .from("observations")
               .select("entity_id")
               .eq("source_id", sourceId)
-              .eq("entity_type", options.entity_type)
-              .limit(1);
+              .eq("entity_type", options.entity_type);
 
             // If interpretation_id exists, also match on it; otherwise match any interpretation_id
             if (interpretationId) {
@@ -995,10 +1176,14 @@ export class SchemaRegistryService {
               obsQuery = obsQuery.is("interpretation_id", null);
             }
 
-            const { data: existingObs } = await obsQuery.maybeSingle();
-
-            if (existingObs) {
-              entityId = existingObs.entity_id;
+            const { data: existingObs } = await obsQuery;
+            const entityIds = new Set<string>(
+              (existingObs || [])
+                .map((obs: { entity_id?: unknown }) => obs.entity_id)
+                .filter((id: unknown): id is string => typeof id === "string")
+            );
+            if (entityIds.size === 1) {
+              entityId = Array.from(entityIds)[0];
             }
           }
 
@@ -1006,20 +1191,15 @@ export class SchemaRegistryService {
             // No existing observation found - skip this group
             // This can happen if fragments were created but observations weren't
             console.warn(
-              `[SCHEMA_REGISTRY] No entity found for source ${sourceId}, interpretation ${interpretationId}, skipping migration`,
+              `[SCHEMA_REGISTRY] No entity found for source ${sourceId}, interpretation ${interpretationId}, skipping migration`
             );
             continue;
           }
 
           // Load current schema to get version
-          const currentSchema = await this.loadActiveSchema(
-            options.entity_type,
-            options.user_id,
-          );
+          const currentSchema = await this.loadActiveSchema(options.entity_type, options.user_id);
           if (!currentSchema) {
-            console.error(
-              `[SCHEMA_REGISTRY] No active schema found for ${options.entity_type}`,
-            );
+            console.error(`[SCHEMA_REGISTRY] No active schema found for ${options.entity_type}`);
             continue;
           }
 
@@ -1039,34 +1219,32 @@ export class SchemaRegistryService {
             // Create new observation with promoted fields
             // Use the same source_id and interpretation_id for provenance
             const observedAt = new Date().toISOString();
-            const { error: obsError } = await db
-              .from("observations")
-              .insert({
-                entity_id: entityId,
-                entity_type: options.entity_type,
-                schema_version: currentSchema.schema_version,
-                source_id: sourceId,
-                interpretation_id: interpretationId,
-                observed_at: observedAt,
-                specificity_score: 0.8, // Medium specificity for migrated fields
-                source_priority: 0, // Same priority as original interpretation
-                fields: promotedFields,
-                user_id: firstFragment.user_id,
-              });
+            const { error: obsError } = await db.from("observations").insert({
+              entity_id: entityId,
+              entity_type: options.entity_type,
+              schema_version: currentSchema.schema_version,
+              source_id: sourceId,
+              interpretation_id: interpretationId,
+              observed_at: observedAt,
+              specificity_score: 0.8, // Medium specificity for migrated fields
+              source_priority: 0, // Same priority as original interpretation
+              fields: promotedFields,
+              user_id: firstFragment.user_id,
+            });
 
             if (obsError) {
               // Check if it's a duplicate (idempotence) - that's okay
               if (obsError.code !== "23505") {
                 console.error(
                   `[SCHEMA_REGISTRY] Failed to create observation for entity ${entityId}:`,
-                  obsError.message,
+                  obsError.message
                 );
                 continue;
               }
             } else {
               totalMigrated += Object.keys(promotedFields).length;
               logSchemaRegistryInfo(
-                `[SCHEMA_REGISTRY] Migrated ${Object.keys(promotedFields).length} fields for entity ${entityId}`,
+                `[SCHEMA_REGISTRY] Migrated ${Object.keys(promotedFields).length} fields for entity ${entityId}`
               );
 
               // Recompute snapshot to include migrated fields
@@ -1081,12 +1259,12 @@ export class SchemaRegistryService {
                 if (allObservations && allObservations.length > 0) {
                   const snapshot = await observationReducer.computeSnapshot(
                     entityId,
-                    allObservations as any,
+                    allObservations as any
                   );
 
                   if (!snapshot) {
                     console.warn(
-                      `[SCHEMA_REGISTRY] computeSnapshot returned null for entity ${entityId}`,
+                      `[SCHEMA_REGISTRY] computeSnapshot returned null for entity ${entityId}`
                     );
                     continue;
                   }
@@ -1107,7 +1285,7 @@ export class SchemaRegistryService {
               } catch (snapshotError: any) {
                 console.warn(
                   `[SCHEMA_REGISTRY] Failed to recompute snapshot for entity ${entityId}:`,
-                  snapshotError.message,
+                  snapshotError.message
                 );
                 // Continue - snapshot will be recomputed on next observation creation
               }
@@ -1115,7 +1293,7 @@ export class SchemaRegistryService {
           } catch (error: any) {
             console.error(
               `[SCHEMA_REGISTRY] Failed to migrate fields for entity ${entityId}:`,
-              error.message,
+              error.message
             );
             // Continue with next group - don't fail entire migration
           }
@@ -1125,16 +1303,14 @@ export class SchemaRegistryService {
 
         // Safety check - don't migrate more than 10,000 fragments at once
         if (totalMigrated >= 10000) {
-          console.warn(
-            `[SCHEMA_REGISTRY] Migration limit reached (10,000 fragments), stopping`,
-          );
+          console.warn(`[SCHEMA_REGISTRY] Migration limit reached (10,000 fragments), stopping`);
           break;
         }
       }
     }
 
     logSchemaRegistryInfo(
-      `[SCHEMA_REGISTRY] Migration complete. Total fragments processed: ${totalMigrated}`,
+      `[SCHEMA_REGISTRY] Migration complete. Total fragments processed: ${totalMigrated}`
     );
 
     return { migrated_count: totalMigrated };
@@ -1142,18 +1318,18 @@ export class SchemaRegistryService {
 
   /**
    * Determine change type for schema update
-   * 
+   *
    * Breaking changes (major):
    * - Removing fields
    * - Changing field types (not just adding converters)
    * - Changing field from optional to required
    * - Removing converters
-   * 
+   *
    * Minor changes (minor):
    * - Adding new optional fields
    * - Adding converters to existing fields
    * - Changing reducer strategies
-   * 
+   *
    * Patch changes (patch):
    * - Documentation updates
    * - Non-functional changes
@@ -1178,10 +1354,7 @@ export class SchemaRegistryService {
     }>;
   }): "major" | "minor" | "patch" {
     // Breaking changes (major version)
-    if (
-      options.fields_to_remove &&
-      options.fields_to_remove.length > 0
-    ) {
+    if (options.fields_to_remove && options.fields_to_remove.length > 0) {
       return "major";
     }
 
@@ -1192,10 +1365,7 @@ export class SchemaRegistryService {
           return "major";
         }
         // Changing from optional to required is breaking
-        if (
-          mod.old_required === false &&
-          mod.new_required === true
-        ) {
+        if (mod.old_required === false && mod.new_required === true) {
           return "major";
         }
       }
@@ -1215,11 +1385,11 @@ export class SchemaRegistryService {
 
   /**
    * Increment schema version using semantic versioning (major.minor.patch)
-   * 
+   *
    * - Major: Breaking changes (removing fields, changing types, making fields required)
    * - Minor: Additive changes (new fields, new converters) - backward compatible
    * - Patch: Non-functional changes (documentation, formatting)
-   * 
+   *
    * Examples:
    * - 1.0.0 -> 1.1.0 (add new optional field)
    * - 1.1.0 -> 1.1.1 (patch change)
@@ -1342,24 +1512,27 @@ export class SchemaRegistryService {
    */
   private generateSearchableText(schema: SchemaRegistryEntry): string {
     const parts: string[] = [schema.entity_type];
-    
+
     // Add field names
     const fieldNames = Object.keys(schema.schema_definition.fields || {});
     parts.push(...fieldNames);
-    
+
     // Add field types for context (e.g., "date", "amount", "name")
     for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
       if (fieldDef.type === "date" && fieldName.includes("date")) {
         parts.push("date", "time", "timestamp");
       }
-      if (fieldDef.type === "number" && (fieldName.includes("amount") || fieldName.includes("price") || fieldName.includes("cost"))) {
+      if (
+        fieldDef.type === "number" &&
+        (fieldName.includes("amount") || fieldName.includes("price") || fieldName.includes("cost"))
+      ) {
         parts.push("amount", "price", "cost", "money", "financial");
       }
       if (fieldName.includes("name") || fieldName.includes("title")) {
         parts.push("name", "title", "label");
       }
     }
-    
+
     return parts.join(" ");
   }
 
@@ -1368,17 +1541,17 @@ export class SchemaRegistryService {
    */
   private cosineSimilarity(a: number[], b: number[]): number {
     if (a.length !== b.length) return 0;
-    
+
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
-    
+
     for (let i = 0; i < a.length; i++) {
       dotProduct += a[i] * b[i];
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-    
+
     if (normA === 0 || normB === 0) return 0;
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
@@ -1386,14 +1559,16 @@ export class SchemaRegistryService {
   /**
    * List all active entity types, optionally filtered by keyword with vector search fallback
    */
-  async listEntityTypes(keyword?: string): Promise<Array<{
-    entity_type: string;
-    schema_version: string;
-    field_names: string[];
-    field_summary: Record<string, { type: string; required: boolean }>;
-    similarity_score?: number;
-    match_type?: "keyword" | "vector";
-  }>> {
+  async listEntityTypes(keyword?: string): Promise<
+    Array<{
+      entity_type: string;
+      schema_version: string;
+      field_names: string[];
+      field_summary: Record<string, { type: string; required: boolean }>;
+      similarity_score?: number;
+      match_type?: "keyword" | "vector";
+    }>
+  > {
     // Get all active schemas from database
     const query = db
       .from("schema_registry")
@@ -1449,7 +1624,7 @@ export class SchemaRegistryService {
     }
 
     const keywordLower = keyword.toLowerCase();
-    
+
     // Step 1: Try keyword matching first (deterministic, strong consistency)
     const keywordMatches: Array<{
       schema: SchemaRegistryEntry;
@@ -1458,7 +1633,7 @@ export class SchemaRegistryService {
 
     for (const schema of allSchemasArray) {
       let score = 0;
-      
+
       // Exact entity type match (highest score)
       if (schema.entity_type.toLowerCase() === keywordLower) {
         score = 10;
@@ -1467,7 +1642,7 @@ export class SchemaRegistryService {
       else if (schema.entity_type.toLowerCase().includes(keywordLower)) {
         score = 5;
       }
-      
+
       // Field name matches
       const fieldNames = Object.keys(schema.schema_definition.fields || {});
       for (const fieldName of fieldNames) {
@@ -1477,21 +1652,23 @@ export class SchemaRegistryService {
           score += 1;
         }
       }
-      
+
       if (score > 0) {
         keywordMatches.push({ schema, score });
       }
     }
 
     // If we have good keyword matches (score >= 3), return those
-    const goodKeywordMatches = keywordMatches.filter(m => m.score >= 3);
+    const goodKeywordMatches = keywordMatches.filter((m) => m.score >= 3);
     if (goodKeywordMatches.length > 0) {
       return goodKeywordMatches
         .sort((a, b) => b.score - a.score)
         .map(({ schema, score }) => {
           const fieldNames = Object.keys(schema.schema_definition.fields || {});
           const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-          for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+          for (const [fieldName, fieldDef] of Object.entries(
+            schema.schema_definition.fields || {}
+          )) {
             fieldSummary[fieldName] = {
               type: fieldDef.type,
               required: fieldDef.required || false,
@@ -1512,7 +1689,7 @@ export class SchemaRegistryService {
     // Step 2: Fallback to vector search (semantic matching, bounded eventual consistency)
     const { generateEmbedding } = await import("../embeddings.js");
     const queryEmbedding = await generateEmbedding(keyword);
-    
+
     if (!queryEmbedding) {
       // If embeddings not available, return keyword matches even if low score
       return keywordMatches
@@ -1520,7 +1697,9 @@ export class SchemaRegistryService {
         .map(({ schema, score }) => {
           const fieldNames = Object.keys(schema.schema_definition.fields || {});
           const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-          for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+          for (const [fieldName, fieldDef] of Object.entries(
+            schema.schema_definition.fields || {}
+          )) {
             fieldSummary[fieldName] = {
               type: fieldDef.type,
               required: fieldDef.required || false,
@@ -1548,7 +1727,7 @@ export class SchemaRegistryService {
     for (const schema of allSchemasArray) {
       const searchableText = this.generateSearchableText(schema);
       const schemaEmbedding = await generateEmbedding(searchableText);
-      
+
       if (schemaEmbedding) {
         const similarity = this.cosineSimilarity(queryEmbedding, schemaEmbedding);
         schemaEmbeddings.push({ schema, embedding: schemaEmbedding, similarity });
@@ -1557,7 +1736,7 @@ export class SchemaRegistryService {
 
     // Sort by similarity and return top matches
     const vectorMatches = schemaEmbeddings
-      .filter(item => item.similarity > 0.3) // Threshold for relevance
+      .filter((item) => item.similarity > 0.3) // Threshold for relevance
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, 20) // Limit results
       .map(({ schema, similarity }) => {
@@ -1628,21 +1807,21 @@ export class SchemaRegistryService {
     ) {
       throw new Error(
         "Schema definition must declare `canonical_name_fields` OR " +
-          "`identity_opt_out: \"heuristic_canonical_name\"`. See " +
-          "docs/foundation/schema_agnostic_design_rules.md (R2).",
+          '`identity_opt_out: "heuristic_canonical_name"`. See ' +
+          "docs/foundation/schema_agnostic_design_rules.md (R2)."
       );
     }
 
     if (definition.identity_opt_out !== undefined) {
       if (typeof definition.identity_opt_out !== "string") {
         throw new Error(
-          "identity_opt_out must be a string token (e.g. \"heuristic_canonical_name\")",
+          'identity_opt_out must be a string token (e.g. "heuristic_canonical_name")'
         );
       }
       if (!VALID_IDENTITY_OPT_OUT_TOKENS.has(definition.identity_opt_out)) {
         throw new Error(
           `identity_opt_out has unknown value: ${definition.identity_opt_out}. ` +
-            `Allowed: ${Array.from(VALID_IDENTITY_OPT_OUT_TOKENS).join(", ")}`,
+            `Allowed: ${Array.from(VALID_IDENTITY_OPT_OUT_TOKENS).join(", ")}`
         );
       }
     }
@@ -1652,22 +1831,22 @@ export class SchemaRegistryService {
       if (policy !== "merge" && policy !== "warn" && policy !== "reject") {
         throw new Error(
           `name_collision_policy has unknown value: ${String(policy)}. ` +
-            "Allowed: merge | warn | reject.",
+            "Allowed: merge | warn | reject."
         );
       }
       if (policy !== "merge" && definition.identity_opt_out !== undefined) {
         throw new Error(
-          "name_collision_policy cannot be set to \"warn\" or \"reject\" on a " +
+          'name_collision_policy cannot be set to "warn" or "reject" on a ' +
             "schema that also declares identity_opt_out. Either declare " +
             "canonical_name_fields so identity can be matched deterministically, " +
-            "or keep the default policy (\"merge\").",
+            'or keep the default policy ("merge").'
         );
       }
       if (policy === "reject" && definition.canonical_name_fields === undefined) {
         throw new Error(
-          "name_collision_policy: \"reject\" requires a reachable " +
+          'name_collision_policy: "reject" requires a reachable ' +
             "canonical_name_fields declaration so callers have a deterministic " +
-            "path to resolve identity. See docs/foundation/schema_agnostic_design_rules.md (R2).",
+            "path to resolve identity. See docs/foundation/schema_agnostic_design_rules.md (R2)."
         );
       }
     }
@@ -1675,7 +1854,7 @@ export class SchemaRegistryService {
     if (definition.canonical_name_fields !== undefined) {
       if (!Array.isArray(definition.canonical_name_fields)) {
         throw new Error(
-          "canonical_name_fields must be an array of field names or { composite: string[] } rules",
+          "canonical_name_fields must be an array of field names or { composite: string[] } rules"
         );
       }
       for (const entry of definition.canonical_name_fields) {
@@ -1684,15 +1863,17 @@ export class SchemaRegistryService {
             throw new Error("canonical_name_fields entries must be non-empty strings");
           }
           if (!definition.fields[entry]) {
-            throw new Error(
-              `canonical_name_fields references unknown field: ${entry}`,
-            );
+            throw new Error(`canonical_name_fields references unknown field: ${entry}`);
           }
           continue;
         }
-        if (!entry || typeof entry !== "object" || !Array.isArray((entry as { composite?: unknown }).composite)) {
+        if (
+          !entry ||
+          typeof entry !== "object" ||
+          !Array.isArray((entry as { composite?: unknown }).composite)
+        ) {
           throw new Error(
-            "canonical_name_fields entries must be strings or { composite: string[] } objects",
+            "canonical_name_fields entries must be strings or { composite: string[] } objects"
           );
         }
         const compositeFields = (entry as { composite: unknown[] }).composite;
@@ -1701,14 +1882,10 @@ export class SchemaRegistryService {
         }
         for (const name of compositeFields) {
           if (typeof name !== "string" || !name.trim()) {
-            throw new Error(
-              "canonical_name_fields composite fields must be non-empty strings",
-            );
+            throw new Error("canonical_name_fields composite fields must be non-empty strings");
           }
           if (!definition.fields[name]) {
-            throw new Error(
-              `canonical_name_fields references unknown field: ${name}`,
-            );
+            throw new Error(`canonical_name_fields references unknown field: ${name}`);
           }
         }
       }
@@ -1723,9 +1900,7 @@ export class SchemaRegistryService {
           throw new Error("temporal_fields entries must be { field, event_type? }");
         }
         if (!definition.fields[entry.field]) {
-          throw new Error(
-            `temporal_fields references unknown field: ${entry.field}`,
-          );
+          throw new Error(`temporal_fields references unknown field: ${entry.field}`);
         }
       }
     }
@@ -1742,13 +1917,11 @@ export class SchemaRegistryService {
           typeof entry.target_entity_type !== "string"
         ) {
           throw new Error(
-            "reference_fields entries must be { field, target_entity_type, relationship_type? }",
+            "reference_fields entries must be { field, target_entity_type, relationship_type? }"
           );
         }
         if (!definition.fields[entry.field]) {
-          throw new Error(
-            `reference_fields references unknown field: ${entry.field}`,
-          );
+          throw new Error(`reference_fields references unknown field: ${entry.field}`);
         }
       }
     }
@@ -1764,70 +1937,62 @@ export class SchemaRegistryService {
       }
     }
 
-    const validTypes = [
-      "string",
-      "number",
-      "date",
-      "boolean",
-      "array",
-      "object",
-    ];
+    const validTypes = ["string", "number", "date", "boolean", "array", "object"];
     for (const [fieldName, fieldDef] of Object.entries(definition.fields)) {
       if (!validTypes.includes(fieldDef.type)) {
-        throw new Error(
-          `Invalid field type for ${fieldName}: ${fieldDef.type}`,
-        );
+        throw new Error(`Invalid field type for ${fieldName}: ${fieldDef.type}`);
       }
 
       // Validate converters if defined
       if (fieldDef.converters) {
         if (!Array.isArray(fieldDef.converters)) {
-          throw new Error(
-            `Converters for ${fieldName} must be an array`,
-          );
+          throw new Error(`Converters for ${fieldName} must be an array`);
         }
 
         for (const converter of fieldDef.converters) {
           // Validate required properties
           if (!converter.from || !converter.to || !converter.function) {
             throw new Error(
-              `Converter for ${fieldName} must have from, to, and function properties`,
+              `Converter for ${fieldName} must have from, to, and function properties`
             );
           }
 
           // Validate deterministic property
           if (converter.deterministic !== true) {
             throw new Error(
-              `Converter for ${fieldName} must be deterministic (deterministic: true)`,
+              `Converter for ${fieldName} must be deterministic (deterministic: true)`
             );
           }
 
           // Validate from/to types
           if (!validTypes.includes(converter.from)) {
-            throw new Error(
-              `Invalid converter from type for ${fieldName}: ${converter.from}`,
-            );
+            throw new Error(`Invalid converter from type for ${fieldName}: ${converter.from}`);
           }
           if (!validTypes.includes(converter.to)) {
-            throw new Error(
-              `Invalid converter to type for ${fieldName}: ${converter.to}`,
-            );
+            throw new Error(`Invalid converter to type for ${fieldName}: ${converter.to}`);
           }
 
           // Validate that converter 'to' type matches field type
           if (converter.to !== fieldDef.type) {
             throw new Error(
-              `Converter for ${fieldName} must convert to field type ${fieldDef.type}, not ${converter.to}`,
+              `Converter for ${fieldName} must convert to field type ${fieldDef.type}, not ${converter.to}`
             );
           }
 
           // Validate converter function name format (basic check)
           if (typeof converter.function !== "string" || converter.function.length === 0) {
-            throw new Error(
-              `Converter function name for ${fieldName} must be a non-empty string`,
-            );
+            throw new Error(`Converter function name for ${fieldName} must be a non-empty string`);
           }
         }
+      }
+    }
+
+    if (definition.agent_instructions !== undefined) {
+      if (
+        typeof definition.agent_instructions !== "string" ||
+        definition.agent_instructions.trim().length === 0
+      ) {
+        throw new Error("agent_instructions must be a non-empty string when present");
       }
     }
   }
@@ -1835,20 +2000,12 @@ export class SchemaRegistryService {
   /**
    * Validate reducer config
    */
-  private validateReducerConfig(
-    config: ReducerConfig,
-    schemaDefinition: SchemaDefinition,
-  ): void {
+  private validateReducerConfig(config: ReducerConfig, schemaDefinition: SchemaDefinition): void {
     if (!config.merge_policies || typeof config.merge_policies !== "object") {
       throw new Error("Reducer config must have merge_policies object");
     }
 
-    const validStrategies = [
-      "last_write",
-      "highest_priority",
-      "most_specific",
-      "merge_array",
-    ];
+    const validStrategies = ["last_write", "highest_priority", "most_specific", "merge_array"];
     const validTieBreakers = ["observed_at", "source_priority"];
 
     for (const [fieldName, policy] of Object.entries(config.merge_policies)) {
@@ -1857,38 +2014,27 @@ export class SchemaRegistryService {
       }
 
       if (!validStrategies.includes(policy.strategy)) {
-        throw new Error(
-          `Invalid merge strategy for ${fieldName}: ${policy.strategy}`,
-        );
+        throw new Error(`Invalid merge strategy for ${fieldName}: ${policy.strategy}`);
       }
 
-      if (
-        policy.tie_breaker &&
-        !validTieBreakers.includes(policy.tie_breaker)
-      ) {
-        throw new Error(
-          `Invalid tie breaker for ${fieldName}: ${policy.tie_breaker}`,
-        );
+      if (policy.tie_breaker && !validTieBreakers.includes(policy.tie_breaker)) {
+        throw new Error(`Invalid tie breaker for ${fieldName}: ${policy.tie_breaker}`);
       }
     }
 
     if (config.observation_source_priority !== undefined) {
       if (!Array.isArray(config.observation_source_priority)) {
         throw new Error(
-          "observation_source_priority must be an array of observation_source values",
+          "observation_source_priority must be an array of observation_source values"
         );
       }
       const seen = new Set<string>();
       for (const value of config.observation_source_priority) {
         if (!OBSERVATION_SOURCE_RANK_VALUES.includes(value)) {
-          throw new Error(
-            `Invalid observation_source in observation_source_priority: ${value}`,
-          );
+          throw new Error(`Invalid observation_source in observation_source_priority: ${value}`);
         }
         if (seen.has(value)) {
-          throw new Error(
-            `Duplicate observation_source in observation_source_priority: ${value}`,
-          );
+          throw new Error(`Duplicate observation_source in observation_source_priority: ${value}`);
         }
         seen.add(value);
       }
@@ -1905,47 +2051,77 @@ export class SchemaRegistryService {
   ): Promise<void> {
     // Find the active schema for this entity type
     const schema = await this.loadActiveSchema(entityType, userId);
-    
+
     if (!schema) {
-      console.warn(`[SCHEMA_REGISTRY] No active schema found for ${entityType}, cannot update icon`);
+      console.warn(
+        `[SCHEMA_REGISTRY] No active schema found for ${entityType}, cannot update icon`
+      );
       return;
     }
-    
+
     // Update metadata with icon
     const updatedMetadata = {
       ...(schema.metadata || {}),
       icon: iconMetadata,
     };
-    
+
     const { error } = await db
       .from("schema_registry")
       .update({ metadata: updatedMetadata })
       .eq("id", schema.id);
-    
+
     if (error) {
       console.error(`[SCHEMA_REGISTRY] Failed to update icon metadata for ${entityType}:`, error);
     }
   }
 
   /**
+   * Merge partial metadata fields into the active schema row for an entity type.
+   * Preserves existing metadata keys that are not in the patch.
+   */
+  async updateMetadata(
+    entityType: string,
+    patch: Partial<SchemaMetadata>,
+    userId?: string
+  ): Promise<void> {
+    const schema = await this.loadActiveSchema(entityType, userId);
+    if (!schema) {
+      throw new Error(
+        `No active schema found for entity type "${entityType}"; cannot update metadata.`
+      );
+    }
+
+    const updatedMetadata: SchemaMetadata = {
+      ...(schema.metadata || {}),
+      ...patch,
+    };
+
+    const { error } = await db
+      .from("schema_registry")
+      .update({ metadata: updatedMetadata })
+      .eq("id", schema.id);
+
+    if (error) {
+      throw new Error(`Failed to update metadata for ${entityType}: ${error.message}`);
+    }
+  }
+
+  /**
    * Generate icon for a schema asynchronously (non-blocking)
    */
-  private async generateIconAsync(
-    entityType: string,
-    metadata?: SchemaMetadata
-  ): Promise<void> {
+  private async generateIconAsync(entityType: string, metadata?: SchemaMetadata): Promise<void> {
     // Only generate if icon doesn't already exist
     if (metadata?.icon) {
       return;
     }
-    
+
     try {
       // Import icon service dynamically to avoid circular dependencies
       const { generateIconForEntityType } = await import("./schema_icon_service.js");
-      
+
       // Generate icon
       const iconMetadata = await generateIconForEntityType(entityType, metadata);
-      
+
       // Update schema with icon
       await this.updateIconMetadata(entityType, iconMetadata);
     } catch (error) {
@@ -1970,10 +2146,7 @@ export class SchemaRegistryService {
     }
 
     // Run export script asynchronously (fire-and-forget)
-    const scriptPath = join(
-      __dirname,
-      "../../scripts/export_schema_snapshots.ts",
-    );
+    const scriptPath = join(__dirname, "../../scripts/export_schema_snapshots.ts");
     const child = spawn("tsx", [scriptPath], {
       stdio: "ignore", // Suppress output to avoid cluttering logs
       detached: true,
@@ -1988,9 +2161,7 @@ export class SchemaRegistryService {
       // Silently ignore export errors - schema operations should not fail
       // if snapshot export fails (e.g., in CI/CD or restricted environments)
       if (process.env.NODE_ENV === "development") {
-        console.warn(
-          `[Schema Registry] Failed to export snapshots: ${error.message}`,
-        );
+        console.warn(`[Schema Registry] Failed to export snapshots: ${error.message}`);
       }
     });
   }

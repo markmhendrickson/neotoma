@@ -49,13 +49,12 @@ import { logger } from "../utils/logger.js";
  * (notably `/session`) can mirror it to the client without hitting the log
  * stream. Pure metadata; never contains signatures or public keys.
  */
-function setAttributionDecision(
-  req: Request,
-  decision: AttributionDecisionDiagnostics,
-): void {
-  (req as Request & {
-    attributionDecision?: AttributionDecisionDiagnostics;
-  }).attributionDecision = decision;
+function setAttributionDecision(req: Request, decision: AttributionDecisionDiagnostics): void {
+  (
+    req as Request & {
+      attributionDecision?: AttributionDecisionDiagnostics;
+    }
+  ).attributionDecision = decision;
 }
 
 /**
@@ -64,13 +63,9 @@ function setAttributionDecision(
  * level on purpose: production logs stay quiet unless operators dial the
  * logger up to inspect a specific request.
  */
-function logAttributionDecision(
-  decision: AttributionDecisionDiagnostics,
-): void {
+function logAttributionDecision(decision: AttributionDecisionDiagnostics): void {
   // Stable event name / shape — consumed by tests and integrator docs.
-  logger.debug(
-    JSON.stringify({ event: "attribution_decision", ...decision }),
-  );
+  logger.debug(JSON.stringify({ event: "attribution_decision", ...decision }));
 }
 
 /**
@@ -110,11 +105,7 @@ export interface AAuthVerifyOptions {
  * present we short-circuit the middleware — verifying unsigned requests is
  * a waste of CPU and log noise.
  */
-const AAUTH_HEADERS = [
-  "signature",
-  "signature-input",
-  "signature-key",
-] as const;
+const AAUTH_HEADERS = ["signature", "signature-input", "signature-key"] as const;
 
 function hasAAuthHeaders(req: Request): boolean {
   return AAUTH_HEADERS.some((h) => req.headers[h] !== undefined);
@@ -142,7 +133,7 @@ function getStrictAAuthSubs(): Set<string> {
     raw
       .split(",")
       .map((s) => s.trim().toLowerCase())
-      .filter((s) => s.length > 0),
+      .filter((s) => s.length > 0)
   );
 }
 
@@ -184,11 +175,20 @@ function serialisePublicKey(publicKey: unknown): string | undefined {
  * - Enforce `exp` if present; ignore otherwise.
  * - Surface `sub` / `iss` for attribution.
  */
+/** Shape of a single external actor claim from the agent_token. */
+export interface ExternalActorTokenClaim {
+  provider: string;
+  id: number;
+  login: string;
+  linked_at?: string;
+}
+
 function validateAgentTokenJwt(raw: string | undefined): {
   sub?: string;
   iss?: string;
   iat?: number;
   attestation?: AttestationEnvelope;
+  externalActorClaims?: ExternalActorTokenClaim[];
   valid: boolean;
   reason?: string;
 } {
@@ -214,12 +214,27 @@ function validateAgentTokenJwt(raw: string | undefined): {
         attestation = candidate as AttestationEnvelope;
       }
     }
+
+    let externalActorClaims: ExternalActorTokenClaim[] | undefined;
+    const extActors = (payload as Record<string, unknown>)["https://neotoma.io/external_actors"];
+    if (Array.isArray(extActors)) {
+      externalActorClaims = extActors.filter(
+        (entry): entry is ExternalActorTokenClaim =>
+          entry != null &&
+          typeof entry === "object" &&
+          typeof (entry as Record<string, unknown>).provider === "string" &&
+          typeof (entry as Record<string, unknown>).id === "number" &&
+          typeof (entry as Record<string, unknown>).login === "string"
+      );
+    }
+
     return {
       valid: true,
       sub: typeof payload.sub === "string" ? payload.sub : undefined,
       iss: typeof payload.iss === "string" ? payload.iss : undefined,
       iat: typeof payload.iat === "number" ? payload.iat : undefined,
       attestation,
+      externalActorClaims: externalActorClaims?.length ? externalActorClaims : undefined,
     };
   } catch (error) {
     return {
@@ -236,23 +251,15 @@ function validateAgentTokenJwt(raw: string | undefined): {
  * code without translation.
  */
 function attestationOutcomeForDiagnostics(
-  outcome: AttestationOutcome,
+  outcome: AttestationOutcome
 ): NonNullable<AttributionDecisionDiagnostics["attestation"]> {
   const revocation = outcome.revocation
     ? {
         checked: outcome.revocation.checked,
-        ...(outcome.revocation.status
-          ? { status: outcome.revocation.status }
-          : {}),
-        ...(outcome.revocation.source
-          ? { source: outcome.revocation.source }
-          : {}),
-        ...(outcome.revocation.detail
-          ? { detail: outcome.revocation.detail }
-          : {}),
-        ...(outcome.revocation.mode
-          ? { mode: outcome.revocation.mode }
-          : {}),
+        ...(outcome.revocation.status ? { status: outcome.revocation.status } : {}),
+        ...(outcome.revocation.source ? { source: outcome.revocation.source } : {}),
+        ...(outcome.revocation.detail ? { detail: outcome.revocation.detail } : {}),
+        ...(outcome.revocation.mode ? { mode: outcome.revocation.mode } : {}),
         ...(outcome.revocation.demoted !== undefined
           ? { demoted: outcome.revocation.demoted }
           : {}),
@@ -295,8 +302,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
     throw new Error("aauthVerify requires a canonical `authority` string");
   }
   const envStrict =
-    process.env.NEOTOMA_AAUTH_STRICT === "1" ||
-    process.env.NEOTOMA_AAUTH_STRICT === "true";
+    process.env.NEOTOMA_AAUTH_STRICT === "1" || process.env.NEOTOMA_AAUTH_STRICT === "true";
   const strict = options.strict ?? envStrict;
 
   function rejectStrict(
@@ -304,7 +310,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
     next: NextFunction,
     code: string,
     message: string,
-    forceReject = false,
+    forceReject = false
   ): void {
     if (!strict && !forceReject) {
       next();
@@ -326,8 +332,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
   ): Promise<void> {
     const strictSubs = getStrictAAuthSubs();
     const claimedLabel = getAgentLabelHeader(req);
-    const labelClaimsStrictSub =
-      !!claimedLabel && strictSubs.has(claimedLabel);
+    const labelClaimsStrictSub = !!claimedLabel && strictSubs.has(claimedLabel);
 
     const signaturePresent = hasAAuthHeaders(req);
     if (!signaturePresent) {
@@ -340,7 +345,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
             event: "aauth_strict_sub_rejected",
             reason: "signature_missing",
             agent_label: claimedLabel,
-          }),
+          })
         );
         res.status(401).json({
           error_code: "AAUTH_REQUIRED",
@@ -373,11 +378,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
     const rawBody = (req as Request & { rawBody?: Buffer | string }).rawBody;
     const bodyForVerify: Buffer | string | undefined =
       rawBody ??
-      (typeof req.body === "string"
-        ? req.body
-        : Buffer.isBuffer(req.body)
-          ? req.body
-          : undefined);
+      (typeof req.body === "string" ? req.body : Buffer.isBuffer(req.body) ? req.body : undefined);
 
     try {
       const result = await expressVerify(
@@ -400,9 +401,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
       );
 
       if (!result.verified) {
-        logger.warn(
-          `[aauth] Signature verification failed: ${result.error ?? "unknown"}`
-        );
+        logger.warn(`[aauth] Signature verification failed: ${result.error ?? "unknown"}`);
         const decision: AttributionDecisionDiagnostics = {
           signature_present: true,
           signature_verified: false,
@@ -416,7 +415,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
           next,
           result.error ?? "signature_invalid",
           "AAuth signature verification failed",
-          labelClaimsStrictSub,
+          labelClaimsStrictSub
         );
       }
 
@@ -427,9 +426,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
       if (result.keyType === "jwt" && result.jwt) {
         const jwtCheck = validateAgentTokenJwt(result.jwt.raw);
         if (!jwtCheck.valid) {
-          logger.warn(
-            `[aauth] Agent token JWT rejected: ${jwtCheck.reason ?? "invalid"}`
-          );
+          logger.warn(`[aauth] Agent token JWT rejected: ${jwtCheck.reason ?? "invalid"}`);
           const decision: AttributionDecisionDiagnostics = {
             signature_present: true,
             signature_verified: false,
@@ -443,19 +440,27 @@ export function aauthVerify(options: AAuthVerifyOptions) {
             next,
             jwtCheck.reason ?? "jwt_invalid",
             "AAuth agent token rejected",
-            labelClaimsStrictSub,
+            labelClaimsStrictSub
           );
         }
         sub = jwtCheck.sub;
         iss = jwtCheck.iss;
         iat = jwtCheck.iat;
         attestationEnvelope = jwtCheck.attestation;
+        if (jwtCheck.externalActorClaims?.length) {
+          (
+            req as Request & { _externalActorClaims?: ExternalActorTokenClaim[] }
+          )._externalActorClaims = jwtCheck.externalActorClaims;
+        }
       }
 
       const algorithm =
         typeof (result.publicKey as { alg?: string })?.alg === "string"
           ? (result.publicKey as { alg?: string }).alg
           : undefined;
+      const externalActorClaims = (
+        req as Request & { _externalActorClaims?: ExternalActorTokenClaim[] }
+      )._externalActorClaims;
       const ctx: AAuthRequestContext = {
         verified: true,
         publicKey: serialisePublicKey(result.publicKey),
@@ -463,6 +468,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
         algorithm,
         sub,
         iss,
+        ...(externalActorClaims?.length ? { externalActorClaims } : {}),
       };
 
       if (labelClaimsStrictSub) {
@@ -474,7 +480,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
               reason: "sub_mismatch",
               agent_label: claimedLabel,
               verified_sub: verifiedSub || null,
-            }),
+            })
           );
           res.status(401).json({
             error_code: "AAUTH_REQUIRED",
@@ -500,10 +506,11 @@ export function aauthVerify(options: AAuthVerifyOptions) {
       const trustConfig = loadAttestationTrustConfig();
       const expectedChallenge = computeExpectedChallenge({ iss, sub, iat });
       const boundJkt = result.thumbprint ?? "";
-      const attestationOutcome = await verifyAttestation(
-        attestationEnvelope ?? null,
-        { expectedChallenge, boundJkt, trustConfig },
-      );
+      const attestationOutcome = await verifyAttestation(attestationEnvelope ?? null, {
+        expectedChallenge,
+        boundJkt,
+        trustConfig,
+      });
 
       let resolvedTier: AttributionTier;
       let allowlistSource: "issuer" | "issuer_subject" | undefined;
@@ -537,9 +544,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
 
       next();
     } catch (error) {
-      logger.warn(
-        `[aauth] Verification threw (treating as unsigned): ${(error as Error).message}`
-      );
+      logger.warn(`[aauth] Verification threw (treating as unsigned): ${(error as Error).message}`);
       const decision: AttributionDecisionDiagnostics = {
         signature_present: true,
         signature_verified: false,
@@ -553,7 +558,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
         next,
         "verification_threw",
         "AAuth verification error",
-        labelClaimsStrictSub,
+        labelClaimsStrictSub
       );
     }
   };
@@ -564,11 +569,15 @@ export function aauthVerify(options: AAuthVerifyOptions) {
  * without a cast dance.
  */
 export function getAttributionDecisionFromRequest(
-  req: Request,
+  req: Request
 ): AttributionDecisionDiagnostics | null {
-  return (req as Request & {
-    attributionDecision?: AttributionDecisionDiagnostics;
-  }).attributionDecision ?? null;
+  return (
+    (
+      req as Request & {
+        attributionDecision?: AttributionDecisionDiagnostics;
+      }
+    ).attributionDecision ?? null
+  );
 }
 
 /**
@@ -585,9 +594,7 @@ export type { ClientNameNormalisationReason } from "../crypto/agent_identity.js"
  * Fetch the AAuth context stamped on a request by {@link aauthVerify}.
  * Returns `null` when the request is unsigned or failed verification.
  */
-export function getAAuthContextFromRequest(
-  req: Request
-): AAuthRequestContext | null {
+export function getAAuthContextFromRequest(req: Request): AAuthRequestContext | null {
   const ctx = (req as Request & { aauth?: AAuthRequestContext }).aauth;
   return ctx && ctx.verified ? ctx : null;
 }

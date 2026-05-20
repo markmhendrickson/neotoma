@@ -2,8 +2,9 @@ import { Check, Copy } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCopyFeedback } from "../lib/copy_feedback";
 import { copyTextToClipboard } from "../lib/copy_to_clipboard";
-import { SITE_CODE_SNIPPETS } from "../site/site_data";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/LocaleContext";
+import { localizePath } from "@/i18n/routing";
 import {
   sendCtaClick,
   sendFunnelEvaluatePromptCopy,
@@ -42,24 +43,27 @@ export function HomeEvaluatePromptBlock({
   hideIntro = false,
 }: HomeEvaluatePromptBlockProps) {
   const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
-  const prompt = SITE_CODE_SNIPPETS.homeEvaluatePrompt;
-  const target = agentTargetPhrase ?? "any AI agent";
+  const { locale, pack } = useLocale();
+  const ev = pack.homeBody.evaluate;
+  const prompt = ev.homeEvaluatePrompt;
+  const target = agentTargetPhrase ?? ev.evaluatePromptDefaultAgentTarget;
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       {!hideIntro && (
         <p className="text-[15px] leading-7 text-muted-foreground">
-          Copy this prompt into {target} to have it read the{" "}
+          {ev.evaluatePromptIntroBeforeTarget}
+          {target}
+          {ev.evaluatePromptIntroBetweenTargetAndLink}
           <Link
-            to="/evaluate"
+            to={localizePath("/evaluate", locale)}
             {...detailPageCtaLinkProps}
             className="font-medium text-foreground underline underline-offset-2 decoration-muted-foreground/50 hover:decoration-foreground/70 transition-colors"
             onClick={() => sendCtaClick("section_evaluate")}
           >
-            evaluation page
+            {ev.evaluatePromptIntroLink}
           </Link>
-          , inspect your tool, workspace, and configuration context, then judge
-          whether Neotoma fits your real workflow and what to persist first.
+          {ev.evaluatePromptIntroAfterLink}
         </p>
       )}
       <div className={cn("w-full", hideIntro ? "" : "my-4", EVALUATE_PROMPT_CARD_SHELL_CLASS)}>
@@ -67,11 +71,11 @@ export function HomeEvaluatePromptBlock({
           <div className="min-w-0 space-y-2 px-1 text-left">
             <div className={EVALUATE_PROMPT_PILL_CLASS}>
               <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
-              Evaluation prompt
+              {ev.evaluatePromptPill}
             </div>
             {!hideIntro && (
               <div className="text-[12px] leading-5 text-muted-foreground">
-                Reads the page, then evaluates fit against your real workflow.
+                {ev.evaluatePromptCardSubtitle}
               </div>
             )}
           </div>
@@ -89,12 +93,12 @@ export function HomeEvaluatePromptBlock({
             {copied ? (
               <>
                 <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Copied
+                {ev.evaluatePromptCopied}
               </>
             ) : (
               <>
                 <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Copy
+                {ev.evaluatePromptCopy}
               </>
             )}
           </button>
@@ -121,12 +125,12 @@ export function HomeEvaluatePromptBlock({
           {copied ? (
             <>
               <Check className="h-4 w-4 shrink-0" aria-hidden />
-              Copied
+              {ev.evaluatePromptCopied}
             </>
           ) : (
             <>
               <Copy className="h-4 w-4 shrink-0" aria-hidden />
-              Copy prompt
+              {ev.evaluatePromptCopyMobile}
             </>
           )}
         </button>

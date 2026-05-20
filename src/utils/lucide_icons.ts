@@ -1,6 +1,6 @@
 /**
  * Lucide Icons Utility
- * 
+ *
  * Provides list of available Lucide icons and validation utilities.
  * Used by SchemaIconService for icon matching.
  */
@@ -27,7 +27,7 @@ export const LUCIDE_ICONS = {
     "ChartBar",
     "BarChart",
   ],
-  
+
   // Productivity
   productivity: [
     "CheckSquare", // task
@@ -41,20 +41,10 @@ export const LUCIDE_ICONS = {
     "Flag",
     "Star",
   ],
-  
+
   // People & Organizations
-  people: [
-    "User",
-    "Users",
-    "Building",
-    "Building2",
-    "Home",
-    "MapPin",
-    "Mail",
-    "Phone",
-    "Contact",
-  ],
-  
+  people: ["User", "Users", "Building", "Building2", "Home", "MapPin", "Mail", "Phone", "Contact"],
+
   // Documents & Files
   documents: [
     "File",
@@ -67,72 +57,24 @@ export const LUCIDE_ICONS = {
     "Paperclip",
     "Folder",
   ],
-  
+
   // Health & Wellness
-  health: [
-    "Heart",
-    "Activity",
-    "Pill",
-    "Stethoscope",
-    "HeartPulse",
-    "Dumbbell",
-    "Apple",
-  ],
-  
+  health: ["Heart", "Activity", "Pill", "Stethoscope", "HeartPulse", "Dumbbell", "Apple"],
+
   // Media & Content
-  media: [
-    "Image",
-    "Video",
-    "Music",
-    "Film",
-    "Camera",
-    "Mic",
-    "Book",
-    "Newspaper",
-  ],
-  
+  media: ["Image", "Video", "Music", "Film", "Camera", "Mic", "Book", "Newspaper"],
+
   // Travel & Location
-  travel: [
-    "Plane",
-    "Car",
-    "Train",
-    "Ship",
-    "MapPin",
-    "Map",
-    "Globe",
-    "Compass",
-  ],
-  
+  travel: ["Plane", "Car", "Train", "Ship", "MapPin", "Map", "Globe", "Compass"],
+
   // Shopping & E-commerce
-  shopping: [
-    "ShoppingCart",
-    "ShoppingBag",
-    "Package",
-    "Box",
-    "Tag",
-    "Store",
-  ],
-  
+  shopping: ["ShoppingCart", "ShoppingBag", "Package", "Box", "Tag", "Store"],
+
   // Communication
-  communication: [
-    "MessageSquare",
-    "Mail",
-    "Phone",
-    "Send",
-    "MessageCircle",
-    "Bell",
-  ],
-  
+  communication: ["MessageSquare", "Mail", "Phone", "Send", "MessageCircle", "Bell"],
+
   // Data & Tech
-  data: [
-    "Database",
-    "Server",
-    "HardDrive",
-    "Cloud",
-    "Link",
-    "Code",
-    "Terminal",
-  ],
+  data: ["Database", "Server", "HardDrive", "Cloud", "Link", "Code", "Terminal"],
 } as const;
 
 /**
@@ -185,7 +127,7 @@ export const ENTITY_TYPE_ICON_MAP: Record<string, string> = {
   account: "Banknote",
   budget: "Calculator",
   contract: "FileCheck",
-  
+
   // Productivity
   task: "CheckSquare",
   project: "Briefcase",
@@ -193,7 +135,7 @@ export const ENTITY_TYPE_ICON_MAP: Record<string, string> = {
   meeting: "Users",
   goal: "Target",
   milestone: "Flag",
-  
+
   // People & Organizations
   person: "User",
   contact: "Contact",
@@ -201,34 +143,34 @@ export const ENTITY_TYPE_ICON_MAP: Record<string, string> = {
   organization: "Building",
   team: "Users",
   location: "MapPin",
-  
+
   // Documents
   document: "File",
   note: "FileText",
   file: "File",
   attachment: "Paperclip",
-  
+
   // Health
   workout: "Dumbbell",
   meal: "Apple",
   health_record: "HeartPulse",
-  
+
   // Media
   photo: "Image",
   video: "Video",
   music: "Music",
   book: "Book",
-  
+
   // Travel
   flight: "Plane",
   trip: "MapPin",
   hotel: "Building",
-  
+
   // Shopping
   order: "ShoppingCart",
   product: "Package",
   purchase: "ShoppingBag",
-  
+
   // Communication
   message: "MessageSquare",
   email: "Mail",
@@ -244,7 +186,7 @@ export function getSuggestedIcon(entityType: string): string | null {
   if (ENTITY_TYPE_ICON_MAP[entityType]) {
     return ENTITY_TYPE_ICON_MAP[entityType];
   }
-  
+
   // Pattern matching (people before document so "user_profile" matches User not File)
   const type = entityType.toLowerCase();
 

@@ -4,13 +4,16 @@ import { WebSocketServer, WebSocket } from "ws";
 const MCP_CMD = process.env.NEOTOMA_MCP_CMD || process.env.MCP_CMD || "node";
 const mcpArgsEnv = process.env.NEOTOMA_MCP_ARGS || process.env.MCP_ARGS;
 const MCP_ARGS = (mcpArgsEnv ? JSON.parse(mcpArgsEnv) : ["dist/index.js"]) as string[];
-const PORT = parseInt(
-  process.env.NEOTOMA_WS_PORT || process.env.WS_PORT || "8280",
-  10
-);
+const PORT = parseInt(process.env.NEOTOMA_WS_PORT || process.env.WS_PORT || "8280", 10);
 
 interface BridgeMessage {
-  type: "client_request" | "server_request" | "client_response" | "server_response" | "event" | "oauth_init";
+  type:
+    | "client_request"
+    | "server_request"
+    | "client_response"
+    | "server_response"
+    | "event"
+    | "oauth_init";
   id?: string;
   encryptedPayload?: string;
   connectionId?: string; // OAuth connection ID
@@ -28,7 +31,7 @@ wss.on("connection", (ws: WebSocket) => {
   function setupMCPForwarding() {
     if (!child || forwardingSetup || !child.stdout || !child.stderr) return;
     forwardingSetup = true;
-    
+
     // MCP → Client (encrypted envelopes)
     let buffer = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -41,7 +44,7 @@ wss.on("connection", (ws: WebSocket) => {
 
         try {
           const mcpResponse = JSON.parse(line);
-          
+
           // Check if this is an encrypted response from MCP
           if (mcpResponse.result?.encryptedPayload) {
             const bridgeResponse: BridgeMessage = {
@@ -49,7 +52,7 @@ wss.on("connection", (ws: WebSocket) => {
               id: mcpResponse.id,
               encryptedPayload: mcpResponse.result.encryptedPayload,
             };
-            
+
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify(bridgeResponse));
             }
@@ -60,7 +63,7 @@ wss.on("connection", (ws: WebSocket) => {
               id: mcpResponse.id,
               encryptedPayload: "", // Error case
             };
-            
+
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify(bridgeResponse));
             }
@@ -77,7 +80,7 @@ wss.on("connection", (ws: WebSocket) => {
                 .replace(/\//g, "_")
                 .replace(/=/g, ""),
             };
-            
+
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify(bridgeResponse));
             }
@@ -87,7 +90,7 @@ wss.on("connection", (ws: WebSocket) => {
         }
       }
     });
-    
+
     child.stderr.on("data", (chunk: Buffer) => {
       // Forward stderr to console (MCP server logs)
       process.stderr.write(chunk);
@@ -98,59 +101,67 @@ wss.on("connection", (ws: WebSocket) => {
   ws.on("message", (data: Buffer) => {
     try {
       const message: BridgeMessage = JSON.parse(data.toString());
-      
+
       // Handle OAuth initialization (must be first message)
       if (message.type === "oauth_init") {
         if (message.connectionId) {
           connectionId = message.connectionId;
-          
+
           // Spawn MCP server with OAuth connection ID
           const env = { ...process.env, NEOTOMA_CONNECTION_ID: connectionId };
-          child = spawn(MCP_CMD, MCP_ARGS, { 
+          child = spawn(MCP_CMD, MCP_ARGS, {
             stdio: ["pipe", "pipe", "inherit"],
-            env 
+            env,
           });
-          
+
           // Set up MCP → Client forwarding
           setupMCPForwarding();
-          
+
           // Send confirmation
-          ws.send(JSON.stringify({
-            type: "server_response",
-            id: message.id,
-            encryptedPayload: Buffer.from(JSON.stringify({ 
-              success: true, 
-              connectionId 
-            })).toString("base64url"),
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "server_response",
+              id: message.id,
+              encryptedPayload: Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  connectionId,
+                })
+              ).toString("base64url"),
+            })
+          );
         } else {
-          ws.send(JSON.stringify({
-            type: "server_response",
-            id: message.id,
-            encryptedPayload: Buffer.from(JSON.stringify({ 
-              error: "connectionId required for OAuth initialization" 
-            })).toString("base64url"),
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "server_response",
+              id: message.id,
+              encryptedPayload: Buffer.from(
+                JSON.stringify({
+                  error: "connectionId required for OAuth initialization",
+                })
+              ).toString("base64url"),
+            })
+          );
         }
         return;
       }
-      
+
       // Ensure MCP server is spawned before processing requests
       if (!child) {
         // If no OAuth init, try to use connection ID from environment or spawn without auth
         const envConnectionId = process.env.NEOTOMA_CONNECTION_ID;
-        const env = envConnectionId 
+        const env = envConnectionId
           ? { ...process.env, NEOTOMA_CONNECTION_ID: envConnectionId }
           : process.env;
-        
-        child = spawn(MCP_CMD, MCP_ARGS, { 
+
+        child = spawn(MCP_CMD, MCP_ARGS, {
           stdio: ["pipe", "pipe", "inherit"],
-          env 
+          env,
         });
-        
+
         setupMCPForwarding();
       }
-      
+
       if (message.type === "client_request" && message.encryptedPayload) {
         // Forward encrypted payload to MCP server
         // MCP server will decrypt, process, and return encrypted response
@@ -162,7 +173,7 @@ wss.on("connection", (ws: WebSocket) => {
             encryptedPayload: message.encryptedPayload,
           },
         };
-        
+
         if (child && child.stdin) {
           child.stdin.write(JSON.stringify(mcpMessage) + "\n");
           if (message.id) {
@@ -219,4 +230,3 @@ wss.on("connection", (ws: WebSocket) => {
 
 // eslint-disable-next-line no-console
 console.log(`MCP WebSocket bridge on ws://localhost:${PORT}/mcp`);
-

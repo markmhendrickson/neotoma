@@ -11,7 +11,7 @@
 2. **Foundation documents** from `docs/foundation/` in this order:
    - `core_identity.md` — What Neotoma is and is not (State Layer scope)
    - `philosophy.md` — Core principles and architectural invariants
-   - `layered_architecture.md` — State Layer, Strategy Layer, Execution Layer
+   - `layered_architecture.md` — State Layer (Neotoma) and Operational Layer(s) above it
    - `product_principles.md` — Product design principles
    - `agent_instructions_rules.mdc` — Repository-wide agent instructions and validation checklist
 3. **Task-specific docs** as indicated by the index (e.g. subsystems, architecture, testing)
@@ -23,7 +23,7 @@
 Full constraints in `docs/foundation/agent_instructions_rules.mdc` and `.Codex/rules/`. Summary:
 
 **MUST enforce:**
-- **State Layer boundaries**: No strategy/execution logic in Neotoma
+- **State Layer boundaries**: No strategy, execution, or inference logic in Neotoma; operational concerns live in the operational layer(s) above
 - **Determinism**: No random IDs, no unstable sorting, hash-based entity/event IDs
 - **Immutability**: Observations and source are immutable (reinterpretation creates NEW observations)
 - **Schema-first**: Use application types from `docs/subsystems/record_types.md`

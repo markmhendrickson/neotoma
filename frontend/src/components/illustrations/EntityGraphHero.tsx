@@ -84,7 +84,7 @@ export function EntityGraphHero({ className = "", compact = false }: EntityGraph
       style={{ perspective: "1200px" }}
     >
       <div
-        className="relative rounded-xl border border-border/60 bg-card/30 p-4 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)] dark:shadow-[0_24px_60px_-28px_rgba(0,0,0,0.55)] transition-transform duration-[700ms] ease-out motion-reduce:transition-none"
+        className="relative rounded-xl border border-border/60 bg-card/30 p-4 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)] dark:shadow-[0_24px_60px_-28px_rgba(0,0,0,0.55)] transition-transform duration-700 ease-out motion-reduce:transition-none"
         style={{
           transform: reduceMotion
             ? "none"

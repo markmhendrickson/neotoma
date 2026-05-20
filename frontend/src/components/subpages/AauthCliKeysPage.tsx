@@ -150,8 +150,8 @@ export function AauthCliKeysPage() {
         On-disk schema (<code>signer.json</code>)
       </h2>
       <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`{
-  "sub": "cli@<hostname>",
-  "iss": "https://neotoma.cli.local",
+  "sub": "cursor-agent@<hostname>",
+  "iss": "https://neotoma.cursor.local",
   "kid": "<jwk-thumbprint>",
   "token_ttl_sec": 300,
   "backend": "apple-secure-enclave",

@@ -15,7 +15,7 @@ v0.7.1 is a surgical hotfix on top of v0.7.0 that turns Neotoma into a credible 
 
 **CLI / runtime**
 
-- `npm run start:api` (and the `dist/server.js` entry point) now serves `GET /.well-known/aauth-resource.json` with the AAuth resource descriptor on every Neotoma instance, regardless of mode. Self-hosted and hosted operators get this for free; the descriptor is honest about what is supported and reflects the existing globally applied `aauthVerify` middleware.
+- `npm run start:server` (and the `dist/server.js` entry point) now serves `GET /.well-known/aauth-resource.json` with the AAuth resource descriptor on every Neotoma instance, regardless of mode. Self-hosted and hosted operators get this for free; the descriptor is honest about what is supported and reflects the existing globally applied `aauthVerify` middleware.
 - The internal `/store` POST handler is now exposed as a named function (`handleStorePost`) inside `src/actions.ts`. This is a pure code-organization refactor with no behavioral change for `POST /store`; existing `/store` integration tests pass unchanged.
 - `src/services/local_auth.ts` adds `ensureSandboxAauthUser(thumbprint)` and a small `hashStringToUserId` helper (the existing `hashEmailToUserId` now delegates to it). The sandbox AAuth users use `aauth-<short-thumbprint>@sandbox.neotoma.local` as their stored email and an unguessable password hash so they cannot be used to log in via local auth.
 

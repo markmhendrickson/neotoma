@@ -63,7 +63,10 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
     };
   }
 
-  if (connection.access_token_expires_at && new Date(connection.access_token_expires_at).getTime() < Date.now()) {
+  if (
+    connection.access_token_expires_at &&
+    new Date(connection.access_token_expires_at).getTime() < Date.now()
+  ) {
     throw new Error("Local session token expired");
   }
 

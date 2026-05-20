@@ -32,7 +32,7 @@ const legacySpecFiles = [
   'source-detail.spec.ts',
   'sources-list.spec.ts',
   'upload-flow.spec.ts',
-];
+].map((file) => `**/${file}`);
 
 export default defineConfig({
   globalSetup: path.join(__dirname, 'playwright', 'global_setup.ts'),
@@ -65,6 +65,12 @@ export default defineConfig({
     },
     {
       name: 'mobile-webkit',
+      // Inspector specs start a worker-scoped Neotoma HTTP server; with multiple
+      // projects Playwright may use a separate worker per project, so the WebKit
+      // run can start after the Chromium worker has torn the server down →
+      // ECONNREFUSED on `fetch(neotomaHttpOrigin/store)`. Validate Inspector on
+      // Chromium only; other suites still run on both projects.
+      testIgnore: ['inspector/**', ...legacySpecFiles],
       use: {
         ...devices['Mobile Safari'],
         viewport: {

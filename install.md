@@ -57,19 +57,35 @@ NOT improvise shell introspection (`python3 -c`, `grep -r`, `ls`, `cat`, `jq`,
 permission prompt; the canonical commands collapse the entire flow into two
 approvals: `neotoma *` (wildcard) and a one-time `npm install -g neotoma`.
 
-**Step 2.1 — Permissions pre-flight (user action)**
+**Step 2.1 — Permissions pre-flight**
 
-Before running any command, ask the user to paste the allowlist snippet for
-their current harness from the
-[Permissions pre-flight](https://neotoma.io/install#permissions-preflight)
-block into the appropriate file:
+Neotoma needs one wildcard allow entry so subsequent commands run without
+per-command prompts.
 
+For **allowlist-capable harnesses** (`claude-code`, `cursor`, `codex`): run
+`neotoma preflight --tool <current_tool> --apply` to write the entry directly.
+If the user prefers to apply it manually, run
+`neotoma preflight --tool <current_tool>` (no `--apply`) to print a single
+copy-paste block.
+
+Harness file locations for manual reference:
 - Claude Code: `.claude/settings.local.json` (project) or `~/.claude/settings.json` (user)
 - Cursor: `.cursor/allowlist.json` (project)
 - Codex: `~/.codex/config.toml` (user)
-- OpenClaw: handled by the native plugin; no allowlist needed
 
-If the user declines the preflight, every command below may prompt individually.
+For **MCP-only harnesses** (`claude-desktop`, `openclaw`, `windsurf`, `continue`,
+`vscode`): these harnesses have no writable command allowlist. Skip this step —
+`neotoma setup` in Step 2.4 configures the MCP server entry, which is the only
+permission surface these harnesses expose.
+
+The `preflight` command is idempotent — re-running it after the entry is already
+present reports `already_ok: true` and makes no changes. Note that Step 2.4
+(`neotoma setup`) also writes the same allowlist entries, so this step is only
+strictly necessary when the allowlist must be in place before
+`npm install -g neotoma` runs (i.e. when `neotoma` is not yet on PATH).
+
+If `neotoma` is not yet on PATH, skip this step; the install step (Step 2.2)
+will place the binary, then return here.
 
 **Step 2.2 — Install the binary (if needed)**
 
@@ -108,6 +124,23 @@ Run `neotoma setup --tool <current_tool> --yes`. This composes:
 Use `--dry-run` first if the harness is strict; `--json` returns a structured
 report of every step, including changed files.
 
+For the full flag surface (`--install-scope` for MCP + CLI instruction files,
+permission `--scope`, `--mcp-transport`, `--rewrite-neotoma-mcp`,
+`--skip-hooks`, `--all-harnesses`, `--dry-run`, and `--skip-permissions`), see
+[`docs/developer/cli_reference.md#harness-setup`](docs/developer/cli_reference.md#harness-setup).
+The default MCP transport is **B**: local stdio for normal npm onboarding, with
+transport **A** available when you want signed HTTP `/mcp` proxy entries and
+the API is already running.
+
+**Step 2.5 — Verify install (grep for canonical confirmation line)**
+
+After `neotoma setup` completes, two plain-text lines appear on stdout:
+
+1. `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)` — grep for `Neotoma installed at` to confirm success.
+2. `Transport: local stdio MCP (no network egress). ...` — answers the privacy/transport question.
+
+If the first line is absent (for example, after a standalone `npm install -g neotoma` without running setup), run `neotoma setup --tool <current_tool> --yes` to produce it. If the binary is not on PATH, check `neotoma doctor --json` → `.neotoma.path_fix_hint` and surface that hint to the user before retrying.
+
 **If the user is already installed**
 
 Run `neotoma doctor --json` to verify, then `neotoma setup --tool <tool> --yes`
@@ -122,6 +155,25 @@ shell introspection to confirm state.
   install-first onboarding. The only approved npm command is `npm install -g neotoma`.
 - Do NOT `open` URLs, documentation, or application packages on the user's
   machine to verify state.
+
+### Available skills
+
+After install and setup, skills provide guided activation workflows. Each skill handles a specific data import pattern. Ask your agent to run any skill by name, or run `ensure-neotoma` to bootstrap everything.
+
+| Skill | Description |
+|-------|-------------|
+| `ensure-neotoma` | Install Neotoma, configure MCP, verify connectivity. Prereq for all others. |
+| `remember-email` | Import emails, extract contacts, tasks, events, transactions. |
+| `remember-conversations` | Import ChatGPT/Claude/Slack exports, reconstruct timeline. |
+| `remember-meetings` | Ingest transcripts, extract decisions and action items. |
+| `remember-finances` | Import statements, receipts, invoices. |
+| `remember-contacts` | Consolidate contacts from multiple sources. |
+| `remember-calendar` | Import calendar events and commitments. |
+| `remember-codebase` | Developer repo integration and MCP wiring. |
+| `store-data` | Generic: persist any structured data. |
+| `query-memory` | Generic: retrieve from memory. |
+
+Skills ship with the npm package and are installed by `neotoma setup`. [Full catalog →](https://neotoma.io/skills)
 
 ### Phase 3: Activation
 
@@ -198,6 +250,46 @@ Detected 3 likely high-value domains:
 2. Zurich insurance (~/Notes/Insurance/) -- 3 files
 3. Neotoma docs (~/repos/neotoma/docs/) -- 6 files
 ```
+
+**Harness transcript detection (always run as part of discovery):**
+
+`neotoma discover` automatically checks well-known harness transcript paths alongside the regular file scan. You can also run it explicitly:
+
+```bash
+neotoma discover --harness-transcripts
+```
+
+This checks for existing AI harness chat history at the following locations:
+- **Claude Code** — `~/.claude/projects/**/*.jsonl`
+- **Codex** — `~/.codex/archived_sessions/*.jsonl`
+- **Cursor** — `~/.cursor/chats/*/store.db` (per-workspace SQLite) and `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (global SQLite)
+
+Example output when harness transcripts are found:
+
+```
+Harness transcripts detected:
+  claude-code: 424 files (2024-01 → 2026-05), ~/.claude/projects/
+  cursor:      3 dbs (via store.db + state.vscdb), ~/.cursor/chats/
+  codex:       11 files (2026-03 → 2026-05), ~/.codex/archived_sessions/
+
+Use `neotoma ingest-transcript --harness <name>` to preview and import.
+```
+
+**Previewing and importing harness transcripts:**
+
+Use `--preview` to inspect transcripts before storing:
+
+```bash
+neotoma ingest-transcript --harness claude-code --limit 5 --preview
+neotoma ingest-transcript --harness codex --preview
+neotoma ingest-transcript --harness cursor --limit 20 --preview
+```
+
+**Consent requirement:** Follow the same preview contract as all other activation ingests (step 4 below). Show the candidate list and confirm with the user before any bulk import. Pass `observation_source: import` when storing.
+
+**Idempotency:** Conversations already imported (matched by `conversation_id`) are skipped automatically.
+
+**Including harness transcripts in the step 3 proposal:** If harness transcripts are detected, include them as a separate cluster in the step 3 proposal alongside file discovery results.
 
 Also gather candidate data from existing context and available sources per the original migration strategy (see [Migration from existing tools](#migration-from-existing-tools) below).
 
@@ -435,7 +527,7 @@ usage. If `neotoma setup` was run in Phase 2, most of this is already in place.
    `configure-permissions`, re-run `neotoma setup --tool <tool> --yes` to
    close the gap. Do NOT grep, `ls`, or `cat` config files to verify state.
 2. When reading the content of a specific config or instruction file is
-   needed, use `neotoma mcp config --json` and `neotoma cli-instructions config --json`
+   needed, use `neotoma mcp guide --json` and `neotoma cli guide --json`
    to print authoritative content. Do NOT search for "where the content is
    defined" across the codebase.
 3. If the user started in a local environment, offer to help configure
@@ -554,10 +646,10 @@ only two approvals:
 1. `Bash(neotoma:*)` / `neotoma *` wildcard
 2. A one-time `npm install -g neotoma`
 
-The per-harness allowlist snippets live in the
-[Permissions pre-flight](https://neotoma.io/install#permissions-preflight)
-section of the site. When the user pastes the correct snippet before the agent
-runs any command, the agent never needs individual approvals for `neotoma init`,
+Run `neotoma preflight --tool <harness> --apply` at the start of the install
+flow to write the allowlist entry directly, or `neotoma preflight --tool <harness>`
+(no `--apply`) to print a copy-paste block for manual application. Either path
+ensures the agent never needs individual approvals for `neotoma init`,
 `neotoma doctor`, `neotoma setup`, `neotoma mcp …`, or any other `neotoma`
 subcommand.
 
@@ -581,7 +673,7 @@ command. Do NOT fall back to shell introspection (`python3 -c`, `grep -r`,
 - The developer / repo-integration branch must not ingest files or store entities. Its output is a written integration plan only. Any ingest requires a separate, explicit user request that re-enters the personal or mixed branch.
 - The preview contract (Activation step 4) is mandatory even for single-file or single-transcript ingests. Count-only summaries are forbidden as the first post-action output.
 - Do not improvise shell introspection in place of `neotoma doctor --json`,
-  `neotoma mcp config --json`, or `neotoma cli-instructions config --json`.
+  `neotoma mcp guide --json`, or `neotoma cli guide --json`.
   Every fact these commands surface is authoritative; searching for "where X is
   defined" in the codebase is a permission-prompt anti-pattern.
 - Do not run arbitrary `npm run <script>` in the user's repositories during
@@ -621,9 +713,8 @@ selection rules the CLI follows.
   development server and production server can coexist on the same host).
 - Release-compiled artifacts from `dist/` (via `node dist/actions.js`) when
   running from an **installed** package. On a source checkout (git clone),
-  the CLI falls back to `dev:prod` (tsx + production data dir) and emits a
-  one-line stderr advisory pointing back to this section so operators don't
-  accidentally run a watcher-style dev process in production.
+  the CLI uses the `dev:server:prod` watcher path so contributors can iterate
+  against the production data dir without changing the product CLI command.
 
 ### Reference `systemd` unit
 

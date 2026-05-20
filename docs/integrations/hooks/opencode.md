@@ -50,7 +50,7 @@ neotoma({
 
 ## Failure-signal accumulator
 
-Storage-only on this harness: `tool.called` records `tool_invocation_failure` entities for Neotoma-relevant errors and bumps the per-`(tool, error_class)` counter under `NEOTOMA_HOOK_STATE_DIR`. OpenCode does not surface an `additional_context` channel into the agent prompt that this plugin uses for hint injection, so the one-shot `Neotoma hook note: …` line is not delivered through the OpenCode harness; the structured signal is still captured and observable in the timeline / `submit_feedback` triage. The hook NEVER calls `submit_feedback` itself.
+Storage-only on this harness: `tool.called` records `tool_invocation_failure` entities for Neotoma-relevant errors and bumps the per-`(tool, error_class)` counter under `NEOTOMA_HOOK_STATE_DIR`. OpenCode does not surface an `additional_context` channel into the agent prompt that this plugin uses for hint injection, so the one-shot `Neotoma hook note: …` line is not delivered through the OpenCode harness; the structured signal is still captured and observable in the timeline / issue reporting. The hook NEVER calls `submit_issue` itself.
 
 ## Coexistence with MCP
 

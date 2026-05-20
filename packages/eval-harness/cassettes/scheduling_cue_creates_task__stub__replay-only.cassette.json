@@ -12,7 +12,7 @@
   "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user mentions a scheduling cue (e.g. \"pencil in\", \"book next\", \"sync again\"), create a task entity for the follow-up and a contact entity for the person. Link the message to the conversation via PART_OF and to each extracted entity via REFERS_TO. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-sched-cue-1-20260429",
         "entities": [

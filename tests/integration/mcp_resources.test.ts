@@ -23,7 +23,7 @@ describe("MCP Resources - Integration", () => {
   beforeEach(async () => {
     // Cleanup test data
     if (createdRelationshipIds.length > 0) {
-      await db.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationship_snapshots").delete().in("relationship_key", createdRelationshipIds);
       createdRelationshipIds.length = 0;
     }
     if (createdTimelineEventIds.length > 0) {
@@ -48,7 +48,7 @@ describe("MCP Resources - Integration", () => {
   afterAll(async () => {
     // Final cleanup
     if (createdRelationshipIds.length > 0) {
-      await db.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationship_snapshots").delete().in("relationship_key", createdRelationshipIds);
     }
     if (createdTimelineEventIds.length > 0) {
       await db.from("timeline_events").delete().in("id", createdTimelineEventIds);
@@ -278,17 +278,19 @@ describe("MCP Resources - Integration", () => {
         ]);
         createdEntityIds.push(entityId1, entityId2);
 
-        // Create relationship with all required fields
-        const relationshipId = randomUUID();
-        const { error: relError } = await db.from("relationships").insert({
-          id: relationshipId,
+        // Create relationship snapshot directly (relationship_snapshots is the active table)
+        const relationshipKey = `REFERS_TO:${entityId1}:${entityId2}`;
+        const { error: relError } = await db.from("relationship_snapshots").insert({
+          relationship_key: relationshipKey,
           relationship_type: "REFERS_TO",
           source_entity_id: entityId1,
           target_entity_id: entityId2,
+          schema_version: "1",
+          snapshot: JSON.stringify({}),
           user_id: testUserId,
         });
         expect(relError).toBeNull();
-        createdRelationshipIds.push(relationshipId);
+        createdRelationshipIds.push(relationshipKey);
 
         const result = await (server as any).handleEntityRelationships(entityId1);
         expect(result.type).toBe("entity_relationships");

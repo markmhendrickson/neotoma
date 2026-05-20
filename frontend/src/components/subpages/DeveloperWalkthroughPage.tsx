@@ -180,7 +180,7 @@ export function DeveloperWalkthroughPage() {
         She&apos;s VP Eng, the rate is $180/hr, and I need to send her the SOW by tomorrow.
       </ChatPrelude>
       <p className="text-[13px] font-mono text-muted-foreground mb-2">MCP store call</p>
-      <CodeBlock>{`store_structured({
+      <CodeBlock>{`store({
   entities: [
     {
       entity_type: "contact",
@@ -277,7 +277,7 @@ export function DeveloperWalkthroughPage() {
         Sarah&apos; task done and note what went out.
       </ChatPrelude>
       <p className="text-[13px] font-mono text-muted-foreground mb-2">Update the task</p>
-      <CodeBlock>{`store_structured({
+      <CodeBlock>{`store({
   entities: [
     {
       entity_type: "task",
@@ -314,7 +314,7 @@ export function DeveloperWalkthroughPage() {
         $195/hr.
       </ChatPrelude>
       <p className="text-[13px] font-mono text-muted-foreground mb-2">Updated store</p>
-      <CodeBlock>{`store_structured({
+      <CodeBlock>{`store({
   entities: [
     {
       entity_type: "contact",

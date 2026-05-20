@@ -5,11 +5,11 @@
  * persist a structured `tool_invocation_failure` entity and bump a
  * session-local counter. When the counter crosses a threshold, the
  * `beforeSubmitPrompt` hook surfaces a one-shot hint suggesting the
- * agent consider submitting feedback via `submit_feedback`.
+ * agent consider filing an issue via `submit_issue`.
  *
  * Design constraints:
- *   - This hook MUST NOT call `submit_feedback` itself. PII redaction
- *     and `metadata.environment` assembly are the agent's job.
+ *   - This hook MUST NOT call `submit_issue` itself. PII redaction
+ *     is the agent's job.
  *   - Filters to Neotoma-relevant tools so generic editor/shell noise
  *     does not drown out real signal.
  */

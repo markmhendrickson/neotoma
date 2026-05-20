@@ -78,7 +78,7 @@ export function InspectorSidebarMock({
     | "turns"
     | "compliance"
     | "activity"
-    | "feedback"
+    | "issues"
     | "entities"
     | "observations"
     | "sources"
@@ -89,6 +89,7 @@ export function InspectorSidebarMock({
     | "interpretations"
     | "agents"
     | "grants"
+    | "peers"
     | "settings";
 }) {
   const groups: { items: { key: string; label: string }[] }[] = [
@@ -99,7 +100,7 @@ export function InspectorSidebarMock({
         { key: "turns", label: "Turns" },
         { key: "compliance", label: "Compliance" },
         { key: "activity", label: "Activity" },
-        { key: "feedback", label: "Feedback" },
+        { key: "issues", label: "Issues" },
       ],
     },
     {
@@ -118,6 +119,7 @@ export function InspectorSidebarMock({
         { key: "interpretations", label: "Interpretations" },
         { key: "agents", label: "Agents" },
         { key: "grants", label: "Agent grants" },
+        { key: "peers", label: "Peers" },
       ],
     },
     {

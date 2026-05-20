@@ -74,7 +74,7 @@ To verify global and non-global behavior **without** publishing to npm:
 
 ### 2.2 Read-only commands (no MCP, against running API)
 
-Start API (e.g. `npm run dev:server` or `npm run start:api`) then:
+Start API (e.g. `npm run dev:server` or `npm run start:server`) then:
 
 - [ ] `neotoma entities list`, `--type`, `--search`, `--limit`, `--offset`, `--include-merged`
 - [ ] `neotoma entities get <id>`
@@ -205,7 +205,7 @@ After a full manual pass, a minimal smoke sequence:
 
 1. `npm run type-check && npm run lint && npm run build:server && npm run build:ui`
 2. `npm test`
-3. Start API: `npm run start:api` (or `npm run dev:server`)
+3. Start API: `npm run start:server` (or `npm run dev:server`)
 4. CLI: `neotoma auth status`, `neotoma entities list --limit 5`, `neotoma stats`
 5. MCP: Connect Cursor; call `store` with one entity; call `retrieve_entities`; verify result
 6. (Optional) Load frontend in browser; open Dashboard and one entity

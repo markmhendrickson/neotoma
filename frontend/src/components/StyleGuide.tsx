@@ -3,6 +3,7 @@ import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -617,7 +618,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[50px]">
-                      <input type="checkbox" className="rounded border-input" />
+                      <Checkbox />
                     </TableHead>
                     <TableHead className="w-[100px]">
                       <Button variant="ghost" size="sm" className="-ml-3 h-8">
@@ -649,7 +650,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 <TableBody>
                   <TableRow>
                     <TableCell>
-                      <input type="checkbox" className="rounded border-input" />
+                      <Checkbox />
                     </TableCell>
                     <TableCell className="font-mono text-xs">src_abc123</TableCell>
                     <TableCell>
@@ -667,7 +668,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   </TableRow>
                   <TableRow>
                     <TableCell>
-                      <input type="checkbox" className="rounded border-input" />
+                      <Checkbox />
                     </TableCell>
                     <TableCell className="font-mono text-xs">src_def456</TableCell>
                     <TableCell>
@@ -685,7 +686,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   </TableRow>
                   <TableRow>
                     <TableCell>
-                      <input type="checkbox" className="rounded border-input" />
+                      <Checkbox />
                     </TableCell>
                     <TableCell className="font-mono text-xs">src_ghi789</TableCell>
                     <TableCell>

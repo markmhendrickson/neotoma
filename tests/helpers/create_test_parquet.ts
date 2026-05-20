@@ -7,7 +7,18 @@
 import * as fs from "fs";
 import * as path from "path";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
-import { Table as WasmTable, writeParquet } from "parquet-wasm";
+// Use the ESM-only build to avoid the CJS/ESM conflict in the node/ entry point
+// (parquet-wasm declares "type": "module" but node/parquet_wasm.js uses module.exports)
+import { Table as WasmTable, writeParquet, initSync } from "parquet-wasm/esm/parquet_wasm.js";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+// Initialize WASM synchronously once.  The ESM build requires explicit init.
+const __wasmDir = dirname(fileURLToPath(import.meta.url));
+const wasmPath = join(__wasmDir, "../../node_modules/parquet-wasm/esm/parquet_wasm_bg.wasm");
+const wasmBytes = readFileSync(wasmPath);
+initSync({ module: wasmBytes });
 
 export interface TestParquetOptions {
   outputPath: string;
@@ -60,8 +71,9 @@ async function writeRowsToParquet(
 
   const arrowTable = tableFromArrays(columns);
   const wasmTable = WasmTable.fromIPCStream(tableToIPC(arrowTable, "stream"));
+  // writeParquet consumes the table (takes ownership via __destroy_into_raw),
+  // so we must NOT call wasmTable.free() afterwards.
   const parquetData = writeParquet(wasmTable);
-  wasmTable.drop();
   fs.writeFileSync(outputPath, parquetData);
 }
 

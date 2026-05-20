@@ -19,9 +19,10 @@ This guide covers local development setup for Neotoma using SQLite + local files
 ```bash
 npm install -g neotoma
 neotoma init
-neotoma api start --env dev
-neotoma mcp config
+neotoma setup --tool <cursor|claude-code|codex> --yes
 ```
+
+`neotoma setup` configures local MCP with transport preset `b` by default, so a basic npm + Cursor/Claude Code/Codex setup does not require a separately running API server. Start the API (`neotoma api start --env dev`) when you need HTTP `/mcp`, Inspector, OAuth, or transport preset `a`/`d`.
 
 ### Option B: repository clone
 
@@ -59,6 +60,8 @@ Then the agent previews candidate data from current session context/tool outputs
 ### Human path
 
 If you are running setup directly yourself, use the install commands above and continue with the normal setup steps in this guide.
+
+For setup flags (`--install-scope`, permission `--scope`, `--mcp-transport`, `--dry-run`, and repair-only flows), see [CLI reference: Harness setup](cli_reference.md#harness-setup).
 
 ## Local storage model
 

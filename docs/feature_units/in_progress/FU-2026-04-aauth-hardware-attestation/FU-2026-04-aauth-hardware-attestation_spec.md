@@ -137,7 +137,7 @@ binding to a hardware element is cryptographically proven and rooted at a truste
 - `docs/subsystems/agent_attribution_integration.md` (rewrite)
 - `docs/developer/mcp/instructions.md`, `docs/developer/cli_agent_instructions.md` (parity-anchored)
 - `docs/releases/in_progress/v0.8.0/github_release_supplement.md` (rewrite)
-- `docs/developer/mcp_chatgpt_setup.md`, `AGENTS.md` (Cursor MCP-reload note)
+- `docs/developer/chatgpt_actions_setup.md`, `AGENTS.md` (Cursor MCP-reload note)
 
 **Dependencies:**
 - Requires AAuth middleware + agent attribution integration (already in main).

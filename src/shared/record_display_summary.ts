@@ -30,8 +30,7 @@ export function getRecordDisplaySummary(
   row: Record<string, unknown>,
   context: RecordDisplayContext = {}
 ): string {
-  const name = (id: string) =>
-    context.getEntityDisplayName?.(id) ?? fallbackId(id);
+  const name = (id: string) => context.getEntityDisplayName?.(id) ?? fallbackId(id);
 
   switch (table) {
     case "sources":
@@ -57,7 +56,10 @@ export function getRecordDisplaySummary(
           fields = undefined;
         }
       }
-      const fieldsObj = fields && typeof fields === "object" && !Array.isArray(fields) ? (fields as Record<string, unknown>) : undefined;
+      const fieldsObj =
+        fields && typeof fields === "object" && !Array.isArray(fields)
+          ? (fields as Record<string, unknown>)
+          : undefined;
       const fromFields = fieldsObj ? str(fieldsObj, "title", 28) || str(fieldsObj, "name", 28) : "";
       const suffix = fromFields ? `: ${fromFields}` : ` for ${entityLabel}`;
       return `${entityType} obs${suffix}`.slice(0, MAX_SUMMARY_LEN + 20);
@@ -79,11 +81,13 @@ export function getRecordDisplaySummary(
           meta = undefined;
         }
       }
-      const metaObj = meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as Record<string, unknown>) : undefined;
-      const title =
-        metaObj
-          ? str(metaObj, "title", MAX_SUMMARY_LEN) || str(metaObj, "description", MAX_SUMMARY_LEN)
-          : "";
+      const metaObj =
+        meta && typeof meta === "object" && !Array.isArray(meta)
+          ? (meta as Record<string, unknown>)
+          : undefined;
+      const title = metaObj
+        ? str(metaObj, "title", MAX_SUMMARY_LEN) || str(metaObj, "description", MAX_SUMMARY_LEN)
+        : "";
       if (title) return title;
       const eventType = str(row, "event_type", 20);
       const ts = str(row, "event_timestamp", 24);
@@ -97,10 +101,7 @@ export function getRecordDisplaySummary(
       const entityId = str(row, "entity_id");
       const label = entityId ? name(entityId) : "";
       const n = row.observation_count ?? 0;
-      return `${str(row, "entity_type", 12)} ${label} (${n} obs)`.slice(
-        0,
-        MAX_SUMMARY_LEN + 12
-      );
+      return `${str(row, "entity_type", 12)} ${label} (${n} obs)`.slice(0, MAX_SUMMARY_LEN + 12);
     }
 
     case "raw_fragments": {

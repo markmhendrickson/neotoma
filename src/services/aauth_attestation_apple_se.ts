@@ -23,22 +23,14 @@
  * rotate keys to expire trust.
  */
 
-import {
-  X509Certificate,
-  createPublicKey,
-  createVerify,
-  type KeyObject,
-} from "node:crypto";
+import { X509Certificate, createPublicKey, createVerify, type KeyObject } from "node:crypto";
 import { calculateJwkThumbprint, exportJWK } from "jose";
 
 import {
   applyRevocationPolicy,
   computeBoundChallengeDigest,
 } from "./aauth_attestation_verifier.js";
-import type {
-  AttestationContext,
-  AttestationOutcome,
-} from "./aauth_attestation_verifier.js";
+import type { AttestationContext, AttestationOutcome } from "./aauth_attestation_verifier.js";
 import {
   checkRevocation,
   readFailOpen,
@@ -59,7 +51,7 @@ interface AppleSeStatement {
  */
 export async function verifyAppleSecureEnclaveAttestation(
   envelope: { statement: unknown; challenge: string; format: string },
-  ctx: AttestationContext,
+  ctx: AttestationContext
 ): Promise<AttestationOutcome> {
   const parsed = parseStatement(envelope.statement);
   if (!parsed) {
@@ -68,9 +60,7 @@ export async function verifyAppleSecureEnclaveAttestation(
 
   let chain: X509Certificate[];
   try {
-    chain = parsed.attestation_chain.map(
-      (b64) => new X509Certificate(base64urlDecode(b64)),
-    );
+    chain = parsed.attestation_chain.map((b64) => new X509Certificate(base64urlDecode(b64)));
   } catch {
     return failure("malformed");
   }
@@ -91,9 +81,7 @@ export async function verifyAppleSecureEnclaveAttestation(
   let leafJkt: string;
   try {
     const leafJwk = await exportJWK(leafKey);
-    leafJkt = await calculateJwkThumbprint(
-      leafJwk as Parameters<typeof calculateJwkThumbprint>[0],
-    );
+    leafJkt = await calculateJwkThumbprint(leafJwk as Parameters<typeof calculateJwkThumbprint>[0]);
   } catch {
     return failure("malformed");
   }
@@ -153,7 +141,7 @@ export async function verifyAppleSecureEnclaveAttestation(
       mode,
       failOpen: readFailOpen(),
       revocation,
-    },
+    }
   );
 }
 
@@ -186,10 +174,7 @@ function isP256PublicKey(key: KeyObject): boolean {
  * terminal certificate is itself trusted (root in the merged trust set)
  * or verifies under one of the trusted roots.
  */
-function walkChainAgainstTrust(
-  chain: X509Certificate[],
-  ctx: AttestationContext,
-): boolean {
+function walkChainAgainstTrust(chain: X509Certificate[], ctx: AttestationContext): boolean {
   for (let i = 0; i < chain.length - 1; i += 1) {
     const cert = chain[i]!;
     const issuer = chain[i + 1]!;
@@ -220,16 +205,11 @@ function certificatesEqual(a: X509Certificate, b: X509Certificate): boolean {
   return a.fingerprint256 === b.fingerprint256;
 }
 
-function failure(
-  reason: AttestationOutcomeReason,
-): AttestationOutcome {
+function failure(reason: AttestationOutcomeReason): AttestationOutcome {
   return { verified: false, format: APPLE_SE_FORMAT, reason };
 }
 
-type AttestationOutcomeReason = Extract<
-  AttestationOutcome,
-  { verified: false }
->["reason"];
+type AttestationOutcomeReason = Extract<AttestationOutcome, { verified: false }>["reason"];
 
 function base64urlDecode(value: string): Buffer {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");

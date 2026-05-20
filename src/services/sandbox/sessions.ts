@@ -65,12 +65,12 @@ export function createSandboxSession(packId: string = "generic"): SandboxSession
 
   db.prepare(
     `INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, is_ephemeral)
-     VALUES (?, ?, ?, ?, ?, ?, 1)`,
+     VALUES (?, ?, ?, ?, ?, ?, 1)`
   ).run(userId, email, passwordHash, salt, createdAt, createdAt);
 
   db.prepare(
     `INSERT INTO sandbox_sessions (user_id, bearer_token_hash, one_time_code_hash, pack_id, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?)`
   ).run(userId, sha256(bearerToken), sha256(oneTimeCode), packId, createdAt, expiresAtStr);
 
   return {
@@ -95,26 +95,31 @@ export function redeemOneTimeCode(code: string): RedeemResult | null {
   const codeHash = sha256(code);
   const now = new Date().toISOString();
 
-  const row = db.prepare(
-    `SELECT user_id, bearer_token_hash, pack_id, expires_at
+  const row = db
+    .prepare(
+      `SELECT user_id, bearer_token_hash, pack_id, expires_at
      FROM sandbox_sessions
-     WHERE one_time_code_hash = ? AND revoked_at IS NULL AND expires_at > ?`,
-  ).get(codeHash, now) as { user_id: string; bearer_token_hash: string; pack_id: string; expires_at: string } | undefined;
+     WHERE one_time_code_hash = ? AND revoked_at IS NULL AND expires_at > ?`
+    )
+    .get(codeHash, now) as
+    | { user_id: string; bearer_token_hash: string; pack_id: string; expires_at: string }
+    | undefined;
 
   if (!row) return null;
 
   // Clear the one-time code after redemption
-  db.prepare(
-    `UPDATE sandbox_sessions SET one_time_code_hash = NULL WHERE user_id = ?`,
-  ).run(row.user_id);
+  db.prepare(`UPDATE sandbox_sessions SET one_time_code_hash = NULL WHERE user_id = ?`).run(
+    row.user_id
+  );
 
   // We cannot reverse the bearer hash, so we regenerate a fresh bearer token
   // and update the stored hash (the code-based handoff is the only time this
   // happens, so the original bearer from createSandboxSession is invalidated).
   const freshBearer = generateToken();
-  db.prepare(
-    `UPDATE sandbox_sessions SET bearer_token_hash = ? WHERE user_id = ?`,
-  ).run(sha256(freshBearer), row.user_id);
+  db.prepare(`UPDATE sandbox_sessions SET bearer_token_hash = ? WHERE user_id = ?`).run(
+    sha256(freshBearer),
+    row.user_id
+  );
 
   return {
     bearerToken: freshBearer,
@@ -138,11 +143,15 @@ export function resolveSessionFromRequest(req: Request): SessionInfo | null {
   const tokenHash = sha256(token);
   const now = new Date().toISOString();
 
-  const row = db.prepare(
-    `SELECT user_id, pack_id, created_at, expires_at
+  const row = db
+    .prepare(
+      `SELECT user_id, pack_id, created_at, expires_at
      FROM sandbox_sessions
-     WHERE bearer_token_hash = ? AND revoked_at IS NULL AND expires_at > ?`,
-  ).get(tokenHash, now) as { user_id: string; pack_id: string; created_at: string; expires_at: string } | undefined;
+     WHERE bearer_token_hash = ? AND revoked_at IS NULL AND expires_at > ?`
+    )
+    .get(tokenHash, now) as
+    | { user_id: string; pack_id: string; created_at: string; expires_at: string }
+    | undefined;
 
   if (!row) return null;
 
@@ -158,7 +167,7 @@ export function revokeSession(userId: string): void {
   const db = getSqliteDb();
   const now = new Date().toISOString();
   db.prepare(
-    `UPDATE sandbox_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`,
+    `UPDATE sandbox_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`
   ).run(now, userId);
 }
 
@@ -180,9 +189,9 @@ export function sweepExpiredSessions(): number {
   const db = getSqliteDb();
   const _now = new Date().toISOString();
 
-  const expired = db.prepare(
-    `SELECT user_id FROM sandbox_sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL`,
-  ).all() as { user_id: string }[];
+  const expired = db
+    .prepare(`SELECT user_id FROM sandbox_sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL`)
+    .all() as { user_id: string }[];
 
   let purged = 0;
   for (const row of expired) {
@@ -194,9 +203,9 @@ export function sweepExpiredSessions(): number {
 
 export function resetSandboxSession(userId: string, packId?: string): SandboxSession | null {
   const db = getSqliteDb();
-  const existing = db.prepare(
-    `SELECT pack_id FROM sandbox_sessions WHERE user_id = ? AND revoked_at IS NULL`,
-  ).get(userId) as { pack_id: string } | undefined;
+  const existing = db
+    .prepare(`SELECT pack_id FROM sandbox_sessions WHERE user_id = ? AND revoked_at IS NULL`)
+    .get(userId) as { pack_id: string } | undefined;
 
   if (!existing) return null;
 

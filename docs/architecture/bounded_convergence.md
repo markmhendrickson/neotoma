@@ -11,6 +11,7 @@ This document covers:
 - Integration points with existing subsystems
 
 This document does NOT cover:
+- Query formulation stochasticity (see [`query_convergence.md`](./query_convergence.md) — companion document for read-path variance)
 - Interpretation-layer idempotence (see [`idempotence_pattern.md`](./idempotence_pattern.md))
 - Reducer determinism (see [`determinism.md`](./determinism.md) Section 3.5)
 - Schema registry internals (see [`../subsystems/schema_registry.md`](../subsystems/schema_registry.md))
@@ -27,6 +28,8 @@ Neotoma's determinism guarantee applies to the data layer: same observations + s
 Each divergent decision creates observations that the deterministic core faithfully processes — producing different entity graphs from the same semantic input.
 
 **Bounded convergence** is the property that, despite agent-layer nondeterminism, the entity graph converges toward a consistent representation of reality over time. The deterministic core ensures this convergence is monotonic: new observations refine truth; they never corrupt it.
+
+**Write-path vs query-path scope.** This document addresses write-path convergence — reducing variance in what agents store. A companion document, [`query_convergence.md`](./query_convergence.md), addresses query formulation convergence — reducing variance in what agents retrieve. Both share infrastructure (schema registry aliases, templates, convergence replay) and compose into an end-to-end variance reduction strategy.
 
 ## 2. Convergence Improvements
 
@@ -256,6 +259,10 @@ These provide measurement infrastructure and tighter payload constraints.
 
 These are warranted when specific entity types require stricter convergence.
 
+### Query-path phases
+
+Query formulation convergence improvements are defined in [`query_convergence.md`](./query_convergence.md) with their own phased roadmap. Phase 1 query improvements (entity type normalization on read, query parameter validation, retrieval templates) depend on Phase 1 write improvements here and should be implemented after or alongside them.
+
 ## 4. Design Principles
 
 1. **Never auto-merge.** The system surfaces candidates; humans or agents decide. Silent auto-merge would violate the immutability and explainability guarantees.
@@ -267,6 +274,8 @@ These are warranted when specific entity types require stricter convergence.
 4. **Measure before optimizing.** Convergence testing (2.7) should run against real agent sessions before tuning thresholds for similarity matching, confidence scoring, or fixed-point iteration.
 
 5. **Composable improvements.** Each improvement is independent and can be shipped alone. They compose well: type normalization + field aliases + retrieval-augmented storing compound into significantly tighter convergence.
+
+6. **Symmetric read/write normalization.** Where normalization applies on the write path (entity types, field names), it must also apply on the read path. Asymmetric normalization creates unreachable data. See [`query_convergence.md`](./query_convergence.md) for read-path counterparts.
 
 ## Agent Instructions
 
@@ -280,7 +289,8 @@ Load `docs/architecture/bounded_convergence.md` when:
 - Implementing MCP response enhancements
 
 ### Required Co-Loaded Documents
-- [`docs/architecture/determinism.md`](./determinism.md) — Determinism doctrine (Section 1.6)
+- [`docs/architecture/determinism.md`](./determinism.md) — Determinism doctrine (Section 1.6, Section 11)
+- [`docs/architecture/query_convergence.md`](./query_convergence.md) — Query formulation convergence (read-path companion)
 - [`docs/architecture/idempotence_pattern.md`](./idempotence_pattern.md) — Idempotence pattern for interpretation
 - [`docs/subsystems/schema_registry.md`](../subsystems/schema_registry.md) — Schema registry patterns
 - [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md) — MCP action catalog
@@ -295,6 +305,7 @@ Load `docs/architecture/bounded_convergence.md` when:
 
 ### Related Documents
 - [`docs/architecture/determinism.md`](./determinism.md) — Determinism requirements
+- [`docs/architecture/query_convergence.md`](./query_convergence.md) — Query formulation convergence (read-path companion)
 - [`docs/architecture/idempotence_pattern.md`](./idempotence_pattern.md) — Idempotence pattern
 - [`docs/architecture/architectural_decisions.md`](./architectural_decisions.md) — Architectural decisions
 - [`docs/subsystems/schema_registry.md`](../subsystems/schema_registry.md) — Schema registry

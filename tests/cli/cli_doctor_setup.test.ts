@@ -18,8 +18,11 @@ import {
   writePermissionsForTool,
   toolFromString,
 } from "../../src/cli/permissions.ts";
-import { runSetup } from "../../src/cli/setup.ts";
-import { runDoctor } from "../../src/cli/doctor.ts";
+import { runSetup, buildVerifyLine, PRIVACY_TRANSPORT_SUMMARY } from "../../src/cli/setup.ts";
+import { runPreflight } from "../../src/cli/preflight.ts";
+import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
+import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
+import { detectCurrentToolHint, detectDataDirRisks, runDoctor } from "../../src/cli/doctor.ts";
 import { detectHooks } from "../../src/cli/hooks_detect.ts";
 
 async function mkTmp(prefix: string): Promise<string> {
@@ -202,7 +205,7 @@ describe("runSetup", () => {
       },
     });
     const stepIds = report.steps.map((s) => s.id);
-    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "permissions"]);
+    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "skills", "permissions"]);
     expect(report.dry_run).toBe(true);
     expect(report.tool).toBe("cursor");
     expect(report.overall_ok).toBe(true);
@@ -258,9 +261,77 @@ describe("runSetup", () => {
       changed: true,
     });
   });
+
+  it("default runners can skip hooks explicitly", async () => {
+    const runners = createDefaultSetupRunners({ cwd, skipHooks: true, dryRun: true });
+    const result = await runners.hooksInstall?.();
+    expect(result).toMatchObject({
+      id: "hooks",
+      ok: true,
+      skipped: true,
+      reason: "skip-hooks",
+    });
+  });
+});
+
+describe("applyCliInstructions", () => {
+  let cwd: string;
+  beforeEach(async () => {
+    cwd = await mkTmp("ntm-cli-instructions");
+    await fs.writeFile(path.join(cwd, "package.json"), "{}\n");
+    await fs.mkdir(path.join(cwd, "docs", "developer"), { recursive: true });
+    await fs.writeFile(
+      path.join(cwd, "docs", "developer", "cli_agent_instructions.md"),
+      "# Neotoma transport: MCP when available, CLI as backup\n\nUse CLI as backup.\n"
+    );
+  });
+  afterEach(async () => {
+    await fs.rm(cwd, { recursive: true, force: true });
+  });
+
+  it("writes project applied rule files non-interactively with an explicit scope", async () => {
+    const scan = await scanAgentInstructions(cwd, { includeUserLevel: false });
+    const result = await applyCliInstructions(scan, { scope: "project" });
+    expect(result.added.map((p) => path.relative(cwd, p)).sort()).toEqual([
+      ".claude/rules/neotoma_cli.mdc",
+      ".codex/neotoma_cli.md",
+      ".cursor/rules/neotoma_cli.mdc",
+    ]);
+  });
 });
 
 describe("runDoctor", () => {
+  it("detects Codex from Codex desktop environment variables", async () => {
+    const cwd = await mkTmp("ntm-doctor-codex-env");
+    try {
+      await fs.mkdir(path.join(cwd, ".claude"), { recursive: true });
+      await fs.mkdir(path.join(cwd, ".codex"), { recursive: true });
+
+      expect(
+        detectCurrentToolHint(cwd, {
+          CODEX_SHELL: "1",
+          CODEX_THREAD_ID: "thread-123",
+          CLAUDE_CODE_ENTRYPOINT: "ambient",
+        })
+      ).toBe("codex");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does not infer a current tool from ambiguous project markers", async () => {
+    const cwd = await mkTmp("ntm-doctor-markers");
+    try {
+      await fs.mkdir(path.join(cwd, ".claude"), { recursive: true });
+      await fs.mkdir(path.join(cwd, ".cursor"), { recursive: true });
+      await fs.mkdir(path.join(cwd, ".codex"), { recursive: true });
+
+      expect(detectCurrentToolHint(cwd, {})).toBeNull();
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("returns a snapshot with all top-level keys", async () => {
     const cwd = await mkTmp("ntm-doctor-cwd");
     try {
@@ -274,9 +345,36 @@ describe("runDoctor", () => {
       expect(report).toHaveProperty("suggested_next_step");
       expect(typeof report.neotoma.installed).toBe("boolean");
       expect(typeof report.neotoma.node_on_path).toBe("boolean");
+      expect(Array.isArray(report.data.risks)).toBe(true);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
+  });
+
+  it("flags macOS Documents data directories as SQLite risk", () => {
+    const home = path.join(os.tmpdir(), "ntm-doctor-home");
+    const risks = detectDataDirRisks({
+      dataDir: path.join(home, "Documents", "data"),
+      homeDir: home,
+      platform: "darwin",
+    });
+
+    expect(risks.map((risk) => risk.code)).toContain("macos_synced_desktop_or_documents");
+    expect(risks[0]?.suggested_action).toContain("storage set-data-dir");
+  });
+
+  it("flags prior SQLite repair artifacts", () => {
+    const risks = detectDataDirRisks({
+      dataDir: path.join(os.tmpdir(), "ntm-doctor-data"),
+      platform: "linux",
+      hasPriorRepairArtifacts: true,
+    });
+
+    expect(risks).toContainEqual(
+      expect.objectContaining({
+        code: "prior_sqlite_repair_artifacts",
+      })
+    );
   });
 
   it("includes a mirror block with inside_git_repo / gitignored shape", async () => {
@@ -366,6 +464,248 @@ describe("detectHooks", () => {
 
       expect(report.installed.cursor.present).toBe(true);
       expect(report.eligible_for_offer).toBe(false);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("buildVerifyLine", () => {
+  function makeDoctor(overrides: {
+    which_neotoma?: string | null;
+    global_bin?: string | null;
+    resolved_via?: string | null;
+    version?: string | null;
+    data_dir?: string;
+    has_neotoma_mcp?: boolean;
+  }): Parameters<typeof buildVerifyLine>[0] {
+    // Use explicit key presence check so null values are preserved (not coalesced to defaults).
+    const whichNeotoma = "which_neotoma" in overrides ? overrides.which_neotoma : "/usr/local/bin/neotoma";
+    const globalBin = "global_bin" in overrides ? overrides.global_bin : "/usr/local/bin/neotoma";
+    return {
+      neotoma: {
+        installed: true,
+        which_neotoma: whichNeotoma,
+        global_bin: globalBin,
+        resolved_via: (overrides.resolved_via ?? "npm") as "npm" | "mise" | "nvm" | "fnm" | "path" | "unknown",
+        version: overrides.version ?? "0.11.0",
+        node_on_path: true,
+        npm_global_root: null,
+        global_package_dir: null,
+        neotoma_on_path: whichNeotoma !== null && whichNeotoma !== undefined,
+        path_fix_hint: null,
+      },
+      data: {
+        config_dir: "/home/user/.config/neotoma",
+        data_dir: overrides.data_dir ?? "/home/user/neotoma/data",
+        db_exists: true,
+        initialized: true,
+        risks: [],
+        suggested_safe_data_dir: null,
+      },
+      api: { running: false, env: null, port: null, pid: null, base_url: null },
+      mcp_servers_detected: overrides.has_neotoma_mcp
+        ? { cursor: { path: "/home/user/.cursor/mcp.json", has_neotoma: true, has_neotoma_dev: false } }
+        : {},
+      cli_instructions: {
+        project: { cursor: false, claude: false, codex: false },
+        user: { cursor: false, claude: false, codex: false },
+      },
+      permission_files: {
+        claude_code_project: null,
+        claude_code_user: null,
+        cursor_project: null,
+        codex_user: null,
+      },
+      current_tool_hint: null,
+      hooks: {
+        installed: {},
+        eligible_for_offer: false,
+      },
+      mirror: { enabled: false, peers: [] },
+      suggested_next_step: null,
+    } as unknown as Parameters<typeof buildVerifyLine>[0];
+  }
+
+  it("produces the canonical single-line format agents grep for", () => {
+    const line = buildVerifyLine(makeDoctor({}));
+    expect(line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
+  });
+
+  it("includes the binary path", () => {
+    const line = buildVerifyLine(makeDoctor({ which_neotoma: "/home/user/.local/bin/neotoma" }));
+    expect(line).toContain("/home/user/.local/bin/neotoma");
+  });
+
+  it("includes the resolved_via manager", () => {
+    const line = buildVerifyLine(makeDoctor({ resolved_via: "mise" }));
+    expect(line).toContain("resolved via mise");
+  });
+
+  it("includes the version with v-prefix", () => {
+    const line = buildVerifyLine(makeDoctor({ version: "0.12.3" }));
+    expect(line).toContain("v0.12.3");
+  });
+
+  it("includes the data_dir", () => {
+    const line = buildVerifyLine(makeDoctor({ data_dir: "/custom/data" }));
+    expect(line).toContain("data_dir=/custom/data");
+  });
+
+  it("shows stdio when MCP is configured", () => {
+    const line = buildVerifyLine(makeDoctor({ has_neotoma_mcp: true }));
+    expect(line).toContain("mcp=stdio");
+    expect(line).not.toContain("not yet configured");
+  });
+
+  it("notes mcp not configured when no MCP server detected", () => {
+    const line = buildVerifyLine(makeDoctor({ has_neotoma_mcp: false }));
+    expect(line).toContain("mcp=stdio (not yet configured)");
+  });
+
+  it("falls back to global_bin when binary is not on PATH", () => {
+    const line = buildVerifyLine(
+      makeDoctor({ which_neotoma: null, global_bin: "/home/user/.local/share/mise/bin/neotoma" })
+    );
+    expect(line).toContain("/home/user/.local/share/mise/bin/neotoma");
+  });
+
+  it("falls back to not-found message when neither path nor global_bin is available", () => {
+    const line = buildVerifyLine(makeDoctor({ which_neotoma: null, global_bin: null }));
+    expect(line).toContain("not found on PATH");
+    expect(line).toContain("path_fix_hint");
+  });
+
+  it("PRIVACY_TRANSPORT_SUMMARY mentions local stdio and no network egress", () => {
+    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("local stdio MCP");
+    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("no network egress");
+  });
+
+  it("runSetup report includes verify_line and privacy_transport_summary", async () => {
+    const cwd = await mkTmp("ntm-verify-line");
+    try {
+      const report = await runSetup({
+        tool: "cursor",
+        dryRun: true,
+        cwd,
+        runners: {
+          init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+          mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+          cliInstructionsConfigure: async () => ({ id: "cli-instructions", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+        },
+      });
+      expect(report.verify_line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
+      expect(report.privacy_transport_summary).toContain("local stdio MCP");
+      expect(report.privacy_transport_summary).toContain("no network egress");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runPreflight", () => {
+  async function mkTmp(prefix: string): Promise<string> {
+    return fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
+  }
+
+  it("returns overall_ok=false and null patches when no tool is specified", async () => {
+    const report = await runPreflight({});
+    expect(report.overall_ok).toBe(false);
+    expect(report.tool).toBeNull();
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("returns overall_ok=false for unknown tool string", async () => {
+    const report = await runPreflight({ tool: "not-a-tool" });
+    expect(report.overall_ok).toBe(false);
+    expect(report.tool).toBeNull();
+  });
+
+  it("prints copy-paste block for claude-code without --apply", async () => {
+    const report = await runPreflight({ tool: "claude-code" });
+    expect(report.overall_ok).toBe(true);
+    expect(report.apply).toBe(false);
+    expect(report.copy_paste_block).toMatch(/Bash\(neotoma:\*\)/);
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("prints copy-paste block for cursor without --apply", async () => {
+    const report = await runPreflight({ tool: "cursor" });
+    expect(report.overall_ok).toBe(true);
+    expect(report.copy_paste_block).toMatch(/neotoma \*/);
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("prints copy-paste block for codex without --apply", async () => {
+    const report = await runPreflight({ tool: "codex" });
+    expect(report.overall_ok).toBe(true);
+    expect(report.copy_paste_block).toMatch(/\[approvals\]/);
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("prints informational block for tools without allowlist files", async () => {
+    for (const tool of ["claude-desktop", "openclaw", "windsurf", "continue", "vscode"] as const) {
+      const report = await runPreflight({ tool });
+      expect(report.overall_ok).toBe(true);
+      expect(report.copy_paste_block).toBeTruthy();
+      expect(report.patches).toHaveLength(0);
+    }
+  });
+
+  it("applies permissions for claude-code when --apply is set", async () => {
+    const cwd = await mkTmp("ntm-preflight-claude");
+    try {
+      const report = await runPreflight({ tool: "claude-code", apply: true, scope: "project", cwd });
+      expect(report.overall_ok).toBe(true);
+      expect(report.apply).toBe(true);
+      expect(report.copy_paste_block).toBeNull();
+      expect(report.patches.length).toBeGreaterThan(0);
+      expect(report.patches.some((p) => p.changed)).toBe(true);
+      // Verify the file was written
+      const written = await fs.readFile(path.join(cwd, ".claude", "settings.local.json"), "utf8");
+      const parsed = JSON.parse(written) as { permissions?: { allow?: string[] } };
+      expect(parsed.permissions?.allow).toContain("Bash(neotoma:*)");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("applies permissions for cursor when --apply is set", async () => {
+    const cwd = await mkTmp("ntm-preflight-cursor");
+    try {
+      const report = await runPreflight({ tool: "cursor", apply: true, cwd });
+      expect(report.overall_ok).toBe(true);
+      expect(report.patches.length).toBeGreaterThan(0);
+      const written = await fs.readFile(path.join(cwd, ".cursor", "allowlist.json"), "utf8");
+      const parsed = JSON.parse(written) as { allow?: string[] };
+      expect(parsed.allow).toContain("neotoma *");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("reports already_ok=true when permissions are already present", async () => {
+    const cwd = await mkTmp("ntm-preflight-already");
+    try {
+      // Apply once
+      await runPreflight({ tool: "cursor", apply: true, cwd });
+      // Apply again
+      const report = await runPreflight({ tool: "cursor", apply: true, cwd });
+      expect(report.overall_ok).toBe(true);
+      expect(report.already_ok).toBe(true);
+      expect(report.patches.every((p) => !p.changed)).toBe(true);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("dry-run does not write files", async () => {
+    const cwd = await mkTmp("ntm-preflight-dry");
+    try {
+      const report = await runPreflight({ tool: "cursor", apply: true, dryRun: true, cwd });
+      expect(report.dry_run).toBe(true);
+      const exists = await fs.access(path.join(cwd, ".cursor", "allowlist.json")).then(() => true).catch(() => false);
+      expect(exists).toBe(false);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }

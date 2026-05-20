@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Run Neotoma production HTTP API for LaunchAgent with hot-reload from source.
+# Used by com.neotoma.prod-server.plist so the server starts at login, restarts
+# after reboot, and picks up source changes automatically via node --watch + tsx.
+#
+# Runs `dev:server:prod` (node --watch on src/actions.ts + tsc --watch, prod env,
+# port 3180) instead of the build-once start:server:prod. Pre-kills any incumbent
+# on port 3180 so prod always binds 3180 and never drifts via pick-port.js's
+# scan-up fallback. This guarantees the `neotoma` MCP entry
+# (NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod) and the Cloudflare tunnel for
+# https://neotoma.markmhendrickson.com/ both target the same bound process.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+export PATH="/usr/sbin:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+export TSC_WATCHFILE="${TSC_WATCHFILE:-UseFsEventsWithFallbackDynamicPolling}"
+export TSC_WATCHDIRECTORY="${TSC_WATCHDIRECTORY:-UseFsEventsWithFallbackDynamicPolling}"
+
+run_npm() {
+  if [[ -n "${NEOTOMA_LAUNCHD_NODE:-}" && -n "${NEOTOMA_LAUNCHD_NPM_CLI:-}" && -x "${NEOTOMA_LAUNCHD_NODE}" && -f "${NEOTOMA_LAUNCHD_NPM_CLI}" ]]; then
+    "${NEOTOMA_LAUNCHD_NODE}" "${NEOTOMA_LAUNCHD_NPM_CLI}" "$@"
+    return
+  fi
+  if [[ -n "${NEOTOMA_LAUNCHD_NPM_BIN:-}" && -x "${NEOTOMA_LAUNCHD_NPM_BIN}" ]]; then
+    "${NEOTOMA_LAUNCHD_NPM_BIN}" "$@"
+    return
+  fi
+  npm "$@"
+}
+
+PROD_HTTP_PORT="${NEOTOMA_PROD_HTTP_PORT:-3180}"
+
+kill_port() {
+  local port="$1"
+  local pid
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
+    [ "$pid" = "$$" ] && continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done < <(lsof -ti tcp:"$port" 2>/dev/null || true)
+  sleep 1
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
+    [ "$pid" = "$$" ] && continue
+    kill -KILL "$pid" 2>/dev/null || true
+  done < <(lsof -ti tcp:"$port" 2>/dev/null || true)
+}
+
+kill_port "$PROD_HTTP_PORT"
+
+rm -f "$REPO_ROOT/.dev-serve/local_http_port_prod" 2>/dev/null || true
+
+for env_file in ".env" ".env.production"; do
+  if [ -f "$env_file" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$env_file"
+    set +a
+  fi
+done
+
+RESTART_DELAY=5
+while true; do
+  run_npm run dev:server:prod || true
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] dev:server:prod exited, restarting in ${RESTART_DELAY}s..."
+  sleep "$RESTART_DELAY"
+done

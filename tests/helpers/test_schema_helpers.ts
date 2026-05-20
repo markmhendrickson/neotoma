@@ -32,7 +32,7 @@ export async function seedTestSchema(
     .insert({
       entity_type: entityType,
       schema_version: "1.0",
-      schema_definition: { fields },
+      schema_definition: { fields, identity_opt_out: "heuristic_canonical_name" },
       reducer_config: {
         merge_policies: Object.fromEntries(
           Object.keys(fields).map(field => [
@@ -256,9 +256,20 @@ export async function createTestUser(userId?: string): Promise<string> {
  * Delete a test user from auth.users
  */
 export async function deleteTestUser(userId: string): Promise<void> {
-  const { error } = await db.auth.admin.deleteUser(userId);
-  if (error) {
-    // Don't throw - user might already be deleted
-    console.warn(`Failed to delete test user ${userId}: ${error.message}`);
+  // db.auth.admin is only available on the Supabase JS client; the local SQLite
+  // adapter does not expose this surface. Delete from the users table directly.
+  try {
+    const dbAny = db as any;
+    if (typeof dbAny?.auth?.admin?.deleteUser === "function") {
+      const { error } = await dbAny.auth.admin.deleteUser(userId);
+      if (error) {
+        console.warn(`Failed to delete test user ${userId}: ${error.message}`);
+      }
+    } else {
+      // Local SQLite adapter — users table may or may not exist; best-effort delete
+      await db.from("users").delete().eq("id", userId);
+    }
+  } catch {
+    // Don't throw - user might already be deleted or table may not exist
   }
 }

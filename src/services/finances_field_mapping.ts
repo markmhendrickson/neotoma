@@ -9,7 +9,7 @@
  * Map finances transaction schema to Neotoma transaction properties
  */
 export function mapTransactionFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -29,9 +29,7 @@ export function mapTransactionFields(
 /**
  * Map finances contact schema to Neotoma contact properties
  */
-export function mapContactFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapContactFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     name: financesRecord.name,
@@ -57,7 +55,7 @@ export function mapContactFields(
  * Map finances contract schema to Neotoma contract properties
  */
 export function mapContractFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -78,9 +76,7 @@ export function mapContractFields(
 /**
  * Map finances holding schema to Neotoma holding properties
  */
-export function mapHoldingFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapHoldingFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     snapshot_date: financesRecord.snapshot_date,
@@ -101,9 +97,7 @@ export function mapHoldingFields(
 /**
  * Map finances income schema to Neotoma income properties
  */
-export function mapIncomeFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapIncomeFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     income_date: financesRecord.income_date,
@@ -124,7 +118,7 @@ export function mapIncomeFields(
  * Map finances tax_event schema to Neotoma tax_event properties
  */
 export function mapTaxEventFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -147,7 +141,7 @@ export function mapTaxEventFields(
  * Map finances crypto_transaction schema to Neotoma crypto_transaction properties
  */
 export function mapCryptoTransactionFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -171,7 +165,7 @@ export function mapCryptoTransactionFields(
  * Map finances liability schema to Neotoma liability properties
  */
 export function mapLiabilityFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -190,9 +184,7 @@ export function mapLiabilityFields(
 /**
  * Map finances flow schema to Neotoma flow properties
  */
-export function mapFlowFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapFlowFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     flow_name: financesRecord.flow_name,
@@ -217,7 +209,7 @@ export function mapFlowFields(
  * Map finances purchase schema to Neotoma purchase properties
  */
 export function mapPurchaseFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -240,7 +232,7 @@ export function mapPurchaseFields(
  * Map finances transfer schema to Neotoma transfer properties
  */
 export function mapTransferFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -263,9 +255,7 @@ export function mapTransferFields(
 /**
  * Map finances wallet schema to Neotoma wallet properties
  */
-export function mapWalletFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapWalletFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     name: financesRecord.name,
@@ -286,7 +276,7 @@ export function mapWalletFields(
  * Map finances tax_filing schema to Neotoma tax_filing properties
  */
 export function mapTaxFilingFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -310,9 +300,7 @@ export function mapTaxFilingFields(
 /**
  * Map finances order schema to Neotoma order properties
  */
-export function mapOrderFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapOrderFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     name: financesRecord.name,
@@ -334,7 +322,7 @@ export function mapOrderFields(
  * Map finances fixed_cost schema to Neotoma fixed_cost properties
  */
 export function mapFixedCostFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -367,7 +355,7 @@ export function mapFixedCostFields(
  * Map finances property schema to Neotoma property properties
  */
 export function mapPropertyFields(
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -387,9 +375,7 @@ export function mapPropertyFields(
 /**
  * Map finances balance schema to Neotoma balance properties
  */
-export function mapBalanceFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapBalanceFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     snapshot_date: financesRecord.snapshot_date,
@@ -408,9 +394,7 @@ export function mapBalanceFields(
 /**
  * Map finances account schema to Neotoma account properties
  */
-export function mapAccountFields(
-  financesRecord: Record<string, unknown>,
-): Record<string, unknown> {
+export function mapAccountFields(financesRecord: Record<string, unknown>): Record<string, unknown> {
   return {
     schema_version: "1.0",
     external_id: financesRecord.account_id,
@@ -459,7 +443,7 @@ export const FIELD_MAPPERS: Record<
  */
 export function mapFinancesRecordToNeotoma(
   recordType: string,
-  financesRecord: Record<string, unknown>,
+  financesRecord: Record<string, unknown>
 ): Record<string, unknown> {
   const mapper = FIELD_MAPPERS[recordType];
   if (!mapper) {

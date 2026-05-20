@@ -19,15 +19,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Prefer the vendored copy bundled alongside this file so the hook works
+# without any manual pip install, regardless of the system Python environment.
+sys.path.insert(0, str(Path(__file__).parent))
 try:
     from neotoma_client import NeotomaClient, NeotomaClientError  # type: ignore
-except Exception:  # pragma: no cover - import fallback when package not installed
+except Exception:  # pragma: no cover
     NeotomaClient = None  # type: ignore[assignment]
     NeotomaClientError = Exception  # type: ignore[assignment]
 
 
 NEOTOMA_BASE_URL = os.environ.get("NEOTOMA_BASE_URL", "http://127.0.0.1:3080")
-NEOTOMA_TOKEN = os.environ.get("NEOTOMA_TOKEN", "dev-local")
+NEOTOMA_TOKEN = os.environ.get("NEOTOMA_TOKEN") or None
 NEOTOMA_LOG_LEVEL = os.environ.get("NEOTOMA_LOG_LEVEL", "warn").lower()
 
 
@@ -187,9 +190,11 @@ def record_conversation_turn(
 # ---------------------------------------------------------------------------
 
 _NEOTOMA_TOOL_NAMES = {
-    "submit_feedback",
-    "get_feedback_status",
+    "submit_issue",
+    "get_issue_status",
+    "store",
     "store_structured",
+    "store_unstructured",
     "retrieve_entities",
     "retrieve_entity_by_identifier",
     "create_relationship",
@@ -311,6 +316,43 @@ def extract_invocation_shape(tool_input: Any) -> dict[str, Any]:
     if isinstance(entities, list):
         shape["entity_count"] = len(entities)
     return shape
+
+
+def _mcp_instructions_cache_path() -> Path:
+    """Return the path for caching MCP interaction instructions."""
+    import hashlib
+
+    key = hashlib.md5(NEOTOMA_BASE_URL.encode()).hexdigest()[:8]
+    return _hook_state_dir() / f"mcp-instructions-{key}.txt"
+
+
+_MCP_INSTRUCTIONS_TTL_S = 3600  # 1 hour
+
+
+def read_cached_mcp_instructions() -> str | None:
+    """Return cached instructions if present and not expired."""
+    path = _mcp_instructions_cache_path()
+    if not path.exists():
+        return None
+    try:
+        age = time.time() - path.stat().st_mtime
+        if age > _MCP_INSTRUCTIONS_TTL_S:
+            return None
+        text = path.read_text(encoding="utf-8").strip()
+        return text or None
+    except Exception as exc:
+        log("debug", f"read_cached_mcp_instructions failed: {exc}")
+        return None
+
+
+def write_cached_mcp_instructions(text: str) -> None:
+    """Persist instructions to the cache file."""
+    try:
+        directory = _hook_state_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        _mcp_instructions_cache_path().write_text(text, encoding="utf-8")
+    except Exception as exc:
+        log("debug", f"write_cached_mcp_instructions failed: {exc}")
 
 
 def _hook_state_dir() -> Path:
@@ -442,7 +484,6 @@ def format_failure_hint(hint: dict[str, Any] | None) -> str:
         f"Neotoma hook note: {hint.get('count', 0)} recent failures this session "
         f"for tool `{hint.get('tool_name')}` with error class "
         f"`{hint.get('error_class')}`. If this is blocking your task, consider "
-        "calling `submit_feedback` with kind=incident, PII-redacted title/body, "
-        "and metadata.environment per docs/developer/mcp/instructions.md. This "
+        "calling `submit_issue` with a PII-redacted title/body describing the friction. This "
         "is informational — do not auto-submit."
     )

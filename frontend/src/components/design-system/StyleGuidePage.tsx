@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DesignSystemLayout } from "./DesignSystemLayout";
 
 export function StyleGuidePage() {
@@ -247,51 +248,51 @@ export function StyleGuidePage() {
             <h4 className="text-sm font-semibold mb-2">Application Checklist</h4>
             <div className="space-y-1 text-sm text-muted-foreground">
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>No em dashes (—) or en dashes (–)</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>No conversational transitions</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>No soft questions or offers</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>No motivational language</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>No redundant qualifiers</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>Simple, declarative sentences</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>Active voice preferred</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>One idea per sentence</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>Colons used for list descriptions</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>Paragraphs are short (3-4 sentences, maximum 5)</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>No immediate repetition of proper nouns</span>
               </div>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" disabled />
+                <Checkbox disabled />
                 <span>Lists used for 3+ related items or concepts</span>
               </div>
             </div>

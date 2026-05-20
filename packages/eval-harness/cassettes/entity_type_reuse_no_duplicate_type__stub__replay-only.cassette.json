@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "I met a new person named Beth Clark at the conference\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before choosing an entity_type, check if a semantically equivalent type already exists (e.g. if \"contact\" exists, use it instead of creating \"person\"). Persist conversation, user message, and extracted entities via store_structured with appropriate relationships.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before choosing an entity_type, check if a semantically equivalent type already exists (e.g. if \"contact\" exists, use it instead of creating \"person\"). Persist conversation, user message, and extracted entities via the MCP store tool with appropriate relationships.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-type-reuse-001",
         "entities": [

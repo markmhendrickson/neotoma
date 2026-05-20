@@ -1,4 +1,7 @@
 import { defineConfig, configDefaults } from "vitest/config";
+import react from "@vitejs/plugin-react";
+import mdx from "@mdx-js/rollup";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -10,11 +13,39 @@ const runRemoteTests = process.env.RUN_REMOTE_TESTS === "1";
 /** When set to "1", run React/frontend tests (jsdom). Default: excluded to avoid ESM/worker issues in default run. */
 const runFrontendTests = process.env.RUN_FRONTEND_TESTS === "1";
 
+/** When set to "1", write Markdown run reports under `.vitest/reports/` via `vitest.markdown_reporter.ts`. */
+const writeTestRunReport = process.env.WRITE_TEST_RUN_REPORT === "1";
+
 export default defineConfig({
+  plugins: [
+    {
+      name: "prefer-ts-source-for-js-specifiers",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if (!importer || !source.endsWith(".js") || !source.startsWith(".")) {
+          return null;
+        }
+        const sourcePath = path.resolve(path.dirname(importer), source);
+        const tsPath = sourcePath.replace(/\.js$/, ".ts");
+        if (fs.existsSync(tsPath)) {
+          return tsPath;
+        }
+        return null;
+      },
+    },
+    { ...mdx({ providerImportSource: "@mdx-js/react" }), enforce: "pre" },
+    react(),
+  ],
+  server: {
+    fs: {
+      allow: ["."],
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./frontend/src"),
       "@shared": path.resolve(__dirname, "./src/shared"),
+      "@neotoma/client": path.resolve(__dirname, "./packages/client/src/index.ts"),
     },
   },
   test: {
@@ -38,6 +69,7 @@ export default defineConfig({
     ],
     setupFiles: ["./vitest.setup.ts"],
     globalSetup: ["./vitest.global_setup.ts"],
+    reporters: writeTestRunReport ? ["default", "./vitest.markdown_reporter.ts"] : ["default"],
     env: {
       NODE_ENV: "test",
     },
@@ -52,6 +84,7 @@ export default defineConfig({
       // Integration/service tests that fail on local SQLite (run with RUN_REMOTE_TESTS=1)
       ...(!runRemoteTests
         ? [
+            "tests/integration/cross_instance_issues.test.ts",
             "tests/integration/entity_queries.test.ts",
             "tests/integration/field_converters.test.ts",
             "tests/integration/gdpr_deletion.test.ts",
@@ -84,6 +117,14 @@ export default defineConfig({
     ],
     testTimeout: 60000, // Increased timeout for integration tests
     hookTimeout: 30000,
+    // parquet-wasm ships a node/ entry that uses `module.exports` (CJS) despite
+    // the package declaring `"type": "module"`.  Tell Vite's SSR runtime to
+    // leave it alone rather than try to re-process it.
+    server: {
+      deps: {
+        external: [/parquet-wasm/],
+      },
+    },
     // Sequential execution for integration tests (avoid DB conflicts)
     sequence: {
       concurrent: false,

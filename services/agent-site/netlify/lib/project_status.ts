@@ -40,7 +40,7 @@ export function buildVerificationRequest(
     verification_steps: steps,
     expected_outcome:
       "The originally failing invocation succeeds on the upgraded version without the reported friction.",
-    report_via: "submit_feedback",
+    report_via: "submit_issue",
     report_kind: "fix_verification",
     parent_feedback_id: record.id,
     deadline_behavior: "silence_treated_as_unable_to_verify",

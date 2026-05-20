@@ -86,9 +86,7 @@ declare module "@neotoma/aauth-yubikey" {
     aaguid: string;
   }
 
-  export function isSupported(opts?: {
-    pkcs11Path?: string;
-  }): NativeSupportProbe;
+  export function isSupported(opts?: { pkcs11Path?: string }): NativeSupportProbe;
   export function generateKey(opts?: GenerateKeyOptions): GenerateKeyResult;
   export function sign(opts: SignOptions): Buffer;
   export function attest(opts: AttestOptions): AttestResult;

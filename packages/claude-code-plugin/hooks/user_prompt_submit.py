@@ -24,6 +24,11 @@ import sys
 import time
 from pathlib import Path
 
+try:
+    import urllib.request as _urllib_request
+except ImportError:
+    _urllib_request = None  # type: ignore[assignment]
+
 sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
     format_failure_hint,
@@ -31,9 +36,11 @@ from _common import (  # noqa: E402
     harness_provenance,
     log,
     make_idempotency_key,
+    read_cached_mcp_instructions,
     read_failure_hint,
     read_hook_input,
     record_conversation_turn,
+    write_cached_mcp_instructions,
     write_hook_output,
 )
 
@@ -46,6 +53,30 @@ def extract_identifiers(prompt: str) -> list[str]:
     if not prompt:
         return []
     return list({match for match in IDENTIFIER_PATTERN.findall(prompt)})[:5]
+
+
+def fetch_mcp_instructions(base_url: str) -> str | None:
+    """Return MCP interaction instructions, using the session-start cache when available.
+
+    Falls back to a live HTTP fetch only when the cache is missing or expired
+    (e.g. first prompt of a session where SessionStart couldn't reach the server).
+    """
+    cached = read_cached_mcp_instructions()
+    if cached:
+        return cached
+    if _urllib_request is None:
+        return None
+    url = base_url.rstrip("/") + "/mcp-interaction-instructions"
+    try:
+        with _urllib_request.urlopen(url, timeout=2) as resp:  # noqa: S310
+            if resp.status == 200:
+                text = resp.read().decode("utf-8", errors="replace").strip() or None
+                if text:
+                    write_cached_mcp_instructions(text)
+                return text
+    except Exception as exc:
+        log("debug", f"fetch_mcp_instructions failed: {exc}")
+    return None
 
 
 def format_context(sections: list[tuple[str, object]]) -> str:
@@ -128,8 +159,14 @@ def main() -> int:
     except Exception:
         pass
 
+    mcp_instructions = fetch_mcp_instructions(NEOTOMA_BASE_URL)
+
     response: dict[str, object] = {}
     additional: list[str] = []
+    if mcp_instructions:
+        additional.append(
+            f"<neotoma-mcp-instructions>\n{mcp_instructions}\n</neotoma-mcp-instructions>"
+        )
     if context_sections:
         additional.append(format_context(context_sections))
     hint = read_failure_hint(session_id)

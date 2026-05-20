@@ -163,9 +163,11 @@ def record_conversation_turn(
 # ---------------------------------------------------------------------------
 
 _NEOTOMA_TOOL_NAMES = {
-    "submit_feedback",
-    "get_feedback_status",
+    "submit_issue",
+    "get_issue_status",
+    "store",
     "store_structured",
+    "store_unstructured",
     "retrieve_entities",
     "retrieve_entity_by_identifier",
     "create_relationship",

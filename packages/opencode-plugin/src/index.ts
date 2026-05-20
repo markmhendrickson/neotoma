@@ -10,7 +10,7 @@
  *   user prompts, tool invocations, and compaction markers land in
  *   Neotoma even if the agent never calls MCP.
  * - MCP stays the quality ceiling: the agent still drives structured
- *   entity extraction explicitly via store_structured when it wants
+ *   entity extraction explicitly via the MCP **`store`** tool when it wants
  *   typed, schema-aware writes.
  *
  * The plugin exports a factory that returns an OpenCode plugin object.
@@ -125,9 +125,11 @@ function harnessProvenance(
 }
 
 const NEOTOMA_TOOL_KEYWORDS = new Set([
-  "submit_feedback",
-  "get_feedback_status",
+  "submit_issue",
+  "get_issue_status",
+  "store",
   "store_structured",
+  "store_unstructured",
   "retrieve_entities",
   "retrieve_entity_by_identifier",
   "create_relationship",
@@ -405,11 +407,12 @@ export function buildCompactReminder(
   const lines = [
     "Neotoma turn must-do (compact; full rules at MCP `instructions`):",
     "1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).",
-    "2. User-phase store (one store_structured call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.",
+    "2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.",
     "3. Tool calls and host edits run AFTER step 2.",
     "4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.",
     "5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.",
     "Forbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.",
+    "Forbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).",
   ];
   if (isSmallModel(model)) {
     lines.push(
@@ -422,7 +425,11 @@ export function buildCompactReminder(
 }
 
 const NEOTOMA_STORE_NAMES = new Set([
+  "store",
   "store_structured",
+  "store_unstructured",
+  "mcp_neotoma_store",
+  "mcp_user-neotoma_store",
   "mcp_neotoma_store_structured",
   "mcp_user-neotoma_store_structured",
 ]);
@@ -435,7 +442,8 @@ function looksLikeStoreStructured(
     const lower = toolName.toLowerCase();
     if (
       NEOTOMA_STORE_NAMES.has(lower) ||
-      lower.endsWith("_store_structured")
+      lower.endsWith("_store_structured") ||
+      lower.endsWith("_store_unstructured")
     )
       return true;
   }
@@ -1075,7 +1083,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
           harness: "opencode",
           model,
           status: "backfilled_by_hook",
-          missedSteps: ["user_phase_store_structured"],
+          missedSteps: ["user_phase_store"],
           toolInvocationCount: state.tool_invocation_count,
           storeStructuredCalls: state.store_structured_calls,
           safetyNetUsed: true,

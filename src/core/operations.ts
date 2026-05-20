@@ -104,10 +104,10 @@ export interface Operations {
   /** Store structured and/or unstructured data. See docs/developer/mcp/instructions.md. */
   store(input: StoreInput): Promise<StoreResult>;
 
-  /** Alias for store() preserving the MCP `store_structured` action name. */
+  /** @deprecated Use {@link Operations.store}. */
   storeStructured(input: StoreInput): Promise<StoreResult>;
 
-  /** Alias for store() preserving the MCP `store_unstructured` action name. */
+  /** @deprecated Use {@link Operations.store}. */
   storeUnstructured(input: StoreInput): Promise<StoreResult>;
 
   /** List entities by type or time window. */
@@ -116,25 +116,26 @@ export interface Operations {
   /** Look up a single entity by identifier (name, email, canonical_name, etc.). */
   retrieveEntityByIdentifier(input: RetrieveEntityByIdentifierInput): Promise<unknown>;
 
-  /** Snapshot of a single entity. */
-  retrieveEntitySnapshot(input: { entity_id: string }): Promise<unknown>;
+  /** Snapshot of a single entity. Pass format: "json" for machine-readable payloads (e.g. issue tooling). */
+  retrieveEntitySnapshot(input: {
+    entity_id: string;
+    format?: string;
+    at?: string;
+  }): Promise<unknown>;
 
   /** List observations for provenance / history. */
   listObservations(input: { entity_id: string; limit?: number }): Promise<unknown>;
 
   /** List timeline events for a time window. */
-  listTimelineEvents(input: {
-    since?: string;
-    until?: string;
-    limit?: number;
-  }): Promise<unknown>;
+  listTimelineEvents(input: { since?: string; until?: string; limit?: number }): Promise<unknown>;
 
   /** Retrieve related entities (graph expansion). */
   retrieveRelatedEntities(input: {
     entity_id: string;
-    relationship_type?: string;
-    direction?: "outgoing" | "incoming" | "both";
-    limit?: number;
+    relationship_types?: string[];
+    direction?: "inbound" | "outbound" | "both";
+    max_hops?: number;
+    include_entities?: boolean;
   }): Promise<unknown>;
 
   /** Create a relationship between two existing entities. */
@@ -195,10 +196,10 @@ export function createOperations(options: CreateOperationsOptions): Operations {
       return call<StoreResult>("store", input);
     },
     async storeStructured(input) {
-      return call<StoreResult>("store_structured", input);
+      return call<StoreResult>("store", input);
     },
     async storeUnstructured(input) {
-      return call<StoreResult>("store_unstructured", input);
+      return call<StoreResult>("store", input);
     },
     async retrieveEntities(input) {
       return call("retrieve_entities", input);

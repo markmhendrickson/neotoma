@@ -73,12 +73,17 @@ see [install.md § Production deployment (headless / systemd)](../../install.md#
 - **Backups:** For local SQLite, copy the DB (default `./data/neotoma.db` in dev, `./data/neotoma.prod.db` in prod, under `NEOTOMA_DATA_DIR`), `NEOTOMA_RAW_STORAGE_DIR` (default `./data/sources` in dev, `./data/sources_prod` in prod), and `NEOTOMA_LOGS_DIR` (default `./data/logs` in dev, `./data/logs_prod` in prod; includes `events.log`).
 - **User and access:** Auth and user management are in [Auth](docs/subsystems/auth.md).
 
+### Branch Protection
+
+- `main` must require the GitHub Actions check `security_gates`.
+- Keep this rule enabled even if `/release` is run manually; the required check is the PR-time guard against manifest drift, auth-matrix regressions, and security-lint failures.
+
 ---
 
 ## Emergency Procedures
 
 - **Rollback:** Revert deployment to previous version; re-run migrations only if a migration rollback is defined (see migration docs). Restore DB/storage from backup if data corruption is suspected.
-- **SQLite corruption:** If Neotoma reports `database disk image is malformed`, `btreeInitPage`, or a failed `PRAGMA integrity_check`, run `neotoma storage recover-db` first. If it reports corruption, stop Neotoma and run `neotoma storage recover-db --recover` to write a recovered copy. Review and swap files manually; do not auto-replace the live DB.
+- **SQLite corruption:** If Neotoma reports `database disk image is malformed`, `btreeInitPage`, or a failed `PRAGMA integrity_check`, run `neotoma storage recover-db` first. If it reports corruption, stop Neotoma and run `neotoma storage recover-db --recover` to write a recovered copy. Review and swap files manually; do not auto-replace the live DB. If corruption recurs on macOS, move `NEOTOMA_DATA_DIR` out of iCloud-synced `Documents`, `Desktop`, or `iCloud Drive` folders with `neotoma storage set-data-dir "~/Library/Application Support/neotoma/data" --move-db-files`, then rerun `neotoma doctor --json` and confirm `data.risks` is empty.
 - **Incident response:** Triage using [Troubleshooting](troubleshooting.md). Check logs and `npm run doctor` output. For security issues, see [SECURITY.md](../../SECURITY.md) in the source root.
 
 ---

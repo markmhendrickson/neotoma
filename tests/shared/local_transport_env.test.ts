@@ -7,6 +7,7 @@ const ENV_KEYS = [
   "NEOTOMA_ENV",
   "NEOTOMA_SESSION_ENV",
   "NEOTOMA_CLI_PREFERRED_ENV",
+  "NEOTOMA_TEST_SIMULATE_DIST_BUILD",
   "HOME",
   "USERPROFILE",
 ] as const;
@@ -175,5 +176,41 @@ describe("resolveLocalTransportEnv", () => {
     writeFileSync(join(configDir, "config.json"), "{not valid json");
     const { resolveLocalTransportEnv } = await import("../../src/shared/local_transport.ts");
     expect(resolveLocalTransportEnv("http://localhost:3180")).toBe("production");
+  });
+
+  // NEOTOMA_TEST_SIMULATE_DIST_BUILD is an internal test hook only. It allows these
+  // tests to exercise the dist-build → production branch without physically running
+  // from a dist/ directory. It must never be set in production environments.
+  it("returns 'production' for dist build (no env vars, no config, any port)", async () => {
+    process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD = "1";
+    const { resolveLocalTransportEnv } = await import("../../src/shared/local_transport.ts");
+    expect(resolveLocalTransportEnv("http://localhost:3080")).toBe("production");
+  });
+
+  it("returns 'production' for dist build when baseUrl is undefined", async () => {
+    process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD = "1";
+    const { resolveLocalTransportEnv } = await import("../../src/shared/local_transport.ts");
+    expect(resolveLocalTransportEnv(undefined)).toBe("production");
+  });
+
+  it("dist build heuristic is overridden by NEOTOMA_ENV=development", async () => {
+    process.env.NEOTOMA_ENV = "development";
+    process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD = "1";
+    const { resolveLocalTransportEnv } = await import("../../src/shared/local_transport.ts");
+    expect(resolveLocalTransportEnv("http://localhost:3080")).toBe("development");
+  });
+
+  it("dist build heuristic is overridden by NEOTOMA_SESSION_ENV=dev", async () => {
+    process.env.NEOTOMA_SESSION_ENV = "dev";
+    process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD = "1";
+    const { resolveLocalTransportEnv } = await import("../../src/shared/local_transport.ts");
+    expect(resolveLocalTransportEnv("http://localhost:3080")).toBe("development");
+  });
+
+  it("dist build heuristic is overridden by config file preferred_env=dev", async () => {
+    writeConfigPreferredEnv("dev");
+    process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD = "1";
+    const { resolveLocalTransportEnv } = await import("../../src/shared/local_transport.ts");
+    expect(resolveLocalTransportEnv("http://localhost:3080")).toBe("development");
   });
 });

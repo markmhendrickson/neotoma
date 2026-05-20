@@ -13,19 +13,29 @@ if [ ! -d "$FOUNDATION" ]; then
   exit 0
 fi
 
-# Skills: copy foundation/.cursor/skills/* to .cursor/skills/
+# Skills: copy foundation/.cursor/skills/* to .cursor/skills/ and .claude/skills/
 if [ -d "$FOUNDATION/.cursor/skills" ]; then
   SKILLS_DST="$REPO_ROOT/.cursor/skills"
-  mkdir -p "$SKILLS_DST"
+  CLAUDE_SKILLS_DST="$REPO_ROOT/.claude/skills"
+  mkdir -p "$SKILLS_DST" "$CLAUDE_SKILLS_DST"
   count=0
   for skill in "$FOUNDATION/.cursor/skills"/*; do
     [ -d "$skill" ] || continue
     name=$(basename "$skill")
+    # .cursor/skills keeps the original kebab-case name (Cursor convention)
     rm -rf "$SKILLS_DST/$name"
     cp -R "$skill" "$SKILLS_DST/$name"
+    # .claude/skills uses underscore names (Claude Code convention)
+    claude_name="${name//-/_}"
+    rm -rf "$CLAUDE_SKILLS_DST/$claude_name"
+    cp -R "$skill" "$CLAUDE_SKILLS_DST/$claude_name"
+    # Remove stale kebab-named copy in .claude/skills/ if underscore name differs
+    if [ "$claude_name" != "$name" ]; then
+      rm -rf "$CLAUDE_SKILLS_DST/$name"
+    fi
     count=$((count + 1))
   done
-  echo "[setup_cursor_from_foundation] Installed $count skill(s) to .cursor/skills/"
+  echo "[setup_cursor_from_foundation] Installed $count skill(s) to .cursor/skills/ and .claude/skills/"
 fi
 
 # Rules: if foundation has cursor_rules, symlink or copy into .cursor/rules/

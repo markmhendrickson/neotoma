@@ -6,7 +6,7 @@ v0.6.0 is an agent-runtime hardening release: AAuth-aware attribution and a `/se
 - **Your whole agent fleet upgrades with the server.** The MCP instructions the server ships to every connected client now codify AAuth preflight, `observation_source` tagging, reply-cited provenance edges (Step 5b.1), an `Ambiguous (N)` display group for heuristic merges, and the structured feedback-submission loop — so every connected agent picks up the new defaults on server upgrade without client-side changes.
 - **Fleet-grade write integrity.** Tag writes with `observation_source` (`sensor` / `workflow_state` / `llm_summary` / `human` / `import`) — accepted on `/store`, MCP store tools, and `neotoma store --observation-source` — then export canonical snapshots and diff them against external state (MEMORY.md, shadow DBs, other fleets) with explicit field-level and provenance-gap reports via `neotoma snapshots export|diff|parsers|check|request`.
 - **Multi-agent conversations as first-class data.** `conversation_message` with `sender_kind` (`user` / `assistant` / `agent` / `system` / `tool`) plus stable `sender_agent_id` / `recipient_agent_id` give real agent-to-agent routing and reporting; `thread_kind` (`human_agent` / `agent_agent` / `multi_party`) describes participant topology; stricter `turn_key` / `conversation_id` guidance keeps unrelated threads from silently merging.
-- **A structured agent feedback loop.** Agents can `submit_feedback`, poll for resolution with `get_feedback_status` (respecting `next_check_suggested_at`), receive install/upgrade guidance, and verify fixes; the new `agent.neotoma.io` Netlify service relays, redacts, and optionally forwards each item into Neotoma so one-off bug reports become a machine-ingestible pipeline.
+- **Agent issue reporting plus optional HTTP feedback intake.** Agents file friction via MCP `submit_issue` / `get_issue_status` / `add_issue_message` / `sync_issues` (GitHub Issues + local `issue` entities). The `agent.neotoma.io` Netlify site still hosts legacy HTTP `/feedback/*` intake, redaction, and optional mirror into Neotoma for non-MCP clients.
 - **Repair over-merged entities without destructive edits.** `POST /entities/split` and the `split_entity` MCP tool rebind a subset of observations to a new entity by time range, source, or field match, producing an `entity_splits` audit record instead of an irreversible delete/re-insert.
 
 ## What changed for npm package users
@@ -16,12 +16,12 @@ v0.6.0 is an agent-runtime hardening release: AAuth-aware attribution and a `/se
 - `neotoma auth session` — calls `GET /session` and prints the resolved trust tier, identity, and `eligible_for_trusted_writes`, merging any local `cli_signer` state.
 - `neotoma auth keygen` — writes a local AAuth keypair under `~/.neotoma/aauth/`; flags: `--alg`, `--sub`, `--iss`, `--force`.
 - `neotoma auth sign-example` — prints a signed `curl` example targeting `/session` so operators can sanity-check signing end-to-end.
-- `neotoma api start --env prod` on source checkouts now defaults to the **built** production runner (`dist/…`) instead of the `dev:prod` watcher. Pass `--watch` to restore the previous tsx-watcher behavior under `NEOTOMA_ENV=production`.
+- `neotoma api start --env prod` on source checkouts now uses the canonical `dev:server:prod` watcher path. Installed-package production starts use `start:server:prod`.
 - `--observation-source <kind>` is threaded through store-oriented flows so operators/agents can label writes as `sensor`, `workflow_state`, `llm_summary`, `human`, or `import` instead of treating every write as equivalent.
-- `neotoma feedback mode <proactive|consent|off>` — controls whether agents auto-submit feedback, prompt for consent, or stay silent unless explicitly asked.
-- `neotoma triage` — ingest pending feedback; flags: `--watch`, `--list-pending`, `--set-status`, `--resolve`, `--health`, `--mirror-replay`, `--dry-run`, plus resolution-link options.
+- `neotoma issues config --mode <consent|proactive|off>` — default **`consent`** (explicit user approval before each `submit_issue`); `proactive` auto-files; `off` files only when the user asks.
+- `neotoma issues list|message|sync|create|...` — GitHub-backed issue workflow (replaces removed `neotoma feedback` / `neotoma triage` commands).
 - `neotoma snapshots check|request|export|diff|parsers` — offline-first fleet audit tooling: export canonical snapshots of local state, request snapshots from a remote Neotoma via `POST /health_check_snapshots`, diff against external sources (MEMORY.md, shadow DBs), and report on supported parsers.
-- New npm scripts: `openapi:bc-diff` (release preflight for breaking contract changes), `feedback:seed-schema` (provision the `product_feedback` entity schema), `feedback:mirror-backfill` (replay historical feedback through the mirror).
+- New npm scripts: `openapi:bc-diff` (release preflight for breaking contract changes), `feedback:mirror-backfill` (replay historical feedback through the mirror).
 
 **Runtime / data layer**
 
@@ -63,7 +63,7 @@ v0.6.0 is an agent-runtime hardening release: AAuth-aware attribution and a `/se
 
 - `get_session_identity` — MCP equivalent of `GET /session`; use in `initialize` or before enabling writes.
 - `split_entity` — MCP equivalent of `POST /entities/split`.
-- `submit_feedback` / `get_feedback_status` — feedback submission and polling (see the Agent feedback pipeline section).
+- `submit_issue` / `add_issue_message` / `get_issue_status` / `sync_issues` — GitHub Issues integration (see `docs/subsystems/agent_feedback_pipeline.md`).
 - `health_check_snapshots` — MCP equivalent of the new fleet-snapshot endpoint.
 - `npm_check_update` — checks for newer `neotoma` npm releases so agents can prompt users to upgrade when their client version falls behind.
 
@@ -73,7 +73,7 @@ Unknown top-level fields are now rejected early (before route handlers) on close
 
 ## Behavior changes
 
-- **`neotoma api start --env prod` on source checkouts runs the built artifact by default.** The old `dev:prod` watcher path is no longer the default production route; pass `--watch` when you explicitly want watcher behavior.
+- **`neotoma api start --env prod` on source checkouts uses the canonical `dev:server:prod` watcher path.** The old `dev:prod` name remains only as a one-release npm alias.
 - **Unknown top-level request fields on closed write/auth endpoints fail fast.** The `unknownFieldsGuard` runs before route handlers, so extra JSON keys that previously slipped through are now rejected with a structured allow-list instead of being silently ignored or stripped downstream.
 - **Session attribution is now inspectable.** Operators and agent builders can query the active trust tier, client identity, and anonymous-write policy via `GET /session` / `get_session_identity` / `neotoma auth session` instead of inferring it from logs or headers.
 - **Stricter browser-side defaults.** The default Helmet CSP allows only `connect-src 'self'`; deployments that relied on permissive outbound browser connections need to set `NEOTOMA_CSP_CONNECT_SRC`.
@@ -94,7 +94,7 @@ The MCP server ships `docs/developer/mcp/instructions.md` to every connected cli
 - **Reply-cited provenance edges (Step 5b.1)** — the closing assistant store now includes `REFERS_TO` edges from the assistant message to every entity the reply materially cites or produces, tightening the provenance graph without linking every retrieval result.
 - **`Ambiguous (N)` display group** — agents surface structured `HEURISTIC_MERGE` warnings from store responses in chat alongside `Created`/`Updated`/`Retrieved`.
 - **`[ATTRIBUTION & AGENT IDENTITY]` block** — codifies AAuth preflight via `get_session_identity` / `GET /session` / `neotoma auth session`, forbidden `clientInfo` values, trust-tier badging, and impersonation policy.
-- **`[FEEDBACK REPORTING]` block** — when to submit feedback, PII redaction expectations, persisting a `product_feedback` record with `access_token`, polling via `get_feedback_status`, handling `upgrade_guidance`, and responding to `verification_request`.
+- **`[ISSUE REPORTING]` block** — when to file issues via `submit_issue`, PII redaction expectations, persisting or updating an `issue` entity after submission, polling via `get_issue_status`, and posting follow-ups with `add_issue_message`.
 - **`npm_check_update` hint** — agents may call it at session start and prompt the user to upgrade when a newer `neotoma` client is available.
 
 `docs/developer/cli_agent_instructions.md` mirrors these rules for CLI-backed flows, and `AGENTS.md` adds an **Agent Identity & Attribution** section pointing at both.
@@ -110,14 +110,14 @@ The MCP server ships `docs/developer/mcp/instructions.md` to every connected cli
 
 ## Agent feedback pipeline (end-to-end)
 
-- **MCP entry points** — `submit_feedback` for agents to report friction; `get_feedback_status` for polling with backoff respecting `next_check_suggested_at`.
+- **MCP entry points (product friction)** — `submit_issue`, `add_issue_message`, `get_issue_status`, and `sync_issues` for GitHub-backed issues (canonical path for agents).
 - **Transport selection** — `NEOTOMA_FEEDBACK_TRANSPORT=local|http`, `AGENT_SITE_BASE_URL`, `AGENT_SITE_BEARER`; kill-switch `NEOTOMA_FEEDBACK_AUTO_SUBMIT=0` disables proactive submission.
 - **Local store** — `src/services/feedback/local_store.ts` persists records to disk for dev/cron flows when HTTP transport is not configured.
 - **Redaction** — emails, phone numbers, tokens, UUIDs, and home-directory path fragments are replaced with `<LABEL:hash>` placeholders before submission; the server returns a `redaction_preview` so agents can audit what was transformed.
 - **Upgrade guidance** — resolved items can carry `upgrade_guidance` (`install_commands`, `verification_steps`) and `verification_request` (with `verify_by`); `feedback_upgrade_guidance_map.json` catalogs the canonical responses.
 - **Netlify `agent-site`** (`services/agent-site/`) — public `/feedback/submit` + `/feedback/status`, admin `/feedback/pending`, `/feedback/{id}/status`, `/feedback/{id}/mirror_replay`, `/feedback/by_commit/:sha`, `/jwks`, `/healthz`, and a scheduled `push_webhook_worker`. Optionally forwards each item into Neotoma via tunnel + Cloudflare Access + AAuth (see `docs/subsystems/feedback_neotoma_forwarder.md`).
 - **Cron ingestion** — `scripts/cron/ingest_agent_incidents.ts` classifies queued feedback, applies the upgrade-guidance map, and updates status; `scripts/cron/com.neotoma.feedback-ingest.plist.template` provides a launchd template.
-- **Backfill + seeding** — `scripts/feedback_mirror_backfill.ts` replays historical submissions; `scripts/seed_product_feedback_schema.ts` (via `npm run feedback:seed-schema`) provisions the `product_feedback` entity schema in a Neotoma instance.
+- **Backfill + seeding** — `scripts/feedback_mirror_backfill.ts` replays historical submissions; generic `submit_entity` targets rely on operator-seeded `submission_config` rows (not repo-defaulted).
 - **Capability registry** — `config/agent_capabilities.default.json` pins `agent-site@neotoma.io` to `neotoma_feedback` operations only, so the forwarder cannot perform unrelated writes even if its key is used (`docs/subsystems/agent_capabilities.md`).
 
 ## Security hardening
@@ -174,7 +174,8 @@ The MCP server ships `docs/developer/mcp/instructions.md` to every connected cli
 - **`POST /relationships/snapshot` and `components.schemas.GetRelationshipSnapshotRequest` now reject undeclared top-level fields.** Before: extra keys could slip through until the route-level validator ran. After: rejected earlier with HTTP `400` / `ERR_UNKNOWN_FIELD`. Migration: send only `relationship_type`, `source_entity_id`, `target_entity_id`, `user_id` (the last is newly optional).
 - **`POST /mcp/oauth/initiate` and `components.schemas.OAuthInitiateRequest` now reject undeclared top-level fields.** Before: callers could include extra auth-initiation metadata at the request root. After: HTTP `400` / `ERR_UNKNOWN_FIELD`. Migration: restrict requests to `connection_id`, `client_name`, `redirect_uri`.
 - **`POST /correct` now rejects undeclared top-level fields.** Before: extra root-level keys were not contractually forbidden at the HTTP boundary. After: HTTP `400` / `ERR_UNKNOWN_FIELD`. Migration: limit the body to `entity_id`, `entity_type`, `field`, `value`, `idempotency_key`, `user_id`.
-- **`neotoma api start --env prod` on source checkouts now runs the built runner by default.** Contributors or automation that relied on the old `dev:prod` watcher must switch to `neotoma api start --env prod --watch`. The `dev:prod` npm script alias itself is unchanged.
+- **`neotoma api start --env prod` on source checkouts now routes through `dev:server:prod`.** Contributors or automation that referenced the old `dev:prod` npm script should switch to `dev:server:prod`; the old name remains as a one-release alias.
 - **Default Helmet CSP restricts `connect-src` to `'self'`.** Deployments that served browser UI from the API and relied on permissive outbound connections must opt in via `NEOTOMA_CSP_CONNECT_SRC`.
 - **Default write rate limit of 120 writes/minute per user/IP.** Bursty writers receive HTTP `429`; tune via `NEOTOMA_WRITE_RATE_LIMIT_PER_MIN` or batch via `store_structured`.
 - **Loopback classification changed.** Requests routed through tunnels/proxies are no longer treated as local even when they carry a localhost `Host` header; deployments that relied on this behavior for lightweight dev-auth must switch to AAuth or an explicit allow-list.
+- **`/guest/*` issue/entity URLs are removed.** Before: capability-scoped callers used `POST /guest/issues/submit`, `GET /guest/issues/{entity_id}/thread`, `POST /guest/issues/{entity_id}/messages`, and the peer-sync-only `GET /guest/entities/{entity_id}`. After: the same guest-token/AAuth flows are gated through `POST /issues/submit`, `POST /issues/status`, `POST /issues/add_message`, and `GET /entities/{id}?access_token=...`. Removed URLs now return 404. Migration: send the same scoped credential as `Authorization: Bearer <guest_access_token>`, `guest_access_token` in issue bodies, or `access_token` on entity reads.

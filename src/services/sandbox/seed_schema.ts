@@ -25,14 +25,31 @@ type FieldSpec = Array<{
 }>;
 
 const FIELDS: FieldSpec = [
-  { name: "report_id", type: "string", required: true, description: "Local sandbox report id (e.g. sbx_...)" },
-  { name: "access_token_hash", type: "string", description: "sha256 of the single-purpose status token" },
-  { name: "submitter_ip_hash", type: "string", description: "sha256 prefix of the reporter's IP, never raw IP" },
+  {
+    name: "report_id",
+    type: "string",
+    required: true,
+    description: "Local sandbox report id (e.g. sbx_...)",
+  },
+  {
+    name: "access_token_hash",
+    type: "string",
+    description: "sha256 of the single-purpose status token",
+  },
+  {
+    name: "submitter_ip_hash",
+    type: "string",
+    description: "sha256 prefix of the reporter's IP, never raw IP",
+  },
   { name: "reason", type: "string", required: true },
   { name: "description", type: "string", required: true },
   { name: "entity_id", type: "string", description: "Reported entity id in the sandbox" },
   { name: "url", type: "string" },
-  { name: "reporter_contact", type: "string", description: "Redacted / hashed contact, never raw email" },
+  {
+    name: "reporter_contact",
+    type: "string",
+    description: "Redacted / hashed contact, never raw email",
+  },
   { name: "status", type: "string", required: true },
   { name: "status_updated_at", type: "date" },
   { name: "submitted_at", type: "date", required: true },
@@ -41,7 +58,11 @@ const FIELDS: FieldSpec = [
   { name: "redaction_backstop_hits", type: "array", reducer: "merge_array" },
   { name: "forwarded_at", type: "date" },
   { name: "forwarded_report_id", type: "string" },
-  { name: "data_source", type: "string", description: "Provenance — e.g. 'sandbox.neotoma.io POST /sandbox/report'" },
+  {
+    name: "data_source",
+    type: "string",
+    description: "Provenance — e.g. 'sandbox.neotoma.io POST /sandbox/report'",
+  },
   { name: "original_submission_payload", type: "object" },
 ];
 
@@ -103,9 +124,7 @@ export async function seedSandboxAbuseReportSchema(options?: {
     });
   }
 
-  const existingFieldNames = new Set(
-    Object.keys(existing.schema_definition.fields ?? {}),
-  );
+  const existingFieldNames = new Set(Object.keys(existing.schema_definition.fields ?? {}));
   const missing = FIELDS.filter((spec) => !existingFieldNames.has(spec.name));
   if (missing.length === 0) return existing;
 

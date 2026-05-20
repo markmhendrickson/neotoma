@@ -101,7 +101,7 @@ function buildResourceBlock(names, ports) {
       : "child processes";
   lines.push(rule);
   lines.push(` ${cmdHint}`);
-  lines.push(" Reprint: npm run dev:resources");
+  lines.push(" Reprint: npm run info:dev-resources");
   lines.push(rule);
   lines.push("");
   return lines.join("\n");
@@ -180,7 +180,7 @@ function main() {
       printResourceBlock(names, ports);
     }
     // Quote args that contain spaces so the shell does not re-split them (preserves
-    // e.g. "tsx watch src/actions.ts" and "tsc --watch" as two commands for concurrently).
+    // e.g. "bash scripts/run-neotoma-api-node-watch.sh" and "tsc --watch" as two commands for concurrently).
     const quote = (arg) => {
       const s = String(arg);
       if (s.includes(" ") || s.includes("'") || s.includes('"')) {

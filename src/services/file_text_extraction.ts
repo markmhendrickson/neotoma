@@ -63,6 +63,55 @@ export function getMimeTypeFromExtension(ext: string): string | null {
   return MIME_EXT_MAP[normalized] ?? null;
 }
 
+export function sniffMimeTypeFromBuffer(buffer: Buffer): string | null {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  const header6 = buffer.subarray(0, 6).toString("ascii");
+  if (header6 === "GIF87a" || header6 === "GIF89a") {
+    return "image/gif";
+  }
+
+  const header4 = buffer.subarray(0, 4).toString("ascii");
+  if (header4 === "%PDF") {
+    return "application/pdf";
+  }
+  if (header4 === "OggS") {
+    return "audio/ogg";
+  }
+  if (header4 === "fLaC") {
+    return "audio/flac";
+  }
+
+  if (buffer.length >= 12) {
+    const riff = buffer.subarray(0, 4).toString("ascii");
+    const riffKind = buffer.subarray(8, 12).toString("ascii");
+    if (riff === "RIFF" && riffKind === "WAVE") {
+      return "audio/wav";
+    }
+    if (riff === "RIFF" && riffKind === "WEBP") {
+      return "image/webp";
+    }
+  }
+
+  return null;
+}
+
 /**
  * Extract plain text from a file buffer for LLM extraction.
  * PDF uses pdf-parse; text/* and common extensions return utf8 string.
@@ -84,7 +133,10 @@ export async function extractTextFromBuffer(
           module as {
             PDFParse?: new (options: { data: Buffer }) => {
               getText(): Promise<{ text?: string }>;
-              getScreenshot(params?: { first?: number; imageDataUrl?: boolean }): Promise<{ pages: Array<{ dataUrl?: string }> }>;
+              getScreenshot(params?: {
+                first?: number;
+                imageDataUrl?: boolean;
+              }): Promise<{ pages: Array<{ dataUrl?: string }> }>;
               destroy(): Promise<void>;
             };
           }
@@ -147,11 +199,18 @@ async function ensurePdfCanvasPolyfill(): Promise<void> {
     if (canvas.ImageData) (globalThis as Record<string, unknown>).ImageData = canvas.ImageData;
     if (canvas.Path2D) (globalThis as Record<string, unknown>).Path2D = canvas.Path2D;
     pdfGlobalsPolyfilled = true;
-    pdfWorkerDebug = { wrapper_path_tried: "@napi-rs/canvas (globalThis polyfill)", configured: true };
+    pdfWorkerDebug = {
+      wrapper_path_tried: "@napi-rs/canvas (globalThis polyfill)",
+      configured: true,
+    };
     logger.debug("PDF canvas globals polyfilled from @napi-rs/canvas");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    pdfWorkerDebug = { wrapper_path_tried: "@napi-rs/canvas (failed)", configured: false, set_worker_error: msg };
+    pdfWorkerDebug = {
+      wrapper_path_tried: "@napi-rs/canvas (failed)",
+      configured: false,
+      set_worker_error: msg,
+    };
     logger.warn("Failed to polyfill PDF canvas globals: %s", msg);
   }
 }
@@ -186,13 +245,18 @@ export async function getPdfFirstPageImageDataUrl(
   try {
     await ensurePdfCanvasPolyfill();
     const module = await import("pdf-parse");
-    const PdfParse = (module as { PDFParse?: unknown }).PDFParse ?? (module as { default?: unknown }).default;
+    const PdfParse =
+      (module as { PDFParse?: unknown }).PDFParse ?? (module as { default?: unknown }).default;
     if (!PdfParse) {
       return opts?.returnError ? { dataUrl: null, error: "PDFParse_not_found" } : null;
     }
     const PDFParseClass = PdfParse as {
       new (opts: { data: Buffer }): {
-        getScreenshot(params?: { first?: number; imageDataUrl?: boolean; imageBuffer?: boolean }): Promise<{
+        getScreenshot(params?: {
+          first?: number;
+          imageDataUrl?: boolean;
+          imageBuffer?: boolean;
+        }): Promise<{
           pages: Array<{ dataUrl?: string; data?: Uint8Array | Buffer }>;
         }>;
         destroy(): Promise<void>;

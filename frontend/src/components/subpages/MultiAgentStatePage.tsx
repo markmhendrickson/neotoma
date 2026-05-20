@@ -221,7 +221,7 @@ export function MultiAgentStatePage() {
             </p>
             <Collapsible defaultOpen={false}>
               <CollapsibleTrigger asChild>
-                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
                   <h2 id="what-breaks-when-agents-share-state" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                     What breaks when agents share state
                   </h2>
@@ -296,7 +296,7 @@ export function MultiAgentStatePage() {
             </p>
             <Collapsible defaultOpen={false}>
               <CollapsibleTrigger asChild>
-                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
                   <h2 id="how-one-bad-write-triggers-a-chain-reaction" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                     How one bad write triggers a chain reaction
                   </h2>
@@ -391,7 +391,7 @@ export function MultiAgentStatePage() {
             </p>
             <Collapsible defaultOpen={false}>
               <CollapsibleTrigger asChild>
-                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
                   <h2 id="how-multi-agent-systems-emerge" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                     How multi-agent systems emerge{" "}
                     <span className="text-muted-foreground">

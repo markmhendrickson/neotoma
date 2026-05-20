@@ -118,6 +118,7 @@ Both products address fragmented personal data, but serve fundamentally differen
 - **Cross-Document Reasoning:** Entity unification enables reasoning across documents
 - **Multi-Modal:** PDFs, images, OCR support for document ingestion
 - **Conversation Context:** Agents can read/write memory during conversations
+- **Reactive coordination:** State-change events delivered to registered consumers (webhook/SSE) — no other tool in the homebrew or VC-funded competitive set offers event-driven agent coordination. See `philosophy.md` §5.9 (Signal Without Strategy).
 ## Overlap and Distinction
 ### Where They Overlap
 - Both address fragmented personal data
@@ -125,14 +126,16 @@ Both products address fragmented personal data, but serve fundamentally differen
 - Both enable search across previously inaccessible content
 - Both are local-first/privacy-first architectures
 ### Where They Diverge
-| Dimension          | mmry.io                                        | Neotoma                                                                |
-| ------------------ | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| **Data Type**      | Web content (tweets, posts, videos, bookmarks) | Documents (PDFs, images, receipts, contracts) + conversation context   |
-| **Primary Use**    | Rediscovering web content you've seen          | Structuring documents for AI agent memory                              |
-| **Structure**      | Indexed text/media                             | Schema-first structured records with entities and timelines            |
-| **AI Integration** | Optional local inference (Ollama)              | Core MCP integration for agent memory                                  |
-| **Target Problem** | "I can't find that thing I saw online"         | "AI agents have no memory across sessions"                             |
-| **User Workflow**  | Import web content → Search                    | Upload documents / Agent conversations → Structured memory → AI access |
+| Dimension              | mmry.io                                        | Neotoma                                                                |
+| ---------------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| **Data Type**          | Web content (tweets, posts, videos, bookmarks) | Documents (PDFs, images, receipts, contracts) + conversation context   |
+| **Primary Use**        | Rediscovering web content you've seen          | Structuring documents for AI agent memory                              |
+| **Structure**          | Indexed text/media                             | Schema-first structured records with entities and timelines            |
+| **AI Integration**     | Optional local inference (Ollama)              | Core MCP integration for agent memory                                  |
+| **Target Problem**     | "I can't find that thing I saw online"         | "AI agents have no memory across sessions"                             |
+| **User Workflow**      | Import web content → Search                    | Upload documents / Agent conversations → Structured memory → AI access |
+| **Coordination model** | None — search-only, polling                    | Event-driven signaling: agents subscribe to entity changes; substrate emits webhooks/SSE on writes (best-effort delivery; no other tool in homebrew or VC-funded competitive set offers this) |
+| **Architecture model** | Search engine — indexes existing web content for recall; no write surface, no state evolution, no agent integration beyond optional local inference | Data-plane substrate — stores, serves, and signals canonical state; action-plane tools (Gmail MCP, Slack, etc.) consume state from Neotoma rather than managing their own; scales at O(P+W) rather than O(P×W) per-pipeline-per-service integrations |
 ## Marketing Messaging Differentiation
 ### mmry.io Messaging
 - "Find the memories you've lost"

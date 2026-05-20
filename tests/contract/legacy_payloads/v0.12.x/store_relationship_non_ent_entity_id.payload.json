@@ -1,0 +1,19 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "idempotency_key": "legacy-v0.12.x-store-relationship-non-ent-entity-id",
+  "commit": true,
+  "entities": [
+    {
+      "entity_type": "person",
+      "canonical_name": "Legacy Relationship Target",
+      "name": "Legacy Relationship Target"
+    }
+  ],
+  "relationships": [
+    {
+      "relationship_type": "REFERS_TO",
+      "source_entity_id": "legacy-source-id",
+      "target_index": 0
+    }
+  ]
+}

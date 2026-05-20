@@ -180,7 +180,7 @@ describe("CLI init command non-interactive coverage", () => {
     });
     const result = JSON.parse(stdout) as { next_steps: string[] };
     expect(result.next_steps.join(" ")).toMatch(/Start the API/i);
-    expect(result.next_steps.join(" ")).toMatch(/mcp check/i);
+    expect(result.next_steps.join(" ")).toMatch(/mcp config/i);
   });
 
   it("prefers directory-local checkout over saved config repo root", async () => {

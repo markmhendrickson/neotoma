@@ -26,9 +26,7 @@ When the user wants to persist structured data (contacts, tasks, events, transac
    - Include ALL fields from the source data; unknown fields go to raw_fragments automatically.
 
 3. **Store with a single call** when possible.
-   - Use `store` for combined file + entity storage.
-   - Use `store_structured` for entities only.
-   - Use `store_unstructured` for files only.
+   - Use the MCP **`store`** tool for entities-only, file-only (bytes → content-addressed source row), or combined file + entities + optional `interpretation`.
    - Always include `idempotency_key` for replay safety.
 
 4. **Link related entities** using `create_relationship`.

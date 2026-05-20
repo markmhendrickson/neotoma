@@ -66,9 +66,7 @@ function resolveDuplicateConfig(def: SchemaDefinition | null | undefined): {
   fields: string[];
   threshold: number;
 } {
-  const fields = def?.duplicate_detection_fields?.length
-    ? def.duplicate_detection_fields
-    : [];
+  const fields = def?.duplicate_detection_fields?.length ? def.duplicate_detection_fields : [];
   const threshold =
     typeof def?.duplicate_detection_threshold === "number" &&
     def.duplicate_detection_threshold > 0 &&
@@ -90,8 +88,7 @@ export async function findDuplicateCandidates(
 
   const schema = await schemaRegistry.loadActiveSchema(entityType, userId);
   const def = (schema?.schema_definition ?? null) as SchemaDefinition | null;
-  const { fields: schemaFields, threshold: schemaThreshold } =
-    resolveDuplicateConfig(def);
+  const { fields: schemaFields, threshold: schemaThreshold } = resolveDuplicateConfig(def);
   const threshold = params.threshold ?? schemaThreshold;
 
   const { data: entities } = await db

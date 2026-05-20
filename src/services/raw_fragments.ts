@@ -14,6 +14,7 @@ import { logger } from "../utils/logger.js";
 export interface StoreFragmentParams {
   sourceId: string;
   userId: string;
+  entityId?: string;
   entityType: string;
   schemaVersion: string;
   key: string;
@@ -46,7 +47,18 @@ async function queueAutoEnhancement(
 }
 
 export async function storeFragment(params: StoreFragmentParams): Promise<boolean> {
-  const { sourceId, userId, entityType, schemaVersion, key, value, reason, convertedTo, interpretationId } = params;
+  const {
+    sourceId,
+    userId,
+    entityId,
+    entityType,
+    schemaVersion,
+    key,
+    value,
+    reason,
+    convertedTo,
+    interpretationId,
+  } = params;
 
   if (value === null || value === undefined) return false;
 
@@ -59,14 +71,17 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
     envelope.converted_to = convertedTo;
   }
 
-  const { data: existing } = await db
+  let existingQuery = db
     .from("raw_fragments")
     .select("id, frequency_count")
     .eq("source_id", sourceId)
     .eq("fragment_key", key)
     .eq("user_id", userId)
-    .eq("entity_type", entityType)
-    .maybeSingle();
+    .eq("entity_type", entityType);
+  if (entityId) {
+    existingQuery = existingQuery.eq("entity_id", entityId);
+  }
+  const { data: existing } = await existingQuery.maybeSingle();
 
   if (existing) {
     const newCount = (existing.frequency_count || 1) + 1;
@@ -99,29 +114,29 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
     source_id: sourceId,
     interpretation_id: interpretationId ?? null,
     user_id: userId,
+    ...(entityId ? { entity_id: entityId } : {}),
     entity_type: entityType,
     fragment_key: key,
     fragment_value: value,
     fragment_envelope: envelope,
   };
 
-  const { error: insertError } = await db
-    .from("raw_fragments")
-    .insert(insertData)
-    .select();
+  const { error: insertError } = await db.from("raw_fragments").insert(insertData).select();
 
   if (insertError) {
     if (insertError.code === "23505") {
-      logger.warn(
-        `[raw_fragments] Race condition for ${entityType}.${key}, retrying as update...`
-      );
-      const { data: retryExisting } = await db
+      logger.warn(`[raw_fragments] Race condition for ${entityType}.${key}, retrying as update...`);
+      let retryQuery = db
         .from("raw_fragments")
         .select("id, frequency_count")
         .eq("source_id", sourceId)
         .eq("fragment_key", key)
         .eq("user_id", userId)
-        .maybeSingle();
+        .eq("entity_type", entityType);
+      if (entityId) {
+        retryQuery = retryQuery.eq("entity_id", entityId);
+      }
+      const { data: retryExisting } = await retryQuery.maybeSingle();
 
       if (retryExisting) {
         const retryCount = (retryExisting.frequency_count || 1) + 1;
@@ -155,18 +170,21 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
 export async function storeConvertedOriginals(params: {
   sourceId: string;
   userId: string;
+  entityId?: string;
   entityType: string;
   schemaVersion: string;
   originalValues: Record<string, unknown>;
   validFields: Record<string, unknown>;
 }): Promise<number> {
-  const { sourceId, userId, entityType, schemaVersion, originalValues, validFields } = params;
+  const { sourceId, userId, entityId, entityType, schemaVersion, originalValues, validFields } =
+    params;
   let count = 0;
 
   for (const [key, value] of Object.entries(originalValues)) {
     const stored = await storeFragment({
       sourceId,
       userId,
+      entityId,
       entityType,
       schemaVersion,
       key,
@@ -183,11 +201,12 @@ export async function storeConvertedOriginals(params: {
 export async function storeUnknownFields(params: {
   sourceId: string;
   userId: string;
+  entityId?: string;
   entityType: string;
   schemaVersion: string;
   unknownFields: Record<string, unknown>;
-}): Promise<number> {
-  const { sourceId, userId, entityType, schemaVersion, unknownFields } = params;
+}): Promise<{ count: number; fields: string[] }> {
+  const { sourceId, userId, entityId, entityType, schemaVersion, unknownFields } = params;
 
   const nonNullEntries = Object.entries(unknownFields).filter(
     ([, value]) => value !== null && value !== undefined
@@ -199,19 +218,20 @@ export async function storeUnknownFields(params: {
     );
   }
 
-  let count = 0;
+  const storedFields: string[] = [];
   for (const [key, value] of nonNullEntries) {
     const stored = await storeFragment({
       sourceId,
       userId,
+      entityId,
       entityType,
       schemaVersion,
       key,
       value,
       reason: "unknown_field",
     });
-    if (stored) count++;
+    if (stored) storedFields.push(key);
   }
 
-  return count;
+  return { count: storedFields.length, fields: storedFields };
 }

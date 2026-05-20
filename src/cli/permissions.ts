@@ -45,7 +45,9 @@ const CURSOR_ALLOW_ENTRIES = ["neotoma *", "npm install -g neotoma"];
 
 /** Merge unique entries into array, preserving existing order. */
 function mergeAllow(existing: unknown, entries: string[]): string[] {
-  const base = Array.isArray(existing) ? (existing.filter((s) => typeof s === "string") as string[]) : [];
+  const base = Array.isArray(existing)
+    ? (existing.filter((s) => typeof s === "string") as string[])
+    : [];
   const out = [...base];
   for (const e of entries) {
     if (!out.includes(e)) out.push(e);
@@ -54,7 +56,10 @@ function mergeAllow(existing: unknown, entries: string[]): string[] {
 }
 
 /** Write `.claude/settings.local.json` with neotoma allow entries (project scope). */
-export async function patchClaudeCodeProject(cwd: string, options: { dryRun?: boolean } = {}): Promise<PermissionPatch> {
+export async function patchClaudeCodeProject(
+  cwd: string,
+  options: { dryRun?: boolean } = {}
+): Promise<PermissionPatch> {
   const target = path.join(cwd, ".claude", "settings.local.json");
   const before = await readText(target);
   let parsed: { permissions?: { allow?: string[]; deny?: string[]; ask?: string[] } } = {};
@@ -77,7 +82,9 @@ export async function patchClaudeCodeProject(cwd: string, options: { dryRun?: bo
 }
 
 /** Write `~/.claude/settings.json` with neotoma allow entries (user scope). */
-export async function patchClaudeCodeUser(options: { dryRun?: boolean } = {}): Promise<PermissionPatch> {
+export async function patchClaudeCodeUser(
+  options: { dryRun?: boolean } = {}
+): Promise<PermissionPatch> {
   const target = path.join(os.homedir(), ".claude", "settings.json");
   const before = await readText(target);
   let parsed: { permissions?: { allow?: string[] } } = {};
@@ -100,7 +107,10 @@ export async function patchClaudeCodeUser(options: { dryRun?: boolean } = {}): P
 }
 
 /** Write `.cursor/allowlist.json` under the current project root. */
-export async function patchCursorAllowlist(cwd: string, options: { dryRun?: boolean } = {}): Promise<PermissionPatch> {
+export async function patchCursorAllowlist(
+  cwd: string,
+  options: { dryRun?: boolean } = {}
+): Promise<PermissionPatch> {
   const target = path.join(cwd, ".cursor", "allowlist.json");
   const before = await readText(target);
   let parsed: { allow?: string[] } = {};
@@ -132,7 +142,9 @@ allow = [
 `.trimStart();
 
 /** Append an `[approvals]` block to `~/.codex/config.toml` if missing. */
-export async function patchCodexConfig(options: { dryRun?: boolean } = {}): Promise<PermissionPatch> {
+export async function patchCodexConfig(
+  options: { dryRun?: boolean } = {}
+): Promise<PermissionPatch> {
   const target = path.join(os.homedir(), ".codex", "config.toml");
   const before = await readText(target);
   const hasNeotoma = before ? /neotoma/i.test(before) : false;
@@ -142,7 +154,9 @@ export async function patchCodexConfig(options: { dryRun?: boolean } = {}): Prom
   } else if (hasNeotoma) {
     after = before;
   } else {
-    after = before.endsWith("\n") ? `${before}\n${CODEX_APPROVAL_BLOCK}` : `${before}\n\n${CODEX_APPROVAL_BLOCK}`;
+    after = before.endsWith("\n")
+      ? `${before}\n${CODEX_APPROVAL_BLOCK}`
+      : `${before}\n\n${CODEX_APPROVAL_BLOCK}`;
   }
   const changed = after !== before;
   if (changed && !options.dryRun) {
@@ -179,7 +193,10 @@ export async function writePermissionsForTool(
       break;
     }
     case "claude-desktop":
-    case "openclaw": {
+    case "openclaw":
+    case "windsurf":
+    case "continue":
+    case "vscode": {
       // These harnesses don't surface an allowlist file; documented in the preflight UI instead.
       break;
     }
@@ -194,6 +211,9 @@ export function toolFromString(s: string): ToolId | null {
   if (n === "cursor") return "cursor";
   if (n === "codex") return "codex";
   if (n === "openclaw") return "openclaw";
+  if (n === "windsurf") return "windsurf";
+  if (n === "continue") return "continue";
+  if (n === "vscode" || n === "vs-code" || n === "vs_code") return "vscode";
   return null;
 }
 

@@ -1,6 +1,6 @@
 ---
 name: release
-description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, version bump, tag, merge, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
+description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, RC branch + PR for public review, version bump, tag, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
 triggers:
   - new release
   - release
@@ -46,7 +46,8 @@ Run before anything else:
 5. **Submodules**: `git submodule status` — surface any that are ahead/behind recorded SHAs.
 6. **Previous tag**: `git tag --sort=-v:refname | head -1` — this is the compare base unless the user specifies `--compare-base`.
 7. **Current package.json version**: Read and display.
-8. **Sandbox deploy readiness**: Confirm `fly.sandbox.toml` exists, `flyctl` is available, and the active Fly account can deploy `neotoma-sandbox`. If Fly auth is missing, report that execute will block at sandbox deployment unless the user explicitly scopes the release to no sandbox.
+8. **Existing GitHub Release check**: Run `gh release view "vX.Y.Z" --json isDraft,tagName 2>/dev/null` for the target version. If a release exists and is a draft, surface this to the user ("Draft release vX.Y.Z already exists on GitHub — execute will update it rather than create a new one."). If a release exists and is **not** a draft (already published), **STOP** and ask the user explicitly before proceeding — updating a published release's notes is a hold point.
+9. **Sandbox deploy readiness**: Confirm `fly.sandbox.toml` exists, `flyctl` is available, and the active Fly account can deploy `neotoma-sandbox`. If Fly auth is missing, report that execute will block at sandbox deployment unless the user explicitly scopes the release to no sandbox.
 
 ### Step 2: Resolve Version
 
@@ -65,7 +66,7 @@ Draft the supplement following the section pattern from `docs/developer/github_r
 - **Docs site & CI / tooling**: If applicable.
 - **Internal changes**: Refactors, architecture, dependency, test-only work.
 - **Fixes**: Bug fixes with user/operator impact.
-- **Tests and validation**: What validates confidence.
+- **Tests and validation**: What validates confidence. (Optional: for a committed Markdown test evidence file, run `npm run test:remote:critical:report` or `npm run test:integration:report`, then copy a redacted `.vitest/reports/*.md` into `docs/releases/in_progress/vX.Y.Z/` per [`docs/testing/integration_run_reports.md`](../../../docs/testing/integration_run_reports.md).)
 - **Breaking changes**: None, or list with migration notes.
 
 **Integrated supplement (mandatory for `/release`):** The narrative is always a **single release story** across committed history and the working tree. Walk the default compare range (commits not yet on `main`, plus any user override) **and** fold **all** material uncommitted and untracked work into **the same sections above**, written **as if that work were already committed** — same grouping and reader-facing tone as shipped commits. Do not isolate dirty work in a separate appendix (for example, do not use a standalone **Uncommitted changes pending inclusion** block as the primary description). If paths cannot ship under repo security or submodule policy, state that in **Breaking changes** or a one-line **Ship constraints** item inside the same structure.
@@ -92,9 +93,115 @@ Write for a human reader deciding whether to upgrade. Do not dump raw commit lis
 
 If the working tree was dirty when drafting, state that **execute** matches the preview only after that local work is committed (excluding forbidden paths); confirm whether the user intends that full scope or needs to narrow it before Step 4.
 
+### Step 3.5: Security review lane
+
+Run after preview is approved by the user, before Step 4. Sources: `docs/security/threat_model.md`, `SECURITY.md`.
+
+1. **Classify the release diff:**
+   ```bash
+   npm run security:classify-diff -- --base <last-tag> --head HEAD --json
+   ```
+   If `sensitive=false`, this lane is informational; still write the gate artifact (Step 3.5.4) so the trail is consistent.
+
+2. **Run the static rules (G2):**
+   ```bash
+   npm run security:lint
+   ```
+   Errors are gating; warnings annotate. Resolve any `error` finding before continuing.
+
+3. **Run the topology auth matrix (G3) and confirm the protected-routes manifest is in sync:**
+   ```bash
+   npm run security:manifest:check
+   npm run test:security:auth-matrix
+   ```
+   If the manifest is out of date, run `npm run security:manifest:write` (this is allowed inside the release commit) and re-render the supplement.
+
+4. **Generate the AI review scaffold (G4):**
+   ```bash
+   npm run security:ai-review -- --tag vX.Y.Z --base <last-tag> --head HEAD
+   ```
+   Provider defaults to `cursor`. Set `NEOTOMA_AI_REVIEW_PROVIDER=claude|gpt|none` to override; `none` keeps the review fully manual.
+
+5. **Fill `docs/releases/in_progress/vX.Y.Z/security_review.md`:** Walk the adversarial prompt sections (alternate-path auth, proxy trust, local-dev widening, unauth public route, guest-access widening, AAuth downgrade). Record findings, suggested negative tests, residual risks, and a sign-off verdict (`yes` | `with-caveats` | `block`). `block` keeps the release on the lane.
+
+6. **Add a `Security hardening` section to the supplement** at `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md` that links the security review file and any advisory under `docs/security/advisories/` opened or referenced by this release. When `classify-diff` was sensitive this section is mandatory; when not sensitive, write `No security-sensitive surfaces touched.` so the trail is explicit.
+
+**Hard gate before Step 4:** Do not merge, tag, push, create a GitHub Release, publish to npm, or deploy sandbox until Step 3.5 has run against the exact commit that will be released. Before advancing, explicitly verify and report:
+
+- G1 `security:classify-diff` completed and whether `sensitive` is true or false.
+- G2 `security:lint` completed with zero errors; warnings are summarized in `security_review.md`.
+- G3 `security:manifest:check` and `test:security:auth-matrix` completed successfully.
+- G4 `security:ai-review` created `docs/releases/in_progress/vX.Y.Z/security_review.md`, and the file is filled with findings, suggested negative tests, residual risks, and a non-placeholder sign-off verdict (`yes` or `with-caveats`; never `block`).
+- The supplement has a `Security hardening` section that links the review artifact.
+
+If any pre-release commit is added after Step 3.5 runs, rerun Step 3.5 before any merge/tag/push action. If a required branch-protection check is missing or bypassed, the local Step 3.5 evidence must already exist and be called out; never use bypass as a substitute for the lane.
+
+Re-render the GitHub Release preview (`npm run -s release-notes:render`) so the supplement diff is reflected; STOP and re-confirm if the supplement changed materially.
+
+### Step 3.6: Test coverage review lane
+
+Run after Step 3.5 passes, before Step 4. Symmetric in role to the security review lane: a structured audit of whether new user-facing surfaces actually have tests that would catch the failure modes a user would hit. Sources: `docs/testing/testing_standard.md`, the supplement's "What changed for npm package users" section.
+
+**Why this lane exists:** Tests-exist is not the same as tests-cover-the-thing-users-will-do. A surface can ship with a named test file that exercises only the happy path of an internal helper, leaving destructive operations, external-file-shape parsing, or new CLI commands effectively unverified. The v0.13.0 audit found 5 such gaps after the supplement was confirmed; this lane catches them before execute.
+
+1. **Walk the supplement's user-facing surfaces** (from "New CLI commands", "New CLI flags on existing commands", "Behavior changes in existing commands", "API surface & contracts"). For each, locate the test file(s) and read what they assert. Note specifically:
+
+   **Surfaces that need a regression test before shipping:**
+   - **Destructive or data-mutating operations** (encryption migrations, schema migrations, repair commands, anything that writes to the user's database or filesystem at rest). Required: a real round-trip test against a real file, not in-memory stubs. Encrypt→decrypt identity, dry-run non-mutation, idempotency on re-run, NULL preservation.
+   - **External file-shape parsers** (harness transcripts, exports, third-party config files). Required: at least one fixture per supported format that exercises the *actual* parsing code path (not just `detectSource`). For SQLite-backed formats, build the SQLite file in the test and parse it.
+   - **New CLI commands or flags** (`neotoma <new-command>`, new flag on existing command). Required: a test that spawns or invokes the command with the flag and asserts the user-observable effect (file written, output emitted, exit code).
+   - **Discovery / detection / parser pairs** that must agree on file layout. Required: a roundtrip test that asserts paths emitted by discovery are parseable by the parser.
+   - **HTTP server runtime configuration** (timeouts, headers, connection behavior) that fails silently. Required: a test that asserts the *runtime* behavior, not just the source string. For timeouts, read the response header or socket behavior.
+
+2. **For each surface, classify the existing test coverage as one of:**
+   - **Covers user-observable behavior end-to-end** → no action needed.
+   - **Covers a helper function only** → flag as a gap. The helper test does not prove the command/parser/migration works for users.
+   - **No test** → flag as BLOCKING.
+
+3. **Write `docs/releases/in_progress/vX.Y.Z/test_coverage_review.md`** with one section per surface, the classification above, and either a link to the satisfying test or a description of the test that needs to be added before execute.
+
+**Hard gate before Step 4:** Any surface classified BLOCKING must be either tested before execute or explicitly deferred to a follow-up patch release with the user's approval recorded in the review file. Trust-but-verify: read the actual test bodies; do not accept "the test file exists" as evidence of coverage.
+
+If new commits are added to satisfy this lane, rerun Step 3.5 (Security review lane) against the final HEAD before Step 4.
+
+### Step 3.7: Release candidate PR
+
+Run after Step 3.6 passes. Push an RC branch and open a PR so the release can be reviewed publicly — with inline comments on the notes, CI, and a clear merge point — before anything is tagged or published.
+
+1. **Create and push the RC branch** from the current integration branch (e.g. `dev`):
+   ```bash
+   git checkout -b release/vX.Y.Z
+   git push origin release/vX.Y.Z
+   ```
+
+2. **Open the PR** targeting `main`, using the confirmed supplement as the PR body:
+   ```bash
+   gh pr create \
+     --base main \
+     --head release/vX.Y.Z \
+     --title "Release vX.Y.Z" \
+     --body "$(cat docs/releases/in_progress/vX.Y.Z/github_release_supplement.md)"
+   ```
+   The PR body gives reviewers the exact same narrative they will see in the GitHub Release notes.
+
+3. **Surface the PR URL** to the user and **STOP**:
+
+   > "Release candidate PR for **vX.Y.Z** is open at `<PR_URL>`. Review, comment, and approve — then reply **`execute`** (or confirm merge) to continue with tagging, npm publish, and sandbox deployment."
+
+   Do not proceed to Step 4 until the user explicitly confirms they are ready to execute. This is the public review window.
+
+4. **When the user confirms execute** (either by replying `execute`, confirming they merged the PR, or explicitly approving):
+   - If the PR is not yet merged, merge it now:
+     ```bash
+     gh pr merge release/vX.Y.Z --merge --delete-branch
+     ```
+   - Verify the merge landed on `main` before proceeding.
+
+**Note:** If uncommitted changes were staged in Step 4.1 and not yet committed, commit them onto `release/vX.Y.Z` before pushing the branch. The PR must reflect the exact state that will be released.
+
 ### Step 4: Execute
 
-After user confirms, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
+After the RC PR is merged and the user confirms execute, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
 
 1. **Commit uncommitted changes** (when the preview assumed them and the user confirms execute):
    - Stage only paths that should ship; **never** stage paths forbidden by repository security / pre-commit rules (for example configured `protected_paths`, `.env*`, `data/` when disallowed).
@@ -102,7 +209,7 @@ After user confirms, run **every** step below in order through **npm publish and
    ```bash
    git commit -m "Pre-release: include pending changes for vX.Y.Z"
    ```
-   Skip this step if the working tree was clean at confirm time.
+   Skip this step if the working tree was clean at confirm time. If this step creates or changes any commit included in the release, rerun Step 3.5 before continuing to version bump, merge, tag, or push.
 
 2. **Bump version** in `package.json` (and workspaces if monorepo):
    ```bash
@@ -111,40 +218,63 @@ After user confirms, run **every** step below in order through **npm publish and
    git commit -m "Bump version to vX.Y.Z"
    ```
 
-3. **Merge dev into main**:
+3. **Update `SECURITY.md` Supported Versions table** if this release introduces a new minor (e.g. `0.12.x` → `0.13.x`):
+   - Add the new minor series as supported.
+   - Demote the oldest supported series to the unsupported row.
+   - Stage and amend into the version bump commit, or create a separate commit.
+
+4. **Confirm main is up to date** (the RC PR merge already landed the release commits on `main`):
    ```bash
    git checkout main
    git pull origin main
-   git merge --no-ff dev -m "Merge dev into main for vX.Y.Z"
    ```
-   If merge conflicts: STOP and report. User resolves manually.
+   Verify `git log --oneline -5` shows the RC PR merge commit at HEAD. If the branch was merged via the PR in Step 3.7, no separate `git merge dev` is needed. If for any reason `main` does not reflect the RC commits, STOP and reconcile before tagging.
 
-4. **Tag**:
+5. **Tag**:
    ```bash
    git tag -a "vX.Y.Z" -m "Release vX.Y.Z"
    ```
 
-5. **Push**:
+6. **Push**:
    ```bash
    git push origin main
    git push origin "vX.Y.Z"
    ```
 
-6. **Write supplement file**: Save the confirmed changelog to `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md`.
+7. **Write supplement file**: Save the confirmed changelog to `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md`.
 
-7. **Render release notes**:
+8. **Render release notes**:
    ```bash
    npm run -s release-notes:render -- --tag vX.Y.Z > /tmp/gh-release-vX.Y.Z.md
    ```
    If the last npm publish does not match the previous git tag, use `--compare-base <last_published_tag>`. This must reproduce the same body style shown in Step 3, now with the final tag/commit set.
 
-8. **Create GitHub Release**:
+9. **Create or update GitHub Release draft**:
    ```bash
-   gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
+   if gh release view "vX.Y.Z" --json isDraft --jq '.isDraft' 2>/dev/null | grep -q true; then
+     gh release edit "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
+   else
+     gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md --draft
+   fi
    ```
+   If a draft already exists it is updated in place; otherwise a new draft is created. In either case the release remains invisible to users and does not trigger the "latest release" pointer until published in step 11b. If `gh release view` returns a release that is **not** a draft, **STOP** — do not overwrite a published release without explicit user approval.
 
-9. **Publish to npm (mandatory for a full release)**:
-   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout), run:
+10. **Publish to npm (mandatory for a full release)**:
+   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout):
+
+   - **Registry auth:** If `npm publish` fails for auth or the session is stale, run `npm login` in an interactive terminal when needed.
+   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`.
+
+   **npm web-login checkpoint (mandatory — do not skip):** Browser sign-in does **not** prove the same shell that will run `npm publish` has a valid token. After any web-login assist **or** when the user says they finished signing in:
+
+   1. **Immediately** run `npm whoami` in the **same** environment you use for `npm publish` (same repo root, same `HOME` / `~/.npmrc`).
+   2. **If `npm whoami` succeeds:** State clearly that the session is authenticated, then run `npm publish` (and `npm publish --otp=<code>` when 2FA applies). Do not advance to sandbox until publish and registry verification succeed.
+   3. **If `npm whoami` still fails (`E401` / unauthorized) or `npm login` exited before completing (for example npm printed `Exit handler never called`):** You **must** end the user-visible turn with an explicit handoff that includes all of the following — do not assume the user knows the next step:
+      - Explain that the browser login authorized the **browser**, not necessarily the **agent shell** (or that the CLI session aborted before writing a token).
+      - Give **copy-paste** commands for the operator to finish auth where `npm publish` will run (their own Terminal with the repo as cwd, or fixing `~/.npmrc` / `NPM_TOKEN` for CI-style shells).
+      - Ask them to reply **`ready`** (or confirm they ran `npm publish` locally and the registry shows `X.Y.Z`) so the next turn **retries `npm whoami` then `npm publish` immediately** without waiting for another vague ping.
+   4. **If the user message is only “I signed in” / “done” in the browser:** Treat that as a signal to run the checkpoint (step 1), not as permission to end the release thread without step 2 or step 3 text above.
+
    ```bash
    npm publish
    ```
@@ -156,7 +286,7 @@ After user confirms, run **every** step below in order through **npm publish and
    ```
    The output must equal `X.Y.Z`. If it still reports the previous version, the registry has not propagated yet — wait 30s and retry rather than advancing.
 
-10. **Deploy sandbox.neotoma.io (mandatory for a full release)**:
+11. **Deploy sandbox.neotoma.io (mandatory for a full release)**:
     Deploy the Fly app from the final release commit:
     ```bash
     flyctl deploy -c fly.sandbox.toml --remote-only
@@ -168,7 +298,13 @@ After user confirms, run **every** step below in order through **npm publish and
     ```
     Do not treat the release as complete until the root JSON reports `version: X.Y.Z`, `mode: sandbox`, and `/health` returns `X-Neotoma-Sandbox: 1`. If sandbox deployment fails after npm publish, report the partial-release state and keep working the sandbox failure unless the user explicitly pauses.
 
-11. **Merge main back to dev** (keep branches in sync):
+11b. **Publish the GitHub Release draft** (after sandbox verified):
+    ```bash
+    gh release edit "vX.Y.Z" --draft=false
+    ```
+    This makes the release public and sets it as the latest release. Only run after sandbox verification passes.
+
+12. **Merge main back to dev** (keep branches in sync):
     ```bash
     git checkout dev
     git merge main
@@ -177,8 +313,73 @@ After user confirms, run **every** step below in order through **npm publish and
 
 ### Step 5: Post-Release
 
-1. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created).
-2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), and sandbox URL/version verification.
+1. **Run the deployed protected-route probes (G5):**
+   ```bash
+   NEOTOMA_PROBE_HOSTS="https://sandbox.neotoma.io
+   https://neotoma.markmhendrickson.com" \
+     bash scripts/security/deployed_probes.sh --tag vX.Y.Z
+   ```
+   The probe writes `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md` and exits non-zero on any unexpected status. A failure here BLOCKS release completion: open an advisory under `docs/security/advisories/`, hotfix the regression, and re-run before declaring done.
+
+2. **Verify GitHub Actions workflows triggered by the release push:**
+
+   The `git push origin main` and `git push origin vX.Y.Z` in Step 4.5 trigger CI and deployment workflows. All must succeed before declaring the release complete.
+
+   a. **Wait for runs to start** (allow ~30s after push, then poll):
+      ```bash
+      gh run list --branch main --limit 10 --json databaseId,name,status,conclusion,headSha,createdAt
+      ```
+
+   b. **Watch each in-progress run** (repeat for each relevant run ID):
+      ```bash
+      gh run watch <run-id>
+      ```
+      Or wait for completion in batch (exit 1 on any failure):
+      ```bash
+      gh run list --branch main --limit 10 --json databaseId,status,conclusion,name \
+        | node -e "
+          const runs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+          const relevant = runs.filter(r => ['CI test lanes','Deploy site (GitHub Pages)','Sandbox weekly reset'].includes(r.name) || r.status !== 'completed');
+          const failed = runs.filter(r => r.conclusion && r.conclusion !== 'success' && r.conclusion !== 'skipped');
+          if (failed.length) { console.error('FAILED:', failed.map(r=>r.name)); process.exit(1); }
+          console.log('All relevant runs passed or in-progress.');
+        "
+      ```
+
+   c. **Workflows to verify:**
+      - `CI test lanes` — all four jobs (`baseline`, `frontend`, `site_export`, `security_gates`) must pass
+      - `Deploy site (GitHub Pages)` — triggered by push to `main`; must reach `success`
+      - Any tag-triggered workflows (inspect `gh run list --ref vX.Y.Z`)
+
+   d. **If any workflow fails:**
+      - Inspect with `gh run view <run-id> --log-failed`
+      - Fix the root cause (typically a commit in the release range introduced the failure)
+      - If the fix requires a new commit, create a patch release (`vX.Y.Z+1`) using this same workflow — do not force-push the tag
+      - Re-run this step after the patch push until all checks pass
+
+   e. **Record the outcome** in the release summary (step 4 of this section).
+
+3. **Close resolved GitHub issues:**
+   - Fetch the release URL created in Step 4.8:
+     ```bash
+     RELEASE_URL=$(gh release view vX.Y.Z --json url --jq .url)
+     ```
+   - List open issues and cross-reference against the commits in this release:
+     ```bash
+     gh issue list --state open --json number,title,body,labels
+     git log <last-tag>..vX.Y.Z --oneline
+     ```
+   - For each issue that is resolved by a commit in the release range (via `Fixes #N`, `Closes #N`, `Resolves #N` in commit messages or PR descriptions) **or** whose described behavior is demonstrably fixed:
+     ```bash
+     gh issue close <number> --comment "Resolved in [vX.Y.Z]($RELEASE_URL)."
+     ```
+   - If there are open issues that are partially addressed but not fully resolved, add a comment noting what was fixed and what remains:
+     ```bash
+     gh issue comment <number> --body "Partially addressed in [vX.Y.Z]($RELEASE_URL): <what changed>. Remaining: <what's still open>."
+     ```
+   - Report which issues were closed and which were commented on.
+4. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created); the security review and probe report move with it.
+5. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), sandbox URL/version verification, the probe report verdict (passes / failures), issues closed, and CI workflow outcomes (all-pass / any-failure with run IDs).
 
 ## Submodule Mode
 
@@ -196,8 +397,12 @@ If the user says `/release foundation` (or another submodule name):
 - Always describe uncommitted changes concretely — never use a generic placeholder.
 - Do not ship a GitHub Release body that is only an auto-generated commit list.
 - Do not merge or tag without user approval of the preview.
-- For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
+- For a standard `/release`, always open a release candidate PR (`release/vX.Y.Z` → `main`) in Step 3.7 after all review lanes pass, and do not proceed to Step 4 until the user confirms execute (or confirms the PR is merged).
+- For a standard `/release`, always create the GitHub Release as a **draft** (`--draft`) in Step 4.9 and publish it (`gh release edit --draft=false`) only after sandbox verification passes in Step 4.11b.
+- For a standard `/release`, **always** run **`npm publish`** after `gh release create --draft` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
+- For a standard `/release`, **always** run Step 3.5 (Security review lane) before Step 4 and Step 5 (Deployed probes) before declaring complete; the supplement MUST contain a `Security hardening` section linking `docs/releases/in_progress/<TAG>/security_review.md` (and `post_deploy_security_probes.md` after Step 5).
+- For a standard `/release`, **always** verify that all GitHub Actions workflows triggered by the release push (`CI test lanes`, `Deploy site (GitHub Pages)`, and any tag-triggered workflows) reach `success` before declaring complete. A CI failure after push is a partial release — fix and re-verify.
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
 ## Agent Instructions
@@ -216,5 +421,15 @@ If the user says `/release foundation` (or another submodule name):
 - Omitting material working-tree changes from the integrated preview (they must appear in-section, not dropped)
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
+- Skipping the RC PR step (Step 3.7) and proceeding directly to merge/tag/push after review lanes pass
+- Proceeding to Step 4 execute without the user explicitly confirming after the RC PR is open
+- Creating the GitHub Release without `--draft` when no draft exists yet (must be a draft until sandbox is verified)
+- Calling `gh release create` when a draft already exists for the tag (must use `gh release edit` to update it)
+- Silently overwriting a published (non-draft) GitHub Release — always stop and ask the user first
+- Publishing the GitHub Release draft (`gh release edit --draft=false`) before sandbox verification passes
 - Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
 - Ending execute after **`npm publish`** without deploying and verifying `sandbox.neotoma.io` when the user confirmed a normal sandbox-included release
+- Ending the execute turn right after npm web-login / “I signed in” **without** running the **npm web-login checkpoint** (`npm whoami` → publish or explicit `ready` handoff with copy-paste commands)
+- Skipping Step 3.5 (Security review lane) before Step 4 when `npm run security:classify-diff` reports the release diff as sensitive, or omitting the supplement's `Security hardening` section
+- Declaring a release complete without running Step 5 deployed probes (`bash scripts/security/deployed_probes.sh --tag vX.Y.Z`) and recording the report under `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md`
+- Declaring a release complete without verifying all release-triggered GitHub Actions workflows (`CI test lanes`, `Deploy site`, tag-triggered workflows) reached `success` via `gh run list` / `gh run watch`

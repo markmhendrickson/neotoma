@@ -15,6 +15,7 @@ import {
   Upload,
   Warehouse,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -245,6 +246,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "routing agent",
 };
 
+export function LogisticsLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function LogisticsLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/logistics" shell="bare" />;
 }

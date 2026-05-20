@@ -56,6 +56,7 @@ Absence of a non-technical GUI is a **feature for this persona**, not a defect. 
 - One-click installers that hide architecture from the user.
 - Cloud-hosted turnkey offerings.
 - Personality customization, chat UI, or other consumer-assistant features.
+- User-facing push notifications, reminders, or strategy-level "should I notify?" decisions. **Note:** Substrate-level event emission and webhook delivery to registered agent consumers ARE in scope — see [SD-002](#sd-002-substrate-event-emission-and-webhook-delivery) for the boundary between strategy-level notifications (rejected here) and substrate-level signaling (accepted there).
 
 ### Revisit Conditions
 
@@ -73,3 +74,72 @@ Reopen this decision if any of the following become true:
 - [`../icp/primary_icp.md`](../icp/primary_icp.md) — Primary ICP definition
 - [`../private/competitive/penfield_competitive_analysis.md`](../private/competitive/penfield_competitive_analysis.md) — Competitor pursuing the consumer gap
 - [`../private/insights/penfield_ai_memory_2026_relevance_analysis.md`](../private/insights/penfield_ai_memory_2026_relevance_analysis.md) — Origin of this decision prompt
+
+---
+
+## SD-002: Substrate Event Emission and Webhook Delivery
+
+**Date:** 2026-05-07
+**Status:** Decided — **In scope**
+
+### Question
+
+Should Neotoma emit events after writes and deliver them to registered consumers (agents, daemons, peer instances) via webhooks and SSE?
+
+### Decision
+
+**Yes.** Event emission and webhook delivery are **in scope** as substrate-level primitives. They report state transitions to registered consumers without deciding what to do about them.
+
+### Rationale
+
+1. **Substrate observability is a substrate concern.** A database that records changes but cannot report them forces every consumer to poll. PostgreSQL has `LISTEN/NOTIFY` and WAL streaming for the same reason: reporting state transitions is part of being a substrate, not a strategy-layer addition. See `philosophy.md` §5.9 (Signal Without Strategy) for the full architectural invariant.
+
+2. **The boundary stays sharp.** Substrate-level signaling reports what changed. Consuming layers decide which signals matter and what to do about them. Removing the feature would mean the substrate has less observability into its own state transitions; it would not affect any user-facing behavior.
+
+3. **Existing infrastructure already supports this.** Inbound webhook ingestion (`POST /github/webhook`), AAuth-signed remote POST (`neotoma_client.ts`), and conversation threading already exist. Outbound emission generalizes the pattern.
+
+4. **Best-effort delivery only.** The substrate does not promise at-least-once, exactly-once, or in-order delivery. Consumers catch up via state queries (`list_recent_changes`, snapshot reads). The substrate MUST NOT add retry queues, dead-letter queues, ordered guarantees, or exactly-once semantics — those are strategy-layer concerns.
+
+### Distinction from SD-001
+
+SD-001 correctly rejects "reminders, notifications, task management, personality, chat" as strategy-layer concerns that violate the state layer boundary. SD-002 is compatible with SD-001:
+
+| SD-001 (out of scope) | SD-002 (in scope) |
+|---|---|
+| User-facing push notifications | Agent-facing webhook delivery |
+| Reminders and scheduling | Event emission (fire-and-forget) |
+| Task management | Subscription registration |
+| Strategy-level "should I notify?" | Infrastructure-level "entity changed, deliver to subscribers" |
+
+The test: if removing the feature would mean the substrate has less observability into its own state transitions, it's substrate. If removing it would mean the user misses a reminder, it's strategy.
+
+### What Stays In Scope
+
+- Outbound event emission after every successful `store()` / `correct()` / `create_relationship()`.
+- Subscription registration with entity-type and event-type filters.
+- Webhook delivery to registered HTTPS endpoints (best-effort).
+- SSE delivery to active subscriber channels (best-effort).
+- Cross-instance peer push via the same webhook delivery mechanism.
+
+### What Stays Out of Scope
+
+- Retry queues, dead-letter queues, exactly-once or at-least-once delivery guarantees.
+- Ordered delivery across event types or entities.
+- Filtering, prioritization, or transformation of events based on consumer-specific logic.
+- Any strategy-layer decision about whether an event "matters."
+- Any user-facing surface (push notifications, alerts, badges) — those remain SD-001 territory.
+
+### Revisit Conditions
+
+Reopen if:
+1. Event emission begins to include filtering, prioritization, or decision logic that belongs in consuming layers.
+2. Field evidence shows best-effort delivery is insufficient for production agent fleets and a stronger guarantee is needed at the substrate layer (the default response should still be "fix it in the consumer," not "weaken substrate boundaries").
+
+### Related Documents
+
+- [`philosophy.md`](philosophy.md) §5.9 Signal Without Strategy — full architectural invariant
+- [`core_identity.md`](core_identity.md) — Substrate Signaling subsection
+- [`layered_architecture.md`](layered_architecture.md) — outbound signaling flow
+- [SD-001](#sd-001-non-technical-gui-and-zero-config-install) — distinguishes user-facing notifications (rejected) from substrate-level signaling (accepted here)
+- [`../subsystems/peer_sync.md`](../subsystems/peer_sync.md) — cross-instance `/sync/webhook`, peer config, bounded batch sync
+- `docs/private/strategy/nervous_system_plans/02_subscription_webhook_delivery.md` — implementation plan

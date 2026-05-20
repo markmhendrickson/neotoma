@@ -1,6 +1,6 @@
 # MCP HTTPS Tunnel Status
 
-**Date:** 2026-01-27  
+**Date:** 2026-01-27
 
 **Full reference:** For provider selection, scripts, env vars, install, and troubleshooting, see [tunnels.md](tunnels.md).
 
@@ -33,10 +33,10 @@
 
 ### Step 0: Start the tunnel
 
-The tunnel must be running for the HTTPS URL to work. **`npm run dev:api` starts both the server and the tunnel** in one terminal (tunnel and API/MCP run together; Ctrl+C stops both).
+The tunnel must be running for the HTTPS URL to work. **`npm run dev:server:tunnel` starts both the server and the tunnel** in one terminal (tunnel and API/MCP run together; Ctrl+C stops both).
 
 ```bash
-npm run dev:api
+npm run dev:server:tunnel
 ```
 
 Use the URL the tunnel script prints (or `cat /tmp/ngrok-mcp-url.txt`). The server auto-discovers it from that file, or set `NEOTOMA_HOST_URL` to it; then update Cursor config. For server-only (no tunnel), use `npm run dev:server`. For tunnel-only (e.g. server already running elsewhere), use `npm run tunnel:https` in a separate terminal.

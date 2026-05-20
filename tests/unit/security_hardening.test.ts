@@ -3,11 +3,15 @@
  * docs/reports/security_audit_2026_04_22.md.
  */
 
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 describe("S-1: isLocalRequest socket-based check", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("rejects spoofed Host header when socket is remote", async () => {
     const { isLocalRequest } = await import("../../src/actions.ts");
     const spoofed = {
@@ -24,6 +28,26 @@ describe("S-1: isLocalRequest socket-based check", () => {
       socket: { remoteAddress: "127.0.0.1" },
     } as unknown as import("express").Request;
     expect(isLocalRequest(real)).toBe(true);
+  });
+
+  it("rejects loopback sockets in production unless explicitly trusted", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const proxied = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(proxied)).toBe(false);
+  });
+
+  it("rejects loopback sockets when X-Forwarded-For names a public client", async () => {
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const proxied = {
+      headers: { "x-forwarded-for": "198.51.100.5" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(proxied)).toBe(false);
   });
 });
 

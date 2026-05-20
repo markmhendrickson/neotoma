@@ -80,7 +80,7 @@ export function InspectorPreviewIllustration({
   className = "",
 }: InspectorPreviewIllustrationProps) {
   const isSandbox = variant === "sandbox";
-  const mcpLine = isSandbox ? `https://${sandboxHost}/mcp` : "http://127.0.0.1:3180/mcp";
+  const mcpLine = isSandbox ? `https://${sandboxHost}/mcp` : "http://127.0.0.1:3080/mcp";
 
   return (
     <div

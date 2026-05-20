@@ -19,6 +19,7 @@ import {
   UserSearch,
   Users,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -262,6 +263,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "case agent",
 };
 
+export function CasesLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function CasesLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/cases" shell="bare" />;
 }

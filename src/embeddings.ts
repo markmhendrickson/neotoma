@@ -1,9 +1,7 @@
 import OpenAI from "openai";
 import { config } from "./config.js";
 
-const openai = config.openaiApiKey
-  ? new OpenAI({ apiKey: config.openaiApiKey })
-  : null;
+const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
 /**
  * Generate an embedding vector from text.
@@ -14,9 +12,7 @@ const openai = config.openaiApiKey
  *
  * Returns null if no provider is configured.
  */
-export async function generateEmbedding(
-  text: string,
-): Promise<number[] | null> {
+export async function generateEmbedding(text: string): Promise<number[] | null> {
   // OpenAI provider
   if (openai) {
     try {
@@ -29,10 +25,7 @@ export async function generateEmbedding(
       if (embedding && embedding.length === 1536) {
         return embedding;
       }
-      console.error(
-        "Invalid embedding dimensions from OpenAI:",
-        embedding?.length,
-      );
+      console.error("Invalid embedding dimensions from OpenAI:", embedding?.length);
       return null;
     } catch (error) {
       console.error("Error generating embedding with OpenAI:", error);
@@ -53,10 +46,7 @@ export async function generateEmbedding(
  * Generate embedding text from a record's properties and type.
  * This creates a searchable text representation for semantic search.
  */
-export function getRecordText(
-  type: string,
-  properties: Record<string, unknown>,
-): string {
+export function getRecordText(type: string, properties: Record<string, unknown>): string {
   const propsText = JSON.stringify(properties);
   return `${type} ${propsText}`;
 }
@@ -69,7 +59,7 @@ export function getRecordText(
 export function getEntitySearchableText(
   entityType: string,
   canonicalName: string,
-  snapshot: Record<string, unknown>,
+  snapshot: Record<string, unknown>
 ): string {
   const snapshotText = JSON.stringify(snapshot);
   return `${entityType} ${canonicalName} ${snapshotText}`;

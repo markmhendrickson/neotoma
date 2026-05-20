@@ -5,7 +5,23 @@ let DatabaseCtor: new (path: string) => any;
 let hasNativeSqlite = false;
 
 try {
+  // Suppress the ExperimentalWarning emitted by node:sqlite on Node 22+.
+  const originalEmit = process.emit.bind(process) as typeof process.emit;
+  process.emit = function (event: string, ...args: unknown[]) {
+    if (
+      event === "warning" &&
+      args[0] != null &&
+      typeof (args[0] as Record<string, unknown>).name === "string" &&
+      (args[0] as Record<string, unknown>).name === "ExperimentalWarning" &&
+      typeof (args[0] as Record<string, unknown>).message === "string" &&
+      ((args[0] as Record<string, unknown>).message as string).includes("SQLite")
+    ) {
+      return false;
+    }
+    return (originalEmit as (...a: unknown[]) => boolean)(event, ...args);
+  } as typeof process.emit;
   const nativeModule = nodeRequire("node:sqlite") as { DatabaseSync: new (path: string) => any };
+  process.emit = originalEmit;
   DatabaseCtor = nativeModule.DatabaseSync;
   hasNativeSqlite = true;
 } catch {
@@ -60,7 +76,9 @@ class SqliteDatabaseImpl {
     return [];
   }
 
-  transaction<TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult): (...args: TArgs) => TResult {
+  transaction<TArgs extends unknown[], TResult>(
+    fn: (...args: TArgs) => TResult
+  ): (...args: TArgs) => TResult {
     if (typeof this.db.transaction === "function" && !hasNativeSqlite) {
       return this.db.transaction(fn) as (...args: TArgs) => TResult;
     }

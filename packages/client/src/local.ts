@@ -48,7 +48,9 @@ export interface LocalTransportOptions {
  */
 export interface LocalOperations {
   store(input: StoreInput): Promise<StoreResult>;
+  /** @deprecated Prefer {@link store}; forwards to the same handler. */
   storeStructured(input: StoreInput): Promise<StoreResult>;
+  /** @deprecated Prefer {@link store}; forwards to the same handler. */
   storeUnstructured(input: StoreInput): Promise<StoreResult>;
   retrieveEntities(input: RetrieveEntitiesInput): Promise<unknown>;
   retrieveEntityByIdentifier(input: RetrieveEntityByIdentifierInput): Promise<unknown>;

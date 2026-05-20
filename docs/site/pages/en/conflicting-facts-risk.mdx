@@ -1,0 +1,30 @@
+Conflicting facts risk is the likelihood that contradictory statements coexist without deterministic
+resolution. In production this causes unpredictable agent behavior.
+
+## Before vs after
+
+Before: both "office is in New York" and "office is in London" remain active with no canonical winner.
+After: merge rules choose one canonical value and preserve conflicting history for audit.
+
+```bash
+# Store two conflicting facts
+neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","office_city":"New York"}]'
+neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","office_city":"London"}]'
+
+# Query canonical resolved state
+neotoma entities search --query "Ana Rivera" --entity-type contact
+```
+
+Deterministic merge logic resolves conflicts reproducibly.
+<MdxI18nLink to="/schema-constraints" className="text-foreground underline hover:text-foreground">
+  Schema constraints
+</MdxI18nLink>
+support typed conflict handling, and
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+guarantees the same result on replay. See
+<MdxI18nLink to="/silent-mutation-risk" className="text-foreground underline hover:text-foreground">
+  silent mutation risk
+</MdxI18nLink>
+.

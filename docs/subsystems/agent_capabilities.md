@@ -54,7 +54,7 @@ the source of truth):
   "match_iss": "https://agent.example.com",  // optional; both must match when set
   "match_thumbprint": "abcd…",               // optional RFC 7638 JWK thumbprint
   "capabilities": [
-    { "op": "store_structured",    "entity_types": ["neotoma_feedback"] },
+    { "op": "store",               "entity_types": ["neotoma_feedback"] },
     { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
     { "op": "correct",             "entity_types": ["neotoma_feedback"] },
     { "op": "retrieve",            "entity_types": ["neotoma_feedback"] }
@@ -75,7 +75,7 @@ MUST match the verified identity for the grant to admit.
 
 | Op                   | Covers                                                 |
 | -------------------- | ------------------------------------------------------ |
-| `store_structured`   | Creating / observing entities (write path).            |
+| `store` / `store_structured` | Creating / observing entities (write path). `store_structured` remains accepted on persisted grants as a legacy synonym. |
 | `create_relationship`| Creating relationships between entities.               |
 | `correct`            | Correcting / updating existing observations / fields.  |
 | `retrieve`           | Reading entities and observations.                     |
@@ -110,7 +110,7 @@ active  ⇄  suspended
 ```
 
 Only the user who owns the grant (or an agent the user has authorised
-with the bootstrap `(store_structured | correct, agent_grant)`
+with the bootstrap `(store | store_structured | correct, agent_grant)`
 capability) can flip status. Admission caches the resolved grant for a
 small TTL plus invalidates on observation events, so a revoke
 propagates to in-flight clients within seconds.

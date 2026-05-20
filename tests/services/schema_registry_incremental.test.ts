@@ -3,7 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { SchemaRegistryService } from "../../src/services/schema_registry.js";
+import {
+  loadCodeDefinedSchemaEntry,
+  SchemaRegistryService,
+} from "../../src/services/schema_registry.js";
 import { db } from "../../src/db.js";
 
 // Mock the database module
@@ -29,6 +32,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       range: vi.fn(),
       is: vi.fn(), // For .is("user_id", null)
       or: vi.fn(), // For .or("user_id.is.null,user_id.eq....")
+      not: vi.fn(), // For .not("id", "eq", id) used in register() deactivation
     };
     // Make each method return the mock so chaining works
     Object.keys(mock).forEach((key) => {
@@ -62,8 +66,8 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       }
     });
     
-    // Ensure update/insert/select/eq/is/range still return mock for chaining (unless overridden)
-    ['update', 'insert', 'select', 'eq', 'is', 'range'].forEach((method) => {
+    // Ensure update/insert/select/eq/is/range/not still return mock for chaining (unless overridden)
+    ['update', 'insert', 'select', 'eq', 'is', 'range', 'not'].forEach((method) => {
       if (!methods[method] || typeof methods[method] !== 'function') {
         // Only set if not already a function that returns something
         if (typeof mock[method] === 'function' && !mock[method].mock) {
@@ -120,6 +124,17 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     service = new SchemaRegistryService();
     mockFrom = vi.fn();
     (db.from as any) = mockFrom;
+  });
+
+  describe("loadCodeDefinedSchemaEntry", () => {
+    it("returns the built-in conversation_message schema without requiring a registry row", async () => {
+      const entry = await loadCodeDefinedSchemaEntry("conversation_message");
+
+      expect(entry).toBeDefined();
+      expect(entry?.entity_type).toBe("conversation_message");
+      expect(entry?.schema_definition.fields.content).toBeDefined();
+      expect(entry?.schema_definition.fields.turn_key).toBeDefined();
+    });
   });
 
   afterEach(() => {
@@ -357,6 +372,47 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       expect(service.loadActiveSchema).toHaveBeenCalledWith("transaction", undefined);
       expect(result).toBeDefined();
+    });
+
+    it("uses code-defined baseline when loadActiveSchema returns null", async () => {
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(null);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: "materialized-schema-id",
+            entity_type: "conversation_message",
+            schema_version: "1.3",
+            active: true,
+            schema_definition: { fields: {} },
+            reducer_config: { merge_policies: {} },
+          },
+        }),
+      });
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } =
+        mockActivateCalls();
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      const result = await service.updateSchemaIncremental({
+        entity_type: "conversation_message",
+        fields_to_add: [
+          { field_name: "raw_fragment_promoted_field", field_type: "string" },
+        ],
+        migrate_existing: false,
+      });
+
+      expect(result.entity_type).toBe("conversation_message");
+      expect(result.schema_version).toBe("1.3");
+      const inserted = mockInsert.insert.mock.calls[0][0];
+      expect(inserted.schema_definition.fields.raw_fragment_promoted_field).toEqual({
+        type: "string",
+        required: false,
+      });
     });
 
     it("should increment schema version correctly", async () => {
@@ -633,15 +689,16 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       });
     });
 
-    it("should throw error if no active schema found", async () => {
+    it("throws when neither registry nor code-defined schema exists", async () => {
       vi.spyOn(service, "loadActiveSchema").mockResolvedValue(null);
 
       await expect(
         service.updateSchemaIncremental({
-          entity_type: "transaction",
+          entity_type: "no_such_builtin_type_xyz",
           fields_to_add: [
             { field_name: "new_field", field_type: "string" },
           ],
+          force: true,
         }),
       ).rejects.toThrow("No active schema found");
     });
@@ -1117,7 +1174,13 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      mockFrom.mockReturnValueOnce(mockInsert);
+      // When activate: true, register() also calls db.from("schema_registry").update(...)
+      // to deactivate prior active schemas. Provide a mock for that call.
+      const mockDeactivate = createChainableQuery({});
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)     // insert call
+        .mockReturnValueOnce(mockDeactivate); // deactivate prior active versions
 
       const result = await service.register({
         entity_type: "transaction",
@@ -1129,6 +1192,8 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       const insertedData = mockInsert.insert.mock.calls[0][0];
       expect(insertedData.active).toBe(true);
+      // Verify deactivation was attempted for prior active schemas
+      expect(mockDeactivate.update).toHaveBeenCalledWith({ active: false });
     });
 
     it("should not activate by default", async () => {

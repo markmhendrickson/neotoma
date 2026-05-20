@@ -363,11 +363,12 @@ describe("Auto-Enhancement Converter Detection", () => {
       expect(recommendation).toBeDefined();
 
       // Verify recommendation was created with add_converters type
+      // Service stores null for default UUID (00000000-...) due to FK constraint
       const { data: storedRec } = await db
         .from("schema_recommendations")
         .select("*")
         .eq("entity_type", "test_converter_task")
-        .eq("user_id", TEST_USER_ID)
+        .is("user_id", null)
         .single();
 
       expect(storedRec).toBeDefined();
@@ -410,11 +411,12 @@ describe("Auto-Enhancement Converter Detection", () => {
       expect(recommendation).toBeDefined();
 
       // Verify recommendation was created with add_fields type
+      // Service stores null for default UUID (00000000-...) due to FK constraint
       const { data: storedRec } = await db
         .from("schema_recommendations")
         .select("*")
         .eq("entity_type", "test_converter_task")
-        .eq("user_id", TEST_USER_ID)
+        .is("user_id", null)
         .single();
 
       expect(storedRec).toBeDefined();
@@ -473,7 +475,7 @@ describe("Auto-Enhancement Converter Detection", () => {
       expect(updatedSchema.schema_definition.fields.created_at.converters?.[0].function).toBe(
         "timestamp_nanos_to_iso",
       );
-      expect(updatedSchema.schema_version).toBe("1.1"); // Version incremented
+      expect(updatedSchema.schema_version).toBe("1.1.0"); // Version incremented (semver)
     });
 
     it("prevents duplicate converters", async () => {

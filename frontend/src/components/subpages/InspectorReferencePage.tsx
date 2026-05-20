@@ -272,6 +272,18 @@ open http://localhost:3080/inspector`}</pre>
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <Link
+            to="/inspector/peers"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+            {...detailPageCtaLinkProps}
+          >
+            Peers
+          </Link>{" "}
+         , registered Neotoma instances for cross-instance sync: URLs,
+          directions, scoped entity types, auth, conflict strategy, and sync
+          status.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <Link
             to="/inspector/search"
             className="text-foreground underline underline-offset-2 hover:no-underline"
             {...detailPageCtaLinkProps}
@@ -282,15 +294,11 @@ open http://localhost:3080/inspector`}</pre>
           type, with ranking and result-kind details.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <Link
-            to="/inspector/feedback"
-            className="text-foreground underline underline-offset-2 hover:no-underline"
-            {...detailPageCtaLinkProps}
-          >
-            Feedback
-          </Link>{" "}
-         , in-app route <code>/feedback</code> (top-level sidebar, not under
-          Settings): submissions, PII redaction preview, and status feed.
+          <strong>Issues</strong> (<code>/issues</code> in the Inspector app),
+          GitHub-backed issue filing and threads synced to Neotoma{" "}
+          <code>issue</code> entities; use <code>neotoma issues</code> / MCP{" "}
+          <code>submit_issue</code> from agents. See{" "}
+          <code>docs/subsystems/issues.md</code>.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <Link

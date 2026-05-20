@@ -187,6 +187,258 @@ describe("SchemaRecommendationService", () => {
       expect(result.eligible).toBe(false);
       expect(result.reasoning).toContain("only one source");
     });
+
+    it("should relax threshold for trusted observation sources on user-scoped schemas", async () => {
+      const { SchemaRegistryService } = await import("../../src/services/schema_registry.js");
+      const mockRegistry = new SchemaRegistryService();
+      mockRegistry.loadActiveSchema = vi.fn().mockResolvedValue({
+        scope: "user",
+        user_id: "test-user-id",
+        schema_definition: {
+          fields: {},
+          identity_opt_out: "heuristic_canonical_name",
+        },
+      });
+      service["schemaRegistry"] = mockRegistry as any;
+
+      const mockBlacklistQuery = {
+        select: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [],
+      };
+
+      // frequency_count=2: below default threshold of 3, but above relaxed threshold of ceil(3*0.5)=2
+      const mockFragmentsQuery = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [
+          { fragment_value: "val1", frequency_count: 1, source_id: "src1" },
+          { fragment_value: "val2", frequency_count: 1, source_id: "src2" },
+        ],
+      };
+
+      mockFrom
+        .mockReturnValueOnce(mockBlacklistQuery)
+        .mockReturnValueOnce(mockFragmentsQuery);
+
+      vi.spyOn(service, "calculateFieldConfidence" as any).mockResolvedValue({
+        confidence: 0.82,
+        type_consistency: 1.0,
+        naming_pattern_match: true,
+        format_consistency: 1.0,
+        inferred_type: "string",
+      });
+
+      const result = await service.checkAutoEnhancementEligibility({
+        entity_type: "transaction",
+        fragment_key: "vendor_name",
+        user_id: "test-user-id",
+        observation_source: "llm_summary",
+        config: {
+          enabled: true,
+          threshold: 3,
+          min_confidence: 0.85,
+          auto_enhance_high_confidence: true,
+          user_specific_aggressive: true,
+          global_conservative: true,
+          trusted_source_relaxation: true,
+        },
+      });
+
+      // confidence 0.82 >= relaxed minimum (0.85 - 0.05 = 0.80), threshold 2 >= ceil(3*0.5)=2
+      expect(result.eligible).toBe(true);
+      expect(result.reasoning).toContain("High confidence");
+    });
+
+    it("should NOT relax threshold for trusted sources on global schemas", async () => {
+      const { SchemaRegistryService } = await import("../../src/services/schema_registry.js");
+      const mockRegistry = new SchemaRegistryService();
+      mockRegistry.loadActiveSchema = vi.fn().mockResolvedValue({
+        scope: "global",
+        user_id: null,
+        schema_definition: {
+          fields: {},
+          identity_opt_out: "heuristic_canonical_name",
+        },
+      });
+      service["schemaRegistry"] = mockRegistry as any;
+
+      const mockBlacklistQuery = {
+        select: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [],
+      };
+
+      // frequency_count=2: below both default (3) and global_conservative (6) thresholds
+      const mockFragmentsQuery = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [
+          { fragment_value: "val1", frequency_count: 1, source_id: "src1" },
+          { fragment_value: "val2", frequency_count: 1, source_id: "src2" },
+        ],
+      };
+
+      mockFrom
+        .mockReturnValueOnce(mockBlacklistQuery)
+        .mockReturnValueOnce(mockFragmentsQuery);
+
+      const result = await service.checkAutoEnhancementEligibility({
+        entity_type: "transaction",
+        fragment_key: "vendor_name",
+        observation_source: "llm_summary",
+        config: {
+          enabled: true,
+          threshold: 3,
+          min_confidence: 0.85,
+          auto_enhance_high_confidence: true,
+          user_specific_aggressive: true,
+          global_conservative: true,
+          trusted_source_relaxation: true,
+        },
+      });
+
+      // global_conservative wins: threshold=6, frequency=2 → ineligible
+      expect(result.eligible).toBe(false);
+      expect(result.reasoning).toContain("below threshold");
+      expect(result.reasoning).toContain("global_conservative");
+    });
+
+    it("should NOT relax threshold for non-trusted observation sources", async () => {
+      const { SchemaRegistryService } = await import("../../src/services/schema_registry.js");
+      const mockRegistry = new SchemaRegistryService();
+      mockRegistry.loadActiveSchema = vi.fn().mockResolvedValue({
+        scope: "user",
+        user_id: "test-user-id",
+        schema_definition: {
+          fields: {},
+          identity_opt_out: "heuristic_canonical_name",
+        },
+      });
+      service["schemaRegistry"] = mockRegistry as any;
+
+      const mockBlacklistQuery = {
+        select: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [],
+      };
+
+      // frequency_count=2: below default threshold of 3
+      const mockFragmentsQuery = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [
+          { fragment_value: "val1", frequency_count: 1, source_id: "src1" },
+          { fragment_value: "val2", frequency_count: 1, source_id: "src2" },
+        ],
+      };
+
+      mockFrom
+        .mockReturnValueOnce(mockBlacklistQuery)
+        .mockReturnValueOnce(mockFragmentsQuery);
+
+      const result = await service.checkAutoEnhancementEligibility({
+        entity_type: "transaction",
+        fragment_key: "vendor_name",
+        user_id: "test-user-id",
+        observation_source: "sensor",
+        config: {
+          enabled: true,
+          threshold: 3,
+          min_confidence: 0.85,
+          auto_enhance_high_confidence: true,
+          user_specific_aggressive: true,
+          global_conservative: true,
+          trusted_source_relaxation: true,
+        },
+      });
+
+      // "sensor" is not a trusted source → default threshold=3, frequency=2 → ineligible
+      expect(result.eligible).toBe(false);
+      expect(result.reasoning).toContain("below threshold");
+    });
+
+    it("should lookup dominant observation source when not provided explicitly", async () => {
+      const { SchemaRegistryService } = await import("../../src/services/schema_registry.js");
+      const mockRegistry = new SchemaRegistryService();
+      mockRegistry.loadActiveSchema = vi.fn().mockResolvedValue({
+        scope: "user",
+        user_id: "test-user-id",
+        schema_definition: {
+          fields: {},
+          identity_opt_out: "heuristic_canonical_name",
+        },
+      });
+      service["schemaRegistry"] = mockRegistry as any;
+
+      const mockBlacklistQuery = {
+        select: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [],
+      };
+
+      const mockFragmentsQuery = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [
+          { fragment_value: "val1", frequency_count: 1, source_id: "src1" },
+          { fragment_value: "val2", frequency_count: 1, source_id: "src2" },
+        ],
+      };
+
+      // Mock observations query for lookupDominantObservationSource
+      const mockObsQuery = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        not: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        data: [
+          { observation_source: "import" },
+          { observation_source: "import" },
+          { observation_source: "import" },
+          { observation_source: "human" },
+        ],
+        error: null,
+      };
+
+      mockFrom
+        .mockReturnValueOnce(mockBlacklistQuery)
+        .mockReturnValueOnce(mockFragmentsQuery)
+        .mockReturnValueOnce(mockObsQuery);
+
+      vi.spyOn(service, "calculateFieldConfidence" as any).mockResolvedValue({
+        confidence: 0.82,
+        type_consistency: 1.0,
+        naming_pattern_match: true,
+        format_consistency: 1.0,
+        inferred_type: "string",
+      });
+
+      const result = await service.checkAutoEnhancementEligibility({
+        entity_type: "transaction",
+        fragment_key: "vendor_name",
+        user_id: "test-user-id",
+        // no observation_source provided — should look up dominant source
+        config: {
+          enabled: true,
+          threshold: 3,
+          min_confidence: 0.85,
+          auto_enhance_high_confidence: true,
+          user_specific_aggressive: true,
+          global_conservative: true,
+          trusted_source_relaxation: true,
+        },
+      });
+
+      // dominant source is "import" (trusted) → relaxed threshold
+      expect(result.eligible).toBe(true);
+    });
   });
 
   describe("calculateFieldConfidence", () => {

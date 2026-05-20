@@ -10,8 +10,10 @@ Pairs with the Neotoma MCP server. Hooks provide the reliability floor (guarante
 pip install neotoma-client
 
 # 3. Install the plugin in Claude Code.
-#    From a local checkout:
-claude plugin install ./packages/claude-code-plugin
+#    From a local checkout: register the plugin directory as a marketplace, then
+#    install by id (the bare `claude plugin install` CLI only accepts plugin@marketplace):
+claude plugin marketplace add /ABS/PATH/TO/neotoma/packages/claude-code-plugin
+claude plugin install neotoma@neotoma-marketplace
 
 #    Or from the Neotoma marketplace (once published):
 #    /plugin marketplace add markmhendrickson/neotoma
@@ -43,7 +45,7 @@ Every hook above also accretes onto a single `conversation_turn` keyed by `(sess
 
 ## Failure-signal accumulator
 
-`PostToolUse` branches on `tool_response.error`: when the failing tool is Neotoma-relevant (MCP tool against the Neotoma server, the `neotoma` CLI, or a direct HTTP call into a Neotoma endpoint), it persists a `tool_invocation_failure` entity (with PII-scrubbed `error_message_redacted`, `error_class`, and `invocation_shape`) and increments a per-`(tool, error_class)` counter on disk. `UserPromptSubmit` then surfaces a single `Neotoma hook note: …` informational line via `additionalContext` once the threshold trips, suggesting the agent call `submit_feedback` (kind `incident`) if friction is blocking. Hooks NEVER call `submit_feedback` themselves. Counters TTL out after 24h.
+`PostToolUse` branches on `tool_response.error`: when the failing tool is Neotoma-relevant (MCP tool against the Neotoma server, the `neotoma` CLI, or a direct HTTP call into a Neotoma endpoint), it persists a `tool_invocation_failure` entity (with PII-scrubbed `error_message_redacted`, `error_class`, and `invocation_shape`) and increments a per-`(tool, error_class)` counter on disk. `UserPromptSubmit` then surfaces a single `Neotoma hook note: …` informational line via `additionalContext` once the threshold trips, suggesting the agent call `submit_issue` if friction is blocking. Hooks NEVER call `submit_issue` themselves. Counters TTL out after 24h.
 
 ## Coexistence with MCP
 

@@ -34,7 +34,7 @@ function navKeyForHref(href: string, locale: SupportedLocale): string {
 
 const linkClass = (active: boolean) =>
   cn(
-    "h-8 text-[13px]",
+    "h-8 text-ui",
     active
       ? "bg-sidebar-accent text-sidebar-foreground font-medium"
       : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -55,7 +55,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
   const sidebarShowsLabels = isMobile || sidebarState === "expanded";
   const { locale, dict, direction } = useLocale();
   const orderedCategories = useMemo(() => {
-    const categories = [...getLocalizedDocNavCategories(dict)];
+    const categories = [...getLocalizedDocNavCategories(dict, locale)];
     const referenceIndex = categories.findIndex((category) =>
       category.items.some((item) => item.href === "/api")
     );
@@ -71,7 +71,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       categories.splice(referenceIndex, 0, useCasesCategory);
     }
     return categories;
-  }, [dict]);
+  }, [dict, locale]);
 
   const isItemActive = useCallback(
     (href: string) => {
@@ -153,7 +153,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
               <button
                 type="button"
                 onClick={() => toggleCategory(cat.title)}
-                className="flex w-full items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground"
+                className="flex w-full items-center gap-1 px-2 py-1 text-caption font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground"
                 aria-expanded={isCategoryOpen}
               >
                 <ChevronRight
@@ -190,7 +190,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                           {BrandIcon ? (
                             <BrandIcon className="size-4 shrink-0" aria-hidden />
                           ) : Icon ? (
-                            <Icon aria-hidden />
+                            <Icon className="size-4 shrink-0" aria-hidden />
                           ) : null}
                           <span>{item.label}</span>
                         </Link>
@@ -209,7 +209,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                         }))
                       }
                       className={cn(
-                        "h-8 text-[12px] font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                        "h-8 text-fine font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground",
                       )}
                       aria-expanded={isNavExpanded}
                     >

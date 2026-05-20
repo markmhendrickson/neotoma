@@ -34,6 +34,7 @@ import * as path from "node:path";
 
 import { db } from "../db.js";
 import { config } from "../config.js";
+import type { NeotomaApiClient } from "../shared/api_client.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
@@ -55,12 +56,7 @@ import {
 // Config
 // ============================================================================
 
-export type MirrorKind =
-  | "entities"
-  | "relationships"
-  | "sources"
-  | "timeline"
-  | "schemas";
+export type MirrorKind = "entities" | "relationships" | "sources" | "timeline" | "schemas";
 
 export const ALL_MIRROR_KINDS: MirrorKind[] = [
   "entities",
@@ -69,6 +65,77 @@ export const ALL_MIRROR_KINDS: MirrorKind[] = [
   "timeline",
   "schemas",
 ];
+
+/**
+ * A mirror profile describes a selective, filtered output path for a specific
+ * entity_type. Only entities whose snapshot fields satisfy `filter` are written
+ * to `output_path`. This prevents personal or cross-project entities from
+ * leaking into a git-tracked directory.
+ *
+ * Safety rule: `allow_git_commit` must be explicitly set to `true` whenever
+ * `output_path` is inside a git repository. The rebuild path warns (or errors
+ * under `--strict`) when this flag is absent for a git-tracked path.
+ */
+export interface MirrorProfile {
+  /** Unique identifier for this profile, e.g. "neotoma-plans". */
+  id: string;
+  /** Entity type to match, e.g. "plan". */
+  entity_type: string;
+  /**
+   * Snapshot field equality filter. All entries must match.
+   * String value: exact equality. Array value: entity field must equal one of the values.
+   * e.g. { repository_name: "neotoma" }
+   */
+  filter: Record<string, string | string[]>;
+  /**
+   * Absolute or repo-relative output directory.
+   * Files are written as `<output_path>/<slug>.md`.
+   */
+  output_path: string;
+  /**
+   * Fields to omit from the rendered markdown. Useful for stripping internal
+   * or verbose fields (e.g. "repository_root", "user_id").
+   */
+  exclude_fields?: string[];
+  /**
+   * If set, only these snapshot fields are rendered. Mutually exclusive with
+   * `exclude_fields`; if both are set, `include_fields` takes precedence.
+   */
+  include_fields?: string[];
+  /**
+   * Filename template. Defaults to `{slug}.md`.
+   * Supported tokens: {slug}, {entity_id}, {canonical_name}.
+   */
+  filename_template?: string;
+  /**
+   * Whether to generate an `index.md` in `output_path` listing all matched
+   * entities. Defaults to `true`.
+   */
+  index_enabled?: boolean;
+  /**
+   * Explicit opt-in required when `output_path` is inside a git repository.
+   * The rebuild warns (or errors with `--strict`) when this is absent and the
+   * path is git-tracked.
+   */
+  allow_git_commit?: boolean;
+  /**
+   * Controls how the entity is rendered to disk.
+   * - "entity" (default): full Neotoma entity markdown via renderEntityMarkdown
+   * - "frontmatter_content": YAML frontmatter (selected fields) + markdown body
+   * - "content_only": bare markdown body from a single snapshot field
+   */
+  render_mode?: "entity" | "frontmatter_content" | "content_only";
+  /**
+   * For render_mode "frontmatter_content": which snapshot fields to include in
+   * the YAML frontmatter block. If omitted, all scalar snapshot fields are used.
+   */
+  frontmatter_fields?: string[];
+  /**
+   * For render_mode "frontmatter_content" and "content_only": which snapshot
+   * field to use as the markdown body. Defaults to "content".
+   */
+  content_field?: string;
+}
 
 export interface MirrorConfig {
   enabled: boolean;
@@ -82,6 +149,13 @@ export interface MirrorConfig {
     path: string;
     limit_lines: number;
   };
+  /**
+   * Optional list of selective output profiles. Each profile writes a filtered
+   * subset of entities of a given type to a dedicated directory, independent of
+   * the main mirror path. Profiles are processed in addition to (not instead of)
+   * the regular mirror when `kinds` includes "entities".
+   */
+  profiles?: MirrorProfile[];
 }
 
 function readUserConfig(): Record<string, unknown> | null {
@@ -136,6 +210,33 @@ export function getMirrorConfig(): MirrorConfig {
       path: "MEMORY.md",
       limit_lines: 200,
     },
+    profiles: [
+      {
+        id: "neotoma-plans",
+        entity_type: "plan",
+        filter: {},
+        output_path: "docs/plans",
+        exclude_fields: ["user_id", "repository_root"],
+        filename_template: "{title}.md",
+        index_enabled: true,
+        allow_git_commit: true,
+        render_mode: "frontmatter_content",
+        content_field: "body",
+        // Compact metadata in frontmatter; content fields (overview, scope, etc.) render as ## sections in the body
+        frontmatter_fields: [
+          "title",
+          "status",
+          "priority",
+          "phase",
+          "target_release",
+          "repository",
+          "file_path",
+          "tags",
+          "todos_completed",
+          "todos_pending",
+        ],
+      },
+    ],
   };
 
   const user = readUserConfig()?.mirror as Partial<MirrorConfig> | undefined;
@@ -147,14 +248,13 @@ export function getMirrorConfig(): MirrorConfig {
     memory_export: {
       enabled: user?.memory_export?.enabled ?? defaults.memory_export.enabled,
       path: user?.memory_export?.path ?? defaults.memory_export.path,
-      limit_lines:
-        user?.memory_export?.limit_lines ?? defaults.memory_export.limit_lines,
+      limit_lines: user?.memory_export?.limit_lines ?? defaults.memory_export.limit_lines,
     },
+    profiles: user?.profiles ?? defaults.profiles,
   };
 
   if (process.env.NEOTOMA_MIRROR_ENABLED !== undefined) {
-    merged.enabled =
-      process.env.NEOTOMA_MIRROR_ENABLED.toLowerCase() === "true";
+    merged.enabled = process.env.NEOTOMA_MIRROR_ENABLED.toLowerCase() === "true";
   }
   if (process.env.NEOTOMA_MIRROR_PATH) merged.path = process.env.NEOTOMA_MIRROR_PATH;
   if (process.env.NEOTOMA_MIRROR_KINDS) {
@@ -163,8 +263,7 @@ export function getMirrorConfig(): MirrorConfig {
       .filter((k) => ALL_MIRROR_KINDS.includes(k));
   }
   if (process.env.NEOTOMA_MIRROR_GIT_ENABLED !== undefined) {
-    merged.git_enabled =
-      process.env.NEOTOMA_MIRROR_GIT_ENABLED.toLowerCase() === "true";
+    merged.git_enabled = process.env.NEOTOMA_MIRROR_GIT_ENABLED.toLowerCase() === "true";
   }
   if (process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_ENABLED !== undefined) {
     merged.memory_export.enabled =
@@ -174,10 +273,7 @@ export function getMirrorConfig(): MirrorConfig {
     merged.memory_export.path = process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_PATH;
   }
   if (process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES) {
-    const n = parseInt(
-      process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES,
-      10
-    );
+    const n = parseInt(process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES, 10);
     if (Number.isFinite(n) && n > 0) merged.memory_export.limit_lines = n;
   }
 
@@ -193,6 +289,8 @@ export function setMirrorConfig(patch: Partial<MirrorConfig>): MirrorConfig {
       ...current.memory_export,
       ...(patch.memory_export ?? {}),
     },
+    // Preserve existing profiles unless explicitly overridden.
+    profiles: patch.profiles !== undefined ? patch.profiles : current.profiles,
   };
   writeUserConfig({ mirror: next });
   return next;
@@ -203,6 +301,134 @@ function kindEnabled(kind: MirrorKind, cfg: MirrorConfig = getMirrorConfig()): b
 }
 
 // ============================================================================
+// Profile helpers
+// ============================================================================
+
+/**
+ * Returns true if the entity's snapshot satisfies every entry in `profile.filter`.
+ * A filter value of string means exact equality; an array means "one of".
+ */
+export function profileMatchesEntity(
+  profile: MirrorProfile,
+  entityType: string,
+  snapshot: Record<string, unknown>
+): boolean {
+  if (profile.entity_type !== entityType) return false;
+  for (const [field, expected] of Object.entries(profile.filter)) {
+    const actual = snapshot[field];
+    if (Array.isArray(expected)) {
+      if (!expected.includes(actual as string)) return false;
+    } else {
+      if (actual !== expected) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Resolve the output file path for an entity under a profile.
+ * Supports filename_template tokens: {slug}, {entity_id}, {canonical_name}.
+ */
+export function profileEntityFilePath(
+  profile: MirrorProfile,
+  entityId: string,
+  canonicalName: string | null | undefined,
+  snapshot?: Record<string, unknown>
+): string {
+  // Truncate the slug to keep filenames within OS PATH_MAX limits.
+  const rawSlug = entitySlug(entityId, canonicalName);
+  const slug = rawSlug.length > 100 ? rawSlug.slice(0, 100) : rawSlug;
+  const template = profile.filename_template ?? "{slug}.md";
+  // Replace well-known tokens first, then any remaining {field} tokens from the snapshot.
+  let filename = template
+    .replace("{slug}", slug)
+    .replace("{entity_id}", entityId)
+    .replace("{canonical_name}", slugify(canonicalName ?? ""));
+  if (snapshot) {
+    filename = filename.replace(/\{(\w+)\}/g, (_match, field: string) => {
+      const value = snapshot[field];
+      if (value != null) {
+        // Truncate long field values to keep filenames within OS limits.
+        return slugify(String(value)).slice(0, 80);
+      }
+      // When the snapshot field is absent, fall back to the entity slug so that
+      // entities without the templated field still get a unique, stable filename.
+      return slug;
+    });
+  }
+  // Ensure the filename ends with .md.
+  if (!filename.endsWith(".md")) {
+    filename = `${filename}.md`;
+  }
+  return path.join(profile.output_path, filename);
+}
+
+/**
+ * Applies include_fields / exclude_fields from a profile to a snapshot copy.
+ * Returns a new snapshot object with only the desired fields.
+ */
+export function applyProfileFieldFilter(
+  profile: MirrorProfile,
+  snapshot: Record<string, unknown>
+): Record<string, unknown> {
+  if (profile.include_fields && profile.include_fields.length > 0) {
+    const filtered: Record<string, unknown> = {};
+    for (const field of profile.include_fields) {
+      if (field in snapshot) filtered[field] = snapshot[field];
+    }
+    return filtered;
+  }
+  if (profile.exclude_fields && profile.exclude_fields.length > 0) {
+    const filtered = { ...snapshot };
+    for (const field of profile.exclude_fields) {
+      delete filtered[field];
+    }
+    return filtered;
+  }
+  return snapshot;
+}
+
+/**
+ * Checks whether a given output_path appears to be inside a git repository.
+ * Uses a simple heuristic: walk parent dirs looking for a `.git` entry.
+ * Returns the git root if found, null otherwise.
+ */
+export function detectGitRoot(outputPath: string): string | null {
+  let dir = path.isAbsolute(outputPath) ? outputPath : path.resolve(outputPath);
+  // Walk up to filesystem root.
+  for (let i = 0; i < 64; i++) {
+    const gitDir = path.join(dir, ".git");
+    try {
+      const stat = fsSync.statSync(gitDir);
+      if (stat.isDirectory() || stat.isFile()) return dir;
+    } catch {
+      // Not found at this level.
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // Reached root.
+    dir = parent;
+  }
+  return null;
+}
+
+/**
+ * Validates a profile's git safety constraint. Returns a warning string when
+ * the profile's output_path is inside a git repo but allow_git_commit is not
+ * set to true. Returns null when the profile is safe.
+ */
+export function checkProfileGitSafety(profile: MirrorProfile): string | null {
+  const gitRoot = detectGitRoot(profile.output_path);
+  if (gitRoot && !profile.allow_git_commit) {
+    return (
+      `Profile "${profile.id}" writes to "${profile.output_path}" which is inside ` +
+      `a git repository at "${gitRoot}". Set allow_git_commit: true on the profile ` +
+      `to acknowledge that these files may be committed.`
+    );
+  }
+  return null;
+}
+
+// ============================================================================
 // Filesystem helpers
 // ============================================================================
 
@@ -210,7 +436,10 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
-async function writeFileIfChanged(filePath: string, content: string): Promise<"written" | "unchanged"> {
+async function writeFileIfChanged(
+  filePath: string,
+  content: string
+): Promise<"written" | "unchanged"> {
   await ensureDir(path.dirname(filePath));
   try {
     const existing = await fs.readFile(filePath, "utf8");
@@ -299,11 +528,7 @@ function entityFilePath(
   cfg: MirrorConfig = getMirrorConfig()
 ): string {
   const p = mirrorPaths(cfg);
-  return path.join(
-    p.entities,
-    slugify(entityType),
-    `${entitySlug(entityId, canonicalName)}.md`
-  );
+  return path.join(p.entities, slugify(entityType), `${entitySlug(entityId, canonicalName)}.md`);
 }
 
 function relationshipFilePath(
@@ -399,13 +624,65 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
   await regenerateEntityTypeIndex(entity.entity_type, c);
   await regenerateEntitiesRootIndex(c);
   await regenerateTopIndex(c);
+
+  // Write to any matching profiles.
+  if (c.profiles && c.profiles.length > 0) {
+    for (const profile of c.profiles) {
+      if (!profileMatchesEntity(profile, entity.entity_type, entity.snapshot ?? {})) continue;
+      const warn = checkProfileGitSafety(profile);
+      if (warn) {
+        process.stderr.write(`[mirror profile warning] ${warn}\n`);
+      }
+      const filteredSnapshot = applyProfileFieldFilter(profile, entity.snapshot ?? {});
+      const renderMode = profile.render_mode ?? "entity";
+      let profileRendered: string;
+      if (renderMode === "frontmatter_content" || renderMode === "content_only") {
+        const { renderProfileEntity } = await import("./canonical_markdown.js");
+        profileRendered = renderProfileEntity(
+          filteredSnapshot,
+          {
+            entity_id: entity.entity_id,
+            entity_type: entity.entity_type,
+            schema_version: entity.schema_version,
+            computed_at: entity.computed_at ?? null,
+            last_observation_at: entity.last_observation_at ?? null,
+            observation_count: entity.observation_count ?? null,
+          },
+          {
+            render_mode: renderMode,
+            frontmatter_fields: profile.frontmatter_fields,
+            content_field: profile.content_field,
+          }
+        );
+      } else {
+        const profileInput: RenderEntityInput = {
+          ...input,
+          snapshot: filteredSnapshot,
+        };
+        profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
+          includeProvenance: false,
+        });
+      }
+      const profilePath = profileEntityFilePath(
+        profile,
+        entity.entity_id,
+        canonicalName,
+        entity.snapshot ?? {}
+      );
+      await writeFileIfChanged(profilePath, profileRendered);
+      if (profile.index_enabled !== false) {
+        await regenerateProfileIndex(profile, c);
+      }
+    }
+  }
 }
 
 export async function removeMirrorEntity(
   entityType: string,
   entityId: string,
   canonicalName: string | null | undefined,
-  cfg?: MirrorConfig
+  cfg?: MirrorConfig,
+  entitySnapshot?: Record<string, unknown>
 ): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("entities", c)) return;
@@ -413,12 +690,21 @@ export async function removeMirrorEntity(
   await regenerateEntityTypeIndex(entityType, c);
   await regenerateEntitiesRootIndex(c);
   await regenerateTopIndex(c);
+
+  // Remove from any matching profiles.
+  if (c.profiles && c.profiles.length > 0 && entitySnapshot) {
+    for (const profile of c.profiles) {
+      if (!profileMatchesEntity(profile, entityType, entitySnapshot)) continue;
+      const profilePath = profileEntityFilePath(profile, entityId, canonicalName, entitySnapshot);
+      await removeIfPresent(profilePath);
+      if (profile.index_enabled !== false) {
+        await regenerateProfileIndex(profile, c);
+      }
+    }
+  }
 }
 
-async function regenerateEntityTypeIndex(
-  entityType: string,
-  cfg: MirrorConfig
-): Promise<void> {
+async function regenerateEntityTypeIndex(entityType: string, cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const dir = path.join(p.entities, slugify(entityType));
   const indexPath = path.join(dir, "index.md");
@@ -457,9 +743,7 @@ async function regenerateEntityTypeIndex(
 async function regenerateEntitiesRootIndex(cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const indexPath = path.join(p.entities, "index.md");
-  const { data, error } = await db
-    .from("entity_snapshots")
-    .select("entity_type");
+  const { data, error } = await db.from("entity_snapshots").select("entity_type");
   if (error) return;
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
@@ -475,6 +759,43 @@ async function regenerateEntitiesRootIndex(cfg: MirrorConfig): Promise<void> {
     }))
     .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
   const rendered = renderIndexMarkdown("Entities", entries);
+  await writeFileIfChanged(indexPath, rendered);
+}
+
+/**
+ * Regenerates index.md in a profile's output_path, listing all entities in
+ * that directory (by scanning the DB for matching entities rather than scanning
+ * the filesystem, to stay deterministic).
+ */
+async function regenerateProfileIndex(profile: MirrorProfile, _cfg: MirrorConfig): Promise<void> {
+  const indexPath = path.join(profile.output_path, "index.md");
+
+  const query = db.from("entity_snapshots").select("*").eq("entity_type", profile.entity_type);
+  const { data, error } = await query;
+  if (error) return;
+
+  const entries: Array<{ label: string; href: string; summary: string }> = [];
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const snapshot = (row.snapshot as Record<string, unknown>) ?? {};
+    if (!profileMatchesEntity(profile, profile.entity_type, snapshot)) continue;
+    const canonicalName =
+      (snapshot.canonical_name as string | undefined) ?? (row.entity_id as string);
+    const slug = entitySlug(row.entity_id as string, canonicalName);
+    const label = getEntityDisplayName({
+      entity_type: profile.entity_type,
+      canonical_name: canonicalName,
+      snapshot,
+    });
+    const template = profile.filename_template ?? "{slug}.md";
+    const href = template
+      .replace("{slug}", slug)
+      .replace("{entity_id}", row.entity_id as string)
+      .replace("{canonical_name}", slugify(canonicalName));
+    entries.push({ label, href, summary: "" });
+  }
+  entries.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+
+  const rendered = renderIndexMarkdown(`${profile.entity_type} — ${profile.id}`, entries);
   await writeFileIfChanged(indexPath, rendered);
 }
 
@@ -547,13 +868,7 @@ export async function removeMirrorRelationship(
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("relationships", c)) return;
   await removeIfPresent(
-    relationshipFilePath(
-      relationshipKey,
-      relationshipType,
-      sourceEntityId,
-      targetEntityId,
-      c
-    )
+    relationshipFilePath(relationshipKey, relationshipType, sourceEntityId, targetEntityId, c)
   );
   await regenerateRelationshipTypeIndex(relationshipType, c);
   await regenerateRelationshipsRootIndex(c);
@@ -562,7 +877,9 @@ export async function removeMirrorRelationship(
 
 async function buildEntityDisplayResolver(
   entityIds: string[]
-): Promise<(entityId: string) => import("../shared/entity_display_name.js").EntityDisplayInput | null> {
+): Promise<
+  (entityId: string) => import("../shared/entity_display_name.js").EntityDisplayInput | null
+> {
   const ids = [...new Set(entityIds)].filter(Boolean);
   if (ids.length === 0) return () => null;
   const { data } = await db
@@ -579,8 +896,7 @@ async function buildEntityDisplayResolver(
     if (!hit) return null;
     return {
       entity_type: hit.entity_type,
-      canonical_name:
-        (hit.snapshot?.canonical_name as string | undefined) ?? entityId,
+      canonical_name: (hit.snapshot?.canonical_name as string | undefined) ?? entityId,
       snapshot: hit.snapshot,
     };
   };
@@ -613,19 +929,14 @@ async function regenerateRelationshipTypeIndex(
     .sort((a: { label: string }, b: { label: string }) =>
       a.label < b.label ? -1 : a.label > b.label ? 1 : 0
     );
-  const rendered = renderIndexMarkdown(
-    `Relationships — ${relationshipType}`,
-    entries
-  );
+  const rendered = renderIndexMarkdown(`Relationships — ${relationshipType}`, entries);
   await writeFileIfChanged(indexPath, rendered);
 }
 
 async function regenerateRelationshipsRootIndex(cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const indexPath = path.join(p.relationships, "index.md");
-  const { data, error } = await db
-    .from("relationship_snapshots")
-    .select("relationship_type");
+  const { data, error } = await db.from("relationship_snapshots").select("relationship_type");
   if (error) return;
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
@@ -684,10 +995,7 @@ export async function mirrorSource(source: MirrorSourceRow, cfg?: MirrorConfig):
   await regenerateTopIndex(c);
 }
 
-export async function removeMirrorSource(
-  sourceId: string,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function removeMirrorSource(sourceId: string, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("sources", c)) return;
   await removeIfPresent(sourceFilePath(sourceId, c));
@@ -724,10 +1032,7 @@ async function regenerateSourcesIndex(cfg: MirrorConfig): Promise<void> {
 // Timeline hooks
 // ============================================================================
 
-export async function mirrorTimelineDay(
-  date: string,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function mirrorTimelineDay(date: string, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("timeline", c)) return;
 
@@ -741,19 +1046,15 @@ export async function mirrorTimelineDay(
     .gte("event_timestamp", start)
     .lt("event_timestamp", end);
   if (error) return;
-  const events: RenderTimelineEventInput[] = (data ?? []).map(
-    (row: Record<string, unknown>) => ({
-      id: row.id as string,
-      event_type: row.event_type as string,
-      event_timestamp: row.event_timestamp as string,
-      source_id: (row.source_id as string | undefined) ?? null,
-      source_field: (row.source_field as string | undefined) ?? null,
-      entity_ids: Array.isArray(row.entity_ids)
-        ? (row.entity_ids as string[])
-        : null,
-      metadata: (row.metadata as Record<string, unknown> | undefined) ?? null,
-    })
-  );
+  const events: RenderTimelineEventInput[] = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    event_type: row.event_type as string,
+    event_timestamp: row.event_timestamp as string,
+    source_id: (row.source_id as string | undefined) ?? null,
+    source_field: (row.source_field as string | undefined) ?? null,
+    entity_ids: Array.isArray(row.entity_ids) ? (row.entity_ids as string[]) : null,
+    metadata: (row.metadata as Record<string, unknown> | undefined) ?? null,
+  }));
 
   const filePath = timelineFilePath(date, c);
   if (events.length === 0) {
@@ -776,9 +1077,7 @@ function nextDay(date: string): string {
 async function regenerateTimelineIndex(cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const indexPath = path.join(p.timeline, "index.md");
-  const { data, error } = await db
-    .from("timeline_events")
-    .select("event_timestamp");
+  const { data, error } = await db.from("timeline_events").select("event_timestamp");
   if (error) return;
   const days = new Map<string, number>();
   for (const row of data ?? []) {
@@ -813,10 +1112,7 @@ export interface MirrorSchemaRow {
   metadata?: { label?: string; description?: string; category?: string };
 }
 
-export async function mirrorSchema(
-  schema: MirrorSchemaRow,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function mirrorSchema(schema: MirrorSchemaRow, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("schemas", c)) return;
   const input: RenderSchemaInput = {
@@ -833,10 +1129,7 @@ export async function mirrorSchema(
   await regenerateTopIndex(c);
 }
 
-export async function removeMirrorSchema(
-  entityType: string,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function removeMirrorSchema(entityType: string, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("schemas", c)) return;
   await removeIfPresent(schemaFilePath(entityType, c));
@@ -893,11 +1186,22 @@ export interface RebuildOptions {
   entityType?: string;
   entityId?: string;
   clean?: boolean;
+  /** If set, only rebuild the profile with this id (skips regular entity mirror). */
+  profileId?: string;
+  /** When true, emit an error (throw) instead of a warning for git-safety violations. */
+  strict?: boolean;
+  /**
+   * When provided, profile rebuilds fetch entity snapshots from the HTTP API
+   * rather than from local SQLite. Required when entity data lives on a remote
+   * server rather than the local database.
+   */
+  apiClient?: NeotomaApiClient;
 }
 
 export interface RebuildReport {
   kinds: MirrorKind[];
   counts: Record<MirrorKind, { written: number; unchanged: number; removed: number }>;
+  profiles: Record<string, { written: number; unchanged: number; removed: number }>;
 }
 
 function emptyReport(): RebuildReport {
@@ -905,12 +1209,10 @@ function emptyReport(): RebuildReport {
   for (const k of ALL_MIRROR_KINDS) {
     counts[k] = { written: 0, unchanged: 0, removed: 0 };
   }
-  return { kinds: [], counts };
+  return { kinds: [], counts, profiles: {} };
 }
 
-export async function rebuildMirror(
-  options: RebuildOptions = {}
-): Promise<RebuildReport> {
+export async function rebuildMirror(options: RebuildOptions = {}): Promise<RebuildReport> {
   const cfg = getMirrorConfig();
   const report = emptyReport();
 
@@ -923,6 +1225,15 @@ export async function rebuildMirror(
         ? [options.kind as MirrorKind]
         : [];
   report.kinds = kinds;
+
+  // If a profileId is targeted, only rebuild that profile and skip the regular mirror.
+  if (options.profileId) {
+    const profile = (cfg.profiles ?? []).find((p) => p.id === options.profileId);
+    if (profile) {
+      await rebuildProfile(cfg, profile, options, report);
+    }
+    return report;
+  }
 
   if (kinds.includes("entities")) {
     await rebuildEntities(cfg, options, report);
@@ -938,6 +1249,15 @@ export async function rebuildMirror(
   }
   if (kinds.includes("schemas")) {
     await rebuildSchemas(cfg, options, report);
+  }
+
+  // Also rebuild all profiles when doing a full or entities rebuild.
+  if (!options.kind || options.kind === "all" || options.kind === "entities") {
+    if (cfg.profiles && cfg.profiles.length > 0) {
+      for (const profile of cfg.profiles) {
+        await rebuildProfile(cfg, profile, options, report);
+      }
+    }
   }
 
   await regenerateTopIndex(cfg);
@@ -989,6 +1309,173 @@ export async function rebuildMirror(
   return report;
 }
 
+/**
+ * Rebuild a single profile: query all entities of the profile's type, filter
+ * by the profile's filter, render with field exclusion, and write to output_path.
+ * Emits git-safety warnings (or throws when opts.strict is set).
+ */
+async function rebuildProfile(
+  cfg: MirrorConfig,
+  profile: MirrorProfile,
+  opts: RebuildOptions,
+  report: RebuildReport
+): Promise<void> {
+  // Git safety check.
+  const warn = checkProfileGitSafety(profile);
+  if (warn) {
+    if (opts.strict) {
+      throw new Error(`[mirror profile error] ${warn}`);
+    }
+    process.stderr.write(`[mirror profile warning] ${warn}\n`);
+  }
+
+  if (!report.profiles[profile.id]) {
+    report.profiles[profile.id] = { written: 0, unchanged: 0, removed: 0 };
+  }
+  const profileReport = report.profiles[profile.id];
+
+  // Fetch entity rows — prefer the HTTP API when a client is provided so that
+  // profiles work against remote servers, not only local SQLite.
+  type EntityRow = Record<string, unknown>;
+  let rows: EntityRow[] = [];
+  if (opts.apiClient) {
+    type EntitiesResp = { entities?: Array<Record<string, unknown>>; total?: number };
+    const apiClientCast = opts.apiClient as unknown as {
+      POST: (
+        path: "/entities/query",
+        args: { body: Record<string, unknown> }
+      ) => Promise<{ data?: EntitiesResp; error?: unknown }>;
+    };
+    const { data: apiData, error: apiError } = await apiClientCast.POST("/entities/query", {
+      body: {
+        entity_type: profile.entity_type,
+        limit: 1000,
+        include_snapshots: true,
+        ...(opts.entityId ? { entity_id: opts.entityId } : {}),
+      },
+    });
+    if (apiError) {
+      process.stderr.write(
+        `[mirror profile] API fetch failed for profile ${profile.id}: ${JSON.stringify(apiError)}\n`
+      );
+      return;
+    }
+    rows = (apiData?.entities ?? []) as EntityRow[];
+  } else {
+    let query = db.from("entity_snapshots").select("*").eq("entity_type", profile.entity_type);
+    if (opts.entityId) query = query.eq("entity_id", opts.entityId);
+    const { data, error } = await query;
+    if (error) return;
+    rows = (data ?? []) as EntityRow[];
+  }
+
+  const writtenPaths = new Set<string>();
+
+  for (const row of rows) {
+    const snapshot = (row.snapshot as Record<string, unknown>) ?? {};
+    if (!profileMatchesEntity(profile, profile.entity_type, snapshot)) continue;
+
+    const entityId = row.entity_id as string;
+
+    let schemaFieldOrder: string[] = [];
+    let schemaCanonicalNameFields: import("./schema_registry.js").CanonicalNameRule[] | undefined;
+    try {
+      const schema = await schemaRegistry.loadActiveSchema(
+        profile.entity_type,
+        (row.user_id as string | undefined) ?? undefined
+      );
+      if (schema) {
+        schemaFieldOrder = Object.keys(schema.schema_definition?.fields ?? {});
+        schemaCanonicalNameFields = schema.schema_definition?.canonical_name_fields;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    // Derive canonical name from snapshot fields declared in the schema, then
+    // fall back to the stored column, then entity_id.
+    let canonicalName: string =
+      (snapshot.canonical_name as string | undefined) ??
+      (row.canonical_name as string | undefined) ??
+      entityId;
+    if (
+      (!snapshot.canonical_name || !(row.canonical_name as string | undefined)) &&
+      schemaCanonicalNameFields &&
+      schemaCanonicalNameFields.length > 0
+    ) {
+      for (const rule of schemaCanonicalNameFields) {
+        if (typeof rule === "string") {
+          const val = snapshot[rule];
+          if (typeof val === "string" && val.trim().length > 0) {
+            canonicalName = val.trim();
+            break;
+          }
+        } else if (typeof rule === "object" && "composite" in rule) {
+          const parts = rule.composite
+            .map((f) => snapshot[f])
+            .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+          if (parts.length === rule.composite.length) {
+            canonicalName = parts.join("|");
+            break;
+          }
+        }
+      }
+    }
+
+    const filteredSnapshot = applyProfileFieldFilter(profile, snapshot);
+    const renderMode = profile.render_mode ?? "entity";
+    let rendered: string;
+    if (renderMode === "frontmatter_content" || renderMode === "content_only") {
+      const { renderProfileEntity } = await import("./canonical_markdown.js");
+      rendered = renderProfileEntity(
+        filteredSnapshot,
+        {
+          entity_id: entityId,
+          entity_type: profile.entity_type,
+          schema_version: (row.schema_version as string) ?? "1.0",
+          computed_at: (row.computed_at as string | undefined) ?? null,
+          last_observation_at: (row.last_observation_at as string | undefined) ?? null,
+          observation_count: (row.observation_count as number | undefined) ?? null,
+        },
+        {
+          render_mode: renderMode,
+          frontmatter_fields: profile.frontmatter_fields,
+          content_field: profile.content_field,
+        }
+      );
+    } else {
+      rendered = renderEntityMarkdown(
+        {
+          entity_id: entityId,
+          entity_type: profile.entity_type,
+          schema_version: (row.schema_version as string) ?? "1.0",
+          snapshot: filteredSnapshot,
+          computed_at: (row.computed_at as string | undefined) ?? null,
+          observation_count: (row.observation_count as number | undefined) ?? null,
+          last_observation_at: (row.last_observation_at as string | undefined) ?? null,
+          provenance: undefined,
+        },
+        schemaFieldOrder,
+        { includeProvenance: false }
+      );
+    }
+
+    const targetPath = profileEntityFilePath(profile, entityId, canonicalName, snapshot);
+    writtenPaths.add(targetPath);
+    const result = await writeFileIfChanged(targetPath, rendered);
+    profileReport[result === "written" ? "written" : "unchanged"]++;
+  }
+
+  if (opts.clean) {
+    const removed = await cleanStale(profile.output_path, writtenPaths, new Set(["index.md"]));
+    profileReport.removed += removed;
+  }
+
+  if (profile.index_enabled !== false) {
+    await regenerateProfileIndex(profile, cfg);
+  }
+}
+
 async function rebuildEntities(
   cfg: MirrorConfig,
   opts: RebuildOptions,
@@ -1014,7 +1501,9 @@ async function rebuildEntities(
       last_observation_at: (row.last_observation_at as string | undefined) ?? null,
       provenance: (row.provenance as Record<string, string> | undefined) ?? null,
       canonical_name:
-        ((row.snapshot as Record<string, unknown> | undefined)?.canonical_name as string | undefined) ?? null,
+        ((row.snapshot as Record<string, unknown> | undefined)?.canonical_name as
+          | string
+          | undefined) ?? null,
       user_id: (row.user_id as string | undefined) ?? null,
     };
     const targetPath = entityFilePath(
@@ -1057,9 +1546,7 @@ async function rebuildEntities(
 
   if (opts.clean) {
     const removed = await cleanStale(
-      opts.entityType
-        ? path.join(p.entities, slugify(opts.entityType))
-        : p.entities,
+      opts.entityType ? path.join(p.entities, slugify(opts.entityType)) : p.entities,
       writtenPaths,
       /* preserveNames */ new Set(["index.md"])
     );
@@ -1150,11 +1637,7 @@ async function rebuildRelationships(
   }
 
   if (opts.clean) {
-    const removed = await cleanStale(
-      p.relationships,
-      writtenPaths,
-      new Set(["index.md"])
-    );
+    const removed = await cleanStale(p.relationships, writtenPaths, new Set(["index.md"]));
     report.counts.relationships.removed += removed;
   }
   for (const t of touchedTypes) await regenerateRelationshipTypeIndex(t, cfg);
@@ -1177,7 +1660,8 @@ async function rebuildSources(
       mime_type: (row.mime_type as string) ?? "application/octet-stream",
       file_name: (row.file_name as string | undefined) ?? null,
       original_filename: (row.original_filename as string | undefined) ?? null,
-      byte_size: (row.file_size as number | undefined) ?? (row.byte_size as number | undefined) ?? null,
+      byte_size:
+        (row.file_size as number | undefined) ?? (row.byte_size as number | undefined) ?? null,
       source_type: (row.source_type as string) ?? "unknown",
       source_agent_id: (row.source_agent_id as string | undefined) ?? null,
       source_metadata: (row.provenance as Record<string, unknown> | undefined) ?? null,
@@ -1206,11 +1690,7 @@ async function rebuildSources(
     report.counts.sources[result === "written" ? "written" : "unchanged"]++;
   }
   if (opts.clean) {
-    const removed = await cleanStale(
-      p.sources,
-      writtenPaths,
-      new Set(["index.md"])
-    );
+    const removed = await cleanStale(p.sources, writtenPaths, new Set(["index.md"]));
     report.counts.sources.removed += removed;
   }
   await regenerateSourcesIndex(cfg);
@@ -1222,9 +1702,7 @@ async function rebuildTimeline(
   report: RebuildReport
 ): Promise<void> {
   const p = mirrorPaths(cfg);
-  const { data, error } = await db
-    .from("timeline_events")
-    .select("*");
+  const { data, error } = await db.from("timeline_events").select("*");
   if (error) return;
   const byDay = new Map<string, RenderTimelineEventInput[]>();
   for (const row of (data ?? []) as Array<Record<string, unknown>>) {
@@ -1237,9 +1715,7 @@ async function rebuildTimeline(
       event_timestamp: ts,
       source_id: (row.source_id as string | undefined) ?? null,
       source_field: (row.source_field as string | undefined) ?? null,
-      entity_ids: Array.isArray(row.entity_ids)
-        ? (row.entity_ids as string[])
-        : null,
+      entity_ids: Array.isArray(row.entity_ids) ? (row.entity_ids as string[]) : null,
       metadata: (row.metadata as Record<string, unknown> | undefined) ?? null,
     };
     const list = byDay.get(date) ?? [];

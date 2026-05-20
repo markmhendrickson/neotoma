@@ -66,12 +66,7 @@ interface TbsBindingShape {
     scope: "user" | "machine";
     alg: "ES256" | "RS256";
   };
-  attest(opts: {
-    keyName: string;
-    provider?: string;
-    challenge: string;
-    jkt: string;
-  }): {
+  attest(opts: { keyName: string; provider?: string; challenge: string; jkt: string }): {
     format: "tpm2";
     ver: "2.0";
     alg: "ES256" | "RS256";
@@ -108,9 +103,7 @@ function loadTbsBinding(): TbsBindingShape | null {
  * this hook so they can exercise the helper without requiring the
  * real native package or a TPM 2.0 chip.
  */
-export function __setTbsBindingForTesting(
-  binding: TbsBindingShape | null,
-): void {
+export function __setTbsBindingForTesting(binding: TbsBindingShape | null): void {
   cachedBinding = binding;
   cachedLoadError = null;
 }
@@ -131,8 +124,7 @@ export function isTbsBackendAvailable(): TbsBackendProbe {
     return {
       supported: false,
       reason:
-        cachedLoadError?.message ??
-        `optional native package ${TBS_PACKAGE_NAME} not installed`,
+        cachedLoadError?.message ?? `optional native package ${TBS_PACKAGE_NAME} not installed`,
     };
   }
   try {
@@ -222,18 +214,14 @@ const COSE_ALG_FOR_BACKEND: Record<"ES256" | "RS256", number> = {
  * }
  * ```
  */
-export function buildTbsAttestationEnvelope(
-  args: BuildTbsEnvelopeArgs,
-): TbsAttestationEnvelope {
+export function buildTbsAttestationEnvelope(args: BuildTbsEnvelopeArgs): TbsAttestationEnvelope {
   const probe = isTbsBackendAvailable();
   if (!probe.supported) {
     throw new TbsBackendUnavailableError(probe.reason ?? "unknown");
   }
   const binding = loadTbsBinding();
   if (!binding) {
-    throw new TbsBackendUnavailableError(
-      cachedLoadError?.message ?? "binding load failed",
-    );
+    throw new TbsBackendUnavailableError(cachedLoadError?.message ?? "binding load failed");
   }
   const challenge = computeAttestationChallenge({
     iss: args.iss,
@@ -248,7 +236,7 @@ export function buildTbsAttestationEnvelope(
   });
   if (result.format !== "tpm2" || result.ver !== "2.0") {
     throw new Error(
-      `aauth-win-tbs: unexpected attest() shape (format=${String(result.format)}, ver=${String(result.ver)})`,
+      `aauth-win-tbs: unexpected attest() shape (format=${String(result.format)}, ver=${String(result.ver)})`
     );
   }
   const cose = COSE_ALG_FOR_BACKEND[result.alg];

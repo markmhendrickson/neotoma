@@ -1,8 +1,18 @@
-# Neotoma for Claude Code
+# Neotoma lifecycle hooks
 
-A plugin that wires [Neotoma](https://neotoma.io) into Claude Code as a set of lifecycle hooks. Pairs with the Neotoma MCP server for agent-driven structured storage — the plugin is the "reliability floor" (guaranteed capture, retrieval injection, compaction markers), while MCP is the "quality ceiling" (rich, schema-typed entity extraction the agent performs deliberately).
+This directory is the **Claude Code** marketplace plugin (`plugin.json` + Python hooks). The **same package** also contains a **Cursor** hook map (`.cursor/hooks.json` → `packages/cursor-hooks`) so one checkout can wire both editors; lifecycle names and implementations differ per harness, but the intent matches: baseline capture, retrieval injection where the API supports it, and a stop-turn safety net. **MCP and CLI** stay the portable Neotoma surface for any agent.
 
-## What it does
+It pairs with the Neotoma MCP server for agent-driven structured storage — hooks are the "reliability floor" (lifecycle-visible capture and markers), while MCP is the "quality ceiling" (rich, schema-typed extraction the agent performs deliberately).
+
+## Harness compatibility
+
+| Surface | What this repo wires | Notes |
+| --- | --- | --- |
+| **MCP / CLI** | Works in any agent or editor | Harness-agnostic; same store/retrieve contract everywhere. |
+| **Claude Code** | `plugin.json` → `hooks/*.py` | Includes `PreCompact` for compaction markers. |
+| **Cursor** | `.cursor/hooks.json` → `cursor-hooks` dist | Uses Cursor hook names (`sessionStart`, `beforeSubmitPrompt`, …); includes `postToolUseFailure`. Compaction hooks follow whatever Cursor exposes. |
+
+## What it does (Claude Code hooks)
 
 | Hook | Purpose |
 | --- | --- |
@@ -26,10 +36,13 @@ The plugin deliberately does not do LLM-based entity extraction from chat or too
 
 ### Local development
 
+The `claude plugin install` CLI only resolves **marketplace** plugins (`name@marketplace`), not `.` or `./packages/...` paths. This package ships `.claude-plugin/marketplace.json` (`neotoma-marketplace`); register the directory, then install:
+
 ```bash
 git clone https://github.com/markmhendrickson/neotoma
-cd neotoma/packages/claude-code-plugin
-claude plugin install .
+cd neotoma
+claude plugin marketplace add "$(pwd)/packages/claude-code-plugin"
+claude plugin install neotoma@neotoma-marketplace
 ```
 
 ## Prerequisites

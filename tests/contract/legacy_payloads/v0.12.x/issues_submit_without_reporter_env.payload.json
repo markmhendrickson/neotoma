@@ -1,0 +1,7 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "title": "Legacy submit_issue without reporter environment",
+  "body": "Pre-v0.12 submitters did not include reporter_git_sha or reporter_app_version. The v0.12 contract change tightens submit_issue to require at least one.",
+  "labels": ["bug"],
+  "visibility": "public"
+}

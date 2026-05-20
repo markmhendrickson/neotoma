@@ -40,6 +40,10 @@ jobs:
           npm run build --prefix packages/client
           npm ci --prefix packages/cursor-hooks
           npm run build --prefix packages/cursor-hooks
+          # opencode-plugin imports @neotoma/client via "file:../client" — its
+          # tests import src/ directly so no build step is needed, but the
+          # node_modules symlink must exist for ESM resolution.
+          npm ci --prefix packages/opencode-plugin
 
       - name: Type check
         run: npm run type-check
@@ -47,14 +51,23 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Format check
+        run: npm run format:check
+
       - name: Lint site copy
         run: npm run lint:site-copy
 
-      - name: Run default Vitest suite
-        run: npm test
+      - name: Build server (required by CLI tests)
+        run: npm run build:server
+
+      - name: Run unit Vitest suite (no DB)
+        run: npm run test:unit
 
       - name: Validate Playwright coverage map
         run: npm run validate:coverage
+
+      - name: Validate automated test catalog
+        run: npm run validate:test-catalog
 
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
@@ -105,7 +118,61 @@ jobs:
         run: npm run validate:locales
 
       - name: Build site export
-        run: npm run build:pages:site
+        run: npm run build:site:pages
 
       - name: Validate site export
         run: npm run validate:site-export
+
+  security_gates:
+    # Gate G1–G3 + manifest sync (Track 1 of the pre-release security gates).
+    # Always runs the manifest sync check + auth matrix; runs the static
+    # rules + classifier output on every PR so reviewers see the
+    # security-sensitive concerns before merge.
+    # Source plan: .cursor/plans/pre-release_security_gates_44e01d74.plan.md
+    # Threat model:  docs/security/threat_model.md
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Classify diff (G1)
+        run: |
+          BASE_REF=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="origin/${{ github.event.pull_request.base.ref }}"
+          else
+            BASE_REF="origin/main"
+          fi
+          git fetch origin "${BASE_REF#origin/}" --depth=200 || true
+          npm run security:classify-diff -- --base "$BASE_REF" --head HEAD --json > /tmp/security_classify_raw.txt 2>&1
+          # Strip npm script header lines before parsing JSON
+          grep -v "^>" /tmp/security_classify_raw.txt | grep -v "^npm" > /tmp/security_classify.json || true
+          cat /tmp/security_classify.json
+          SENSITIVE=$(node -e "console.log(require('/tmp/security_classify.json').sensitive)")
+          echo "SECURITY_SENSITIVE=$SENSITIVE" >> "$GITHUB_ENV"
+
+      - name: Static rules (G2 — security:lint)
+        run: npm run security:lint
+
+      - name: Protected routes manifest sync (G3 + manifest-sync)
+        run: npm run security:manifest:check
+
+      - name: Topology auth matrix (G3)
+        run: npm run test:security:auth-matrix
+
+      - name: Surface sensitivity flag
+        if: always()
+        run: |
+          echo "Security-sensitive diff: ${SECURITY_SENSITIVE:-unknown}"
+          echo "Per docs/security/threat_model.md, sensitive PRs MUST land with a Security hardening supplement section and a same-release security_review.md."

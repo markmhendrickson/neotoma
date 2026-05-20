@@ -27,6 +27,9 @@ EXPOSE 3180
 
 COPY package*.json ./
 RUN npm ci --omit=dev
+# flyctl ssh console -C wraps remote commands in `bash -lc`; Alpine has no bash by default.
+# Required for sandbox-weekly-reset.yml to connect and run the reset script via SSH.
+RUN apk add --no-cache bash
 
 # Compiled output and OpenAPI spec
 COPY --from=build /app/dist ./dist

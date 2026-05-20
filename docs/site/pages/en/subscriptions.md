@@ -1,0 +1,127 @@
+---
+path: /subscriptions
+locale: en
+page_title: Substrate subscriptions
+shell: detail
+translation_status: canonical
+nav_group: reference
+nav_order: 61
+---
+
+Substrate subscriptions deliver Neotoma write-path events to external consumers without polling. Available since v0.12.0. Each subscription is a first-class `subscription` entity, so its filters, history, and provenance live in the same SQLite + reducer model as any other Neotoma record.
+
+Use subscriptions when:
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    An external workflow needs to react when a new <code>task</code> or <code>issue</code> lands.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    A peer Neotoma instance should mirror a subset of entity types (the{" "}
+    <MdxI18nLink to="/peer-sync" className="text-foreground underline underline-offset-2 hover:no-underline">
+      peer sync
+    </MdxI18nLink>{" "}
+    bridge runs on top of subscriptions).
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    A live UI or third-party dashboard wants a streaming activity feed.
+  </li>
+</ul>
+
+Subscriptions are bounded by design: per-user caps, webhook circuit breakers, and a process-wide SSE ring buffer keep deliveries from overwhelming receivers.
+
+## MCP tools
+
+- `subscribe({ entity_types?, entity_ids?, event_types?, delivery_method, webhook_url?, webhook_secret?, sync_peer_id? })` — at least one of `entity_types`, `entity_ids`, or `event_types` must be non-empty (there is no firehose mode). `delivery_method` is `webhook` or `sse`.
+- `unsubscribe({ subscription_id })` — removes a subscription.
+- `list_subscriptions({ active_only? })` — enumerates subscriptions owned by the caller.
+- `get_subscription_status({ subscription_id })` — returns the current `subscription` snapshot, including `consecutive_failures`, `max_failures`, and the `active` flag (flipped to `false` by the circuit breaker after `max_failures` consecutive errors).
+
+## HTTP / SSE surface
+
+- `POST /subscribe` — same shape as the MCP tool.
+- `POST /unsubscribe` — `{ subscription_id }`.
+- `GET /events/stream?subscription_id=<id>` — Server-Sent Events stream for an SSE-mode subscription. Frame format: `id: <ring_id>\nevent: <event_type>\ndata: <json>\n\n`. Clients reconnect with `Last-Event-ID: <ring_id>` to replay buffered events.
+
+## Webhook contract
+
+<TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+  <table className="w-full text-[14px] leading-6 border-collapse md:rounded-lg md:overflow-hidden md:border md:border-border">
+    <thead>
+      <tr className="border-b border-border">
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted w-[12ch]">Aspect</th>
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">Method</td>
+        <td className="px-4 py-3 align-top text-muted-foreground"><code>POST</code> to <code>webhook_url</code>.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">Headers</td>
+        <td className="px-4 py-3 align-top text-muted-foreground"><code>Content-Type: application/json</code>, <code>X-Neotoma-Signature-256: sha256=&lt;hex&gt;</code>, <code>User-Agent: neotoma-webhook/&lt;version&gt;</code>.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">Body</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Canonical JSON of the <code>SubstrateEvent</code> payload via <code>stableStringify</code> (sorted keys, deterministic).</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">Retries</td>
+        <td className="px-4 py-3 align-top text-muted-foreground"><code>[1s, 5s, 30s, 5m]</code> for non-2xx and timeouts; failures roll the <code>consecutive_failures</code> counter.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">Allow-list</td>
+        <td className="px-4 py-3 align-top text-muted-foreground"><code>https://*</code> always; <code>http://localhost</code> / <code>http://127.0.0.1</code> only outside production. Other <code>http://</code> URLs refused at registration and delivery.</td>
+      </tr>
+      <tr className="hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">Circuit breaker</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Reaching <code>max_failures</code> flips <code>active = false</code> via a <code>correct</code> write.</td>
+      </tr>
+    </tbody>
+  </table>
+</TableScrollWrapper>
+
+## Environment
+
+- `NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER` — soft cap on active subscriptions per user (default 50).
+- `NEOTOMA_SSE_EVENT_BUFFER` — ring buffer capacity for the SSE hub (clamped 100–10000, default 1000).
+- `NEOTOMA_DEBUG_SUBSTRATE_EVENTS` — debug logging on the underlying event bus.
+
+## Example
+
+Subscribe to webhook delivery for new `issue` and `task` writes:
+
+```bash
+curl -X POST http://localhost:3080/subscribe \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity_types": ["issue", "task"],
+    "delivery_method": "webhook",
+    "webhook_url": "https://hooks.example.com/neotoma"
+  }'
+```
+
+Stream the same filter as Server-Sent Events:
+
+```bash
+curl -N \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  "http://localhost:3080/events/stream?subscription_id=<id>"
+```
+
+## Loop prevention with peer sync
+
+When a subscription is configured with `sync_peer_id = "<peer_id>"`, the bridge:
+
+- Skips events whose `source_peer_id` equals the subscription's `sync_peer_id` (those came from that peer; sending them back would loop).
+- Routes matching deliveries through the peer-sync envelope, not the generic webhook queue, so they are signed and verified per the peer's `auth_method`.
+
+See the [peer sync reference](/peer-sync) for full peer wiring.
+
+## Full reference
+
+[`docs/subsystems/subscriptions.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/subscriptions.md) covers the `subscription` schema, the matcher (`subscriptionMatchesEvent`), the bridge (`subscription_bridge.ts`), the SSE hub (`sse_hub.ts`), the webhook delivery worker (`webhook_delivery.ts`), and the boot wiring in `install_subscription_bridge.ts`.
+
+See [peer sync](/peer-sync), [API reference](/api), and [MCP reference](/mcp).

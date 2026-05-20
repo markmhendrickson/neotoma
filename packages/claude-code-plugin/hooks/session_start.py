@@ -19,36 +19,73 @@ import time
 import uuid
 from pathlib import Path
 
+try:
+    import urllib.request as _urllib_request
+except ImportError:
+    _urllib_request = None  # type: ignore[assignment]
+
 sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
+    NEOTOMA_BASE_URL,
     get_client,
     harness_provenance,
     log,
     make_idempotency_key,
     read_hook_input,
     record_conversation_turn,
+    write_cached_mcp_instructions,
     write_hook_output,
 )
 
 
+def _prefetch_mcp_instructions() -> None:
+    """Fetch MCP instructions once at session start and cache them."""
+    if _urllib_request is None:
+        return
+    url = NEOTOMA_BASE_URL.rstrip("/") + "/mcp-interaction-instructions"
+    try:
+        with _urllib_request.urlopen(url, timeout=2) as resp:  # noqa: S310
+            if resp.status == 200:
+                text = resp.read().decode("utf-8", errors="replace").strip()
+                if text:
+                    write_cached_mcp_instructions(text)
+    except Exception as exc:
+        log("debug", f"prefetch_mcp_instructions failed: {exc}")
+
+
 def main() -> int:
     payload = read_hook_input()
+    _prefetch_mcp_instructions()
     client = get_client()
     if client is None:
         return 0
 
-    session_id = payload.get("session_id") or f"claude-code-{uuid.uuid4()}"
+    # Claude Code supplies a raw UUID in `session_id`. Persist it under both
+    # `session_id` (canonical identity for schema resolution) and
+    # `session_uuid` (the cross-reference bridge field declared on the
+    # conversation schema). The bridge lets a hook-created entity coalesce
+    # with the slug-keyed entity an MCP agent later creates for the same
+    # session. See `src/services/schema_definitions.ts` (conversation
+    # schema, v1.4 session_uuid bridge) and issue #145.
+    raw_session_id = payload.get("session_id")
+    session_id = raw_session_id or f"claude-code-{uuid.uuid4()}"
     conversation_title = payload.get("conversation_title") or "Claude Code session"
 
-    entities = [
-        {
-            "entity_type": "conversation",
-            "title": conversation_title,
-            "session_id": session_id,
-            "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            **harness_provenance({"hook_event": "SessionStart"}),
-        }
-    ]
+    conversation_entity = {
+        "entity_type": "conversation",
+        "title": conversation_title,
+        "session_id": session_id,
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        **harness_provenance({"hook_event": "SessionStart"}),
+    }
+    # Only populate session_uuid when the host actually supplied a UUID
+    # (i.e. we did not synthesize a `claude-code-<uuid>` fallback). A
+    # synthesized session_id is not the harness-emitted UUID and would not
+    # match anything an MCP agent could cross-reference.
+    if raw_session_id:
+        conversation_entity["session_uuid"] = raw_session_id
+
+    entities = [conversation_entity]
 
     try:
         client.store(

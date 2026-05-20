@@ -32,3 +32,31 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: bash scripts/schedule_sandbox_reset.sh
+
+      - name: Setup Node (for security probes)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync protected routes manifest (drift check)
+        run: npm run security:manifest:check
+
+      - name: Run deployed protected-route probes (sandbox)
+        env:
+          NEOTOMA_PROBE_HOSTS: "https://sandbox.neotoma.io"
+        run: |
+          mkdir -p docs/security/probes
+          bash scripts/security/deployed_probes.sh \
+            --tag "weekly-$(date -u +%Y-%m-%d)" \
+            --out "docs/security/probes/weekly-$(date -u +%Y-%m-%d).md"
+
+      - name: Upload probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-security-probes
+          path: docs/security/probes/weekly-*.md

@@ -26,6 +26,13 @@ vi.mock("../../src/services/schema_recommendation.js", () => ({
   },
 }));
 
+// Mock schema registry (processor now calls updateSchemaIncremental after auto-enhance)
+vi.mock("../../src/services/schema_registry.js", () => ({
+  schemaRegistry: {
+    updateSchemaIncremental: vi.fn().mockResolvedValue({}),
+  },
+}));
+
 describe("AutoEnhancementProcessor", () => {
   let mockFrom: any;
 

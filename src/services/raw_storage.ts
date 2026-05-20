@@ -7,10 +7,7 @@ import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 import { db } from "../db.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
-import {
-  getCurrentAgentIdentity,
-  getCurrentAttribution,
-} from "./request_context.js";
+import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 
 export interface RawStorageOptions {
@@ -18,6 +15,7 @@ export interface RawStorageOptions {
   fileBuffer: Buffer;
   mimeType: string;
   originalFilename?: string;
+  sourceType?: string;
   provenance?: Record<string, unknown>;
   idempotencyKey?: string;
 }
@@ -46,11 +44,17 @@ export function computeContentHash(buffer: Buffer): string {
  * Storage path: sources/{user_id}/{content_hash}
  * Deduplication: Per-user uniqueness on (user_id, content_hash)
  */
-export async function storeRawContent(
-  options: RawStorageOptions
-): Promise<RawStorageResult> {
+export async function storeRawContent(options: RawStorageOptions): Promise<RawStorageResult> {
   enforceAttributionPolicy("sources", getCurrentAgentIdentity());
-  const { userId, fileBuffer, mimeType, originalFilename, provenance = {}, idempotencyKey } = options;
+  const {
+    userId,
+    fileBuffer,
+    mimeType,
+    originalFilename,
+    sourceType,
+    provenance = {},
+    idempotencyKey,
+  } = options;
 
   // Compute content hash
   const contentHash = computeContentHash(fileBuffer);
@@ -127,7 +131,7 @@ export async function storeRawContent(
 
   // Check if we're in test environment
   const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-  
+
   if (!isTestEnv) {
     const { error: uploadError } = await db.storage
       .from(bucketName)
@@ -166,23 +170,25 @@ export async function storeRawContent(
 
   // Create source record
   const deterministicSourceId = generateDeterministicSourceId(userId, contentHash);
+  const sourceRow: Record<string, unknown> = {
+    id: deterministicSourceId,
+    user_id: userId,
+    content_hash: contentHash,
+    mime_type: mimeType,
+    storage_url: storagePath,
+    file_size: fileSize,
+    original_filename: originalFilename,
+    idempotency_key: idempotencyKey,
+    provenance: {
+      ...provenance,
+      uploaded_at: new Date().toISOString(),
+      ...getCurrentAttribution(),
+    },
+  };
+  if (sourceType) sourceRow.source_type = sourceType;
   const { data: source, error: insertError } = await db
     .from("sources")
-    .insert({
-      id: deterministicSourceId,
-      user_id: userId,
-      content_hash: contentHash,
-      mime_type: mimeType,
-      storage_url: storagePath,
-      file_size: fileSize,
-      original_filename: originalFilename,
-      idempotency_key: idempotencyKey,
-      provenance: {
-        ...provenance,
-        uploaded_at: new Date().toISOString(),
-        ...getCurrentAttribution(),
-      },
-    })
+    .insert(sourceRow)
     .select()
     .single();
 
@@ -225,11 +231,7 @@ export async function storeRawContent(
  * Get source metadata by ID
  */
 export async function getSourceMetadata(sourceId: string) {
-  const { data, error } = await db
-    .from("sources")
-    .select("*")
-    .eq("id", sourceId)
-    .single();
+  const { data, error } = await db.from("sources").select("*").eq("id", sourceId).single();
 
   if (error) {
     throw new Error(`Failed to get source metadata: ${error.message}`);
@@ -257,17 +259,12 @@ export async function downloadRawContent(
   storageUrl: string,
   bucketName: string = "sources"
 ): Promise<Buffer> {
-  const { data, error } = await db.storage
-    .from(bucketName)
-    .download(storageUrl);
+  const { data, error } = await db.storage.from(bucketName).download(storageUrl);
 
   if (error || !data) {
     const msg = error?.message ?? "Unknown error";
     if (msg.includes("ENOENT") || msg.includes("no such file or directory")) {
-      throw new SourceFileNotFoundError(
-        `Source file not found: ${msg}`,
-        storageUrl
-      );
+      throw new SourceFileNotFoundError(`Source file not found: ${msg}`, storageUrl);
     }
     throw new Error(`Failed to download content: ${msg}`);
   }
@@ -294,4 +291,3 @@ export function resolveLocalSourceFilePath(storageUrl: string | null | undefined
   if (config.storageBackend !== "local") return null;
   return path.resolve(path.join(config.rawStorageDir, u));
 }
-

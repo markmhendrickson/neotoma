@@ -39,7 +39,7 @@ Output is a sibling file like `neotoma.prod.recovered-<timestamp>.db`. Verify it
 
 ## After swap
 
-- Inspect **`lost_and_found`** in the recovered file if present; re-ingest important rows via **`POST /store`** / MCP **`store_structured`** using normal schemas (see prior recovery notes: `note`, `product_feedback`, etc.).
+- Inspect **`lost_and_found`** in the recovered file if present; re-ingest important rows via **`POST /store`** / MCP **`store`** using normal schemas (see prior recovery notes: `note`, `issue`, etc.).
 - Prefer **`NEOTOMA_DATA_DIR` outside iCloud-synced folders** (e.g. not only under `~/Documents` if Documents syncs) to reduce recurrence.
 
 ## Do not

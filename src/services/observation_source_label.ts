@@ -41,7 +41,10 @@ function labelFromObservationFields(fields: unknown): string | null {
  * Derive a short string for API consumers (e.g. finances UI) from a `sources` row.
  * Observations store `source_id`; this fills `source` for list responses.
  */
-export function sourceRowToLabel(src: SourceRow | undefined, observationFields?: unknown): string | null {
+export function sourceRowToLabel(
+  src: SourceRow | undefined,
+  observationFields?: unknown
+): string | null {
   if (!src) return null;
   const fn = typeof src.original_filename === "string" ? src.original_filename.trim() : "";
   if (fn) return fn;
@@ -69,7 +72,7 @@ export function sourceRowToLabel(src: SourceRow | undefined, observationFields?:
  */
 export async function attachSourceLabelsToObservations(
   userId: string,
-  observations: Record<string, unknown>[],
+  observations: Record<string, unknown>[]
 ): Promise<Record<string, unknown>[]> {
   if (!observations.length) return observations;
 
@@ -77,7 +80,7 @@ export async function attachSourceLabelsToObservations(
     ...new Set(
       observations
         .map((o) => o.source_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
     ),
   ];
 

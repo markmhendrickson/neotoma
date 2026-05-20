@@ -9,19 +9,33 @@ import {
 import { Terminal, Bot, Braces, LayoutDashboard, Download, MessageSquare } from "lucide-react";
 import { HOME_DEMO_INSTALL_CTA_CLASS } from "./code_block_copy_button_classes";
 import { InspectorPreviewIllustration } from "./illustrations/InspectorPreviewIllustration";
-
-interface DemoStep {
-  comment: string;
-  command: string;
-  output: string[];
-}
-
-interface DemoScenario {
-  label: string;
-  steps: DemoStep[];
-}
+import { useLocale } from "@/i18n/LocaleContext";
+import type {
+  HomeCliDemoChatMsg as ChatMsg,
+  HomeCliDemoPack,
+  HomeCliDemoTerminalScenario as DemoScenario,
+  HomeCliDemoTerminalStep as DemoStep,
+} from "@/i18n/locales/home_body_types";
 
 type DemoMode = "chat" | "cli" | "agentic" | "api" | "inspector";
+
+function scenarioCountFor(mode: DemoMode, cd: HomeCliDemoPack): number {
+  if (mode === "inspector") return 0;
+  if (mode === "chat") return cd.chatScenarios.length;
+  if (mode === "cli") return cd.cliScenarios.length;
+  if (mode === "agentic") return cd.agenticScenarios.length;
+  return cd.apiScenarios.length;
+}
+
+function terminalScenariosForMode(mode: DemoMode, cd: HomeCliDemoPack): DemoScenario[] {
+  if (mode === "cli") return cd.cliScenarios;
+  if (mode === "agentic") return cd.agenticScenarios;
+  return cd.apiScenarios;
+}
+
+function flattenTerminalScenarios(cd: HomeCliDemoPack): DemoScenario[] {
+  return [...cd.cliScenarios, ...cd.agenticScenarios, ...cd.apiScenarios];
+}
 
 /**
  * Inserts a zero-width non-joiner before each `@` so iOS/macOS Data Detectors do not
@@ -31,318 +45,6 @@ type DemoMode = "chat" | "cli" | "agentic" | "api" | "inspector";
 function breakEmailAutoLinks(text: string): string {
   return text.replace(/@/g, "\u200c@");
 }
-
-const CLI_SCENARIOS: DemoScenario[] = [
-  {
-    label: "Cross-tool sync",
-    steps: [
-      {
-        comment: "Store a contact from any agent session",
-        command:
-          'neotoma store --json=\'[{"entity_type":"contact", "name":"Sarah Chen", "email":"sarah@newstartup.io"}]\'',
-        output: ["Stored 1 entity: contact \u00b7 sarah-chen \u00b7 v1"],
-      },
-      {
-        comment: "Query from a different tool \u2014 same state",
-        command: 'neotoma entities search "Sarah Chen"',
-        output: [
-          "contact \u00b7 sarah-chen \u00b7 v3 \u00b7 updated 2h ago",
-          "  email: sarah@newstartup.io <changed>(changed from sarah@oldcompany.com in v2)</changed>",
-        ],
-      },
-      {
-        comment: "Show version history for this contact",
-        command: "neotoma history sarah-chen",
-        output: [
-          "v3 \u00b7 2h ago \u00b7 Cursor session #412 \u00b7 email \u2192 sarah@newstartup.io",
-          "v2 \u00b7 3d ago \u00b7 Claude Code \u00b7 email \u2192 sarah@oldcompany.com",
-          "v1 \u00b7 2w ago \u00b7 ChatGPT \u00b7 initial import",
-        ],
-      },
-    ],
-  },
-  {
-    label: "Replay & debug",
-    steps: [
-      {
-        comment: "Pipeline run #47 gave wrong output \u2014 what did the agent believe?",
-        command: "neotoma replay --entity acme-corp --at 2025-03-15T14:30:00",
-        output: [
-          "State at 2025-03-15 14:30:00:",
-          "  company \u00b7 acme-corp \u00b7 v4",
-          "  status: active_client  \u00b7  revenue: $48,000",
-          "  primary_contact: james@acme.com",
-        ],
-      },
-      {
-        comment: "Compare state between two pipeline runs",
-        command: "neotoma diff acme-corp v4 v6",
-        output: [
-          "<changed>\u2212 status: active_client</changed>",
-          "<added>\u002B status: churned</added>",
-          "<changed>\u2212 revenue: $48,000</changed>",
-          "<added>\u002B revenue: $0</added>",
-          "  Changed by: Claude Code session #318 \u00b7 3d ago",
-        ],
-      },
-      {
-        comment: "Trace which session caused the state change",
-        command: "neotoma history acme-corp --field status",
-        output: [
-          "v6 \u00b7 3d ago \u00b7 Claude Code #318 \u00b7 status \u2192 churned",
-          "v4 \u00b7 2w ago \u00b7 Cursor #290 \u00b7 status \u2192 active_client",
-          "v1 \u00b7 1mo ago \u00b7 ChatGPT \u00b7 status \u2192 prospect",
-        ],
-      },
-    ],
-  },
-];
-
-const AGENTIC_SCENARIOS: DemoScenario[] = [
-  {
-    label: "Cross-tool sync",
-    steps: [
-      {
-        comment: "Cursor agent stores a contact during your conversation",
-        command:
-          'store_structured({ entities: [{ entity_type: "contact", name: "Sarah Chen", email: "sarah@newstartup.io" }] })',
-        output: ["entity_id: sarah-chen \u00b7 version: 1 \u00b7 stored"],
-      },
-      {
-        comment: "Claude Code retrieves the same contact \u2014 no export needed",
-        command: 'retrieve_entity_by_identifier({ identifier: "Sarah Chen" })',
-        output: [
-          "contact \u00b7 sarah-chen \u00b7 v3 \u00b7 updated 2h ago",
-          "  email: sarah@newstartup.io <changed>(changed from sarah@oldcompany.com in v2)</changed>",
-        ],
-      },
-      {
-        comment: "Any agent can inspect the full version trail",
-        command: 'list_observations({ entity_id: "sarah-chen" })',
-        output: [
-          "v3 \u00b7 2h ago \u00b7 Cursor session #412 \u00b7 email \u2192 sarah@newstartup.io",
-          "v2 \u00b7 3d ago \u00b7 Claude Code \u00b7 email \u2192 sarah@oldcompany.com",
-          "v1 \u00b7 2w ago \u00b7 ChatGPT \u00b7 initial import",
-        ],
-      },
-    ],
-  },
-  {
-    label: "Replay & debug",
-    steps: [
-      {
-        comment: "Pipeline gave wrong output \u2014 agent inspects state at that time",
-        command:
-          'retrieve_entity_snapshot({ identifier: "acme-corp", at: "2025-03-15T14:30:00" })',
-        output: [
-          "State at 2025-03-15 14:30:00:",
-          "  company \u00b7 acme-corp \u00b7 v4",
-          "  status: active_client  \u00b7  revenue: $48,000",
-          "  primary_contact: james@acme.com",
-        ],
-      },
-      {
-        comment: "Agent diffs between versions to find the regression",
-        command:
-          'diff_entity({ identifier: "acme-corp", from_version: 4, to_version: 6 })',
-        output: [
-          "<changed>\u2212 status: active_client</changed>",
-          "<added>\u002B status: churned</added>",
-          "<changed>\u2212 revenue: $48,000</changed>",
-          "<added>\u002B revenue: $0</added>",
-          "  Changed by: Claude Code session #318 \u00b7 3d ago",
-        ],
-      },
-      {
-        comment: "Agent traces which session caused the state change",
-        command: 'list_observations({ entity_id: "acme-corp", field: "status" })',
-        output: [
-          "v6 \u00b7 3d ago \u00b7 Claude Code #318 \u00b7 status \u2192 churned",
-          "v4 \u00b7 2w ago \u00b7 Cursor #290 \u00b7 status \u2192 active_client",
-          "v1 \u00b7 1mo ago \u00b7 ChatGPT \u00b7 status \u2192 prospect",
-        ],
-      },
-    ],
-  },
-];
-
-const API_SCENARIOS: DemoScenario[] = [
-  {
-    label: "Cross-tool sync",
-    steps: [
-      {
-        comment: "Store a contact via the REST API",
-        command:
-          "curl -s -X POST localhost:3080/store -H 'Content-Type: application/json' -d '{\"entities\":[{\"entity_type\":\"contact\",\"name\":\"Sarah Chen\",\"email\":\"sarah@newstartup.io\"}]}'",
-        output: [
-          '{ "entities": [{ "entity_id": "sarah-chen", "entity_type": "contact", "version": 1 }] }',
-        ],
-      },
-      {
-        comment: "Search for the contact from any HTTP client",
-        command: 'curl -s "localhost:3080/entities/search?identifier=Sarah+Chen"',
-        output: [
-          "contact \u00b7 sarah-chen \u00b7 v3 \u00b7 updated 2h ago",
-          "  email: sarah@newstartup.io <changed>(changed from sarah@oldcompany.com in v2)</changed>",
-        ],
-      },
-      {
-        comment: "Retrieve full observation history",
-        command: 'curl -s "localhost:3080/entities/sarah-chen/observations"',
-        output: [
-          "v3 \u00b7 2h ago \u00b7 Cursor session #412 \u00b7 email \u2192 sarah@newstartup.io",
-          "v2 \u00b7 3d ago \u00b7 Claude Code \u00b7 email \u2192 sarah@oldcompany.com",
-          "v1 \u00b7 2w ago \u00b7 ChatGPT \u00b7 initial import",
-        ],
-      },
-    ],
-  },
-  {
-    label: "Replay & debug",
-    steps: [
-      {
-        comment: "Retrieve entity state at a specific point in time",
-        command:
-          'curl -s "localhost:3080/entities/acme-corp/snapshot?at=2025-03-15T14:30:00"',
-        output: [
-          "State at 2025-03-15 14:30:00:",
-          "  company \u00b7 acme-corp \u00b7 v4",
-          "  status: active_client  \u00b7  revenue: $48,000",
-          "  primary_contact: james@acme.com",
-        ],
-      },
-      {
-        comment: "Diff between two entity versions",
-        command: 'curl -s "localhost:3080/entities/acme-corp/diff?from=4&to=6"',
-        output: [
-          "<changed>\u2212 status: active_client</changed>",
-          "<added>\u002B status: churned</added>",
-          "<changed>\u2212 revenue: $48,000</changed>",
-          "<added>\u002B revenue: $0</added>",
-          "  Changed by: Claude Code session #318 \u00b7 3d ago",
-        ],
-      },
-      {
-        comment: "List observations filtered by field",
-        command:
-          'curl -s "localhost:3080/entities/acme-corp/observations?field=status"',
-        output: [
-          "v6 \u00b7 3d ago \u00b7 Claude Code #318 \u00b7 status \u2192 churned",
-          "v4 \u00b7 2w ago \u00b7 Cursor #290 \u00b7 status \u2192 active_client",
-          "v1 \u00b7 1mo ago \u00b7 ChatGPT \u00b7 status \u2192 prospect",
-        ],
-      },
-    ],
-  },
-];
-
-/* ------------------------------------------------------------------ */
-/*  Chat UX demo                                                       */
-/* ------------------------------------------------------------------ */
-
-interface ChatMsg {
-  role: "user" | "assistant" | "tool" | "divider";
-  content: string;
-  toolName?: string;
-  toolLines?: string[];
-}
-
-interface ChatScenario {
-  label: string;
-  messages: ChatMsg[];
-}
-
-const CHAT_SCENARIOS: ChatScenario[] = [
-  {
-    label: "Cross-tool sync",
-    messages: [
-      { role: "divider", content: "Cursor" },
-      {
-        role: "user",
-        content:
-          "I just spoke with Sarah Chen \u2014 she moved to a new startup. Her new email is sarah@newstartup.io",
-      },
-      {
-        role: "tool",
-        content: "",
-        toolName: "store_structured",
-        toolLines: ["Stored 1 entity: contact \u00b7 sarah-chen \u00b7 v1"],
-      },
-      {
-        role: "assistant",
-        content: "Done \u2014 I\u2019ve saved Sarah Chen\u2019s updated contact info.",
-      },
-      { role: "divider", content: "Claude Code" },
-      {
-        role: "user",
-        content:
-          "Can you find Sarah Chen\u2019s email? I need to send her the contract.",
-      },
-      {
-        role: "tool",
-        content: "",
-        toolName: "retrieve_entity_by_identifier",
-        toolLines: [
-          "contact \u00b7 sarah-chen \u00b7 v3 \u00b7 updated 2h ago",
-          "  email: sarah@newstartup.io <changed>(changed from sarah@oldcompany.com in v2)</changed>",
-        ],
-      },
-      {
-        role: "assistant",
-        content:
-          "Sarah\u2019s email is sarah@newstartup.io \u2014 updated from sarah@oldcompany.com. The change was recorded in your Cursor session 2 hours ago.",
-      },
-    ],
-  },
-  {
-    label: "Replay & debug",
-    messages: [
-      { role: "divider", content: "Codex" },
-      {
-        role: "user",
-        content:
-          "Pipeline run #47 gave wrong results for Acme Corp. What did the agent see at that point?",
-      },
-      {
-        role: "tool",
-        content: "",
-        toolName: "retrieve_entity_snapshot",
-        toolLines: [
-          "State at 2025-03-15 14:30:00:",
-          "  company \u00b7 acme-corp \u00b7 v4",
-          "  status: active_client  \u00b7  revenue: $48,000",
-        ],
-      },
-      {
-        role: "assistant",
-        content:
-          "At the time of run #47, Acme Corp was still an active client with $48K revenue.",
-      },
-      { role: "divider", content: "ChatGPT" },
-      {
-        role: "user",
-        content: "Something changed with Acme Corp since March. Can you diff the versions?",
-      },
-      {
-        role: "tool",
-        content: "",
-        toolName: "diff_entity",
-        toolLines: [
-          "<changed>\u2212 status: active_client</changed>",
-          "<added>\u002B status: churned</added>",
-          "<changed>\u2212 revenue: $48,000</changed>",
-          "<added>\u002B revenue: $0</added>",
-          "  Changed by: Codex session #318 \u00b7 3d ago",
-        ],
-      },
-      {
-        role: "assistant",
-        content:
-          "Found it \u2014 Codex session #318 changed status from active_client to churned and zeroed revenue 3 days ago. That\u2019s your regression.",
-      },
-    ],
-  },
-];
 
 const CHAT_MSG_FADE_MS = 200;
 
@@ -367,12 +69,6 @@ const CLI_DEMO_LINE_HEIGHT_PX = 24;
 const CLI_DEMO_CHROME_EXTRA_PX = 52;
 /** Vertical padding `p-4` / `md:p-5` (use md for stable min-height). */
 const CLI_DEMO_VERTICAL_PADDING_PX = 40;
-
-const ALL_CLI_DEMO_SCENARIOS: DemoScenario[] = [
-  ...CLI_SCENARIOS,
-  ...AGENTIC_SCENARIOS,
-  ...API_SCENARIOS,
-];
 
 function cliDemoWrappedLineCount(text: string): number {
   const charsPerLine = Math.max(
@@ -410,12 +106,16 @@ function cliDemoScenarioMaxBodyLines(scenario: DemoScenario): number {
 /** Extra body lines so font metrics / long tokens do not clip. */
 const CLI_DEMO_MIN_HEIGHT_SAFETY_LINES = 2;
 
-const CLI_DEMO_TERMINAL_MIN_HEIGHT_PX =
-  CLI_DEMO_VERTICAL_PADDING_PX +
-  CLI_DEMO_CHROME_EXTRA_PX +
-  (Math.max(...ALL_CLI_DEMO_SCENARIOS.map(cliDemoScenarioMaxBodyLines)) +
-    CLI_DEMO_MIN_HEIGHT_SAFETY_LINES) *
-    CLI_DEMO_LINE_HEIGHT_PX;
+function computeCliDemoTerminalMinHeightPx(cd: HomeCliDemoPack): number {
+  const all = flattenTerminalScenarios(cd);
+  const maxLines =
+    all.length === 0
+      ? 0
+      : Math.max(...all.map(cliDemoScenarioMaxBodyLines)) + CLI_DEMO_MIN_HEIGHT_SAFETY_LINES;
+  return (
+    CLI_DEMO_VERTICAL_PADDING_PX + CLI_DEMO_CHROME_EXTRA_PX + maxLines * CLI_DEMO_LINE_HEIGHT_PX
+  );
+}
 
 const scenarioTabClass = (active: boolean) =>
   `px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors cursor-pointer select-none ${
@@ -719,21 +419,15 @@ function ChatMsgBlock({ msg, opacity }: { msg: ChatMsg; opacity: number }) {
   );
 }
 
-function scenarioCountForMode(m: DemoMode): number {
-  if (m === "inspector") return 0;
-  if (m === "chat") return CHAT_SCENARIOS.length;
-  return m === "cli"
-    ? CLI_SCENARIOS.length
-    : m === "agentic"
-      ? AGENTIC_SCENARIOS.length
-      : API_SCENARIOS.length;
-}
-
 export function CliDemoInteractive() {
+  const { pack } = useLocale();
+  const cd = pack.homeBody.cliDemo;
+  const terminalMinHeightPx = useMemo(() => computeCliDemoTerminalMinHeightPx(cd), [cd]);
+
   const [mode, setMode] = useState<DemoMode>("chat");
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [elapsedByScenario, setElapsedByScenario] = useState<number[]>(() =>
-    new Array(scenarioCountForMode("chat")).fill(0)
+    new Array(scenarioCountFor("chat", cd)).fill(0)
   );
   const [playing, setPlaying] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -746,33 +440,25 @@ export function CliDemoInteractive() {
 
   playingRef.current = playing;
 
-  const scenarios =
-    mode === "cli" ? CLI_SCENARIOS : mode === "agentic" ? AGENTIC_SCENARIOS : API_SCENARIOS;
+  const scenarios = useMemo(() => terminalScenariosForMode(mode, cd), [mode, cd]);
 
   useEffect(() => {
-    const n = scenarioCountForMode(mode);
+    const n = scenarioCountFor(mode, cd);
     setElapsedByScenario(new Array(n).fill(0));
     setScenarioIndex(0);
-  }, [mode]);
+  }, [mode, cd]);
 
   const currentScenario = scenarios[scenarioIndex] ?? scenarios[0];
   const { segments, totalMs } = useMemo(() => {
     if (mode === "chat") {
-      return buildChatTimeline(
-        CHAT_SCENARIOS[scenarioIndex]?.messages ?? [],
-      );
+      return buildChatTimeline(cd.chatScenarios[scenarioIndex]?.messages ?? []);
     }
     if (mode === "inspector") {
       return { segments: [] as CliDemoStepSegment[], totalMs: 0 };
     }
-    const modeScenarios =
-      mode === "cli"
-        ? CLI_SCENARIOS
-        : mode === "agentic"
-          ? AGENTIC_SCENARIOS
-          : API_SCENARIOS;
+    const modeScenarios = terminalScenariosForMode(mode, cd);
     return buildStepsTimeline(modeScenarios[scenarioIndex]?.steps ?? []);
-  }, [mode, scenarioIndex]);
+  }, [mode, scenarioIndex, cd]);
 
   const elapsed = elapsedByScenario[scenarioIndex] ?? 0;
 
@@ -798,7 +484,7 @@ export function CliDemoInteractive() {
         setIsInView(nowInView);
         if (nowInView && !wasInViewRef.current) {
           setPlaying(true);
-          const n = scenarioCountForMode(mode);
+          const n = scenarioCountFor(mode, cd);
           setElapsedByScenario(new Array(n).fill(0));
           setScenarioIndex(0);
         }
@@ -808,7 +494,7 @@ export function CliDemoInteractive() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [mode]);
+  }, [mode, cd]);
 
   useEffect(() => {
     if (!playing || dragging || !isInView || mode === "inspector" || totalMs <= 0) return;
@@ -938,7 +624,7 @@ export function CliDemoInteractive() {
             onClick={() => switchMode("chat")}
           >
             <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-            Chat
+            {cd.modeTabs.chat}
           </button>
           <button
             type="button"
@@ -946,7 +632,7 @@ export function CliDemoInteractive() {
             onClick={() => switchMode("cli")}
           >
             <Terminal className="h-3.5 w-3.5" aria-hidden />
-            CLI
+            {cd.modeTabs.cli}
           </button>
           <button
             type="button"
@@ -954,7 +640,7 @@ export function CliDemoInteractive() {
             onClick={() => switchMode("agentic")}
           >
             <Bot className="h-3.5 w-3.5" aria-hidden />
-            MCP
+            {cd.modeTabs.mcp}
           </button>
           <button
             type="button"
@@ -962,7 +648,7 @@ export function CliDemoInteractive() {
             onClick={() => switchMode("api")}
           >
             <Braces className="h-3.5 w-3.5" aria-hidden />
-            API
+            {cd.modeTabs.api}
           </button>
           <button
             type="button"
@@ -970,7 +656,7 @@ export function CliDemoInteractive() {
             onClick={() => switchMode("inspector")}
           >
             <LayoutDashboard className="h-3.5 w-3.5" aria-hidden />
-            Inspector
+            {cd.modeTabs.inspector}
           </button>
         </div>
       </div>
@@ -982,7 +668,7 @@ export function CliDemoInteractive() {
           {mode === "chat" ? (
             <div
               className="box-border flex w-full min-w-0 max-w-3xl flex-col rounded-xl border border-border/60 bg-slate-950 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950"
-              style={{ minHeight: CLI_DEMO_TERMINAL_MIN_HEIGHT_PX }}
+              style={{ minHeight: terminalMinHeightPx }}
             >
               <div className="mb-4 flex items-center justify-between -mt-1">
                 <div className="flex items-center gap-1.5">
@@ -991,7 +677,7 @@ export function CliDemoInteractive() {
                   <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500/70" />
                 </div>
                 <div className="flex items-center gap-1">
-                  {CHAT_SCENARIOS.map((s, i) => (
+                  {cd.chatScenarios.map((s, i) => (
                     <button
                       key={s.label}
                       type="button"
@@ -1005,7 +691,7 @@ export function CliDemoInteractive() {
               </div>
 
               <div className="flex-1 space-y-3">
-                {(CHAT_SCENARIOS[scenarioIndex]?.messages ?? []).map(
+                {(cd.chatScenarios[scenarioIndex]?.messages ?? []).map(
                   (msg, i) => {
                     if (i > activeStepIdx) return null;
                     const opacity =
@@ -1025,14 +711,14 @@ export function CliDemoInteractive() {
 
               <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-800/50 bg-slate-900/30 px-3 py-2">
                 <span className="flex-1 select-none text-[12px] text-slate-600">
-                  Ask anything...
+                  {cd.chatPlaceholder}
                 </span>
               </div>
             </div>
           ) : (
           <div
             className="box-border w-full min-w-0 max-w-3xl rounded-xl border border-border/60 bg-slate-950 p-4 md:p-5 font-mono text-[12px] leading-6 text-slate-300 overflow-x-auto dark:bg-slate-950 dark:border-slate-800"
-            style={{ minHeight: CLI_DEMO_TERMINAL_MIN_HEIGHT_PX }}
+            style={{ minHeight: terminalMinHeightPx }}
           >
             <div className="flex items-center justify-between mb-3 -mt-1">
               <div className="flex items-center gap-1.5">
@@ -1100,7 +786,7 @@ export function CliDemoInteractive() {
                 type="button"
                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-500 hover:text-slate-300"
                 onClick={handlePlayPause}
-                aria-label={playing ? "Pause demo" : "Play demo"}
+                aria-label={playing ? cd.playPause.pauseLabel : cd.playPause.playLabel}
               >
                 {playing ? (
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
@@ -1152,7 +838,7 @@ export function CliDemoInteractive() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-3">
         <a href="/install" className={`${HOME_DEMO_INSTALL_CTA_CLASS} w-full sm:w-auto`}>
           <Download className="h-4 w-4 shrink-0" aria-hidden />
-          Install in 5 minutes
+          {cd.installCta}
         </a>
       </div>
     </div>
