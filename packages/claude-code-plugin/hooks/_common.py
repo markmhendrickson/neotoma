@@ -178,7 +178,12 @@ def record_conversation_turn(
     idempotency_key = make_idempotency_key(session_id, turn_id, "turn")
     try:
         result = client.store(entities=[entity], idempotency_key=idempotency_key)
-        entities_list = (result or {}).get("structured", {}).get("entities", [])
+        try:
+            from neotoma_client.helpers import _extract_entities
+            entities_list = _extract_entities(result)
+        except Exception:
+            # Fallback if helpers not available: tolerate both response shapes.
+            entities_list = (result or {}).get("entities") or (result or {}).get("structured", {}).get("entities") or []
         return {"entity_id": entities_list[0].get("entity_id")} if entities_list else None
     except Exception as exc:
         log("debug", f"record_conversation_turn failed: {exc}")
