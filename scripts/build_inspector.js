@@ -32,8 +32,9 @@ if (process.env.SKIP_INSPECTOR_BUILD === "1") {
 
 if (!existsSync(join(INSPECTOR_DIR, "package.json"))) {
   log(
-    "ERROR: inspector/ submodule not initialised (no package.json). " +
-      "Run `git submodule update --init inspector` before packaging or publishing.",
+    "ERROR: inspector/package.json not found. The inspector source is part " +
+      "of this repository under inspector/. If you cloned without the " +
+      "inspector source (rare), restore it from git history.",
   );
   process.exit(1);
 }

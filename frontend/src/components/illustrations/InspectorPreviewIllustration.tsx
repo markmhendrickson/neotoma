@@ -18,8 +18,12 @@ import {
 } from "lucide-react";
 import { sendCtaClick } from "@/utils/analytics";
 
-/** Source repo for the local Neotoma Inspector UI (`inspector` git submodule). */
-const NEOTOMA_INSPECTOR_REPO_URL = "https://github.com/markmhendrickson/neotoma-inspector";
+/**
+ * GitHub URL for the Inspector UI source. The Inspector now lives under
+ * `inspector/` in this repository (consolidated 2026-05-20 from the
+ * standalone neotoma-inspector repo).
+ */
+const NEOTOMA_INSPECTOR_REPO_URL = "https://github.com/markmhendrickson/neotoma/tree/main/inspector";
 
 const INSPECTOR_DASHBOARD_METRICS = [
   { label: "Entities", value: "23,633", Icon: Box },

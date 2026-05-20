@@ -61,8 +61,8 @@ Earlier drafts of this plan treated several pieces as new work that are actually
 
 - **`services/agent-site`** — existing service for an agent-driven site experience. Earlier drafts treated this as something to design; it already exists and is presumably what the harness UX will be built on top of or alongside.
 - **`site_pages`** — marketing site content managed in-repo, alongside the build.
-- **`frontend`** — React/Vite frontend already wired, with the inspector integrated as a submodule (`inspector @ submodule`).
-- **The inspector itself** (`neotoma-inspector` repo) — a complete operator UI covering all 47 non-OAuth Neotoma OpenAPI endpoints, with a left-nav structure already organized around substrate primitives:
+- **`frontend`** — React/Vite frontend already wired, with the inspector co-located in the repo (`inspector/`).
+- **The inspector itself** (`inspector/` in this repo; formerly the standalone `neotoma-inspector` repo, archived 2026-05-20) — a complete operator UI covering all 47 non-OAuth Neotoma OpenAPI endpoints, with a left-nav structure already organized around substrate primitives:
   - **Dashboard** (`/`) — top-level stats, entity type breakdown, recent timeline activity, health
   - **Entities** (`/entities`) — filterable/sortable browse with type filtering, pagination, search
   - **Entity Detail** (`/entities/:id`) — snapshot, observations, relationships, graph neighborhood, field provenance, batch corrections, canonical-markdown preview
