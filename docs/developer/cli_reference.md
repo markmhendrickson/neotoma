@@ -354,8 +354,8 @@ neotoma session --servers
   - `--force`: Overwrite existing configuration.
   - `--skip-db`: Skip database initialization.
   - `--skip-env`: Skip interactive `.env` creation and variable prompts (e.g. for CI or non-interactive use).
-  - `--project-local`: Store the Neotoma config in `.neotoma/config.json` in the current directory (project-scoped) instead of the user-level `~/.config/neotoma/config.json`. The project-local config takes precedence over the user-level config when `readEffectiveConfig` is used. Use this when you want per-project Neotoma configuration that is independent of the user-level setup.
-  - `--safe`: Dry-run mode. Reports what `init` would do (create directories, write config, run migrations) without writing any files or making any changes. Output lists each planned action with a check mark. Exit code is 0 if everything would succeed. Combine with `--json` to get machine-readable output.
+  - `--project-local`: Store the Neotoma config in `.neotoma/config.json` in the current directory (project-scoped) instead of the user-level `~/.config/neotoma/config.json`. The CLI reads this project-local config automatically for all subsequent commands run from that directory via `readEffectiveConfig`, which checks for `.neotoma/config.json` before falling back to the user-level config. Trust boundary: project-local config is only loaded when the containing directory is owned by the current user (prevents untrusted directories from silently overriding user settings). Use this when you want per-project Neotoma configuration independent of the user-level setup.
+  - `--safe`: Dry-run mode. Reports what `init` would do (create directories, write config, run migrations) without writing any files or making any changes. Output lists each planned action with a check mark or blocker reason. Exit code is 0 if all planned actions would succeed; exit code 1 if any blocker is detected (e.g. config already exists without `--force`, parent directory not writable). Combine with `--json` to get machine-readable output. Note: `--safe` checks the filesystem layout planned by `init`; it does not simulate authentication or preflight steps.
 
 **Examples:**
 
@@ -395,10 +395,7 @@ neotoma init --safe --project-local
 | 2 | `NEOTOMA_DATA_DIR` env var | Environment variable override |
 | 3 (default) | Auto-detected or `~/neotoma/data` | Resolved at startup |
 
-| Precedence | Source | Description |
-|------------|--------|-------------|
-| 1 (highest) | `--project-local` flag | Write to `.neotoma/config.json` in cwd |
-| 2 (default) | (no flag) | Write to `~/.config/neotoma/config.json` |
+Config scope for `neotoma init` is a binary switch: `--project-local` writes to `.neotoma/config.json` in cwd; without the flag, init writes to `~/.config/neotoma/config.json`. All subsequent commands that call `readEffectiveConfig` will read the project-local file when present (and owned by the current user).
 
 ### Harness setup
 

@@ -58,20 +58,38 @@ export function projectLocalConfigPath(cwd?: string): string {
 }
 
 /**
- * Read the merged effective config: project-local (if present) takes precedence
- * over user-level config. Call this instead of `readConfig()` when callers want
- * the full precedence chain.
+ * Read the merged effective config: project-local (if present and trusted) takes
+ * precedence over user-level config. Call this instead of `readConfig()` when
+ * callers want the full precedence chain.
+ *
+ * Security: project-local config is only loaded when the directory containing
+ * `.neotoma/` is owned by the current user (similar to git's `safe.directory`
+ * model). This prevents a malicious `.neotoma/config.json` in an untrusted
+ * working directory from silently overriding user-level settings such as
+ * `base_url` or `access_token`.
  */
 export async function readEffectiveConfig(
   cwd?: string
 ): Promise<Config & { _source?: "project-local" | "user" }> {
   const localPath = projectLocalConfigPath(cwd);
+  const localDir = path.dirname(path.dirname(localPath)); // parent of .neotoma/
   try {
-    const raw = await fs.readFile(localPath, "utf-8");
-    const local = JSON.parse(raw) as Config;
-    return { ...local, _source: "project-local" };
+    // Trust-boundary check: only load project-local config when the containing
+    // directory is owned by the current process uid (mirrors git safe.directory).
+    const dirStat = await fs.stat(localDir);
+    const uid = process.getuid?.();
+    if (uid !== undefined && dirStat.uid !== uid) {
+      // Directory owned by a different user — refuse to load project-local config.
+      // Fall through to user-level config silently (same as if the file didn't exist).
+    } else {
+      const raw = await fs.readFile(localPath, "utf-8");
+      const local = JSON.parse(raw) as Config;
+      // Strip _source so it is not written back through writeConfig paths.
+      const { _source: _, ...rest } = local as Config & { _source?: unknown };
+      return { ...rest, _source: "project-local" };
+    }
   } catch {
-    // No project-local config; fall through to user-level.
+    // No project-local config or unreadable; fall through to user-level.
   }
   const userConfig = await readConfig();
   return { ...userConfig, _source: "user" };
@@ -84,7 +102,9 @@ export async function readEffectiveConfig(
 export async function writeProjectLocalConfig(next: Config, cwd?: string): Promise<string> {
   const localPath = projectLocalConfigPath(cwd);
   await fs.mkdir(path.dirname(localPath), { recursive: true });
-  await fs.writeFile(localPath, JSON.stringify(next, null, 2));
+  // Write with mode 0600 (owner read/write only) to protect credentials that
+  // may be stored in the config (e.g. access_token, connection_id).
+  await fs.writeFile(localPath, JSON.stringify(next, null, 2), { mode: 0o600 });
   return localPath;
 }
 
