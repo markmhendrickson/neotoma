@@ -23,26 +23,7 @@
  * based on their own error policy.
  */
 
-import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "./types.js";
-
-/**
- * Extract the stored-entity list from a {@link StoreResult}, tolerating both
- * the live transport shape and the legacy nested shape.
- *
- * The `/store` endpoint (`StoreStructuredResponse` in `openapi.yaml`) and both
- * `HttpTransport` and `LocalTransport` return entities at the **top level**:
- * `{ success, replayed, entities: [...] }`. There is no `structured` wrapper on
- * the live response. Earlier helper code read `result.structured.entities`,
- * which is always `undefined`, silently dropping every created `entity_id`
- * (see issue #316).
- *
- * This reads `result.entities` first and falls back to
- * `result.structured?.entities` so it keeps working against any pre-v0.x client
- * that still nests the payload.
- */
-export function extractStoredEntities(result: StoreResult | undefined): StoredEntityRef[] {
-  return result?.entities ?? result?.structured?.entities ?? [];
-}
+import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "@neotoma/client";
 
 /**
  * Authoritative sender category for a chat message.
@@ -176,10 +157,17 @@ export async function storeChatTurn(
     idempotency_key: `${keyPrefix}-turn`,
   });
 
-  const stored = extractStoredEntities(storeResult);
+  // Server returns entities at the top level. Older shapes wrapped under
+  // `structured.entities`; tolerate both for forward compatibility.
+  const rawStored =
+    (storeResult as StoreResult & { entities?: StoredEntityRef[] }).entities ??
+    storeResult.structured?.entities ??
+    [];
+  const stored = rawStored;
 
-  // Result entities may be reordered or fewer than sent (when an existing
-  // entity matches). Prefer `observation_index` to align back to input.
+  // Server may return entities in any order or fewer than sent (when an
+  // existing entity matches). Prefer matching by `observation_index` when
+  // present (echoes the input index), then fall back to entity_type lookup.
   const byInputIndex = new Map<number, StoredEntityRef>();
   for (const e of stored) {
     const idx = (e as StoredEntityRef & { observation_index?: number }).observation_index;
@@ -188,6 +176,7 @@ export async function storeChatTurn(
   const lookupByIndex = (i: number): string | undefined => {
     const direct = byInputIndex.get(i);
     if (direct?.entity_id) return direct.entity_id;
+    // Fallback: positional alignment only when result length matches input.
     if (stored.length === entities.length) return stored[i]?.entity_id;
     return undefined;
   };
@@ -257,7 +246,11 @@ export async function retrieveOrStore(
     idempotency_key: input.idempotencyKey ?? `${input.entityType}-${input.identifier}`,
   });
 
-  const stored: StoredEntityRef | undefined = extractStoredEntities(result)[0];
+  const storedList =
+    (result as StoreResult & { entities?: StoredEntityRef[] }).entities ??
+    result.structured?.entities ??
+    [];
+  const stored: StoredEntityRef | undefined = storedList[0];
   if (!stored?.entity_id) {
     throw new Error(
       `retrieveOrStore: store returned no entity_id for ${input.entityType} identifier=${input.identifier}`
@@ -409,5 +402,9 @@ export async function recordConversationTurn(
     entities: [entity],
     idempotency_key: idempotencyKey,
   })) as StoreResult;
-  return { entityId: extractStoredEntities(result)[0]?.entity_id };
+  const turnEntities =
+    (result as StoreResult & { entities?: StoredEntityRef[] }).entities ??
+    result.structured?.entities ??
+    [];
+  return { entityId: turnEntities[0]?.entity_id };
 }
