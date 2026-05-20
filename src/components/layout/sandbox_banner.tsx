@@ -64,7 +64,7 @@ async function resetSandboxSession(descriptor: SandboxSessionDescriptor): Promis
   try {
     const res = await fetch("/sandbox/session/reset", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { accept: "application/json", "content-type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ pack_id: descriptor.packId || null }),
     });
@@ -85,6 +85,7 @@ async function endSandboxSession(descriptor: SandboxSessionDescriptor): Promise<
   try {
     await fetch("/sandbox/session", {
       method: "DELETE",
+      headers: { accept: "application/json" },
       credentials: "include",
     });
   } catch {

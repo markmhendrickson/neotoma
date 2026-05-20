@@ -629,6 +629,23 @@ export interface ServerInfo {
   neotoma_env?: string;
 }
 
+/**
+ * Server-resolved mode reported by /me. The server picks one of these at boot
+ * via `resolveSandboxMode()`; UI gates downstream branch on this value.
+ *
+ *   - `local`          — installed end-user app (single user, real data).
+ *   - `production`     — hosted multi-tenant production deployment.
+ *   - `local_sandbox`  — developer's per-install dev environment.
+ *   - `hosted_sandbox` — public sandbox at neotoma.io (funnel landing).
+ *   - `refuse`         — v0.11.1 advisory shape; surfaced for debug only.
+ */
+export type ServerMode =
+  | "local"
+  | "production"
+  | "local_sandbox"
+  | "hosted_sandbox"
+  | "refuse";
+
 export interface UserInfo {
   user_id: string;
   email?: string;
@@ -637,6 +654,12 @@ export interface UserInfo {
     data_dir: string;
     sqlite_db: string;
   };
+  /**
+   * Boot-resolved server mode. Always set when the server has completed
+   * startup; absent only in degraded states (test harness without
+   * startHTTPServer, or pre-resolver init).
+   */
+  sandbox_mode?: ServerMode;
 }
 
 export interface StoreRequest {

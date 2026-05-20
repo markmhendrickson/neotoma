@@ -202,6 +202,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAuthToken();
 
   const headers: Record<string, string> = {
+    // MUST set Accept on every API call. With content-negotiation unification
+    // (plan ent_1f176dbbe9a39e6bbad27f1f), the same URL serves both API JSON
+    // and the Inspector SPA shell, dispatched on Accept. Missing Accept →
+    // server defaults to JSON for back-compat, but explicit declaration is
+    // the invariant for the SPA so cache/proxy behavior stays predictable.
+    Accept: "application/json",
     "Content-Type": "application/json",
     ...(init?.headers as Record<string, string>),
   };
@@ -250,7 +256,10 @@ export async function getText(
 ): Promise<string> {
   const url = buildApiUrl(path, params);
   const token = getAuthToken();
-  const headers: Record<string, string> = {};
+  // Markdown-typed endpoints (e.g. /entities/:id/markdown). Setting Accept
+  // explicitly so content negotiation can't surface the Inspector SPA shell
+  // for these calls.
+  const headers: Record<string, string> = { Accept: "text/markdown, text/plain, */*" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(url, { headers, credentials: "include" });
   if (!res.ok) {
@@ -266,7 +275,10 @@ export async function getBlob(
 ): Promise<Blob> {
   const url = buildApiUrl(path, params);
   const token = getAuthToken();
-  const headers: Record<string, string> = {};
+  // Binary downloads (files, images). Accept anything except text/html so we
+  // cannot accidentally pull the Inspector SPA shell when content-negotiation
+  // is active on overlapping routes.
+  const headers: Record<string, string> = { Accept: "application/octet-stream, */*" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(url, { headers, credentials: "include" });
   if (!res.ok) {
