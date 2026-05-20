@@ -6,10 +6,12 @@ that encode the turn-lifecycle obligations agents must honor.
 
 from __future__ import annotations
 
-import uuid
+import logging
 from typing import Any, Literal
 
 from .types import StoreEntityInput, StoreRelationshipInput, StoredEntityRef
+
+_log = logging.getLogger(__name__)
 
 # Shape-tolerant entity extraction — server returns entities at top level
 # (result["entities"]); older response shapes nested under structured.entities.
@@ -32,9 +34,9 @@ def _lookup_by_index(
     """Return entity_id for input index i, preferring observation_index alignment."""
     by_input_index: dict[int, StoredEntityRef] = {}
     for e in stored:
-        idx = e.get("observation_index")  # type: ignore[call-overload]
-        if isinstance(idx, int):
-            by_input_index[idx] = e
+        raw = dict(e).get("observation_index")
+        if isinstance(raw, int):
+            by_input_index[raw] = e
 
     direct = by_input_index.get(i)
     if direct and direct.get("entity_id"):
@@ -217,7 +219,8 @@ def retrieve_or_store(
             "identifier": identifier,
             "entity_type": entity_type,
         })
-    except Exception:
+    except Exception as exc:
+        _log.debug("retrieve_or_store: identifier=%r not found (%r), will store", identifier, exc)
         existing = None
 
     existing_id: str | None = None

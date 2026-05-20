@@ -8,12 +8,14 @@ the rules themselves.
 
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass
 from typing import Any
 
 from .helpers import _extract_entities, _lookup_by_index
-from .types import StoreEntityInput, StoreRelationshipInput, StoredEntityRef
+from .types import StoreEntityInput, StoreRelationshipInput
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -163,8 +165,8 @@ class NeotomaMemory:
                 result = self._transport.retrieve_entity_by_identifier({"identifier": ident})
                 if result and isinstance(result, dict) and result.get("entity_id"):
                     retrieved.append(result)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.debug("bounded_retrieval: identifier=%r error=%r", ident, exc)
         ids = [e["entity_id"] for e in retrieved if e.get("entity_id")]
         return retrieved, ids
 
@@ -222,8 +224,8 @@ class NeotomaMemory:
                 result = await self._transport.aretrieve_entity_by_identifier({"identifier": ident})
                 if result and isinstance(result, dict) and result.get("entity_id"):
                     retrieved.append(result)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.debug("abounded_retrieval: identifier=%r error=%r", ident, exc)
         ids = [e["entity_id"] for e in retrieved if e.get("entity_id")]
         return retrieved, ids
 
@@ -306,7 +308,8 @@ class NeotomaMemory:
         relationships: list[StoreRelationshipInput] = [
             {"relationship_type": "PART_OF", "source_index": 1, "target_index": 0}
         ]
-        for entity_id in retrieved_entity_ids:
+        # Deduplicate: same entity_id appearing twice would write two REFERS_TO edges.
+        for entity_id in dict.fromkeys(retrieved_entity_ids):
             relationships.append({
                 "relationship_type": "REFERS_TO",
                 "source_index": 1,
@@ -339,7 +342,8 @@ class NeotomaMemory:
         relationships: list[StoreRelationshipInput] = [
             {"relationship_type": "PART_OF", "source_index": 1, "target_index": 0}
         ]
-        for entity_id in refers_to:
+        # Deduplicate: same entity_id appearing twice would write two REFERS_TO edges.
+        for entity_id in dict.fromkeys(refers_to):
             relationships.append({
                 "relationship_type": "REFERS_TO",
                 "source_index": 1,

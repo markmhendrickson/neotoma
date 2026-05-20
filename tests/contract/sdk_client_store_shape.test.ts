@@ -91,4 +91,23 @@ describe("@neotoma/client StoreResult ↔ openapi.yaml contract", () => {
     // documents that `structured` is optional in the type.
     expect(/structured\?:/.test(source)).toBe(true);
   });
+
+  it("openapi StoreRelationshipInput has a oneOf variant with source_index + target_entity_id", () => {
+    // Python NeotomaMemory writes { relationship_type, source_index, target_entity_id } when
+    // wiring REFERS_TO edges to existing entities. Assert the discriminated union in openapi.yaml
+    // includes that variant so the server accepts the shape the Python SDK sends.
+    const spec = loadSpec();
+    const schema = spec.components?.schemas?.StoreRelationshipInput as
+      | { oneOf?: Array<{ properties?: Record<string, unknown> }> }
+      | undefined;
+    expect(schema, "StoreRelationshipInput must exist in openapi.yaml").toBeDefined();
+    const oneOf = schema!.oneOf ?? [];
+    const found = oneOf.some(
+      (variant) => variant.properties?.source_index && variant.properties?.target_entity_id
+    );
+    expect(
+      found,
+      "StoreRelationshipInput oneOf must include a variant with both source_index and target_entity_id (used by Python SDK REFERS_TO wiring)"
+    ).toBe(true);
+  });
 });

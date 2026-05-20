@@ -7,6 +7,8 @@ have to manage the open/close lifecycle themselves.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import uuid
 from typing import Any, Callable
 
@@ -63,11 +65,11 @@ class WrappedAgent:
             turn_id=t_id,
             conversation_id=opened.conversation_id,
         )
-        import asyncio, inspect
         if inspect.iscoroutinefunction(self._agent_fn):
             assistant_message = await self._agent_fn(user_message, ctx)
         else:
-            assistant_message = self._agent_fn(user_message, ctx)
+            # Run sync callables in a thread so the event loop is not blocked.
+            assistant_message = await asyncio.to_thread(self._agent_fn, user_message, ctx)
         await self.memory.aclose_turn(
             turn_id=t_id,
             assistant_message=assistant_message,

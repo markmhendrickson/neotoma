@@ -177,24 +177,67 @@ class TestCloseTurn:
 # ---------------------------------------------------------------------------
 
 class TestIdempotencyKeys:
-    def test_user_and_assistant_keys_are_different(self) -> None:
+    def test_canonical_key_shapes(self) -> None:
+        """User key = conversation-{id}-{turn_id}; assistant key appends -assistant."""
         transport = make_transport()
-        # Second store call gets assistant entities
         transport.store.side_effect = [
             {"entities": [{"entity_id": "c1", "entity_type": "conversation"}, {"entity_id": "u1", "entity_type": "conversation_message"}]},
             {"entities": [{"entity_id": "a1", "entity_type": "conversation_message"}]},
         ]
-        memory = NeotomaMemory(transport, conversation_id="conv-1")
+        memory = NeotomaMemory(transport, conversation_id="conv-99")
 
-        memory.open_turn(turn_id="t1", user_message="Hi")
-        memory.close_turn(turn_id="t1", assistant_message="Hello")
+        memory.open_turn(turn_id="turn-7", user_message="Hi")
+        memory.close_turn(turn_id="turn-7", assistant_message="Hello")
 
         calls = transport.store.call_args_list
         user_key = calls[0][0][0]["idempotency_key"]
         assistant_key = calls[1][0][0]["idempotency_key"]
-        assert user_key != assistant_key
-        assert "assistant" not in user_key
-        assert "assistant" in assistant_key
+        assert user_key == "conversation-conv-99-turn-7"
+        assert assistant_key == "conversation-conv-99-turn-7-assistant"
+
+
+# ---------------------------------------------------------------------------
+# Deduplication
+# ---------------------------------------------------------------------------
+
+class TestDeduplication:
+    def test_duplicate_retrieved_entity_ids_produce_single_refers_to(self) -> None:
+        """If the same entity_id appears twice in retrieved_entity_ids, only one
+        REFERS_TO edge should be written."""
+        transport = make_transport()
+        memory = NeotomaMemory(transport, conversation_id="conv-1")
+
+        memory.close_turn(turn_id="t1", assistant_message="reply",
+                          refers_to=["ent_a", "ent_a", "ent_b"])
+
+        store_args = transport.store.call_args[0][0]
+        rels = store_args["relationships"]
+        refers = [r for r in rels if r["relationship_type"] == "REFERS_TO"]
+        target_ids = [r.get("target_entity_id") for r in refers]
+        assert target_ids.count("ent_a") == 1
+        assert target_ids.count("ent_b") == 1
+
+    def test_duplicate_ids_in_user_phase_deduped(self) -> None:
+        transport = make_transport(
+            retrieve_result={"entity_id": "ent_same", "entity_type": "company"},
+        )
+        transport.store.side_effect = [
+            {"entities": [{"entity_id": "c1", "entity_type": "conversation"}, {"entity_id": "u1", "entity_type": "conversation_message"}]},
+            {"entities": [{"entity_id": "a1", "entity_type": "conversation_message"}]},
+        ]
+        # Make retrieve return the same entity for multiple identifiers
+        def agent_fn(msg: str, ctx: Any) -> str:
+            return "ok"
+
+        wrapped = with_memory(agent_fn, transport=transport, conversation_id="conv-1")
+        # Message with two long words that both resolve to the same entity
+        wrapped("Acme Acme Corp Corp here")
+
+        store_args = transport.store.call_args_list[0][0][0]
+        rels = store_args["relationships"]
+        refers = [r for r in rels if r["relationship_type"] == "REFERS_TO"]
+        target_ids = [r.get("target_entity_id") for r in refers]
+        assert target_ids.count("ent_same") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +289,42 @@ class TestWithMemory:
         assert len(captured) == 1
         # retrieved should contain the mocked entity for identifiers found in message
         assert any(e.get("entity_id") == "ent_x" for e in captured[0])
+
+    def test_acall_with_sync_callable_does_not_block_loop(self) -> None:
+        """acall must use asyncio.to_thread for sync callables so the event loop
+        is not stalled by a blocking LLM call."""
+        transport = make_async_transport()
+        transport.astore.side_effect = [
+            {"entities": [{"entity_id": "c1", "entity_type": "conversation"}, {"entity_id": "u1", "entity_type": "conversation_message"}]},
+            {"entities": [{"entity_id": "a1", "entity_type": "conversation_message"}]},
+        ]
+        called_from_thread: list[bool] = []
+
+        def sync_agent(msg: str, ctx: Any) -> str:
+            # Record that the call arrived (asyncio.to_thread runs in a thread)
+            called_from_thread.append(True)
+            return "sync-reply"
+
+        wrapped = with_memory(sync_agent, transport=transport, conversation_id="conv-1")
+        result = asyncio.run(wrapped.acall("Hello"))
+
+        assert result.assistant_message == "sync-reply"
+        assert called_from_thread  # callable was invoked
+
+    def test_acall_with_async_callable(self) -> None:
+        transport = make_async_transport()
+        transport.astore.side_effect = [
+            {"entities": [{"entity_id": "c1", "entity_type": "conversation"}, {"entity_id": "u1", "entity_type": "conversation_message"}]},
+            {"entities": [{"entity_id": "a1", "entity_type": "conversation_message"}]},
+        ]
+
+        async def async_agent(msg: str, ctx: Any) -> str:
+            return "async-reply"
+
+        wrapped = with_memory(async_agent, transport=transport, conversation_id="conv-1")
+        result = asyncio.run(wrapped.acall("Hello"))
+
+        assert result.assistant_message == "async-reply"
 
 
 # ---------------------------------------------------------------------------
