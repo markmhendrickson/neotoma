@@ -1,12 +1,10 @@
 ---
-name: publish-plan
-description: Convert a plan file into a GitHub Discussion post for public input.
-triggers:
-  - publish plan
-  - share plan
-  - publish-plan
-  - /publish-plan
+name: publish_plan
+description: publish-plan
 ---
+
+<!-- Source: .cursor/skills/publish-plan/SKILL.md -->
+
 
 # publish-plan
 

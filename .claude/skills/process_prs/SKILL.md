@@ -1,15 +1,10 @@
 ---
 name: process_prs
-description: Process open pull requests — triage readiness, run security checks, request Opus review on substantial PRs, post per-issue closure-narrative comments, merge eligible PRs, and detect release PRs and hand off to /release.
-triggers:
-  - process prs
-  - /process_prs
-  - work the pr queue
-  - triage prs
-  - review open prs
+description: Process PRs
 ---
 
 <!-- Source: .cursor/skills/process-prs/SKILL.md -->
+
 
 # Process PRs
 

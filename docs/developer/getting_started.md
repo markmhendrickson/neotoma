@@ -118,6 +118,14 @@ npm run type-check
 npm run lint
 ```
 
+## Feature guides
+
+- [Plans](plans_guide.md) — store engineering plans as entities, with optional disk mirror.
+- [Issues](issues_guide.md) — built-in issue tracker with optional GitHub mirror.
+- [Markdown mirror](mirror_guide.md) — read-only filesystem view of Neotoma data.
+- [Subscriptions](subscriptions_guide.md) — real-time webhooks and SSE for data changes.
+- [Skills](skills_guide.md) — store reusable agent workflows as entities, mirrored to your harness skill directory.
+
 ## First contribution checklist
 
 - Run `npm run type-check`

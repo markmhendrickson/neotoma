@@ -1,14 +1,10 @@
 ---
 name: audit
-description: Audit a Neotoma database for graph-health issues (duplicate or redundant entity types, misused types, excessive raw_fragments, non-humanreadable canonical names, orphans, cycles, schema drift). Runs deterministic checks first; LLM-assisted checks are opt-in. Detection separate from repair — emits structured remediation hints pointing at existing tools (merge_entities, correct, register_schema, split_entity, delete_entity).
-triggers:
-  - audit
-  - /audit
-  - audit neotoma
-  - check database health
-  - find duplicates in neotoma
-  - clean up neotoma graph
+description: audit
 ---
+
+<!-- Source: .cursor/skills/audit/SKILL.md -->
+
 
 # audit
 

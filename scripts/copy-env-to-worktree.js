@@ -38,13 +38,15 @@ function isCursorWorktree(worktreePath) {
 }
 
 function findEnvFile(repoPath) {
-  // Priority: .env.dev, .env, .env.development
+  // Priority: repo-local first, then ~/.config/neotoma fallback
+  const home = process.env.HOME || process.env.USERPROFILE || '';
   const candidates = [
     join(repoPath, '.env.dev'),
     join(repoPath, '.env'),
     join(repoPath, '.env.development'),
+    join(home, '.config', 'neotoma', '.env'),
   ];
-  
+
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
       return candidate;

@@ -168,6 +168,29 @@ describe("Lexical retrieval fallback", () => {
     expect(result.entities.some((entity) => entity.entity_id === targetEntityId)).toBe(true);
   });
 
+  it("matches plan titles that end with a registered entity type name", async () => {
+    const entityId = `ent_lex_plan_strategy_title_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "plan",
+      canonicalName: "plan:Schema Packs Strategy",
+      snapshot: {
+        title: "Schema Packs Strategy",
+        status: "pending",
+      },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search: "Schema Packs Strategy",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.total).toBeGreaterThanOrEqual(1);
+    expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
+  });
+
   it("ranks cross-type lexical matches deterministically without entity_type filter", async () => {
     const runId = Date.now();
     const canonicalFirstId = `ent_lex_rank_canonical_${runId}`;
