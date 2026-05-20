@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { formatInspectorUserBadge } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Circle, Database, Server, User } from "lucide-react";
@@ -117,6 +118,14 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
               <div className="min-w-0">
                 <p className="truncate font-medium">{label}</p>
                 <p className="mt-1 break-all font-mono text-muted-foreground">{me.data.user_id}</p>
+                {me.data.sandbox_mode && me.data.sandbox_mode !== "local" ? (
+                  <Badge
+                    variant={me.data.sandbox_mode === "refuse" ? "destructive" : "secondary"}
+                    className="mt-1.5"
+                  >
+                    {me.data.sandbox_mode}
+                  </Badge>
+                ) : null}
               </div>
             </div>
             <div className="flex min-w-0 items-start gap-2">
