@@ -57,7 +57,7 @@ In all four handlers (`/list_relationships` HTTP, `/retrieve_graph_neighborhood`
 2. Apply `.eq("user_id", userId)` to every query that touches `entities`, `relationship_snapshots`, `entity_snapshots`, `observations`, `sources`, or `timeline_events`
 3. The `.or()` clause for source/target entity matching is retained; the `user_id` filter is `AND`-ed with it
 
-Regression tests in `tests/security/tenant_isolation_matrix.test.ts` and `tests/integration/retrieve_graph_neighborhood_tenant_isolation.test.ts` seed two users and assert that user A cannot retrieve user B's data through these endpoints.
+Regression tests in `tests/security/tenant_isolation_matrix.test.ts` seed two users and assert that user A cannot retrieve user B's data through these endpoints (`/list_relationships` and `/retrieve_graph_neighborhood`).
 
 ## Operator action
 

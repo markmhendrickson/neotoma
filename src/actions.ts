@@ -7705,12 +7705,13 @@ app.post("/list_relationships", async (req, res) => {
     });
     return res.json({ relationships: paginated, total: all.length, limit, offset });
   } catch (error) {
-    logError("RelationshipQueryError:list_relationships", req, error);
-    return sendError(
+    return handleApiError(
+      req,
       res,
-      500,
+      error,
+      "Failed to query relationships",
       "DB_QUERY_FAILED",
-      error instanceof Error ? error.message : "Failed to query relationships"
+      "RelationshipQueryError:list_relationships"
     );
   }
 });
