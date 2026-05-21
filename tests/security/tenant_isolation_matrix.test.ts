@@ -34,6 +34,7 @@ interface FixtureUserData {
   entityId: string;
   sourceId: string;
   relationshipKey: string;
+  observationId: string;
 }
 
 async function seedUserData(label: string): Promise<FixtureUserData> {
@@ -43,6 +44,7 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
   const entityId2 = `${TEST_PREFIX}_ent2_${label}_${suffix}`;
   const sourceId = randomUUID();
   const relationshipKey = `${TEST_PREFIX}_rel_${label}_${suffix}`;
+  const observationId = randomUUID();
 
   await db.from("entities").insert({
     id: entityId,
@@ -77,10 +79,23 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
     user_id: userId,
   });
 
-  return { userId, entityId, sourceId, relationshipKey };
+  await db.from("observations").insert({
+    id: observationId,
+    entity_id: entityId,
+    entity_type: "test",
+    schema_version: "1.0",
+    observed_at: new Date().toISOString(),
+    source_priority: 0,
+    source_id: sourceId,
+    fields: { marker: `${TEST_PREFIX}_obs_${label}` },
+    user_id: userId,
+  });
+
+  return { userId, entityId, sourceId, relationshipKey, observationId };
 }
 
 async function cleanupUserData(data: FixtureUserData): Promise<void> {
+  await db.from("observations").delete().eq("id", data.observationId);
   await db.from("relationship_snapshots").delete().eq("relationship_key", data.relationshipKey);
   await db.from("entities").delete().like("id", `${TEST_PREFIX}_%`).eq("user_id", data.userId);
   await db.from("sources").delete().eq("id", data.sourceId);
@@ -159,14 +174,43 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
       expect(json.entity).toBeUndefined();
     });
 
-    it("user A querying user B's source does NOT return user B's source", async () => {
+    // NOTE: the `node_type: "source"` branch in src/actions.ts and src/server.ts
+    // queries `db.from("source")` (singular). The canonical table is `sources`
+    // (plural), so that branch returns no rows for any user — a pre-existing
+    // dead-code path tracked separately. We intentionally do NOT assert against
+    // it here: a tautological assertion (always passes regardless of the
+    // user_id filter) is worse than no assertion.
+
+    it("user A's include_observations does NOT return user B's observations on user B's entity", async () => {
+      // userA queries userB's entityId asking for observations. The entity-branch
+      // .single() filter blocks the entity itself, but we also assert the
+      // observations sub-query is user-scoped — a regression of the
+      // .eq("user_id", userId) on the observations subquery would surface user B's
+      // observation row here.
       const { status, json } = await callEndpoint("/retrieve_graph_neighborhood", {
-        node_id: userB.sourceId,
-        node_type: "source",
+        node_id: userB.entityId,
+        node_type: "entity",
         user_id: userA.userId,
+        include_observations: true,
       });
       expect(status).toBe(200);
-      expect(json.source).toBeUndefined();
+      expect(json.entity).toBeUndefined();
+      const obsIds = (json.observations ?? []).map((o: any) => o.id);
+      expect(obsIds).not.toContain(userB.observationId);
+    });
+
+    it("user A querying their own entity with include_observations returns their observation", async () => {
+      // Positive control: the same code path returns user A's own observations.
+      const { status, json } = await callEndpoint("/retrieve_graph_neighborhood", {
+        node_id: userA.entityId,
+        node_type: "entity",
+        user_id: userA.userId,
+        include_observations: true,
+      });
+      expect(status).toBe(200);
+      expect(json.entity).toBeDefined();
+      const obsIds = (json.observations ?? []).map((o: any) => o.id);
+      expect(obsIds).toContain(userA.observationId);
     });
   });
 

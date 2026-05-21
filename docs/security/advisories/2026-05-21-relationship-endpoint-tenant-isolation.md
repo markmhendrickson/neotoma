@@ -57,7 +57,7 @@ In all four handlers (`/list_relationships` HTTP, `/retrieve_graph_neighborhood`
 2. Apply `.eq("user_id", userId)` to every query that touches `entities`, `relationship_snapshots`, `entity_snapshots`, `observations`, `sources`, or `timeline_events`
 3. The `.or()` clause for source/target entity matching is retained; the `user_id` filter is `AND`-ed with it
 
-Regression tests in `tests/security/tenant_isolation_matrix.test.ts` seed two users and assert that user A cannot retrieve user B's data through these endpoints (`/list_relationships` and `/retrieve_graph_neighborhood`).
+Regression tests in `tests/security/tenant_isolation_matrix.test.ts` seed two users (each with an entity, a relationship_snapshot row, and an observation row) and assert that user A cannot retrieve user B's data through `/list_relationships`, `/retrieve_graph_neighborhood` (entity branch, including the `include_observations` sub-path), or `/retrieve_related_entities`. The `/retrieve_graph_neighborhood` `node_type: "source"` branch is fixed by the same scoping pattern but is not asserted in this matrix: that handler path queries a singular `source` table (a pre-existing dead-code path) and would produce a tautological assertion. Coverage of the source branch is gated on the singular→plural table rename tracked as a follow-up.
 
 ## Operator action
 
