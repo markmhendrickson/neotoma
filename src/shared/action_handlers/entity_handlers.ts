@@ -190,7 +190,14 @@ async function resolveEntityTypesForTypeFilters(typeFilterTokens: Set<string>): 
 
   const { data, error } = await db.from("schema_registry").select("entity_type").eq("active", true);
   if (error) {
-    throw new Error(`Failed to resolve entity types for search filters: ${error.message}`);
+    // Degrade gracefully: a transient schema_registry hiccup should not 500
+    // the entire search request. Returning an empty set falls back to the
+    // unfiltered candidate query (capped at MAX_LEXICAL_CANDIDATES), matching
+    // the symmetric loadKnownEntityTypes behavior just above.
+    logger.warn(
+      `[lexicalSearch] Failed to resolve entity types for search filters: ${error.message}`
+    );
+    return [];
   }
 
   const matched = new Set<string>();
