@@ -98,6 +98,59 @@ interface ErrorEnvelope {
 - `ENTITY_NORMALIZATION_FAILED`: Entity name is empty or invalid
 - `ENTITY_TYPE_INVALID`: Entity type not in allowed set
 
+## Schema Registry Errors
+
+Errors raised by `update_schema_incremental` and related schema-registry tools.
+These are structured (non-throwing) responses with an actionable `hint` field
+directing the caller to the right next tool, rather than opaque internal errors.
+
+| Code                              | HTTP | Retry? | Description                                                                          |
+| --------------------------------- | ---- | ------ | ------------------------------------------------------------------------------------ |
+| `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`   | 200  | No     | No registered or code-defined schema exists for the given `entity_type`              |
+| `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 200 | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out`            |
+
+**`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`** — raised by `update_schema_incremental` when
+the target `entity_type` has no schema registered in `schema_registry` and no
+code-defined fallback in `schema_definitions.ts`. Incremental update needs a
+baseline to extend, so the call cannot proceed.
+
+Response shape:
+
+```json
+{
+  "success": false,
+  "entity_type": "<type>",
+  "error_code": "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
+  "no_schema_for_entity_type": true,
+  "hint": "Call register_schema first ... Use analyze_schema_candidates to get field suggestions before registering."
+}
+```
+
+Remediation: call `analyze_schema_candidates` for field suggestions, then
+`register_schema` with a complete `schema_definition` including either
+`canonical_name_fields` or `identity_opt_out`. Retry
+`update_schema_incremental` once the baseline schema is registered.
+
+**`ERR_SCHEMA_MISSING_IDENTITY_CONFIG`** — raised when the existing schema for
+the target `entity_type` lacks both `canonical_name_fields` and
+`identity_opt_out`. The baseline schema is present but cannot be safely
+extended without an identity rule in place.
+
+Response shape:
+
+```json
+{
+  "success": false,
+  "entity_type": "<type>",
+  "error_code": "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
+  "hint": "Call register_schema with a full schema_definition that includes canonical_name_fields (or identity_opt_out: \"heuristic_canonical_name\") to establish a baseline, then retry update_schema_incremental."
+}
+```
+
+Remediation: call `register_schema` with a complete `schema_definition` that
+declares one of `canonical_name_fields` or `identity_opt_out`, then retry
+`update_schema_incremental`.
+
 ## Search Errors
 
 | Code                       | HTTP | Retry? | Description                                      |
