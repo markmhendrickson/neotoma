@@ -117,6 +117,7 @@ type StoreRelationshipRef = {
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
+const TURN_SUMMARY_WIDGET_RESOURCE_URI = "ui://neotoma/turn-summary";
 const ADVISORY_VISIBILITY_DEPRECATION =
   "visibility 'advisory' is deprecated; use 'private' instead.";
 
@@ -1603,15 +1604,17 @@ export class NeotomaServer {
       }
 
       return {
-        tools: buildToolDefinitions(this.toolDescriptions, TIMELINE_WIDGET_RESOURCE_URI).map(
-          (def) => ({
-            name: def.name,
-            description: def.description,
-            inputSchema: def.inputSchema,
-            ...(def.annotations ? { annotations: def.annotations } : {}),
-            ...(def._meta ? { _meta: def._meta } : {}),
-          })
-        ),
+        tools: buildToolDefinitions(
+          this.toolDescriptions,
+          TIMELINE_WIDGET_RESOURCE_URI,
+          TURN_SUMMARY_WIDGET_RESOURCE_URI
+        ).map((def) => ({
+          name: def.name,
+          description: def.description,
+          inputSchema: def.inputSchema,
+          ...(def.annotations ? { annotations: def.annotations } : {}),
+          ...(def._meta ? { _meta: def._meta } : {}),
+        })),
       };
     });
 
@@ -1993,6 +1996,13 @@ export class NeotomaServer {
           mimeType: "text/html;profile=mcp-app",
         });
 
+        resources.push({
+          uri: TURN_SUMMARY_WIDGET_RESOURCE_URI,
+          name: "Turn Summary Widget",
+          description: "Inline per-turn status card for neotoma_turn_summary results.",
+          mimeType: "text/html;profile=mcp-app",
+        });
+
         // Get entity types count from schema registry
         try {
           const { SchemaRegistryService } = await import("./services/schema_registry.js");
@@ -2113,6 +2123,16 @@ export class NeotomaServer {
                   uri,
                   mimeType: "text/html;profile=mcp-app",
                   text: this.buildTimelineWidgetHtml(),
+                },
+              ],
+            };
+          case "ui_turn_summary_widget":
+            return {
+              contents: [
+                {
+                  uri,
+                  mimeType: "text/html;profile=mcp-app",
+                  text: this.buildTurnSummaryWidgetHtml(),
                 },
               ],
             };
@@ -2329,6 +2349,161 @@ export class NeotomaServer {
       const total = typeof safePayload.total === "number" ? safePayload.total : events.length;
       summaryEl.textContent = total + " event" + (total === 1 ? "" : "s");
       payloadEl.textContent = JSON.stringify(safePayload, null, 2);
+    }
+
+    window.addEventListener("message", (event) => {
+      const message = event.data;
+      if (!message || typeof message !== "object") return;
+
+      if (message.method === "ui/initialize") {
+        const initial = message.params?.toolResult ?? message.params?.initialToolResult;
+        if (initial) renderPayload(initial);
+        return;
+      }
+
+      if (message.method === "ui/notifications/tool-result") {
+        renderPayload(message.params?.result);
+      }
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  private buildTurnSummaryWidgetHtml(): string {
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neotoma Turn Summary</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background: transparent;
+    }
+    .card {
+      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: color-mix(in srgb, canvas 92%, transparent);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .status {
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .status .label {
+      opacity: 0.7;
+      font-weight: 400;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: color-mix(in srgb, currentColor 12%, transparent);
+    }
+    .badge.issues {
+      background: color-mix(in srgb, #d97706 30%, transparent);
+      color: color-mix(in srgb, #d97706 80%, canvastext);
+    }
+    .consent {
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: color-mix(in srgb, #d97706 14%, transparent);
+      border: 1px solid color-mix(in srgb, #d97706 30%, transparent);
+      line-height: 1.4;
+    }
+    .consent a {
+      display: inline-block;
+      margin-top: 4px;
+      font-weight: 500;
+      color: inherit;
+      text-decoration: underline;
+    }
+    .empty {
+      font-size: 12px;
+      opacity: 0.65;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="status" id="status">
+      <span class="empty" id="empty">Waiting for turn summary...</span>
+    </div>
+    <div id="consent"></div>
+  </div>
+  <script>
+    const statusEl = document.getElementById("status");
+    const consentEl = document.getElementById("consent");
+
+    function escapeText(value) {
+      return String(value ?? "").replace(/[&<>"']/g, function (ch) {
+        switch (ch) {
+          case "&": return "&amp;";
+          case "<": return "&lt;";
+          case ">": return "&gt;";
+          case '"': return "&quot;";
+          default: return "&#39;";
+        }
+      });
+    }
+
+    function renderPayload(payload) {
+      const safe = payload && typeof payload === "object" ? payload : {};
+      const turnNumber = typeof safe.turn_number === "number" ? safe.turn_number : null;
+      const totalMessages = typeof safe.conversation_message_count === "number"
+        ? safe.conversation_message_count
+        : null;
+      const storedCount = Array.isArray(safe.stored) ? safe.stored.length : 0;
+      const retrievedCount = Array.isArray(safe.retrieved) ? safe.retrieved.length : 0;
+      const issuesCount = Array.isArray(safe.issues) ? safe.issues.length : 0;
+      const statusLine = typeof safe.status_line === "string" ? safe.status_line : null;
+
+      if (turnNumber === null && !statusLine) {
+        statusEl.innerHTML = '<span class="empty">Waiting for turn summary...</span>';
+        consentEl.innerHTML = "";
+        return;
+      }
+
+      const parts = [];
+      if (turnNumber !== null && totalMessages !== null) {
+        parts.push('<span><span class="label">msg</span> ' + escapeText(turnNumber) + '/' + escapeText(totalMessages) + '</span>');
+      }
+      parts.push('<span class="badge"><span class="label">stored</span> ' + escapeText(storedCount) + '</span>');
+      parts.push('<span class="badge"><span class="label">retrieved</span> ' + escapeText(retrievedCount) + '</span>');
+      if (issuesCount > 0) {
+        parts.push('<span class="badge issues"><span class="label">issues</span> ' + escapeText(issuesCount) + '</span>');
+      }
+      statusEl.innerHTML = parts.join("");
+
+      if (issuesCount > 0) {
+        const noun = issuesCount === 1 ? "issue" : "issues";
+        consentEl.innerHTML =
+          '<div class="consent">' +
+          escapeText(issuesCount) + ' ' + noun + ' flagged this turn. Review in Neotoma Inspector.' +
+          '<br><a href="neotoma://issues" rel="noopener">View issues</a>' +
+          '</div>';
+      } else {
+        consentEl.innerHTML = "";
+      }
     }
 
     window.addEventListener("message", (event) => {
@@ -6173,6 +6348,9 @@ export class NeotomaServer {
       const [serverName, resourceName, extraSegment] = pathPart.split("/").filter(Boolean);
       if (serverName === "neotoma" && resourceName === "timeline_widget" && !extraSegment) {
         return { type: "ui_timeline_widget" };
+      }
+      if (serverName === "neotoma" && resourceName === "turn-summary" && !extraSegment) {
+        return { type: "ui_turn_summary_widget" };
       }
       throw new McpError(ErrorCode.InvalidRequest, `Unrecognized UI resource URI format: ${uri}`);
     }

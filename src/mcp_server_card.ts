@@ -6,6 +6,7 @@ import { buildToolDefinitions } from "./tool_definitions.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
+const TURN_SUMMARY_WIDGET_RESOURCE_URI = "ui://neotoma/turn-summary";
 
 function loadToolDescriptionsMap(): Map<string, string> {
   const yamlPath = join(config.projectRoot, ...MCP_DOCS_SUBDIR, "tool_descriptions.yaml");
@@ -37,7 +38,11 @@ function readPackageVersion(): string {
  */
 export function buildSmitheryServerCard(): Record<string, unknown> {
   const toolDescriptions = loadToolDescriptionsMap();
-  const tools = buildToolDefinitions(toolDescriptions, TIMELINE_WIDGET_RESOURCE_URI).map((def) => ({
+  const tools = buildToolDefinitions(
+    toolDescriptions,
+    TIMELINE_WIDGET_RESOURCE_URI,
+    TURN_SUMMARY_WIDGET_RESOURCE_URI
+  ).map((def) => ({
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema,
@@ -80,6 +85,12 @@ export function buildSmitheryServerCard(): Record<string, unknown> {
         uri: TIMELINE_WIDGET_RESOURCE_URI,
         name: "Timeline Widget",
         description: "Embedded timeline widget for timeline event tool results.",
+        mimeType: "text/html;profile=mcp-app",
+      },
+      {
+        uri: TURN_SUMMARY_WIDGET_RESOURCE_URI,
+        name: "Turn Summary Widget",
+        description: "Inline per-turn status card for neotoma_turn_summary results.",
         mimeType: "text/html;profile=mcp-app",
       },
       {

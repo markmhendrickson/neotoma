@@ -29,10 +29,13 @@ const RELATIONSHIP_TYPE_ENUM = [
  *   allow runtime description customization).
  * @param timelineWidgetResourceUri - Optional resource URI for the timeline
  *   widget, attached as _meta on list_timeline_events.
+ * @param turnSummaryWidgetResourceUri - Optional resource URI for the turn
+ *   summary widget, attached as _meta on neotoma_turn_summary.
  */
 export function buildToolDefinitions(
   descriptionOverrides?: Map<string, string>,
-  timelineWidgetResourceUri?: string
+  timelineWidgetResourceUri?: string,
+  turnSummaryWidgetResourceUri?: string
 ): ToolDefinition[] {
   const desc = (name: string, fallback: string): string =>
     descriptionOverrides?.get(name) ?? fallback;
@@ -1326,6 +1329,14 @@ export function buildToolDefinitions(
         "Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("neotoma_turn_summary"),
+      ...(turnSummaryWidgetResourceUri
+        ? {
+            _meta: {
+              ui: { resourceUri: turnSummaryWidgetResourceUri },
+              "openai/outputTemplate": turnSummaryWidgetResourceUri,
+            },
+          }
+        : {}),
     },
     {
       name: "npm_check_update",
