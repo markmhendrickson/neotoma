@@ -772,6 +772,13 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         >
           {dict.architecture}
         </Link>
+        <Link
+          to={localizePath("/docs", locale)}
+          className="inline-flex rounded-md px-1.5 py-1.5 text-ui text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => sendCtaClick("header_docs")}
+        >
+          {dict.docs}
+        </Link>
       </nav>
 
       {/*
