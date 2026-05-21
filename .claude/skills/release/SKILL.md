@@ -144,6 +144,8 @@ Run after Step 3.5 passes, before Step 4. Symmetric in role to the security revi
 
 **Why this lane exists:** Tests-exist is not the same as tests-cover-the-thing-users-will-do. A surface can ship with a named test file that exercises only the happy path of an internal helper, leaving destructive operations, external-file-shape parsing, or new CLI commands effectively unverified. The v0.13.0 audit found 5 such gaps after the supplement was confirmed; this lane catches them before execute.
 
+0. **Run `/review <last-tag>..HEAD`** before writing the coverage file. The `/review` skill (`.claude/skills/review/SKILL.md`) walks the full pre-PR checklist against the diff and emits structured findings (BLOCKING / ADVISORY / NIT) covering architecture, schema-agnostic design, determinism, immutability, auth, contract seams, and user-facing-surface coverage in a single pass. Append its verdict and blocking findings to `docs/releases/in_progress/vX.Y.Z/test_coverage_review.md` under a `## Code review` section. A `NEEDS-CHANGES` verdict from `/review` is a hard gate on Step 4 — resolve all BLOCKING findings before proceeding, even if they were introduced by commits that bypassed PR review.
+
 1. **Walk the supplement's user-facing surfaces** (from "New CLI commands", "New CLI flags on existing commands", "Behavior changes in existing commands", "API surface & contracts"). For each, locate the test file(s) and read what they assert. Note specifically:
 
    **Surfaces that need a regression test before shipping:**
