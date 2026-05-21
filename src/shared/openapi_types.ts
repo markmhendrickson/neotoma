@@ -3903,6 +3903,17 @@ export interface operations {
             | "heuristic_name"
             | "heuristic_fallback"
             | "target_id";
+          /**
+           * @description When true, omit chat bookkeeping types (`conversation`,
+           *     `conversation_message`, and other entries in
+           *     `BOOKKEEPING_ENTITY_TYPES`) from results. Default false —
+           *     bookkeeping entities are included unless the caller
+           *     explicitly opts in to exclusion. Has no effect when
+           *     `entity_type` already filters to a single bookkeeping
+           *     type (the explicit type filter wins).
+           * @default false
+           */
+          exclude_bookkeeping?: boolean;
         };
       };
     };

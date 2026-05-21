@@ -34,6 +34,12 @@ interface QueryEntitiesParams {
     | "heuristic_name"
     | "heuristic_fallback"
     | "target_id";
+  /**
+   * When true, omit chat bookkeeping types (`conversation`, `conversation_message`,
+   * etc.) from results. Default false — bookkeeping is included unless the caller
+   * opts in. Has no effect when `entityType` already filters to a bookkeeping type.
+   */
+  excludeBookkeeping?: boolean;
 }
 
 const MAX_LEXICAL_CANDIDATES = 5000;
@@ -612,6 +618,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     updatedSince,
     createdSince,
     identityBasis,
+    excludeBookkeeping = false,
   } = params;
 
   let entities: EntityWithProvenance[];
@@ -622,7 +629,11 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     const searchTokens = normalizeSearchText(trimmedSearch).split(" ").filter(Boolean);
     const registryTypes = await loadKnownEntityTypes(userId, []);
     const typeFilterTokens = buildEntityTypeFilterTokens(searchTokens, registryTypes);
-    const excludeBookkeeping = shouldExcludeBookkeepingFromSearch(entityType);
+    // Bookkeeping exclusion is caller-controlled (per docs/foundation/product_principles.md
+    // §10.2 Explicit Over Implicit). If the caller explicitly filters to a bookkeeping
+    // entity_type, the explicit type filter wins and excludeBookkeeping is ignored.
+    const effectiveExcludeBookkeeping =
+      excludeBookkeeping && !(entityType && BOOKKEEPING_ENTITY_TYPES.has(entityType));
 
     const lexicalParams = {
       userId,
@@ -638,7 +649,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       createdSince,
       identityBasis,
       search: trimmedSearch,
-      excludeBookkeeping,
+      excludeBookkeeping: effectiveExcludeBookkeeping,
       limit,
       offset,
     };
@@ -682,7 +693,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           createdSince,
           identityBasis,
         });
-        if (excludeBookkeeping) {
+        if (effectiveExcludeBookkeeping) {
           entities = entities.filter((entity) => !BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type));
         }
         if (entities.length > 0) {
