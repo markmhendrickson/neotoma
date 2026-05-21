@@ -2485,7 +2485,7 @@ paths:
                     Primary use case is the Inspector "ambiguous / heuristic
                     resolution" filter so operators can audit entities that
                     were matched by name/title rather than by a schema rule.
-                exclude_bookkeeping:
+                exclude_conversations:
                   type: boolean
                   default: false
                   description: |

@@ -3374,7 +3374,7 @@ app.post("/entities/query", async (req, res) => {
       updated_since,
       created_since,
       identity_basis,
-      exclude_bookkeeping,
+      exclude_conversations,
     } = parsed.data;
     const { entities, total } = await queryEntitiesWithCount({
       userId,
@@ -3392,7 +3392,7 @@ app.post("/entities/query", async (req, res) => {
       updatedSince: updated_since,
       createdSince: created_since,
       identityBasis: identity_basis,
-      excludeBookkeeping: exclude_bookkeeping,
+      excludeConversations: exclude_conversations,
     });
 
     return res.json({
