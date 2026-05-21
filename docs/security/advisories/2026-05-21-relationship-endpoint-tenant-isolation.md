@@ -76,6 +76,7 @@ Fix approach (per #365 and #366):
 | 2026-05-21 | Vulnerability identified during internal security review |
 | 2026-05-21 | GitHub issues #365 and #366 filed (sanitized; no attack vector details) |
 | 2026-05-21 | Advisory filed in `docs/security/advisories/` |
+| 2026-05-21 | GHSA-wrr4-782v-jhwh created (draft, private) |
 | TBD | Fix released in a future patch version |
 
 ---
@@ -84,6 +85,7 @@ Fix approach (per #365 and #366):
 
 - **#365** — Fix `/list_relationships` tenant isolation
 - **#366** — Fix `/retrieve_graph_neighborhood` tenant isolation
+- **GHSA-wrr4-782v-jhwh** — GitHub Security Advisory (draft; full technical details)
 
 ---
 
