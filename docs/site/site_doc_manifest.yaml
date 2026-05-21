@@ -247,6 +247,10 @@ entries:
     status: canonical_site_page
     canonical_site_path: /schemas/versioning
 
+  - repo_path: docs/site/pages/en/schemas/locked_vs_evolving.mdx
+    status: canonical_site_page
+    canonical_site_path: /schemas/locked-vs-evolving
+
   - repo_path: docs/site/pages/en/operating.mdx
     status: canonical_site_page
     canonical_site_path: /operating

@@ -3401,6 +3401,13 @@ export interface operations {
           "application/json": {
             /** @description Resolved NEOTOMA_ENV for this process (development or production). */
             neotoma_env?: string;
+            /**
+             * @description Configured schema authoring posture (NEOTOMA_SCHEMA_MODE).
+             *     `evolving` (default) lets agents author new types; `guided` and `locked`
+             *     tighten that posture in later milestones. Surfaced for Inspector badge.
+             * @enum {string}
+             */
+            schema_mode?: "evolving" | "guided" | "locked";
           } & {
             [key: string]: unknown;
           };

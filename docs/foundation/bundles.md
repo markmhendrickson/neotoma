@@ -95,7 +95,7 @@ Neotoma exposes three schema-evolution modes via the environment variable `NEOTO
 
 m1 introduces the env var with default `evolving` and no enforcement beyond surfacing the value. m2 gates the two auto-create points (`src/server.ts:4416` and `src/services/interpretation.ts:225`) on the mode.
 
-See also: the public FAQ entry "What's the difference between evolving, guided, and locked schema modes in Neotoma?" at `docs/site/faq/schema_modes.md`.
+See also: the public FAQ entry "What's the difference between evolving, guided, and locked schema modes in Neotoma?" at `docs/site/faq/schema_modes.md`, and the public-site guide `docs/site/pages/en/schemas/locked_vs_evolving.md` ("Locked vs evolving schemas") for an operator-facing walkthrough.
 
 ## Skills and bundles
 

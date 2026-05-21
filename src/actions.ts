@@ -706,6 +706,7 @@ app.get("/server-info", (_req, res) => {
     apiBase: config.apiBase,
     mcpUrl,
     neotoma_env: readNeotomaConfigEnvironment(),
+    schema_mode: getSchemaMode(),
   });
 });
 

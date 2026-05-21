@@ -2078,6 +2078,13 @@ paths:
                   neotoma_env:
                     type: string
                     description: Resolved NEOTOMA_ENV for this process (development or production).
+                  schema_mode:
+                    type: string
+                    enum: [evolving, guided, locked]
+                    description: |
+                      Configured schema authoring posture (NEOTOMA_SCHEMA_MODE).
+                      `evolving` (default) lets agents author new types; `guided` and `locked`
+                      tighten that posture in later milestones. Surfaced for Inspector badge.
 
   /mcp/oauth/initiate:
     post:
