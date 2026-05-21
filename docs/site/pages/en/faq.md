@@ -172,3 +172,11 @@ An entity is the canonical representation of a person, company, task, event, or 
 An observation is an immutable, timestamped fact about an entity. Observations are never modified or deleted. Reducers merge all observations about an entity into a single snapshot representing current truth.
 
 [Terminology](/terminology)
+
+## What's the difference between evolving, guided, and locked schema modes in Neotoma? {#whats-the-difference-between-evolving-guided-and-locked-schema-modes-in-neotoma}
+
+Neotoma exposes three schema-evolution modes via the `NEOTOMA_SCHEMA_MODE` environment variable. `evolving` is the default and matches Neotoma's historical behavior: any entity type may auto-create on first write. `guided` restricts auto-create to entity types provided by installed bundles; unknown types are rejected with a structured error that names the bundles that provide them. `locked` blocks all auto-create — every entity type MUST be registered explicitly via an installed bundle.
+
+The three modes let teams choose where they sit on the trade-off between exploratory ergonomics (`evolving`), curated growth (`guided`), and full-schema-as-contract (`locked`). The mode is read at boot and surfaced in the Inspector. Bundles are the unit through which schemas register; see `docs/foundation/bundles.md` for the bundle model.
+
+[Bundles](/bundles)
