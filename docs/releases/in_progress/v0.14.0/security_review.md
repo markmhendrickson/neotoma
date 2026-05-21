@@ -11,7 +11,7 @@ Manual security review for v0.14.0 (security patch release on top of v0.13.0). T
 - Protected routes manifest: in sync (no new routes added).
 - `security:lint`: 0 errors.
 - `test:security:auth-matrix`: 16/16 passed.
-- `test:security:tenant-isolation-matrix`: new in this release, 6/6 passed.
+- `test:security:tenant-isolation-matrix`: new in this release, 8/8 passed (list_relationships ×2, retrieve_graph_neighborhood ×4, retrieve_related_entities ×2).
 - Changed files: 7
   - `src/actions.ts` (handler scoping fixes)
   - `src/server.ts` (MCP handler scoping fixes)
