@@ -91,6 +91,15 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
     ],
   },
   {
+    title: "Feature guides",
+    items: [
+      { label: "Plans", href: "/plans-guide", icon: "FileText" },
+      { label: "Issues", href: "/issues-guide", icon: "Bug" },
+      { label: "Markdown mirror", href: "/mirror-guide", icon: "FolderOpen" },
+      { label: "Subscriptions", href: "/subscriptions-guide", icon: "Radio" },
+    ],
+  },
+  {
     title: "Record types",
     items: [
       { label: "Contacts", href: "/types/contacts", icon: "Users" },

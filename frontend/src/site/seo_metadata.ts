@@ -468,6 +468,54 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Security hardening", path: "/security-hardening" },
     ],
   },
+  "/plans-guide": {
+    title: "Plans | Neotoma",
+    description:
+      "Store engineering and design plans as Neotoma entities. Link plans to issues and tasks, query them across harnesses, and mirror them back to disk as markdown files.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Plans", path: "/plans-guide" },
+    ],
+  },
+  "/issues-guide": {
+    title: "Issues | Neotoma",
+    description:
+      "Neotoma's built-in issue tracker: create issues from CLI, MCP, or Inspector; add conversation comments; mirror to GitHub; manage private issues and guest access tokens.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Issues", path: "/issues-guide" },
+    ],
+  },
+  "/mirror-guide": {
+    title: "Markdown mirror | Neotoma",
+    description:
+      "Write a read-only filesystem view of Neotoma data as markdown files. Browse entities, relationships, timeline events, and schemas with standard tools without going through the API.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Markdown mirror", path: "/mirror-guide" },
+    ],
+  },
+  "/subscriptions-guide": {
+    title: "Subscriptions | Neotoma",
+    description:
+      "Deliver real-time notifications when Neotoma data changes via webhooks or Server-Sent Events. Covers creating subscriptions, webhook signing, SSE streaming, and peer sync.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Subscriptions", path: "/subscriptions-guide" },
+    ],
+  },
   "/inspector": {
     title: "Inspector | Neotoma",
     description:

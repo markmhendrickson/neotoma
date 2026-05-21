@@ -64,6 +64,7 @@ import {
 } from "@/i18n/routing";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
 import { isMarketingFullPageRoute } from "@/site/full_page_paths";
+import { staticAssetPath } from "@/site/spa_path";
 import { getFaqItems } from "@/site/faq_items";
 import {
   NavigationMenu,
@@ -702,7 +703,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           }}
         >
           <img
-            src="/neotoma-wordmark.svg"
+            src={staticAssetPath("/neotoma-wordmark.svg")}
             alt="Neotoma"
             className="h-5 w-auto dark:invert"
           />
@@ -936,7 +937,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                 }}
               >
                 <img
-                  src="/neotoma-wordmark.svg"
+                  src={staticAssetPath("/neotoma-wordmark.svg")}
                   alt="Neotoma"
                   className="h-5 w-auto dark:invert"
                 />

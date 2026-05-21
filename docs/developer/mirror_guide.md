@@ -1,0 +1,104 @@
+# Markdown Mirror
+
+The markdown mirror writes a read-only filesystem view of your Neotoma data as markdown files. This lets you browse entities, relationships, timeline events, and schemas with standard tools (`cat`, `grep`, `tree`, your editor) without going through the API or Inspector.
+
+SQLite remains the only source of truth. Mirror files are derived and regenerated on every write. Manual edits to mirror files are overwritten.
+
+## Enabling the mirror
+
+The mirror defaults to off. Enable it with:
+
+```bash
+neotoma mirror enable --yes
+```
+
+This writes mirror files to `<NEOTOMA_DATA_DIR>/mirror/` and regenerates them on every subsequent write.
+
+Optional flags:
+
+```bash
+# Enable with git tracking (commits mirror changes automatically)
+neotoma mirror enable --git
+
+# Enable only specific kinds (entities, relationships, timeline, schemas, sources)
+neotoma mirror enable --kinds entities,timeline
+
+# Add mirror path to your repo's .gitignore
+neotoma mirror enable --gitignore
+```
+
+## Mirror layout
+
+```
+mirror/
+  index.md                           # top-level table of contents
+  entities/
+    index.md                         # entity-type summary
+    <entity_type>/
+      index.md                       # list of entities in this type
+      <slug>.md                      # per-entity snapshot
+  relationships/
+    <relationship_type>/
+      <key>.md
+  timeline/
+    <YYYY>/<YYYY-MM-DD>.md           # per-day event log
+  schemas/
+    <entity_type>.md                 # schema data dictionary
+  sources/
+    <source_id>.md                   # source metadata
+```
+
+Entity files include all snapshot fields, provenance metadata, and a "Do not edit" header pointing to the correction flow.
+
+## Rebuilding
+
+Regenerate mirror files from the current SQLite state:
+
+```bash
+# Full rebuild
+neotoma mirror rebuild
+
+# Rebuild only entities of a specific type
+neotoma mirror rebuild --entity-type contact
+
+# Rebuild a single entity
+neotoma mirror rebuild --entity-id <id>
+
+# Remove stale files that the rebuild did not produce
+neotoma mirror rebuild --clean
+```
+
+## Checking status
+
+```bash
+neotoma mirror status
+```
+
+Shows whether the mirror is enabled, per-kind file counts, and git state (if git tracking is on).
+
+## Disabling
+
+```bash
+neotoma mirror disable
+```
+
+Stops write-through regeneration. Does not delete existing mirror files.
+
+## Selective profiles
+
+The general mirror writes to `data/mirror/`. Separate mirror profiles (like `neotoma-plans`) write specific entity types to other locations (e.g. `plans/` in the repo root). These profiles are independent of the general mirror and can be enabled separately.
+
+## Modifying data
+
+To change data that appears in the mirror, use one of:
+
+- `neotoma edit <entity-id>` (CLI)
+- The Inspector Edit tab
+- The MCP `correct` action
+
+All three share the same batch-correction backend. The mirror file regenerates after the correction is applied.
+
+## Related
+
+- [`docs/subsystems/markdown_mirror.md`](../subsystems/markdown_mirror.md) for internals.
+- [`docs/developer/cli_reference.md`](cli_reference.md) for the `neotoma mirror` CLI reference.
