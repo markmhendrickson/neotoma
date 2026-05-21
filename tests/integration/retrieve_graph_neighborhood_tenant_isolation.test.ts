@@ -17,6 +17,8 @@ import { db } from "../../src/db.js";
 import { randomUUID } from "node:crypto";
 
 const TEST_PREFIX = "rgn_tenant_iso_test";
+const PORT = process.env.NEOTOMA_SESSION_DEV_PORT ?? "18099";
+const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 describe("retrieve_graph_neighborhood tenant isolation (GHSA-wrr4-782v-jhwh)", () => {
   const userA = randomUUID();
@@ -48,7 +50,7 @@ describe("retrieve_graph_neighborhood tenant isolation (GHSA-wrr4-782v-jhwh)", (
   });
 
   it("user A querying their own entity returns it", async () => {
-    const res = await fetch("http://localhost:18099/retrieve_graph_neighborhood", {
+    const res = await fetch(`${BASE_URL}/retrieve_graph_neighborhood`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -64,7 +66,7 @@ describe("retrieve_graph_neighborhood tenant isolation (GHSA-wrr4-782v-jhwh)", (
   });
 
   it("user A querying user B's entity does NOT return user B's data", async () => {
-    const res = await fetch("http://localhost:18099/retrieve_graph_neighborhood", {
+    const res = await fetch(`${BASE_URL}/retrieve_graph_neighborhood`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -81,7 +83,7 @@ describe("retrieve_graph_neighborhood tenant isolation (GHSA-wrr4-782v-jhwh)", (
   });
 
   it("user B querying their own entity returns it", async () => {
-    const res = await fetch("http://localhost:18099/retrieve_graph_neighborhood", {
+    const res = await fetch(`${BASE_URL}/retrieve_graph_neighborhood`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
