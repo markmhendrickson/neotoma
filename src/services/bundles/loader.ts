@@ -1,13 +1,22 @@
 /**
  * Bundle loader (Bundles m2).
  *
- * Reads bundle manifests, validates them, and exposes the registered bundle
- * catalog for use by the schema-mode enforcement layer. The loader is
- * intentionally read-only at this layer — it does not write to the DB.
- * Schema seeding is handled by each bundle's seed_schema.ts (existing pattern).
+ * Reads bundle manifests, validates them, registers bundles, and triggers
+ * schema seeding for each registered bundle. Schema seeding is delegated to
+ * the existing per-subsystem seed_schema.ts files (option 2 of the migration
+ * plan) — the bundle loader calls them rather than each file living as a
+ * standalone startup call in actions.ts.
  *
  * Default-install bundles (`core`, `infrastructure`, `core_workflows`) are
  * always registered. Additional bundles are loaded on demand (m3).
+ *
+ * Seed wiring (option 2):
+ *   - `infrastructure` → seedIssueSchema, seedPlanSchema, seedSubscriptionSchema,
+ *     seedSubmissionDefaults, seedPeerConfigSchema, and (in sandbox mode)
+ *     seedSandboxAbuseReportSchema.
+ *   - `core` → no dedicated seed functions; types rely on the schema-definitions
+ *     fallback / database bootstrap path.
+ *   - `core_workflows` → skill bundle; no schema seeds.
  *
  * Plan: `ent_089da2ecebc3bd804d63dcf2` (Bundles Strategy m2)
  */
@@ -112,6 +121,87 @@ async function loadBundleManifest(bundleName: string): Promise<BundleManifest> {
   return parseBundleManifest(raw, bundleName);
 }
 
+// ── Per-bundle seed functions ────────────────────────────────────────────────
+
+/**
+ * Run schema-seed side-effects for a bundle after it is registered.
+ *
+ * Each bundle that owns database-backed schema definitions is responsible for
+ * seeding them here. `core` types use the schema-definitions fallback / DB
+ * bootstrap path and have no dedicated seed functions. Skill bundles seed
+ * nothing.
+ */
+async function runBundleSeeds(bundleName: string): Promise<void> {
+  if (bundleName === "infrastructure") {
+    const seeds: Array<{ label: string; fn: () => Promise<void> }> = [
+      {
+        label: "issue",
+        fn: async () => {
+          const { seedIssueSchema } = await import("../issues/seed_schema.js");
+          await seedIssueSchema();
+        },
+      },
+      {
+        label: "plan",
+        fn: async () => {
+          const { seedPlanSchema } = await import("../plans/seed_schema.js");
+          await seedPlanSchema();
+        },
+      },
+      {
+        label: "subscription",
+        fn: async () => {
+          const { seedSubscriptionSchema } = await import("../subscriptions/seed_schema.js");
+          await seedSubscriptionSchema();
+        },
+      },
+      {
+        label: "submission_config",
+        fn: async () => {
+          const { seedSubmissionDefaults } = await import(
+            "../entity_submission/seed_submission_defaults.js"
+          );
+          await seedSubmissionDefaults();
+        },
+      },
+      {
+        label: "peer_config",
+        fn: async () => {
+          const { seedPeerConfigSchema } = await import("../sync/seed_peer_schema.js");
+          await seedPeerConfigSchema();
+        },
+      },
+    ];
+
+    for (const { label, fn } of seeds) {
+      try {
+        await fn();
+        logger.debug(`[bundles] seeded ${label} schema (infrastructure bundle)`);
+      } catch (err) {
+        logger.warn(
+          `[bundles] failed to seed ${label} schema (infrastructure bundle): ${String(err)}`
+        );
+      }
+    }
+
+    // sandbox_abuse_report is only needed in sandbox-mode deployments, but we
+    // seed it unconditionally so the schema is available if an operator later
+    // enables sandbox mode without restarting. The seed is idempotent.
+    try {
+      const { seedSandboxAbuseReportSchema } = await import("../sandbox/seed_schema.js");
+      await seedSandboxAbuseReportSchema();
+      logger.debug(`[bundles] seeded sandbox_abuse_report schema (infrastructure bundle)`);
+    } catch (err) {
+      logger.warn(
+        `[bundles] failed to seed sandbox_abuse_report schema (infrastructure bundle): ${String(err)}`
+      );
+    }
+  }
+  // `core` and `core_workflows` have no dedicated seed functions — core types
+  // are covered by the schema-definitions fallback / `npm run schema:init`,
+  // and core_workflows is a skill bundle with no entity schemas.
+}
+
 /**
  * Register a single bundle by name. Idempotent — re-registering an already-
  * loaded bundle is a no-op (uses the first-registered version).
@@ -132,6 +222,10 @@ export async function registerBundle(bundleName: string): Promise<BundleRegistra
   for (const entityType of manifest.provides_entity_types) {
     _providedEntityTypes.add(entityType);
   }
+
+  // Run per-bundle seed side-effects (option 2: delegate to existing
+  // seed_schema.ts files rather than duplicating their logic here).
+  await runBundleSeeds(bundleName);
 
   logger.debug(
     `[bundles] registered bundle "${bundleName}" v${manifest.version} (${manifest.bundle_type})`
