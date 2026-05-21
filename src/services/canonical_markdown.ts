@@ -643,7 +643,11 @@ export function renderProfileEntity(
   parts.push(fmLines.join("\n"));
 
   if (hasContent) {
-    parts.push(contentValue as string);
+    // Strip a spurious leading `## body` / `# body` heading that some harnesses
+    // emit when they serialise the plan body as markdown (e.g. "## body\n\n## Problem\n…").
+    // The heading is redundant: the mirror already knows which field is the body.
+    const strippedContent = (contentValue as string).replace(/^##?\s+body\s*\n+/i, "");
+    parts.push(strippedContent);
   } else {
     // No body — fall back: render all snapshot fields (except those already in frontmatter) as ## sections
     const bodyFields = Object.keys(snapshot).filter(
