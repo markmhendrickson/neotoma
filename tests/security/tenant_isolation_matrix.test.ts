@@ -25,7 +25,8 @@ import { db } from "../../src/db.js";
 import { randomUUID } from "node:crypto";
 
 const TEST_PREFIX = "tenant_iso_matrix_test";
-const BASE_URL = "http://localhost:18099";
+const PORT = process.env.NEOTOMA_SESSION_DEV_PORT ?? "18099";
+const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 interface FixtureUserData {
   userId: string;
