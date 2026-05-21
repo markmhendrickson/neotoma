@@ -6327,6 +6327,11 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       include_observations = false,
     } = parsed.data;
 
+    // Tenant isolation: scope all queries to the authenticated user.
+    // See docs/security/advisories/2026-05-21-relationship-endpoint-
+    // tenant-isolation.md (GHSA-wrr4-782v-jhwh) for context.
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     const result: any = { node_id, node_type };
 
     if (node_type === "entity") {
@@ -6335,6 +6340,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         .from("entities")
         .select("*")
         .eq("id", node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!entityError && entity) {
@@ -6346,7 +6352,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
-          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .eq("user_id", userId);
 
         if (!relError) {
           result.relationships = relationships || [];
@@ -6367,7 +6374,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
             const { data: relatedEntities, error: relatedEntitiesError } = await db
               .from("entities")
               .select("*")
-              .in("id", relatedEntityIds);
+              .in("id", relatedEntityIds)
+              .eq("user_id", userId);
 
             if (!relatedEntitiesError) {
               result.related_entities = relatedEntities || [];
@@ -6381,7 +6389,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("entity_id", node_id);
+          .eq("entity_id", node_id)
+          .eq("user_id", userId);
 
         if (!obsError) {
           result.observations = observations || [];
@@ -6395,7 +6404,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
           const { data: sources, error: srcError } = await db
             .from("source")
             .select("*")
-            .in("id", sourceIds);
+            .in("id", sourceIds)
+            .eq("user_id", userId);
 
           if (!srcError) {
             result.sources = sources || [];
@@ -6408,6 +6418,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         .from("source")
         .select("*")
         .eq("id", node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!srcError && source) {
@@ -6419,7 +6430,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("source_id", node_id);
+          .eq("source_id", node_id)
+          .eq("user_id", userId);
 
         if (!obsError) {
           result.observations = observations || [];

@@ -476,6 +476,8 @@ export const RetrieveGraphNeighborhoodSchema = z.object({
   include_sources: z.boolean().optional().default(true),
   include_events: z.boolean().optional().default(true),
   include_observations: z.boolean().optional().default(false),
+  // Optional override honored only for LOCAL_DEV_USER_ID (see getAuthenticatedUserId).
+  user_id: z.string().optional(),
 });
 
 export const RelationshipSnapshotRequestSchema = z.object({

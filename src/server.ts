@@ -2662,6 +2662,11 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveGraphNeighborhoodSchema.parse(args ?? {});
 
+    // Tenant isolation: scope all queries to the authenticated user.
+    // See docs/security/advisories/2026-05-21-relationship-endpoint-
+    // tenant-isolation.md (GHSA-wrr4-782v-jhwh) for context.
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
     const includeSources = parsed.include_sources;
 
     const result: any = {
@@ -2675,6 +2680,7 @@ export class NeotomaServer {
         .from("entities")
         .select("*")
         .eq("id", parsed.node_id)
+        .eq("user_id", userId)
         .single();
 
       if (entityError || !entity) {
@@ -2688,6 +2694,7 @@ export class NeotomaServer {
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", parsed.node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!snapError && snapshot) {
@@ -2699,7 +2706,8 @@ export class NeotomaServer {
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
-          .or(`source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`);
+          .or(`source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`)
+          .eq("user_id", userId);
 
         if (!relError && relationships) {
           result.relationships = relationships;
@@ -2718,7 +2726,8 @@ export class NeotomaServer {
             const { data: relatedEntities, error: relEntError } = await db
               .from("entities")
               .select("*")
-              .in("id", Array.from(relatedEntityIds));
+              .in("id", Array.from(relatedEntityIds))
+              .eq("user_id", userId);
 
             if (!relEntError && relatedEntities) {
               result.related_entities = relatedEntities;
@@ -2733,6 +2742,7 @@ export class NeotomaServer {
           .from("observations")
           .select("*")
           .eq("entity_id", parsed.node_id)
+          .eq("user_id", userId)
           .order("observed_at", { ascending: false })
           .limit(100);
 
@@ -2748,7 +2758,8 @@ export class NeotomaServer {
               const { data: sources, error: sourceError } = await db
                 .from("sources")
                 .select("id, mime_type, file_size, original_filename, created_at")
-                .in("id", sourceIds);
+                .in("id", sourceIds)
+                .eq("user_id", userId);
 
               if (!sourceError && sources) {
                 result.related_sources = sources;
@@ -2758,7 +2769,8 @@ export class NeotomaServer {
                   const { data: events, error: evtError } = await db
                     .from("timeline_events")
                     .select("*")
-                    .in("source_id", sourceIds);
+                    .in("source_id", sourceIds)
+                    .eq("user_id", userId);
 
                   if (!evtError && events) {
                     result.timeline_events = events;
@@ -2775,6 +2787,7 @@ export class NeotomaServer {
         .from("sources")
         .select("*")
         .eq("id", parsed.node_id)
+        .eq("user_id", userId)
         .single();
 
       if (sourceError || !source) {
@@ -2788,7 +2801,8 @@ export class NeotomaServer {
         const { data: events, error: evtError } = await db
           .from("timeline_events")
           .select("*")
-          .eq("source_id", parsed.node_id);
+          .eq("source_id", parsed.node_id)
+          .eq("user_id", userId);
 
         if (!evtError && events) {
           result.timeline_events = events;
@@ -2799,7 +2813,8 @@ export class NeotomaServer {
       const { data: observations, error: obsError } = await db
         .from("observations")
         .select("*")
-        .eq("source_id", parsed.node_id);
+        .eq("source_id", parsed.node_id)
+        .eq("user_id", userId);
 
       if (!obsError && observations) {
         result.observations = observations;
@@ -2813,7 +2828,8 @@ export class NeotomaServer {
             const { data: entities, error: entError } = await db
               .from("entities")
               .select("*")
-              .in("id", entityIds);
+              .in("id", entityIds)
+              .eq("user_id", userId);
 
             if (!entError && entities) {
               result.related_entities = entities;
@@ -2828,6 +2844,7 @@ export class NeotomaServer {
                       ","
                     )}),target_entity_id.in.(${entityIds.join(",")})`
                   )
+                  .eq("user_id", userId)
                   .limit(1000);
 
                 if (!relError && relationships) {
