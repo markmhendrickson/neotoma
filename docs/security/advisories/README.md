@@ -9,6 +9,10 @@ Internal record of security findings, their scope, remediation status, and discl
 | [2026-05-11-inspector-auth-bypass](./2026-05-11-inspector-auth-bypass.md) | Inspector local-auth bypass via alternate path | v0.11.x | High (single-user; now patched) | Fixed in v0.11.1 |
 | [2026-05-21-relationship-endpoint-tenant-isolation](./2026-05-21-relationship-endpoint-tenant-isolation.md) | Tenant isolation gap in relationship query endpoints | v0.13.0 | Low (no multi-tenant deployments) | Open — fix tracked in #365, #366 |
 
+## Related
+
+- `docs/security/practices.md` — Current security posture and history of gate/checklist changes motivated by each advisory. Read this to understand *what we now do* in response to disclosed regressions, as opposed to *what happened* in each individual advisory.
+
 ## Format
 
 Each advisory file documents:
