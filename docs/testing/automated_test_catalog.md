@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **395**
-- Backend and repo Vitest files: **362**
+- Total automated test files: **397**
+- Backend and repo Vitest files: **364**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 96 |
+| Vitest unit tests | 98 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 46 |
 | Vitest integration tests | 108 |
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (96):**
+**Files (98):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -130,6 +130,7 @@ flowchart TD
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
+- `tests/unit/canonical_markdown_body_heading.test.ts`
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
@@ -179,6 +180,7 @@ flowchart TD
 - `tests/unit/observation_reducer_provenance.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
+- `tests/unit/plan_schema_body_field.test.ts`
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
