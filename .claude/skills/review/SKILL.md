@@ -233,6 +233,48 @@ For each new error code, `hint` string, or structured error response:
 - For each "default" stated in the supplement: trace it back to the code and confirm.
 - This check exists because supplement drift is a common silent-failure mode — code merges without the supplement catching up. Flag any divergence as BLOCKING/contract.
 
+### Phase 5c — Documentation completeness
+
+Every functional change must leave the written documentation in sync with the code. A change is "functional" if it alters what callers receive, what agents can do, what operators must configure, or what error codes can appear.
+
+For each functional surface changed, verify the following. Emit findings using `docs` or `discoverability` category.
+
+**Subsystem docs (`docs/subsystems/`):**
+- If `src/services/<subsystem>*` was changed in a user-observable way (new parameter, changed default, new behavior, new error), does `docs/subsystems/<subsystem>.md` (or the appropriate subsystem doc) describe the updated behavior?
+- If a new subsystem file was added under `src/services/`, does a corresponding doc page exist or is one referenced from the Phase 2 conditional-load table?
+- Flag as ADVISORY when the subsystem doc is silent on the changed behavior. Flag as BLOCKING when the subsystem doc actively contradicts the new code.
+
+**MCP tool narrative docs (`docs/developer/mcp/`):**
+- If a new MCP tool was added or an existing tool's parameters/semantics changed, is the change reflected in `docs/developer/mcp/instructions.md` (the fenced block, not just parity checks)?
+- Is there a tool description entry in `docs/developer/mcp/tool_descriptions.yaml` (or equivalent) for new tools?
+- Flag ADVISORY when docs are missing; BLOCKING when instructions describe removed/renamed parameters.
+
+**CLI reference (`docs/developer/cli_reference.md`):**
+- If a new CLI command or subcommand was added, is it present in `docs/developer/cli_reference.md`?
+- If a new CLI flag was added, does `cli_reference.md` list it under the correct command section with type, default, and description?
+- Flag ADVISORY.
+
+**Error code registry (`docs/reference/error_codes.md`):**
+- If a new error code constant was added to the codebase (e.g. `ERR_*`, `INGESTION_*`), is it listed in `docs/reference/error_codes.md` with HTTP status, retry eligibility, description, and common causes?
+- Flag ADVISORY.
+
+**`doc_dependencies.yaml` (`docs/doc_dependencies.yaml` if it exists):**
+- If a new doc was added (subsystem doc, reference doc, architecture doc), is a dependency entry registered so future reviews load it when the relevant source paths change?
+- Flag NIT.
+
+**`docs/developer/pr_review_reading_list.md`:**
+- If a new source path pattern (`src/services/<new>*`) was added, is a row present in the conditional-load table mapping it to the right doc(s)?
+- Flag ADVISORY — missing entries cause future reviews to skip loading the doc for that surface.
+
+**`docs/developer/agent_instructions.md` (operator index):**
+- If a new tool, workflow, or behavior was added that an agent operator needs to know about (configure, enable, or be aware of), is it referenced from `docs/developer/agent_instructions.md`?
+- Flag NIT.
+
+**Docs site / public pages:**
+- If the change adds a net-new user-facing capability (new tool available to agents, new CLI command, new error taxonomy), is there a planned or existing page under `docs/` that a first-time user could find via the table of contents or the docs site search?
+- This is not about updating every existing page; it is about ensuring new capabilities are not entirely invisible to new users.
+- Flag ADVISORY when a new capability has no discoverable docs path at all.
+
 ### Phase 6 — Emit findings
 
 For each issue found, emit a finding in this format:
@@ -245,7 +287,7 @@ Finding: <one or two sentences describing what's wrong>
 Fix: <concrete action — what to change, what to add>
 ```
 
-Categories: `arch-boundary` | `schema-agnostic` | `determinism` | `immutability` | `auth` | `contract` | `error-handling` | `test-coverage` | `pii` | `security` | `docs` | `style` | `product-principles` | `silent-behavior` | `agent-instructions` | `hint-quality` | `naming` | `discoverability` | `supplement-accuracy`
+Categories: `arch-boundary` | `schema-agnostic` | `determinism` | `immutability` | `auth` | `contract` | `error-handling` | `test-coverage` | `pii` | `security` | `docs` | `doc-completeness` | `style` | `product-principles` | `silent-behavior` | `agent-instructions` | `hint-quality` | `naming` | `discoverability` | `supplement-accuracy`
 
 After all findings, emit a summary block:
 
@@ -286,6 +328,7 @@ When invoked from `/release` Step 3.6, append the verdict to `docs/releases/in_p
 - MUST NOT produce a passing verdict when any BLOCKING finding exists
 - MUST surface schema-agnostic design violations even when the code "works" — per-type branches accumulate silently
 - MUST check `excludeBookkeeping` defaults whenever `entity_handlers.ts` is in the diff
+- MUST run Phase 5c (documentation completeness) for every functional surface change — code that works but has no discoverable docs is an incomplete change
 
 ## Integration points
 
