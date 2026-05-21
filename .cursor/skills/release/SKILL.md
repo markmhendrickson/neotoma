@@ -184,6 +184,18 @@ Run after Step 3.6 passes. Push an RC branch and open a PR so the release can be
    ```
    The PR body gives reviewers the exact same narrative they will see in the GitHub Release notes.
 
+2b. **Post `@claude review` on the release PR** immediately after opening it:
+   ```bash
+   gh pr comment <PR_NUMBER> --body "@claude review"
+   ```
+   The automated Opus review (`claude_pr_review.yml`) will run the full `/review` skill against the release diff and post findings as a `github-actions[bot]` comment. Wait for the review to complete, then check for Blocking findings:
+   ```bash
+   gh api repos/{owner}/{repo}/issues/<PR_NUMBER>/comments \
+     --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | length > 300))] | last | .body' \
+     | grep -E "Blocker|MUST|request changes|NEEDS-CHANGES" || echo "No blockers found"
+   ```
+   **Hard gate:** If the review verdict is `NEEDS-CHANGES` or any finding is labeled `Blocker` / `MUST`, resolve those findings before proceeding to Step 4. A review that returns only `ADVISORY` / `NIT` findings is not blocking.
+
 3. **Surface the PR URL** to the user and **STOP**:
 
    > "Release candidate PR for **vX.Y.Z** is open at `<PR_URL>`. Review, comment, and approve — then reply **`execute`** (or confirm merge) to continue with tagging, npm publish, and sandbox deployment."
