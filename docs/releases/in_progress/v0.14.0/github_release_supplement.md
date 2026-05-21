@@ -112,6 +112,7 @@ Gate results:
 - `.claude/skills/review/SKILL.md` — new (335 lines), the `/review` skill body that the PR review workflow invokes.
 - `.github/workflows/claude_pr_review.yml` — invokes the skill via `direct_prompt`, widens path triggers, broadens `substantial` gate detection.
 - `docs/testing/automated_test_catalog.md` regenerated to include all new test files.
+- **User-facing feature guides** (PR #314) — four new consumer-facing guides added to `docs/developer/`: `plans_guide.md`, `issues_guide.md`, `mirror_guide.md`, `subscriptions_guide.md`. Getting-started page gains a "Feature guides" section. Corresponding docs site pages added (`docs/site/pages/en/`). Fixes the v0.13.0 supplement's "replaces feature units" framing to "opt-in" with explicit backward-compatibility note; v0.13.0 supplement and security_review archived to `docs/releases/completed/v0.13.0/`.
 
 ## Fixes
 
