@@ -3113,6 +3113,46 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  preference: {
+    entity_type: "preference",
+    schema_version: "1.0",
+    metadata: {
+      label: "Preference",
+      description:
+        "User preference / setting persisted across sessions (e.g. issue_filing_consent).",
+      category: "agent_runtime",
+      aliases: ["setting"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // Stable identifier for the preference (e.g. "issue_filing_consent"). Acts as the key.
+        title: { type: "string", required: true, preserveCase: false },
+        // Current value of the preference (e.g. "always" | "ask" | "never"). Type is freeform
+        // string because preference shape varies; agents and UIs interpret per-title.
+        value: { type: "string", required: true, preserveCase: true },
+        // Optional scope qualifier — e.g. "global", "project:neotoma". Default behavior treats
+        // a preference as global when scope is omitted.
+        scope: { type: "string", required: false },
+        // Optional human-readable description of what the preference controls.
+        description: { type: "string", required: false, preserveCase: true },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+      },
+      // A preference is uniquely identified by its title (plus optional scope when present).
+      // Two stores with the same title collapse to one entity; the latest write wins on value.
+      canonical_name_fields: ["title", { composite: ["scope", "title"] }],
+    },
+    reducer_config: {
+      merge_policies: {
+        value: { strategy: "last_write" },
+        scope: { strategy: "last_write" },
+        description: { strategy: "highest_priority" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
