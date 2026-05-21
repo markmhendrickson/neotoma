@@ -7645,40 +7645,10 @@ app.post("/list_relationships", async (req, res) => {
     offset = 0,
   } = parsed.data;
 
-  // SECURITY (#366): Entity ID inputs are interpolated into PostgREST .or() filter
-  // strings below. A caller-controlled value containing filter metacharacters
-  // (commas, parens, dots, `eq.` tokens) could widen the result set. Reject any
-  // entity-id-shaped input that does not match the canonical Neotoma entity ID
-  // format before it reaches the query builder.
-  for (const [field, value] of [
-    ["entity_id", entity_id],
-    ["source_entity_id", source_entity_id],
-    ["target_entity_id", target_entity_id],
-  ] as const) {
-    if (typeof value === "string" && !isNeotomaEntityId(value)) {
-      logWarn("ValidationError:list_relationships:entity_id_format", req, { field });
-      return sendValidationError(res, [
-        {
-          code: "custom",
-          path: [field],
-          message: `${field} must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits)`,
-          params: {
-            code: "ERR_RELATIONSHIP_ENTITY_ID_FORMAT",
-            hint: "relationship_entity_id_format",
-          },
-        } as z.ZodIssue,
-      ]);
-    }
-  }
-
   try {
-    // SECURITY (#365): Scope to the authenticated user. Without this, an
-    // authenticated caller could read another user's relationship graph.
-    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
-    let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
+    let query = db.from("relationship_snapshots").select("*");
 
     if (source_entity_id && target_entity_id) {
       query = query
@@ -7930,52 +7900,26 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       offset = 0,
     } = parsed.data;
 
-    // SECURITY (#366): node_id is interpolated into PostgREST .or() filter strings
-    // below when node_type === "entity". Require canonical Neotoma entity ID format
-    // for entity nodes. (source nodes use a different ID space and are passed via
-    // .eq() not .or(), so format is not interpolation-sensitive.)
-    if (node_type === "entity" && !isNeotomaEntityId(node_id)) {
-      logWarn("ValidationError:retrieve_graph_neighborhood:node_id_format", req, {});
-      return sendValidationError(res, [
-        {
-          code: "custom",
-          path: ["node_id"],
-          message:
-            "node_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits) when node_type is 'entity'",
-          params: {
-            code: "ERR_RELATIONSHIP_ENTITY_ID_FORMAT",
-            hint: "relationship_entity_id_format",
-          },
-        } as z.ZodIssue,
-      ]);
-    }
-
-    // SECURITY (#365): Scope to the authenticated user. Without this, an
-    // authenticated caller could read another user's graph neighborhood.
-    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-
     const result: any = { node_id, node_type };
 
     if (node_type === "entity") {
-      // Get entity (scoped to user)
+      // Get entity
       const { data: entity, error: entityError } = await db
         .from("entities")
         .select("*")
         .eq("id", node_id)
-        .eq("user_id", userId)
         .single();
 
       if (!entityError && entity) {
         result.entity = entity;
       }
 
-      // Get relationships if requested (scoped to user)
+      // Get relationships if requested
       if (include_relationships) {
         // Count total relationships for pagination metadata
         const { count: totalCount, error: countError } = await db
           .from("relationship_snapshots")
           .select("*", { count: "exact", head: true })
-          .eq("user_id", userId)
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
 
         const total = countError ? 0 : (totalCount ?? 0);
@@ -7985,7 +7929,6 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
-          .eq("user_id", userId)
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
           .range(offset, offset + limit - 1);
 
@@ -8008,8 +7951,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
             const { data: relatedEntities, error: relatedEntitiesError } = await db
               .from("entities")
               .select("*")
-              .in("id", relatedEntityIds)
-              .eq("user_id", userId);
+              .in("id", relatedEntityIds);
 
             if (!relatedEntitiesError) {
               result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
@@ -8021,32 +7963,26 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         }
       }
 
-      // Get observations if requested (scoped to user)
+      // Get observations if requested
       if (include_observations) {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("entity_id", node_id)
-          .eq("user_id", userId);
+          .eq("entity_id", node_id);
 
         if (!obsError) {
           result.observations = observations || [];
         }
       }
 
-      // Get sources if requested (scoped to user)
-      // Note: canonical table is `sources` (plural). Earlier revisions of this
-      // handler used `source` (singular) which silently returned no rows. Fixed
-      // alongside the user-scoping change since both are correctness bugs on
-      // the same code path.
+      // Get sources if requested
       if (include_sources && include_observations) {
         const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
         if (sourceIds.length > 0) {
           const { data: sources, error: srcError } = await db
-            .from("sources")
+            .from("source")
             .select("*")
-            .in("id", sourceIds)
-            .eq("user_id", userId);
+            .in("id", sourceIds);
 
           if (!srcError) {
             result.sources = sources || [];
@@ -8054,25 +7990,23 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         }
       }
     } else if (node_type === "source") {
-      // Get source (scoped to user). See note above about `sources` vs `source`.
+      // Get source
       const { data: source, error: srcError } = await db
-        .from("sources")
+        .from("source")
         .select("*")
         .eq("id", node_id)
-        .eq("user_id", userId)
         .single();
 
       if (!srcError && source) {
         result.source = source;
       }
 
-      // Get observations from this source (scoped to user)
+      // Get observations from this source
       if (include_observations) {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("source_id", node_id)
-          .eq("user_id", userId);
+          .eq("source_id", node_id);
 
         if (!obsError) {
           result.observations = observations || [];

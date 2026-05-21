@@ -114,9 +114,7 @@ describe("retrieve_graph_neighborhood pagination", () => {
     const resp = await fetch(`${API_BASE}/retrieve_graph_neighborhood`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // user_id override is honored on loopback (LOCAL_DEV_USER_ID admission).
-      // Required since the handler now scopes by authenticated user_id for #365.
-      body: JSON.stringify({ node_id: centerEntityId, user_id: TEST_USER_ID, ...params }),
+      body: JSON.stringify({ node_id: centerEntityId, ...params }),
     });
     return resp.json() as Promise<Record<string, unknown>>;
   }

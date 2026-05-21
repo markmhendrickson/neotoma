@@ -4,8 +4,6 @@
  * Helper functions for creating test data with proper schemas
  */
 
-import { createHash } from "node:crypto";
-
 import { db } from "../../src/db.js";
 
 /**
@@ -81,15 +79,8 @@ export async function createTestEntity(params: {
   user_id: string | null;
   metadata?: Record<string, any>;
 }): Promise<string> {
-  // Generate a canonical-shape Neotoma entity ID: `ent_` + 24 lowercase hex.
-  // Production entity IDs (per src/shared/neotoma_entity_id.ts and
-  // generateEntityId in entity_resolution.ts) use this shape. Test fixtures
-  // must follow it so security validation that rejects malformed IDs (e.g.
-  // /list_relationships and /retrieve_graph_neighborhood per issue #366) is
-  // exercisable from tests.
-  const seed = `${Date.now()}_${Math.random()}`;
-  const hex = createHash("sha256").update(seed).digest("hex").slice(0, 24);
-  const entityId = `ent_${hex}`;
+  // First create entity ID (deterministic hash-based)
+  const entityId = `ent_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
   // First create the entity record
   const { error: entityError } = await db.from("entities").insert({
