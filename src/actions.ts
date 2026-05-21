@@ -6096,9 +6096,18 @@ app.post("/list_relationships", async (req, res) => {
   const { relationshipsService } = await import("./services/relationships.js");
 
   try {
+    // Tenant isolation: resolve authenticated user and scope all queries to
+    // their records. See docs/security/advisories/2026-05-21-relationship-
+    // endpoint-tenant-isolation.md (GHSA-wrr4-782v-jhwh) for context.
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     let relationships;
     if (relationship_type) {
-      relationships = await relationshipsService.getRelationshipsByType(relationship_type as any);
+      relationships = await relationshipsService.getRelationshipsByType(
+        relationship_type as any,
+        false,
+        userId
+      );
       // Filter by entity_id
       relationships = relationships.filter(
         (rel) => rel.source_entity_id === entity_id || rel.target_entity_id === entity_id
@@ -6106,7 +6115,9 @@ app.post("/list_relationships", async (req, res) => {
     } else {
       relationships = await relationshipsService.getRelationshipsForEntity(
         entity_id,
-        normalizedDirection
+        normalizedDirection,
+        false,
+        userId
       );
     }
 

@@ -244,6 +244,7 @@ export class RelationshipsService {
     entityId: string,
     direction: "outgoing" | "incoming" | "both" = "both",
     includeDeleted: boolean = false,
+    userId?: string,
   ): Promise<RelationshipSnapshot[]> {
     let query;
 
@@ -262,6 +263,13 @@ export class RelationshipsService {
         .from("relationship_snapshots")
         .select("*")
         .or(`source_entity_id.eq.${entityId},target_entity_id.eq.${entityId}`);
+    }
+
+    // Tenant isolation: scope to authenticated user when provided.
+    // The `userId` argument is required by all production callers; legacy
+    // internal callers (e.g. tests, system jobs) may omit it.
+    if (userId) {
+      query = query.eq("user_id", userId);
     }
 
     const { data, error } = await query.order("last_observation_at", {
@@ -327,12 +335,21 @@ export class RelationshipsService {
   async getRelationshipsByType(
     type: RelationshipType,
     includeDeleted: boolean = false,
+    userId?: string,
   ): Promise<RelationshipSnapshot[]> {
-    const { data, error } = await db
+    let query = db
       .from("relationship_snapshots")
       .select("*")
-      .eq("relationship_type", type)
-      .order("last_observation_at", { ascending: false });
+      .eq("relationship_type", type);
+
+    // Tenant isolation: scope to authenticated user when provided.
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+
+    const { data, error } = await query.order("last_observation_at", {
+      ascending: false,
+    });
 
     if (error) {
       throw new Error(`Failed to get relationships by type: ${error.message}`);
