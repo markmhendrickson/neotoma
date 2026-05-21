@@ -4243,6 +4243,10 @@ paths:
     post:
       summary: List relationships
       operationId: listRelationshipsForEntity
+      description: |
+        Query relationships filtered by entity ID, source entity ID, target entity ID, or
+        relationship type. At least one of `entity_id`, `source_entity_id`,
+        `target_entity_id`, or `relationship_type` must be provided. Results are paginated.
       requestBody:
         required: true
         content:
@@ -4250,6 +4254,46 @@ paths:
             schema:
               type: object
               additionalProperties: true
+              properties:
+                entity_id:
+                  type: string
+                  description: |
+                    Entity ID to match against either the source or target of each
+                    relationship (filtered further by `direction`). Legacy filter pattern;
+                    prefer `source_entity_id` / `target_entity_id` for new code.
+                source_entity_id:
+                  type: string
+                  description: Match relationships whose `source_entity_id` equals this value.
+                target_entity_id:
+                  type: string
+                  description: Match relationships whose `target_entity_id` equals this value.
+                direction:
+                  type: string
+                  enum: [inbound, outbound, incoming, outgoing, both]
+                  default: both
+                  description: |
+                    Direction applied when `entity_id` is set. `incoming`/`inbound` matches
+                    relationships where the entity is the target; `outgoing`/`outbound`
+                    matches relationships where the entity is the source; `both` (default)
+                    matches either side.
+                relationship_type:
+                  type: string
+                  description: Optional relationship_type filter (e.g. `REFERS_TO`, `PART_OF`).
+                limit:
+                  type: integer
+                  minimum: 1
+                  default: 100
+                  description: Maximum number of relationships to return.
+                offset:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                  description: Number of relationships to skip before returning results.
+                user_id:
+                  type: string
+                  description: |
+                    Optional user_id override (scoped to callers with privilege to query on
+                    behalf of another user). When omitted, the authenticated user is used.
       responses:
         "200":
           description: Relationships
@@ -4262,6 +4306,15 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/RelationshipSnapshot"
+                  total:
+                    type: integer
+                    description: Total number of matching relationships before pagination.
+                  limit:
+                    type: integer
+                    description: Echo of the requested `limit`.
+                  offset:
+                    type: integer
+                    description: Echo of the requested `offset`.
 
   /retrieve_entity_by_identifier:
     post:
