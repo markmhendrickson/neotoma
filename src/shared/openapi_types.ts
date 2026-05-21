@@ -3918,7 +3918,7 @@ export interface operations {
            *     type (the explicit type filter wins).
            * @default false
            */
-          exclude_conversations?: boolean;
+          exclude_bookkeeping?: boolean;
         };
       };
     };

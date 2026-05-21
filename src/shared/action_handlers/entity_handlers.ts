@@ -39,7 +39,7 @@ interface QueryEntitiesParams {
    * etc.) from results. Default false — bookkeeping is included unless the caller
    * opts in. Has no effect when `entityType` already filters to a bookkeeping type.
    */
-  excludeConversations?: boolean;
+  excludeBookkeeping?: boolean;
 }
 
 const MAX_LEXICAL_CANDIDATES = 5000;
@@ -53,7 +53,7 @@ interface LexicalSearchEntityIdsParams {
   includeMerged?: boolean;
   search: string;
   /** Omit chat bookkeeping rows from product search (Inspector header, /search). */
-  excludeConversations?: boolean;
+  excludeBookkeeping?: boolean;
 }
 
 export function shouldExcludeBookkeepingFromSearch(entityType?: string): boolean {
@@ -306,7 +306,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   entityIds: string[];
   total: number;
 }> {
-  const { userId, entityType, includeMerged = false, search, excludeConversations = false } = params;
+  const { userId, entityType, includeMerged = false, search, excludeBookkeeping = false } = params;
   const normalizedSearch = normalizeSearchText(search);
   const searchTokens = normalizedSearch.split(" ").filter(Boolean);
   if (searchTokens.length === 0) {
@@ -383,7 +383,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     canonical_name: string;
     entity_type: string;
   }>) {
-    if (excludeConversations && BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type)) {
+    if (excludeBookkeeping && BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type)) {
       continue;
     }
     const snapshot = snapshotMap.get(entity.id);
@@ -558,7 +558,7 @@ async function queryEntitiesFromLexicalSearch(params: {
   createdSince?: string;
   identityBasis?: QueryEntitiesParams["identityBasis"];
   search: string;
-  excludeConversations: boolean;
+  excludeBookkeeping: boolean;
   limit: number;
   offset: number;
 }): Promise<{ entities: EntityWithProvenance[]; total: number }> {
@@ -567,7 +567,7 @@ async function queryEntitiesFromLexicalSearch(params: {
     entityType: params.entityType,
     includeMerged: params.includeMerged,
     search: params.search,
-    excludeConversations: params.excludeConversations,
+    excludeBookkeeping: params.excludeBookkeeping,
   });
 
   if (lexicalIds.length === 0) {
@@ -625,7 +625,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     updatedSince,
     createdSince,
     identityBasis,
-    excludeConversations = false,
+    excludeBookkeeping = false,
   } = params;
 
   let entities: EntityWithProvenance[];
@@ -638,9 +638,9 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     const typeFilterTokens = buildEntityTypeFilterTokens(searchTokens, registryTypes);
     // Bookkeeping exclusion is caller-controlled (per docs/foundation/product_principles.md
     // §10.2 Explicit Over Implicit). If the caller explicitly filters to a bookkeeping
-    // entity_type, the explicit type filter wins and excludeConversations is ignored.
+    // entity_type, the explicit type filter wins and excludeBookkeeping is ignored.
     const effectiveExcludeBookkeeping =
-      excludeConversations && !(entityType && BOOKKEEPING_ENTITY_TYPES.has(entityType));
+      excludeBookkeeping && !(entityType && BOOKKEEPING_ENTITY_TYPES.has(entityType));
 
     const lexicalParams = {
       userId,
@@ -656,7 +656,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       createdSince,
       identityBasis,
       search: trimmedSearch,
-      excludeConversations: effectiveExcludeBookkeeping,
+      excludeBookkeeping: effectiveExcludeBookkeeping,
       limit,
       offset,
     };

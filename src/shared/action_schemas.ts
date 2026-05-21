@@ -259,7 +259,7 @@ const EntitiesQueryRequestBaseSchema = z
      * Has no effect when `entity_type` already filters to a single bookkeeping
      * type (the explicit type filter wins).
      */
-    exclude_conversations: z.boolean().optional().default(false),
+    exclude_bookkeeping: z.boolean().optional().default(false),
     /**
      * R3: filter entities whose observations were resolved with the given
      * `identity_basis`. Satisfied when ANY observation for the entity carries
@@ -317,7 +317,7 @@ const RetrieveEntitiesRequestBaseSchema = z
      * Has no effect when `entity_type` already filters to a single bookkeeping
      * type (the explicit type filter wins).
      */
-    exclude_conversations: z.boolean().optional().default(false),
+    exclude_bookkeeping: z.boolean().optional().default(false),
   })
   .superRefine(validateEntityQueryCombinations);
 
