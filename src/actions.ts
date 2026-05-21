@@ -9775,12 +9775,15 @@ export async function startHTTPServer() {
       subscriptionBridge.installSubscriptionBridge();
       logger.info("[Subscriptions] substrate event bridge installed");
 
-      // Bundles m1 (PR C): resolve schema mode once at boot so the parsed
-      // value is cached and any invalid-value warning surfaces during startup.
-      // No runtime behavior is gated on this yet; enforcement lands in m2.
-      // Plan: ent_089da2ecebc3bd804d63dcf2.
+      // Bundles m1 (PR C): resolve schema mode once at boot.
       const schemaMode = getSchemaMode();
       logger.info(`[SchemaMode] resolved schema mode: ${schemaMode}`);
+
+      // Bundles m2: load default bundles so the provided-entity-types set is
+      // populated before any request hits the schema-mode enforcement layer.
+      // Plan: ent_089da2ecebc3bd804d63dcf2.
+      const { initDefaultBundles } = await import("./services/bundles/loader.js");
+      await initDefaultBundles();
 
       return { server, port: boundPort };
     } catch (err: unknown) {

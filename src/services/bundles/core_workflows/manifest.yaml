@@ -1,0 +1,58 @@
+name: core_workflows
+version: 1.0.0
+description: Default session-loop skills for every Neotoma install — start-session, get-context, close-session.
+bundle_type: skill
+requires_bundles:
+  - core
+provides_entity_types: []
+provides_skills:
+  - name: start-session
+    file: skills/start-session/SKILL.md
+    requires_entity_types:
+      - contact
+      - event
+      - task
+      - observation
+      - session_close
+    depth_tiers:
+      - snapshot
+      - standard
+      - full
+  - name: get-context
+    file: skills/get-context/SKILL.md
+    requires_entity_types:
+      - contact
+      - event
+      - task
+      - observation
+    depth_tiers:
+      - snapshot
+      - standard
+      - full
+  - name: close-session
+    file: skills/close-session/SKILL.md
+    requires_entity_types:
+      - contact
+      - task
+      - session_close
+      - interaction
+compatible_modes:
+  - evolving
+  - guided
+  - locked
+serves_use_cases:
+  - cases
+  - compliance
+  - contracts
+  - crm
+  - crypto_engineering
+  - customer_ops
+  - diligence
+  - financial_ops
+  - government
+  - healthcare
+  - logistics
+  - personal_data
+  - portfolio
+  - procurement
+  - trading
