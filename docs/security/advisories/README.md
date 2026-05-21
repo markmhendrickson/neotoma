@@ -14,6 +14,7 @@ This index is the canonical cross-link target for:
 
 | Date | Title | GHSA | CVE | Affected | Fixed in | Gate that catches the regression class |
 |------|-------|------|-----|----------|----------|----------------------------------------|
+| 2026-05-21 | [Tenant isolation gap in relationship query endpoints](2026-05-21-relationship-endpoint-tenant-isolation.md) | [GHSA-wrr4-782v-jhwh](https://github.com/markmhendrickson/neotoma/security/advisories/GHSA-wrr4-782v-jhwh) | _requested_ | `>= 0.13.0, < 0.14.0` | `0.14.0` | G3 tenant isolation matrix (`tests/security/tenant_isolation_matrix.test.ts`), change guardrails rule MUST 5, pre-release adversarial checklist (cross-tenant category) |
 | 2026-05-11 | [Inspector / API auth bypass behind a reverse proxy](2026-05-11-inspector-auth-bypass.md) | [GHSA-5cvp-p7p4-mcx9](https://github.com/markmhendrickson/neotoma/security/advisories/GHSA-5cvp-p7p4-mcx9) | _requested_ | `>= 0.4.0, < 0.11.1` | `0.11.1` | G2 (`loopback-trust-in-production`, `forwarded-for-trust`), G3 topology auth matrix, G5 deployed probes |
 
 Add new rows above the existing entry (most-recent first). Keep the GHSA / CVE columns linked when assigned; use `_requested_` while a CVE is still pending.
