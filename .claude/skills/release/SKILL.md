@@ -323,7 +323,37 @@ After the RC PR is merged and the user confirms execute, run **every** step belo
    ```
    The probe writes `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md` and exits non-zero on any unexpected status. A failure here BLOCKS release completion: open an advisory under `docs/security/advisories/`, hotfix the regression, and re-run before declaring done.
 
-2. **Verify GitHub Actions workflows triggered by the release push:**
+2. **Publish any draft security advisories linked from this release (mandatory when `Security hardening` section is non-trivial):**
+
+   After the tag is live and before declaring the release complete, check whether any advisory referenced in the supplement's `Security hardening` section is still in draft/private state.
+
+   a. **Scan the supplement for advisory links:**
+      ```bash
+      grep -oE 'docs/security/advisories/[^ )]+\.md' docs/releases/in_progress/vX.Y.Z/github_release_supplement.md
+      ```
+
+   b. **For each linked advisory file, check its status field:**
+      ```bash
+      head -20 docs/security/advisories/<slug>.md | grep -i status
+      ```
+      If status is `draft` or `private`, it must be published now.
+
+   c. **Run `/advisory close <slug> vX.Y.Z`** for each unpublished advisory. This skill will:
+      - Update the advisory doc status to `disclosed`
+      - Record the fix version
+      - Publish the corresponding GitHub Security Advisory (GHSA) via `gh api`
+
+   d. **Verify the GHSA is public** after publication:
+      ```bash
+      gh api repos/markmhendrickson/neotoma/security-advisories --jq '.[] | select(.ghsa_id == "<GHSA-ID>") | {state, published_at}'
+      ```
+      State must be `published`. If the GHSA publish step fails (auth, scope), STOP and surface the exact error — do not declare the release complete with a draft GHSA.
+
+   **Why this step is here and not in Step 3.5:** The GHSA should only go public after the fix is actually tagged and shipped. Publishing before the tag leaks attack vector details before users can protect themselves. The advisory doc is written during Step 3.5; the GHSA is published here.
+
+   **Skip this step** only when the supplement's `Security hardening` section reads `No security-sensitive surfaces touched.`
+
+3. **Verify GitHub Actions workflows triggered by the release push:**
 
    The `git push origin main` and `git push origin vX.Y.Z` in Step 4.5 trigger CI and deployment workflows. All must succeed before declaring the release complete.
 
@@ -361,7 +391,7 @@ After the RC PR is merged and the user confirms execute, run **every** step belo
 
    e. **Record the outcome** in the release summary (step 4 of this section).
 
-3. **Close resolved GitHub issues:**
+4. **Close resolved GitHub issues:**
    - Fetch the release URL created in Step 4.8:
      ```bash
      RELEASE_URL=$(gh release view vX.Y.Z --json url --jq .url)
@@ -380,8 +410,8 @@ After the RC PR is merged and the user confirms execute, run **every** step belo
      gh issue comment <number> --body "Partially addressed in [vX.Y.Z]($RELEASE_URL): <what changed>. Remaining: <what's still open>."
      ```
    - Report which issues were closed and which were commented on.
-4. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created); the security review and probe report move with it.
-5. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), sandbox URL/version verification, the probe report verdict (passes / failures), issues closed, and CI workflow outcomes (all-pass / any-failure with run IDs).
+5. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created); the security review and probe report move with it.
+6. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), sandbox URL/version verification, the probe report verdict (passes / failures), advisories published (GHSA IDs and public URLs), issues closed, and CI workflow outcomes (all-pass / any-failure with run IDs).
 
 ## Submodule Mode
 
@@ -404,6 +434,7 @@ If the user says `/release foundation` (or another submodule name):
 - For a standard `/release`, **always** run **`npm publish`** after `gh release create --draft` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
 - For a standard `/release`, **always** run Step 3.5 (Security review lane) before Step 4 and Step 5 (Deployed probes) before declaring complete; the supplement MUST contain a `Security hardening` section linking `docs/releases/in_progress/<TAG>/security_review.md` (and `post_deploy_security_probes.md` after Step 5).
+- For a standard `/release`, **always** run Step 5.2 (Advisory publication) when the supplement's `Security hardening` section references any advisory file. Draft GHSAs MUST be published after the tag is live and before declaring the release complete. Never publish a GHSA before the fix tag exists.
 - For a standard `/release`, **always** verify that all GitHub Actions workflows triggered by the release push (`CI test lanes`, `Deploy site (GitHub Pages)`, and any tag-triggered workflows) reach `success` before declaring complete. A CI failure after push is a partial release — fix and re-verify.
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
@@ -435,3 +466,5 @@ If the user says `/release foundation` (or another submodule name):
 - Skipping Step 3.5 (Security review lane) before Step 4 when `npm run security:classify-diff` reports the release diff as sensitive, or omitting the supplement's `Security hardening` section
 - Declaring a release complete without running Step 5 deployed probes (`bash scripts/security/deployed_probes.sh --tag vX.Y.Z`) and recording the report under `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md`
 - Declaring a release complete without verifying all release-triggered GitHub Actions workflows (`CI test lanes`, `Deploy site`, tag-triggered workflows) reached `success` via `gh run list` / `gh run watch`
+- Declaring a release complete when the supplement's `Security hardening` section references an advisory that is still in draft/private state — run Step 5.2 and confirm GHSA state is `published` first
+- Publishing a GHSA (Step 5.2) before the fix tag is pushed and live on `main` — GHSA publication must come after `git push origin vX.Y.Z` in Step 4.6

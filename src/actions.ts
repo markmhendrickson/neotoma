@@ -7648,9 +7648,14 @@ app.post("/list_relationships", async (req, res) => {
   } = parsed.data;
 
   try {
+    // Tenant isolation: resolve authenticated user and scope all queries to
+    // their records. See docs/security/advisories/2026-05-21-relationship-
+    // endpoint-tenant-isolation.md for context.
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
-    let query = db.from("relationship_snapshots").select("*");
+    let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
 
     if (source_entity_id && target_entity_id) {
       query = query
@@ -7700,12 +7705,13 @@ app.post("/list_relationships", async (req, res) => {
     });
     return res.json({ relationships: paginated, total: all.length, limit, offset });
   } catch (error) {
-    logError("RelationshipQueryError:list_relationships", req, error);
-    return sendError(
+    return handleApiError(
+      req,
       res,
-      500,
+      error,
+      "Failed to query relationships",
       "DB_QUERY_FAILED",
-      error instanceof Error ? error.message : "Failed to query relationships"
+      "RelationshipQueryError:list_relationships"
     );
   }
 });
@@ -7902,6 +7908,11 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       offset = 0,
     } = parsed.data;
 
+    // Tenant isolation: scope all queries to the authenticated user.
+    // See docs/security/advisories/2026-05-21-relationship-endpoint-
+    // tenant-isolation.md for context.
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     const result: any = { node_id, node_type };
 
     if (node_type === "entity") {
@@ -7910,6 +7921,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         .from("entities")
         .select("*")
         .eq("id", node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!entityError && entity) {
@@ -7922,7 +7934,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { count: totalCount, error: countError } = await db
           .from("relationship_snapshots")
           .select("*", { count: "exact", head: true })
-          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .eq("user_id", userId);
 
         const total = countError ? 0 : (totalCount ?? 0);
         result.total_count = total;
@@ -7932,6 +7945,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
           .from("relationship_snapshots")
           .select("*")
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .eq("user_id", userId)
           .range(offset, offset + limit - 1);
 
         if (!relError) {
@@ -7953,7 +7967,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
             const { data: relatedEntities, error: relatedEntitiesError } = await db
               .from("entities")
               .select("*")
-              .in("id", relatedEntityIds);
+              .in("id", relatedEntityIds)
+              .eq("user_id", userId);
 
             if (!relatedEntitiesError) {
               result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
@@ -7970,7 +7985,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("entity_id", node_id);
+          .eq("entity_id", node_id)
+          .eq("user_id", userId);
 
         if (!obsError) {
           result.observations = observations || [];
@@ -7984,7 +8000,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
           const { data: sources, error: srcError } = await db
             .from("source")
             .select("*")
-            .in("id", sourceIds);
+            .in("id", sourceIds)
+            .eq("user_id", userId);
 
           if (!srcError) {
             result.sources = sources || [];
@@ -7997,6 +8014,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         .from("source")
         .select("*")
         .eq("id", node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!srcError && source) {
@@ -8008,7 +8026,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("source_id", node_id);
+          .eq("source_id", node_id)
+          .eq("user_id", userId);
 
         if (!obsError) {
           result.observations = observations || [];
