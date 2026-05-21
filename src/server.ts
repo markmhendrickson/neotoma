@@ -3553,8 +3553,8 @@ export class NeotomaServer {
           error_code: "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
           no_schema_for_entity_type: true,
           hint:
-            `No schema is registered for entity_type "${parsed.entity_type}". ` +
-            "update_schema_incremental requires an existing schema to extend. " +
+            "No schema is registered for this entity_type. " +
+            "update_schema_incremental requires an existing SchemaDefinition to extend. " +
             "Call register_schema first with a full schema_definition that includes " +
             "canonical_name_fields (or identity_opt_out), then optionally call " +
             "update_schema_incremental to add more fields. " +
@@ -3605,7 +3605,7 @@ export class NeotomaServer {
           entity_type: parsed.entity_type,
           error_code: "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
           hint:
-            `The existing schema for entity_type "${parsed.entity_type}" does not declare ` +
+            "The existing SchemaDefinition for this entity_type does not declare " +
             "canonical_name_fields or identity_opt_out, which are required before fields can " +
             "be added incrementally. Call register_schema with a full schema_definition that " +
             'includes canonical_name_fields (or identity_opt_out: "heuristic_canonical_name") ' +
