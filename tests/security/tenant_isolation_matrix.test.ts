@@ -97,7 +97,7 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
 async function cleanupUserData(data: FixtureUserData): Promise<void> {
   await db.from("observations").delete().eq("id", data.observationId);
   await db.from("relationship_snapshots").delete().eq("relationship_key", data.relationshipKey);
-  await db.from("entities").delete().like("id", `${TEST_PREFIX}_%`).eq("user_id", data.userId);
+  await db.from("entities").delete().eq("user_id", data.userId);
   await db.from("sources").delete().eq("id", data.sourceId);
 }
 
