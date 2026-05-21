@@ -2259,6 +2259,12 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = ListRelationshipsRequestSchema.parse(args ?? {});
+
+    // Tenant isolation: scope all queries to the authenticated user.
+    // See docs/security/advisories/2026-05-21-relationship-endpoint-
+    // tenant-isolation.md (GHSA-wrr4-782v-jhwh) for context.
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
     const normalizedDirection =
       parsed.direction === "incoming" || parsed.direction === "inbound"
         ? "inbound"
@@ -2273,7 +2279,8 @@ export class NeotomaServer {
       let outboundQuery = db
         .from("relationship_snapshots")
         .select("*")
-        .eq("source_entity_id", parsed.entity_id);
+        .eq("source_entity_id", parsed.entity_id)
+        .eq("user_id", userId);
 
       if (parsed.relationship_type) {
         outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
@@ -2306,7 +2313,8 @@ export class NeotomaServer {
       let inboundQuery = db
         .from("relationship_snapshots")
         .select("*")
-        .eq("target_entity_id", parsed.entity_id);
+        .eq("target_entity_id", parsed.entity_id)
+        .eq("user_id", userId);
 
       if (parsed.relationship_type) {
         inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);

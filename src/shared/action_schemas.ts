@@ -108,6 +108,8 @@ export const ListRelationshipsRequestSchema = z.object({
   relationship_type: RelationshipTypeSchema.optional(),
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
+  // Optional override honored only for LOCAL_DEV_USER_ID (see getAuthenticatedUserId).
+  user_id: z.string().optional(),
 });
 
 export const TimelineEventsRequestSchema = z.object({
