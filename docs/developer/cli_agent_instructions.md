@@ -31,6 +31,12 @@ Peer sync (peers, `/sync/webhook`, env `NEOTOMA_PUBLIC_BASE_URL` / `NEOTOMA_LOCA
 - **When both neotoma-dev and neotoma MCP servers are configured:** Default to **neotoma** (production) for retrieval/store/instruction precedence. Use **neotoma-dev** only when the user explicitly requests development behavior or the task is clearly dev-only.
 - **When MCP is not available:** Use the **Neotoma CLI** as backup. Data commands are offline-first with in-process local transport by default. Use `--api-only` to require remote API; `--offline` forces local transport. For server commands (`api start`, `api stop`, `api logs`, `watch`), always pass `--env dev` or `--env prod`.
 
+## Skill auto-loading at session start
+
+**Skill auto-loading at session start.** On every MCP `initialize`, the harness MUST detect available skills in the active workspace (`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, or the harness's documented skill registry path) and ensure they are registered with the agent context. If skills are already detected, this is a no-op. Emit a log/trace entry naming auto-loaded vs already-present skills. This requirement is idempotent and applies regardless of whether the user explicitly invoked a skill in the prior turn.
+
+This mirrors the canonical [CONVENTIONS] entry in `docs/developer/mcp/instructions.md`. Behavioral edits live there; this paragraph is the CLI-harness anchor.
+
 ## CLI startup protocol (use-existing)
 
 CLI uses connect-only startup for interactive sessions. It does not auto-start servers on session start. On no-args startup, it discovers running local API instances from session ports, defaults (`3080`, `3180`), remembered ports, and optional configured ports. If multiple instances are healthy, it applies `--env` as a preference and then prompts for explicit selection.
