@@ -123,11 +123,11 @@ Items to check (evaluate all; mark N/A when not triggered):
 11. `tests/contract/legacy_payloads/replay.test.ts` passes; outcome flips paired with `CHANGES.md` entry
 12. New top-level request bodies declare `additionalProperties: false` unless intentional
 13. New response fields declared in `openapi.yaml`; populated consistently across all code paths
-14. Release-visible changes documented in supplement; historical supplements untouched
+14. Release-visible changes documented in supplement under `docs/releases/in_progress/<TAG>/`; historical supplements under `docs/releases/completed/` are NOT modified — post-release fixes go in a new patch version
 15. `docs/foundation/schema_agnostic_design_rules.md` re-read when adding per-type behavior
 16. Data-layer changes preserve determinism (reproducible IDs, stable ordering, canonicalized LLM output)
-17. Mutating ops honor `idempotency_key`; ingestion writes are transactional
-18. No new PII in logs, metric labels, event payloads, or error messages
+17. Mutating ops honor `idempotency_key`; ingestion writes are transactional; `idempotency_key` reuse with a different payload is a validation error (`ERR_IDEMPOTENCY_MISMATCH` or `ERR_IDEMPOTENCY_COLLISION`), not a silent overwrite
+18. No new PII in logs, metric labels, event payloads, or error messages; metric labels use error codes / entity types / IDs, never names or personal identifiers; log fields use IDs only
 19. Renamed files are `snake_case` and `foundation_config.yaml` + `.claude/rules/` symlinks updated
 20. Security gate results: `classify-diff` recorded; if sensitive, `security:lint` clean, `manifest:check` passes, `auth-matrix` passes, `security_review.md` exists with sign-off
 21. New Express routes in `protected_routes_manifest.json` (or runtime unauth allow-list with `reason`); manifest regenerated
@@ -138,14 +138,17 @@ Items to check (evaluate all; mark N/A when not triggered):
     - External-file-shape parser: fixture per format exercising actual parser path
     - Discovery/detection/parser pair: roundtrip test asserting discovery paths are parseable
     - HTTP runtime config: test asserting runtime behavior (response header, socket lifetime), not just source string
+24. New or renamed npm scripts follow the three-category prefix convention: `watch:*` for dev file-watchers, `serve:*` / `start:*` for compiled-dist runners, `dev:*` for other dev tooling; aliases stay within the same category; one-minor back-compat alias when renaming an existing script (`docs/developer/package_scripts.md`)
+25. No iteration over `Object.keys()`, `Map`, or `Set` without an explicit `sort()` call in any code path that produces output stored to the database, emitted in a response, or used as an ID input — unstable iteration order is a determinism violation
 
 ### Phase 5 — Architectural review
 
 Beyond the checklist, evaluate the diff against the loaded architectural docs for:
 
-**State Layer boundaries:**
+**State Layer boundaries (Principle 10.8 Signal Without Strategy):**
 - Does any new code implement strategy, filtering suggestions, agent orchestration, or scheduled execution? (MUST NOT — belongs in the Operational Layer)
 - Does any new code read Neotoma state and decide what to do with it beyond serving a response?
+- Does any new code emit "importance" signals, prioritize changes, or choose which consumer receives what? (The state layer signals; consumers interpret. If the code decides what a signal *means*, it is in the wrong layer.)
 
 **Schema-agnostic design:**
 - Any new `switch (entity_type)` or `if (entityType === "X")` branches?
@@ -153,9 +156,10 @@ Beyond the checklist, evaluate the diff against the loaded architectural docs fo
 - Any per-type special cases in `entity_resolution.ts`, `timeline_events.ts`, `observation_reducer.ts`, or `storeStructuredInternal` without a schema declaration backing them?
 
 **Determinism:**
-- Any `Math.random()`, `Date.now()` in ID derivation or business logic?
-- Any unstable iteration or sort keys in reducer output?
-- Any LLM output stored without post-hoc canonicalization/hashing?
+- Any `Math.random()`, `Date.now()` in ID derivation or business logic? (`Date.now()` is allowed in observability / timestamps, not in entity/event IDs or reducer keys.)
+- Any unstable iteration or sort keys in reducer output? (Reducer ordering MUST be `observed_at DESC, id ASC`.)
+- Any LLM output stored without post-hoc canonicalization? (Raw LLM text MUST be normalized/hashed before it influences entity IDs or observation deduplication — stochastic input, deterministic storage.)
+- Any new sort or grouping in a code path that emits stored or returned data, where the sort comparator relies on object property insertion order, `Map` insertion order, or `Set` membership order?
 
 **Immutability:**
 - Any in-place mutation of observations or sources?
@@ -169,7 +173,8 @@ Beyond the checklist, evaluate the diff against the loaded architectural docs fo
 
 **Error handling:**
 - Any new error path that throws an opaque internal error instead of a structured envelope?
-- Any tightened validation without a `hint` and legacy-payload fixture flip?
+- Any tightened validation (closed `additionalProperties`, added required field, narrowed type, removed enum value) without: (a) a structured `hint` in the same change, (b) a legacy-payload fixture in `tests/contract/legacy_payloads/` flipped to `rejected` with a `hint_match` assertion, and (c) a line in `CHANGES.md`? All three are required together — this is the Tightening-change hint obligation (`docs/subsystems/errors.md` § Tightening-change hint obligation).
+- Any structured `hint` text that interpolates user-supplied input (e.g. entity types, field names from the request)? Hints MUST be stable text agents can pattern-match on; avoid `"Unknown entity type: ${type}"` — the type value makes the hint fragile.
 
 **Search/ranking changes (for diffs touching `entity_handlers.ts`):**
 - Does type-filter logic correctly fall back for unseeded/unregistered types?
@@ -189,10 +194,13 @@ Load these once per review and evaluate the diff against them:
 Walk the change against each axis below. Emit findings using the same severity/category structure as Phase 6.
 
 **Product principles alignment:**
-- Does any new behavior silently change what callers receive without an opt-in parameter or an explicit signal in the response? (Per "explicit control / no silent behavior" — flag as `product-principles`.)
-- Does any new flow do work the user did not authorize? (e.g. background scanning, cross-session implicit storage.)
-- Does any new output drop provenance information (source IDs, timestamps, observation chain) that was previously present?
-- Are defaults safe (privacy-preserving, fail-closed for security, surfaces-bounded for performance)?
+- Does any new behavior silently change what callers receive without an opt-in parameter or an explicit signal in the response? (10.2 Explicit Over Implicit — flag as `product-principles`.)
+- Does any new flow do work the user did not authorize? (e.g. background scanning, cross-session implicit storage — 10.2 and 10.7 Privacy Over Automation.)
+- Does any new output drop provenance information (source IDs, timestamps, observation chain) that was previously present? (10.1 Truth Before Experience.)
+- Are defaults safe (privacy-preserving, fail-closed for security, surfaces-bounded for performance)? (10.7.)
+- Does any new code store meaning or interpretation rather than structured facts? (10.5 Structure Over Interpretation — extracted fields are fine; inferred intent is not.)
+- Does any new schema field or entity property rely on LLM inference to determine truth rather than a schema rule? (10.4 Schema Over Semantics — type-driven, not inference-driven.)
+- Does the state layer make any decision about what a state change *means* for consumers, or decide which consumers should act on it? (10.8 Signal Without Strategy — signals are infrastructure; consumers interpret.)
 
 **Silent behavior changes:**
 For each behavior change, ask: can the caller tell from the response that something was filtered, redirected, paginated, or truncated? If not — flag it. Common patterns:
@@ -231,6 +239,8 @@ For each new error code, `hint` string, or structured error response:
 - Does every claim in the supplement match the actual code behavior?
 - For each named parameter, field, error code, or tool in the supplement: verify it exists in the code with the described semantics.
 - For each "default" stated in the supplement: trace it back to the code and confirm.
+- Does the supplement contain an explicit **"Breaking changes"** section? This section is mandatory even for patch releases. If nothing broke, the section MUST read `No breaking changes.` — omitting the section entirely is a BLOCKING finding.
+- Is the `npm run openapi:bc-diff` output reconciled? Any entry the tool flags as "Breaking" must appear by name in the supplement's "Breaking changes" section. Run the diff: `npm run openapi:bc-diff -- --base <last_tag> --head HEAD` (or use `--compare-base` if the last npm publish tag differs).
 - This check exists because supplement drift is a common silent-failure mode — code merges without the supplement catching up. Flag any divergence as BLOCKING/contract.
 
 ### Phase 5c — Documentation completeness
