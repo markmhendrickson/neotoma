@@ -4638,7 +4638,15 @@ export class NeotomaServer {
       }
 
       if (!schema) {
-        // Auto-create user-specific schema from structured data
+        // Auto-create user-specific schema from structured data.
+        // Bundles m2: gate on NEOTOMA_SCHEMA_MODE before inferring.
+        // SchemaModeBlockedError propagates up to the MCP/HTTP handler which
+        // serialises it into a 422 response via the standard error envelope.
+        const { assertEntityTypeAllowed } = await import(
+          "./services/bundles/schema_mode_guard.js"
+        );
+        assertEntityTypeAllowed(entityType);
+
         logger.error(`[STORE] No schema found for "${entityType}", inferring from data structure`);
 
         const { inferSchemaFromEntities } = await import("./services/schema_inference.js");

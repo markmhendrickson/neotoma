@@ -469,9 +469,28 @@ export async function runInterpretation(
         }
       }
 
-      // When no known schema at all (neither DB nor code): optionally create a user-scoped schema from extracted fields
+      // When no known schema at all (neither DB nor code): optionally create a user-scoped schema from extracted fields.
+      // Bundles m2: gate on NEOTOMA_SCHEMA_MODE before creating.
       let schemaCreationAttempted = false;
       if (!schema && !codeSchema && config.create_schema_for_unknown !== false) {
+        const { assertEntityTypeAllowed, SchemaModeBlockedError } = await import(
+          "./bundles/schema_mode_guard.js"
+        );
+        try {
+          assertEntityTypeAllowed(entityType);
+        } catch (err) {
+          if (err instanceof SchemaModeBlockedError) {
+            logger.warn(
+              `[interpretation] schema auto-create blocked for "${entityType}" by mode=${err.payload.schema_mode}`
+            );
+            // Treat as if create_schema_for_unknown=false — fall through to raw_fragment path.
+            schemaCreationAttempted = false;
+          } else {
+            throw err;
+          }
+        }
+      }
+      if (!schema && !codeSchema && config.create_schema_for_unknown !== false && !schemaCreationAttempted) {
         schemaCreationAttempted = true;
         schema = await schemaRegistry.ensureSchemaForExtractedEntity(
           entityType,

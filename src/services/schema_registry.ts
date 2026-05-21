@@ -340,6 +340,10 @@ export interface SchemaMetadata {
   test?: boolean; // Mark schemas created for testing
   test_marked_at?: string; // ISO timestamp when test schema was marked
   guest_access_policy?: GuestAccessPolicyMode;
+  /** Bundle that originated this schema, e.g. `core` or `crm`. Added in Bundles m2. */
+  bundle?: string;
+  /** Version of the originating bundle at registration time, e.g. `1.0.0`. */
+  bundle_version?: string;
 }
 
 export interface SchemaRegistryEntry {
