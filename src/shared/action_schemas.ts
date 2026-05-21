@@ -252,6 +252,15 @@ const EntitiesQueryRequestBaseSchema = z
     updated_since: z.string().optional(),
     created_since: z.string().optional(),
     /**
+     * When true, omit `conversation`, `conversation_message`, and other chat
+     * bookkeeping types from results. Default false: bookkeeping entities are
+     * included unless the caller explicitly opts in to exclusion. The Inspector
+     * header search and `/search` UI pass `true` explicitly.
+     * Has no effect when `entity_type` already filters to a single bookkeeping
+     * type (the explicit type filter wins).
+     */
+    exclude_bookkeeping: z.boolean().optional().default(false),
+    /**
      * R3: filter entities whose observations were resolved with the given
      * `identity_basis`. Satisfied when ANY observation for the entity carries
      * this basis. Enables the Inspector "Ambiguous/heuristic" filter without
@@ -300,6 +309,15 @@ const RetrieveEntitiesRequestBaseSchema = z
     include_merged: z.boolean().optional().default(false),
     updated_since: z.string().optional(),
     created_since: z.string().optional(),
+    /**
+     * When true, omit `conversation`, `conversation_message`, and other chat
+     * bookkeeping types from results. Default false: bookkeeping entities are
+     * included unless the caller explicitly opts in to exclusion. The Inspector
+     * header search and `/search` UI pass `true` explicitly.
+     * Has no effect when `entity_type` already filters to a single bookkeeping
+     * type (the explicit type filter wins).
+     */
+    exclude_bookkeeping: z.boolean().optional().default(false),
   })
   .superRefine(validateEntityQueryCombinations);
 

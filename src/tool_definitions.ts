@@ -202,6 +202,12 @@ export function buildToolDefinitions(
             description:
               "ISO 8601 timestamp. Return only entities whose created_at is greater than or equal to this value.",
           },
+          exclude_bookkeeping: {
+            type: "boolean",
+            description:
+              "When true, omit chat bookkeeping types (`conversation`, `conversation_message`, etc.) from results. Default false. Has no effect when `entity_type` already filters to a bookkeeping type.",
+            default: false,
+          },
         },
         required: [],
       },
