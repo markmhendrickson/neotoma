@@ -40,6 +40,7 @@ import {
   AccessPolicyError,
   type GuestIdentity,
 } from "./services/access_policy.js";
+import { getSchemaMode } from "./services/schema_mode.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
 import {
@@ -9772,6 +9773,14 @@ export async function startHTTPServer() {
         await import("./services/subscriptions/install_subscription_bridge.js");
       subscriptionBridge.installSubscriptionBridge();
       logger.info("[Subscriptions] substrate event bridge installed");
+
+      // Bundles m1 (PR C): resolve schema mode once at boot so the parsed
+      // value is cached and any invalid-value warning surfaces during startup.
+      // No runtime behavior is gated on this yet; enforcement lands in m2.
+      // Plan: ent_089da2ecebc3bd804d63dcf2.
+      const schemaMode = getSchemaMode();
+      logger.info(`[SchemaMode] resolved schema mode: ${schemaMode}`);
+
       return { server, port: boundPort };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;

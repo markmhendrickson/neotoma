@@ -271,6 +271,15 @@ These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for out
 
 `GET /peers/{peer_id}` returns `remote_health` from probing `{peer_url}/health` and semver compat vs the local package version (same rules as `neotoma compat`). See `docs/subsystems/peer_sync.md`.
 
+### Schema mode (server process)
+
+Bundles m1 introduces a schema-mode selector read once at server boot. The value is currently observational — no runtime behavior is gated on it yet. Enforcement lands in m2 at `inferSchemaFromEntities` (`src/server.ts`) and `ensureSchemaForExtractedEntity` (`src/services/interpretation.ts`).
+
+| Environment variable | Values | Default | Purpose |
+|----------------------|--------|---------|---------|
+| `NEOTOMA_SCHEMA_MODE` | `evolving` / `guided` / `locked` (case-insensitive) | `evolving` | Selects schema evolution behavior. `evolving` allows free inference and extension; `guided` (m2) adds stronger user prompts; `locked` (m2) freezes the schema set and disables auto-inference. Invalid values fall back to `evolving` with a structured warning at startup. See `docs/foundation/bundles.md` for full semantics. |
+| `NEOTOMA_DEBUG_SCHEMA_MODE` | `1` | unset | Emit a debug log when the schema mode is resolved at boot. |
+
 ### MCP signed shim (`mcp.json` — not CLI `preAction`)
 
 Cursor reads these from the **`env`** block for **`run_neotoma_mcp_signed_stdio_dev_shim.sh`** (they are **not** parsed by `neotoma` CLI `preAction`; document them here for discoverability).
