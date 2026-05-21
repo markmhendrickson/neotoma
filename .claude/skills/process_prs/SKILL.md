@@ -1,15 +1,10 @@
 ---
 name: process_prs
-description: Process open pull requests — triage readiness, run security checks, request Opus review on substantial PRs, post per-issue closure-narrative comments, merge eligible PRs, and detect release PRs and hand off to /release.
-triggers:
-  - process prs
-  - /process_prs
-  - work the pr queue
-  - triage prs
-  - review open prs
+description: Process PRs
 ---
 
 <!-- Source: .cursor/skills/process-prs/SKILL.md -->
+
 
 # Process PRs
 
@@ -290,13 +285,95 @@ gh issue close <iss> --reason completed
 
 For each PR that cannot be merged, take the appropriate action:
 
-- **CI failing**: Post a comment summarizing which checks failed. Do not merge.
+- **CI failing**: Before posting a failure comment, check whether the failure is purely mechanical (prettier formatting or eslint auto-fixable lint errors). If so, apply the mechanical fix in-place:
+
+  **Mechanical CI auto-fix (prettier / eslint only):**
+
+  ```bash
+  # Determine what failed
+  gh pr checks <number> --json name,conclusion,detailsUrl \
+    | jq '[.[] | select(.conclusion == "failure") | .name]'
+  ```
+
+  If and only if **all** failed checks are formatting or lint checks (names containing `prettier`, `format`, `lint`, or `eslint` — and no type-check, test, build, or security failures), apply the fix:
+
+  ```bash
+  BRANCH=$(gh pr view <number> --json headRefName --jq '.headRefName')
+  git fetch origin "$BRANCH"
+  git worktree add ".claude/worktrees/fmt-pr-<number>" "origin/$BRANCH"
+  cd ".claude/worktrees/fmt-pr-<number>"
+
+  # Check what scripts are available
+  cat package.json | jq '.scripts | keys'
+
+  # Apply formatting and lint fixes
+  npm run format 2>/dev/null || npx prettier --write "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}"
+  npm run lint:fix 2>/dev/null || npx eslint --fix "src/**/*.ts" "tests/**/*.ts"
+
+  # Verify no type errors were introduced
+  npm run type-check
+
+  # If type-check passes, commit and push
+  git add -A
+  git commit -m "chore: apply prettier formatting
+
+  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+  git push origin "$BRANCH"
+
+  cd /Users/markmhendrickson/repos/neotoma
+  git worktree remove ".claude/worktrees/fmt-pr-<number>" --force
+  ```
+
+  After pushing, post a comment on the PR:
+
+  ```bash
+  gh pr comment <number> --body "Applied automatic prettier/eslint formatting fix. Re-running CI."
+  ```
+
+  Do **not** apply the mechanical fix if:
+  - Any non-formatting check also failed (type errors, test failures, build failures, security gates)
+  - `npm run type-check` fails after applying formatting
+  - The diff produced by formatting exceeds 50 lines (indicates something unexpected; surface to user instead)
+
+  If the mechanical fix is not applicable, fall through to the normal CI-failing path:
+  Post a comment summarizing which checks failed. Do not merge.
+
 - **Security gate errors (G2/G3)**: Post a comment with the specific `security:lint` errors or manifest/auth-matrix failures. Do not merge.
 - **Review-blocked (Step 1c)**: Post a comment listing the unaddressed Blocking findings from the most recent review, quoting the relevant lines and naming the file paths. Request that the author either land substantive fix commits, post `Waiver: <reason>` comments per finding, or re-request `@claude review` after the fixes. Do not merge.
 - **Awaiting review**: Note in the summary report. Do not post a comment unless explicitly requested.
 - **Merge conflicts**: Post a comment asking the author to rebase.
 - **Draft**: Skip. Report in summary.
 - **Release PR**: Report in summary, instruct user to run `/release`.
+
+### Step 5b: Suggest `/fix_pr` for Suitable Blocked PRs
+
+After handling each blocked PR, determine whether it is a good candidate for `/fix_pr` and include the suggestion in the report. A PR is a good candidate if it has at least one auto-fixable blocking reason and no hard stops.
+
+**Suggest `/fix_pr <number>` when ALL of the following are true:**
+
+- PR is not a draft
+- PR is not a release PR
+- At least one blocking reason is in the auto-fixable category:
+  - CI failures that are TypeScript type errors, failing unit/integration tests, or non-formatting lint errors
+  - Review findings that are rename/style/naming issues (not logic, architecture, or security)
+  - Merge conflicts in non-sensitive files (not `openapi.yaml`, lock files, or migration files)
+
+**Do NOT suggest `/fix_pr` when:**
+
+- All CI failures were already handled by the mechanical auto-fix in Step 5 (fix already applied)
+- The only blockers are security-adjacent findings (`src/actions.ts`, `src/services/local_auth.ts`, `protected_routes_manifest.json`, `docs/security/`)
+- The only blockers are architectural or design-discussion review findings
+- Merge conflicts are only in `openapi.yaml`, lock files, or migration files
+- The PR is awaiting review with no other blockers (nothing for `/fix_pr` to act on)
+
+Include the suggestion inline in the blocked PR's report entry, e.g.:
+
+```
+PR #217 — Add user preference caching [BLOCKED]
+  CI: type-check failing (3 errors in src/services/preferences.ts)
+  Review: 1 Blocking finding (rename `prefMap` → `preferenceMap`)
+  → Run `/fix_pr 217` to address these automatically.
+```
 
 ### Step 6: Report
 
@@ -330,6 +407,7 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 
 ## Constraints
 
+- The mechanical CI auto-fix in Step 5 is scoped strictly to prettier formatting and eslint `--fix`-able lint errors. Never apply it when other check types also failed, and never skip `npm run type-check` before pushing the fix commit.
 - Never push to `main` directly. Merges to `main` only happen via `/release`.
 - Never merge a release PR (dev→main with version bump). Hand off to `/release`.
 - Never use `--no-verify`.
@@ -360,4 +438,6 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - **Counting `chore: regenerate test catalog` / `prettier` / rebase-merge commits as "post-review fixes."** They are housekeeping and do not clear review blockers.
 - **Treating placeholder review comments (`I'll analyze this and get back to you.` with 0 output tokens) as completed reviews.** Re-trigger and wait for a substantive review.
 - **Merging a PR that closes issues without first posting a closure-narrative comment on each linked issue (Step 4).** The GitHub auto-close link is not a resolution trail.
+- **Applying the mechanical CI auto-fix when non-formatting checks also failed.** The fix is scoped to prettier/eslint-only failures. Mixed failures go to the user.
+- **Skipping `npm run type-check` after applying prettier/eslint fixes.** A formatting pass that produces type errors must not be pushed.
 - **Leaving issues open that the merged PR resolved.** When detection in Step 4 surfaces an auto-close gap (closure verb in body/commit but issue not in `closingIssuesReferences`), close the issue manually after merge with `gh issue close <iss> --reason completed` and a comment linking the resolving PR.
