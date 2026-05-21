@@ -87,4 +87,58 @@ describe("OpenAPI tool schemas", () => {
       expect(props.summary?.type).toBe("boolean");
     });
   });
+
+  describe("list_relationships tool schema (issue #340)", () => {
+    const schema = getOpenApiInputSchemaForTool("list_relationships") as {
+      type?: string;
+      anyOf?: Array<{ required?: string[] }>;
+      properties?: Record<
+        string,
+        { type?: string; enum?: string[]; minimum?: number; default?: unknown }
+      >;
+    } | null;
+
+    it("declares the request fields the handler actually accepts", () => {
+      expect(schema).toBeTruthy();
+      expect(schema?.type).toBe("object");
+      const props = schema?.properties ?? {};
+      expect(Object.keys(props)).toEqual(
+        expect.arrayContaining([
+          "entity_id",
+          "source_entity_id",
+          "target_entity_id",
+          "direction",
+          "relationship_type",
+          "limit",
+          "offset",
+          "user_id",
+        ])
+      );
+    });
+
+    it("constrains relationship_type to the closed enum matching the handler", () => {
+      const rel = schema?.properties?.relationship_type;
+      expect(rel?.type).toBe("string");
+      // Sample of canonical + lowercase relationship types; full list must
+      // match RelationshipTypeSchema in src/shared/action_schemas.ts.
+      expect(rel?.enum).toEqual(
+        expect.arrayContaining([
+          "PART_OF",
+          "CORRECTS",
+          "REFERS_TO",
+          "DEPENDS_ON",
+          "EMBEDS",
+          "works_at",
+          "invested_in",
+        ])
+      );
+    });
+
+    // Note: the openapi.yaml schema declares an `anyOf` constraint requiring
+    // at least one of entity_id / source_entity_id / target_entity_id /
+    // relationship_type. That constraint is not surfaced by the
+    // tool-schema extractor (which flattens to {type, properties, required}
+    // for MCP consumption), so it is verified by the openapi:bc-diff output
+    // and by ListRelationshipsRequestSchema's .refine() in action_schemas.ts.
+  });
 });

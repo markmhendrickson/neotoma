@@ -4253,7 +4253,15 @@ paths:
           application/json:
             schema:
               type: object
+              # additionalProperties retained as `true` for legacy back-compat (clients
+              # pre-v0.13 may emit ambient fields). A future release may tighten this
+              # to `false` per change_guardrails_rules.mdc § Validation tightening.
               additionalProperties: true
+              anyOf:
+                - required: [entity_id]
+                - required: [source_entity_id]
+                - required: [target_entity_id]
+                - required: [relationship_type]
               properties:
                 entity_id:
                   type: string
@@ -4278,7 +4286,41 @@ paths:
                     matches either side.
                 relationship_type:
                   type: string
-                  description: Optional relationship_type filter (e.g. `REFERS_TO`, `PART_OF`).
+                  enum:
+                    [
+                      PART_OF,
+                      CORRECTS,
+                      REFERS_TO,
+                      SETTLES,
+                      DUPLICATE_OF,
+                      DEPENDS_ON,
+                      SUPERSEDES,
+                      EMBEDS,
+                      works_at,
+                      owns,
+                      manages,
+                      part_of,
+                      related_to,
+                      depends_on,
+                      references,
+                      transacted_with,
+                      member_of,
+                      reports_to,
+                      located_at,
+                      created_by,
+                      funded_by,
+                      acquired_by,
+                      subsidiary_of,
+                      partner_of,
+                      competitor_of,
+                      supplies_to,
+                      contracted_with,
+                      invested_in,
+                    ]
+                  description: |
+                    Optional relationship_type filter. Closed enum matching the handler's
+                    accepted values; spec-driven clients passing any other value will be
+                    rejected at runtime with a Zod validation error.
                 limit:
                   type: integer
                   minimum: 1

@@ -5366,46 +5366,84 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": {
-          /**
-           * @description Entity ID to match against either the source or target of each
-           *     relationship (filtered further by `direction`). Legacy filter pattern;
-           *     prefer `source_entity_id` / `target_entity_id` for new code.
-           */
-          entity_id?: string;
-          /** @description Match relationships whose `source_entity_id` equals this value. */
-          source_entity_id?: string;
-          /** @description Match relationships whose `target_entity_id` equals this value. */
-          target_entity_id?: string;
-          /**
-           * @description Direction applied when `entity_id` is set. `incoming`/`inbound` matches
-           *     relationships where the entity is the target; `outgoing`/`outbound`
-           *     matches relationships where the entity is the source; `both` (default)
-           *     matches either side.
-           * @default both
-           * @enum {string}
-           */
-          direction?: "inbound" | "outbound" | "incoming" | "outgoing" | "both";
-          /** @description Optional relationship_type filter (e.g. `REFERS_TO`, `PART_OF`). */
-          relationship_type?: string;
-          /**
-           * @description Maximum number of relationships to return.
-           * @default 100
-           */
-          limit?: number;
-          /**
-           * @description Number of relationships to skip before returning results.
-           * @default 0
-           */
-          offset?: number;
-          /**
-           * @description Optional user_id override (scoped to callers with privilege to query on
-           *     behalf of another user). When omitted, the authenticated user is used.
-           */
-          user_id?: string;
-        } & {
-          [key: string]: unknown;
-        };
+        "application/json":
+          | ({
+              /**
+               * @description Entity ID to match against either the source or target of each
+               *     relationship (filtered further by `direction`). Legacy filter pattern;
+               *     prefer `source_entity_id` / `target_entity_id` for new code.
+               */
+              entity_id?: string;
+              /** @description Match relationships whose `source_entity_id` equals this value. */
+              source_entity_id?: string;
+              /** @description Match relationships whose `target_entity_id` equals this value. */
+              target_entity_id?: string;
+              /**
+               * @description Direction applied when `entity_id` is set. `incoming`/`inbound` matches
+               *     relationships where the entity is the target; `outgoing`/`outbound`
+               *     matches relationships where the entity is the source; `both` (default)
+               *     matches either side.
+               * @default both
+               * @enum {string}
+               */
+              direction?: "inbound" | "outbound" | "incoming" | "outgoing" | "both";
+              /**
+               * @description Optional relationship_type filter. Closed enum matching the handler's
+               *     accepted values; spec-driven clients passing any other value will be
+               *     rejected at runtime with a Zod validation error.
+               * @enum {string}
+               */
+              relationship_type?:
+                | "PART_OF"
+                | "CORRECTS"
+                | "REFERS_TO"
+                | "SETTLES"
+                | "DUPLICATE_OF"
+                | "DEPENDS_ON"
+                | "SUPERSEDES"
+                | "EMBEDS"
+                | "works_at"
+                | "owns"
+                | "manages"
+                | "part_of"
+                | "related_to"
+                | "depends_on"
+                | "references"
+                | "transacted_with"
+                | "member_of"
+                | "reports_to"
+                | "located_at"
+                | "created_by"
+                | "funded_by"
+                | "acquired_by"
+                | "subsidiary_of"
+                | "partner_of"
+                | "competitor_of"
+                | "supplies_to"
+                | "contracted_with"
+                | "invested_in";
+              /**
+               * @description Maximum number of relationships to return.
+               * @default 100
+               */
+              limit?: number;
+              /**
+               * @description Number of relationships to skip before returning results.
+               * @default 0
+               */
+              offset?: number;
+              /**
+               * @description Optional user_id override (scoped to callers with privilege to query on
+               *     behalf of another user). When omitted, the authenticated user is used.
+               */
+              user_id?: string;
+            } & {
+              [key: string]: unknown;
+            })
+          | unknown
+          | unknown
+          | unknown
+          | unknown;
       };
     };
     responses: {
