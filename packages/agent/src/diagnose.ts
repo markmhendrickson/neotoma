@@ -107,7 +107,7 @@ export function diagnoseTurn(observation: TurnObservation): Diagnosis[] {
         ongoingRisk:
           "Future recall, auditing, and any repair logic for this conversation can remain incomplete because the turn starts with a missing user record.",
         recommendedResolution:
-          "Backfill the missing user `agent_message` immediately using the canonical chat-turn or repair helper.",
+          "Backfill the missing user `conversation_message` immediately using the canonical chat-turn or repair helper.",
         suggestedRepair: {
           type: "store_missing_user_message",
           conversationId: observation.conversationId,
@@ -126,13 +126,13 @@ export function diagnoseTurn(observation: TurnObservation): Diagnosis[] {
         id: "assistant-message-missing",
         severity: "error",
         message:
-          "Assistant produced a user-visible reply but the closing assistant agent_message was not stored.",
+          "Assistant produced a user-visible reply but the closing assistant conversation_message was not stored.",
         immediateMeaning:
           "The assistant side of this turn is absent from Neotoma, so the stored conversation currently stops short of the actual reply.",
         ongoingRisk:
           "Future retrievals of the thread can show an incomplete turn history and make repair or provenance review misleading.",
         recommendedResolution:
-          "Store the missing assistant `agent_message` now with the canonical closing-store helper.",
+          "Store the missing assistant `conversation_message` now with the canonical closing-store helper.",
         suggestedRepair: {
           type: "store_missing_assistant_message",
           conversationId: observation.conversationId,

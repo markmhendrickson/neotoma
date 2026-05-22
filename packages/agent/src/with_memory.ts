@@ -49,7 +49,7 @@ export interface WrappedAgent {
 export function withMemory(agentFn: AgentFn, options: WithMemoryOptions): WrappedAgent {
   const memory = new NeotomaMemory(options);
   let counter = 0;
-  const nextTurnId = options.nextTurnId ?? (() => `${Date.now()}-${++counter}`);
+  const nextTurnId = options.nextTurnId ?? (() => String(++counter));
 
   const wrapped: WrappedAgent = (async (userMessage: string) => {
     const turnId = nextTurnId();

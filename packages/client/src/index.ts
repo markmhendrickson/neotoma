@@ -30,6 +30,7 @@ export {
   snapshotOnUpdate,
   recordConversationTurn,
   type ChatTurnMessage,
+  type ChatTurnSenderKind,
   type StoreChatTurnInput,
   type StoreChatTurnResult,
   type RetrieveOrStoreInput,
