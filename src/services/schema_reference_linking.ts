@@ -54,7 +54,7 @@ function normalizeCandidate(value: unknown): string | null {
 }
 
 export async function autoLinkReferenceFields(
-  params: AutoLinkReferenceFieldsParams,
+  params: AutoLinkReferenceFieldsParams
 ): Promise<AutoLinkResult> {
   const result: AutoLinkResult = { created: 0, skipped: 0, details: [] };
   const refs = params.schema?.reference_fields;
@@ -79,9 +79,7 @@ export async function autoLinkReferenceFields(
       .limit(1);
 
     let targetEntityId: string | null =
-      !canonErr && byCanonical && byCanonical.length > 0
-        ? byCanonical[0].entity_id
-        : null;
+      !canonErr && byCanonical && byCanonical.length > 0 ? byCanonical[0].entity_id : null;
 
     if (!targetEntityId) {
       // Fallback: case-insensitive match on common name-like fields in the
@@ -99,10 +97,7 @@ export async function autoLinkReferenceFields(
           const snap = row.snapshot as Record<string, unknown> | null;
           if (!snap) return false;
           const v = snap[key];
-          return (
-            typeof v === "string" &&
-            v.trim().toLowerCase() === candidate.toLowerCase()
-          );
+          return typeof v === "string" && v.trim().toLowerCase() === candidate.toLowerCase();
         });
         if (hit) {
           targetEntityId = (hit as { entity_id: string }).entity_id;
@@ -130,8 +125,7 @@ export async function autoLinkReferenceFields(
       continue;
     }
 
-    const relationshipType = (ref.relationship_type ||
-      "REFERS_TO") as RelationshipType;
+    const relationshipType = (ref.relationship_type || "REFERS_TO") as RelationshipType;
 
     try {
       await relationshipsService.createRelationship({
@@ -161,7 +155,7 @@ export async function autoLinkReferenceFields(
         `[SCHEMA_REF_LINK] Failed to auto-link ${params.entityType}.${ref.field} -> ` +
           `${ref.target_entity_type}(${candidate}): ${
             err instanceof Error ? err.message : String(err)
-          }`,
+          }`
       );
     }
   }

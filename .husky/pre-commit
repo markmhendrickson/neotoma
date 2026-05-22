@@ -29,6 +29,14 @@ npm run type-check || exit 1
 echo "Running linter..."
 npm run lint || exit 1
 
+# Format check (MANDATORY - rejects unformatted code; run `npm run format` to fix)
+echo "Running format check..."
+npm run format:check || {
+  echo ""
+  echo "❌ Prettier formatting drift detected. Fix with: npm run format"
+  exit 1
+}
+
 echo "Running site copy style lint (writing_style_guide)..."
 npm run lint:site-copy || exit 1
 

@@ -22,13 +22,14 @@ export type RecordTypeMatch = "canonical" | "alias" | "custom" | "default";
 // Derive record type definitions from entity schemas
 function deriveDefinitionsFromSchemas(): ReadonlyArray<RecordTypeDefinition> {
   return Object.values(ENTITY_SCHEMAS)
-    .filter(schema => schema.metadata)
-    .map(schema => ({
+    .filter((schema) => schema.metadata)
+    .map((schema) => ({
       id: schema.entity_type,
       label: schema.metadata!.label,
       description: schema.metadata!.description,
       category: schema.metadata!.category,
-      primaryProperties: schema.metadata!.primaryProperties || 
+      primaryProperties:
+        schema.metadata!.primaryProperties ||
         Object.entries(schema.schema_definition.fields)
           .filter(([, def]) => def.required)
           .map(([key]) => key),
@@ -86,13 +87,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Invoice",
     description: "Money owed to you or vendors.",
     category: "finance",
-    primaryProperties: [
-      "invoice_number",
-      "amount_due",
-      "due_date",
-      "vendor",
-      "status",
-    ],
+    primaryProperties: ["invoice_number", "amount_due", "due_date", "vendor", "status"],
     aliases: ["bill"],
   },
   {
@@ -100,13 +95,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Receipt",
     description: "Proof-of-purchase documents.",
     category: "finance",
-    primaryProperties: [
-      "receipt_number",
-      "amount_total",
-      "date",
-      "merchant_name",
-      "currency",
-    ],
+    primaryProperties: ["receipt_number", "amount_total", "date", "merchant_name", "currency"],
     aliases: ["proof_of_purchase"],
   },
   {
@@ -114,12 +103,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Statement",
     description: "Periodic statements (bank, credit, utilities).",
     category: "finance",
-    primaryProperties: [
-      "statement_period_start",
-      "statement_period_end",
-      "balance",
-      "institution",
-    ],
+    primaryProperties: ["statement_period_start", "statement_period_end", "balance", "institution"],
     aliases: ["bank_statement"],
   },
   {
@@ -127,13 +111,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Budget",
     description: "Planned vs actual spend for a window/category.",
     category: "finance",
-    primaryProperties: [
-      "period",
-      "category",
-      "amount_limit",
-      "amount_spent",
-      "currency",
-    ],
+    primaryProperties: ["period", "category", "amount_limit", "amount_spent", "currency"],
     aliases: ["spending_plan"],
   },
   {
@@ -141,14 +119,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Subscription",
     description: "Recurring payment agreements.",
     category: "finance",
-    primaryProperties: [
-      "provider",
-      "plan_name",
-      "amount",
-      "currency",
-      "renewal_date",
-      "status",
-    ],
+    primaryProperties: ["provider", "plan_name", "amount", "currency", "renewal_date", "status"],
     aliases: ["membership", "recurring_payment"],
   },
   {
@@ -204,13 +175,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Goal",
     description: "Outcome targets or OKRs.",
     category: "productivity",
-    primaryProperties: [
-      "name",
-      "metric",
-      "target_value",
-      "deadline",
-      "category",
-    ],
+    primaryProperties: ["name", "metric", "target_value", "deadline", "category"],
     aliases: ["objective", "okr"],
   },
   {
@@ -261,14 +226,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Exercise",
     description: "Single workout sessions or sets.",
     category: "health",
-    primaryProperties: [
-      "name",
-      "duration",
-      "intensity",
-      "muscle_group",
-      "sets",
-      "reps",
-    ],
+    primaryProperties: ["name", "duration", "intensity", "muscle_group", "sets", "reps"],
     aliases: ["workout", "training_session"],
   },
   {
@@ -292,13 +250,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Sleep Session",
     description: "Bedtime tracking entries.",
     category: "health",
-    primaryProperties: [
-      "start_time",
-      "end_time",
-      "duration",
-      "quality",
-      "notes",
-    ],
+    primaryProperties: ["start_time", "end_time", "duration", "quality", "notes"],
     aliases: ["sleep", "rest"],
   },
   {
@@ -306,14 +258,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Media Asset",
     description: "Uploaded files, images, videos, or remote media.",
     category: "media",
-    primaryProperties: [
-      "file_name",
-      "mime_type",
-      "size",
-      "url",
-      "checksum",
-      "engagement_stats",
-    ],
+    primaryProperties: ["file_name", "mime_type", "size", "url", "checksum", "engagement_stats"],
     aliases: ["file_asset", "file", "attachment", "asset"],
   },
   {
@@ -355,8 +300,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
   {
     id: "holding",
     label: "Holding",
-    description:
-      "Portfolio position snapshots tracking asset holdings over time.",
+    description: "Portfolio position snapshots tracking asset holdings over time.",
     category: "finance",
     primaryProperties: [
       "asset_symbol",
@@ -380,12 +324,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Tax Event",
     description: "Capital gains, losses, and tax-related transactions.",
     category: "finance",
-    primaryProperties: [
-      "event_date",
-      "asset_symbol",
-      "tax_year",
-      "gain_loss_usd",
-    ],
+    primaryProperties: ["event_date", "asset_symbol", "tax_year", "gain_loss_usd"],
     aliases: ["capital_gain", "tax_transaction"],
   },
   {
@@ -393,12 +332,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Crypto Transaction",
     description: "On-chain cryptocurrency transactions.",
     category: "finance",
-    primaryProperties: [
-      "transaction_date",
-      "tx_hash",
-      "asset_symbol",
-      "value_usd",
-    ],
+    primaryProperties: ["transaction_date", "tx_hash", "asset_symbol", "value_usd"],
     aliases: ["blockchain_transaction", "crypto_tx"],
   },
   {
@@ -406,12 +340,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Liability",
     description: "Debt and obligation tracking.",
     category: "finance",
-    primaryProperties: [
-      "name",
-      "liability_type",
-      "amount_usd",
-      "snapshot_date",
-    ],
+    primaryProperties: ["name", "liability_type", "amount_usd", "snapshot_date"],
     aliases: ["debt", "obligation"],
   },
   {
@@ -419,12 +348,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Flow",
     description: "Cash flow tracking for income and expenses over time.",
     category: "finance",
-    primaryProperties: [
-      "flow_name",
-      "flow_date",
-      "amount_usd",
-      "for_cash_flow",
-    ],
+    primaryProperties: ["flow_name", "flow_date", "amount_usd", "for_cash_flow"],
     aliases: ["cash_flow", "money_flow"],
   },
   {
@@ -440,12 +364,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Transfer",
     description: "Asset transfers between accounts.",
     category: "finance",
-    primaryProperties: [
-      "name",
-      "created_time",
-      "origin_account",
-      "destination_account",
-    ],
+    primaryProperties: ["name", "created_time", "origin_account", "destination_account"],
     aliases: ["asset_transfer", "account_transfer"],
   },
   {
@@ -477,12 +396,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Fixed Cost",
     description: "Recurring expenses and subscriptions.",
     category: "finance",
-    primaryProperties: [
-      "merchant",
-      "expense_name",
-      "status",
-      "frequency_per_year",
-    ],
+    primaryProperties: ["merchant", "expense_name", "status", "frequency_per_year"],
     aliases: ["recurring_expense", "subscription_cost"],
   },
   {
@@ -498,12 +412,7 @@ const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
     label: "Balance",
     description: "Account balance snapshots over time.",
     category: "finance",
-    primaryProperties: [
-      "snapshot_date",
-      "account_id",
-      "balance_usd",
-      "currency_original",
-    ],
+    primaryProperties: ["snapshot_date", "account_id", "balance_usd", "currency_original"],
     aliases: ["account_balance", "balance_snapshot"],
   },
 ] as const;
@@ -535,9 +444,7 @@ export function listCanonicalRecordTypes(): ReadonlyArray<RecordTypeDefinition> 
  *
  * Per MVP requirements, unrecognized types fallback to 'document' instead of creating custom types.
  */
-export function normalizeRecordType(
-  input?: string | null,
-): RecordTypeResolution {
+export function normalizeRecordType(input?: string | null): RecordTypeResolution {
   const trimmed = (input || "").trim();
   if (!trimmed) {
     return { type: "document", match: "default" };

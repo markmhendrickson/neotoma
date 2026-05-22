@@ -8,17 +8,18 @@
  *      MCP store. (Idempotent with the agent's own write.)
  *
  *   2. Compliance backfill: when the per-turn state shows the agent never
- *      called `store_structured` this turn, emit a `turn_compliance`
+ *      called MCP **`store`** this turn, emit a `turn_compliance`
  *      observation summarising what was missed, and ensure the
  *      conversation entity exists with PART_OF links from both the user
  *      message and the assistant message. This makes the turn graph
  *      survive small-model regimes that ignore the MCP instructions.
  *
- *   3. Optional auto follow-up: when `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` is
- *      enabled (default `auto` — on for every model) and the agent skipped
- *      writes, return `followup_message` so Cursor re-prompts the agent for
- *      one compliance pass. We rely on the hook's `loop_limit: 1` to cap
- *      this at a single retry per turn.
+ *   3. Optional auto follow-up: when `NEOTOMA_HOOK_COMPLIANCE_PASSES` is not
+ *      off and `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` is enabled (default `auto`
+ *      — on for every model) and the agent skipped writes, return
+ *      `followup_message` so Cursor re-prompts the agent for one compliance
+ *      pass. We rely on the hook's `loop_limit: 1` to cap this at a single
+ *      retry per turn.
  */
 
 import {
@@ -29,6 +30,7 @@ import {
   getClient,
   harnessProvenance,
   isExpectedNetworkError,
+  isHookComplianceFollowupEnabled,
   log,
   makeIdempotencyKey,
   readTurnState,
@@ -47,22 +49,12 @@ function pickEntityId(result: unknown): string | undefined {
   return undefined;
 }
 
-function complianceFollowupEnabled(): boolean {
-  const raw = (
-    process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP ?? "auto"
-  ).toLowerCase();
-  if (raw === "off" || raw === "false" || raw === "0") return false;
-  if (raw === "on" || raw === "true" || raw === "1") return true;
-  if (raw === "auto") return true;
-  return true;
-}
-
 function followupMessage(
   diagnosis: SkippedStoreDiagnosis | undefined
 ): string {
   const base = [
     "Neotoma compliance pass: the previous turn skipped the required Neotoma writes.",
-    "Please re-run this turn now using one batched store_structured call:",
+    "Please re-run this turn now using one batched **`store`** MCP call:",
     "(1) bounded retrieval if the user message implied known entities,",
     "(2) user-phase store with conversation + user conversation_message + extracted entities + PART_OF/REFERS_TO links,",
     "(3) closing assistant store with the exact reply text.",
@@ -153,7 +145,7 @@ async function handle(
     diagnosis = diagnoseSkippedStore({ state, hadFinalText });
     const missedSteps: string[] = [];
     if (!state.user_message_stored) missedSteps.push("user_message_store");
-    missedSteps.push("user_phase_store_structured");
+    missedSteps.push("user_phase_store");
     if (!finalText) missedSteps.push("assistant_message_store");
 
     if (!conversationEntityId) {
@@ -332,7 +324,7 @@ async function handle(
     hadMaterialContent &&
     loopCount === 0 &&
     status === "completed" &&
-    complianceFollowupEnabled();
+    isHookComplianceFollowupEnabled();
   if (!followupAllowed) {
     return backfilled ? {} : {};
   }

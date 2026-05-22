@@ -1,0 +1,42 @@
+Semantic similarity search finds relevant prior context by meaning rather than exact text match.
+Retrieval / RAG systems pioneered this by searching over unstructured documents using vector embeddings.
+Neotoma applies the same technique to structured entity snapshots, scoped by entity type and structural
+filters.
+
+## How it works
+
+When an agent or user queries Neotoma, the system embeds the query and compares it against entity
+snapshots. Because entities are structured and typed, search can be narrowed by entity type, time range,
+or relationship before similarity ranking is applied.
+
+```bash
+# Search by meaning across all entities
+neotoma entities search --query "upcoming meetings with the design team"
+
+# Narrow by entity type
+neotoma entities search --query "design review" --entity-type event
+```
+
+## Structured vs unstructured
+
+Pure retrieval systems search over raw documents and rely on the model to extract relevant facts from
+returned chunks. Neotoma searches over snapshots that already conform to
+<MdxI18nLink to="/schema-constraints" className="text-foreground underline hover:text-foreground">
+  schema constraints
+</MdxI18nLink>
+, so results are typed and immediately usable. This combines the flexibility of semantic search with the
+reliability of
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+.
+
+See
+<MdxI18nLink to="/memory-models" className="text-foreground underline hover:text-foreground">
+  memory models
+</MdxI18nLink>
+for a full comparison, and the
+<MdxI18nLink to="/mcp" className="text-foreground underline hover:text-foreground">
+  MCP reference
+</MdxI18nLink>
+for retrieval actions.

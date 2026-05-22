@@ -7,12 +7,7 @@ This directory contains future work proposals that have been migrated from `.cur
 - `*.md` - Active proposals for future implementation
 - `archived/` - Completed proposals that have been implemented
 
-## Current proposals
-
-- `mcp-cli-action-items.md` - MCP and CLI action items proposal
-- `llm_sampling_parameters_interpretation_config.md` - Add top-K and top-P to interpretation config for LLM auditability and repetition mitigation
-- `iterative_chat_store_mcp_instructions.md` - Update MCP instructions so agents store conversation and each turn as the chat progresses (no manual end-of-chat store command); Option A implemented
-- `conversation_turn_identity_reverts_forks.md` - Follow-on: turn identity, idempotency_key convention, preserve-all-branch-data, and graceful handling of reverts and chat forks; Option B contract implemented
+Browse the directory listing for the current set of active proposals. Implemented proposals are moved to `archived/` rather than kept in this list, so the list does not drift as work ships.
 
 ## Proposal Format
 

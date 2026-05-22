@@ -36,7 +36,7 @@ Patch release (git **`v0.3.11`**): large **CLI + HTTP action + MCP runtime** har
 - **`docs/developer/mcp/instructions.md`** — expanded MCP interaction block: prod vs **neotoma-dev** default, retrieval query-shape guidance, publication-recency vs observation recency, relationship batching in `store`, **`create_relationship` + EMBEDS** clarification, external-tool and **research deliverable** store-first rules, entity-type consistency for imports, **CLI parity** (`search` / `store` aliases), **CLI backup transport** (`--api-only` / `--base-url`) when reconciling with MCP.
 - **`docs/developer/cli_agent_instructions.md`** — same **prod vs dev** default, **publication recency** semantics for “recently published” style prompts.
 - **`docs/developer/cli_reference.md`** — documents the flags above, **`storage merge-db`**, and MCP/CLI parity notes.
-- **`docs/developer/mcp_overview.md`** — batched **`store` + `relationships`** example; **`mcp_chatgpt_setup.md`** — points ChatGPT Apps connector readers to **`chatgpt_apps_setup.md`**.
+- **`docs/developer/mcp_overview.md`** — batched **`store` + `relationships`** example; **`chatgpt_actions_setup.md`** — points ChatGPT Apps connector readers to **`chatgpt_apps_setup.md`**.
 - These files are what **`sync_mcp_configs`** / rule-copy flows use; refresh local rules after pull if you rely on generated `.cursor` / MCP instruction payloads.
 
 ## API surface & contracts

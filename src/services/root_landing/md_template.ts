@@ -81,7 +81,7 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
     parts.push("");
   }
   parts.push(
-    `**mode:** \`${ctx.mode}\` · **config:** \`${ctx.configEnvironment}\` · **version:** \`${ctx.version}\`${ctx.gitSha ? ` · **git:** \`${ctx.gitSha.slice(0, 7)}\`` : ""}`,
+    `**mode:** \`${ctx.mode}\` · **config:** \`${ctx.configEnvironment}\` · **version:** \`${ctx.version}\`${ctx.gitSha ? ` · **git:** \`${ctx.gitSha.slice(0, 7)}\`` : ""}`
   );
   parts.push("");
 
@@ -99,14 +99,16 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
   }
   if (ctx.mode === "sandbox") {
     parts.push(
-      `- **Sandbox terms:** ${mdLink(`${ctx.base}/sandbox/terms`, `${ctx.base}/sandbox/terms`)} (acceptable-use JSON)`,
+      `- **Sandbox terms:** ${mdLink(`${ctx.base}/sandbox/terms`, `${ctx.base}/sandbox/terms`)} (acceptable-use JSON)`
     );
     parts.push(`- **Abuse / PII reports:** \`POST ${ctx.base}/sandbox/report\``);
     parts.push("");
 
     parts.push("## Start a sandbox session");
     parts.push("");
-    parts.push("Each session creates an ephemeral user with seed data. Data is deleted when the session expires or is ended.");
+    parts.push(
+      "Each session creates an ephemeral user with seed data. Data is deleted when the session expires or is ended."
+    );
     parts.push("");
     parts.push("```shell");
     parts.push(`# Start with the generic pack`);
@@ -122,7 +124,9 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
     parts.push(`  -d '{"pack_id":"crm"}'`);
     parts.push("```");
     parts.push("");
-    parts.push("The response includes `one_time_code` (for browser handoff) and cookie credentials for API access.");
+    parts.push(
+      "The response includes `one_time_code` (for browser handoff) and cookie credentials for API access."
+    );
     parts.push("");
   }
 
@@ -131,9 +135,14 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
       ? "Config snippets use stdio; connect Neotoma as a local process."
       : `Config snippets below use this host's MCP URL (\`${ctx.mcpUrl}\`) so you can paste them directly into your harness.`;
 
+  const connectHarnessCliNote =
+    "With the Neotoma CLI installed: `neotoma setup` wires MCP entries and agent instruction files; use `neotoma mcp config` or `neotoma cli config` to update one layer only. For read-only help, run `neotoma mcp guide` or `neotoma cli guide`.";
+
   parts.push("## Connect your harness");
   parts.push("");
   parts.push(harnessLede);
+  parts.push("");
+  parts.push(connectHarnessCliNote);
   parts.push("");
   for (const h of ctx.harnesses) {
     parts.push(renderHarnessMd(h));
@@ -148,11 +157,11 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
   parts.push("---");
   parts.push("");
   parts.push(
-    `Served by Neotoma ${ctx.version}${ctx.gitSha ? ` · \`${ctx.gitSha.slice(0, 7)}\`` : ""} — mode \`${ctx.mode}\` · config \`${ctx.configEnvironment}\`.`,
+    `Served by Neotoma ${ctx.version}${ctx.gitSha ? ` · \`${ctx.gitSha.slice(0, 7)}\`` : ""} — mode \`${ctx.mode}\` · config \`${ctx.configEnvironment}\`.`
   );
   parts.push("");
   parts.push(
-    "**Programmatic clients:** send `Accept: application/json` for structured JSON, or `Accept: text/markdown` for this Markdown document. Default (no `Accept` / generic `*/*`) is JSON.",
+    "**Programmatic clients:** send `Accept: application/json` for structured JSON, or `Accept: text/markdown` for this Markdown document. Default (no `Accept` / generic `*/*`) is JSON."
   );
   parts.push("");
 

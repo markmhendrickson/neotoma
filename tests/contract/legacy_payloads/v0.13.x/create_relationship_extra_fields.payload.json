@@ -1,0 +1,7 @@
+{
+  "relationship_type": "REFERS_TO",
+  "source_entity_id": "ent_000000000000000000000001",
+  "target_entity_id": "ent_000000000000000000000002",
+  "undeclared_field": "some_value",
+  "another_extra": 42
+}

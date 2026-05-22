@@ -108,7 +108,12 @@ export async function inferSchemaFromEntities(
   );
 
   return {
-    schemaDefinition: { fields },
+    schemaDefinition: {
+      fields,
+      // Auto-inferred schemas have no explicit canonical identity — opt out of
+      // the R2 canonical_name_fields requirement so registration succeeds.
+      identity_opt_out: "heuristic_canonical_name" as const,
+    },
     reducerConfig: { merge_policies: mergePolicies },
     metadata: {
       field_count: allFields.size,
@@ -174,7 +179,10 @@ export async function inferSchemaFromParquet(
     );
 
     return {
-      schemaDefinition: { fields },
+      schemaDefinition: {
+        fields,
+        identity_opt_out: "heuristic_canonical_name" as const,
+      },
       reducerConfig: { merge_policies: mergePolicies },
       metadata: {
         field_count: Object.keys(fields).length,
@@ -340,23 +348,17 @@ function getDominantType(typeCounts: Map<string, number>): string {
 /**
  * Calculate overall confidence based on type consistency across samples
  */
-function calculateTypeConfidence(
-  fieldTypes: Map<string, Map<string, number>>
-): number {
+function calculateTypeConfidence(fieldTypes: Map<string, Map<string, number>>): number {
   let totalConsistency = 0;
   let fieldCount = 0;
 
   for (const typeCounts of fieldTypes.values()) {
-    const totalSamples = Array.from(typeCounts.values()).reduce(
-      (sum, count) => sum + count,
-      0
-    );
+    const totalSamples = Array.from(typeCounts.values()).reduce((sum, count) => sum + count, 0);
     const dominantCount = Math.max(...Array.from(typeCounts.values()));
 
     // Calculate consistency for this field (excluding null from denominator)
     const nonNullSamples = totalSamples - (typeCounts.get("null") || 0);
-    const consistency =
-      nonNullSamples > 0 ? dominantCount / nonNullSamples : 0;
+    const consistency = nonNullSamples > 0 ? dominantCount / nonNullSamples : 0;
 
     totalConsistency += consistency;
     fieldCount++;

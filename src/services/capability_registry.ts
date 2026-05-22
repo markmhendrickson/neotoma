@@ -39,13 +39,7 @@ const CAPABILITIES: Record<string, Capability> = {
     primary_entity_type: "invoice",
     schema_version: "1.0",
     canonicalization_rules: {
-      includedFields: [
-        "invoice_number",
-        "amount",
-        "vendor_name",
-        "customer_name",
-        "date",
-      ],
+      includedFields: ["invoice_number", "amount", "vendor_name", "customer_name", "date"],
       normalizeStrings: true,
       sortArrays: true,
     },
@@ -70,13 +64,7 @@ const CAPABILITIES: Record<string, Capability> = {
     primary_entity_type: "transaction",
     schema_version: "1.0",
     canonicalization_rules: {
-      includedFields: [
-        "transaction_id",
-        "amount",
-        "merchant_name",
-        "counterparty",
-        "date",
-      ],
+      includedFields: ["transaction_id", "amount", "merchant_name", "counterparty", "date"],
       normalizeStrings: true,
       sortArrays: true,
     },

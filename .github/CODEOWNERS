@@ -1,0 +1,55 @@
+# Code ownership and review routing.
+#
+# Lines lower in the file take precedence over earlier lines for the same path.
+# All entries currently route to @markmhendrickson; split out as additional
+# maintainers join. The point today is to make high-risk surfaces visible at
+# PR-open time and to give GitHub a hook for branch-protection required reviews.
+#
+# See .claude/rules/change_guardrails_rules.md § "Touchpoint matrix" for the
+# canonical mapping from surface → constraint doc.
+
+# Default owner for everything not otherwise matched.
+*                                            @markmhendrickson
+
+# Security: auth, proxy/loopback trust, local-dev shortcuts, semgrep, manifests.
+/src/actions.ts                              @markmhendrickson
+/src/services/local_auth.ts                  @markmhendrickson
+/src/services/access_policy.ts               @markmhendrickson
+/src/services/root_landing/                  @markmhendrickson
+/scripts/security/                           @markmhendrickson
+/tests/security/                             @markmhendrickson
+/docs/security/                              @markmhendrickson
+
+# API contract: OpenAPI is the source of truth; mappings + types are generated
+# or hand-maintained companions.
+/openapi.yaml                                @markmhendrickson
+/src/shared/openapi_types.ts                 @markmhendrickson
+/src/shared/openapi_schema.ts                @markmhendrickson
+/src/shared/openapi_file.ts                  @markmhendrickson
+/src/shared/contract_mappings.ts             @markmhendrickson
+/src/shared/action_schemas.ts                @markmhendrickson
+/tests/contract/                             @markmhendrickson
+
+# Schema registry & bootstrap: per-type behavior must stay schema-driven.
+/src/services/schema_registry.ts             @markmhendrickson
+/src/services/schema_bootstrap.ts            @markmhendrickson
+
+# Foundation, architecture, and the change guardrails themselves.
+/docs/foundation/                            @markmhendrickson
+/docs/architecture/                          @markmhendrickson
+/docs/NEOTOMA_MANIFEST.md                    @markmhendrickson
+/.claude/rules/                              @markmhendrickson
+
+# Release tooling and process. Skills are mirrored across .cursor/ and .claude/;
+# both paths route to the same reviewer.
+/.cursor/skills/release/                     @markmhendrickson
+/.cursor/skills/create-release/              @markmhendrickson
+/.claude/skills/release/                     @markmhendrickson
+/.claude/skills/create-release/              @markmhendrickson
+/docs/developer/github_release_process.md    @markmhendrickson
+/docs/releases/                              @markmhendrickson
+
+# CI configuration: changing what runs on PR is itself a high-risk change.
+/.github/workflows/                          @markmhendrickson
+/.github/CODEOWNERS                          @markmhendrickson
+/.github/pull_request_template.md            @markmhendrickson

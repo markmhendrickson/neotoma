@@ -27,7 +27,7 @@ npm test -- tests/cli/cli_entity_subcommands.test.ts tests/integration/entity_id
 - **Commands**:
 ```bash
 npm run validate:locales
-npm run build:pages:site
+npm run build:site:pages
 ```
 - **Exit criteria**:
   - no critical locale parity failures

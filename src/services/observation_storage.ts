@@ -44,6 +44,8 @@ export interface CreateObservationParams {
    * `Observation.observation_source` for the semantic contract.
    */
   observation_source?: ObservationSource | null;
+  /** Cross-instance sync: Neotoma peer id that originated this replayed write. */
+  source_peer_id?: string | null;
   fields: Record<string, unknown>;
   user_id: string;
   idempotency_key?: string | null;
@@ -82,7 +84,7 @@ export async function createObservation(
   enforceAttributionPolicy("observations", getCurrentAgentIdentity());
   assertCanWriteProtected({
     entity_type: params.entity_type,
-    op: "store_structured",
+    op: "store",
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
@@ -119,6 +121,9 @@ export async function createObservation(
   if (params.identity_rule) {
     (row as Record<string, unknown>).identity_rule = params.identity_rule;
   }
+  if (params.source_peer_id) {
+    (row as Record<string, unknown>).source_peer_id = params.source_peer_id;
+  }
 
   // Agent attribution (Phase 1). The provenance blob is empty when no
   // request context is active (stdio + no env identity), which keeps
@@ -129,11 +134,7 @@ export async function createObservation(
     (row as Record<string, unknown>).provenance = attribution;
   }
 
-  const { data, error } = await db
-    .from("observations")
-    .insert(row)
-    .select()
-    .single();
+  const { data, error } = await db.from("observations").insert(row).select().single();
 
   if (error) {
     throw new Error(`Failed to create observation: ${error.message}`);
@@ -155,7 +156,8 @@ export async function listObservationsForEntity(
     .order("observed_at", { ascending: false });
 
   if (options?.limit) query = query.limit(options.limit);
-  if (options?.offset) query = query.range(options.offset, (options.offset ?? 0) + (options.limit ?? 50) - 1);
+  if (options?.offset)
+    query = query.range(options.offset, (options.offset ?? 0) + (options.limit ?? 50) - 1);
 
   const { data, error, count } = await query;
   if (error) throw new Error(`Failed to list observations: ${error.message}`);
@@ -207,10 +209,7 @@ export async function rewriteObservationEntityId(
   return data?.length || 0;
 }
 
-export async function hasObservationsForEntity(
-  entityId: string,
-  userId: string
-): Promise<boolean> {
+export async function hasObservationsForEntity(entityId: string, userId: string): Promise<boolean> {
   const { data, error } = await db
     .from("observations")
     .select("id")

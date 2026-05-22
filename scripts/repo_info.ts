@@ -3,7 +3,7 @@
  * Writes frontend/src/site/repo_info.json with version (from package.json),
  * releasesCount, and starsCount (from GitHub API). Used by the landing page so
  * version, "N releases", and star count stay in sync. Run on npm run dev
- * (watch:ui) and before build:ui / build:pages:site.
+ * (dev:ui) and before build:ui / build:site:pages.
  */
 import fs from "node:fs";
 import path from "node:path";

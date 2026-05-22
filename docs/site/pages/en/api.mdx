@@ -1,0 +1,178 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import { ApiReferenceEndpointsTable } from "@/components/mdx/doc_reference_tables";
+
+The Neotoma REST API is defined in the{" "}
+<a
+  href="https://github.com/markmhendrickson/neotoma/blob/main/openapi.yaml"
+  className="text-foreground underline underline-offset-2 hover:no-underline"
+  target="_blank"
+  rel="noreferrer"
+>
+  OpenAPI spec
+</a>
+. The table below lists each endpoint and the capability it provides.
+
+The API is designed around deterministic state operations: store structured observations, retrieve snapshots with provenance, and manage typed relationships explicitly.
+
+## Getting started
+
+The API server is managed through the{" "}
+<MdxI18nLink to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+  Neotoma CLI
+</MdxI18nLink>
+. After{" "}
+<MdxI18nLink to="/install" className="text-foreground underline underline-offset-2 hover:no-underline">
+  installing Neotoma
+</MdxI18nLink>
+, start the API server:
+
+```
+# Start the development API server (port 3080)
+neotoma api start --env dev
+
+# Start the production API server (port 3180)
+neotoma api start --env prod
+
+# Check server status
+neotoma api status
+
+# View server logs
+neotoma api logs --env dev
+```
+
+Once the server is running, you can reach it at the base URLs below. The CLI also exposes every API operation directly. Run `neotoma --help` to see available commands, or see the{" "}
+<MdxI18nLink to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+  CLI reference
+</MdxI18nLink>{" "}
+for the full command list.
+
+## Base URL
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <strong className="text-foreground">Development:</strong> <code>http://localhost:3080</code>
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <strong className="text-foreground">Production:</strong> <code>http://localhost:3180</code> (local) or your deployed host
+  </li>
+</ul>
+
+## Authentication
+
+Most write endpoints require authentication. Discovery routes like `/health`, `/server-info`, and `/.well-known/*` are unauthenticated. When authentication is enabled, include a Bearer token:
+
+```
+Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
+```
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Set via <code>NEOTOMA_BEARER_TOKEN</code> environment variable
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    When encryption is enabled, use the key-derived MCP token instead: <code>neotoma auth mcp-token</code>
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    MCP OAuth endpoints (<code>/mcp/oauth/*</code>) have their own auth flow — see the{" "}
+    <MdxI18nLink to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
+      MCP reference
+    </MdxI18nLink>
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    For agent identity (cryptographically verifiable writes via RFC 9421 signatures and the <code>aa-agent+jwt</code> token), see the{" "}
+    <MdxI18nLink to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+      AAuth reference
+    </MdxI18nLink>
+    . Bearer auth and AAuth are independent and stack: Bearer authorizes the connection, AAuth attributes individual writes.
+  </li>
+</ul>
+
+## Request examples
+
+```
+# Store structured entities
+curl -X POST http://localhost:3080/store \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"entities":[{"entity_type":"task","title":"Review schema changes","status":"open"}]}'
+
+# Query entities
+curl -X POST http://localhost:3080/entities/query \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"filters":{"entity_type":"task"},"limit":10}'
+
+# Retrieve snapshot with provenance
+curl -X POST http://localhost:3080/get_entity_snapshot \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id":"<entity_id>"}'
+
+# Store a file with entities (unified store)
+curl -X POST http://localhost:3080/store \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"entities":[{"entity_type":"note","title":"Meeting notes"}],"file_path":"/path/to/document.pdf"}'
+
+# Health check (no auth required)
+curl http://localhost:3080/health
+```
+
+<ApiReferenceEndpointsTable />
+
+## Error responses
+
+All errors use a structured envelope:
+
+```
+{
+  "error_code": "INGESTION_FILE_TOO_LARGE",
+  "message": "File exceeds maximum size of 50MB",
+  "details": { "file_size": 52428800, "max_size": 52428800 },
+  "trace_id": "trace-uuid",
+  "timestamp": "2024-01-01T12:00:00Z"
+}
+```
+
+Standard HTTP status codes: `200` OK, `201` Created, `400` Bad Request, `401` Unauthorized, `403` Forbidden, `404` Not Found, `409` Conflict, `413` Payload Too Large, `429` Rate Limited, `500` Internal Server Error, `503` Service Unavailable. Check `error_code` for programmatic handling, not just the HTTP status.
+
+## Pagination
+
+List endpoints accept `limit` and `offset` parameters. Use `include_total_count: true` when building pagination UI. Recommended: keep `limit` at 100 or below for performance.
+
+```
+{
+  "filters": { "entity_type": "task" },
+  "limit": 20,
+  "offset": 0,
+  "include_total_count": true
+}
+```
+
+## File operations
+
+Upload files via the unified `POST /store` (with `file_path` or `file_content` + `mime_type`) or `POST /store/unstructured` for raw file ingestion. File size limit: 50 MB. Retrieve signed URLs via `GET /get_file_url?file_path=...` (default expiry: 1 hour).
+
+<p className="text-[14px] leading-6 text-muted-foreground">
+  Continue with{" "}
+  <MdxI18nLink to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
+    MCP reference
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+    CLI reference
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/schema-management" className="text-foreground underline underline-offset-2 hover:no-underline">
+    schema management
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/architecture" className="text-foreground underline underline-offset-2 hover:no-underline">
+    architecture
+  </MdxI18nLink>
+  , and{" "}
+  <MdxI18nLink to="/tunnel" className="text-foreground underline underline-offset-2 hover:no-underline">
+    expose tunnel
+  </MdxI18nLink>
+  .
+</p>

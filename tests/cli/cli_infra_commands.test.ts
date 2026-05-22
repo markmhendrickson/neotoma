@@ -120,19 +120,38 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(out).toMatch(/config|check|watch/i);
     });
 
+    it("mcp guide --help shows usage", async () => {
+      const out = await getHelp("mcp guide");
+      expect(out).toMatch(/guide|Usage|Options/i);
+    });
+
     it("mcp config --help shows usage", async () => {
       const out = await getHelp("mcp config");
       expect(out).toMatch(/config|Usage|Options/i);
+      expect(out).toMatch(/--rewrite-neotoma-mcp/i);
     });
 
     it("mcp check --help shows usage", async () => {
       const out = await getHelp("mcp check");
       expect(out).toMatch(/check|Usage|Options/i);
+      expect(out).toMatch(/--rewrite-neotoma-mcp/i);
     });
 
     it("mcp watch --help shows usage", async () => {
       const out = await getHelp("mcp watch");
       expect(out).toMatch(/watch|Usage|Options/i);
+    });
+
+    it("cli help lists guide and config subcommands", async () => {
+      const out = await getHelp("cli");
+      expect(out).toMatch(/guide/i);
+      expect(out).toMatch(/config/i);
+    });
+
+    it("cli config --help shows scope and yes flags", async () => {
+      const out = await getHelp("cli config");
+      expect(out).toMatch(/--scope/i);
+      expect(out).toMatch(/--yes/i);
     });
 
     it("watch accepts env as first argument (e.g. watch dev)", async () => {
@@ -196,6 +215,12 @@ describe("CLI infrastructure command smoke tests", () => {
     it("api status --help shows usage", async () => {
       const out = await getHelp("api status");
       expect(out).toMatch(/status|Usage|Options/i);
+    });
+
+    it("api start --help mentions the required env flag", async () => {
+      const out = await getHelp("api start");
+      expect(out).toMatch(/--env dev or --env prod/i);
+      expect(out).toMatch(/api start --env prod/i);
     });
   });
 
@@ -311,14 +336,14 @@ describe("CLI infrastructure command smoke tests", () => {
       const { stdout } = await execAsync(
         `NEOTOMA_SESSION_ENV=dev NEOTOMA_SESSION_DEV_PORT=3080 ${CLI_PATH} servers`
       );
-      expect(stdout).toContain("http://127.0.0.1:3080/mcp");
+      expect(stdout).toContain("http://localhost:3080/mcp");
     });
 
     it("servers should honor selected session instance port", async () => {
       const { stdout } = await execAsync(
         `NEOTOMA_SESSION_ENV=prod NEOTOMA_SESSION_API_PORT=9191 ${CLI_PATH} servers`
       );
-      expect(stdout).toContain("http://127.0.0.1:9191/mcp");
+      expect(stdout).toContain("http://localhost:9191/mcp");
     });
 
     it("storage info should return JSON payload", async () => {
@@ -423,6 +448,9 @@ describe("CLI infrastructure command smoke tests", () => {
       const dataDir = join(root, "data");
       const outputDir = join(root, "out");
       const restoreDir = join(root, "restore");
+      await mkdir(dataDir, { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      createTestDb(join(dataDir, "neotoma.db"), [{ id: "a", value: "backup-src" }]);
       const { stdout: backupStdout } = await execAsync(
         `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup create --output "${outputDir}" --json`
       );
@@ -430,6 +458,11 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(backupResult).toHaveProperty("status");
       expect(backupResult.status).toBe("complete");
       expect(backupResult).toHaveProperty("backup_dir");
+      expect(backupResult).toHaveProperty("backup_size");
+      expect((backupResult as { backup_size: { bytes: number; files: number; human: string } }).backup_size.bytes).toBeGreaterThan(0);
+      expect(
+        (backupResult as { backup_size: { bytes: number; files: number; human: string } }).backup_size.human
+      ).toMatch(/\d/);
 
       const { stdout: restoreStdout } = await execAsync(
         `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup restore --from "${backupResult.backup_dir}" --target "${restoreDir}" --json`
@@ -438,6 +471,33 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(restoreResult).toHaveProperty("status");
       expect(restoreResult.status).toBe("restored");
       expect(restoreResult).toHaveProperty("target_dir");
+    });
+
+    it("backup create --tar should write a non-empty tar.gz beside the backup dir", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-backup-tar-"));
+      const dataDir = join(root, "data");
+      const outputDir = join(root, "out");
+      await mkdir(dataDir, { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      createTestDb(join(dataDir, "neotoma.db"), [{ id: "b", value: "ok" }]);
+      const { stdout } = await execAsync(
+        `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup create --output "${outputDir}" --tar --json`
+      );
+      const backupResult = JSON.parse(stdout) as {
+        status: string;
+        archive_path?: string;
+        archive_bytes?: number;
+      };
+      expect(backupResult.status).toBe("complete");
+      expect(backupResult).toHaveProperty("backup_size");
+      expect(
+        (backupResult as { backup_size: { archive_bytes?: number } }).backup_size.archive_bytes
+      ).toBeGreaterThan(0);
+      expect(backupResult.archive_path).toBeDefined();
+      expect(backupResult.archive_bytes).toBeGreaterThan(0);
+      const { stat } = await import("fs/promises");
+      const st = await stat(backupResult.archive_path!);
+      expect(st.size).toBe(backupResult.archive_bytes);
     });
 
     it("storage set-data-dir should update NEOTOMA_DATA_DIR in .env", async () => {

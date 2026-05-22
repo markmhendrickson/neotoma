@@ -1,0 +1,128 @@
+name: Docs PR preview
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "frontend/src/site/**"
+      - "frontend/public/**"
+      - "public/**"
+      - "scripts/build_github_pages_site.tsx"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: docs-pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate route parity
+        run: npm run validate:routes
+
+      - name: Build UI (for compiled Tailwind CSS)
+        run: npm run build:ui
+
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Build static site
+        env:
+          SITE_PREVIEW: "1"
+          NEOTOMA_DOCS_SHOW_INTERNAL: "false"
+        run: npm run build:site:pages
+
+      - name: Validate locale parity
+        run: npm run validate:locales
+
+      - name: Validate site export
+        run: npm run validate:site-export
+
+      - name: Rewrite asset paths for subdirectory deploy
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Prerender and validation require root-absolute paths.
+          # Rewrite all root-absolute static asset references so they resolve
+          # under /pr-N/ when deployed to that subdirectory on dev.neotoma.io.
+          find site_pages -name "*.html" -print0 | xargs -0 sed -i \
+            -e "s|/assets/|/pr-${PR_NUMBER}/assets/|g" \
+            -e "s|/neotoma-wordmark\.svg|/pr-${PR_NUMBER}/neotoma-wordmark.svg|g" \
+            -e "s|/neotoma-hero\.png|/pr-${PR_NUMBER}/neotoma-hero.png|g" \
+            -e "s|/neotoma-og-1200x630\.png|/pr-${PR_NUMBER}/neotoma-og-1200x630.png|g" \
+            -e "s|/favicon\.ico|/pr-${PR_NUMBER}/favicon.ico|g" \
+            -e "s|/favicon\.svg|/pr-${PR_NUMBER}/favicon.svg|g" \
+            -e "s|/favicon-16x16\.png|/pr-${PR_NUMBER}/favicon-16x16.png|g" \
+            -e "s|/favicon-32x32\.png|/pr-${PR_NUMBER}/favicon-32x32.png|g" \
+            -e "s|/favicon-48x48\.png|/pr-${PR_NUMBER}/favicon-48x48.png|g" \
+            -e "s|/apple-touch-icon\.png|/pr-${PR_NUMBER}/apple-touch-icon.png|g" \
+            -e "s|/android-chrome-192x192\.png|/pr-${PR_NUMBER}/android-chrome-192x192.png|g" \
+            -e "s|/android-chrome-512x512\.png|/pr-${PR_NUMBER}/android-chrome-512x512.png|g" \
+            -e "s|/site\.webmanifest|/pr-${PR_NUMBER}/site.webmanifest|g"
+
+      - name: Deploy PR preview
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.DEV_PAGES_DEPLOY_TOKEN }}
+          external_repository: markmhendrickson/neotoma-dev-site
+          publish_branch: gh-pages
+          destination_dir: pr-${{ github.event.pull_request.number }}
+          publish_dir: ./site_pages
+          keep_files: true
+          commit_message: "PR #${{ github.event.pull_request.number }} preview from ${{ github.sha }}"
+
+      - name: Post preview URL as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request.number;
+            const previewUrl = `https://dev.neotoma.io/pr-${pr}/`;
+            const body = [
+              `### Docs preview`,
+              ``,
+              `**Preview URL:** ${previewUrl}`,
+              ``,
+              `Built from \`${{ github.sha }}\`. The preview is a static export — manifest-driven category ordering is not applied, but all doc content is rendered.`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+            });
+
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.startsWith('### Docs preview')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }

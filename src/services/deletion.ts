@@ -9,6 +9,8 @@
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
 
+import { emitEntityLifecycle, emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
+
 export interface DeletionObservation extends Record<string, unknown> {
   id: string;
   entity_id: string;
@@ -129,6 +131,14 @@ export async function softDeleteEntity(
       };
     }
 
+    emitEntityLifecycle({
+      user_id: userId,
+      entity_id: entityId,
+      entity_type: entityType,
+      event_type: "entity.deleted",
+      timestamp: deletedAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,
@@ -178,9 +188,7 @@ export async function softDeleteRelationship(
     deleted_by: userId,
     ...(reason && { deletion_reason: reason }),
   });
-  const canonicalHash = createHash("sha256")
-    .update(metadataString)
-    .digest("hex");
+  const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
   const deletionObservation = {
     id: observationId,
@@ -215,6 +223,16 @@ export async function softDeleteRelationship(
       };
     }
 
+    emitRelationshipLifecycle({
+      user_id: userId,
+      relationship_key: relationshipKey,
+      relationship_type: relationshipType,
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetEntityId,
+      event_type: "relationship.deleted",
+      timestamp: deletedAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,
@@ -285,6 +303,14 @@ export async function restoreEntity(
       };
     }
 
+    emitEntityLifecycle({
+      user_id: userId,
+      entity_id: entityId,
+      entity_type: entityType,
+      event_type: "entity.restored",
+      timestamp: restoredAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,
@@ -334,9 +360,7 @@ export async function restoreRelationship(
     restored_by: userId,
     ...(reason && { restoration_reason: reason }),
   });
-  const canonicalHash = createHash("sha256")
-    .update(metadataString)
-    .digest("hex");
+  const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
   const restorationObservation = {
     id: observationId,
@@ -371,6 +395,16 @@ export async function restoreRelationship(
       };
     }
 
+    emitRelationshipLifecycle({
+      user_id: userId,
+      relationship_key: relationshipKey,
+      relationship_type: relationshipType,
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetEntityId,
+      event_type: "relationship.restored",
+      timestamp: restoredAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,
@@ -392,10 +426,7 @@ export async function restoreRelationship(
  * @param userId - User ID (for RLS)
  * @returns True if entity is deleted
  */
-export async function isEntityDeleted(
-  entityId: string,
-  userId: string
-): Promise<boolean> {
+export async function isEntityDeleted(entityId: string, userId: string): Promise<boolean> {
   const { data, error } = await db
     .from("observations")
     .select("fields, source_priority, observed_at")
@@ -468,13 +499,7 @@ export async function batchSoftDeleteEntities(
   const results: DeletionResult[] = [];
 
   for (const entityId of entityIds) {
-    const result = await softDeleteEntity(
-      entityId,
-      entityType,
-      userId,
-      reason,
-      timestamp
-    );
+    const result = await softDeleteEntity(entityId, entityType, userId, reason, timestamp);
     results.push(result);
   }
 

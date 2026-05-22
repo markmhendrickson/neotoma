@@ -1,23 +1,24 @@
 /**
- * Tenant isolation matrix.
+ * Tenant isolation matrix (Gate G3 — companion to auth_topology_matrix).
  *
- * Companion to (and conceptually parallel with) any future
- * auth_topology_matrix that verifies unauthenticated callers are rejected.
- * This suite covers a different threat model: an authenticated caller
- * MUST NOT be able to read another user's data, even when they know a
- * cross-user entity_id, source_id, or relationship key.
+ * Where `auth_topology_matrix.test.ts` verifies that protected endpoints
+ * reject unauthenticated callers, this matrix covers the orthogonal
+ * threat model: an authenticated caller MUST NOT be able to read another
+ * user's data even when they know a cross-user entity_id, source_id, or
+ * relationship key.
  *
  * Motivated by GHSA-wrr4-782v-jhwh /
  * docs/security/advisories/2026-05-21-relationship-endpoint-tenant-isolation.md
  *
- * Every authenticated query endpoint that touches user-owned data MUST be
- * covered here. Adding a new endpoint to the codebase without adding a
- * row to this matrix is a regression that must be caught in review.
+ * Every authenticated query endpoint that touches user-owned data
+ * (entities, observations, sources, relationship_snapshots,
+ * timeline_events, entity_snapshots) MUST be covered here. Adding a new
+ * such endpoint without adding a row is blocked by the change guardrails
+ * rule MUST 5.
  *
- * NOTE: Some endpoints listed below are pending tenant-isolation fixes
- * (#365 /list_relationships, #366 /retrieve_graph_neighborhood). Those
- * cases are marked `.todo` or `.skip` until the fix PRs land; the matrix
- * landing first ensures the fixes are verified against this suite.
+ * The matrix seeds two distinct user_ids' worth of data and asserts that
+ * calls authenticated as user A only see user A's data, regardless of
+ * which node_id, entity_id, or source_id is queried.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -32,18 +33,31 @@ interface FixtureUserData {
   userId: string;
   entityId: string;
   sourceId: string;
+  relationshipKey: string;
+  observationId: string;
 }
 
 async function seedUserData(label: string): Promise<FixtureUserData> {
   const userId = randomUUID();
-  const entityId = `${TEST_PREFIX}_ent_${label}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const entityId = `${TEST_PREFIX}_ent_${label}_${suffix}`;
+  const entityId2 = `${TEST_PREFIX}_ent2_${label}_${suffix}`;
   const sourceId = randomUUID();
+  const relationshipKey = `${TEST_PREFIX}_rel_${label}_${suffix}`;
+  const observationId = randomUUID();
 
   await db.from("entities").insert({
     id: entityId,
     user_id: userId,
     entity_type: "test",
     canonical_name: `${label}'s Entity`,
+  });
+
+  await db.from("entities").insert({
+    id: entityId2,
+    user_id: userId,
+    entity_type: "test",
+    canonical_name: `${label}'s Entity 2`,
   });
 
   await db.from("sources").insert({
@@ -55,11 +69,35 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
     file_size: 0,
   });
 
-  return { userId, entityId, sourceId };
+  await db.from("relationship_snapshots").insert({
+    relationship_key: relationshipKey,
+    relationship_type: "REFERS_TO",
+    source_entity_id: entityId,
+    target_entity_id: entityId2,
+    schema_version: "1",
+    snapshot: JSON.stringify({}),
+    user_id: userId,
+  });
+
+  await db.from("observations").insert({
+    id: observationId,
+    entity_id: entityId,
+    entity_type: "test",
+    schema_version: "1.0",
+    observed_at: new Date().toISOString(),
+    source_priority: 0,
+    source_id: sourceId,
+    fields: { marker: `${TEST_PREFIX}_obs_${label}` },
+    user_id: userId,
+  });
+
+  return { userId, entityId, sourceId, relationshipKey, observationId };
 }
 
 async function cleanupUserData(data: FixtureUserData): Promise<void> {
-  await db.from("entities").delete().eq("id", data.entityId);
+  await db.from("observations").delete().eq("id", data.observationId);
+  await db.from("relationship_snapshots").delete().eq("relationship_key", data.relationshipKey);
+  await db.from("entities").delete().eq("user_id", data.userId);
   await db.from("sources").delete().eq("id", data.sourceId);
 }
 
@@ -90,34 +128,110 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
     await cleanupUserData(userB);
   });
 
+  describe("/list_relationships", () => {
+    it("user A querying their own entity_id returns scoped result", async () => {
+      const { status, json } = await callEndpoint("/list_relationships", {
+        entity_id: userA.entityId,
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      expect(Array.isArray(json.relationships)).toBe(true);
+    });
+
+    it("user A querying user B's entity_id does NOT return user B's seeded relationship", async () => {
+      const { status, json } = await callEndpoint("/list_relationships", {
+        entity_id: userB.entityId,
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      // user_id scoping blocks user B's relationship_snapshots row; relationship_key must not appear
+      const keys = (json.relationships ?? []).map((r: any) => r.relationship_key);
+      expect(keys).not.toContain(userB.relationshipKey);
+      expect(json.relationships).toEqual([]);
+    });
+  });
+
+  describe("/retrieve_graph_neighborhood", () => {
+    it("user A querying their own node_id returns user A's entity", async () => {
+      const { status, json } = await callEndpoint("/retrieve_graph_neighborhood", {
+        node_id: userA.entityId,
+        node_type: "entity",
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      expect(json.entity).toBeDefined();
+      expect(json.entity.id).toBe(userA.entityId);
+    });
+
+    it("user A querying user B's node_id does NOT return user B's entity", async () => {
+      const { status, json } = await callEndpoint("/retrieve_graph_neighborhood", {
+        node_id: userB.entityId,
+        node_type: "entity",
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      // Scoped query .single() finds no row for user A
+      expect(json.entity).toBeUndefined();
+    });
+
+    // NOTE: the `node_type: "source"` branch in src/actions.ts and src/server.ts
+    // queries `db.from("source")` (singular). The canonical table is `sources`
+    // (plural), so that branch returns no rows for any user — a pre-existing
+    // dead-code path tracked separately. We intentionally do NOT assert against
+    // it here: a tautological assertion (always passes regardless of the
+    // user_id filter) is worse than no assertion.
+
+    it("user A's include_observations does NOT return user B's observations on user B's entity", async () => {
+      // userA queries userB's entityId asking for observations. The entity-branch
+      // .single() filter blocks the entity itself, but we also assert the
+      // observations sub-query is user-scoped — a regression of the
+      // .eq("user_id", userId) on the observations subquery would surface user B's
+      // observation row here.
+      const { status, json } = await callEndpoint("/retrieve_graph_neighborhood", {
+        node_id: userB.entityId,
+        node_type: "entity",
+        user_id: userA.userId,
+        include_observations: true,
+      });
+      expect(status).toBe(200);
+      expect(json.entity).toBeUndefined();
+      const obsIds = (json.observations ?? []).map((o: any) => o.id);
+      expect(obsIds).not.toContain(userB.observationId);
+    });
+
+    it("user A querying their own entity with include_observations returns their observation", async () => {
+      // Positive control: the same code path returns user A's own observations.
+      const { status, json } = await callEndpoint("/retrieve_graph_neighborhood", {
+        node_id: userA.entityId,
+        node_type: "entity",
+        user_id: userA.userId,
+        include_observations: true,
+      });
+      expect(status).toBe(200);
+      expect(json.entity).toBeDefined();
+      const obsIds = (json.observations ?? []).map((o: any) => o.id);
+      expect(obsIds).toContain(userA.observationId);
+    });
+  });
+
   describe("/retrieve_related_entities", () => {
-    it("user A querying their own entity_id returns user A's data", async () => {
+    it("user A querying their own entity_id returns scoped result", async () => {
       const { status, json } = await callEndpoint("/retrieve_related_entities", {
         entity_id: userA.entityId,
         user_id: userA.userId,
       });
       expect(status).toBe(200);
-      // Empty relationships is fine — what matters is no error and no cross-user leak
       expect(Array.isArray(json.relationships)).toBe(true);
     });
 
-    it("user A querying user B's entity_id returns no data (scoped to user A)", async () => {
+    it("user A querying user B's entity_id returns empty (scoped to user A)", async () => {
       const { status, json } = await callEndpoint("/retrieve_related_entities", {
         entity_id: userB.entityId,
         user_id: userA.userId,
       });
       expect(status).toBe(200);
-      // User A's scope means no relationships involving user B's entity
       expect(json.relationships).toEqual([]);
       expect(json.entities ?? []).toEqual([]);
     });
-  });
-
-  describe("/list_relationships", () => {
-    it.todo("Add coverage once #365 lands — verify cross-user entity_id returns empty");
-  });
-
-  describe("/retrieve_graph_neighborhood", () => {
-    it.todo("Add coverage once #366 lands — verify cross-user node_id returns no entity");
   });
 });

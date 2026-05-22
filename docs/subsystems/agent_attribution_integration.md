@@ -27,13 +27,19 @@ interpretations, timeline events):
      `typ: "aa-agent+jwt"` carrying stable `sub` and `iss` claims.
 
    Neotoma verifies against the canonical `authority` configured via
-   `NEOTOMA_AUTH_AUTHORITY` (defaults to the local dev host). The
+   `NEOTOMA_AAUTH_AUTHORITY` (defaults to the local dev host). The
    `authority` value MUST match the server's canonical host — using the
    `Host` header is explicitly unsafe.
 
 2. **MCP `clientInfo` fallback**. On `initialize` the MCP transport
    self-reports `{ name, version }`. Self-reported; subject to generic-
    name normalisation (see §3).
+
+Cursor's native HTTP MCP `url` configuration is a `clientInfo`/OAuth/Bearer
+transport; it does not add AAuth HTTP Message Signature headers. Use the
+signed stdio shim or another signing client when Cursor writes need to land
+as `software`, `operator_attested`, or `hardware`. See
+[`docs/developer/mcp_cursor_setup.md`](../developer/mcp_cursor_setup.md).
 
 Both channels contribute to a single `AgentIdentity` record that's
 persisted on every write.
@@ -378,6 +384,8 @@ Stable fields:
 | `signature_verified: false`, `signature_error_code: "signature_invalid"` | Wrong `@authority`; body hashing misaligned; `content-digest` not covered. |
 | `signature_error_code: "jwt_expired"` | Agent token past its `exp`. Refresh the token. |
 | `signature_error_code: "verification_threw"`              | Unreachable JWKS URL or malformed headers. Check network + header casing. |
+| `signature_present: false` on `GET /session`, `POST /entities/query`, or other non-MCP routes | Expected for unsigned Inspector / REST requests. Filter to `POST /mcp` after an MCP tool call before diagnosing MCP signing. |
+| `signature_present: false` on `POST /mcp` from Cursor | Cursor is using a direct HTTP `url` transport, a stale/non-signed MCP entry, or the proxy fell back to unsigned fetch. Use stdio + signed shim and inspect MCP subprocess stderr. |
 | `tier: "anonymous"`, no signature headers                 | Caller forgot to sign; OR `Host` header rewriting stripped `@authority`. |
 | `tier: "unverified_client"` but expected `software`/`hardware` | AAuth not wired; clientInfo.name survived but signature is missing. |
 | `client_info_normalised_to_null_reason: "too_generic"`    | clientInfo.name is in the blocklist (`mcp`, `client`, …). Pick a distinctive name. |
@@ -428,7 +436,74 @@ When a keypair is present at `~/.neotoma/aauth/private.jwk`,
 `@hellocoop/httpsig`. Signing is silently skipped (no error) when no
 keypair is configured so existing CLI users are unaffected.
 
-## 8. Where to go from here
+## 8. External actor provenance (GitHub identity)
+
+A separate `external_actor` channel in `observations.provenance` captures
+who authored the upstream artifact on GitHub. This is NOT part of AAuth
+agent identity — it is a parallel provenance facet. AAuth answers "who
+wrote to Neotoma"; `external_actor` answers "who authored the upstream
+GitHub issue/comment".
+
+### AAuth alignment
+
+This feature stays in **AAuth Identity-Based mode**: the agent signs
+every request, the resource verifies and applies its own access control.
+The submitter's GitHub link rides as a **custom claim** on the AAuth
+`agent_token` JWT (`https://neotoma.io/external_actors` array). No
+`resource_token`, `auth_token`, or Person Server is introduced.
+
+### `verified_via` values
+
+Each `external_actor` carries a `verified_via` field indicating the
+strength of the identity claim:
+
+| Value | Meaning |
+|---|---|
+| `claim` | Self-reported in payload; no independent verification. |
+| `linked_attestation` | Carried in the submitter's `agent_token` JWT claim; bound to the same key that authenticated the HTTP request. |
+| `oauth_link` | Verified on this install via GitHub OAuth; `linked_neotoma_user_id` is the operator-local user. |
+| `webhook_signature` | Verified via GitHub webhook HMAC SHA-256 signature. Strongest. |
+
+### Cross-install identity rules
+
+- `neotoma_user_id` / `linked_neotoma_user_id` is **always install-local**.
+- AAuth `thumbprint` / `sub` carry across installs (public-key-derived).
+- A remote submitter's GitHub identity reaches the operator via:
+  1. Webhook (Phase 3): `verified_via: "webhook_signature"`.
+  2. Agent token claim (Phase 4b): `verified_via: "linked_attestation"`.
+  3. Operator-local grant link (Phase 4): `verified_via: "oauth_link"`.
+
+### Webhook setup
+
+1. Set `GITHUB_WEBHOOK_SECRET` in the operator's environment.
+2. Configure the GitHub repo webhook to POST to `<neotoma-url>/github/webhook`
+   with content type `application/json` and events: `issues`, `issue_comment`.
+3. Neotoma verifies `X-Hub-Signature-256` using timing-safe HMAC SHA-256.
+4. Verified events are stored with `observation_source: "sensor"` and
+   `verified_via: "webhook_signature"`.
+
+### Operator-local GitHub linking
+
+The `agent_grant` entity has optional fields `linked_github_login`,
+`linked_github_user_id`, and `linked_github_verified_at`. Agents (or
+operators) link via `neotoma github link` (CLI) or Inspector OAuth flow.
+When a store request's inbound `external_actor.id` matches the grant's
+`linked_github_user_id`, `verified_via` is promoted to `oauth_link` and
+`linked_neotoma_user_id` is set.
+
+### Submitter-side `--no-external-actors` flag
+
+The CLI's `mintCliAgentTokenJwt` embeds the `https://neotoma.io/external_actors`
+claim by default when a local grant has a GitHub link. Submitters can
+suppress this with `--no-external-actors` for privacy.
+
+### Inspector surfacing
+
+The `ExternalActorBadge` component shows login, verification pill,
+and detailed tooltip. The `IssueAuthorLine` extracts and displays
+`external_actor` from provenance alongside existing AAuth attribution.
+
+## 9. Where to go from here
 
 - Model / tier derivation: [`src/crypto/agent_identity.ts`](../../src/crypto/agent_identity.ts)
 - AAuth middleware internals: [`src/middleware/aauth_verify.ts`](../../src/middleware/aauth_verify.ts)
@@ -436,4 +511,10 @@ keypair is configured so existing CLI users are unaffected.
 - Policy enforcement seam: [`src/services/attribution_policy.ts`](../../src/services/attribution_policy.ts)
 - Session response assembly: [`src/services/session_info.ts`](../../src/services/session_info.ts)
 - Inspector surfacing: [`inspector/src/components/shared/agent_badge.tsx`](../../inspector/src/components/shared/agent_badge.tsx), [`inspector/src/pages/agents.tsx`](../../inspector/src/pages/agents.tsx)
+- External actor badge: [`inspector/src/components/shared/external_actor_badge.tsx`](../../inspector/src/components/shared/external_actor_badge.tsx)
+- GitHub webhook handler: [`src/services/github_webhook.ts`](../../src/services/github_webhook.ts)
+- External actor builder: [`src/services/issues/external_actor_builder.ts`](../../src/services/issues/external_actor_builder.ts)
+- External actor promoter: [`src/services/external_actor_promoter.ts`](../../src/services/external_actor_promoter.ts)
+- GitHub account linking: [`src/services/github_link.ts`](../../src/services/github_link.ts)
+- Attribution backfill: [`src/services/issues/attribution_backfill.ts`](../../src/services/issues/attribution_backfill.ts)
 - Related proposals: [`docs/proposals/agent-trust-framework.md`](../proposals/agent-trust-framework.md), [`docs/proposals/trusted_proxy_mode_2026_04_22.md`](../proposals/trusted_proxy_mode_2026_04_22.md)

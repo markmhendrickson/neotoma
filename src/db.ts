@@ -12,7 +12,7 @@ export async function initDatabase(): Promise<void> {
   // Note: Migrations are skipped in MCP mode to avoid stdout pollution
   // Apply migrations manually via: npm run migrate
   const skipMigrations = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
-  
+
   if (!skipMigrations) {
     try {
       // Use dynamic import to avoid circular dependencies
@@ -27,7 +27,7 @@ export async function initDatabase(): Promise<void> {
       logger.warn(
         `[WARN] Could not run migrations during init: ${
           error instanceof Error ? error.message : String(error)
-        }`,
+        }`
       );
       // Continue anyway - migrations might already be applied or might fail due to permissions
     }

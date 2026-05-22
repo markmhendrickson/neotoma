@@ -112,8 +112,9 @@ function isNeotomaRelevantTool(
       lower.includes("neotoma") ||
       lower.startsWith("mcp_neotoma") ||
       lower.startsWith("mcp_user-neotoma") ||
-      lower === "submit_feedback" ||
-      lower === "get_feedback_status" ||
+      lower === "submit_issue" ||
+      lower === "get_issue_status" ||
+      lower === "store" ||
       lower === "store_structured" ||
       lower === "retrieve_entities" ||
       lower === "retrieve_entity_by_identifier" ||
@@ -156,7 +157,7 @@ function homeDirPattern(): RegExp | null {
  * Light PII scrub suitable for passing a short error message through the
  * hook layer into a structured entity. The agent is still expected to
  * apply the full PII redaction contract when it decides to call
- * `submit_feedback` — this is a defence in depth only.
+ * `submit_issue` — this is a defence in depth only.
  */
 function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
@@ -385,8 +386,8 @@ function formatFailureHint(hint: FailureHint): string {
   return [
     `Neotoma hook note: ${hint.count} recent failures this session for`,
     `tool \`${hint.tool_name}\` with error class \`${hint.error_class}\`.`,
-    `If this is blocking your task, consider calling \`submit_feedback\``,
-    `with kind=incident, PII-redacted title/body, and metadata.environment`,
+    `If this is blocking your task, consider calling \`submit_issue\``,
+    `with a PII-redacted title/body describing the friction`,
     `per docs/developer/mcp/instructions.md. This is informational —`,
     `do not auto-submit.`,
   ].join(" ");

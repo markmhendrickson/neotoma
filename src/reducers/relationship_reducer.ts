@@ -5,7 +5,6 @@
  * Mirrors the entity observation reducer but works with relationships.
  */
 
-
 export interface RelationshipObservation {
   id: string;
   relationship_key: string;
@@ -37,11 +36,7 @@ export interface RelationshipSnapshot {
   user_id: string;
 }
 
-type MergeStrategy =
-  | "last_write"
-  | "highest_priority"
-  | "most_specific"
-  | "merge_array";
+type MergeStrategy = "last_write" | "highest_priority" | "most_specific" | "merge_array";
 
 export class RelationshipReducer {
   /**
@@ -49,12 +44,10 @@ export class RelationshipReducer {
    */
   async computeSnapshot(
     relationshipKey: string,
-    observations: RelationshipObservation[],
+    observations: RelationshipObservation[]
   ): Promise<RelationshipSnapshot> {
     if (observations.length === 0) {
-      throw new Error(
-        `No observations found for relationship ${relationshipKey}`,
-      );
+      throw new Error(`No observations found for relationship ${relationshipKey}`);
     }
 
     // Get relationship type from first observation
@@ -89,7 +82,7 @@ export class RelationshipReducer {
         field,
         sortedObservations,
         "last_write", // Default strategy
-        "observed_at", // Default tie breaker
+        "observed_at" // Default tie breaker
       );
 
       if (result.value !== undefined && result.value !== null) {
@@ -120,9 +113,7 @@ export class RelationshipReducer {
   /**
    * Sort observations deterministically
    */
-  private sortObservations(
-    observations: RelationshipObservation[],
-  ): RelationshipObservation[] {
+  private sortObservations(observations: RelationshipObservation[]): RelationshipObservation[] {
     return [...observations].sort((a, b) => {
       // Primary: observed_at DESC (most recent first)
       const timeA = new Date(a.observed_at).getTime();
@@ -142,12 +133,11 @@ export class RelationshipReducer {
     field: string,
     observations: RelationshipObservation[],
     strategy: MergeStrategy,
-    tieBreaker: "observed_at" | "source_priority",
+    tieBreaker: "observed_at" | "source_priority"
   ): { value: unknown; source_observation_id: string } {
     // Filter observations that have this metadata field
     const relevantObservations = observations.filter(
-      (obs) =>
-        obs.metadata[field] !== undefined && obs.metadata[field] !== null,
+      (obs) => obs.metadata[field] !== undefined && obs.metadata[field] !== null
     );
 
     if (relevantObservations.length === 0) {
@@ -177,7 +167,7 @@ export class RelationshipReducer {
    */
   private lastWriteWins(
     field: string,
-    observations: RelationshipObservation[],
+    observations: RelationshipObservation[]
   ): { value: unknown; source_observation_id: string } {
     // Observations already sorted by observed_at DESC
     const latest = observations[0];
@@ -193,7 +183,7 @@ export class RelationshipReducer {
   private highestPriority(
     field: string,
     observations: RelationshipObservation[],
-    tieBreaker: "observed_at" | "source_priority",
+    tieBreaker: "observed_at" | "source_priority"
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: source_priority DESC
@@ -202,9 +192,7 @@ export class RelationshipReducer {
       }
       // Tie breaker
       if (tieBreaker === "observed_at") {
-        return (
-          new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
-        );
+        return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
       }
       // source_priority is already the primary sort, so just use id
       return a.id.localeCompare(b.id);
@@ -222,7 +210,7 @@ export class RelationshipReducer {
   private mostSpecific(
     field: string,
     observations: RelationshipObservation[],
-    tieBreaker: "observed_at" | "source_priority",
+    tieBreaker: "observed_at" | "source_priority"
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: specificity_score DESC
@@ -233,9 +221,7 @@ export class RelationshipReducer {
       }
       // Tie breaker
       if (tieBreaker === "observed_at") {
-        return (
-          new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
-        );
+        return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
       } else {
         return b.source_priority - a.source_priority;
       }
@@ -252,7 +238,7 @@ export class RelationshipReducer {
    */
   private mergeArray(
     field: string,
-    observations: RelationshipObservation[],
+    observations: RelationshipObservation[]
   ): { value: unknown; source_observation_id: string } {
     const values = new Set<unknown>();
     const observationIds: string[] = [];
@@ -282,7 +268,7 @@ export class RelationshipReducer {
   static generateRelationshipKey(
     relationshipType: string,
     sourceEntityId: string,
-    targetEntityId: string,
+    targetEntityId: string
   ): string {
     return `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
   }

@@ -3,9 +3,10 @@
  * diagnoseSkippedStore classifier from _common.ts.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   diagnoseSkippedStore,
+  isHookComplianceFollowupEnabled,
   looksLikeRetrieveInvocation,
   looksLikeStoreStructured,
   type TurnComplianceState,
@@ -137,7 +138,11 @@ describe("diagnoseSkippedStore", () => {
     });
     expect(result.local_build).toBe(false);
     expect(result.proactive_remediation_required).toBe(false);
-    expect(result.recommended_repairs.some((r) => r.includes("NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP"))).toBe(true);
+    expect(
+      result.recommended_repairs.some(
+        (r) => r.includes("NEOTOMA_HOOK_COMPLIANCE_PASSES") || r.includes("COMPLIANCE_FOLLOWUP")
+      )
+    ).toBe(true);
   });
 
   it("respects localBuild override parameter", () => {
@@ -166,6 +171,35 @@ describe("diagnoseSkippedStore", () => {
     expect(typeof result.signals.reminder_injected).toBe("boolean");
     expect(typeof result.signals.neotoma_connection_failure).toBe("boolean");
     expect(typeof result.signals.had_final_text).toBe("boolean");
+  });
+});
+
+describe("isHookComplianceFollowupEnabled", () => {
+  const keys = ["NEOTOMA_HOOK_COMPLIANCE_PASSES", "NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP"] as const;
+
+  afterEach(() => {
+    for (const k of keys) delete process.env[k];
+  });
+
+  it("defaults to enabled", () => {
+    expect(isHookComplianceFollowupEnabled()).toBe(true);
+  });
+
+  it("disables when NEOTOMA_HOOK_COMPLIANCE_PASSES=off even if FOLLOWUP=on", () => {
+    process.env.NEOTOMA_HOOK_COMPLIANCE_PASSES = "off";
+    process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP = "on";
+    expect(isHookComplianceFollowupEnabled()).toBe(false);
+  });
+
+  it("allows FOLLOWUP=off when PASSES is unset", () => {
+    process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP = "off";
+    expect(isHookComplianceFollowupEnabled()).toBe(false);
+  });
+
+  it("allows FOLLOWUP when PASSES=on", () => {
+    process.env.NEOTOMA_HOOK_COMPLIANCE_PASSES = "on";
+    process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP = "auto";
+    expect(isHookComplianceFollowupEnabled()).toBe(true);
   });
 });
 

@@ -271,7 +271,7 @@ describe("MCP Schema Actions - Integration", () => {
       });
 
       expect(updatedSchema).toBeDefined();
-      expect(updatedSchema.schema_version).toBe("1.1");
+      expect(updatedSchema.schema_version).toBe("1.1.0");
 
       // Verify schema was updated
       const activeSchema = await registryService.loadActiveSchema(testEntityType);
@@ -299,7 +299,7 @@ describe("MCP Schema Actions - Integration", () => {
         ],
       });
 
-      expect(updatedSchema.schema_version).toBe("1.1");
+      expect(updatedSchema.schema_version).toBe("1.1.0");
     });
 
     it("should skip duplicate fields", async () => {
@@ -359,7 +359,7 @@ describe("MCP Schema Actions - Integration", () => {
 
       // Verify schema is active
       const activeSchema = await registryService.loadActiveSchema(`${testEntityType}_activate`);
-      expect(activeSchema?.schema_version).toBe("1.1");
+      expect(activeSchema?.schema_version).toBe("1.1.0");
     });
 
     it("should not activate if activate=false", async () => {

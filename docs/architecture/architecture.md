@@ -88,56 +88,50 @@ See `docs/releases/v2.0.0/` and `docs/architecture/local_first_e2ee_architecture
 - Consent management and cookie consent banner
 - US state privacy law compliance (GPC signals, sensitive data opt-in, right to correct)
 See `docs/releases/v2.1.0/` for detailed release plan.
-## 1. Neotoma in Context: Layered Architecture
-Neotoma is designed as a **State Layer** that can support multiple upper layers implementing agent-driven data processing and action execution. Understanding this layered architecture is **critical** to maintaining architectural purity.
+## 1. Neotoma in Context: State Layer + Operational Layers
+Neotoma is designed as a **State Layer** that can support any operational system above it — agents, pipelines, orchestrators, and custom applications that read truth and write results back as observations. Understanding this two-tier model is **critical** to maintaining architectural purity.
 ### 1.1 Core Architectural Model
 Neotoma is the **state layer** providing structured personal data memory:
 - Event-sourced
 - Reducer-driven
 - Deterministic world model
 - Dual-path ingestion (file uploads + agent interactions via MCP)
-- All agents read from it, write structured data via MCP
-Above Neotoma sit two layers:
-#### A. Strategy Layer (General Strategy Engine)
-This layer:
+- All operational systems read from it, write structured data via MCP
+
+Above Neotoma sit one or more **operational layers** — any agent, pipeline, orchestrator, or custom application that reads truth and writes results back. The state layer never decides, infers, or acts. Operational layers may reason, plan, decide, and execute side effects; the artifacts of those activities (plans, decisions, rules, preferences, action logs) are themselves stored in Neotoma as inert state.
+
+#### Example operational systems
+
+The following are illustrative examples of operational systems built on Neotoma. They are not architectural layers Neotoma prescribes.
+
+##### Agentic Portfolio (reasoning-style operational system)
 - Reads the current world state
 - Evaluates priorities, constraints, risk, commitments, time, and financial posture
 - Plans _what_ should happen next
-- Outputs **Decisions** + **Commands** (intents)
-- NEVER mutates truth or performs side effects
-Strategy is pure cognition:
-- State in → Decisions out
-- Declarative, testable, deterministic
-#### B. Execution Layer (Agentic Wallet + Domain Agents)
-This layer:
-- Takes commands from the Strategy Layer
+- Outputs **Decisions** + **Commands** (intents) — stored back in Neotoma as `decision` / `command` entities
+- Never mutates truth directly; writes results via observations
+
+##### Agentic Wallet + Domain Agents (effect-style operational system)
+- Takes commands (read from Neotoma)
 - Performs side effects using **external adapters** (email, scheduling APIs, financial services, messaging systems, etc.)
 - Emits **Domain Events** describing what happened
 - Domain Events are validated → Reducers → Updated world state
-Execution is pure effect:
-- Commands in → Events out
-- All truth updates flow through reducers
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
     User[User / AI Agent]
-    User --> Execution[Execution Layer]
-    User --> Strategy[Strategy Layer]
+    User --> Operational[Operational Layer]
     User --> Neotoma[Neotoma - State Layer]
-    Execution --> Strategy
-    Strategy --> Neotoma
-    Execution -.->|Reads Only| Neotoma
-    Strategy -.->|Reads Only| Neotoma
-    Execution -.->|Emits Domain Events| Neotoma
-    subgraph ExecutionLayer["Execution Layer"]
+    Operational --> Neotoma
+    Operational -.->|Reads Only| Neotoma
+    Operational -.->|Emits Domain Events| Neotoma
+    subgraph OperationalLayer["Operational Layer (examples)"]
         Wallet[Agentic Wallet]
+        Portfolio[Agentic Portfolio]
         DomainAgents[Domain Agents]
-        ExecutionResp["• Takes Commands<br/>• Performs side effects via adapters<br/>• Emits Domain Events<br/>• Pure effect: Commands → Events"]
-    end
-    subgraph StrategyLayer["Strategy Layer"]
-        Portfolio[Agentic Portfolio<br/>(Example)]
-        StrategyEngine[General Strategy Engine]
-        StrategyResp["• Reads world state<br/>• Evaluates priorities/constraints<br/>• Outputs Decisions + Commands<br/>• Pure cognition: State → Decisions"]
+        Harness[Agent harnesses (Claude, Cursor, ChatGPT)]
+        Custom[Custom apps and pipelines]
+        OpResp["• Reads world state<br/>• Reasons / plans / acts<br/>• Writes results as observations<br/>• Strategy artifacts (plans, decisions) stored in Neotoma"]
     end
     subgraph TruthLayer["State Layer (Neotoma)"]
         Neotoma
@@ -145,24 +139,24 @@ flowchart TD
         EventLog[Event Log]
         NeoResp["• Event-sourced<br/>• Reducer-driven<br/>• Deterministic world model<br/>• Domain Events → State updates"]
     end
-    Execution -.->|Domain Events| Reducers
+    Operational -.->|Domain Events| Reducers
     Reducers --> EventLog
     EventLog --> Neotoma
-    style ExecutionLayer fill:#ffe6e6
-    style StrategyLayer fill:#fff4e6
+    style OperationalLayer fill:#ffe6e6
     style TruthLayer fill:#e6f7ff
 ```
-_Figure: Layered architecture showing Strategy Layer (pure cognition) and Execution Layer (pure effect) above Neotoma's event-sourced state layer. Agentic Portfolio is an example instance of the Strategy Layer; Agentic Wallet is part of the Execution Layer alongside domain agents._
+_Figure: Two-tier architecture — operational layers (agents, pipelines, orchestrators, custom apps) sit above Neotoma's event-sourced state layer. Agentic Portfolio and Agentic Wallet are illustrative examples of operational systems, not architectural layers Neotoma extends into._
 ### 1.2 Event Flow & State Management
 The closed loop of autonomy:
 ```
 Inbound Signals (email, WhatsApp, calendar, financial data)
 ↓
-Normalization → ActionItems
+Normalization → Observations
 ↓
-Neotoma State (event log + reducers)
-↓
-Strategy Tick (General Strategy Engine)
+Neotoma State (event log + reducers → snapshots)
+↓                              ↓
+Strategy Tick                  Event Emission → Subscriptions → Webhook/SSE
+(General Strategy Engine)      (best-effort delivery to registered consumers)
 ↓
 Decisions + Commands
 ↓
@@ -180,13 +174,15 @@ sequenceDiagram
     participant Signals as Inbound Signals<br/>(email, calendar, etc.)
     participant Normalize as Normalization
     participant State as Neotoma State<br/>(Event Log + Reducers)
-    participant Strategy as Strategy Layer<br/>(General Strategy Engine)
-    participant Execution as Execution Layer<br/>(Wallet + Domain Agents)
+    participant Strategy as Operational Layer<br/>(reasoning system, e.g. Agentic Portfolio)
+    participant Execution as Operational Layer<br/>(effect system, e.g. Agentic Wallet + Domain Agents)
     participant Adapters as External Adapters<br/>(Gmail, Calendar, etc.)
     participant Events as Domain Events
+    participant Subscribers as Registered Subscribers<br/>(daemons, peer instances, agents)
     Signals->>Normalize: Raw signals
-    Normalize->>State: ActionItems
+    Normalize->>State: Observations
     State->>Strategy: Current world state
+    State->>Subscribers: State-change signals (best-effort, fire-and-forget)
     Strategy->>Strategy: Evaluate priorities<br/>constraints, risk
     Strategy->>Execution: Decisions + Commands
     Execution->>Adapters: Execute side effects
@@ -194,9 +190,10 @@ sequenceDiagram
     Execution->>Events: Emit Domain Events<br/>(EMAIL_SENT, PAYMENT_INITIATED, etc.)
     Events->>State: Domain Events
     State->>State: Reducers update state
+    State->>Subscribers: State-change signals (best-effort, fire-and-forget)
     State->>Strategy: Updated world state
 ```
-_Figure: Event flow showing the closed loop from inbound signals through normalization, strategy evaluation, execution, and back to state updates via reducers._
+_Figure: Event flow showing the closed loop from inbound signals through normalization, strategy evaluation, execution, and back to state updates via reducers. The State Layer also emits derived state-change signals to registered subscribers (best-effort delivery, no retry queue or ordering guarantees) — see `docs/foundation/philosophy.md` §5.9._
 ### 1.3 State Layer Responsibilities (Neotoma)
 Neotoma MUST:
 - Ingest user-provided files (explicit upload, Gmail attachments)
@@ -209,16 +206,20 @@ Neotoma MUST:
 - Maintain provenance and immutability
 - Process Domain Events through reducers to update state
 - Maintain event log for auditability and replay
+- Emit structured state-change events after every successful write
+- Deliver events to registered subscribers via webhook/SSE (best-effort, fire-and-forget)
+- Maintain subscription registry (registration of interest only; not prioritization of action)
 Neotoma MUST NOT:
 - Infer meaning beyond extracted fields
 - Predict future states
 - Execute financial transactions
 - Implement strategy or planning logic
-- Act as an autonomous agent
+- Act as an autonomous agent (Neotoma signals state changes to agents but does not subscribe to its own events, reason about them, or take autonomous action; see `docs/foundation/philosophy.md` §5.9)
 - Perform semantic search (MVP constraint)
 - Mutate state directly (only via reducers processing Domain Events)
-### 1.4 Strategy Layer Responsibilities
-The Strategy Layer (General Strategy Engine) MUST:
+- Add retry queues, dead-letter queues, ordered delivery guarantees, or exactly-once semantics to outbound signaling (those are operational-layer concerns)
+### 1.4 Operational Layer Responsibilities (general)
+Operational layers (any agent, pipeline, orchestrator, or custom application above Neotoma) MAY:
 - Read current world state from Neotoma
 - Evaluate tasks, obligations, schedules, financial positions
 - Compute priority scores
@@ -227,40 +228,31 @@ The Strategy Layer (General Strategy Engine) MUST:
 - Enforce constraints at decision time
 - Reason across multiple domains (communications, household operations, financial flows, portfolio management, tax & entity logic, scheduling, projects, logistics)
 - Output binary or ternary choices for Watch interaction (micro-prompts, minimal user input)
-- NEVER mutate truth or perform side effects
-The Strategy Layer MUST NOT:
-- Perform side effects (send emails, execute transactions, modify calendars)
-- Mutate Neotoma truth directly
-- Bypass the Execution Layer
-- Contain execution logic
-### 1.5 Execution Layer Responsibilities
-Execution Agents (Agentic Wallet + domain agents) MUST:
-- Take commands from the Strategy Layer
 - Perform side effects using external adapters (GmailAdapter, WhatsAppAdapter, CalendarAdapter, PaymentsAdapter, TradingAdapter, etc.)
-- Emit Domain Events describing what actually happened (EMAIL_SENT, PAYMENT_INITIATED, TRADE_EXECUTED, SCHEDULE_BLOCKED, CONTRACTOR_CONFIRMED, TASK_COMPLETED)
-- Ensure all actions are idempotent
-- Execute commands exactly once
-- Enforce safety limits via execution adapters
-Execution Agents MUST NOT:
+- Emit Domain Events describing what happened (EMAIL_SENT, PAYMENT_INITIATED, TRADE_EXECUTED, SCHEDULE_BLOCKED, CONTRACTOR_CONFIRMED, TASK_COMPLETED)
+- Store the artifacts of strategy and execution (plans, decisions, rules, preferences, action logs) as entities in Neotoma
+
+Operational layers MUST NOT:
 - Mutate Neotoma truth directly (only via Domain Events → Reducers)
-- Implement strategy or planning logic
 - Bypass adapters for side effects
 - Emit events without performing the actual action
-### 1.6 Layer Boundaries
-**Critical Invariant:** Upper layers (Strategy Layer and Execution Layer) MAY read from Neotoma but MUST NEVER write or modify truth directly.
+### 1.5 Layer Boundaries
+**Critical Invariant:** Operational layers MAY read from Neotoma but MUST NEVER write or modify truth directly.
 **Truth updates flow only through:**
-1. Domain Events emitted by Execution Layer
+1. Domain Events emitted by operational layers
 2. Reducers processing Domain Events
 3. Updated world state
-**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose State Layer substrate.
-## 1.7 Required Engineering Patterns
-All strategy/execution code MUST follow these patterns:
-### 1.7.1 Pure Strategy Functions
+4. (Derived) State-change signals emitted to registered consumers — these are reports of completed updates, not causes of new state changes; they do not pass through reducers and do not themselves cause state changes (see `docs/foundation/philosophy.md` §5.9)
+
+**Note:** Agentic Portfolio and Agentic Wallet are illustrative examples of operational systems built on Neotoma. Many other operational systems (agent harnesses, pipelines, custom apps) are possible. Neotoma is a general-purpose State Layer substrate that does not prescribe how operational systems above it are structured.
+## 1.7 Recommended Operational-Layer Patterns
+Operational systems built on Neotoma SHOULD consider the following patterns. Neotoma does not enforce them; they are operational-layer engineering recommendations.
+### 1.7.1 Pure Reasoning Functions (recommended)
 - No side effects
 - No file I/O
 - Inputs: world state
-- Outputs: decisions, commands
-### 1.7.2 Execution via Adapters Only
+- Outputs: decisions, commands (stored back as entities)
+### 1.7.2 Side Effects via Adapters Only (recommended)
 - GmailAdapter, WhatsAppAdapter, CalendarAdapter, PaymentsAdapter, TradingAdapter, etc.
 - Adapters generate events, not truth writes
 - All side effects go through adapters
@@ -766,11 +758,11 @@ See `docs/releases/v2.1.0/` for detailed release plan.
 **Graph Query Language:**
 - Custom query language for graph traversal (e.g., "Find all entities linked to records from Q1 2024")
 ### 10.2 Non-Goals (Never)
-- Autonomous agents in State Layer (belongs in Strategy Layer or Execution Layer)
-- Predictive analytics (belongs in Strategy Layer)
-- Strategy or execution logic in State Layer (belongs in upper layers)
+- Autonomous agents in the State Layer (belongs in operational layers)
+- Predictive analytics in the State Layer (belongs in operational layers)
+- Strategy or execution logic in the State Layer (belongs in operational layers)
 - Direct truth mutations (all updates via Domain Events → Reducers)
-- Side effects in Strategy Layer (belongs in Execution Layer)
+- Side effects in the State Layer (operational layers perform effects through adapters and write results back as observations)
 
 **Note:** AI interpretation for unstructured files is allowed with audit trail and idempotence (see `docs/architecture/determinism.md` Section 1.2-1.4). The system logs interpretation config (model, temperature, prompt_hash) and ensures idempotence via canonicalization and hashing. While LLM output is non-deterministic, the final system state is idempotent.
 - Internal chat UI or conversational interfaces (externalized to MCP-compatible agents; see `docs/architecture/conversational_ux_architecture.md`)
@@ -802,8 +794,8 @@ Load `docs/architecture/architecture.md` when:
 7. **No global state:** Dependency injection for all services
 8. **State Layer purity:** No strategy, execution, or agent logic in Neotoma
 9. **Event-sourced updates:** All state changes via Domain Events → Reducers
-10. **Pure Strategy:** Strategy Layer has no side effects
-11. **Pure Execution:** Execution Layer emits Domain Events, never writes truth directly
+10. **Operational-layer boundary:** Operational layers MUST NOT mutate Neotoma truth directly; all writes flow through observations and reducers
+11a. **Substrate Outbound Signaling:** State Layer emits state-change signals to registered consumers after writes (reports of state transitions, not causes of them). These signals are derived outputs of the write pipeline, do not pass through reducers, and do not themselves cause state changes. Delivery is best-effort; no retry queues, dead-letter queues, or ordering guarantees in the substrate (those are operational-layer concerns). See `docs/foundation/philosophy.md` §5.9.
 12. **Four-layer model:** [Source](../vocabulary/canonical_terms.md#source) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) must be respected
 13. **Reducer determinism:** Same observations + merge rules → same entity snapshot
 14. **Provenance tracking:** All entity snapshot fields trace to observations and documents
@@ -818,8 +810,7 @@ Load `docs/architecture/architecture.md` when:
 - Semantic search in MVP
 - Internal chat UI or conversational interfaces (externalize to MCP-compatible agents)
 - PII in logs
-- Strategy Layer performing side effects
-- Execution Layer mutating truth directly (must use Domain Events)
+- Operational layers mutating Neotoma truth directly (must use observations / Domain Events)
 - Bypassing reducers for state updates
 - Direct file-to-entity updates (must go through observations)
 - Hard-coded parent-child relationships (use relationship types)

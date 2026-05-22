@@ -120,6 +120,7 @@ const SCHEMA_STATEMENTS = [
     id TEXT PRIMARY KEY,
     source_id TEXT,
     interpretation_id TEXT,
+    entity_id TEXT,
     entity_type TEXT NOT NULL,
     fragment_key TEXT NOT NULL,
     fragment_value TEXT,
@@ -311,12 +312,7 @@ const DEPRECATED_TABLES = [
 ];
 
 /** Add a column to a table if it does not exist (for existing SQLite DBs). */
-function addColumnIfMissing(
-  db: SqliteDatabase,
-  table: string,
-  column: string,
-  type: string
-): void {
+function addColumnIfMissing(db: SqliteDatabase, table: string, column: string, type: string): void {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (rows.some((r) => r.name === column)) return;
   db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
@@ -359,6 +355,10 @@ function ensureSchema(db: SqliteDatabase): void {
     // `provenance` attribution blob. Soft migration keeps pre-existing
     // rows at NULL so historical data round-trips intact.
     addColumnIfMissing(db, "observations", "observation_source", "TEXT");
+    // Cross-instance sync (Phase 5): originating peer id stamped on
+    // observations created from peer webhook replay; drives subscription
+    // loop prevention on the event bus.
+    addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
     addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
@@ -367,6 +367,7 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
     addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
+    addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
     addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
@@ -375,10 +376,12 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
+    addColumnIfMissing(db, "auto_enhancement_queue", "job_type", "TEXT DEFAULT 'auto_enhance'");
 
     addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
 
-    db.prepare(`CREATE TABLE IF NOT EXISTS sandbox_sessions (
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS sandbox_sessions (
       user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
       bearer_token_hash TEXT NOT NULL,
       one_time_code_hash TEXT,
@@ -386,7 +389,8 @@ function ensureSchema(db: SqliteDatabase): void {
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       revoked_at TEXT
-    )`).run();
+    )`
+    ).run();
     db.prepare(
       "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
     ).run();

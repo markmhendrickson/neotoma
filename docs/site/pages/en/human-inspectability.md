@@ -1,0 +1,37 @@
+---
+path: /human-inspectability
+locale: en
+page_title: Human inspectability
+shell: detail
+translation_status: canonical
+nav_group: guides
+nav_order: 59
+---
+
+Human inspectability means a person can diff two versions, inspect lineage, and trace each fact to its
+source. Trust comes from verification, not hidden model behavior.
+
+## Before vs after
+
+Before: a value changes and operators only see "current state." After: operators can inspect field-level
+diffs and provenance to validate or correct the update.
+
+```bash
+# Inspect snapshot lineage
+neotoma entities get <entity_id>
+neotoma observations list --entity-id <entity_id>
+```
+
+Inspectability depends on
+<MdxI18nLink to="/versioned-history" className="text-foreground underline hover:text-foreground">
+  versioned history
+</MdxI18nLink>
+,
+<MdxI18nLink to="/auditable-change-log" className="text-foreground underline hover:text-foreground">
+  auditable change log
+</MdxI18nLink>
+, and
+<MdxI18nLink to="/replayable-timeline" className="text-foreground underline hover:text-foreground">
+  replayable timeline
+</MdxI18nLink>
+.

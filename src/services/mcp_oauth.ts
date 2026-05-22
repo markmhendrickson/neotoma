@@ -908,16 +908,12 @@ export async function initiateOAuthFlow(
 
   // Generate or use provided PKCE
   const { codeVerifier, codeChallenge } =
-    serverPkce && serverPkce.codeVerifier && serverPkce.codeChallenge
-      ? serverPkce
-      : generatePKCE();
+    serverPkce && serverPkce.codeVerifier && serverPkce.codeChallenge ? serverPkce : generatePKCE();
   const state = generateState();
 
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
   const frontendBase =
-    process.env.NEOTOMA_FRONTEND_URL ||
-    process.env.FRONTEND_URL ||
-    "http://localhost:5195";
+    process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
   const finalRedirectUri = redirectUri ?? `${frontendBase}/oauth`;
 
   if (isLocalBackend) {
@@ -1010,7 +1006,9 @@ export async function createLocalAuthorizationRequest(params: {
   codeVerifier?: string;
 }): Promise<{ authUrl: string; connectionId: string; state: string; expiresAt: string }> {
   if (!isLocalBackend) {
-    throw createOAuthError.stateInvalid("Local authorization requests require local storage backend");
+    throw createOAuthError.stateInvalid(
+      "Local authorization requests require local storage backend"
+    );
   }
 
   validateConnectionId(params.connectionId);
@@ -1199,7 +1197,9 @@ async function exchangeRefreshTokenForTokens(refreshToken: string): Promise<OAut
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      logger.error(`[MCP OAuth] Refresh token exchange failed: ${tokenResponse.status} ${errorText}`);
+      logger.error(
+        `[MCP OAuth] Refresh token exchange failed: ${tokenResponse.status} ${errorText}`
+      );
 
       let errorJson: any = null;
       try {
@@ -1346,9 +1346,7 @@ export async function handleOAuthCallback(
     throw createOAuthError.stateInvalid(`Failed to store connection: ${insertError.message}`);
   }
 
-  logger.info(
-    `[MCP OAuth] Connection created: ${stateData.connection_id} for user: ${userId}`
-  );
+  logger.info(`[MCP OAuth] Connection created: ${stateData.connection_id} for user: ${userId}`);
 
   // Audit log
   auditLog("oauth_callback_success", {
@@ -1471,9 +1469,10 @@ export async function getAccessTokenForConnection(
 
   const providerRefreshToken = decryptRefreshToken(connection.refresh_token);
   const tokens = await exchangeRefreshTokenForTokens(providerRefreshToken);
-  const encryptedRefreshToken = tokens.refreshToken === providerRefreshToken
-    ? connection.refresh_token
-    : encryptRefreshToken(tokens.refreshToken);
+  const encryptedRefreshToken =
+    tokens.refreshToken === providerRefreshToken
+      ? connection.refresh_token
+      : encryptRefreshToken(tokens.refreshToken);
   const newExpiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
   const { error: updateError } = await db
     .from("mcp_oauth_connections")
@@ -1510,7 +1509,9 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
       throw createOAuthError.connectionNotFound("Connection not found for refresh token");
     }
 
-    logger.info(`[MCP OAuth] Refreshing local access token for connection: ${connection.connection_id}`);
+    logger.info(
+      `[MCP OAuth] Refreshing local access token for connection: ${connection.connection_id}`
+    );
     auditLog("token_refresh_initiated", {
       connectionId: connection.connection_id,
       userId: connection.user_id,
@@ -1548,7 +1549,9 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
     throw createOAuthError.connectionNotFound("Connection not found for refresh token");
   }
 
-  logger.info(`[MCP OAuth] Refreshing access token via refresh_token for connection: ${connection.connection_id}`);
+  logger.info(
+    `[MCP OAuth] Refreshing access token via refresh_token for connection: ${connection.connection_id}`
+  );
   auditLog("token_refresh_initiated", {
     connectionId: connection.connection_id,
     userId: connection.user_id,
@@ -1557,9 +1560,10 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
 
   const providerRefreshToken = decryptRefreshToken(connection.refresh_token);
   const tokens = await exchangeRefreshTokenForTokens(providerRefreshToken);
-  const encryptedRefreshToken = tokens.refreshToken === providerRefreshToken
-    ? connection.refresh_token
-    : encryptRefreshToken(tokens.refreshToken);
+  const encryptedRefreshToken =
+    tokens.refreshToken === providerRefreshToken
+      ? connection.refresh_token
+      : encryptRefreshToken(tokens.refreshToken);
   const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
   const { error: updateError } = await db
@@ -1604,7 +1608,9 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
  * // response.token_type: "Bearer"
  * // response.expires_in: 3600
  */
-export async function getTokenResponseForConnection(connectionId: string): Promise<OAuthTokenResponse> {
+export async function getTokenResponseForConnection(
+  connectionId: string
+): Promise<OAuthTokenResponse> {
   // Validate input
   validateConnectionId(connectionId);
 
@@ -1822,12 +1828,19 @@ export async function listConnections(userId: string): Promise<
     throw createOAuthError.connectionNotFound("Failed to list MCP connections");
   }
 
-  return (connections || []).map((conn: { connection_id: string; client_name: string | null; created_at: string; last_used_at: string | null }) => ({
-    connectionId: conn.connection_id,
-    clientName: conn.client_name,
-    createdAt: conn.created_at,
-    lastUsedAt: conn.last_used_at,
-  }));
+  return (connections || []).map(
+    (conn: {
+      connection_id: string;
+      client_name: string | null;
+      created_at: string;
+      last_used_at: string | null;
+    }) => ({
+      connectionId: conn.connection_id,
+      clientName: conn.client_name,
+      createdAt: conn.created_at,
+      lastUsedAt: conn.last_used_at,
+    })
+  );
 }
 
 /**

@@ -25,7 +25,7 @@
 
 4. **MCP server with tunnel:**
    ```bash
-   npm run dev:api
+   npm run dev:server:tunnel
    ```
 
 ---
@@ -36,7 +36,7 @@ Run the tunnel script (or use a combined command that starts server and tunnel):
 
 ```bash
 npm run tunnel:https
-# Or: npm run dev:api   (tunnel + server together)
+# Or: npm run dev:server:tunnel   (tunnel + server together)
 ```
 
 This will:
@@ -61,7 +61,7 @@ In a **new terminal**, set the API base URL and restart the server:
 export NEOTOMA_HOST_URL=https://abc123.ngrok-free.app
 
 # Restart the MCP server with HTTPS URL
-npm run dev:api
+npm run dev:server:tunnel
 ```
 
 ### Option B: Update .env File
@@ -118,7 +118,7 @@ Update `.cursor/mcp.json` to use the HTTPS URL:
 
 **Issue:** ngrok free tier assigns new URLs on each restart.
 
-**Solution:** 
+**Solution:**
 - Use ngrok paid plan for static domains, OR
 - Update `.cursor/mcp.json` and `NEOTOMA_HOST_URL` each time you restart ngrok
 

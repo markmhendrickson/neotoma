@@ -27,15 +27,10 @@ import type { SchemaDefinition, ReducerConfig } from "./schema_registry.js";
 export interface EntitySchemaMetadata {
   label: string;
   description: string;
-  category:
-    | "finance"
-    | "productivity"
-    | "knowledge"
-    | "health"
-    | "media"
-    | "agent_runtime";
+  category: "finance" | "productivity" | "knowledge" | "health" | "media" | "agent_runtime";
   aliases?: string[];
   primaryProperties?: string[]; // Optional: can derive from required fields
+  guest_access_policy?: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
 }
 
 export interface EntitySchema {
@@ -104,6 +99,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         schema_version: { type: "string", required: true },
         income_date: { type: "date", required: true },
         income_type: { type: "string", required: false },
+        // Originating system slug (e.g. "csv_import", "manual", "quickbooks").
+        // See docs/subsystems/entity_field_semantics.md for canonical values.
         source: { type: "string", required: true },
         amount_usd: { type: "number", required: true },
         amount_original: { type: "number", required: false },
@@ -389,11 +386,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         status: { type: "string", required: false },
         transaction_id: { type: "string", required: false },
       },
-      canonical_name_fields: [
-        "merchant_name",
-        "date_purchased",
-        "amount_total",
-      ],
+      canonical_name_fields: ["merchant_name", "date_purchased", "amount_total"],
       temporal_fields: [
         { field: "date_purchased", event_type: "ReceiptIssued" },
         { field: "transaction_date", event_type: "TransactionDate" },
@@ -709,9 +702,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_source_file: { type: "string", required: false },
       },
       canonical_name_fields: ["snapshot_date", "account_id"],
-      temporal_fields: [
-        { field: "snapshot_date", event_type: "BalanceSnapshot" },
-      ],
+      temporal_fields: [{ field: "snapshot_date", event_type: "BalanceSnapshot" }],
     },
     reducer_config: {
       merge_policies: {
@@ -792,13 +783,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // first (external_id, website, email, legal_name), falling through
       // to `name` as the last resort so name-only observations still
       // resolve deterministically.
-      canonical_name_fields: [
-        "external_id",
-        "website",
-        "email",
-        "legal_name",
-        "name",
-      ],
+      canonical_name_fields: ["external_id", "website", "email", "legal_name", "name"],
     },
     reducer_config: {
       merge_policies: {
@@ -900,12 +885,13 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation: {
     entity_type: "conversation",
-    schema_version: "1.3",
+    schema_version: "1.4",
     metadata: {
       label: "Conversation",
       description: "Chat conversation container entity.",
       category: "knowledge",
       aliases: ["chat_conversation", "thread"],
+      guest_access_policy: "submitter_scoped",
     },
     schema_definition: {
       fields: {
@@ -916,7 +902,44 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         // docs/foundation/entity_resolution.md and
         // .cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md.
         conversation_id: { type: "string", required: false },
+        // v1.4: alternate stable session identifier used by some callers
+        // (e.g. hook-based stores). Accepted as a canonical_name_fields rule
+        // alongside conversation_id so either alone is sufficient for
+        // deterministic identity. See issue #138.
+        session_id: { type: "string", required: false },
         title: { type: "string", required: false, preserveCase: true },
+        // v1.4: free-text session summary written by agent or human.
+        summary: { type: "string", required: false, preserveCase: true },
+        // v1.4: temporal bounds of the conversation session.
+        started_at: { type: "date", required: false },
+        ended_at: { type: "date", required: false },
+        // v1.4: session date (day-level, for filtering/display).
+        date: { type: "date", required: false },
+        // v1.4: participant count and reported message count for aggregate
+        // views. `reported_message_count` is the count as claimed by the
+        // ingesting source (e.g. transcript importer); it can disagree with
+        // the SQL aggregate over `conversation_message` rows when not every
+        // message was ingested as a separate row. Consumers that need the
+        // authoritative live count should query `conversation_message`
+        // directly (see `src/services/recent_conversations.ts`); the
+        // `message_count` field on `RecentConversationItem` is the SQL
+        // aggregate, not this stored field.
+        participant_count: { type: "number", required: false },
+        reported_message_count: { type: "number", required: false },
+        // v1.4: names or identifiers of participants.
+        participants: { type: "array", required: false },
+        // v1.4: topics covered in the conversation.
+        topics: { type: "array", required: false },
+        // v1.4: decisions made during the conversation.
+        decisions: { type: "array", required: false },
+        // v1.4: open tasks identified but not yet completed.
+        open_tasks: { type: "array", required: false },
+        // v1.4: model or agent harness used (e.g. claude-sonnet-4-5, gpt-4o).
+        model: { type: "string", required: false },
+        // v1.4: agent harness / tool name (e.g. claude_code, cursor).
+        tool: { type: "string", required: false },
+        // v1.4: canonical URL of the conversation on the source platform.
+        source_url: { type: "string", required: false },
         // Phase 1: identifies the participant topology of the conversation so
         // downstream views can distinguish human<->agent chats from
         // agent<->agent (A2A) or multi-party threads. Optional; defaults to
@@ -932,18 +955,57 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         repository_root: { type: "string", required: false },
         repository_remote: { type: "string", required: false },
         scope_summary: { type: "string", required: false, preserveCase: true },
+        // v1.4: session UUID bridge. In Claude Code contexts the SessionStart
+        // hook creates a conversation entity keyed by the session UUID while
+        // the MCP agent creates a slug-keyed entity. Storing the raw session
+        // UUID here cross-references both entities so timeline events and
+        // observations can be correlated without server-side coalescing.
+        // Optional — only populated in Claude Code / hook-aware contexts.
+        session_uuid: { type: "string", required: false },
       },
       // v1.2+: session-scoped identity via caller-supplied `conversation_id`.
-      // When absent, resolution falls through to the heuristic path; the
-      // schema-level `name_collision_policy: reject` (R2) then converts that
-      // heuristic match into ERR_STORE_RESOLUTION_FAILED instead of silently
-      // collapsing unrelated sessions by `title`.
-      canonical_name_fields: ["conversation_id"],
+      // v1.4+: `session_id` accepted as an alternate single-field rule so
+      // callers that only supply session_id can still resolve deterministically.
+      // Ordered precedence: `conversation_id` wins when present; falls back to
+      // `session_id` when only that field is supplied. When neither is present,
+      // resolution falls through to the heuristic path; the schema-level
+      // `name_collision_policy: reject` (R2) then converts that heuristic match
+      // into ERR_STORE_RESOLUTION_FAILED instead of silently collapsing
+      // unrelated sessions by `title`.
+      // NOTE: uses ordered-rule form `{ composite: [...] }` so each field is an
+      // independent single-field rule rather than a joint composite requiring both.
+      canonical_name_fields: [{ composite: ["conversation_id"] }, { composite: ["session_id"] }],
       name_collision_policy: "reject",
+      // v1.4: emit timeline events when temporal bounds are stored.
+      temporal_fields: [
+        { field: "started_at", event_type: "conversation_started" },
+        { field: "ended_at", event_type: "conversation_ended" },
+      ],
+      agent_instructions:
+        "A conversation entity represents a single AI conversation session. " +
+        "Use the title field as the primary display name. " +
+        "The conversation_id or session_id field holds the external/platform identifier — " +
+        "always supply one of these when storing so the entity resolves deterministically " +
+        "rather than falling through to the heuristic path. " +
+        "The summary field should capture the high-level purpose and outcome of the session. " +
+        "Link related entities observed during the conversation using REFERS_TO relationships.",
     },
     reducer_config: {
       merge_policies: {
         title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        summary: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        started_at: { strategy: "last_write" },
+        ended_at: { strategy: "last_write" },
+        date: { strategy: "last_write" },
+        participant_count: { strategy: "last_write" },
+        reported_message_count: { strategy: "last_write" },
+        participants: { strategy: "merge_array" },
+        topics: { strategy: "merge_array" },
+        decisions: { strategy: "merge_array" },
+        open_tasks: { strategy: "merge_array" },
+        model: { strategy: "last_write" },
+        tool: { strategy: "last_write" },
+        source_url: { strategy: "last_write" },
         thread_kind: { strategy: "last_write" },
         client_name: { strategy: "last_write" },
         harness: { strategy: "last_write" },
@@ -952,19 +1014,21 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         repository_root: { strategy: "last_write" },
         repository_remote: { strategy: "last_write" },
         scope_summary: { strategy: "last_write" },
+        session_uuid: { strategy: "last_write" },
       },
     },
   },
 
   conversation_message: {
     entity_type: "conversation_message",
-    schema_version: "1.2",
+    schema_version: "1.3",
     metadata: {
       label: "Chat Message",
       description:
         "One turn in a conversation. Sender may be a human user, an assistant, another agent, a system, or a tool; see sender_kind. Phase 2 (2026-04) renamed the canonical entity_type from `agent_message`; `agent_message` remains an alias for backward compatibility.",
       category: "knowledge",
       aliases: ["agent_message", "chat_message"],
+      guest_access_policy: "submitter_scoped",
     },
     schema_definition: {
       fields: {
@@ -984,6 +1048,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         sender_agent_id: { type: "string", required: false },
         // Phase 1: stable identifier of the recipient agent for A2A traffic.
         recipient_agent_id: { type: "string", required: false },
+        // v1.3: optional reporter environment for messages on issue threads.
+        // Soft requirement (server warns rather than rejects); agent
+        // instructions require populating these when the message is
+        // authored by a user/assistant on an `issue`'s conversation so
+        // operators can correlate debugging steps with the build the
+        // reporter is testing against.
+        reporter_git_sha: { type: "string", required: false },
+        reporter_git_ref: { type: "string", required: false },
+        reporter_channel: { type: "string", required: false },
+        reporter_app_version: { type: "string", required: false },
       },
       // v1.2: turn-scoped identity via caller-supplied `turn_key`. Falls
       // through to heuristic when missing; R2 `name_collision_policy: reject`
@@ -1000,6 +1074,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         sender_kind: { strategy: "last_write" },
         sender_agent_id: { strategy: "last_write" },
         recipient_agent_id: { strategy: "last_write" },
+        reporter_git_sha: { strategy: "last_write" },
+        reporter_git_ref: { strategy: "last_write" },
+        reporter_channel: { strategy: "last_write" },
+        reporter_app_version: { strategy: "last_write" },
       },
     },
   },
@@ -1223,10 +1301,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // R2: RFC 5322 message_id is the canonical strong identifier when
       // present. Fall back to (from, subject, sent_at) which uniquely
       // identifies the message within most mailboxes.
-      canonical_name_fields: [
-        "message_id",
-        { composite: ["from", "subject", "sent_at"] },
-      ],
+      canonical_name_fields: ["message_id", { composite: ["from", "subject", "sent_at"] }],
     },
     reducer_config: {
       merge_policies: {
@@ -1292,6 +1367,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         title: { type: "string", required: false, preserveCase: true },
         content: { type: "string", required: true, preserveCase: true },
         tags: { type: "string", required: false },
+        // Originating system slug (e.g. "notion", "manual", "csv_import").
+        // See docs/subsystems/entity_field_semantics.md for canonical values.
+        // Also used as part of the composite canonical name when title is absent.
         source: { type: "string", required: false },
         created_date: { type: "date", required: false },
         updated_date: { type: "date", required: false },
@@ -1302,10 +1380,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
       // R2: title is a natural identifier when present; content is the
       // fallback so title-less scratchpads still resolve deterministically.
-      canonical_name_fields: [
-        "title",
-        { composite: ["source", "created_date"] },
-      ],
+      canonical_name_fields: ["title", { composite: ["source", "created_date"] }],
     },
     reducer_config: {
       merge_policies: {
@@ -1448,6 +1523,52 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  exercise_log: {
+    entity_type: "exercise_log",
+    schema_version: "1.0",
+    metadata: {
+      label: "Exercise Log",
+      description:
+        "A single logged exercise set — one atomic entry in a workout (e.g. Bench Press, Set 1, 60 kg × 10 reps, 2026-05-16).",
+      category: "health",
+      aliases: ["exercise_set", "workout_set", "exercise_entry"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        exercise: { type: "string", required: true },
+        date: { type: "date", required: true },
+        set_number: { type: "number", required: false },
+        set_type: { type: "string", required: false },
+        reps: { type: "number", required: false },
+        weight_kg: { type: "number", required: false },
+        weight_lbs: { type: "number", required: false },
+        duration_seconds: { type: "number", required: false },
+        distance_meters: { type: "number", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+      // Composite identity: exercise name + date + set_number uniquely identifies
+      // a single logged set. Falls back to exercise + date when set_number is absent
+      // (e.g. for cardio or untimed drills with no per-set breakdown).
+      canonical_name_fields: [
+        { composite: ["exercise", "date", "set_number"] },
+        { composite: ["exercise", "date"] },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        date: { strategy: "last_write" },
+        reps: { strategy: "last_write" },
+        weight_kg: { strategy: "last_write" },
+        weight_lbs: { strategy: "last_write" },
+        duration_seconds: { strategy: "last_write" },
+        distance_meters: { strategy: "last_write" },
+      },
+    },
+  },
+
   meal: {
     entity_type: "meal",
     schema_version: "1.0",
@@ -1497,25 +1618,27 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        amount: { type: "number", required: false },
+        amount_original: { type: "number", required: false },
+        currency: { type: "string", required: false },
+        date: { type: "date", required: false },
         posting_date: { type: "date", required: false },
+        merchant_name: { type: "string", required: false },
+        status: { type: "string", required: false },
+        account_id: { type: "string", required: false },
         category: { type: "string", required: false },
         bank_provider: { type: "string", required: false },
-        amount_original: { type: "number", required: false },
       },
-      canonical_name_fields: [
-        "posting_date",
-        "category",
-        "amount_original",
-        "bank_provider",
-      ],
+      canonical_name_fields: ["posting_date", "category", "amount_original", "bank_provider"],
       temporal_fields: [
         { field: "posting_date", event_type: "TransactionPosted" },
-        { field: "transaction_date", event_type: "TransactionDate" },
+        { field: "date", event_type: "TransactionDate" },
       ],
     },
     reducer_config: {
       merge_policies: {
         posting_date: { strategy: "last_write" },
+        status: { strategy: "last_write" },
         category: { strategy: "last_write" },
       },
     },
@@ -1556,13 +1679,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // R2: ordered identity precedence. Contact records arrive with varied
       // identifiers depending on source (CRM export, email signature, chat
       // mention), so each strong identifier is a single-field rule.
-      canonical_name_fields: [
-        "email",
-        "phone",
-        "external_id",
-        "contact_id",
-        "name",
-      ],
+      canonical_name_fields: ["email", "phone", "external_id", "contact_id", "name"],
     },
     reducer_config: {
       merge_policies: {
@@ -1589,7 +1706,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       fields: {
         schema_version: { type: "string", required: true },
         name: { type: "string", required: false },
+        contract_number: { type: "string", required: false },
+        parties: { type: "string", required: false },
+        effective_date: { type: "date", required: false },
+        expiration_date: { type: "date", required: false },
         signed_date: { type: "date", required: false },
+        status: { type: "string", required: false },
         companies: { type: "string", required: false },
         files: { type: "string", required: false },
         type: { type: "string", required: false },
@@ -1603,6 +1725,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     reducer_config: {
       merge_policies: {
         signed_date: { strategy: "last_write" },
+        effective_date: { strategy: "last_write" },
+        expiration_date: { strategy: "last_write" },
+        status: { strategy: "last_write" },
         files: { strategy: "merge_array" },
       },
     },
@@ -1620,6 +1745,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        external_id: { type: "string", required: false },
+        institution: { type: "string", required: false },
+        currency: { type: "string", required: false },
+        balance: { type: "number", required: false },
         wallet: { type: "string", required: false },
         wallet_name: { type: "string", required: false },
         number: { type: "string", required: false },
@@ -2252,6 +2381,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         description: { type: "string", required: false, preserveCase: true },
         started_at: { type: "date", required: false },
         completed_at: { type: "date", required: false },
+        // Originating system or runtime that dispatched this task
+        // (e.g. "langgraph", "claude_code", "manual").
+        // See docs/subsystems/entity_field_semantics.md for canonical values.
         source: { type: "string", required: false },
         priority: { type: "string", required: false },
         input_summary: { type: "string", required: false, preserveCase: true },
@@ -2416,10 +2548,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         emitted_at: { type: "date", required: false },
         payload: { type: "object", required: false },
       },
-      canonical_name_fields: [
-        { composite: ["sensor_id", "emitted_at"] },
-        "sensor_id",
-      ],
+      canonical_name_fields: [{ composite: ["sensor_id", "emitted_at"] }, "sensor_id"],
       temporal_fields: [{ field: "emitted_at", event_type: "AgentSensorEmitted" }],
     },
     reducer_config: {
@@ -2436,13 +2565,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // keep the registry-wide default order (sensor > workflow_state >
       // llm_summary > human > import) explicit so future edits don't
       // accidentally demote sensor writes below summaries.
-      observation_source_priority: [
-        "sensor",
-        "workflow_state",
-        "llm_summary",
-        "human",
-        "import",
-      ],
+      observation_source_priority: ["sensor", "workflow_state", "llm_summary", "human", "import"],
     },
   },
 
@@ -2506,6 +2629,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         notes: { type: "string", required: false },
         last_used_at: { type: "date", required: false },
         import_source: { type: "string", required: false },
+        linked_github_login: { type: "string", required: false },
+        linked_github_user_id: { type: "number", required: false },
+        linked_github_verified_at: { type: "date", required: false },
       },
       // Identity rules: thumbprint pin wins (rotated JWT issuer cannot
       // quietly replace the grant); otherwise a (sub, iss) composite; else
@@ -2529,6 +2655,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         match_iss: { strategy: "last_write" },
         match_thumbprint: { strategy: "last_write" },
         import_source: { strategy: "last_write" },
+        linked_github_login: { strategy: "last_write" },
+        linked_github_user_id: { strategy: "last_write" },
+        linked_github_verified_at: { strategy: "last_write" },
       },
     },
   },
@@ -2658,7 +2787,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         hint_shown: { type: "boolean", required: false },
         harness: { type: "string", required: false },
       },
-      canonical_name_fields: [{ composite: ["turn_key", "tool_name", "error_class", "observed_at"] }],
+      canonical_name_fields: [
+        { composite: ["turn_key", "tool_name", "error_class", "observed_at"] },
+      ],
       name_collision_policy: "reject",
     },
     reducer_config: {
@@ -2697,6 +2828,328 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         chars_injected: { strategy: "last_write" },
         entity_ids: { strategy: "last_write" },
         harness: { strategy: "last_write" },
+      },
+    },
+  },
+
+  gist: {
+    entity_type: "gist",
+    schema_version: "1.0",
+    metadata: {
+      label: "Gist",
+      description: "GitHub Gists and similar code/text snippets shared via URL.",
+      category: "knowledge",
+      aliases: ["github_gist", "code_snippet"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        url: { type: "string", required: false },
+        gist_id: { type: "string", required: false },
+        description: { type: "string", required: false, preserveCase: true },
+        title: { type: "string", required: false, preserveCase: true },
+        content: { type: "string", required: false, preserveCase: true },
+        language: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        updated_at: { type: "date", required: false },
+      },
+      // Callers commonly supply a pre-formed canonical_name or a stable gist_id;
+      // identity_opt_out allows both paths without requiring composite fields.
+      identity_opt_out: "heuristic_canonical_name",
+    },
+    reducer_config: {
+      merge_policies: {
+        description: { strategy: "last_write" },
+        title: { strategy: "last_write" },
+        content: { strategy: "last_write" },
+        url: { strategy: "last_write" },
+        language: { strategy: "last_write" },
+        updated_at: { strategy: "last_write" },
+      },
+    },
+  },
+
+  neotoma_repair: {
+    entity_type: "neotoma_repair",
+    schema_version: "1.0",
+    metadata: {
+      label: "Neotoma Repair",
+      description: "A record of a repair or remediation action taken within Neotoma.",
+      category: "agent_runtime",
+      aliases: ["repair", "remediation"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        title: { type: "string", required: false, preserveCase: true },
+        diagnosis: { type: "string", required: false, preserveCase: true },
+        diagnosis_classification: { type: "string", required: false },
+        trigger: { type: "string", required: false, preserveCase: true },
+        applied_fix: { type: "string", required: false, preserveCase: true },
+        proactive_remediation_required: { type: "boolean", required: false },
+        remediation_status: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+      },
+      identity_opt_out: "heuristic_canonical_name",
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        diagnosis: { strategy: "last_write" },
+        diagnosis_classification: { strategy: "last_write" },
+        trigger: { strategy: "last_write" },
+        applied_fix: { strategy: "last_write" },
+        proactive_remediation_required: { strategy: "last_write" },
+        remediation_status: { strategy: "last_write" },
+      },
+    },
+  },
+
+  device: {
+    entity_type: "device",
+    schema_version: "1.0",
+    metadata: {
+      label: "Device",
+      description:
+        "A hardware device or IoT/smart-home unit (compute hardware, sensors, appliances). Identified by name; additional metadata such as brand, protocol, and location can be stored as optional fields.",
+      category: "knowledge",
+      aliases: ["hardware", "iot_device", "smart_device", "appliance"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        brand: { type: "string", required: false },
+        device_type: { type: "string", required: false },
+        model: { type: "string", required: false },
+        protocol: { type: "string", required: false },
+        location_in_home: { type: "string", required: false },
+        floor: { type: "string", required: false },
+        local_api_available: { type: "boolean", required: false },
+        cloud_dependent: { type: "boolean", required: false },
+        cpu_cores: { type: "number", required: false },
+        gpu_cores: { type: "number", required: false },
+        memory_gb: { type: "number", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+      // Devices are identified by name — "Nest Thermostat", "MacBook Pro", etc.
+      canonical_name_fields: ["name"],
+    },
+    reducer_config: {
+      merge_policies: {
+        brand: { strategy: "last_write" },
+        device_type: { strategy: "last_write" },
+        model: { strategy: "last_write" },
+        protocol: { strategy: "last_write" },
+        location_in_home: { strategy: "last_write" },
+        floor: { strategy: "last_write" },
+        local_api_available: { strategy: "last_write" },
+        cloud_dependent: { strategy: "last_write" },
+      },
+    },
+  },
+
+  external_link: {
+    entity_type: "external_link",
+    schema_version: "1.0",
+    metadata: {
+      label: "External Link",
+      description:
+        "A URL bookmark or reference with optional metadata. Supports common link provenance fields: description, data_source, link_kind, visibility.",
+      category: "knowledge",
+      aliases: ["bookmark", "link", "url_reference"],
+    },
+    schema_definition: {
+      fields: {
+        title: { type: "string", required: true },
+        url: { type: "string", required: true },
+        description: { type: "string", required: false },
+        data_source: { type: "string", required: false },
+        link_kind: { type: "string", required: false },
+        visibility: { type: "string", required: false },
+      },
+      canonical_name_fields: ["url", "title"],
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        description: { strategy: "last_write" },
+        data_source: { strategy: "last_write" },
+        link_kind: { strategy: "last_write" },
+        visibility: { strategy: "last_write" },
+      },
+    },
+  },
+
+  workout_session: {
+    entity_type: "workout_session",
+    schema_version: "1.0",
+    metadata: {
+      label: "Workout Session",
+      description:
+        "A single workout session container. Exercises performed during the session are accumulated incrementally via the `exercises` array field using the merge_array reducer strategy, so each logged exercise observation appends to the consolidated list.",
+      category: "health",
+      aliases: ["training_session", "gym_session", "workout_log"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // Caller-supplied stable identifier linking all observations in this
+        // session. Required for deterministic identity; callers (e.g. the
+        // Telegram bot) should pass a stable session token each turn.
+        session_id: { type: "string", required: false },
+        name: { type: "string", required: false, preserveCase: true },
+        date: { type: "date", required: false },
+        started_at: { type: "date", required: false },
+        ended_at: { type: "date", required: false },
+        duration_minutes: { type: "number", required: false },
+        // Accumulated list of exercises performed. Each observation may
+        // push one or more exercise objects (name, sets, reps, weight).
+        // The merge_array reducer strategy unions all values across
+        // observations so incremental logging converges into a full list.
+        exercises: { type: "array", required: false },
+        notes: { type: "string", required: false, preserveCase: true },
+        location: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+      // session_id is the primary stable identity key. Falls back to
+      // name + date for sessions created without an explicit session_id.
+      canonical_name_fields: ["session_id", { composite: ["name", "date"] }],
+    },
+    reducer_config: {
+      merge_policies: {
+        // exercises accumulates across observations — each new log appends.
+        exercises: { strategy: "merge_array" },
+        // Scalar fields use last_write so mid-session corrections propagate.
+        name: { strategy: "last_write" },
+        date: { strategy: "last_write" },
+        started_at: { strategy: "last_write" },
+        ended_at: { strategy: "last_write" },
+        duration_minutes: { strategy: "last_write" },
+        notes: { strategy: "last_write" },
+        location: { strategy: "last_write" },
+      },
+    },
+  },
+
+  product_feedback: {
+    entity_type: "product_feedback",
+    schema_version: "1.0",
+    metadata: {
+      label: "Product Feedback",
+      description:
+        "User-reported or internally-filed feedback about product features, bugs, or UX. " +
+        "Use feedback_source to distinguish internal engineering observations from external " +
+        "user reports so they can be queried and triaged independently.",
+      category: "knowledge",
+      aliases: ["feedback", "user_feedback", "feature_request", "bug_report"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        // Discriminator — distinguishes internal engineering notes from external user reports.
+        // Allowed values: "internal" | "external"
+        feedback_source: {
+          type: "string",
+          required: false,
+          description:
+            'Discriminator for feedback origin. Use "internal" for engineering/team ' +
+            'observations and "external" for reports from end users or beta testers.',
+        },
+        title: { type: "string", required: false, preserveCase: true },
+        content: { type: "string", required: false, preserveCase: true },
+        // External-actor identity fields. At least one should be present for external feedback.
+        reporter_email: { type: "string", required: false },
+        reporter_name: { type: "string", required: false },
+        reporter_id: { type: "string", required: false },
+        // Categorisation and routing
+        category: { type: "string", required: false },
+        severity: { type: "string", required: false },
+        status: { type: "string", required: false },
+        product_area: { type: "string", required: false },
+        // Timestamps
+        submitted_at: { type: "date", required: false },
+        resolved_at: { type: "date", required: false },
+      },
+      // R2: feedback items are identified by a combination of reporter and title
+      // when both are present; title alone is the fallback for anonymous submissions.
+      canonical_name_fields: [
+        { composite: ["reporter_email", "title"] },
+        { composite: ["reporter_id", "title"] },
+        { composite: ["reporter_name", "title"] },
+        "title",
+      ],
+      agent_instructions:
+        "product_feedback entities carry a `feedback_source` discriminator field.\n" +
+        '- `"internal"` — filed by the engineering team or internal stakeholders.\n' +
+        '- `"external"` — submitted by an end user or beta tester.\n' +
+        "Always surface `feedback_source` when presenting or summarising feedback so that " +
+        "internal observations are not confused with user-reported issues. " +
+        "For external feedback, also surface `reporter_email`, `reporter_name`, or " +
+        "`reporter_id` when present to preserve attribution.",
+      // Emit a non-blocking warning when feedback is stored without any identity or
+      // source discriminator — this is the most common cause of internal artifacts
+      // being mixed with external user reports in queries (#136 / #137).
+      store_warnings: [
+        {
+          code: "MISSING_IDENTITY_FIELDS",
+          fields: ["feedback_source", "reporter_email", "reporter_name", "reporter_id"],
+          message:
+            "product_feedback stored without identity fields " +
+            "(feedback_source, reporter_email, reporter_name, reporter_id); " +
+            "consider adding at least one to distinguish internal from external feedback",
+        },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        severity: { strategy: "last_write" },
+        resolved_at: { strategy: "last_write" },
+        content: { strategy: "highest_priority" },
+      },
+    },
+  },
+
+  preference: {
+    entity_type: "preference",
+    schema_version: "1.0",
+    metadata: {
+      label: "Preference",
+      description:
+        "User preference / setting persisted across sessions (e.g. issue_filing_consent).",
+      category: "agent_runtime",
+      aliases: ["setting"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // Stable identifier for the preference (e.g. "issue_filing_consent"). Acts as the key.
+        title: { type: "string", required: true, preserveCase: false },
+        // Current value of the preference (e.g. "always" | "ask" | "never"). Type is freeform
+        // string because preference shape varies; agents and UIs interpret per-title.
+        value: { type: "string", required: true, preserveCase: true },
+        // Optional scope qualifier — e.g. "global", "project:neotoma". Default behavior treats
+        // a preference as global when scope is omitted.
+        scope: { type: "string", required: false },
+        // Optional human-readable description of what the preference controls.
+        description: { type: "string", required: false, preserveCase: true },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+      },
+      // A preference is uniquely identified by its title (plus optional scope when present).
+      // Two stores with the same title collapse to one entity; the latest write wins on value.
+      canonical_name_fields: ["title", { composite: ["scope", "title"] }],
+    },
+    reducer_config: {
+      merge_policies: {
+        value: { strategy: "last_write" },
+        scope: { strategy: "last_write" },
+        description: { strategy: "highest_priority" },
+        updated_date: { strategy: "last_write" },
       },
     },
   },
@@ -2813,11 +3266,16 @@ export function refineEntityTypeFromExtractedFields(
   if (keySet.size === 0) return currentEntityType;
 
   const candidates: SchemaCandidate[] =
-    candidateSchemas ?? Object.entries(ENTITY_SCHEMAS).map(([entity_type, s]) => ({ entity_type, schema_definition: s.schema_definition }));
+    candidateSchemas ??
+    Object.entries(ENTITY_SCHEMAS).map(([entity_type, s]) => ({
+      entity_type,
+      schema_definition: s.schema_definition,
+    }));
 
-  const currentSchema = candidates.find((c) => c.entity_type === currentEntityType) ?? getSchemaDefinition(currentEntityType);
-  const shouldRefineCurrentType =
-    GENERIC_ENTITY_TYPES.has(currentEntityType) || !currentSchema;
+  const currentSchema =
+    candidates.find((c) => c.entity_type === currentEntityType) ??
+    getSchemaDefinition(currentEntityType);
+  const shouldRefineCurrentType = GENERIC_ENTITY_TYPES.has(currentEntityType) || !currentSchema;
   if (!shouldRefineCurrentType) return currentEntityType;
 
   const currentScore = currentSchema
@@ -2831,7 +3289,12 @@ export function refineEntityTypeFromExtractedFields(
   for (const schema of candidates) {
     if (schema.entity_type === currentEntityType) continue;
     const s = scoreSchemaMatch(keySet, schema);
-    if (s.required >= 2 && (!bestOther || s.required > bestOther.required || (s.required === bestOther.required && s.optional > bestOther.optional))) {
+    if (
+      s.required >= 2 &&
+      (!bestOther ||
+        s.required > bestOther.required ||
+        (s.required === bestOther.required && s.optional > bestOther.optional))
+    ) {
       bestOther = { type: schema.entity_type, required: s.required, optional: s.optional };
     }
   }

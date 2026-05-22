@@ -5,10 +5,7 @@
 
 import { encryptEnvelope } from "../crypto/envelope.js";
 import type { Ed25519KeyPair, X25519KeyPair } from "../crypto/types.js";
-import {
-  generateX25519KeyPair,
-  generateEd25519KeyPair,
-} from "../crypto/keys.js";
+import { generateX25519KeyPair, generateEd25519KeyPair } from "../crypto/keys.js";
 
 let serverX25519Key: X25519KeyPair | null = null;
 let serverEd25519Key: Ed25519KeyPair | null = null;
@@ -33,7 +30,7 @@ export async function initServerKeys(): Promise<void> {
  */
 export async function encryptResponse(
   plaintext: unknown,
-  recipientPublicKey: Uint8Array,
+  recipientPublicKey: Uint8Array
 ): Promise<string> {
   if (!serverX25519Key || !serverEd25519Key) {
     await initServerKeys();
@@ -42,11 +39,7 @@ export async function encryptResponse(
   const payload = JSON.stringify(plaintext);
   const payloadBytes = new TextEncoder().encode(payload);
 
-  const envelope = await encryptEnvelope(
-    payloadBytes,
-    recipientPublicKey,
-    serverEd25519Key!,
-  );
+  const envelope = await encryptEnvelope(payloadBytes, recipientPublicKey, serverEd25519Key!);
 
   // Serialize to base64url
   return serializeEnvelope(envelope);

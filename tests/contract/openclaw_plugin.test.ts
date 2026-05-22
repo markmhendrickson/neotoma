@@ -5,6 +5,13 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
+function parseNpmPackJsonOutput(output: string): Array<{ files?: Array<{ path?: string }> }> {
+  const trimmed = output.trim();
+  const jsonStart = trimmed.lastIndexOf("\n[");
+  const jsonText = jsonStart >= 0 ? trimmed.slice(jsonStart + 1) : trimmed.slice(trimmed.indexOf("["));
+  return JSON.parse(jsonText) as Array<{ files?: Array<{ path?: string }> }>;
+}
+
 describe("OpenClaw plugin packaging", () => {
   describe("openclaw.plugin.json manifest", () => {
     const manifestPath = join(ROOT, "openclaw.plugin.json");
@@ -119,6 +126,41 @@ describe("OpenClaw plugin packaging", () => {
       const storeTool = tools.find((t: { name: string }) => t.name === "store");
       expect(storeTool!.description).toBe("Custom store description");
     });
+
+    it("issue tools avoid top-level anyOf so Codex/OpenAI accept the schemas", async () => {
+      const { buildToolDefinitions } = await import("../../src/tool_definitions.js");
+      const tools = buildToolDefinitions();
+      const submitIssue = tools.find((t: { name: string }) => t.name === "submit_issue");
+      const addMsg = tools.find((t: { name: string }) => t.name === "add_issue_message");
+      const getStatus = tools.find((t: { name: string }) => t.name === "get_issue_status");
+
+      for (const tool of [submitIssue, addMsg, getStatus]) {
+        expect(tool?.inputSchema).toBeDefined();
+        expect((tool?.inputSchema as Record<string, unknown>)?.type).toBe("object");
+        expect((tool?.inputSchema as Record<string, unknown>)?.anyOf).toBeUndefined();
+      }
+
+      expect(addMsg?.inputSchema).toMatchObject({
+        required: ["body"],
+        properties: {
+          entity_id: { type: "string" },
+          issue_number: { type: "integer" },
+        },
+      });
+      expect(getStatus?.inputSchema).toMatchObject({
+        properties: {
+          entity_id: { type: "string" },
+          issue_number: { type: "integer" },
+        },
+      });
+      expect(submitIssue?.inputSchema).toMatchObject({
+        required: ["title", "body"],
+        properties: {
+          reporter_git_sha: { type: "string" },
+          reporter_app_version: { type: "string" },
+        },
+      });
+    });
   });
 
   describe("openclaw entry module", () => {
@@ -152,6 +194,30 @@ describe("OpenClaw plugin packaging", () => {
         expect(registeredTools, `Tool not registered: ${name}`).toContain(name);
       }
     });
+
+    it("register() wires OpenClaw lifecycle hooks", async () => {
+      const mod = await import("../../src/openclaw_entry.js");
+      const plugin = mod.default;
+      const hookNames: string[] = [];
+      const mockApi = {
+        config: {},
+        registerTool() {},
+        on(name: string) {
+          hookNames.push(name);
+        },
+      };
+
+      plugin.register(mockApi);
+      expect(hookNames).toEqual(
+        expect.arrayContaining([
+          "session_start",
+          "session_end",
+          "message_received",
+          "message_sent",
+          "after_tool_call",
+        ]),
+      );
+    });
   });
 
   describe("npm pack includes openclaw files", () => {
@@ -164,9 +230,7 @@ describe("OpenClaw plugin packaging", () => {
 
       expect(result.status, result.stderr || result.stdout).toBe(0);
 
-      const parsed = JSON.parse(result.stdout.trim()) as Array<{
-        files?: Array<{ path?: string }>;
-      }>;
+      const parsed = parseNpmPackJsonOutput(result.stdout);
       const filePaths = (parsed[0]?.files ?? [])
         .map((f) => f.path)
         .filter(Boolean) as string[];

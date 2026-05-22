@@ -27,29 +27,26 @@ Core invariants:
 - Explicit control: User approves all ingestion
 - Privacy-maximal: No background data collection
 - Graph integrity: No orphans, no cycles, no inferred edges
-- Truth-Layer bounded: No strategy, execution, or agent logic
+- State-Layer bounded: No strategy, execution, or agent logic in Neotoma
 - Event-sourced: All state updates via Domain Events -> Reducers
-- Pure Strategy: Strategy Layer has no side effects (State in -> Decisions out)
-- Pure Execution: Execution Layer emits Domain Events (Commands in -> Events out)
-Layered architecture (example: financial system):
+- Operational-layer boundary: Operational layers MUST NOT mutate Neotoma truth directly; all writes flow through observations
+State Layer + Operational Layer (example: financial operational system):
 ┌───────────────────────────────────────────────┐
-│ Execution Layer                               │
-│ (Agentic Wallet + Domain Agents)              │
-│ Commands -> Side Effects -> Domain Events     │
+│ Operational Layer                             │
+│  Examples:                                    │
+│   • Agentic Portfolio (reasoning-style)       │
+│   • Agentic Wallet + Domain Agents (effect)   │
+│   • Agent harnesses, pipelines, custom apps   │
+│  Reads truth -> reasons / acts                │
+│  Writes results back as observations          │
 └────────────▲─────────────────────────────────┘
-             │ Reads Only, Receives Commands
-┌────────────▼─────────────────────────────────┐
-│ Strategy Layer                                │
-│ (Agentic Portfolio is example instance)       │
-│ State -> Evaluates -> Decisions + Commands    │
-└────────────▲─────────────────────────────────┘
-             │ Reads Only
+             │ Reads Only / Writes via observations
 ┌────────────▼─────────────────────────────────┐
 │ Neotoma (State Layer)                         │
 │ Event-sourced, Reducer-driven                 │
 │ Domain Events -> Reducers -> State            │
 └───────────────────────────────────────────────┘
-Note: Agentic Portfolio is an example instance of Strategy Layer. Agentic Wallet is part of Execution Layer alongside domain agents. Many other agent-driven layers are possible.
+Note: Agentic Portfolio and Agentic Wallet are illustrative examples of operational systems built on Neotoma. Many other operational systems are possible.
 This document enforces State Layer purity.
 ```
 

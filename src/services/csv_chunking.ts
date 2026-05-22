@@ -31,10 +31,7 @@ function estimateTokenCount(text: string): number {
  * @param maxTokens Maximum tokens per chunk (default: 20000 = ~80KB)
  * @returns true if chunking is needed
  */
-export function needsChunking(
-  csvContent: string,
-  maxTokens: number = 20000
-): boolean {
+export function needsChunking(csvContent: string, maxTokens: number = 20000): boolean {
   const estimatedTokens = estimateTokenCount(csvContent);
   return estimatedTokens > maxTokens;
 }
@@ -46,10 +43,7 @@ export function needsChunking(
  * @param rowsPerChunk Number of rows per chunk (default: 100 rows = ~2000 tokens)
  * @returns Array of CSV chunks with metadata
  */
-export function chunkCSV(
-  csvContent: string,
-  rowsPerChunk: number = 100
-): CSVChunk[] {
+export function chunkCSV(csvContent: string, rowsPerChunk: number = 100): CSVChunk[] {
   const lines = csvContent.split("\n").filter((line) => line.trim() !== "");
 
   if (lines.length === 0) {

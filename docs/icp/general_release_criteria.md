@@ -45,28 +45,46 @@ General release readiness means sufficient evidence on all three.
 
 ### Gate 3: Unassisted activation
 
-**Threshold:** 2+ users have gone from discovery to active usage without direct intervention — no personal walkthrough, no DM troubleshooting, no hand-holding through MCP setup.
+**Threshold:** 2+ users have gone from discovery to active usage without direct intervention, where each user satisfies all three of the following:
+
+- **(a) Install completed on the evaluator's actual machine** — not a screen-share over the founder's machine, not a guided pairing session, not a sandbox set up by the team.
+- **(b) First sustained-write session within 7 days of install** — observation activity that goes beyond a single test write and reflects real workflow usage.
+- **(c) No synchronous help between discovery and that first sustained-write** — no personal walkthrough, no DM troubleshooting, no live debugging of the install path or MCP setup.
+
+Pre-install evaluators (those who have not completed install on their own machine) do not vacuously satisfy this gate. Self-reported intent to install does not count.
 
 **What this proves:** The docs, onboarding flow, error messages, and agent instructions are sufficient for self-service adoption. During the dev release, personal intervention is expected; for general release, it can't scale.
 
 **Evidence to track:**
-- Did they install from docs alone?
-- Did they hit a blocker that required human help?
+- Did they install from docs alone, on their own machine?
+- Did they hit a blocker that required human help between install and first sustained write?
 - Did they discover Priority 2+ data types without being prompted?
 - Did they configure MCP in a second tool without guidance?
+
+<!-- Evidence basis: round-1 corpus had 4 of 6 gate3=true rows vacuously true (pre-install evaluators); round-2 fresh-install attempts (ent_727fee4a94cfaea86880a0f1, ent_81f79780f1fbe679af99da90, ent_4f0db2d7f2c349900e4dac2c) failed 0/3 to activate unassisted. See aggregate_round2_2026_05_15_feedback_analysis.md. -->
 
 **Status:** [ ] Met / [ ] Not met
 
 ### Gate 4: Activation risk resolution
 
-Each of the four activation risk classes from [`developer_release_targeting.md`](./developer_release_targeting.md) needs minimum resolution:
+Each of the activation risk classes from [`developer_release_targeting.md`](./developer_release_targeting.md) needs minimum resolution. The first four rows are the original risk classes; the four rows below are sub-gates promoted to first-class measurement based on the round-2 evaluator corpus.
 
-| Risk class | Minimum status for general release | Current status |
+| Risk class / sub-gate | Minimum status for general release | Current status |
 |---|---|---|
-| **Cognitive cold-start** | Priority 1 data auto-stores (done); "what to store" guide has worked examples; agent proactively suggests next entity types | Partially done |
+| **Cognitive cold-start** (`gate4_cognitive_coldstart`) | ≤25% of evaluators report `friction` or `blocked` on cognitive cold-start; Priority 1 data auto-stores; "what to store" guide has worked examples; agent proactively suggests next entity types | Failing — 7/16 = 44% `friction\|blocked` in current corpus |
 | **UX friction** | Error messages guide recovery; successful storage is confirmed to user; duplicate entity edge cases resolved or surfaced gracefully | Pending |
 | **Trust barrier** | SBOM or dependency audit published (if proven to be a real blocker); supply chain posture surfaced in install docs | Pending |
 | **Prior bad experience** | Onboarding surface includes integrity-first framing; at least one user-facing comparison (fuzzy memory vs. Neotoma guarantees) exists | Pending |
+| **Install-path friction** (`gate4_install_path_friction`) | Cold install on evaluator's actual machine completes with ≤2 approval prompts, in ≤5 minutes, respecting version-managed Node (Mise / asdf / nvm / volta), and emits a canonical `installed at <path>` line | Failing — 0/3 round-2 fresh-install attempts met threshold |
+| **Retrieval transparency** (`gate4_retrieval_transparency`) | The harness surfaces a visible breadcrumb of which observations the agent just used during a turn (e.g. "read N observations from Neotoma"), enabling the user to verify what informed an agent response | Pending |
+| **Privacy / local-LLM compatibility** (`gate4_privacy_local_llm_compatibility`) | A documented `/local-llm` (or equivalent) surface plus a working walkthrough for at least one local-LLM topology (Ollama / LM Studio / Alaris-class), including a Neotoma-CLI-without-MCP path for harnesses that do not speak MCP | Pending |
+
+<!-- Evidence basis for sub-gates:
+  - Cognitive cold-start promotion: 7/16 friction|blocked across N=16 corpus.
+  - Install-path friction: ent_4f0db2d7f2c349900e4dac2c, ent_81f79780f1fbe679af99da90, ent_727fee4a94cfaea86880a0f1.
+  - Retrieval transparency: ent_727fee4a94cfaea86880a0f1 (bounce reason), ent_8e880b688c1a2299cefac8f9 (recall-layer gap), ent_b75ca95fbfc3317d56ac1fe0 (Inspector ask).
+  - Privacy / local-LLM: ent_4f0db2d7f2c349900e4dac2c, ent_727fee4a94cfaea86880a0f1, ent_81f79780f1fbe679af99da90.
+  See aggregate_round2_2026_05_15_feedback_analysis.md. -->
 
 **Status:** [ ] All minimum statuses met / [ ] Gaps remain
 
@@ -131,8 +149,15 @@ Date: ___________
 
 Gate 1 (Adoption):    [ ] Met  [ ] Not met  —  Active users: ___/5
 Gate 2 (Retention):   [ ] Met  [ ] Not met  —  4+ week users: ___/3
-Gate 3 (Unassisted):  [ ] Met  [ ] Not met  —  Self-service activations: ___/2
+Gate 3 (Unassisted):  [ ] Met  [ ] Not met  —  Self-service activations meeting (a)+(b)+(c): ___/2
 Gate 4 (Risk resolution): [ ] Met  [ ] Gaps  —  Remaining gaps: ___
+  - Cognitive cold-start:           [ ] Met  [ ] Gap  —  Friction|blocked rate: ___% (target ≤25%)
+  - UX friction:                    [ ] Met  [ ] Gap
+  - Trust barrier:                  [ ] Met  [ ] Gap
+  - Prior bad experience:           [ ] Met  [ ] Gap
+  - Install-path friction:          [ ] Met  [ ] Gap  —  Cold-install pass rate: ___/___
+  - Retrieval transparency:         [ ] Met  [ ] Gap
+  - Privacy / local-LLM compat:     [ ] Met  [ ] Gap
 Gate 5 (Architecture):    [ ] Met  [ ] Failures  —  Issues: ___
 Gate 6 (Signal quality):  [ ] Met  [ ] Speculative  —  Gaps: ___
 
@@ -173,3 +198,9 @@ Signs that the developer release is being extended past its useful life:
 3. Do not recommend expanding ICP scope as a substitute for meeting adoption gates within the current ICP
 4. Distinguish between activation success (Gate 1) and retention success (Gate 2) — both are required
 5. Architecture validation (Gate 5) is a hard blocker — a single integrity failure undermines the core value prop
+
+---
+
+## Revision history
+
+- **2026-05-15:** Tightened Gate 3 to require install on evaluator's actual machine, first sustained-write within 7 days, and no synchronous help in between — closing the "vacuously true" pre-install loophole. Added Gate 4 sub-gates for `gate4_install_path_friction`, `gate4_retrieval_transparency`, and `gate4_privacy_local_llm_compatibility`. Promoted `gate4_cognitive_coldstart` to a first-class Gate 4 sub-gate with explicit ≤25% `friction|blocked` threshold. Updated Readiness Assessment Template to reflect new sub-gates. Backed by the 16-evaluator feedback corpus (see `docs/private/customer-development/aggregate_round2_2026_05_15_feedback_analysis.md`).

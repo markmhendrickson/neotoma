@@ -7,6 +7,7 @@ import {
   renderTimelineDayMarkdown,
   renderSchemaMarkdown,
   renderIndexMarkdown,
+  renderProfileEntity,
   orderedSnapshotKeys,
   canonicalStringify,
   type RenderEntityInput,
@@ -39,7 +40,7 @@ const BASE_ENTITY: RenderEntityInput = {
 
 describe("canonicalStringify", () => {
   it("sorts keys alphabetically at every depth", () => {
-    const input = { b: 1, a: { z: 1, a: 1 }, c: [ { y: 2, x: 1 } ] };
+    const input = { b: 1, a: { z: 1, a: 1 }, c: [{ y: 2, x: 1 }] };
     const out = canonicalStringify(input, 0);
     expect(out).toBe('{"a":{"a":1,"z":1},"b":1,"c":[{"x":1,"y":2}]}');
   });
@@ -88,11 +89,9 @@ describe("renderEntityMarkdown", () => {
   });
 
   it("orders fields by schema first and alphabetically for the rest", () => {
-    const md = renderEntityMarkdown(
-      BASE_ENTITY,
-      ["name", "email", "notes"],
-      { includeProvenance: false }
-    );
+    const md = renderEntityMarkdown(BASE_ENTITY, ["name", "email", "notes"], {
+      includeProvenance: false,
+    });
     const aaIdx = md.indexOf("## aa_alpha_first");
     const zzIdx = md.indexOf("## zz_alpha_last");
     const nameIdx = md.indexOf("## name");
@@ -130,7 +129,10 @@ describe("renderEntityMarkdown", () => {
 
   it("excludes schema_version and entity_type from body", () => {
     const md = renderEntityMarkdown(
-      { ...BASE_ENTITY, snapshot: { ...BASE_ENTITY.snapshot, schema_version: "1.0", entity_type: "contact" } },
+      {
+        ...BASE_ENTITY,
+        snapshot: { ...BASE_ENTITY.snapshot, schema_version: "1.0", entity_type: "contact" },
+      },
       [],
       {}
     );
@@ -312,5 +314,123 @@ describe("renderIndexMarkdown", () => {
   it("emits '(no entries)' for empty arrays", () => {
     const md = renderIndexMarkdown("Empty", [], {});
     expect(md).toContain("_(no entries)_");
+  });
+});
+
+describe("renderProfileEntity", () => {
+  const meta = {
+    entity_id: "ent_plan_abc123",
+    entity_type: "plan",
+    schema_version: "1.7.0",
+    computed_at: "2026-05-18T00:00:00.000Z",
+    last_observation_at: "2026-05-17T00:00:00.000Z",
+    observation_count: 3,
+  };
+
+  const snapshotWithBody = {
+    title: "Neotoma Harness Plan",
+    status: "active",
+    priority: "high",
+    tags: ["harness", "infrastructure"],
+    body: "# Neotoma Harness Plan\n\nThis is the plan body content.",
+  };
+
+  const snapshotWithoutBody = {
+    title: "Agent Trust Framework",
+    status: "pending",
+    overview: "Implement blockchain-inspired trust mechanisms.",
+    file_path: ".cursor/plans/agent_trust_framework.plan.md",
+    todos_pending: 9,
+  };
+
+  describe("frontmatter_content mode", () => {
+    it("renders YAML frontmatter + body content when body field exists", () => {
+      const md = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+      });
+      expect(md).toContain("entity_id: ent_plan_abc123");
+      expect(md).toContain("entity_type: plan");
+      expect(md).toContain("schema_version: 1.7.0");
+      expect(md).toContain("title: Neotoma Harness Plan");
+      expect(md).toContain("status: active");
+      expect(md).toContain("# Neotoma Harness Plan");
+      expect(md).toContain("This is the plan body content.");
+      // body field itself should not appear as a frontmatter key
+      expect(md).not.toContain("body:");
+    });
+
+    it("does not emit a ## body section heading when content_field is 'body' (#262)", () => {
+      const md = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+      });
+      // The field named "body" must never produce a visible ## body heading.
+      expect(md).not.toContain("## body");
+    });
+
+    it("falls back to ## sections when body field is absent", () => {
+      const md = renderProfileEntity(snapshotWithoutBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+      });
+      expect(md).toContain("entity_id: ent_plan_abc123");
+      expect(md).toContain("title: Agent Trust Framework");
+      // No body field — should still render other fields
+      expect(md).toContain("overview");
+    });
+
+    it("includes arrays as YAML lists in frontmatter", () => {
+      const md = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+      });
+      expect(md).toContain("tags:");
+      expect(md).toContain("  - harness");
+      expect(md).toContain("  - infrastructure");
+    });
+
+    it("respects frontmatter_fields to restrict which fields appear", () => {
+      const md = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+        frontmatter_fields: ["title", "status"],
+      });
+      expect(md).toContain("title: Neotoma Harness Plan");
+      expect(md).toContain("status: active");
+      // priority was not in frontmatter_fields
+      expect(md).not.toContain("priority:");
+    });
+
+    it("is deterministic", () => {
+      const a = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+      });
+      const b = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+      });
+      expect(a).toBe(b);
+    });
+  });
+
+  describe("content_only mode", () => {
+    it("returns only the body field value", () => {
+      const md = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "content_only",
+        content_field: "body",
+      });
+      expect(md).toBe("# Neotoma Harness Plan\n\nThis is the plan body content.\n");
+      expect(md).not.toContain("entity_id:");
+    });
+
+    it("returns empty string when body field is absent", () => {
+      const md = renderProfileEntity(snapshotWithoutBody, meta, {
+        render_mode: "content_only",
+        content_field: "body",
+      });
+      expect(md).toBe("");
+    });
   });
 });

@@ -31,7 +31,7 @@
       {
         "type": "turn_compliance",
         "status": "backfilled_by_hook",
-        "missed_includes": ["user_phase_store_structured"]
+        "missed_includes": ["user_phase_store"]
       },
       {
         "type": "turn_diagnosis",

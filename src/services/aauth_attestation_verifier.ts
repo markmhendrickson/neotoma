@@ -16,19 +16,13 @@
 import { createHash } from "node:crypto";
 
 import type { AttestationTrustConfig } from "./aauth_attestation_trust_config.js";
-import type {
-  RevocationOutcome,
-  RevocationStatus,
-} from "./aauth_attestation_revocation.js";
+import type { RevocationOutcome, RevocationStatus } from "./aauth_attestation_revocation.js";
 import { verifyAppleSecureEnclaveAttestation } from "./aauth_attestation_apple_se.js";
 import { verifyWebauthnPackedAttestation } from "./aauth_attestation_webauthn_packed.js";
 import { verifyTpm2Attestation } from "./aauth_attestation_tpm2.js";
 
 /** Discriminator values understood by the verifier. */
-export type AttestationFormat =
-  | "apple-secure-enclave"
-  | "webauthn-packed"
-  | "tpm2";
+export type AttestationFormat = "apple-secure-enclave" | "webauthn-packed" | "tpm2";
 
 /** Reason codes surfaced when {@link verifyAttestation} rejects. */
 export type AttestationFailureReason =
@@ -128,7 +122,7 @@ export interface AttestationContext {
  */
 export async function verifyAttestation(
   envelope: AttestationEnvelope | null | undefined,
-  ctx: AttestationContext,
+  ctx: AttestationContext
 ): Promise<AttestationOutcome> {
   if (envelope === null || envelope === undefined) {
     return { verified: false, format: "unknown", reason: "not_present" };
@@ -171,17 +165,17 @@ export async function verifyAttestation(
     case "apple-secure-enclave":
       return verifyAppleSecureEnclaveAttestation(
         envelope as { statement: unknown; challenge: string; format: string },
-        ctx,
+        ctx
       );
     case "webauthn-packed":
       return verifyWebauthnPackedAttestation(
         envelope as { statement: unknown; challenge: string; format: string },
-        ctx,
+        ctx
       );
     case "tpm2":
       return verifyTpm2Attestation(
         envelope as { statement: unknown; challenge: string; format: string },
-        ctx,
+        ctx
       );
     default:
       return {
@@ -212,7 +206,7 @@ export function applyRevocationPolicy(
     mode: "disabled" | "log_only" | "enforce";
     failOpen: boolean;
     revocation: RevocationOutcome | null;
-  },
+  }
 ): AttestationOutcome {
   if (policy.mode === "disabled" || policy.revocation === null) {
     return outcome;
@@ -262,11 +256,7 @@ export function computeExpectedChallenge(input: {
   const iss = input.iss ?? "";
   const sub = input.sub ?? "";
   const iat = input.iat === undefined || input.iat === null ? "" : String(input.iat);
-  const digest = createHash("sha256")
-    .update(String(iss))
-    .update(String(sub))
-    .update(iat)
-    .digest();
+  const digest = createHash("sha256").update(String(iss)).update(String(sub)).update(iat).digest();
   return base64url(digest);
 }
 
@@ -275,10 +265,7 @@ export function computeExpectedChallenge(input: {
  * signs `SHA-256(challenge || jkt)` so the leaf signature commits both to
  * the recomputed challenge and the bound credential thumbprint.
  */
-export function computeBoundChallengeDigest(
-  challenge: string,
-  jkt: string,
-): Buffer {
+export function computeBoundChallengeDigest(challenge: string, jkt: string): Buffer {
   return createHash("sha256").update(challenge).update(jkt).digest();
 }
 
@@ -292,9 +279,5 @@ function constantTimeStringEquals(a: string, b: string): boolean {
 }
 
 function base64url(buf: Buffer): string {
-  return buf
-    .toString("base64")
-    .replace(/=+$/, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  return buf.toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }

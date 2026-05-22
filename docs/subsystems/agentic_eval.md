@@ -102,7 +102,7 @@ Captured requests:
 
 Snapshot diff (tests/__snapshots__/agentic_eval/agent_skips_store__cursor-hooks__composer-2.snap.json):
   - "missed_steps": [
-  -   "user_phase_store_structured"
+  -   "user_phase_store"
   - ]
   + (missing)
 ```
@@ -236,7 +236,7 @@ Each `(scenario, provider, model)` triple has one cassette under
 ```
 
 In replay mode the driver walks the cassette's `tool_calls[]` and
-re-applies each call — Neotoma MCP tools (`store_structured`,
+re-applies each call — Neotoma MCP tools (**`store`**,
 `create_relationship`, etc.) hit the isolated server live so post-turn
 graph state is reproduced exactly; host-tool calls (Read/Grep/Write) go
 through the registry of canned stubs declared in the scenario.
@@ -317,7 +317,7 @@ Supported predicates in `packages/eval-harness/src/assertions.ts`:
 
 | Predicate | Purpose |
 |-----------|---------|
-| `store_structured.calls` | Count of store calls (from /stats) |
+| `store_structured.calls` | Count of unified **`store`** invocations (from `/stats`; predicate name retained) |
 | `entity.exists` | At least one entity of given type exists |
 | `entity.count` | Entity count matches op/value |
 | `observation.with_field` | At least one observation carries the named field |
@@ -366,7 +366,7 @@ chains over time (80% WRIT)" — telling you exactly where to invest.
 - *Server doesn't come up*: increase log level with
   `NEOTOMA_LOG_LEVEL=debug NEOTOMA_EVAL_VERBOSE=1` and check the
   isolated server's stderr tail in the runner output.
-- *Assertion fails on `store_structured.calls`*: the runner reads from
+- *Assertion fails on `store_structured.calls` (unified store counter)*: the runner reads from
   `/stats`. If the counter is missing the runner reports the predicate
   as inconclusive — verify
   [`docs/subsystems/instruction_profile.md`](./instruction_profile.md)
@@ -389,7 +389,7 @@ hooks already emit a `turn_compliance` observation per turn whenever
 they had to backfill a missed Neotoma write; Tier 3 aggregates those
 observations into a per-(model × harness × profile) backfill rate and
 surfaces the result through a CLI, an admin HTTP endpoint, an Inspector
-dashboard, an optional Prometheus exporter, and a `product_feedback`
+dashboard, an optional Prometheus exporter, and an `issue`
 alerting layer. There is **no LLM cost** — Tier 3 reads what the fleet
 already wrote.
 
@@ -413,7 +413,7 @@ turn_compliance entities (written by stop hooks)                    │
             │
             ├──▶ services/compliance/routes.ts        → GET /admin/compliance/scorecard
             │                                         → GET /admin/compliance/metrics (Prometheus)
-            ├──▶ services/compliance/alerting.ts      → product_feedback{kind:"compliance_drift"}
+            ├──▶ services/compliance/alerting.ts      → issue{labels:["compliance_drift"]}
             ├──▶ services/compliance/historical_backfill.ts (estimates from old conversation_message data)
             └──▶ inspector/src/pages/compliance.tsx   → /inspector/compliance dashboard
 ```
@@ -443,7 +443,7 @@ neotoma compliance export --since 30d --format jsonl --output compliance_30d.jso
 neotoma compliance backfill --since 90d --dry-run
 neotoma compliance backfill --since 90d
 
-# Evaluate alert thresholds without emitting product_feedback
+# Evaluate alert thresholds without emitting issues
 neotoma compliance alert-check --threshold 0.30 --window 24h --min-turns 100 --dry-run
 ```
 
@@ -470,12 +470,14 @@ top missed steps for the window. Filtering by `--since` and
 When any (model × harness) cell with `≥ NEOTOMA_COMPLIANCE_BACKFILL_ALERT_MIN_TURNS`
 turns has a backfill rate above `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_THRESHOLD`
 sustained over `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_WINDOW`, the
-`runComplianceAlertCheck()` function emits a `product_feedback` entity:
+`runComplianceAlertCheck()` function emits an `issue` entity (or equivalent operator-chosen type) for triage:
 
 ```json
 {
-  "entity_type": "product_feedback",
-  "kind": "compliance_drift",
+  "entity_type": "issue",
+  "title": "Compliance drift: composer-2 × cursor-hooks",
+  "body": "Backfill rate exceeded threshold; see metadata.",
+  "labels": ["compliance_drift", "neotoma-issue"],
   "metadata": {
     "model": "composer-2",
     "harness": "cursor-hooks",
@@ -483,7 +485,7 @@ sustained over `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_WINDOW`, the
     "threshold": 0.30,
     "window": "24h",
     "cell_total_turns": 3142,
-    "top_missed_steps": [{ "step": "store_structured", "count": 891 }]
+    "top_missed_steps": [{ "step": "user_phase_store", "count": 891 }]
   }
 }
 ```
@@ -522,7 +524,7 @@ high backfill rate?
     │       │   forward; correlate with `instruction_profile` counters
     │       │   to confirm the right profile was served.
     │       └── No deployment? Inspect `top_missed_steps`:
-    │             • `store_structured`     → agent is skipping memory entirely.
+    │             • `user_phase_store` / missing **`store`** → agent is skipping memory entirely.
     │             • `agent_message_part_of` → assistant message stored but
     │                                          not linked. Likely a Tier 2
     │                                          regression or missing

@@ -29,12 +29,15 @@ describe("site_data", () => {
     expect(CLI_COMMANDS_TABLE.length).toBeGreaterThan(10);
     expect(CLI_COMMANDS_TABLE.some((row) => row.command.includes("entities list"))).toBe(true);
     expect(MCP_ACTIONS_TABLE.length).toBeGreaterThan(10);
-    expect(MCP_ACTIONS_TABLE.some((row) => row.action === "store" || row.action === "store_structured")).toBe(true);
+    expect(MCP_ACTIONS_TABLE.some((row) => row.action === "store")).toBe(true);
   });
 
   it("keeps critical code snippets available for rendering", () => {
     expect(SITE_CODE_SNIPPETS.installCommands).toContain("npm install -g neotoma");
     expect(SITE_CODE_SNIPPETS.stdioConfigJson).toContain("\"mcpServers\"");
+    expect(SITE_CODE_SNIPPETS.unsignedStdioDevShimMcpJson).toContain(
+      "run_neotoma_mcp_unsigned_stdio_dev_shim.sh",
+    );
     expect(SITE_CODE_SNIPPETS.cliUploadExample).toContain("neotoma ingest");
   });
 

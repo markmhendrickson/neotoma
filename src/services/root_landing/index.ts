@@ -35,6 +35,11 @@ import {
 import { ROOT_LANDING_SITE_NAV, resolveNavHref, type RootLandingNavCategory } from "./site_nav.js";
 import { renderLandingHtml } from "./html_template.js";
 import { renderLandingMarkdown } from "./md_template.js";
+import {
+  buildBundledDocsNavCategories,
+  buildBundledDocsFooterColumns,
+} from "../docs/bundled_nav.js";
+import { getBundledDocsIndex } from "../docs/index.js";
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +60,16 @@ export interface RootLandingContext {
   stdioMcpScriptPath: string | null;
   harnesses: HarnessSnippetResult[];
   index: RootLandingNavCategory[];
+  /**
+   * Footer navigation columns. Populated when bundled-docs nav is active so
+   * the personal/MCP landing surfaces a footer that mirrors the docs site.
+   */
+  footerNav?: RootLandingNavCategory[];
+  /**
+   * True when `index` was derived from the bundled docs tree instead of the
+   * static marketing nav. Disabled by `NEOTOMA_ROOT_LANDING_MARKETING_NAV=1`.
+   */
+  bundledDocsNav: boolean;
   endpoints: Record<string, string>;
   sandboxPacks: SandboxPack[];
   sandboxDefaultPackId: string;
@@ -70,19 +85,55 @@ function resolveStdioMcpScriptPath(): string | null {
   }
 }
 
-/**
- * True when the request arrived over a loopback socket. Mirrors
- * `src/actions.ts::isLocalRequest`, duplicated here so this module has no
- * upward dependency on that file. SECURITY: uses `req.socket.remoteAddress`,
- * never `req.headers.host` or `req.ip`.
- */
-function isLoopbackRequest(req: express.Request): boolean {
-  const remote = (req.socket?.remoteAddress || "").toLowerCase();
+function resolveUnsignedStdioDevShimMcpScriptPath(): string | null {
+  try {
+    const script = path.join(
+      config.projectRoot,
+      "scripts",
+      "run_neotoma_mcp_unsigned_stdio_dev_shim.sh"
+    );
+    return existsSync(script) ? script : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackAddress(value: string | undefined): boolean {
+  const remote = (value || "").trim().toLowerCase();
   if (!remote) return false;
   if (remote === "127.0.0.1" || remote === "::1") return true;
   if (remote.startsWith("127.")) return true;
   if (remote.startsWith("::ffff:127.")) return true;
   return false;
+}
+
+function forwardedForValues(req: express.Request): string[] {
+  const headers = req.headers ?? {};
+  const raw = headers["x-forwarded-for"] || headers["X-Forwarded-For"];
+  const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return values
+    .flatMap((value) => String(value).split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
+  return value === "production" || value === "prod";
+}
+
+/**
+ * True when the request is genuinely local to this process. Mirrors
+ * `src/actions.ts::isLocalRequest`, duplicated here so this module has no
+ * upward dependency on that file. In production, loopback from a reverse proxy
+ * is not local unless explicitly trusted.
+ */
+function isLoopbackRequest(req: express.Request, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
+  const forwardedFor = forwardedForValues(req);
+  if (forwardedFor.length > 0) return forwardedFor.every(isLoopbackAddress);
+  if (isProductionEnvironment(env) && env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") return true;
+  return !isProductionEnvironment(env);
 }
 
 function readEnvMode(env: NodeJS.ProcessEnv = process.env): LandingMode | null {
@@ -110,12 +161,12 @@ export function readNeotomaConfigEnvironment(env: NodeJS.ProcessEnv = process.en
  */
 export function resolveLandingMode(
   req: express.Request,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): LandingMode {
   const explicit = readEnvMode(env);
   if (explicit) return explicit;
   if (isSandboxMode(env)) return "sandbox";
-  if (isLoopbackRequest(req)) return "local";
+  if (isLoopbackRequest(req, env)) return "local";
   return "personal";
 }
 
@@ -149,12 +200,7 @@ function readPackageVersion(): string {
 }
 
 function readGitSha(env: NodeJS.ProcessEnv = process.env): string | null {
-  const candidates = [
-    env.NEOTOMA_GIT_SHA,
-    env.GIT_SHA,
-    env.SOURCE_COMMIT,
-    env.FLY_MACHINE_VERSION,
-  ];
+  const candidates = [env.NEOTOMA_GIT_SHA, env.GIT_SHA, env.SOURCE_COMMIT, env.FLY_MACHINE_VERSION];
   for (const value of candidates) {
     if (value && value.trim().length) return value.trim();
   }
@@ -181,14 +227,13 @@ function buildEndpointsMap(mode: LandingMode): Record<string, string> {
   return base;
 }
 
-
 export function parseCookieBearer(req: express.Request): string | null {
   return (req.cookies?.[SESSION_COOKIE_NAME] as string | undefined) ?? null;
 }
 
 export function buildLandingContext(
   req: express.Request,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): RootLandingContext {
   const mode = resolveLandingMode(req, env);
   const configEnvironment = readNeotomaConfigEnvironment(env);
@@ -199,6 +244,7 @@ export function buildLandingContext(
   const publicDocsUrl = defaultPublicDocsUrl(env);
   const inspectorUrl = resolveInspectorLandingUrl(base, env);
   const stdioMcpScriptPath = resolveStdioMcpScriptPath();
+  const proxyMcpScriptPath = resolveUnsignedStdioDevShimMcpScriptPath();
 
   const activeSessionBearer = mode === "sandbox" ? parseCookieBearer(req) : null;
 
@@ -208,8 +254,29 @@ export function buildLandingContext(
     mode,
     publicDocsUrl,
     stdioMcpScriptPath,
+    proxyMcpScriptPath,
     sessionBearer: activeSessionBearer,
   };
+
+  const marketingNavOverride = env.NEOTOMA_ROOT_LANDING_MARKETING_NAV === "1";
+  const docsRoot = path.join(config.projectRoot, "docs");
+  const docsTreeExists = existsSync(docsRoot);
+  const bundledDocsNav = !marketingNavOverride && docsTreeExists;
+
+  let landingIndex: RootLandingNavCategory[] = ROOT_LANDING_SITE_NAV;
+  let footerNav: RootLandingNavCategory[] | undefined;
+  if (bundledDocsNav) {
+    try {
+      const docsIndex = getBundledDocsIndex({
+        repoRoot: config.projectRoot,
+        envSource: env as Record<string, string | undefined>,
+      });
+      landingIndex = buildBundledDocsNavCategories(docsIndex);
+      footerNav = buildBundledDocsFooterColumns(docsIndex, base);
+    } catch {
+      // Fall back to the static nav if the docs tree can't be loaded.
+    }
+  }
 
   return {
     mode,
@@ -222,7 +289,9 @@ export function buildLandingContext(
     publicDocsUrl,
     stdioMcpScriptPath,
     harnesses: buildAllHarnessSnippets(snippetCtx),
-    index: ROOT_LANDING_SITE_NAV,
+    index: landingIndex,
+    footerNav,
+    bundledDocsNav,
     endpoints: buildEndpointsMap(mode),
     sandboxPacks: [...PACK_REGISTRY],
     sandboxDefaultPackId: DEFAULT_SANDBOX_PACK_ID,
@@ -267,9 +336,10 @@ export function buildRootLandingJson(ctx: RootLandingContext): Record<string, un
         href: resolveNavHref(item.href, ctx.publicDocsUrl),
       })),
     })),
-    sandbox_packs: ctx.mode === "sandbox"
-      ? ctx.sandboxPacks.map((p) => ({ id: p.id, kind: p.kind, label: p.label }))
-      : undefined,
+    sandbox_packs:
+      ctx.mode === "sandbox"
+        ? ctx.sandboxPacks.map((p) => ({ id: p.id, kind: p.kind, label: p.label }))
+        : undefined,
     sandbox_default_pack_id: ctx.mode === "sandbox" ? ctx.sandboxDefaultPackId : undefined,
   };
 }

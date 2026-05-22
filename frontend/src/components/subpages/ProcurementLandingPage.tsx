@@ -18,6 +18,7 @@ import {
   Upload,
   Users,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -259,6 +260,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "procurement agent",
 };
 
+export function ProcurementLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function ProcurementLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/procurement" shell="bare" />;
 }

@@ -1,6 +1,11 @@
 import path from "path";
-import { rmSync } from "fs";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
 import { describe, it, expect } from "vitest";
+import { isRecoverableSqliteConnectionError, isSqliteLockError } from "../local_db_adapter.ts";
+
+let dbImportSeq = 0;
+let rowSeq = 0;
 
 async function loadDb(tempDir: string) {
   process.env.NEOTOMA_DATA_DIR = tempDir;
@@ -8,22 +13,34 @@ async function loadDb(tempDir: string) {
   process.env.NEOTOMA_EVENT_LOG_MIRROR = "false";
 
   const moduleUrl = new URL("../../../db.js", import.meta.url).href;
-  const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
+  const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}-${++dbImportSeq}`;
   const module = await import(cacheBustUrl);
   return module.db;
 }
 
+function makeTempDir(prefix: string): string {
+  return mkdtempSync(path.join(tmpdir(), `${prefix}-`));
+}
+
+function nextId(prefix: string): string {
+  rowSeq += 1;
+  return `${prefix}_${process.pid}_${Date.now()}_${rowSeq}`;
+}
+
 describe("local db adapter", () => {
   it("writes and reads sources in local sqlite", async () => {
-    const tempDir = path.join(process.cwd(), "tmp", `neotoma-local-${Date.now()}`);
+    const tempDir = makeTempDir("neotoma-local");
     const db = await loadDb(tempDir);
+    const sourceId = nextId("src_local_test");
+    const userId = nextId("user_local_test");
+    const contentHash = nextId("hash_local_test");
 
     const { data: inserted, error: insertError } = await db
       .from("sources")
       .insert({
-        id: "src_local_test",
-        user_id: "user_local_test",
-        content_hash: "hash_123",
+        id: sourceId,
+        user_id: userId,
+        content_hash: contentHash,
         mime_type: "text/plain",
         storage_url: "file:///tmp/source.txt",
         provenance: { origin: "local_test" },
@@ -33,12 +50,12 @@ describe("local db adapter", () => {
       .single();
 
     expect(insertError).toBeNull();
-    expect(inserted?.id).toBe("src_local_test");
+    expect(inserted?.id).toBe(sourceId);
 
     const { data: fetched, error: fetchError } = await db
       .from("sources")
       .select("*")
-      .eq("id", "src_local_test")
+      .eq("id", sourceId)
       .single();
 
     expect(fetchError).toBeNull();
@@ -48,20 +65,22 @@ describe("local db adapter", () => {
   });
 
   it("creates and validates local auth sessions", async () => {
-    const tempDir = path.join(process.cwd(), "tmp", `neotoma-auth-${Date.now()}`);
+    const tempDir = makeTempDir("neotoma-auth");
     const db = await loadDb(tempDir);
+    const userId = nextId("user_local_test");
+    const email = `${userId}@test.neotoma`;
 
     const { data: userResult } = await db.auth.admin.createUser({
-      id: "user_local_test",
-      email: "local@test.neotoma",
+      id: userId,
+      email,
       email_confirm: true,
     });
 
-    expect(userResult?.user?.id).toBe("user_local_test");
+    expect(userResult?.user?.id).toBe(userId);
 
     const { data: linkData } = await db.auth.admin.generateLink({
       type: "magiclink",
-      email: "local@test.neotoma",
+      email,
       options: { redirectTo: "http://localhost:5173" },
     });
 
@@ -71,18 +90,21 @@ describe("local db adapter", () => {
 
     const { data: authData, error: authError } = await db.auth.getUser(accessToken);
     expect(authError).toBeNull();
-    expect(authData?.user?.id).toBe("user_local_test");
+    expect(authData?.user?.id).toBe(userId);
 
     rmSync(tempDir, { recursive: true, force: true });
   });
 
   it("stores raw fragments without explicitly setting created_at", async () => {
-    const tempDir = path.join(process.cwd(), "tmp", `neotoma-fragments-${Date.now()}`);
+    const tempDir = makeTempDir("neotoma-fragments");
     const db = await loadDb(tempDir);
+    const fragmentId = nextId("frag_local_test");
+    const sourceId = nextId("src_local_test");
+    const userId = nextId("user_local_test");
 
     const { error: insertError } = await db.from("raw_fragments").insert({
-      id: "frag_local_test",
-      source_id: "src_local_test",
+      id: fragmentId,
+      source_id: sourceId,
       interpretation_id: null,
       entity_type: "person",
       fragment_key: "nickname",
@@ -91,7 +113,7 @@ describe("local db adapter", () => {
       frequency_count: 1,
       first_seen: new Date().toISOString(),
       last_seen: new Date().toISOString(),
-      user_id: "user_local_test",
+      user_id: userId,
     });
 
     expect(insertError).toBeNull();
@@ -99,7 +121,7 @@ describe("local db adapter", () => {
     const { data: fragment, error: fetchError } = await db
       .from("raw_fragments")
       .select("id, created_at")
-      .eq("id", "frag_local_test")
+      .eq("id", fragmentId)
       .single();
 
     expect(fetchError).toBeNull();
@@ -109,27 +131,25 @@ describe("local db adapter", () => {
   });
 
   it("writes timeline events in local sqlite", async () => {
-    const tempDir = path.join(process.cwd(), "tmp", `neotoma-events-${Date.now()}`);
+    const tempDir = makeTempDir("neotoma-events");
     const db = await loadDb(tempDir);
+    const eventId = nextId("evt_test");
+    const sourceId = nextId("src_local_test");
+    const userId = nextId("user_local_test");
 
-    const { error } = await db
-      .from("timeline_events")
-      .insert({
-        id: "evt_test_1",
-        event_type: "SourceIngested",
-        event_timestamp: new Date().toISOString(),
-        source_id: "src_local_test",
-        source_field: "created_at",
-        created_at: new Date().toISOString(),
-        user_id: "user_local_test",
-      });
+    const { error } = await db.from("timeline_events").insert({
+      id: eventId,
+      event_type: "SourceIngested",
+      event_timestamp: new Date().toISOString(),
+      source_id: sourceId,
+      source_field: "created_at",
+      created_at: new Date().toISOString(),
+      user_id: userId,
+    });
 
     expect(error).toBeNull();
 
-    const { data: events } = await db
-      .from("timeline_events")
-      .select("*")
-      .eq("id", "evt_test_1");
+    const { data: events } = await db.from("timeline_events").select("*").eq("id", eventId);
 
     expect(events?.length).toBe(1);
 
@@ -137,24 +157,26 @@ describe("local db adapter", () => {
   });
 
   it("supports PostgREST-style JSON path filters for snapshots", async () => {
-    const tempDir = path.join(process.cwd(), "tmp", `neotoma-json-path-${Date.now()}`);
+    const tempDir = makeTempDir("neotoma-json-path");
     const db = await loadDb(tempDir);
 
     const now = new Date().toISOString();
+    const entityId = nextId("ent_json_path_post");
+    const userId = nextId("user_json_path_test");
     const { error: entityError } = await db.from("entities").insert({
-      id: "ent_json_path_post",
+      id: entityId,
       entity_type: "post",
       canonical_name: "json path post",
-      user_id: "user_json_path_test",
+      user_id: userId,
       created_at: now,
       updated_at: now,
     });
     expect(entityError).toBeNull();
 
     const { error: snapshotError } = await db.from("entity_snapshots").insert({
-      entity_id: "ent_json_path_post",
+      entity_id: entityId,
       entity_type: "post",
-      user_id: "user_json_path_test",
+      user_id: userId,
       schema_version: "1.0",
       snapshot: {
         published: true,
@@ -175,26 +197,26 @@ describe("local db adapter", () => {
       .lte("snapshot->>published_date", "2026-12-31");
 
     expect(filterError).toBeNull();
-    expect(filtered?.length).toBe(1);
-    expect(filtered?.[0]?.entity_id).toBe("ent_json_path_post");
+    expect(filtered?.some((row) => row.entity_id === entityId)).toBe(true);
 
     rmSync(tempDir, { recursive: true, force: true });
   });
 
   it("recovers from sqlite disk I/O errors by reopening connection", async () => {
-    const tempDir = path.join(process.cwd(), "tmp", `neotoma-ioerr-${Date.now()}`);
+    const tempDir = makeTempDir("neotoma-ioerr");
     const db = await loadDb(tempDir);
+    const sourceId = nextId("src_ioerr_test");
+    const userId = nextId("user_ioerr_test");
+    const contentHash = nextId("hash_ioerr");
 
-    const { error: insertError } = await db
-      .from("sources")
-      .insert({
-        id: "src_ioerr_test",
-        user_id: "user_ioerr_test",
-        content_hash: "hash_ioerr",
-        mime_type: "text/plain",
-        storage_url: "file:///tmp/ioerr.txt",
-        created_at: new Date().toISOString(),
-      });
+    const { error: insertError } = await db.from("sources").insert({
+      id: sourceId,
+      user_id: userId,
+      content_hash: contentHash,
+      mime_type: "text/plain",
+      storage_url: "file:///tmp/ioerr.txt",
+      created_at: new Date().toISOString(),
+    });
     expect(insertError).toBeNull();
 
     // Force stale handle state: delete SQLite files while adapter still has a cached connection.
@@ -204,9 +226,112 @@ describe("local db adapter", () => {
     rmSync(`${dbPath}-shm`, { force: true });
 
     // Query should not bubble disk I/O error; adapter retries once after cache reset.
-    const { error: fetchError } = await db.from("sources").select("*").eq("id", "src_ioerr_test");
+    const { error: fetchError } = await db.from("sources").select("*").eq("id", sourceId);
     expect(fetchError).toBeNull();
 
     rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("treats sqlite corruption errors as connection-invalidating", () => {
+    expect(
+      isRecoverableSqliteConnectionError(
+        Object.assign(new Error("database disk image is malformed"), { code: "SQLITE_CORRUPT" })
+      )
+    ).toBe(true);
+    expect(
+      isRecoverableSqliteConnectionError(
+        new Error("Tree 42 page 33089: btreeInitPage() returns error code 11")
+      )
+    ).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // isSqliteLockError — issue #173
+  // -------------------------------------------------------------------------
+
+  describe("isSqliteLockError", () => {
+    it("detects SQLITE_BUSY code", () => {
+      expect(
+        isSqliteLockError(Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }))
+      ).toBe(true);
+    });
+
+    it("detects SQLITE_LOCKED code", () => {
+      expect(
+        isSqliteLockError(
+          Object.assign(new Error("database table is locked"), { code: "SQLITE_LOCKED" })
+        )
+      ).toBe(true);
+    });
+
+    it("detects SQLITE_BUSY_SNAPSHOT extended code", () => {
+      expect(
+        isSqliteLockError(
+          Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY_SNAPSHOT" })
+        )
+      ).toBe(true);
+    });
+
+    it("detects 'database is locked' message without code", () => {
+      expect(isSqliteLockError(new Error("SqliteError: database is locked"))).toBe(true);
+    });
+
+    it("detects 'database table is locked' message without code", () => {
+      expect(isSqliteLockError(new Error("database table is locked: sources"))).toBe(true);
+    });
+
+    it("returns false for non-lock errors", () => {
+      expect(
+        isSqliteLockError(Object.assign(new Error("disk i/o error"), { code: "SQLITE_IOERR" }))
+      ).toBe(false);
+    });
+
+    it("returns false for null input", () => {
+      expect(isSqliteLockError(null)).toBe(false);
+    });
+
+    it("returns false for string input", () => {
+      expect(isSqliteLockError("database is locked")).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Lock retry integration — issue #173
+  // The actual retry with backoff is exercised here by verifying that
+  // concurrent writes to the same DB do not produce unhandled errors.
+  // -------------------------------------------------------------------------
+
+  describe("SQLITE_BUSY retry with backoff", () => {
+    it("succeeds under concurrent writes to the same SQLite file (retry path exercises)", async () => {
+      const tempDir = makeTempDir("neotoma-concurrent");
+      const db = await loadDb(tempDir);
+
+      // Fire 10 concurrent inserts to the same table to maximise lock contention.
+      const inserts = Array.from({ length: 10 }, (_, i) => {
+        const sourceId = nextId(`src_concurrent_${i}`);
+        const userId = nextId(`user_concurrent_${i}`);
+        const contentHash = nextId(`hash_concurrent_${i}`);
+        return db
+          .from("sources")
+          .insert({
+            id: sourceId,
+            user_id: userId,
+            content_hash: contentHash,
+            mime_type: "text/plain",
+            storage_url: `file:///tmp/src_${i}.txt`,
+            provenance: { origin: "concurrent_test" },
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+      });
+
+      const results = await Promise.all(inserts);
+      for (const { error } of results) {
+        expect(error).toBeNull();
+      }
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
   });
 });

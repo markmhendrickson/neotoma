@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import { isNeotomaEntityId } from "./neotoma_entity_id.js";
+
+export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
+export const RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE = "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+
 export const EntityIdSchema = z.object({
   entity_id: z.string(),
 });
@@ -80,37 +85,76 @@ export const CreateRelationshipsRequestSchema = z.object({
   user_id: z.string().optional(),
 });
 
-const StoreRelationshipByIndexSchema = z.object({
-  relationship_type: z.string(),
-  source_index: z.number().int().min(0),
-  target_index: z.number().int().min(0),
-  metadata: z.record(z.unknown()).optional(),
-});
-
-const StoreRelationshipByEntityIdSchema = z.object({
-  relationship_type: z.string(),
-  source_entity_id: z.string().min(1),
-  target_entity_id: z.string().min(1),
-  metadata: z.record(z.unknown()).optional(),
-});
-
-export const StoreRelationshipInputSchema = z.union([
-  StoreRelationshipByIndexSchema,
-  StoreRelationshipByEntityIdSchema,
+const StoreRelationshipEndpointSchema = z.union([
+  z.object({ source_index: z.number().int().min(0), source_entity_id: z.never().optional() }),
+  z.object({ source_entity_id: z.string().min(1), source_index: z.never().optional() }),
 ]);
 
-export const ListRelationshipsRequestSchema = z.object({
-  entity_id: z.string(),
-  direction: z
-    .enum(["inbound", "outbound", "incoming", "outgoing", "both"])
-    .optional()
-    .default("both"),
-  relationship_type: RelationshipTypeSchema.optional(),
-  limit: z.number().int().positive().optional().default(100),
-  offset: z.number().int().nonnegative().optional().default(0),
-  // Optional override honored only for LOCAL_DEV_USER_ID (see getAuthenticatedUserId).
-  user_id: z.string().optional(),
-});
+const StoreRelationshipTargetEndpointSchema = z.union([
+  z.object({ target_index: z.number().int().min(0), target_entity_id: z.never().optional() }),
+  z.object({ target_entity_id: z.string().min(1), target_index: z.never().optional() }),
+]);
+
+export const StoreRelationshipInputSchema = z
+  .object({
+    relationship_type: z.string(),
+    source_index: z.number().int().min(0).optional(),
+    source_entity_id: z.string().min(1).optional(),
+    target_index: z.number().int().min(0).optional(),
+    target_entity_id: z.string().min(1).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .and(StoreRelationshipEndpointSchema)
+  .and(StoreRelationshipTargetEndpointSchema)
+  .superRefine((rel, ctx) => {
+    if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(rel.source_entity_id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: source_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
+        path: ["source_entity_id"],
+        params: {
+          code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+          hint: RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+        },
+      });
+    }
+    if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(rel.target_entity_id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: target_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
+        path: ["target_entity_id"],
+        params: {
+          code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+          hint: RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+        },
+      });
+    }
+  });
+
+export const ListRelationshipsRequestSchema = z
+  .object({
+    entity_id: z.string().optional(),
+    source_entity_id: z.string().optional(),
+    target_entity_id: z.string().optional(),
+    direction: z
+      .enum(["inbound", "outbound", "incoming", "outgoing", "both"])
+      .optional()
+      .default("both"),
+    relationship_type: RelationshipTypeSchema.optional(),
+    limit: z.number().int().positive().optional().default(100),
+    offset: z.number().int().nonnegative().optional().default(0),
+    user_id: z.string().optional(),
+  })
+  .refine(
+    (data) =>
+      Boolean(
+        data.entity_id || data.source_entity_id || data.target_entity_id || data.relationship_type
+      ),
+    {
+      message:
+        "At least one of entity_id, source_entity_id, target_entity_id, or relationship_type must be provided.",
+    }
+  );
 
 export const TimelineEventsRequestSchema = z.object({
   event_type: z.string().optional(),
@@ -123,7 +167,14 @@ export const TimelineEventsRequestSchema = z.object({
 });
 
 const EntityQuerySortBySchema = z
-  .enum(["entity_id", "canonical_name", "observation_count", "last_observation_at"])
+  .enum([
+    "entity_id",
+    "canonical_name",
+    "observation_count",
+    "last_observation_at",
+    /** ISO string at `snapshot.created_at` (e.g. GitHub issue opened / submitted time). */
+    "submitted_at",
+  ])
   .optional()
   .default("entity_id");
 const EntityQuerySortOrderSchema = z.enum(["asc", "desc"]).optional().default("asc");
@@ -131,7 +182,12 @@ const EntityQuerySortOrderSchema = z.enum(["asc", "desc"]).optional().default("a
 function validateEntityQueryCombinations(
   value: {
     search?: string;
-    sort_by?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+    sort_by?:
+      | "entity_id"
+      | "canonical_name"
+      | "observation_count"
+      | "last_observation_at"
+      | "submitted_at";
     sort_order?: "asc" | "desc";
     published?: boolean;
     published_after?: string;
@@ -196,6 +252,15 @@ const EntitiesQueryRequestBaseSchema = z
     updated_since: z.string().optional(),
     created_since: z.string().optional(),
     /**
+     * When true, omit `conversation`, `conversation_message`, and other chat
+     * bookkeeping types from results. Default false: bookkeeping entities are
+     * included unless the caller explicitly opts in to exclusion. The Inspector
+     * header search and `/search` UI pass `true` explicitly.
+     * Has no effect when `entity_type` already filters to a single bookkeeping
+     * type (the explicit type filter wins).
+     */
+    exclude_bookkeeping: z.boolean().optional().default(false),
+    /**
      * R3: filter entities whose observations were resolved with the given
      * `identity_basis`. Satisfied when ANY observation for the entity carries
      * this basis. Enables the Inspector "Ambiguous/heuristic" filter without
@@ -203,13 +268,7 @@ const EntitiesQueryRequestBaseSchema = z
      * `src/services/entity_resolution.ts#IdentityBasis`.
      */
     identity_basis: z
-      .enum([
-        "schema_rule",
-        "schema_lookup",
-        "heuristic_name",
-        "heuristic_fallback",
-        "target_id",
-      ])
+      .enum(["schema_rule", "schema_lookup", "heuristic_name", "heuristic_fallback", "target_id"])
       .optional(),
   })
   .superRefine(validateEntityQueryCombinations);
@@ -250,6 +309,15 @@ const RetrieveEntitiesRequestBaseSchema = z
     include_merged: z.boolean().optional().default(false),
     updated_since: z.string().optional(),
     created_since: z.string().optional(),
+    /**
+     * When true, omit `conversation`, `conversation_message`, and other chat
+     * bookkeeping types from results. Default false: bookkeeping entities are
+     * included unless the caller explicitly opts in to exclusion. The Inspector
+     * header search and `/search` UI pass `true` explicitly.
+     * Has no effect when `entity_type` already filters to a single bookkeeping
+     * type (the explicit type filter wins).
+     */
+    exclude_bookkeeping: z.boolean().optional().default(false),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -292,19 +360,42 @@ export const OBSERVATION_SOURCE_VALUES = [
   "workflow_state",
   "human",
   "import",
+  "sync",
 ] as const;
 
 export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);
 
 export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
 
+export const StoreInterpretationInputSchema = z
+  .object({
+    source_id: z.string().min(1).optional(),
+    source_ref: z.enum(["structured", "unstructured"]).optional(),
+    interpretation_config: z.record(z.unknown()).optional(),
+  })
+  .refine((data) => Boolean(data.source_id || data.source_ref), {
+    message: "interpretation requires source_id or source_ref",
+  });
+
+export type StoreInterpretationInput = z.infer<typeof StoreInterpretationInputSchema>;
+
+export const CreateInterpretationRequestSchema = z.object({
+  source_id: z.string().min(1),
+  entities: z.array(z.record(z.unknown())).min(1),
+  interpretation_config: z.record(z.unknown()).optional(),
+  relationships: z.array(StoreRelationshipInputSchema).optional(),
+  idempotency_key: z.string().min(1).optional(),
+  user_id: z.string().optional(),
+});
+
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
-  relationships: z
-    .array(StoreRelationshipInputSchema)
-    .optional(),
+  relationships: z.array(StoreRelationshipInputSchema).optional(),
+  interpretation: StoreInterpretationInputSchema.optional(),
   source_priority: z.number().optional().default(100),
   observation_source: ObservationSourceSchema.optional(),
+  /** Cross-instance sync: stamp observations with this peer id (Phase 5). */
+  source_peer_id: z.string().min(1).optional(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
   original_filename: z.string().optional(),
@@ -319,15 +410,34 @@ export const StoreUnstructuredRequestSchema = z.object({
   user_id: z.string().optional(),
 });
 
+export const ExternalActorInputSchema = z
+  .object({
+    provider: z.literal("github"),
+    login: z.string().min(1),
+    id: z.number(),
+    type: z.enum(["User", "Bot", "Organization"]).optional().default("User"),
+    verified_via: z
+      .enum(["claim", "linked_attestation", "oauth_link", "webhook_signature"])
+      .optional()
+      .default("claim"),
+    delivery_id: z.string().optional(),
+    event_type: z.string().optional(),
+    repository: z.string().optional(),
+    event_id: z.number().optional(),
+    comment_id: z.number().optional(),
+  })
+  .strict();
+
 export const StoreRequestSchema = z
   .object({
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).optional(),
-    relationships: z
-      .array(StoreRelationshipInputSchema)
-      .optional(),
+    relationships: z.array(StoreRelationshipInputSchema).optional(),
+    interpretation: StoreInterpretationInputSchema.optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),
+    source_peer_id: z.string().min(1).optional(),
+    external_actor: ExternalActorInputSchema.optional(),
     idempotency_key: z.string().min(1).optional(),
     file_idempotency_key: z.string().min(1).optional(),
     file_content: z.string().optional(),
@@ -374,13 +484,9 @@ export const SplitPredicateSchema = z
         value: z.string().optional(),
         value_starts_with: z.string().optional(),
       })
-      .refine(
-        (v) => v.value !== undefined || v.value_starts_with !== undefined,
-        {
-          message:
-            "observation_field_equals requires either `value` or `value_starts_with`",
-        },
-      )
+      .refine((v) => v.value !== undefined || v.value_starts_with !== undefined, {
+        message: "observation_field_equals requires either `value` or `value_starts_with`",
+      })
       .optional(),
   })
   .refine(
@@ -391,7 +497,7 @@ export const SplitPredicateSchema = z
     {
       message:
         "Split predicate must declare at least one of observed_at_gte, source_id_in, observation_field_equals",
-    },
+    }
   );
 
 export const SplitEntityRequestSchema = z.object({
@@ -476,7 +582,8 @@ export const RetrieveGraphNeighborhoodSchema = z.object({
   include_sources: z.boolean().optional().default(true),
   include_events: z.boolean().optional().default(true),
   include_observations: z.boolean().optional().default(false),
-  // Optional override honored only for LOCAL_DEV_USER_ID (see getAuthenticatedUserId).
+  limit: z.number().int().min(1).max(500).optional().default(100),
+  offset: z.number().int().min(0).optional().default(0),
   user_id: z.string().optional(),
 });
 
@@ -540,4 +647,86 @@ export const RegisterSchemaRequestSchema = z.object({
   user_id: z.string().optional(),
   activate: z.boolean().default(false),
   force: z.boolean().default(false),
+});
+
+/** Bulk inspector actions on `issue` entities (close on GitHub when linked, then persist / delete). */
+export const IssuesBulkEntityIdsRequestSchema = z.object({
+  entity_ids: z.array(z.string().min(1)).min(1).max(100),
+  user_id: z.string().optional(),
+});
+
+/** Append a message to an issue thread (Inspector + HTTP); mirrors MCP add_issue_message. */
+export const IssuesAddMessageRequestSchema = z
+  .object({
+    entity_id: z.string().min(1).optional(),
+    issue_number: z.number().int().positive().optional(),
+    body: z.string().min(1),
+    guest_access_token: z.string().min(1).optional(),
+    /**
+     * Soft requirement on public issue threads: when both `reporter_git_sha`
+     * and `reporter_app_version` are missing the server emits a warning but
+     * still persists the message. See docs/subsystems/issues.md.
+     */
+    reporter_git_sha: z.string().optional(),
+    reporter_git_ref: z.string().optional(),
+    reporter_channel: z.string().optional(),
+    reporter_app_version: z.string().optional(),
+    entity_ids_to_link: z.array(z.string().min(1)).optional(),
+    user_id: z.string().optional(),
+  })
+  .refine(
+    (v) =>
+      (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
+      (typeof v.issue_number === "number" && v.issue_number > 0),
+    { message: "Provide entity_id or issue_number" }
+  );
+
+/** Create issue (HTTP + CLI parity with MCP submit_issue). */
+export const IssuesSubmitRequestSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  labels: z.array(z.string()).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
+  reporter_git_sha: z.string().optional(),
+  reporter_git_ref: z.string().optional(),
+  reporter_channel: z.string().optional(),
+  reporter_app_version: z.string().optional(),
+  reporter_ci_run_id: z.string().optional(),
+  reporter_patch_source_id: z.string().optional(),
+  github_url: z.string().optional(),
+  github_number: z.number().int().positive().optional(),
+  author: z.string().optional(),
+  local_issue_id: z.string().optional(),
+  submission_timestamp: z.string().optional(),
+  entity_ids_to_link: z.array(z.string().min(1)).optional(),
+  user_id: z.string().optional(),
+});
+
+/** Issue status read (HTTP + CLI parity with MCP get_issue_status). */
+export const IssuesGetStatusRequestSchema = z
+  .object({
+    entity_id: z.string().min(1).optional(),
+    issue_number: z.number().int().positive().optional(),
+    skip_sync: z.boolean().optional(),
+    guest_access_token: z.string().min(1).optional(),
+    user_id: z.string().optional(),
+  })
+  .refine(
+    (v) =>
+      (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
+      (typeof v.issue_number === "number" && v.issue_number > 0),
+    { message: "Provide entity_id or issue_number" }
+  );
+
+/** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
+export const IssuesSyncRequestSchema = z.object({
+  since: z.string().optional(),
+  state: z.enum(["open", "closed", "all"]).optional(),
+  labels: z.array(z.string()).optional(),
+  /**
+   * When true (default), local public issues with no github_number are pushed to GitHub
+   * before the pull leg runs. Pass false to disable the push leg.
+   */
+  push: z.boolean().optional(),
+  user_id: z.string().optional(),
 });

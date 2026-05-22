@@ -1,13 +1,11 @@
 {
   "mcpServers": {
-    "parquet": {
-      "command": "/Users/markmhendrickson/repos/ateles/mcp/parquet/run-parquet-mcp.sh",
-      "args": [],
-      "env": {}
-    },
-    "web-scraper": {
-      "command": "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper/run-web-scraper-mcp.sh",
-      "cwd": "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper"
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "shadcn@latest",
+        "mcp"
+      ]
     }
   }
 }

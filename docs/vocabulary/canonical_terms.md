@@ -230,9 +230,9 @@
 
 **Definition:** Neotoma's architectural role — deterministic, immutable structured memory substrate.
 
-**Use:** "Neotoma is the state layer beneath Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)."
+**Use:** "Neotoma is the state layer beneath any operational layer — agents, pipelines, orchestrators, custom apps. Agentic Portfolio (reasoning-style) and Agentic Wallet (effect-style) are illustrative example operational systems."
 
-**Example:** "The state layer stores all invoices, transactions, and contracts with full [provenance](#provenance), whether [stored](#storing) as unstructured [source](#source) (files) or structured [source](#source) (JSON with entity types), enabling other layers to make decisions based on accurate historical data."
+**Example:** "The state layer stores all invoices, transactions, and contracts with full [provenance](#provenance), whether [stored](#storing) as unstructured [source](#source) (files) or structured [source](#source) (JSON with entity types), enabling operational layers above it to make decisions based on accurate historical data."
 
 **Forbidden Synonyms:**
 - ❌ "truth layer" (deprecated; use "state layer")

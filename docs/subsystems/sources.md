@@ -41,6 +41,20 @@ Source → Interpretation → Observations → Entity Snapshots
 | User Isolation | All tables user-scoped with RLS |
 | Auditability | [Interpretation](../vocabulary/canonical_terms.md#interpretation) config logged; can understand how data was [extracted](../vocabulary/canonical_terms.md#extraction) |
 
+### 1.3 How do you *write* a [source](../vocabulary/canonical_terms.md#source)? (MCP / HTTP)
+
+**Contract (current `main` / MCP as documented in [`MCP_SPEC.md`](../specs/MCP_SPEC.md)):** There is no separate MCP tool such as `create_source`. Creating a **sources** row is what happens when you persist **raw bytes** through the unified **`store`** action (HTTP: **`POST /store`** with the same shape). Pass `file_path`, or `file_content` + `mime_type`; the response includes `source_id`, `content_hash`, and deduplication metadata.
+
+**Do not confuse three layers:**
+
+| Layer | What you send | What gets persisted |
+|-------|----------------|----------------------|
+| **Bytes → source** | `file_path` or (`file_content` + `mime_type`) | Immutable **sources** row (content-addressed per user) |
+| **Structured facts → observations** | `entities` (+ `relationships`, `idempotency_key`, …) | **Observations** (and resolver output); may use a synthetic source when no file is attached |
+| **Combined (usual for attachments)** | `entities` **and** file fields in **one** `store` call | One round trip: artifact in **sources**, facts as **observations**, links batched in `relationships` |
+
+**Legacy naming (older releases only):** Some clients or docs referred to “structured” vs “unstructured” as separate MCP tool names. On current surfaces those names are **removed**; use **`store`** only. If you are pinned to an older npm/server build, check that build’s release notes for whether split tools still exist.
+
 ## 2. Sources Table
 
 ### 2.1 Schema

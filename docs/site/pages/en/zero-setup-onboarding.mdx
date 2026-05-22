@@ -1,0 +1,39 @@
+Zero-setup onboarding means memory works from the first message with no installation, configuration,
+or infrastructure required. Platform memory products like ChatGPT and Claude provide this by embedding
+memory into the chat product itself.
+
+## Trade-offs
+
+The convenience of zero-setup comes at a cost: the vendor controls where data lives, how it is
+structured, and what guarantees it provides. Users cannot export, version, or audit memory independently.
+Retrieval systems and file-based approaches require setup but offer more control. Neotoma requires
+installation but provides
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+,
+<MdxI18nLink to="/versioned-history" className="text-foreground underline hover:text-foreground">
+  versioned history
+</MdxI18nLink>
+, and
+<MdxI18nLink to="/human-inspectability" className="text-foreground underline hover:text-foreground">
+  human inspectability
+</MdxI18nLink>
+in exchange.
+
+## Getting started with Neotoma
+
+While Neotoma is not zero-setup, the install process is minimal. See the
+<MdxTrackedInstallLink variant="zero_setup_onboarding">install guide</MdxTrackedInstallLink>
+for step-by-step instructions.
+
+```bash
+npm install -g neotoma
+neotoma api start --env prod
+```
+
+Compare memory approaches on the
+<MdxI18nLink to="/memory-models" className="text-foreground underline hover:text-foreground">
+  memory models
+</MdxI18nLink>
+page.

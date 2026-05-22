@@ -30,23 +30,31 @@ def main() -> int:
     if client is None:
         return 0
 
-    session_id = payload.get("session_id") or f"codex-{uuid.uuid4()}"
+    # Codex supplies a raw UUID in `session_id`. Persist it under both
+    # `session_id` (canonical identity) and `session_uuid` (cross-reference
+    # bridge field on the conversation schema, v1.4). The bridge lets this
+    # hook-created entity coalesce with a slug-keyed entity an MCP agent
+    # later creates for the same session. See issue #145.
+    raw_session_id = payload.get("session_id")
+    session_id = raw_session_id or f"codex-{uuid.uuid4()}"
     title = payload.get("title") or "Codex CLI session"
+
+    conversation_entity = {
+        "entity_type": "conversation",
+        "title": title,
+        "session_id": session_id,
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        **harness_provenance({"hook_event": "session_start"}),
+    }
+    # Only populate session_uuid when the host actually supplied a UUID
+    # (not when we synthesized a `codex-<uuid>` fallback).
+    if raw_session_id:
+        conversation_entity["session_uuid"] = raw_session_id
 
     try:
         client.store(
             {
-                "entities": [
-                    {
-                        "entity_type": "conversation",
-                        "title": title,
-                        "session_id": session_id,
-                        "started_at": time.strftime(
-                            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
-                        ),
-                        **harness_provenance({"hook_event": "session_start"}),
-                    }
-                ],
+                "entities": [conversation_entity],
                 "idempotency_key": make_idempotency_key(
                     session_id, "session", "start"
                 ),

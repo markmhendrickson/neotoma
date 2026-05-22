@@ -29,7 +29,7 @@ describe("CLI observation commands", () => {
     }));
 
     const { stdout } = await execAsync(
-      `${CLI_PATH} store-structured --file-path "${entityFile}" --json`
+      `${CLI_PATH} store --file "${entityFile}" --json`
     );
     const result = JSON.parse(stdout);
     testEntityId = result.entities?.[0]?.entity_id;

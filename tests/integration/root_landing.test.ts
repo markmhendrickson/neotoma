@@ -19,6 +19,7 @@ import {
   buildRootLandingMarkdown,
   buildRobotsTxt,
   readNeotomaConfigEnvironment,
+  resolveLandingMode,
   wantsHtml,
   wantsMarkdown,
 } from "../../src/services/root_landing/index.js";
@@ -102,6 +103,24 @@ describe("buildRobotsTxt", () => {
   });
 });
 
+describe("resolveLandingMode", () => {
+  it("does not classify production loopback reverse-proxy traffic as local by default", () => {
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as express.Request;
+    expect(resolveLandingMode(req, { NEOTOMA_ENV: "production" })).toBe("personal");
+  });
+
+  it("classifies loopback reverse-proxy traffic with public X-Forwarded-For as personal", () => {
+    const req = {
+      headers: { "x-forwarded-for": "203.0.113.10" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as express.Request;
+    expect(resolveLandingMode(req, { NEOTOMA_ENV: "development" })).toBe("personal");
+  });
+});
+
 describe("root landing — content negotiation", () => {
   let server: Server;
   let baseUrl = "";
@@ -165,6 +184,8 @@ describe("root landing — content negotiation", () => {
     expect(body).toMatch(/<strong>config<\/strong>\s+[^<]+/);
     // Host-aware URL interpolation in the body
     expect(body).toContain("/mcp");
+    expect(body).toMatch(/neotoma setup/);
+    expect(body).toMatch(/neotoma mcp config/);
   });
 
   it("returns Markdown when Accept: text/markdown", async () => {
@@ -176,6 +197,9 @@ describe("root landing — content negotiation", () => {
     const body = await res.text();
     expect(body.startsWith("#")).toBe(true);
     expect(body).toContain("## Connect your harness");
+    expect(body).toMatch(/neotoma setup/);
+    expect(body).toMatch(/neotoma mcp config/);
+    expect(body).toMatch(/neotoma cli guide/);
     expect(body).toContain("**config:**");
     expect(body).toContain("http://127.0.0.1");
     expect(body).toMatch(/```(?:json|shell|toml|text)?\n/);

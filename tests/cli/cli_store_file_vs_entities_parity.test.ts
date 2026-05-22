@@ -102,11 +102,11 @@ describe("CLI store --entities vs --file parity", () => {
     expect(secondFileJson.replayed).toBe(true);
   });
 
-  it("wires the commit-mode stderr guard on both store and store-structured", async () => {
+  it("wires the commit-mode stderr guard on the canonical store command", async () => {
     // The guard fires only when a live store returns entities_created=0
     // with replayed!=true. Contriving that condition in a black-box CLI
     // test without mocking is fragile, so instead we verify both command
-    // handlers contain the guard text in the compiled bundle. This locks
+    // handler contains the guard text in the compiled bundle. This locks
     // in the behavior against accidental regression (guard removed).
     const { readFile } = await import("node:fs/promises");
     const compiled = await readFile(
@@ -116,6 +116,6 @@ describe("CLI store --entities vs --file parity", () => {
     const matches = compiled.match(
       /warning: store returned entities_created=0 without replayed=true/g
     );
-    expect(matches?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(matches?.length ?? 0).toBeGreaterThanOrEqual(1);
   });
 });

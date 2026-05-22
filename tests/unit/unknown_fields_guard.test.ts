@@ -56,6 +56,32 @@ describe("unknownFieldsGuard", () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
+  it("allows top-level external_actor on POST /store (issue submission provenance)", () => {
+    _resetUnknownFieldsGuardCache();
+    const req = {
+      method: "POST",
+      path: "/store",
+      body: {
+        idempotency_key: "k",
+        entities: [],
+        external_actor: {
+          provider: "github",
+          login: "octocat",
+          id: 1,
+          type: "User",
+          verified_via: "claim",
+          repository: "owner/repo",
+          event_id: 99,
+        },
+      },
+    } as any;
+    const res = buildRes();
+    const next = vi.fn();
+    unknownFieldsGuard(req, res, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
   it("passes through when the route is not a closed OpenAPI shape", () => {
     _resetUnknownFieldsGuardCache();
     const req = {

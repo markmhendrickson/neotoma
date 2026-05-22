@@ -201,7 +201,7 @@ Average the six principle scores. Map to positioning quality:
 When running a positioning evaluation, retrieve evaluator feedback from Neotoma before scoring:
 
 1. **Retrieve evaluators:** Query `developer_release_tester` entities to get the full evaluator roster.
-2. **Retrieve feedback:** Query `product_feedback` entities for evaluator reactions, objections, and quotes.
+2. **Retrieve feedback:** Query `issue` entities (and linked conversations) for evaluator reactions, objections, and quotes.
 3. **Retrieve evaluator-to-ICP mappings:** Search for `agent_message` entities containing evaluator ICP scoring and classification (Strong, Moderate, Weak, Non-ICP, DIY).
 4. **Retrieve convergent themes:** Search for agent messages about evaluation analysis, positioning gaps, and feedback synthesis.
 
@@ -874,7 +874,7 @@ See: [Team Exercise Facilitator Guide](references/team_exercise.md)
 
 | Question | If No | Action |
 |----------|-------|--------|
-| Does the positioning name a pain evaluators actually described? | Ungrounded pain | Mine Neotoma `product_feedback` for real pain language |
+| Does the positioning name a pain evaluators actually described? | Ungrounded pain | Mine Neotoma `issue` / conversation threads for real pain language |
 | Does the competitive frame match what evaluators actually use? | Wrong alternatives | Check evaluator-reported tools (SQLite, markdown, Notion, platform memory) |
 | Are evaluator objections addressed in the positioning? | Blind spots | Retrieve objection patterns from evaluator feedback data |
 | Would Strong ICP evaluators share this positioning? | Wrong resonance | Test positioning language against Strong ICP evaluator profiles |
@@ -932,7 +932,7 @@ See: [Team Exercise Facilitator Guide](references/team_exercise.md)
 - `docs/icp/primary_icp.md` — Primary ICP definition: archetype, pain triggers, operational modes, vocabulary bridge, qualification criteria, competitor migration paths
 - `docs/icp/profiles.md` — Detailed profiles for all target user segments
 - `docs/icp/developer_release_targeting.md` — Release-scoped targeting, activation risks, and status tracking
-- Neotoma entity types for evaluator feedback retrieval: `developer_release_tester`, `product_feedback`, `feedback`, `agent_message` (search for evaluator-related content)
+- Neotoma entity types for evaluator feedback retrieval: `developer_release_tester`, `issue`, `conversation_message`, `agent_message` (search for evaluator-related content)
 
 ## About the Authors
 

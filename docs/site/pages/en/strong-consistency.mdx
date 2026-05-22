@@ -1,0 +1,41 @@
+Core records, entities, and events are immediately visible after write. There is no eventual-consistency
+lag between write and read for the structured store; once `store` returns, every subsequent retrieval
+sees the new state.
+
+## Before vs after
+
+Before: a write returns success, but a follow-up read may briefly see stale state because the index lags
+behind the source of truth. After: writes commit and return only when the entity, observation, and
+relationship rows are durably written and visible to subsequent reads on the same connection.
+
+## CLI example
+
+```bash
+# Write a contact and a related task in one store call
+neotoma store --json='[
+  {"entity_type":"contact","name":"Ana Rivera","city":"Barcelona"},
+  {"entity_type":"task","title":"Send Ana an intro","due_date":"2026-05-12"}
+]'
+
+# Immediately read back; no propagation delay required
+neotoma entities search "Ana Rivera" --entity-type contact
+neotoma entities list --type task
+```
+
+## What is bounded-eventual
+
+Optional secondary indices that exist for retrieval quality &mdash; full-text search (~5s) and vector
+embeddings (~10s) &mdash; are bounded-eventual rather than strongly consistent. The structured store and
+graph that drive correctness are strongly consistent. See
+
+<MdxI18nLink to="/architecture" className="text-foreground underline hover:text-foreground">
+  architecture
+</MdxI18nLink>
+
+for the full consistency model and
+
+<MdxI18nLink to="/transactional-writes" className="text-foreground underline hover:text-foreground">
+  transactional writes
+</MdxI18nLink>
+
+for the atomicity guarantee.

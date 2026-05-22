@@ -24,9 +24,11 @@ host_tools:
     default:
       output: |
         # Architecture
-        Neotoma uses a three-layer architecture: State Layer (persistence),
-        Strategy Layer (business logic), and Execution Layer (agent runtime).
-        The State Layer owns all durable data and enforces immutability.
+        Neotoma uses a two-tier architecture: a State Layer (persistence,
+        immutable observations, deterministic reducers) with one or more
+        Operational Layers above it (agents, pipelines, custom apps that
+        reason over and write back to the state). The State Layer owns all
+        durable data and enforces immutability.
 
 models:
   - provider: stub

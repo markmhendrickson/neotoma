@@ -21,10 +21,7 @@
  * These invariants back the public KV-cache stability claim for Neotoma text
  * output to LLMs.
  */
-import {
-  getEntityDisplayName,
-  type EntityDisplayInput,
-} from "../shared/entity_display_name.js";
+import { getEntityDisplayName, type EntityDisplayInput } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
 
 // ============================================================================
@@ -139,24 +136,12 @@ export function canonicalStringify(value: unknown, indent: 0 | 2 = 0): string {
     for (const [k, vv] of entries) sorted[k] = vv;
     return sorted;
   };
-  return indent === 0
-    ? JSON.stringify(value, replacer)
-    : JSON.stringify(value, replacer, indent);
+  return indent === 0 ? JSON.stringify(value, replacer) : JSON.stringify(value, replacer, indent);
 }
 
-const EXCLUDED_SNAPSHOT_KEYS = new Set([
-  "schema_version",
-  "entity_type",
-  "_deleted",
-]);
+const EXCLUDED_SNAPSHOT_KEYS = new Set(["schema_version", "entity_type", "_deleted"]);
 
-const SPECIAL_FIRST_KEYS = [
-  "title",
-  "name",
-  "canonical_name",
-  "description",
-  "summary",
-];
+const SPECIAL_FIRST_KEYS = ["title", "name", "canonical_name", "description", "summary"];
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -214,12 +199,13 @@ function formatFieldValueMarkdown(value: unknown): string {
   }
   if (Array.isArray(value)) {
     if (value.length === 0) return "_(empty)_";
-    const allScalars = value.every(
-      (v) => v === null || typeof v !== "object"
-    );
+    const allScalars = value.every((v) => v === null || typeof v !== "object");
     if (allScalars) {
       return value
-        .map((v) => `- ${v === null || v === undefined ? "_(empty)_" : typeof v === "string" ? v : canonicalStringify(v)}`)
+        .map(
+          (v) =>
+            `- ${v === null || v === undefined ? "_(empty)_" : typeof v === "string" ? v : canonicalStringify(v)}`
+        )
         .join("\n");
     }
     return "```json\n" + canonicalStringify(value, 2) + "\n```";
@@ -279,8 +265,7 @@ export function renderEntityMarkdown(
   const snapshot = entity.snapshot ?? {};
   const displayName = getEntityDisplayName({
     entity_type: entity.entity_type,
-    canonical_name:
-      (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
+    canonical_name: (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
     snapshot,
   });
 
@@ -337,8 +322,7 @@ export function renderEntityCompactText(
   const snapshot = entity.snapshot ?? {};
   const displayName = getEntityDisplayName({
     entity_type: entity.entity_type,
-    canonical_name:
-      (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
+    canonical_name: (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
     snapshot,
   });
   const lines: string[] = [];
@@ -433,10 +417,7 @@ function resolveEntityLabel(entityId: string, opts: RenderOpts): string {
 // Source renderer
 // ============================================================================
 
-export function renderSourceMarkdown(
-  source: RenderSourceInput,
-  opts: RenderOpts = {}
-): string {
+export function renderSourceMarkdown(source: RenderSourceInput, opts: RenderOpts = {}): string {
   const parts: string[] = [];
   if (opts.includeDoNotEditHeader !== false) parts.push(DO_NOT_EDIT_NOTICE);
   parts.push(
@@ -532,10 +513,7 @@ export function renderTimelineDayMarkdown(
 // Schema renderer
 // ============================================================================
 
-export function renderSchemaMarkdown(
-  schema: RenderSchemaInput,
-  opts: RenderOpts = {}
-): string {
+export function renderSchemaMarkdown(schema: RenderSchemaInput, opts: RenderOpts = {}): string {
   const parts: string[] = [];
   if (opts.includeDoNotEditHeader !== false) parts.push(DO_NOT_EDIT_NOTICE);
   parts.push(
@@ -573,6 +551,118 @@ export function renderSchemaMarkdown(
 // ============================================================================
 // Index-page helper (used by mirror subsystem)
 // ============================================================================
+
+// ============================================================================
+// Profile entity renderer (frontmatter_content / content_only modes)
+// ============================================================================
+
+export interface ProfileRenderMeta {
+  entity_id: string;
+  entity_type: string;
+  schema_version: string;
+  computed_at: string | null | undefined;
+  last_observation_at: string | null | undefined;
+  observation_count: number | null | undefined;
+}
+
+export interface ProfileRenderOpts {
+  render_mode: "frontmatter_content" | "content_only";
+  /** Fields to include in YAML frontmatter (frontmatter_content only). Defaults to all non-content fields. */
+  frontmatter_fields?: string[];
+  /** Snapshot field whose value is used as the markdown body. Defaults to "body". */
+  content_field?: string;
+}
+
+/**
+ * Renders a plan (or other profile entity) with a human-readable document
+ * structure instead of the generic "one ## section per field" entity format.
+ *
+ * render_mode "frontmatter_content":
+ *   YAML frontmatter with selected metadata fields, followed by the value of
+ *   `content_field` (default "body") as the document body. If no content field
+ *   is present, falls back to rendering all remaining fields as ## sections.
+ *
+ * render_mode "content_only":
+ *   Just the content field value, no frontmatter. Falls back to empty string
+ *   when the field is absent.
+ */
+export function renderProfileEntity(
+  snapshot: Record<string, unknown>,
+  meta: ProfileRenderMeta,
+  opts: ProfileRenderOpts
+): string {
+  const contentField = opts.content_field ?? "body";
+  const contentValue = snapshot[contentField];
+  const hasContent = typeof contentValue === "string" && contentValue.trim().length > 0;
+
+  if (opts.render_mode === "content_only") {
+    return hasContent ? (contentValue as string).trimEnd() + "\n" : "";
+  }
+
+  // frontmatter_content mode
+  const parts: string[] = [];
+  parts.push(
+    "<!-- Do not edit this file directly. Corrections go through `neotoma corrections create`, `neotoma edit <id>`, or the Neotoma Inspector. This file is regenerated on every relevant write. -->"
+  );
+
+  // Build frontmatter
+  const fmLines: string[] = ["---"];
+  fmLines.push(`entity_id: ${meta.entity_id}`);
+  fmLines.push(`entity_type: ${meta.entity_type}`);
+  fmLines.push(`schema_version: ${meta.schema_version}`);
+  if (meta.last_observation_at) fmLines.push(`last_observation_at: ${meta.last_observation_at}`);
+  if (typeof meta.observation_count === "number")
+    fmLines.push(`observation_count: ${meta.observation_count}`);
+  if (meta.computed_at) fmLines.push(`computed_at: ${meta.computed_at}`);
+
+  // Determine which snapshot fields go in frontmatter
+  const excludeFromFrontmatter = new Set([contentField]);
+  let fmFieldKeys: string[];
+  if (opts.frontmatter_fields && opts.frontmatter_fields.length > 0) {
+    fmFieldKeys = opts.frontmatter_fields.filter((k) => k in snapshot && k !== contentField);
+  } else {
+    // All snapshot fields except the content field
+    fmFieldKeys = Object.keys(snapshot).filter((k) => !excludeFromFrontmatter.has(k));
+  }
+
+  for (const key of fmFieldKeys) {
+    const val = snapshot[key];
+    if (val === undefined || val === null || val === "") continue;
+    if (Array.isArray(val)) {
+      fmLines.push(`${key}:`);
+      for (const item of val) {
+        fmLines.push(`  - ${String(item)}`);
+      }
+    } else if (typeof val === "object") {
+      // Skip complex objects in frontmatter; they appear in body section fallback below
+    } else {
+      fmLines.push(`${key}: ${String(val)}`);
+    }
+  }
+  fmLines.push("---");
+  parts.push(fmLines.join("\n"));
+
+  if (hasContent) {
+    // Strip a spurious leading `## body` / `# body` heading that some harnesses
+    // emit when they serialise the plan body as markdown (e.g. "## body\n\n## Problem\n…").
+    // The heading is redundant: the mirror already knows which field is the body.
+    const strippedContent = (contentValue as string).replace(/^##?\s+body\s*\n+/i, "");
+    parts.push(strippedContent);
+  } else {
+    // No body — fall back: render all snapshot fields (except those already in frontmatter) as ## sections
+    const bodyFields = Object.keys(snapshot).filter(
+      (k) => k !== contentField && !fmFieldKeys.includes(k)
+    );
+    for (const key of bodyFields) {
+      const val = snapshot[key];
+      if (val === undefined) continue;
+      parts.push(`## ${key}`);
+      parts.push(formatFieldValueMarkdown(val));
+    }
+  }
+
+  return parts.join("\n\n") + "\n";
+}
 
 export function renderIndexMarkdown(
   title: string,

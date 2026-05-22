@@ -2,7 +2,7 @@
 
 Your agents forget. Neotoma makes them remember.
 
-Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, OpenClaw, IronClaw, and every agent you run. Open-source. Local-first. Deterministic. MIT licensed.
+Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, Windsurf, VS Code, Continue, Letta, OpenClaw, IronClaw, and every agent you run. Open-source. Local-first. Deterministic. MIT licensed.
 
 **[neotoma.io](https://neotoma.io)** · **[Evaluate](https://neotoma.io/evaluate)** · **[Install](https://neotoma.io/install)** · **[Documentation](https://neotoma.io/docs)**
 
@@ -46,13 +46,16 @@ graph LR
 - **Replayable.** Inspect any entity at any point in time. Diff versions. Reconstruct history from the observation log.
 - **Structure-first.** Schema-first extraction with deterministic retrieval. Optional similarity search when embeddings are configured.
 
-### Three foundations
+### Four foundations
 
-| Foundation         | What it means                                                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Privacy-first**  | Your data stays local. Never used for training. User-controlled storage, optional encryption at rest. Full export and deletion control. |
-| **Deterministic**  | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.            |
-| **Cross-platform** | One memory graph across Claude, ChatGPT, Cursor, OpenClaw, IronClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
+| Foundation                  | What it means                                                                                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Privacy-first**           | Your data stays local. Never used for training. Nothing is stored unless you approve it; no background scanning or implicit captures. Full export and deletion control. |
+| **Deterministic**           | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.                                |
+| **Immutable and verifiable** | Append-only observations; history cannot be rewritten. Hash-based entity IDs are tamper-evident. Full provenance chain from any state to its source.       |
+| **Cross-platform**          | One memory graph across Claude, ChatGPT, Cursor, Windsurf, VS Code, Continue, Letta, OpenClaw, IronClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
+
+Full compatibility matrix: [Integrations](docs/integrations/matrix.md).
 
 ## State guarantees
 
@@ -72,6 +75,8 @@ Most AI memory systems optimize storage or retrieval. Neotoma enforces state int
 | Zero-setup onboarding                | ✓         | ✗               | ✗          | ✗             | ✗             |
 | Semantic similarity search           | ✗         | ✓               | ✗          | ✗             | ✓             |
 | Direct human editability             | ✗         | ✗               | ✓          | ✗             | ✗             |
+| Strong consistency                   | ✗         | ✗               | ✗          | ✓             | ✓             |
+| Transactional writes                 | ✗         | ✗               | ✗          | ✓             | ✓             |
 
 **Platform:** Claude, ChatGPT, Gemini, Copilot. **Retrieval:** Mem0, Zep, LangChain Memory. **Files:** Markdown files, JSON stores, CRDT docs. **Database:** SQLite, Postgres, MySQL. **Neotoma:** Deterministic state layer (reference implementation).
 
@@ -100,6 +105,7 @@ The agent handles npm install, initialization, and MCP configuration. **Manual i
 ```bash
 npm install -g neotoma
 neotoma init
+neotoma setup --tool <cursor|claude-code|codex> --yes
 neotoma mcp config
 ```
 
@@ -115,6 +121,26 @@ neotoma upload ./invoice.pdf
 
 Results reflect versioned entity state with full provenance. Agents perform the same operations through MCP tool calls (`store`, `retrieve_entities`, `retrieve_entity_by_identifier`).
 
+## Available skills
+
+Skills are guided workflows that teach your AI agent to import, extract, and persist data into Neotoma memory. They ship with the npm package and are installed by `neotoma setup`.
+
+| Skill | Description |
+|-------|-------------|
+| **ensure-neotoma** | Install Neotoma, configure MCP, verify connectivity. Prerequisite for all other skills. |
+| **remember-email** | Configure email MCP, import emails, extract contacts, tasks, events, transactions. |
+| **remember-conversations** | Import ChatGPT/Claude/Slack exports, reconstruct decision timeline. |
+| **remember-meetings** | Ingest meeting transcripts, extract decisions and action items. |
+| **remember-finances** | Import bank statements, receipts, invoices. Extract structured transactions. |
+| **remember-contacts** | Consolidate contacts from email, calendar, chat, vCards, LinkedIn. |
+| **remember-calendar** | Configure calendar MCP, import events and commitments. |
+| **remember-codebase** | Developer repo integration — inventory, architecture decisions, MCP wiring. |
+| **store-data** | Generic: persist any structured data or file with provenance. |
+| **query-memory** | Generic: retrieve what your agent knows about anything. |
+| **recover-sqlite-database** | Troubleshooting: check integrity and recover corrupted Neotoma database. |
+
+[Full skill documentation →](https://neotoma.io/skills) | [Skill strategy →](docs/skills/skill_strategy.md)
+
 ## Interfaces
 
 Three interfaces. One state invariant. Every interface provides the same deterministic behavior regardless of how you access the state layer.
@@ -122,14 +148,14 @@ Three interfaces. One state invariant. Every interface provides the same determi
 | Interface      | Description                                                                                                                    |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | **REST API**   | Full HTTP interface for application integration. Entities, relationships, observations, schema, timeline, and version history. |
-| **MCP Server** | Model Context Protocol for Claude, ChatGPT, Cursor, OpenClaw, IronClaw, Codex, and more. Agents store and retrieve state through structured tool calls. |
+| **MCP Server** | Model Context Protocol for Claude, ChatGPT, Cursor, Windsurf, VS Code, Continue, Letta, OpenClaw, IronClaw, Codex, and more. Agents store and retrieve state through structured tool calls. |
 | **CLI**        | Command-line for scripting and direct access. Inspect entities, replay timelines, and manage state from the terminal.          |
 
 All three map to the same OpenAPI-backed operations. MCP tool calls log the equivalent CLI invocation.
 
 ## Who this is for
 
-People building a personal operating system with AI agents across their life — wiring together tools like Claude, Cursor, ChatGPT, OpenClaw, IronClaw, and custom scripts to manage contacts, tasks, finances, code, content, and other domains. The same person operates their agents, builds new pipelines, and debugs state drift. These are three operational modes, not separate personas:
+People building a personal operating system with AI agents across their life — wiring together tools like Claude, Cursor, ChatGPT, Windsurf, VS Code, Letta, OpenClaw, IronClaw, and custom scripts to manage contacts, tasks, finances, code, content, and other domains. The same person operates their agents, builds new pipelines, and debugs state drift. These are three operational modes, not separate personas:
 
 | Mode | What you're doing | The tax you pay without Neotoma | What you get back |
 | ---- | ----------------- | ------------------------------- | ----------------- |
@@ -218,27 +244,35 @@ npm test
 
 Neotoma exposes state via MCP. Local storage only in preview. Local built-in auth.
 
-**Setup guides:** [Cursor](https://neotoma.io/neotoma-with-cursor) · [Claude Code](https://neotoma.io/neotoma-with-claude-code) · [Claude](https://neotoma.io/neotoma-with-claude) · [ChatGPT](https://neotoma.io/neotoma-with-chatgpt) · [Codex](https://neotoma.io/neotoma-with-codex) · [OpenCode](docs/integrations/hooks/opencode.md) · [OpenClaw](https://neotoma.io/neotoma-with-openclaw) · [IronClaw](https://neotoma.io/neotoma-with-ironclaw)
+**Full compatibility matrix:** [Integrations](docs/integrations/matrix.md) · [neotoma.io/integrations](https://neotoma.io/integrations)
 
-For local source iteration, use the stable dev shim (`scripts/run_neotoma_mcp_stdio_dev_shim.sh` or `npm run dev:mcp:dev-shim`) instead of pointing installed MCP clients at a `tsx watch` stdio process. The shim keeps the client-facing JSON-RPC stream stable and asks clients to refresh or reconnect when the tool interface changes.
+| Host | Modes | Install | Setup guide |
+| --- | --- | --- | --- |
+| Cursor | MCP + hooks | `neotoma setup --tool cursor --yes` | [neotoma-with-cursor](https://neotoma.io/neotoma-with-cursor) |
+| Claude Code | MCP + hooks | `neotoma setup --tool claude-code --yes` | [neotoma-with-claude-code](https://neotoma.io/neotoma-with-claude-code) |
+| Claude Desktop | MCP (local + remote) | `neotoma setup --tool claude-desktop --yes` | [neotoma-with-claude](https://neotoma.io/neotoma-with-claude) |
+| Claude Agent SDK | hooks | adapter install | [hooks/claude_agent_sdk.md](docs/integrations/hooks/claude_agent_sdk.md) |
+| ChatGPT | MCP App + Custom GPT Actions | Manual HTTPS + OAuth | [neotoma-with-chatgpt](https://neotoma.io/neotoma-with-chatgpt) |
+| Codex CLI | MCP + hooks | `neotoma setup --tool codex --yes` | [neotoma-with-codex](https://neotoma.io/neotoma-with-codex) |
+| OpenClaw | Native plugin + MCP | `neotoma setup --tool openclaw --yes` | [neotoma-with-openclaw](https://neotoma.io/neotoma-with-openclaw) |
+| IronClaw | MCP | `neotoma setup --tool ironclaw --yes` | [neotoma-with-ironclaw](https://neotoma.io/neotoma-with-ironclaw) |
+| OpenCode | hooks | plugin install | [hooks/opencode.md](docs/integrations/hooks/opencode.md) |
+| Windsurf | MCP | `neotoma setup --tool windsurf --yes` | [neotoma-with-windsurf](https://neotoma.io/neotoma-with-windsurf) |
+| Continue | MCP | `neotoma setup --tool continue --yes` | [neotoma-with-continue](https://neotoma.io/neotoma-with-continue) |
+| VS Code (Copilot Chat) | MCP | `neotoma setup --tool vscode --yes` | [neotoma-with-vscode](https://neotoma.io/neotoma-with-vscode) |
+| Letta | MCP (streamable HTTP, SSE, stdio) | Manual SDK setup | [neotoma-with-letta](https://neotoma.io/neotoma-with-letta) |
+
+Shared client libraries: [`@neotoma/client`](packages/client) (TypeScript), [`neotoma-client`](packages/client-python) (Python). Not yet supported: LangGraph, CrewAI — see [Integrations roadmap](docs/integrations/matrix.md#not-yet-supported-roadmap).
+
+For local source iteration, use the stable dev shim (`scripts/run_neotoma_mcp_stdio_dev_shim.sh`) or signed shim (`scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh`) instead of pointing installed MCP clients at a `tsx watch` stdio process. `neotoma mcp config` defaults to **`b`** for low-friction local stdio setup; use **`a`** for signed + AAuth HTTP `/mcp` proxy entries when the Neotoma API is running, **`c`** for direct stdio, or **`d`** when both MCP entries should target prod.
 
 **Agent behavior contract:** Store first, retrieve before storing, extract entities from user input, create tasks for commitments, and attach bounded host context such as repository name/root scope when available. Full instructions: [MCP instructions](docs/developer/mcp/instructions.md) and [CLI agent instructions](docs/developer/cli_agent_instructions.md).
 
 **Representative actions:** `store`, `retrieve_entities`, `retrieve_entity_snapshot`, `merge_entities`, `list_observations`, `create_relationship`, `list_relationships`, `list_timeline_events`, `retrieve_graph_neighborhood`. Full list: [MCP spec](docs/specs/MCP_SPEC.md).
 
-## Using with AI tools (hooks)
+### Hooks composition
 
-Neotoma also integrates into harnesses that expose lifecycle hooks. Hooks and MCP compose: hooks are the reliability floor (guaranteed capture, retrieval injection, compaction awareness, persistence safety net) and MCP remains the quality ceiling (agent-driven structured writes).
-
-| Harness | Package | Guide |
-| --- | --- | --- |
-| Claude Code | [`packages/claude-code-plugin`](packages/claude-code-plugin) | [docs/integrations/hooks/claude_code.md](docs/integrations/hooks/claude_code.md) |
-| Cursor | [`packages/cursor-hooks`](packages/cursor-hooks) | [docs/integrations/hooks/cursor.md](docs/integrations/hooks/cursor.md) |
-| OpenCode | [`packages/opencode-plugin`](packages/opencode-plugin) | [docs/integrations/hooks/opencode.md](docs/integrations/hooks/opencode.md) |
-| Codex CLI | [`packages/codex-hooks`](packages/codex-hooks) | [docs/integrations/hooks/codex_cli.md](docs/integrations/hooks/codex_cli.md) |
-| Claude Agent SDK | [`packages/claude-agent-sdk-adapter`](packages/claude-agent-sdk-adapter) | [docs/integrations/hooks/claude_agent_sdk.md](docs/integrations/hooks/claude_agent_sdk.md) |
-
-Shared client libraries: [`@neotoma/client`](packages/client) (TypeScript), [`neotoma-client`](packages/client-python) (Python).
+Hooks integrate with harnesses that expose lifecycle events. Hooks and MCP compose: hooks are the reliability floor (guaranteed capture, retrieval injection, compaction awareness, persistence safety net), and MCP remains the quality ceiling (agent-driven structured writes). Per-harness hooks packages: [`claude-code-plugin`](packages/claude-code-plugin), [`cursor-hooks`](packages/cursor-hooks), [`opencode-plugin`](packages/opencode-plugin), [`codex-hooks`](packages/codex-hooks), [`claude-agent-sdk-adapter`](packages/claude-agent-sdk-adapter). Per-harness setup guides in [`docs/integrations/hooks/`](docs/integrations/hooks/).
 
 ### OpenClaw native plugin
 

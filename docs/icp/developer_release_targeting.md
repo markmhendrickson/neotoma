@@ -21,6 +21,8 @@ The immediate developer release target is a subsegment of the primary ICP archet
 
 - **Values transparency and control over magic.** Allergic to opaque native memory. Their alternative isn't "I'll build my own" — it's "I need something I can inspect and own." Open source matters. Local-first or self-hosted matters.
 
+- **Owns a privacy-compatible LLM access path.** Precondition: Claude Code direct, Cursor, ChatGPT non-enterprise, OR a local LLM with MCP. Enterprise-egress restrictions, cloud-LLM skepticism, and privacy-gating each kill activation independently of Neotoma's own quality. <!-- Backed by ent_81f79780f1fbe679af99da90 (ChatGPT enterprise egress), ent_727fee4a94cfaea86880a0f1 (cloud-LLM skepticism), ent_4f0db2d7f2c349900e4dac2c (local-LLM precondition). -->
+
 ### Sharpest filter
 
 Would they describe "setting up Neotoma" as a worthwhile Saturday project, but "building their own state layer" as a distraction from real work?
@@ -31,11 +33,24 @@ Would they describe "setting up Neotoma" as a worthwhile Saturday project, but "
 
 2. **Missing context (most common):** User tries to do something cross-session or cross-agent and realizes context is gone. Annoying and wasteful but survivable.
 
+3. **Local-LLM compatibility unblocked (privacy-gated cohort):** A privacy-first subsegment gates activation on running Neotoma alongside Ollama, LM Studio, or comparable local LLMs. Until a local-LLM topology and a Neotoma-CLI-without-MCP path are documented, this cohort is structurally blocked from activation regardless of motivational force. Promote local-LLM support from edge case to first-class activation precondition for them. <!-- Backed by ent_4f0db2d7f2c349900e4dac2c, ent_727fee4a94cfaea86880a0f1, ent_81f79780f1fbe679af99da90. -->
+
 The first five may not be the most frustrated people — they may be the ones who've been **burned**. A concrete loss event is a conversion event, not a gradual migration.
+
+### Activation milestones
+
+A first-five activation must clear all of the following, in order:
+
+1. **Install completed on evaluator's actual machine** — respects their version manager, no global-NPM permission failures, MCP server location is discoverable, no enterprise-egress block. <!-- Backed by ent_727fee4a94cfaea86880a0f1, ent_81f79780f1fbe679af99da90, ent_4f0db2d7f2c349900e4dac2c. -->
+2. **First sustained-write session within 7 days post-install** — agent or user produces a coherent observation batch, not just a smoke-test write.
+3. **First unassisted retrieval observation** — the harness surfaces what observations the agent just read, without the evaluator having to inspect storage directly. Read-side opacity is a distinct failure mode from cognitive cold-start and from write-side friction. <!-- Backed by ent_727fee4a94cfaea86880a0f1 (installed-and-bounced on read-side opacity). -->
+4. **No synchronous help between install and first sustained write.**
 
 ### Who they are NOT
 
 - **Not capable DIY builders:** Power users who build their own MCP + Postgres stack. These are later adopters — once Neotoma is proven enough that DIY feels like wasted effort. (See D12 in primary ICP disqualification criteria.)
+- **Not autonomous-loop builders on raw provider SDKs:** Builders running fully custom agentic harnesses on raw OpenAI / Anthropic SDKs with self-managed in-loop dedup agents. They engineer around state drift by construction — structured data, in-loop quality control, raw markdown + structured logs — and refuse external substrates on supply-chain grounds. Anti-adopters, not slow adopters. <!-- Backed by ent_75b7d691cd12fb1524ef8b63 (Emil Erkkola). -->
+- **Not adjacent platform builders (partnership, not conversion):** Identity vendors, agent-framework maintainers, and auth-protocol authors treat durable user state as part of their own primitive. They are partnership and integration targets — Neotoma should compose under their primitives, not compete with their roadmaps. (Extension of D3.) <!-- Backed by ent_3f183584ebe4b89081cf9f75 (Dick Hardt / Hellō). -->
 - **Not "normals":** Not casual ChatGPT users who'd be fine with native memory.
 - **Not enterprise buyers:** They find Neotoma, try it on a weekend, and either adopt it or don't.
 

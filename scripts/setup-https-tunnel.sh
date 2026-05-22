@@ -41,13 +41,13 @@ echo "🔒 Setting up HTTPS tunnel for MCP server testing..."
 echo "   Forwarding to http://localhost:${HTTP_PORT}"
 echo ""
 
-# Port-in-use check (skip prompt when TUNNEL_NONINTERACTIVE=1, e.g. dev:api)
-if ! lsof -Pi :${HTTP_PORT} -sTCP:LISTEN -t >/dev/null 2>&1; then
+# Port-in-use check (skip prompt when TUNNEL_NONINTERACTIVE=1, e.g. dev:server:tunnel)
+if ! lsof -Pi :"${HTTP_PORT}" -sTCP:LISTEN -t >/dev/null 2>&1; then
   if [[ "${TUNNEL_NONINTERACTIVE:-}" == "1" ]]; then
     echo "⚠️  Port ${HTTP_PORT} not in use yet; tunnel will start anyway (server starting in parallel)."
   else
     echo "⚠️  Port ${HTTP_PORT} is not in use. Make sure the MCP server is running:"
-    echo "   npm run dev:api"
+    echo "   npm run dev:server:tunnel"
     echo ""
     read -p "Continue anyway? (y/n) " -n 1 -r
     echo
@@ -183,9 +183,9 @@ else
   echo ""
 
   if [ -n "$TUNNEL_DOMAIN" ]; then
-    ngrok http ${HTTP_PORT} --domain="${TUNNEL_DOMAIN}" --log=stdout > /tmp/ngrok.log 2>&1 &
+    ngrok http "${HTTP_PORT}" --domain="${TUNNEL_DOMAIN}" --log=stdout > /tmp/ngrok.log 2>&1 &
   else
-    ngrok http ${HTTP_PORT} --log=stdout > /tmp/ngrok.log 2>&1 &
+    ngrok http "${HTTP_PORT}" --log=stdout > /tmp/ngrok.log 2>&1 &
   fi
   NGROK_PID=$!
 
@@ -195,7 +195,7 @@ else
     MAX_RETRIES=10
     RETRY_COUNT=0
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-      NGROK_URL=$(curl -s http://localhost:${NGROK_PORT}/api/tunnels 2>/dev/null | grep -o '"public_url":"https://[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+      NGROK_URL=$(curl -s "http://localhost:${NGROK_PORT}/api/tunnels" 2>/dev/null | grep -o '"public_url":"https://[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
       [ -n "$NGROK_URL" ] && break
       RETRY_COUNT=$((RETRY_COUNT + 1))
       sleep 1
@@ -332,7 +332,7 @@ echo ""
 
 if [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ]; then
   echo "📋 MCP: Add to .cursor/mcp.json: {\"mcpServers\": {\"neotoma\": {\"url\": \"${NGROK_URL}/mcp\"}}}"
-  echo "   Or run: neotoma mcp config   (then restart Cursor)"
+  echo "   Or run: neotoma mcp guide    (then restart Cursor)"
   echo "   To test OAuth (key-auth in browser): neotoma auth login --tunnel"
   echo ""
 fi
@@ -364,7 +364,7 @@ else
     if [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ]; then
       echo ""
       echo "  ℹ️  Restart this process (Ctrl+C, then run again) so the server picks up the URL:"
-      echo "      HOST_URL=${NGROK_URL} npm run dev:server+api   # or dev:api"
+      echo "      HOST_URL=${NGROK_URL} npm run dev:server:tunnel:types   # or dev:server:tunnel"
     else
       echo ""
       echo "  ℹ️  Restart the server (if running) so it picks up the URL."

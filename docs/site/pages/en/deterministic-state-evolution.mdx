@@ -1,0 +1,56 @@
+Given the same set of observations, the system always produces the same entity state regardless of when
+or in what order they are processed. This removes ordering bugs and makes agent state testable.
+
+## Before vs after
+
+Before: two agents report conflicting values and whichever write arrives last wins. After: both
+observations are preserved and a deterministic merge rule resolves the canonical value reproducibly.
+
+## CLI example
+
+```bash
+# Agent A writes one value
+neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","city":"Barcelona"}]'
+
+# Agent B writes a conflicting value
+neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","city":"San Francisco"}]'
+
+# Deterministic reducer computes one canonical snapshot
+neotoma entities search --query "Ana Rivera" --entity-type contact
+```
+
+Late-arriving observations are folded in deterministically. If the merge rule prefers stronger
+provenance or recency, it behaves identically on replay, which is required for
+<MdxI18nLink to="/reproducible-state-reconstruction" className="text-foreground underline hover:text-foreground">
+  reproducible state reconstruction
+</MdxI18nLink>
+.
+
+## Caveat: AI interpretation of unstructured files
+
+Determinism is fully guaranteed for **structured agent writes** &mdash; the entities array your
+agent passes to `store` via MCP, CLI, or REST. The reducer behaves identically across replays.
+
+For **unstructured files** (PDFs, free-text notes, screenshots), Neotoma supports an optional
+AI-based interpretation step. This step is **auditable** &mdash; the model, prompt hash,
+parameters, and config are recorded as an `interpretation` row, and observations link back to
+that interpretation &mdash; but it is **not replay-deterministic** across model versions or
+provider snapshots. The same PDF run through a different model may extract a different field
+value. The audit trail tells you exactly which run produced which field.
+
+If full replay determinism matters for a given pipeline, drive interpretation client-side and
+write the resulting structured entities to Neotoma; the storage path itself is deterministic.
+
+See
+<MdxI18nLink to="/versioned-history" className="text-foreground underline hover:text-foreground">
+  versioned history
+</MdxI18nLink>
+,
+<MdxI18nLink to="/replayable-timeline" className="text-foreground underline hover:text-foreground">
+  replayable timeline
+</MdxI18nLink>
+, and
+<MdxI18nLink to="/architecture" className="text-foreground underline hover:text-foreground">
+  architecture
+</MdxI18nLink>
+.

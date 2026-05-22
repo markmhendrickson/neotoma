@@ -7,10 +7,7 @@ import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import type { SchemaDefinition } from "./schema_registry.js";
-import {
-  getCurrentAgentIdentity,
-  getCurrentAttribution,
-} from "./request_context.js";
+import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 
 /** Date-like field names that may appear in entity snapshots (order does not matter). */
@@ -74,7 +71,9 @@ function mapFieldToEventType(entityType: string, fieldName: string): string {
     if (fieldName === "departure_datetime") return "FlightDeparture";
     if (fieldName === "arrival_datetime") return "FlightArrival";
   }
-  const capitalized = fieldName.replace(/_([a-z])/g, (_, c) => c.toUpperCase()).replace(/^./, (c) => c.toUpperCase());
+  const capitalized = fieldName
+    .replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+    .replace(/^./, (c) => c.toUpperCase());
   return `${capitalized}`;
 }
 
@@ -184,7 +183,7 @@ export function getDateLikeFields(fields: Record<string, unknown>): Record<strin
  * should be used.
  */
 function schemaTemporalFieldAllowlist(
-  schema?: Pick<SchemaDefinition, "temporal_fields"> | null,
+  schema?: Pick<SchemaDefinition, "temporal_fields"> | null
 ): Map<string, string | undefined> | null {
   if (!schema?.temporal_fields || schema.temporal_fields.length === 0) {
     return null;
@@ -211,7 +210,7 @@ export function deriveTimelineEventsFromSnapshot(
   sourceId: string,
   userId: string,
   snapshot: Record<string, unknown>,
-  schema?: Pick<SchemaDefinition, "temporal_fields"> | null,
+  schema?: Pick<SchemaDefinition, "temporal_fields"> | null
 ): TimelineEventRow[] {
   const rows: TimelineEventRow[] = [];
   const now = new Date().toISOString();
@@ -235,8 +234,7 @@ export function deriveTimelineEventsFromSnapshot(
     const eventTimestamp = toISODate(value);
     if (!eventTimestamp) continue;
 
-    const eventType =
-      declaredEventType ?? mapFieldToEventType(entityType, fieldName);
+    const eventType = declaredEventType ?? mapFieldToEventType(entityType, fieldName);
     const id = generateTimelineEventId(sourceId, entityId, fieldName, eventTimestamp);
 
     rows.push({
@@ -269,7 +267,7 @@ export function deriveTimelineEventsFromRawFragments(
   sourceId: string,
   userId: string,
   snapshotFieldKeys: Set<string>,
-  schema?: Pick<SchemaDefinition, "temporal_fields"> | null,
+  schema?: Pick<SchemaDefinition, "temporal_fields"> | null
 ): TimelineEventRow[] {
   const rows: TimelineEventRow[] = [];
   const now = new Date().toISOString();
@@ -285,8 +283,7 @@ export function deriveTimelineEventsFromRawFragments(
     const eventTimestamp = toISODate(value);
     if (!eventTimestamp) continue;
 
-    const eventType =
-      allow?.get(fieldName) ?? mapFieldToEventType(entityType, fieldName);
+    const eventType = allow?.get(fieldName) ?? mapFieldToEventType(entityType, fieldName);
     const id = generateTimelineEventId(sourceId, entityId, fieldName, eventTimestamp);
 
     rows.push({
@@ -331,15 +328,8 @@ export async function upsertTimelineEventsForEntitySnapshot(
   params: UpsertTimelineEventsForSnapshotParams
 ): Promise<void> {
   enforceAttributionPolicy("timeline_events", getCurrentAgentIdentity());
-  const {
-    entityType,
-    entityId,
-    sourceId,
-    userId,
-    snapshot,
-    sameTypeInSourceBatch,
-    schema,
-  } = params;
+  const { entityType, entityId, sourceId, userId, snapshot, sameTypeInSourceBatch, schema } =
+    params;
   const snapshotFields = snapshot || {};
   let timelineRows = deriveTimelineEventsFromSnapshot(
     entityType,
@@ -347,7 +337,7 @@ export async function upsertTimelineEventsForEntitySnapshot(
     sourceId,
     userId,
     snapshotFields,
-    schema,
+    schema
   );
 
   if (sameTypeInSourceBatch === 1 && sourceId) {
@@ -358,7 +348,9 @@ export async function upsertTimelineEventsForEntitySnapshot(
       .eq("entity_type", entityType)
       .eq("user_id", userId);
     if (fragError) {
-      logger.warn(`upsertTimelineEventsForEntitySnapshot: raw_fragments read failed: ${fragError.message}`);
+      logger.warn(
+        `upsertTimelineEventsForEntitySnapshot: raw_fragments read failed: ${fragError.message}`
+      );
     } else if (fragments && fragments.length > 0) {
       const snapshotKeys = new Set(Object.keys(snapshotFields));
       const fromFragments = deriveTimelineEventsFromRawFragments(
@@ -368,7 +360,7 @@ export async function upsertTimelineEventsForEntitySnapshot(
         sourceId,
         userId,
         snapshotKeys,
-        schema,
+        schema
       );
       timelineRows = timelineRows.concat(fromFragments);
     }
@@ -376,9 +368,7 @@ export async function upsertTimelineEventsForEntitySnapshot(
 
   const timelineAttribution = getCurrentAttribution();
   const timelineAttributionMixin =
-    Object.keys(timelineAttribution).length > 0
-      ? { provenance: timelineAttribution }
-      : {};
+    Object.keys(timelineAttribution).length > 0 ? { provenance: timelineAttribution } : {};
   for (const row of timelineRows) {
     const { error: evtError } = await db.from("timeline_events").upsert(
       {

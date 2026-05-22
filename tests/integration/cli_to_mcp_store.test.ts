@@ -151,7 +151,7 @@ describe("Cross-layer: CLI store commands → Database", () => {
     });
   });
 
-  describe("store-structured command → entities + observations", () => {
+  describe("store --file → entities + observations", () => {
     it("should create entity and observations in DB", async () => {
       const filePath = await files.createJson("structured-entity.json", {
         entity_type: "company",
@@ -160,7 +160,7 @@ describe("Cross-layer: CLI store commands → Database", () => {
       });
 
       const result = await execCliJson(
-        `store-structured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
+        `store --file "${filePath}" --user-id "${TEST_USER_ID}"`
       );
 
       const sourceId = extractSourceId(result);
@@ -178,14 +178,15 @@ describe("Cross-layer: CLI store commands → Database", () => {
       }
     });
 
-    it("should create entity with explicit --entity-type override", async () => {
+    it("should create entity with entity_type in JSON payload", async () => {
       const filePath = await files.createJson("structured-typed.json", {
+        entity_type: "task",
         canonical_name: "Force-typed Entity",
         custom_field: "value",
       });
 
       const result = await execCliJson(
-        `store-structured --file-path "${filePath}" --user-id "${TEST_USER_ID}" --entity-type task`
+        `store --file "${filePath}" --user-id "${TEST_USER_ID}"`
       );
 
       const sourceId = extractSourceId(result);
@@ -199,7 +200,7 @@ describe("Cross-layer: CLI store commands → Database", () => {
     });
   });
 
-  describe("store-unstructured command → sources table", () => {
+  describe("store command → sources table", () => {
     it("should create source record for text file", async () => {
       const filePath = await files.createText(
         "unstructured.txt",
@@ -209,7 +210,7 @@ describe("Cross-layer: CLI store commands → Database", () => {
       let result: unknown;
       try {
         result = await execCliJson(
-          `store-unstructured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
+          `store --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
         );
       } catch (e) {
         if (
@@ -234,7 +235,7 @@ describe("Cross-layer: CLI store commands → Database", () => {
       let result: unknown;
       try {
         result = await execCliJson(
-          `store-unstructured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
+          `store --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
         );
       } catch (e) {
         if (
@@ -260,10 +261,10 @@ describe("Cross-layer: CLI store commands → Database", () => {
         0x44, 0xac, 0x00, 0x00, 0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00,
         0x64, 0x61, 0x74, 0x61, 0x00, 0x00, 0x00, 0x00,
       ]);
-      const filePath = await files.createBinary("store-unstructured-audio.wav", wavHeader);
+      const filePath = await files.createBinary("store-audio.wav", wavHeader);
 
       const result = await execCliJson(
-        `store-unstructured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
+        `store --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
       );
 
       const sourceId = extractSourceId(result);

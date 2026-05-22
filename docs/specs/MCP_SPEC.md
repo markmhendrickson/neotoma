@@ -6,12 +6,14 @@
 
 This document defines the complete specification for Neotoma's Model Context Protocol (MCP) actions. It provides authoritative schemas, error handling, consistency guarantees, and determinism requirements for all MCP actions that AI agents use to interact with Neotoma's State Layer.
 
+**Registry authority:** The MCP server registers exactly the tool names in `NEOTOMA_TOOL_NAMES` in [`src/tool_definitions.ts`](../../src/tool_definitions.ts). When this document and that array disagree, update this spec (or file a doc bug); runtime behavior follows the shipped server and OpenAPI for mapped operations.
+
 ## Scope
 
 This document covers:
 
-- Complete catalog of MCP actions (18 MVP actions)
-- Request/response schemas for each action
+- Complete catalog of MCP actions (every name in `NEOTOMA_TOOL_NAMES`; currently 55 tools)
+- Request/response schemas for each action (detailed §3 blocks for the core surface; §3.30 summarizes extensions with OpenAPI as contract authority)
 - Error envelopes and error codes
 - Consistency guarantees per action
 - Determinism requirements
@@ -19,8 +21,8 @@ This document covers:
 
 This document does NOT cover:
 
-- MCP protocol details (see MCP SDK docs)
-- Implementation internals (see `src/server.ts`)
+- General MCP protocol mechanics (see MCP SDK docs). **§ 1.1** documents one Neotoma-specific **`initialize`** requirement for client discovery.
+- Other implementation internals (see `src/server.ts`)
 - Database schema (see `docs/subsystems/schema.md`)
 
 ## 1. MCP Architecture in Neotoma
@@ -52,6 +54,12 @@ flowchart LR
 - All requests validated at MCP layer
 - All responses structured and typed
 - All errors use ErrorEnvelope
+
+### 1.1 Client discovery (`initialize` capabilities)
+
+Neotoma’s MCP `initialize` result **must** advertise the same **server capability objects** registered on the underlying MCP `Server` instance (notably `tools: { listChanged: true }` together with `resources`). Some hosts (including Cursor) use the **`initialize` capability block** for MCP UI and tool discovery; returning a bare `tools: {}` there can hide tools even when `tools/list` would succeed.
+
+Implementation: `NEOTOMA_MCP_DECLARED_CAPABILITIES` in `src/server.ts` is spread into both authenticated and unauthenticated `initialize` handlers so it stays aligned with the `Server` constructor. See `docs/developer/mcp_cursor_setup.md` (troubleshooting) and `docs/developer/mcp/proxy.md`.
 
 ## 2. Authentication
 
@@ -192,16 +200,18 @@ flowchart LR
 
 ## 3. Complete MCP Action Catalog
 
+Catalog tables below list **every** MCP tool name registered by the server (see `NEOTOMA_TOOL_NAMES` in `src/tool_definitions.ts`). **§3 *Action Specifications*** documents request/response shapes in depth for the original core tools through **`split_entity`**; tools without a dedicated §3 subsection are specified in **§3.30** and in **`openapi.yaml`** (for operations wired from OpenAPI).
+
 ### 2.1 Core [Storing](../vocabulary/canonical_terms.md#storing) Operations
 
 | Action  | Purpose                                                                                                                                                 | Consistency | Deterministic            |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------ |
 | `store` | **Unified** [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source) (unstructured and structured) | Strong      | Yes (content-hash based) |
 
-**Note:** `store` is the single unified action for all [source](../vocabulary/canonical_terms.md#source). It accepts either:
+**Note:** `store` is the single unified MCP action for all [source](../vocabulary/canonical_terms.md#source). Legacy MCP tool names `store_structured` and `store_unstructured` were removed; clients MUST use `store` only. It accepts either:
 
-- Unstructured: `{file_content, mime_type}` for unstructured [source](../vocabulary/canonical_terms.md#source) that needs [interpretation](../vocabulary/canonical_terms.md#interpretation)
-- Structured: `{entities: [{entity_type, ...}]}` for pre-structured [source](../vocabulary/canonical_terms.md#source)
+- Unstructured: `file_path` or (`file_content` + `mime_type`) so bytes land in the immutable **sources** table (content-addressed SHA-256 per user; response includes `source_id` / `content_hash`).
+- Structured: `{entities: [{entity_type, ...}]}` for agent- or tool-derived rows (chat-native writes keep `interpretation_id` null on observations unless you attach an `interpretation` block tied to a file [source](../vocabulary/canonical_terms.md#source)).
 
 ### 2.2 File Operations
 
@@ -222,6 +232,9 @@ flowchart LR
 | `retrieve_graph_neighborhood`   | [Retrieve](../vocabulary/canonical_terms.md#retrieving) complete graph context around node                                                                                                                                                   | Strong      | Yes           | MVP        |
 | `list_entity_types`             | List all available [entity types](../vocabulary/canonical_terms.md#entity-type) with schema information, optionally filtered by keyword                                                                                                      | Strong      | Yes           | MVP        |
 | `merge_entities`                | Merge duplicate [entities](../vocabulary/canonical_terms.md#entity)                                                                                                                                                                          | Strong      | Yes           | MVP        |
+| `split_entity`                  | Split a predicate-selected subset of observations out of an over-merged [entity](../vocabulary/canonical_terms.md#entity)                                                                                                                    | Strong      | Yes           | Available  |
+| `list_potential_duplicates`     | List candidate duplicate [entity](../vocabulary/canonical_terms.md#entity) pairs for an `entity_type` (read-only; never auto-merges; use `merge_entities` after human confirmation)                                                           | Strong      | Yes           | Available  |
+| `get_entity_type_counts`        | Return row counts by `entity_type` for the authenticated user (sorted descending). Use for cardinality; do **not** treat `list_entity_types` `field_count` as entity counts                                                                  | Strong      | Yes           | MVP        |
 
 ### 2.4 [Observation](../vocabulary/canonical_terms.md#observation) and [Relationship](../vocabulary/canonical_terms.md#relationship) Operations ([Retrieving](../vocabulary/canonical_terms.md#retrieving))
 
@@ -230,27 +243,40 @@ flowchart LR
 | `list_observations`         | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [observations](../vocabulary/canonical_terms.md#observation) for [entity](../vocabulary/canonical_terms.md#entity)                    | Strong      | Yes           | MVP        |
 | `retrieve_field_provenance` | [Retrieve](../vocabulary/canonical_terms.md#retrieving) field [provenance](../vocabulary/canonical_terms.md#provenance) chain to [source](../vocabulary/canonical_terms.md#source)            | Strong      | Yes           | MVP        |
 | `create_relationship`       | Create typed [relationship](../vocabulary/canonical_terms.md#relationship) between [entities](../vocabulary/canonical_terms.md#entity)                                                        | Strong      | Yes           | MVP        |
+| `create_relationships`      | Create multiple typed [relationships](../vocabulary/canonical_terms.md#relationship) between existing [entities](../vocabulary/canonical_terms.md#entity) in one batch                     | Strong      | Yes           | MVP        |
 | `list_relationships`        | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [entity](../vocabulary/canonical_terms.md#entity) [relationships](../vocabulary/canonical_terms.md#relationship)                      | Strong      | Yes           | MVP        |
 | `get_relationship_snapshot` | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [relationship](../vocabulary/canonical_terms.md#relationship) snapshot with [provenance](../vocabulary/canonical_terms.md#provenance) | Strong      | Yes           | MVP        |
 | `list_timeline_events`      | [Retrieve](../vocabulary/canonical_terms.md#retrieving) timeline [events](../vocabulary/canonical_terms.md#event) with filters                                                                | Strong      | Yes           | MVP        |
 
 **Note:** These actions enable AI agents to work with [entities](../vocabulary/canonical_terms.md#entity), [observations](../vocabulary/canonical_terms.md#observation), and [entity snapshots](../vocabulary/canonical_terms.md#entity-snapshot), the core of Neotoma's three-layer truth model. See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
 
+### 2.4.1 Soft delete and restoration
+
+| Action                 | Purpose                                                                                                                                     | Consistency | Deterministic | MVP Status |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| `delete_entity`        | Soft-delete an [entity](../vocabulary/canonical_terms.md#entity) via deletion [observation](../vocabulary/canonical_terms.md#observation) (excluded from active snapshots; auditable) | Strong      | Yes           | Available  |
+| `delete_relationship`  | Soft-delete a typed edge between two entities (same semantics as entity delete)                                                             | Strong      | Yes           | Available  |
+| `restore_entity`       | Restore a soft-deleted entity via restoration observation (priority overrides delete)                                                       | Strong      | Yes           | Available  |
+| `restore_relationship` | Restore a soft-deleted relationship                                                                                                         | Strong      | Yes           | Available  |
+
+Request/response detail: §3.24–§3.27.
+
 ### 2.5 Authentication Operations
 
 | Action                   | Purpose                                                   | Consistency | Deterministic | MVP Status |
 | ------------------------ | --------------------------------------------------------- | ----------- | ------------- | ---------- |
 | `get_authenticated_user` | Get the authenticated user ID for the current MCP session | Strong      | Yes           | MVP        |
+| `get_session_identity`   | Resolve attribution tier (AAuth / clientInfo), anonymous-write policy, and trusted-write eligibility; read-only preflight | Strong      | Yes           | MVP        |
 
-**Note:** Returns the `user_id` that is automatically used for all authenticated actions. This is useful for debugging, logging, or when you need to explicitly reference the authenticated user.
+**Note:** `get_authenticated_user` returns the `user_id` that is automatically used for all authenticated actions. `get_session_identity` is the contract preflight for agent identity and write gating; see [`docs/subsystems/agent_attribution_integration.md`](../subsystems/agent_attribution_integration.md).
 
 ### 2.5.1 Advisory / Update Check
 
 | Action             | Purpose                                                                                 | Consistency              | Deterministic | MVP Status |
 | ------------------ | --------------------------------------------------------------------------------------- | ------------------------ | ------------- | ---------- |
-| `npm_check_update` | Check if a newer npm package version is available; returns message and suggestedCommand | N/A (read-only registry) | Yes           | MVP        |
+| `npm_check_update` | Check if a newer npm package version is available; returns message, suggestedCommand, optional release_url and release-note excerpts when `include_release_notes` is true | N/A (read-only registry) | Yes           | MVP        |
 
-**Note:** No side effects. Agents can call at session start and, if `updateAvailable` is true, prompt the user to upgrade.
+**Note:** No side effects. Agents can call at session start and, if `updateAvailable` is true, prompt the user to upgrade. Pass `include_release_notes: true` for best-effort upgrade context (npm + optional GitHub release body).
 
 ### 2.6 Correction and Parsing Operations
 
@@ -269,8 +295,8 @@ The unified `store` action handles all [source](../vocabulary/canonical_terms.md
 
 Choose the storage path based on **where the data came from**, not only on what format you have. This keeps provenance correct (artifact vs agent-derived) and avoids double interpretation of files.
 
-- **Conversation-sourced or tool-sourced:** Data from what the user said in chat, or from another MCP/tool (e.g. email, calendar) where the agent is extracting entities. Use the **structured** path: `store` or `store_structured` with an `entities` array. Omit `original_filename`.
-- **File-sourced or resource-sourced:** User attached a file, or the agent has a file/blob to preserve as an artifact. Use the **unstructured** path: `store` or `store_unstructured` with `file_content`+`mime_type` or `file_path` to preserve the raw artifact. If you also need entities from that file, parse/extract first and send those entities in the same combined request.
+- **Conversation-sourced or tool-sourced:** Data from what the user said in chat, or from another MCP/tool (e.g. email, calendar) where the agent is extracting entities. Use the **structured** path: `store` with an `entities` array. Omit `original_filename`.
+- **File-sourced or resource-sourced:** User attached a file, or the agent has a file/blob to preserve as an artifact. Use `store` with `file_content`+`mime_type` or `file_path` so the raw bytes become a **sources** row. If you also need entities from that file, parse/extract client-side (or use `parse_file` / vision) and send those entities in the same combined `store` request; optionally include an `interpretation` block so observations link to both `source_id` and `interpretation_id` per [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 
 **For Unstructured [Source](../vocabulary/canonical_terms.md#source):**
 
@@ -283,9 +309,12 @@ Choose the storage path based on **where the data came from**, not only on what 
 }
 ```
 
-**IMPORTANT:** Agents SHOULD extract entities from readable files before storing when structured data is needed. Use `parse_file` for PDFs, read text/CSV/JSON/Markdown directly, and use vision directly for images. If parsing yields nothing usable, store the raw file only.
+**IMPORTANT — two provenance modes for file-backed facts:**
 
-Flow: parse/read file (agent-side) → extract entities if needed → [Store](../vocabulary/canonical_terms.md#storing) raw file and optional entities → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing for structured entities → [Observations](../vocabulary/canonical_terms.md#observation)
+1. **Agent-side extraction (default for chat recipes):** Read/parse the file (`parse_file` for PDFs, direct read for text/CSV/JSON/Markdown, vision for images), build `entities`, then call `store` with those entities. Optionally include the same `file_path` / `file_content`+`mime_type` in the same request so the raw artifact is also a **sources** row and you add an `interpretation` block when you want observations tied to that extraction run (see interpretations doc). If parsing yields nothing usable, call `store` file-only.
+2. **Server-side interpretation:** When you want Neotoma to record an interpretation pipeline against a stored **source**, use `store` with file bytes plus `interpretation: { source_ref: "unstructured", interpretation_config: … }` (or follow up with `create_interpretation` for an existing `source_id`). Do not confuse “agent read the file in chat” (no server interpretation unless you request it) with “server interpretation job” (explicit `interpretation` / `create_interpretation`).
+
+Flow (typical): parse/read file (agent-side when needed) → single `store` (file leg + optional entities + optional `interpretation`) → schema projection → [Observations](../vocabulary/canonical_terms.md#observation)
 
 **For Structured [Source](../vocabulary/canonical_terms.md#source):**
 
@@ -336,7 +365,7 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
 2. **Conversation- or tool-sourced** (what the user said or structured data from another MCP) → Use `store` with `entities` array containing `entity_type`. Omit `original_filename`.
 3. **Turn with both extracted entities and attachment** → Use one `store` call containing both `entities` and file input, then create `EMBEDS` using IDs from `response.structured` and `response.unstructured`.
 
-**Conversation and turn storage (restore-turns, idempotency_key):**  
+**Conversation and turn storage (restore-turns, idempotency_key):**
 When storing conversation and agent_message entities (iterative chat store), use a stable `conversation_id` (prefer host-provided: conversation_id, thread_id, or session_id from context; when host does not provide, use entity id from first turn's store if re-exposed, or a deterministic derivative; best-effort). For **idempotency_key** when storing each turn: include a **per-store unique** value so each store creates a new observation, e.g. `conversation-{conversation_id}-{turn_id}-{timestamp_ms}` or `conversation-{conversation_id}-{turn_id}-{uuid}`. Overwriting between branches is acceptable; current state is the snapshot (latest); users can query observation history (`list_observations`) to view historical turns or branches. The message entity MUST include a stable turn identity (e.g. `turn_key` or `id` = `conversation_id:turn_id`) so the same logical turn resolves to the same entity and multiple observations form history. Link message to conversation with relationship type **PART_OF** (message PART_OF conversation); link attachments with **EMBEDS**; for reverted turns optionally use **SUPERSEDES** (new message SUPERSEDES previous). See [docs/proposals/conversation_turn_identity_reverts_forks.md](../proposals/conversation_turn_identity_reverts_forks.md).
 
 **Important: Entity Type Determination**
@@ -387,6 +416,67 @@ This minimizes round-trips for common cases and keeps discovery for ambiguous or
 - Schema resolution: User-specific schema first, then fallback to global
 - Reconciliation: User-specific fields can be promoted to global schemas based on usage patterns
 
+### 2.7.1 Interpretation pipeline
+
+| Action                   | Purpose                                                                                                                                                    | Consistency | Deterministic | Status    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `create_interpretation`  | Attach a versioned interpretation run to an existing **source** from agent-extracted flat entities (observations link `source_id` + `interpretation_id`). Prefer unified `store` with an `interpretation` block when file + entities land in one request | Strong      | Yes           | Available |
+| `list_interpretations`   | List interpretation runs for the authenticated user, optionally filtered by `source_id`                                                                  | Strong      | Yes           | Available |
+
+See [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
+
+### 2.7.2 Diagnostics and activity
+
+| Action                   | Purpose                                                                                         | Consistency | Deterministic | Status    |
+| ------------------------ | ----------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `health_check_snapshots` | Detect stale entity snapshots (`observation_count` mismatch); optional automatic recompute      | Strong      | Yes           | Available |
+| `list_recent_changes`    | Recent activity across core tables (entities, sources, observations, interpretations, relationships, timeline_events), ordered by `activity_at` | Strong      | Yes           | Available |
+
+### 2.7.3 Guest entity submission
+
+| Action                         | Purpose                                                                                                                                                     | Consistency | Deterministic | Status    |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `submit_entity`                | Config-driven submission for `entity_type` with an active `submission_config` row (operator-seeded; repo does not seed defaults). May mint guest thread token | Strong      | Partial       | Available |
+| `add_entity_message`           | Append a `conversation_message` to the thread linked to a submitted entity                                                                                  | Strong      | Yes           | Available |
+| `get_entity_submission_status` | Read-back submitted entity (`retrieve_entity_snapshot` shape); optional `guest_access_token`                                                                | Strong      | Yes           | Available |
+| `list_entity_submissions`      | List entities of a type for the current user (thin wrapper over entity listing)                                                                             | Strong      | Yes           | Available |
+| `sync_entity_submissions`      | Sync external mirrors for submissions (`issue` delegates to GitHub issue sync; other types may no-op until providers exist)                                  | Strong      | Varies        | Available |
+
+### 2.7.4 Issues (operator + GitHub)
+
+| Action             | Purpose                                                                                                                                                                              | Consistency | Deterministic | Status    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | ------------- | --------- |
+| `submit_issue`     | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set. Requires at least one of `reporter_git_sha` or `reporter_app_version` (v0.12+).                           | Strong      | Partial       | Available |
+| `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                        | Strong      | Partial       | Available |
+| `get_issue_status` | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                           | Strong      | Yes           | Available |
+| `sync_issues`      | Bulk pull issues (and messages) from configured GitHub into local Neotoma                                                                                                           | Strong      | Partial       | Available |
+| `bulk_close_issues`| Close multiple `issue` entities in one call (operator/Inspector triage). HTTP twin: `POST /issues/bulk_close`.                                                                          | Strong      | Yes           | Available |
+| `bulk_remove_issues`| Soft-delete multiple `issue` entities (operator/Inspector triage clean-up) via `deleteEntity` observations; restore through `restore_entity`. HTTP twin: `POST /issues/bulk_remove`.   | Strong      | Yes           | Available |
+
+Canonical behavior: [`docs/subsystems/issues.md`](../subsystems/issues.md).
+
+### 2.7.5 Substrate event subscriptions
+
+| Action                    | Purpose                                                                                                              | Consistency | Deterministic | Status    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `subscribe`               | Create a bounded subscription (`entity_types`, `entity_ids`, and/or `event_types`; at least one required) for webhook or SSE delivery | Strong      | Yes           | Available |
+| `unsubscribe`             | Deactivate a subscription by `subscription_id`                                                                       | Strong      | Yes           | Available |
+| `list_subscriptions`      | List active subscriptions (secrets omitted)                                                                          | Strong      | Yes           | Available |
+| `get_subscription_status` | Snapshot one subscription by `subscription_id` (secret omitted)                                                    | Strong      | Yes           | Available |
+
+### 2.7.6 Cross-instance peers and sync
+
+| Action                  | Purpose                                                                                                   | Consistency | Deterministic | Status    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `add_peer`              | Register a peer for cross-instance sync; may return `shared_secret` when using shared-secret auth       | Strong      | Partial       | Available |
+| `remove_peer`           | Deactivate a peer configuration                                                                           | Strong      | Yes           | Available |
+| `list_peers`            | List configured peers (shared secrets redacted)                                                           | Strong      | Yes           | Available |
+| `get_peer_status`       | One peer snapshot plus remote health probe when configured                                                | Strong      | Partial       | Available |
+| `sync_peer`             | Bounded outbound/inbound observation sync vs. a peer                                                      | Strong      | Partial       | Available |
+| `resolve_sync_conflict` | Resolve replication conflicts (`prefer_local`, `prefer_remote`, `last_write_wins`, `source_priority`, …) | Strong      | Varies        | Available |
+
+See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md).
+
 ### 2.8 MCP Resources
 
 **Overview:** Neotoma MCP server exposes resources for browseable, read-only access to entities, timelines, and sources. Resources complement actions by enabling discovery and exploration patterns.
@@ -410,15 +500,15 @@ This minimizes round-trips for common cases and keeps discovery for ambiguous or
 | Entity Relationships     | `neotoma://entity/{entity_id}/relationships`  | All relationships for an entity (inbound and outbound)                         | No - requires entity ID                                                                |
 | All Relationships        | `neotoma://relationships`                     | All relationships regardless of type                                           | Yes - always available                                                                 |
 | Relationship Collections | `neotoma://relationships/{relationship_type}` | All relationships of a specific type (e.g., `neotoma://relationships/PART_OF`) | Yes - dynamically enumerated                                                           |
-| Timeline (Year)          | `neotoma://timeline/{year}`                   | All timeline events in a specific year (e.g., `neotoma://timeline/2024`)       | Yes - dynamically enumerated                                                           |
-| Timeline (Month)         | `neotoma://timeline/{year}-{month}`           | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`)   | Yes - dynamically enumerated                                                           |
+| Timeline (Year)          | `neotoma://timeline/{year}`                   | All timeline events in a specific year (e.g., `neotoma://timeline/2024`)       | No — valid for `read_resource` / templates; not listed in `list_resources`            |
+| Timeline (Month)         | `neotoma://timeline/{year}-{month}`           | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`)   | No — valid for `read_resource` / templates; not listed in `list_resources`            |
 | Source                   | `neotoma://source/{source_id}`                | Specific source with metadata                                                  | No - requires source ID                                                                |
 | Source Collection        | `neotoma://sources`                           | All sources                                                                    | Yes - always available                                                                 |
 
 **Resource Discovery:**
 
 - Use MCP `list_resources` to discover available resources dynamically
-- Resources are generated based on actual data (timeline years, relationship types available)
+- Resources are generated based on actual data (relationship types, etc.); timeline year/month URIs are not bulk-enumerated in `list_resources` (use `read_resource` or templates)
 - Use `list_resource_templates` to discover resource templates (e.g., `neotoma://entities/{entity_type}`)
 - Entity type discovery: Use `neotoma://entity_types` resource (enumerated) or `list_entity_types` action (for detailed schema information with keyword filtering)
 - User context is respected where applicable
@@ -566,7 +656,7 @@ Clients can subscribe to resource updates:
 | Query entities with filters     | Action: `retrieve_entities` (supports pagination, user filtering, entity_type filter) OR Resource with query params                |
 | Filter and paginate collections | Resource with query params: `neotoma://entities?limit=50&offset=100&user_id={uuid}`                                                |
 | Store new data                  | Action: `store` (resources are read-only)                                                                                          |
-| Create relationships            | Action: `create_relationship` (resources are read-only)                                                                            |
+| Create relationships            | Action: `create_relationship` or batched `create_relationships` (resources are read-only)                                        |
 | Correct entity fields           | Action: `correct` (resources are read-only)                                                                                        |
 | Subscribe to updates            | Resource subscriptions: `resources/subscribe`                                                                                      |
 
@@ -582,13 +672,11 @@ Clients can subscribe to resource updates:
 
 ## 3. Action Specifications
 
-**Contract authority:** OpenAPI is the source of truth for mapped tool schemas. MCP tool input schemas are derived from OpenAPI for tools that map to OpenAPI operations. MCP-only tools define schemas in `src/server.ts`.
+**Contract authority:** OpenAPI is the source of truth for mapped tool schemas. MCP tool input schemas are derived from OpenAPI for tools that map to OpenAPI operations. Tools whose bodies are assembled in `buildToolDefinitions` without an OpenAPI `operationId` still appear in `NEOTOMA_TOOL_NAMES` and are documented here at catalog level (§2) and summarized in §3.30; prefer aligning new tools with OpenAPI per [`docs/architecture/openapi_contract_flow.md`](../architecture/openapi_contract_flow.md).
 
 ### 3.1 `store` (Unified)
 
 **Purpose:** Unified [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source). Accepts unstructured (files) or structured (JSON with [entity types](../vocabulary/canonical_terms.md#entity-type)). Content-addressed storage with SHA-256 deduplication per user.
-
-**Atomic alternatives:** Prefer `store_structured` for structured entities and `store_unstructured` for raw files when you do not need the unified tool.
 
 **Combined Request Schema (both in one call):**
 
@@ -599,6 +687,9 @@ Clients can subscribe to resource updates:
   entities?: Array<Record<string, unknown>>;
   relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>;
   source_priority?: number;
+  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync";
+  source_peer_id?: string;
+  external_actor?: { kind: "github_user"; login: string; html_url?: string };
   file_content?: string;
   file_path?: string;
   mime_type?: string;
@@ -608,6 +699,14 @@ Clients can subscribe to resource updates:
 ```
 
 Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_type`) is required. Both structured and unstructured inputs may be present together.
+
+**Write-classification, sync, and external attribution (v0.12+):**
+
+- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` so classified writes beat unclassified legacy rows. Set this only when the writer is **not** an LLM summary — for sensor / state-machine / human / import / sync writes. Plain agent extraction omits the field and defaults to `llm_summary`.
+- `source_peer_id` stamps observations with the peer that produced them. Used for loop prevention on subscriptions whose `sync_peer_id` matches, and for the `Inspector → peers` audit view. Always pairs with `observation_source: "sync"`.
+- `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the *signing agent*, `external_actor` identifies the *human or account on whose behalf* the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
+
+See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) for `source_peer_id` / `observation_source: "sync"` semantics, and [`docs/subsystems/issues.md`](../subsystems/issues.md) `## Reporter provenance` for the `external_actor` usage on issue mirrors.
 
 **Combined Response Schema:**
 
@@ -683,6 +782,19 @@ The server handles all interpretation automatically. Agents should only pass the
     target_index: number;             // 0-based index into entities
   }>;                                 // One-call chat: [conversation, agent_message] + [{ PART_OF, source_index: 1, target_index: 0 }]
   source_priority?: number;           // Optional: Source priority (default: 100)
+  observation_source?:                 // Optional: classifies the KIND of write (v0.12+)
+    | "sensor"                         //   deterministic tool / telemetry emission
+    | "workflow_state"                 //   state machine transitions
+    | "llm_summary"                    //   LLM-authored content (default; omit for plain extraction)
+    | "human"                          //   direct human edit or acceptance
+    | "import"                         //   batch / ETL ingestion
+    | "sync";                          //   cross-instance peer replication (always pairs with source_peer_id)
+  source_peer_id?: string;             // Optional (v0.12+): peer_id of the producing instance for sync replays
+  external_actor?: {                   // Optional (v0.12+): upstream human / account behind a guest write
+    kind: "github_user";
+    login: string;
+    html_url?: string;
+  };
   provenance?: {
     source_refs?: string[];           // Optional: Immediate source IDs
     extracted_at: string;             // Required: ISO 8601 timestamp
@@ -1446,6 +1558,8 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Consistency:** Strong
 **Determinism:** Yes (same inputs → same [relationship](../vocabulary/canonical_terms.md#relationship) ID)
 
+**Batching:** Prefer `create_relationships` when inserting many independent edges after a `store` (same validation and cycle rules as single `create_relationship`; see §3.30 for registry pointer).
+
 **Related Documents:**
 
 - [`docs/subsystems/relationships.md`](../subsystems/relationships.md): [Relationship](../vocabulary/canonical_terms.md#relationship) patterns
@@ -1827,6 +1941,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   packageName: string;   // Required: npm package name (e.g. neotoma)
   currentVersion: string; // Required: version reported by the client
   distTag?: string;      // Optional: dist tag to check (default: latest)
+  include_release_notes?: boolean; // Optional: default false. When true, best-effort npm version doc + GitHub release excerpt
 }
 ```
 
@@ -1841,12 +1956,16 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   updateAvailable: boolean;
   message: string; // e.g. "New version available (x.y.z). Please upgrade before continuing." or "Registry unreachable."
   suggestedCommand: string | null; // e.g. "npm i -g neotoma@latest" when update available
+  release_url: string | null; // npmjs.com package version URL when latestVersion known; null if registry unreachable
+  release_notes_excerpt: string | null; // Truncated readme or GitHub release body when include_release_notes
+  breaking_changes_excerpt: string | null; // Parsed breaking section when present
+  enrichment_error: string | null; // Set when optional enrichment failed (registry version doc or GitHub)
 }
 ```
 
-**Behavior:** Queries the npm registry for the package dist-tags. Compares `currentVersion` with the requested tag (e.g. `latest`) using semver. On registry failure, returns `updateAvailable: false`, `latestVersion: null`, `message: "Registry unreachable."`, `suggestedCommand: null`. Results are cached in-memory for 10 minutes per package+tag.
+**Behavior:** Queries the npm registry for the package dist-tags. Compares `currentVersion` with the requested tag (e.g. `latest`) using semver. On registry failure, returns `updateAvailable: false`, `latestVersion: null`, `message: "Registry unreachable."`, `suggestedCommand: null`. When `latestVersion` is known, `release_url` points at the canonical npmjs.com version page. With `include_release_notes: true`, the server may fetch the per-version registry document and, when `repository` resolves to GitHub, the matching release tag body (optional `GITHUB_TOKEN` for rate limits); failures are non-fatal and reported via `enrichment_error`. Results are cached in-memory for 10 minutes per package+tag.
 
-**When to Use:** Agents can call this at session start to encourage users to upgrade. If `updateAvailable` is true, the agent may prompt the user and run `suggestedCommand` (e.g. via shell) with user consent.
+**When to Use:** Agents can call this at session start to encourage users to upgrade. If `updateAvailable` is true, the agent may prompt the user and run `suggestedCommand` (e.g. via shell) with user consent. Pass `include_release_notes: true` when the user should see upgrade context (truncated notes / breaking hints) without opening the browser.
 
 ### 3.24 `delete_entity`
 
@@ -1932,14 +2051,119 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 
 ```typescript
 {
-  user_id?: string;      // Optional: inferred from auth context
-  repair?: boolean;      // Optional: if true, recompute stale snapshots (default: false)
+  auto_fix?: boolean; // Optional: if true, recompute stale snapshots (default: false). OpenAPI field name; aligns with MCP tool input.
 }
 ```
 
 **Response:** List of stale snapshots found and any repairs performed.
 
 **Determinism:** Yes (read-only scan; repairs are deterministic recomputations)
+
+### 3.29 `split_entity`
+
+**Purpose:** Repair over-merged [entities](../vocabulary/canonical_terms.md#entity) by re-pointing a predicate-selected subset of one entity's [observations](../vocabulary/canonical_terms.md#observation) onto a new or pre-existing entity. This is the inverse of `merge_entities` and preserves the immutable observation-content guarantee: `fields`, `observed_at`, `source_id`, and `interpretation_id` are never modified.
+
+**Request Schema:**
+
+```typescript
+{
+  source_entity_id: string; // Required: over-merged entity to split from
+  predicate: {
+    observed_at_gte?: string; // Optional: ISO-8601 lower bound
+    source_id_in?: string[]; // Optional: match observations from these sources
+    observation_field_equals?: {
+      field: string; // Required when using this predicate form
+      value?: string; // Optional exact string comparison
+      value_starts_with?: string; // Optional string-prefix comparison
+    };
+  };
+  new_entity: {
+    entity_type: string; // Required
+    canonical_name: string; // Required for deterministic new ID derivation
+    target_entity_id?: string; // Optional: existing entity to receive observations
+  };
+  idempotency_key: string; // Required: replay-safe split key
+  reason?: string; // Optional: audit rationale
+  user_id?: string; // Optional: inferred from auth context
+}
+```
+
+At least one predicate form is required. The operation refuses predicates that match zero observations (no-op) or every observation (rename/merge case; use `correct` or `merge_entities` instead).
+
+**Response Schema:**
+
+```typescript
+{
+  split_id: string;
+  source_entity_id: string;
+  new_entity_id: string;
+  observations_moved: number;
+  split_at: string; // ISO 8601
+  replayed: boolean;
+}
+```
+
+**Behavior:**
+
+1. Resolve `(user_id, idempotency_key)`; replay identical requests with `replayed: true` and reject mismatched reuses with `ERR_IDEMPOTENCY_MISMATCH`.
+2. Validate the source entity exists and is not merged away.
+3. Select source observations matching the schema-agnostic predicate.
+4. Re-point matched observations' `entity_id` foreign key to `target_entity_id` or to a deterministic new entity ID derived from `(entity_type, canonical_name)`.
+5. Recompute snapshots for both source and target entities and insert an `entity_splits` audit row.
+
+Typed relationships remain bound to the source entity. Callers must rebuild appropriate edges onto the split target via `create_relationship` when needed.
+
+**Errors:**
+
+| Code | HTTP | Meaning | Retry? |
+| ---- | ---- | ------- | ------ |
+| `RESOURCE_NOT_FOUND` | 404 | Source entity does not exist for this user | No |
+| `VALIDATION_INVALID_FORMAT` | 400 | Source already merged, invalid predicate, predicate matched zero observations, or predicate matched every observation | No |
+| `ERR_IDEMPOTENCY_MISMATCH` | 400 | `idempotency_key` was reused with a different canonicalized predicate | No |
+
+**Consistency:** Strong (observations are rebound and snapshots recomputed synchronously)
+**Determinism:** Yes (same source, predicate, target identity, and idempotency key → same split result)
+
+**Related Documents:**
+
+- [`docs/subsystems/entity_merge.md`](../subsystems/entity_merge.md): Merge and split repair semantics
+
+### 3.30 Extended tools (registry parity)
+
+The following tools are first-class MCP actions (listed in §2 catalog tables and in `NEOTOMA_TOOL_NAMES`) but do not yet have a dedicated numbered subsection in §3.1–§3.29. **Request and response shapes:** use `openapi.yaml` for paths whose `operationId` matches the tool name (camelCase in OpenAPI, snake_case in MCP), or inspect the `inputSchema` object in `buildToolDefinitions` in `src/tool_definitions.ts` for tools defined only in code.
+
+| Tool | Mutation? | Primary doc / notes |
+| ---- | --------- | -------------------- |
+| `create_relationships` | Yes | Same edge semantics as `create_relationship`; accepts an array of `{ relationship_type, source_entity_id, target_entity_id, metadata? }`. Prefer batching when creating many edges after `store`. |
+| `list_potential_duplicates` | No | Parameters: `entity_type` (required), optional `threshold`, `limit`, `user_id`. |
+| `get_entity_type_counts` | No | Optional `user_id`; returns sorted counts map. |
+| `create_interpretation` | Yes | OpenAPI-backed; links new observations to existing `source_id`. |
+| `list_interpretations` | No | OpenAPI-backed; optional `source_id` filter. |
+| `get_session_identity` | No | No parameters; returns attribution envelope for MCP `initialize` / AAuth diagnostics. |
+| `list_recent_changes` | No | Pagination `limit` / `offset`. |
+| `submit_entity` | Yes | Requires active `submission_config` for `entity_type`; optional `initial_message`. |
+| `add_entity_message` | Yes | `entity_id` + `message`. |
+| `get_entity_submission_status` | No | `entity_id`, optional `guest_access_token`. |
+| `list_entity_submissions` | No | `entity_type`, optional `limit` / `offset`. |
+| `sync_entity_submissions` | Yes | Optional `entity_type` (defaults toward `issue` sync behavior). |
+| `submit_issue` | Yes | `title`, `body`, optional `labels`, `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Optional `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`, `reporter_patch_source_id`. |
+| `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted). |
+| `get_issue_status` | No | `entity_id`, optional `skip_sync`, `guest_access_token`. |
+| `sync_issues` | Yes | Optional `state`, `labels`, `since`. |
+| `bulk_close_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
+| `bulk_remove_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
+| `subscribe` | Yes | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI. |
+| `unsubscribe` | Yes | `subscription_id`. |
+| `list_subscriptions` | No | Lists active rows (secrets omitted). |
+| `get_subscription_status` | No | `subscription_id`. |
+| `add_peer` | Yes | OpenAPI `add_peer` body; see peer sync doc for env prerequisites (`NEOTOMA_PUBLIC_BASE_URL`, etc.). |
+| `remove_peer` | Yes | Path-style `peer_id` per OpenAPI `DELETE /peers/{peer_id}` (MCP tool wraps the same contract). |
+| `list_peers` | No | — |
+| `get_peer_status` | No | `peer_id`. |
+| `sync_peer` | Yes | Bounded fan-out; requires peer + public base URL configuration. |
+| `resolve_sync_conflict` | Yes | Strategy enum + entity/observation selectors per OpenAPI. |
+
+When adding or renaming an MCP tool, update **this catalog**, **`NEOTOMA_TOOL_NAMES`**, and the change-guardrails checklist in [`docs/architecture/change_guardrails_rules.mdc`](../architecture/change_guardrails_rules.mdc).
 
 ## 4. Error Envelope Standard
 

@@ -2,6 +2,7 @@ import { GitBranch, Eye, ShieldCheck, RotateCcw } from "lucide-react";
 import { ICP_PROFILES } from "../../site/site_data";
 import { IcpDetailPage } from "./IcpDetailPage";
 import type { IcpOutcomeCard } from "./IcpDetailPage";
+import { MdxSitePage } from "./MdxSitePage";
 
 const profile = ICP_PROFILES.find((p) => p.slug === "debugging-infrastructure")!;
 
@@ -56,9 +57,10 @@ const outcomes: IcpOutcomeCard[] = [
   },
 ];
 
-export function AiInfrastructureEngineersPage() {
+export function AiInfrastructureEngineersPageBody() {
   return (
     <IcpDetailPage
+      mdxShell
       profile={profile}
       openingHook={
         <p>
@@ -244,4 +246,8 @@ export function AiInfrastructureEngineersPage() {
       closingStatement="The tax is writing glue: checkpoint logic, custom diffing, state serialization. Neotoma removes that tax and gives you primitives to build on instead."
     />
   );
+}
+
+export function AiInfrastructureEngineersPage() {
+  return <MdxSitePage canonicalPath="/debugging-infrastructure" detailTitle={profile.shortName} />;
 }

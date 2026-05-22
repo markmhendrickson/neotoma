@@ -23,7 +23,7 @@
       "sequence": 0
     },
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-ext-tool-1-20260429",
         "entities": [

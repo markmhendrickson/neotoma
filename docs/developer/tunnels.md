@@ -35,7 +35,7 @@ Use a tunnel when:
 
 - You want **remote MCP access** (Cursor or other IDEs connecting from another machine or over the internet)
 - You need **HTTPS** for OAuth or discovery (e.g. Cursor Connect)
-- You are testing **production-like** behavior with a local server (e.g. `watch:prod:tunnel`)
+- You are testing **production-like** behavior with a local server (e.g. `dev:server:prod:tunnel`)
 
 Do not use a tunnel when:
 
@@ -56,6 +56,28 @@ Do not use a tunnel when:
 - **Encryption on:** When `NEOTOMA_ENCRYPTION_ENABLED=true`, only the key-derived MCP token is accepted (`neotoma auth mcp-token`); OAuth is disabled.
 
 **Summary:** Tunnel traffic must always authenticate. OAuth is key-gated; non-key users should use `NEOTOMA_BEARER_TOKEN`.
+
+**Caller authentication for cloud-fronted topologies (Vercel, CDN edge, Cloudflare Access):**
+
+When a cloud service (Vercel, a CDN, Cloudflare Access) sits in front of cloudflared, the request that reaches Neotoma carries `x-forwarded-for` with the cloud egress IP — not a loopback address. This matters because:
+
+- `NEOTOMA_TRUST_PROD_LOOPBACK=1` only applies when XFF is absent or all-loopback addresses. A non-loopback XFF entry disqualifies loopback-trust even with that variable set.
+- Callers in this topology — a Vercel app hitting `api.yourdomain.com`, a CDN-fronted webhook, etc. — will receive `401 AUTH_REQUIRED` unless they send a `Bearer` token.
+
+**The fix:** every caller behind a cloud proxy must send `Authorization: Bearer <token>`:
+
+1. Generate the token on the host machine:
+   ```bash
+   neotoma auth mcp-token   # requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC
+   ```
+2. Set `NEOTOMA_BEARER_TOKEN` in the caller's environment (e.g. `vercel env add NEOTOMA_BEARER_TOKEN production`) with the output from step 1.
+3. Have the caller include `Authorization: Bearer ${NEOTOMA_BEARER_TOKEN}` on every Neotoma request.
+
+To verify which XFF IP your tunnel topology actually injects, start the server and make one request through the tunnel. Neotoma logs to stderr:
+```
+[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): 13.219.225.56. Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses.
+```
+If you want loopback-trust (rather than bearer auth) for these callers, set `NEOTOMA_TRUSTED_PROXY_IPS` to that IP or CIDR. `NEOTOMA_TRUST_PROD_LOOPBACK=1` and `NEOTOMA_TRUSTED_PROXY_IPS` are independent and can coexist.
 
 **Local OAuth over a public tunnel:** With encryption off, OAuth still uses a built-in dev account **after** key-auth preflight succeeds. When the server is reached **via a tunnel** (non-local Host), it requires **explicit approval** (an "Approve this connection" page) before completing OAuth, and it only accepts **allowlisted redirect URIs** (e.g. `cursor://`, `http://localhost`, `http://127.0.0.1`) so the authorization code cannot be sent to an arbitrary third-party site. If users cannot complete key-authenticated OAuth, use bearer token access:
 
@@ -91,13 +113,13 @@ NEOTOMA_TUNNEL_PROVIDER=ngrok        # use ngrok
 | Script                 | Port | What runs                          | Use case                          |
 |------------------------|------|------------------------------------|-----------------------------------|
 | `npm run tunnel:https` | 3080 | Tunnel only                        | Server already running elsewhere  |
-| `npm run watch:dev:tunnel` / `npm run dev:api` | 3080 | Tunnel + API (dev)                 | Dev + remote MCP                 |
-| `npm run watch:server+api` | 3080 | Tunnel + API + `tsc --watch`       | Dev + tunnel + rebuild            |
-| `npm run watch:prod:tunnel` | 3180 | Tunnel + API + `tsc --watch` (prod) | Prod env + remote MCP             |
+| `npm run dev:server:tunnel` | 3080 | Tunnel + HTTP stack (dev)                 | Dev + remote MCP                 |
+| `npm run dev:server:tunnel:types` | 3080 | Tunnel + HTTP stack + `tsc --watch`       | Dev + tunnel + rebuild            |
+| `npm run dev:server:prod:tunnel` | 3180 | Tunnel + HTTP stack + `tsc --watch` (prod) | Prod env + remote MCP             |
 
 Port is controlled by `NEOTOMA_HTTP_PORT` or `HTTP_PORT` (default 3080 for dev, 3180 for prod scripts). The tunnel forwards HTTPS to `http://localhost:${HTTP_PORT}`. Prefer `NEOTOMA_HTTP_PORT` when running Neotoma as MCP inside a host workspace to avoid port conflicts.
 
-**Combined commands** (e.g. `dev:api`, `watch:prod:tunnel`) start both tunnel and server in one terminal; the tunnel script writes the URL to `/tmp/ngrok-mcp-url.txt` and the server reads it for auto-discovery or explicit `NEOTOMA_HOST_URL`. Ctrl+C stops both.
+**Combined commands** (e.g. `dev:server:tunnel`, `dev:server:prod:tunnel`) start both tunnel and server in one terminal; the tunnel script writes the URL to `/tmp/ngrok-mcp-url.txt` and the server reads it for auto-discovery or explicit `NEOTOMA_HOST_URL`. Ctrl+C stops both.
 
 **CLI:** To start the API with a tunnel from the Neotoma CLI: `neotoma api start --background --env dev --tunnel` (or `--env prod --tunnel`). See [cli_reference.md](cli_reference.md).
 
@@ -209,7 +231,7 @@ tail -f /tmp/ngrok.log
 3. `http://localhost:${httpPort}` (fallback)
 
 **This means:**
-- Combined scripts (`dev:api`, `watch:prod:tunnel`) work without manual URL configuration
+- Combined scripts (`dev:server:tunnel`, `dev:server:prod:tunnel`) work without manual URL configuration
 - Starting tunnel first, then server separately works automatically
 - No `.env` changes needed for most tunnel use cases
 
@@ -219,24 +241,24 @@ tail -f /tmp/ngrok.log
 
 ## Configuration After Tunnel Starts
 
-1. **Tunnel URL**  
+1. **Tunnel URL**
    From script output or `cat /tmp/ngrok-mcp-url.txt`.
 
-2. **Server base URL**  
-   **Auto-discovery (no action needed):** Combined scripts (`dev:api`, `watch:prod:tunnel`) write the tunnel URL to a file; the server auto-discovers from `/tmp/ngrok-mcp-url.txt`. If you start server separately, it reads that file on startup.  
+2. **Server base URL**
+   **Auto-discovery (no action needed):** Combined scripts (`dev:server:tunnel`, `dev:server:prod:tunnel`) write the tunnel URL to a file; the server auto-discovers from `/tmp/ngrok-mcp-url.txt`. If you start server separately, it reads that file on startup.
    **Manual:** Set `NEOTOMA_HOST_URL` to the tunnel URL and restart the server.
 
-3. **Cursor / MCP client**  
+3. **Cursor / MCP client**
    Use `https://<tunnel-url>/mcp` in `.cursor/mcp.json` or the Neotoma UI "Add to Cursor" flow.
 
-4. **Optional**  
+4. **Optional**
    Visit the tunnel URL in a browser once; ngrok free tier may require accepting the "Visit Site" page.
 
 ---
 
 ## Stopping the Tunnel
 
-- **Combined command (e.g. dev:api, watch:prod:tunnel):** Ctrl+C in the terminal stops both tunnel and server.
+- **Combined command (e.g. `dev:server:tunnel`, `dev:server:prod:tunnel`):** Ctrl+C in the terminal stops both tunnel and server.
 - **Tunnel-only (`tunnel:https`):** Ctrl+C in the tunnel terminal.
 - **Manual kill (either provider):**
   ```bash

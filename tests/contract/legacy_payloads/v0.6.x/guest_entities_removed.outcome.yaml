@@ -1,0 +1,5 @@
+endpoint: "GET /guest/entities/ent_removed"
+outcome: rejected
+notes: |
+  The v0.6 guest entity read URL is intentionally removed. Use
+  GET /entities/{id}?access_token=... instead.

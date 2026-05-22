@@ -27,7 +27,7 @@ print_error() {
 adapt_mdc_for_claude() {
     local source_file="$1"
     local source_path="$2"
-    
+
     # Read file, strip Cursor copy-header, adapt references
     # Extract frontmatter if present (between first --- and second ---)
     if head -1 "$source_file" | grep -q "^---$"; then
@@ -91,10 +91,10 @@ adapt_command_to_skill() {
     local source_file="$1"
     local source_path="$2"
     local skill_name="$3"
-    
+
     # Extract description from first markdown header
     local description=$(grep -m1 "^# " "$source_file" | sed 's/^# //')
-    
+
     # Output skill frontmatter
     echo "---"
     echo "name: $skill_name"
@@ -105,7 +105,7 @@ adapt_command_to_skill() {
     echo ""
     echo "<!-- Source: $source_path -->"
     echo ""
-    
+
     # Output command content, strip Cursor copy-header if present, adapt references
     grep -v "^<!--" "$source_file" | \
         grep -v "^⚠️" | \
@@ -201,7 +201,7 @@ for rule_file in "$RULES_DIR"/*.mdc "$RULES_DIR"/*.md; do
     if [ -f "$rule_file" ]; then
         rule_name=$(basename "$rule_file")
         base_name="${rule_name%.*}"
-        
+
         # Skip Cursor-specific rules
         skip=false
         for skip_pattern in "${SKIP_RULES[@]}"; do
@@ -210,21 +210,21 @@ for rule_file in "$RULES_DIR"/*.mdc "$RULES_DIR"/*.md; do
                 break
             fi
         done
-        
+
         if [ "$skip" = true ]; then
             print_info "  ⊘ Skipped Cursor-specific: $rule_name"
             continue
         fi
-        
+
         # Prefer .mdc over .md if both exist
         if [[ "$rule_name" == *.md ]] && [ -f "$RULES_DIR/${base_name}.mdc" ]; then
             continue
         fi
-        
+
         # Always output as .md for Claude Code
         target_name="${base_name}.md"
         target_file=".claude/rules/$target_name"
-        
+
         adapt_mdc_for_claude "$rule_file" "$rule_file" > "$target_file"
         print_info "  ✓ Adapted $rule_name → $target_name"
         RULES_COPIED=$((RULES_COPIED + 1))
@@ -296,11 +296,11 @@ if [ -d "docs" ]; then
         rel_path="${rule_file#docs/}"
         base_name=$(basename "$rule_file")
         base_name_no_ext="${base_name%.*}"
-        
+
         # Convert to .md for Claude
         target_name="${base_name_no_ext}.md"
         target_file=".claude/rules/$target_name"
-        
+
         # Skip if Cursor-specific
         skip=false
         for skip_pattern in "${SKIP_RULES[@]}"; do
@@ -309,12 +309,12 @@ if [ -d "docs" ]; then
                 break
             fi
         done
-        
+
         if [ "$skip" = true ]; then
             print_info "  ⊘ Skipped Cursor-specific: $base_name"
             continue
         fi
-        
+
         adapt_mdc_for_claude "$rule_file" "$rule_file" > "$target_file"
         print_info "  ✓ Adapted $base_name → $target_name"
         REPO_RULES_COPIED=$((REPO_RULES_COPIED + 1))
@@ -355,7 +355,7 @@ cat > .claude/CLAUDE.md << 'EOF'
 2. **Foundation documents** from `docs/foundation/` in this order:
    - `core_identity.md` — What Neotoma is and is not (State Layer scope)
    - `philosophy.md` — Core principles and architectural invariants
-   - `layered_architecture.md` — State Layer, Strategy Layer, Execution Layer
+   - `layered_architecture.md` — State Layer (Neotoma) and Operational Layer(s) above it
    - `product_principles.md` — Product design principles
    - `agent_instructions_rules.mdc` — Repository-wide agent instructions and validation checklist
 3. **Task-specific docs** as indicated by the index (e.g. subsystems, architecture, testing)

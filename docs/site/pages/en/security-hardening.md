@@ -1,0 +1,149 @@
+---
+title: Security hardening
+category: developer_reference
+subcategory: inspector
+locale: en
+nav_group: reference
+nav_order: 63
+page_title: Security hardening
+path: /security-hardening
+shell: detail
+translation_status: canonical
+---
+
+# Security hardening
+
+Operator-tunable hardening knobs introduced or sharpened in v0.12.0. These are the *runtime* security surface that static gates cannot exhaustively cover from source diffs alone — they are owned by the operator running the instance, not by code review.
+
+Use this reference when:
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Standing up a hosted / multi-tenant Neotoma deployment.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Auditing whether a self-hosted instance is in a defensible default state.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Investigating an alert that touches loopback trust, OAuth bearers, guest tokens, or peer-sync envelopes.
+  </li>
+</ul>
+
+## Loopback rewrite and trust
+
+Neotoma classifies inbound requests as `loopback` only when the underlying TCP socket is on `127.0.0.1` / `::1`. `isLocalRequest` (in `src/utils/local_request.ts`) is the single source of truth — it walks the socket peer address, not the `Host` header, and is used by both the HTTP API and the Inspector to gate developer-only surfaces.
+
+- `NEOTOMA_TRUST_PROD_LOOPBACK=1` — opt-in escape hatch for production instances that need to expose loopback-only routes to a same-host reverse proxy. Defaults off. When unset, prod runs refuse loopback-tagged surfaces from any caller.
+
+## Gate stack (G1–G5)
+
+The five operator-visible gates wrap every write path:
+
+<TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+  <table className="w-full text-[14px] leading-6 border-collapse md:rounded-lg md:overflow-hidden md:border md:border-border">
+    <thead>
+      <tr className="border-b border-border">
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted w-[18ch]">Gate</th>
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">G1 — Bearer scope</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Validates the <code>Authorization</code> bearer token (or AAuth signature) against the requested action's scope.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">G2 — Subject</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Resolves the user, agent, and (when present) <code>external_actor</code> triple from the bearer or AAuth thumbprint.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">G3 — Loopback</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Applies <code>isLocalRequest</code> + <code>NEOTOMA_TRUST_PROD_LOOPBACK</code> for surfaces marked <code>loopback-only</code>.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">G4 — Rate limit</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Per-key throttle keyed by AAuth thumbprint &gt; hashed guest token &gt; IP.</td>
+      </tr>
+      <tr className="hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top font-medium text-foreground">G5 — Schema / payload</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Schema validation and <code>ERR_STORE_RESOLUTION_FAILED</code> repair hints for malformed payloads.</td>
+      </tr>
+    </tbody>
+  </table>
+</TableScrollWrapper>
+
+## OAuth Bearer enforcement on `/mcp`
+
+Pre-v0.12, an unrecognized OAuth `Bearer` token on `/mcp` could fall through to anonymous attribution if the token was syntactically a UUID. v0.12 closes that gap:
+
+- Unknown / expired bearers return **HTTP 401** with a JSON-RPC envelope (`code: -32001`, `data.error: "invalid_token"`) and a `WWW-Authenticate: Bearer realm="neotoma", resource_metadata="<url>"` header pointing at the OAuth protected-resource metadata.
+- UUID-shaped tokens passed as `access_token=` query params or `Authorization: Bearer …` no longer downgrade to anonymous on validation failure.
+- Regression coverage: `tests/subscriptions/subscription_guest_auth.test.ts` and `tests/unit/security_hardening.test.ts`.
+
+## MCP proxy: fail-closed mode
+
+`neotoma mcp proxy --aauth` (and operator-deployed AAuth-signed proxies) accept an opt-in flag that refuses unsigned downstream requests when AAuth signing or session preflight fails:
+
+- `MCP_PROXY_FAIL_CLOSED=1` (env) or `failClosed: true` (proxy options).
+- Default is fail-open (legacy behavior); set fail-closed in any hosted deployment so a misconfigured upstream cannot silently downgrade to anonymous writes.
+
+See [`docs/developer/mcp/proxy.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp/proxy.md) for the proxy options reference.
+
+## Guest write rate limit & token TTL
+
+<TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+  <table className="w-full text-[14px] leading-6 border-collapse md:rounded-lg md:overflow-hidden md:border md:border-border">
+    <thead>
+      <tr className="border-b border-border">
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Variable</th>
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted w-[12ch]">Default</th>
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN</code></td>
+        <td className="px-4 py-3 align-top"><code>30</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Per-key throttle on <code>/issues/submit</code>, <code>/issues/add_message</code>, <code>/subscribe</code>, <code>/unsubscribe</code>. Key precedence is AAuth thumbprint &gt; hashed guest token &gt; IP, so a shared NAT cannot starve another operator. Lower this in hosted multi-tenant environments.</td>
+      </tr>
+      <tr className="hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>NEOTOMA_GUEST_TOKEN_TTL_SECONDS</code></td>
+        <td className="px-4 py-3 align-top"><code>2592000</code> (30 days)</td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Lifetime of guest access tokens issued by <code>generateGuestAccessToken</code>. Tokens carry a <code>revoked_at</code> column and become invalid the moment that column is set, regardless of TTL. Generation errors surface (not swallowed) so operators see when persistence fails.</td>
+      </tr>
+    </tbody>
+  </table>
+</TableScrollWrapper>
+
+These knobs do **not** affect authenticated abuse: a `software` / `hardware` AAuth tier write is rate-limited under its own attribution row, not the guest bucket. They exist so a leaked guest token cannot DoS the issue / subscription surfaces.
+
+## Peer-sync hostname enforcement
+
+`NEOTOMA_HOSTED_MODE=1` enables an inbound check on `POST /sync/webhook`: any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address (RFC 1918, `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `fc00::/7`, `fe80::/10`, the `localhost` family) is rejected. Single-tenant self-hosted operators normally leave it unset; hosted control planes MUST set it. See [peer sync](/peer-sync) for the full inbound flow.
+
+## Inspector auth bypass advisory
+
+For the May 2026 Inspector auth-bypass that motivated the loopback rewrite, see [`docs/security/advisories/2026-05-11-inspector-auth-bypass.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/security/advisories/2026-05-11-inspector-auth-bypass.md). The advisory documents the trust model the v0.12 changes restored.
+
+## Operator checklist
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Set <code>NEOTOMA_HOSTED_MODE=1</code> on hosted / multi-tenant instances.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Set <code>MCP_PROXY_FAIL_CLOSED=1</code> on AAuth-signed hosted MCP proxies.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Lower <code>NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN</code> and <code>NEOTOMA_GUEST_TOKEN_TTL_SECONDS</code> from the single-tenant defaults if guests can reach you.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Audit any <code>NEOTOMA_TRUST_PROD_LOOPBACK=1</code> opt-in — it should only exist where a trusted same-host reverse proxy actually fronts the API.
+  </li>
+</ul>
+
+## Full reference
+
+[`SECURITY.md`](https://github.com/markmhendrickson/neotoma/blob/main/SECURITY.md) is the operator landing page. [`docs/security/threat_model.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/security/threat_model.md) covers the threat surface end to end, including the v0.12 operator hardening knobs section. [`docs/developer/mcp/proxy.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp/proxy.md) documents the AAuth proxy + fail-closed semantics.
+
+See [peer sync](/peer-sync), [issue reporting](/issue-reporting), [API reference](/api), and [MCP reference](/mcp).

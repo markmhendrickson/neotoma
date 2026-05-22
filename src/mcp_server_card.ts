@@ -37,15 +37,13 @@ function readPackageVersion(): string {
  */
 export function buildSmitheryServerCard(): Record<string, unknown> {
   const toolDescriptions = loadToolDescriptionsMap();
-  const tools = buildToolDefinitions(toolDescriptions, TIMELINE_WIDGET_RESOURCE_URI).map(
-    (def) => ({
-      name: def.name,
-      description: def.description,
-      inputSchema: def.inputSchema,
-      ...(def.annotations ? { annotations: def.annotations } : {}),
-      ...(def._meta ? { _meta: def._meta } : {}),
-    }),
-  );
+  const tools = buildToolDefinitions(toolDescriptions, TIMELINE_WIDGET_RESOURCE_URI).map((def) => ({
+    name: def.name,
+    description: def.description,
+    inputSchema: def.inputSchema,
+    ...(def.annotations ? { annotations: def.annotations } : {}),
+    ...(def._meta ? { _meta: def._meta } : {}),
+  }));
 
   const authentication: Record<string, unknown> = {
     required: true,

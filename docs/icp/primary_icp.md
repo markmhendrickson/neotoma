@@ -41,6 +41,9 @@ Cross-tool state is consistent; context persists across sessions; facts stored o
 
 Install for personal use, expand as the personal OS matures across life domains. B2B opportunities emerge downstream when personal builders bring Neotoma into team/professional contexts — not a separate ICP, but a secondary motion from personal adoption. See [B2B Pull-Through Mechanics](#b2b-pull-through-mechanics) for the operational sequence.
 
+**Variant — internal-tools / biz-tech engineer at model-lab or agentic-native company.** Same Tier 1 builder archetype, but the entry vector is the org rather than personal. They build internal agentic tools for legal, recruiting, AE, or exec teams using pre-release internal models, with cultural cover to ship internal infra fast. ACV is team-plan from day one.
+<!-- Source: ent_9c8c955b2fd4afbdad398d0c -->
+
 ---
 
 ## Operational Modes
@@ -152,6 +155,11 @@ The primary adoption path is personal (B2D). B2B revenue emerges downstream when
 - **Business case ammunition:** Templates or examples the individual champion can use to justify the purchase: "here's what state corruption cost us last month," "here's what we can't audit today"
 - **Timeline:** First B2B pull-through expected during Phase 2 (angel-funded growth, Dec 2026–mid 2027) as early individual adopters encounter team-scale problems
 
+### Engineering consultancy fan-out
+
+A higher-ACV variant of the agency-fleet operator pattern. A senior engineer-consultant adopts Neotoma personally, then pulls it into client engagements as a deterministic state substrate. SaaS license + support revenue follows client deployment. The consultant's portfolio creates fan-out across multiple clients from a single adoption event, compressing the personal-to-team timeline.
+<!-- Source: ent_81f79780f1fbe679af99da90 -->
+
 ### Revenue implication
 
 Team plans drive majority of revenue by M12 (see [`business_model.md`](../private/strategy/business_model.md)). The individual plan is the activation channel; the team plan is the revenue channel. Individual-to-team upgrade target: 20% within 2–3 months.
@@ -172,6 +180,8 @@ Not all adoption is pain-driven. Some triggers are aspirational — the ICP want
 - **Multi-agent coordination:** "I want Agent A's output to feed Agent B, but I can't guarantee Agent A wrote clean data." Schema constraints and provenance tracing make multi-agent pipelines trustworthy.
 - **Cross-tool unification:** "I want one source of truth across Claude, Cursor, and ChatGPT." MCP-based access turns fragmented tool-specific memory into a shared substrate.
 - **Scaling domains:** "I've been managing contacts manually; now I want to add financial data, health data, and project tracking without the system becoming a mess." Schema-bound entities make each new domain additive rather than chaotic.
+- **Local-LLM compatibility.** A privacy-first cohort (≥3 evaluators in 2 weeks) gates activation on the harness running Neotoma alongside Ollama, LM Studio, or comparable local-LLM stacks. Local-LLM support is a first-class activation precondition for this cohort, not an edge case.
+<!-- Source: ent_4f0db2d7f2c349900e4dac2c, ent_727fee4a94cfaea86880a0f1, ent_81f79780f1fbe679af99da90 -->
 
 ### External event triggers
 
@@ -181,6 +191,9 @@ Moments that create receptivity windows — the ICP didn't change, but the envir
 - **Viral agent memory failure posts:** An AI Twitter thread or blog post describing agent memory failures creates a "that's me" moment for latent ICP members.
 - **Competitor public failures:** A prominent failure of a fuzzy memory tool (data loss, hallucinated memories, privacy breach) makes the integrity-first pitch land harder.
 - **Peer adoption / social proof:** A respected builder posts a walkthrough of their Neotoma setup, or mentions it in a tools thread. For solo founders and indie hackers, peer validation is often the final push.
+- **First unattended cron / overnight agent run.** Forget-by-default users hit a forcing function the moment they need a process to act without them watching. Re-establishing context manually each run becomes untenable; Neotoma's provenance becomes the only mechanism that preserves the determinism guarantee they already value.
+<!-- Source: ent_727fee4a94cfaea86880a0f1 -->
+
 
 ### Scale threshold triggers
 
@@ -197,7 +210,11 @@ Structured paths from current tools to Neotoma, organized by what the ICP tried,
 
 | Currently using | Why it fails | Receptive to |
 |---|---|---|
-| **Platform memory** (Claude, ChatGPT) | Tool-specific, non-auditable, opaque, doesn't cross tool boundaries | Cross-tool state via MCP; transparency and inspectability |
+| **Claude Projects KB** | Per-project file uploads with 200K context; no cross-project state, no structured extraction, no versioning, no entity resolution, Claude.ai-only | Cross-tool structured state via MCP; schema-first entities with provenance; works in every MCP-connected tool, not just one |
+| **Claude chat memory** | RAG over past Claude.ai conversations; retrieval-based not state-based, no schema, no provenance, no write surface, Claude.ai-only | Deterministic composed state (not retrieval fragments); cross-tool; agents read and write structured entities |
+| **Claude Cowork memory** | CLAUDE.md + auto-learnings (200-line / 25KB cap); local-only, no structured queries, no entity resolution, no cross-tool sync, degrades at scale (Fulkerson failure mode) | Schema-constrained entities that scale without degradation; cross-tool access; temporal queries; no cap on structured state |
+| **Memory tool / homebrew** (API memory files, MEMORY.md, custom implementations) | Client-managed, per-app, no shared state across tools, no provenance, no versioning, maintenance burden grows with scale | All guarantees without building and maintaining it yourself; shared state across all MCP-connected tools |
+| **ChatGPT memory** | Auto-captured preferences within ChatGPT; opaque, non-auditable, ChatGPT-only, no structured schema, no cross-tool portability | Transparent, inspectable state with full provenance; cross-tool via MCP; user controls what's stored and how |
 | **Markdown / flat files** (CLAUDE.md, SOUL.md) | Doesn't scale; agents write Python scripts to manage files; no schema enforcement | Schema-constrained entities that scale without compensatory engineering |
 | **Notion / Airtable** | Fine for human editing; breaks when adding agent reviewers; insufficient hooks for inter-agent validation | MCP-native data layer purpose-built for agent read/write |
 | **JSON / CSV files** | Any real size triggers compensatory tooling; no versioning; last-write-wins | Append-only writes with versioning; no silent overwrites |
@@ -248,6 +265,9 @@ A person meeting **3+** is likely qualified; **5+** is strongly qualified.
 | D3 | **Building their own state layer as a product** | Won't adopt external dependency for core value prop |
 | D4 | **Requires zero-install, no-config onboarding** | Neotoma requires npm + CLI/MCP configuration |
 
+**Note on D3 — adjacent platform builders.** Identity vendors, agent-framework maintainers, and auth-protocol authors fall under D3 as disqualifiers for conversion, but they are partnership and integration targets, not anti-targets. Neotoma should compose under their primitives, not compete with their roadmaps.
+<!-- Source: ent_3f183584ebe4b89081cf9f75 -->
+
 **Soft disqualifiers** (3+ together indicate poor fit):
 
 | # | Criterion | Signal |
@@ -289,6 +309,12 @@ The [`/evaluate`](https://neotoma.io/evaluate) page is the canonical source for 
 **Capable DIY builders:** Technically strong individuals who build their own state infra for personal use (custom MCP + Postgres, homegrown validation layers). They validate the problem space strongly — often independently arriving at the same architectural conclusions (schema constraints, multi-agent review hooks, deterministic validation). But they prefer to own and control the full stack. They are later adopters, not early ones. The people who can build their own are not the ones who adopt first.
 
 **Thought-partner users:** Heavy AI users whose continuity needs are about context and voice, not deterministic state versioning. The human drives every turn; they are not running autonomous pipelines.
+
+**Forget-by-default LLM users:** Technically strong users who deliberately spin up fresh contexts to retain deterministic control over what the model knows. They have experienced the re-prompting tax but have re-framed it as a feature. They validate the integrity/provenance story strongly but are not pain-driven adopters. Reactivation trigger: when they begin running unattended or cross-session pipelines, the same determinism preference that motivates fresh-context discipline will motivate Neotoma adoption — because Neotoma is the only way to keep that determinism guarantee at scale.
+<!-- Source: ent_727fee4a94cfaea86880a0f1 -->
+
+**Autonomous-loop builders on raw provider SDKs:** Builders running fully custom agentic harnesses on raw OpenAI / Anthropic SDKs with self-managed in-loop dedup agents. They engineer around the state-drift problem by construction (structured data, in-loop quality control) and refuse external substrates due to supply-chain reflex. Treat as anti-adopter; predict marginal-case rather than central-case ICP.
+<!-- Source: ent_75b7d691cd12fb1524ef8b63 -->
 
 ---
 
@@ -415,6 +441,7 @@ What makes them tell someone else:
 | State integrity as differentiator | Evaluator agents independently identifying "state integrity, not retrieval quality" and "deterministic guarantees" as the differentiated layer; one described it as "CI/CD for agent state" |
 | Non-ICP self-selection | Platform builder who correctly said "I don't have the problem" (state management is their product); thought-partner user whose agent self-selected out |
 | ICP boundary (capable DIY) | Evaluator who validates the problem strongly but is mid-build on custom infra: "I see potential value but this isn't my biggest problem." |
+| Privacy-gated local-LLM waiters | Evaluator with strong infra fluency, home-server hosting personal data archive, running Ollama + Gemma/Qwen, postpones full Neotoma adoption until the local-LLM + MCP path is first-class. <!-- ent_4f0db2d7f2c349900e4dac2c --> |
 
 ---
 
@@ -424,6 +451,8 @@ Neotoma is not retrieval memory. Retrieval memory (RAG, vector DB, LangChain-sty
 
 - Retrieval memory → context lookup
 - Deterministic memory → state governance
+
+Neotoma sits as a state layer beneath your operational tooling — agents, pipelines, custom systems — without prescribing how they reason or act. Strategy artifacts (plans, decisions, rules, preferences) live in Neotoma as state; the act of strategizing happens in the operational layer above it.
 
 ---
 
@@ -459,6 +488,9 @@ Objections mapped to framing layers (core incentive, role transformation, tax re
 
 - *"This feels like a solution looking for a problem"* → Start from the failure mode: "What breaks when your agent forgets last week?" If the answer involves re-explaining context, debugging unreproducible behavior, or manually syncing state, the problem is real. If the answer is "nothing," this person is not the ICP.
 
+- *"I deliberately create fresh contexts so the model forgets — why would I want memory?"* → Because Neotoma is the opposite of fuzzy memory. Every observation is append-only, schema-bound, and inspectable. You don't lose the control you have when you start fresh — you gain a place where the things you do want to keep can't silently change underneath you, and where every decision the agent makes can be traced to the observation that produced it.
+<!-- Source: ent_727fee4a94cfaea86880a0f1 -->
+
 ---
 
 ## ICP Vocabulary Bridge
@@ -484,6 +516,8 @@ The ICP describes problems in everyday language. This table maps their vocabular
 | "it contradicted what I told it last week" | **Conflicting state** / undetected merge conflict | Observations disagree across sessions with no detection mechanism. |
 | "I can't tell if what it remembers is real" | **Missing provenance** / hallucinated memory | No audit trail connecting a referenced "fact" to an actual observation. |
 | "it remembered the what but not the why" | **Lossy compression** / summary degradation | Fuzzy memory flattens nuanced decisions into bare facts, stripping reasoning context. |
+| "the agent doing the work", "my orchestrator", "the pipeline", "my harness" | **Operational layer** | Anything above Neotoma that reads truth and writes results back as observations. Neotoma is the state layer; the operational layer is where reasoning, planning, and action happen. |
+| "the durable bit", "what I keep across runs", "my source of truth" | **State layer** (Neotoma) | The deterministic, versioned substrate the operational layer reads from and writes back to. |
 
 ---
 
@@ -572,6 +606,7 @@ Ordered by how quickly each data type delivers value.
 - [ ] ICP messaging includes role transformation (escaping → into) and interaction pattern shift
 - [ ] Content leads with felt experience before architectural description
 - [ ] Messaging connects chronic tax to acute crisis
+- [ ] Messaging distinguishes state layer (Neotoma) from operational layer (agents, pipelines, custom systems) — without prescribing pure cognition / pure effect
 - [ ] Non-ICP boundaries respected (including capable DIY builders)
 - [ ] Data priority tiers guide onboarding
 - [ ] Content distributed through identified watering holes (AI Twitter, Claude Code communities, indie hacker forums)

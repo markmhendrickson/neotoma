@@ -1,101 +1,88 @@
-# Advisory: Tenant Isolation Gap in Relationship Query Endpoints
+# Tenant isolation gap in relationship query endpoints (v0.14.0 fix)
 
-**Advisory ID:** 2026-05-21-relationship-endpoint-tenant-isolation  
-**Date:** 2026-05-21  
-**Severity:** Low (no multi-tenant deployments; see escalation condition below)  
-**Status:** Open — fix tracked in #365, #366
+- **Date disclosed:** 2026-05-21
+- **GHSA:** [GHSA-wrr4-782v-jhwh](https://github.com/markmhendrickson/neotoma/security/advisories/GHSA-wrr4-782v-jhwh)
+- **CVE:** _requested_
+- **Severity:** Low — authenticated cross-user data disclosure on two read endpoints. No known multi-tenant deployments exist; severity escalates to Medium the moment any instance is configured with two or more distinct user accounts.
+- **Affected:** `>= 0.13.0, < 0.14.0` (the gap exists in earlier versions but `/retrieve_graph_neighborhood` was first introduced in a form that exposed it at v0.13.0). Single-user deployments were not effectively at risk.
+- **Fixed in:** `0.14.0`
+- **Reporter:** internal security review.
+- **CWEs:** [CWE-639](https://cwe.mitre.org/data/definitions/639.html) (Authorization Bypass Through User-Controlled Key), [CWE-863](https://cwe.mitre.org/data/definitions/863.html) (Incorrect Authorization).
 
----
+## Summary
 
-## CVE Class
+Two query endpoints — `/list_relationships` and `/retrieve_graph_neighborhood` — accepted an authenticated request but did not constrain database queries to the authenticated user's records. An authenticated caller with a known entity ID, source ID, or relationship key belonging to another user could retrieve that user's relationship metadata and (via `/retrieve_graph_neighborhood`) the full graph neighborhood reachable from that node.
 
-Tenant isolation bypass on read endpoints. Two query endpoints apply authentication (confirming a valid session) but do not scope database queries to the authenticated user's data. Any authenticated user can read data belonging to other users on the same instance. Regression class: missing per-user filter on a protected route handler (same class as v0.11.1, different layer).
-
----
-
-## Affected Versions
-
-- v0.13.0
-
-Fix not yet released. Remediation tracked in #365 and #366.
-
----
-
-## Prerequisites
-
-1. A valid authentication token for the Neotoma instance (i.e., the attacker must hold a legitimate account on the instance)
-2. A known or guessable entity ID belonging to another user (~96 bits of entropy for hash-based IDs; brute-force is not practical)
-
-An unauthenticated caller cannot exploit this vulnerability. A caller authenticated as the target user's account cannot benefit (they already own the data). The gap is meaningful only when two or more distinct user accounts share one Neotoma instance.
-
----
+The regression class is the same as the v0.11.1 Inspector advisory at the system level (authentication succeeded but authorization scope was missing), but landed in a different layer: the auth middleware correctly resolved the user, the handlers correctly called `getAuthenticatedUserId` in spec — but the resolved `userId` was not propagated into the Supabase query filter, so every row matching the supplied `entity_id` / `node_id` was returned regardless of owner.
 
 ## Impact
 
-The affected endpoints return entity relationship metadata and graph neighborhood data without filtering to the requesting user's records. A caller with a valid session and a known entity ID belonging to a different user can retrieve:
+For affected deployments with two or more user accounts:
 
-- Relationship edges (type, weight, linked entity IDs)
-- Graph neighborhood data reachable from the known entity
+- `/list_relationships` returned relationship edges (type, weight, linked entity IDs) for any `entity_id` the caller knew, regardless of which user owned the entity
+- `/retrieve_graph_neighborhood` returned the full graph neighborhood reachable from any `node_id` the caller knew, including:
+  - The target entity record
+  - Relationship edges (one and two hops via `node_type=source`)
+  - Related entity records
+  - Observations and sources, if `include_observations` / `include_sources` were set
 
-Impact is bounded by:
-- Requiring a valid authentication credential
-- Requiring knowledge of the target entity ID (high-entropy, not enumerable via these endpoints)
-- No write capability exposed by this gap
+No write capability was exposed by this gap. The MCP-side handlers (`server.ts` `listRelationships` and `retrieveGraphNeighborhood`) had the same shape and the same gap as the HTTP-side handlers (`actions.ts`).
 
----
+Single-user deployments (the only kind known to exist at the time of disclosure) had no real-world impact: the only valid authenticated identity was the data owner.
 
-## Severity
+## Reproduction (sanitized)
 
-**Low** under current deployment conditions.
+Against an affected deployment with two user accounts (`alice`, `bob`) holding disjoint data:
 
-No multi-tenant deployments of Neotoma are known to exist. All current instances are single-user. The vulnerability has no practical impact when only one user account exists on an instance.
+```bash
+# alice authenticates
+curl -X POST https://example.tld/list_relationships \
+  -H "Authorization: Bearer $ALICE_BEARER" \
+  -d '{"entity_id":"<bob_entity_id>"}'
+```
 
-**Escalation condition:** Severity escalates to **Medium** the moment any instance is configured with two or more distinct user accounts. The fix (#365, #366) must be applied before any multi-tenant deployment.
+Returned the relationships connected to `bob_entity_id` even though they belonged to bob, not alice.
 
----
+## Root cause
 
-## Remediation
+The handlers' query construction in `src/actions.ts` and `src/server.ts` did not append `.eq("user_id", userId)` to the `relationship_snapshots`, `entities`, `observations`, `sources`, `entity_snapshots`, or `timeline_events` queries. The `getAuthenticatedUserId` resolution was either absent (in the HTTP handlers) or present but not propagated (in the MCP handlers).
 
-Tracked in:
-- **#365** — Add per-user scoping to `/list_relationships`
-- **#366** — Add per-user scoping to `/retrieve_graph_neighborhood`
+This is the second incarnation of "authentication is not authorization" in the codebase. The G3 auth-topology matrix correctly verifies that protected routes reject unauthenticated callers, but it did not have a row for cross-user data scoping — so the gap shipped past the gates.
 
-Fix approach (per #365 and #366):
-- Call `getAuthenticatedUserId` in both handlers (the canonical user-ID resolution path per `docs/subsystems/auth.md`)
-- Add `.eq("user_id", userId)` to all database queries in each handler
-- Validate entity ID inputs using `isNeotomaEntityId` before querying
-- Replace any `.or()` string interpolation with separate scoped `.eq()` calls
-- Extend `tests/security/auth_topology_matrix.test.ts` to cover cross-user read access on these endpoints
+## Fix
 
----
+In all four handlers (`/list_relationships` HTTP, `/retrieve_graph_neighborhood` HTTP, MCP `listRelationships`, MCP `retrieveGraphNeighborhood`):
 
-## Disclosure Timeline
+1. Resolve `userId` via `getAuthenticatedUserId(req, parsed.user_id)` (HTTP) or `this.getAuthenticatedUserId(parsed.user_id)` (MCP)
+2. Apply `.eq("user_id", userId)` to every query that touches `entities`, `relationship_snapshots`, `entity_snapshots`, `observations`, `sources`, or `timeline_events`
+3. The `.or()` clause for source/target entity matching is retained; the `user_id` filter is `AND`-ed with it
+
+Regression tests in `tests/security/tenant_isolation_matrix.test.ts` seed two users (each with an entity, a relationship_snapshot row, and an observation row) and assert that user A cannot retrieve user B's data through `/list_relationships`, `/retrieve_graph_neighborhood` (entity branch, including the `include_observations` sub-path), or `/retrieve_related_entities`. The `/retrieve_graph_neighborhood` `node_type: "source"` branch is fixed by the same scoping pattern but is not asserted in this matrix: that handler path queries a singular `source` table (a pre-existing dead-code path) and would produce a tautological assertion. Coverage of the source branch is gated on the singular→plural table rename tracked as a follow-up.
+
+## Operator action
+
+- Upgrade to `>= 0.14.0`.
+- No data migration required.
+- If the deployment had two or more user accounts at any point in `>= 0.13.0`, review access logs for `/list_relationships` and `/retrieve_graph_neighborhood` calls whose resolved user differs from the queried entity's owner.
+
+## Detection
+
+The `tenant_isolation_matrix.test.ts` suite added in v0.14.0 detects regressions of this class going forward. New query endpoints touching user-owned tables MUST add a row to the matrix per the change guardrails rule (see `docs/architecture/change_guardrails_rules.mdc` § MUST 5).
+
+## Gates that catch this regression class going forward
+
+- **G3 tenant isolation matrix** (`tests/security/tenant_isolation_matrix.test.ts`) — new in v0.14.0. Seeds two users and asserts cross-user reads are blocked on every authenticated query endpoint.
+- **Change guardrails rule MUST 5** — requires `.eq("user_id", userId)` on user-owned tables and a matrix row for new query endpoints.
+- **Pre-release adversarial checklist** — gains a "cross-tenant data access" category that must be walked through for every release containing new or modified read endpoints.
+
+## Timeline
 
 | Date | Event |
 |------|-------|
 | 2026-05-21 | Vulnerability identified during internal security review |
-| 2026-05-21 | GitHub issues #365 and #366 filed (sanitized; no attack vector details) |
-| 2026-05-21 | Advisory filed in `docs/security/advisories/` |
-| 2026-05-21 | GHSA-wrr4-782v-jhwh created (draft, private) |
-| TBD | Fix released in a future patch version |
-
----
-
-## Tracking Issues
-
-- **#365** — Fix `/list_relationships` tenant isolation
-- **#366** — Fix `/retrieve_graph_neighborhood` tenant isolation
-- **GHSA-wrr4-782v-jhwh** — GitHub Security Advisory (draft; full technical details)
-
----
-
-## Gate Gap
-
-The security gates that ran for v0.13.0 did not catch this class of vulnerability:
-
-- **Auth-matrix test**: Validates that routes require authentication; does not validate that authenticated queries are scoped to the requesting user.
-- **Manifest check**: Confirms route registration and auth-middleware presence; does not inspect query-level user filtering.
-- **`security:lint`**: Checks forwarded-for trust and local-dev shortcuts; does not analyze database query filter clauses.
-- **Manual checklist**: The pre-release adversarial walk-through did not include a cross-user data access category.
-
-Gate gap is tracked in **#372** — Extend security checklist and auth-matrix tests to cover per-user query scoping.
+| 2026-05-21 | GHSA-wrr4-782v-jhwh created (draft) |
+| 2026-05-21 | Internal advisory + practices.md filed in `docs/security/` |
+| 2026-05-21 | Issues #365, #366, #372 filed (sanitized; no attack vector details) |
+| 2026-05-21 | Fix PRs #376, #377, #378 merged to `dev` |
+| TBD | v0.14.0 released with fix |
+| TBD | GHSA published |

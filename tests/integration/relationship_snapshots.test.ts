@@ -95,6 +95,10 @@ describe("Relationship Snapshots Integration", () => {
       100,
     );
 
+    // Brief delay so the second observation gets a strictly later observed_at
+    // (last_write strategy picks the most recent by timestamp)
+    await new Promise((resolve) => setTimeout(resolve, 2));
+
     // Second source
     await createRelationshipObservations(
       [

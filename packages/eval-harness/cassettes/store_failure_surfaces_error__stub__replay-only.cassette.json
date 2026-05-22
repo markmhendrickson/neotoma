@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "Note that our next board meeting is June 15th at 2pm.\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation via store_structured. If storage fails after retrying, tell the user that storage failed. Do not silently skip.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation via the MCP store tool. If storage fails after retrying, tell the user that storage failed. Do not silently skip.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-fail-all-001-attempt-1",
         "entities": [
@@ -32,7 +32,7 @@
       "sequence": 0
     },
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-fail-all-001-attempt-2",
         "entities": [

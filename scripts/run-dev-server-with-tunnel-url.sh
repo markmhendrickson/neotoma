@@ -1,6 +1,6 @@
 #!/bin/bash
 # Waits for the tunnel script to write the ngrok URL, then runs the server with API_BASE_URL set.
-# Used by dev:server+api so the server automatically uses the tunnel URL (no .env change needed).
+# Used by dev:server:tunnel* so the server automatically uses the tunnel URL (no .env change needed).
 
 set -euo pipefail
 
@@ -13,4 +13,4 @@ if [ -s "$URL_FILE" ] && [ -z "${HOST_URL:-}" ] && [ -z "${API_BASE_URL:-}" ]; t
   _url=$(cat "$URL_FILE")
   export HOST_URL="$_url"
 fi
-exec node "$SCRIPT_DIR/run-dev-task.js" tsx watch src/actions.ts
+exec "$SCRIPT_DIR/run-neotoma-api-node-watch.sh"

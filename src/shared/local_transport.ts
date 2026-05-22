@@ -10,13 +10,14 @@ import type { paths } from "./openapi_types.js";
 
 type LocalTransportClient = ReturnType<typeof createClient<paths>>;
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 let localClientPromise: Promise<LocalTransportClient> | null = null;
 let localApiChild: ChildProcess | null = null;
 let localTransportKillHandler: (() => void) | null = null;
 
 function resolveProjectRoot(): string {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
   return __dirname.includes("/dist/") || __dirname.endsWith("/dist/shared")
     ? join(__dirname, "..", "..")
     : join(__dirname, "..", "..");
@@ -58,11 +59,13 @@ function readPreferredEnvFromCliConfig(): "production" | "development" | null {
  *   2. NEOTOMA_SESSION_ENV ("prod" | "dev") — set by `--env` flag in runCli
  *   3. NEOTOMA_CLI_PREFERRED_ENV ("prod" | "dev") — inherited from parent session
  *   4. preferred_env in ~/.config/neotoma/config.json — sticky across invocations
- *   5. Port inference from baseUrl (3180 → production, else development) — last resort
+ *   5a. Build-origin heuristic: dist/ builds are npm-installed end-user installs → production
+ *   5b. Port inference from baseUrl (3180 → production, else development) — source-checkout fallback
  *
  * Exported for unit tests. Do NOT call port inference first — that is the bug this
  * function exists to prevent (silent dev/prod DB file split based on whichever API
- * happens to be running).
+ * happens to be running). dist/ builds default to production because an end user who
+ * installed Neotoma via npm should never silently hit the development DB.
  */
 export function resolveLocalTransportEnv(baseUrl?: string): "production" | "development" {
   const explicitEnv = process.env.NEOTOMA_ENV;
@@ -79,6 +82,16 @@ export function resolveLocalTransportEnv(baseUrl?: string): "production" | "deve
   const configPreferred = readPreferredEnvFromCliConfig();
   if (configPreferred) return configPreferred;
 
+  // Step 5a: build-origin heuristic — dist/ = npm install = end-user install = prod default.
+  // Source checkouts (__dirname contains "/src/shared") fall through to port inference.
+  //
+  // NEOTOMA_TEST_SIMULATE_DIST_BUILD is an internal test hook that allows unit tests to
+  // exercise this branch without physically running from a dist/ directory. It MUST NOT
+  // be set in production — doing so forces production mode regardless of actual build origin.
+  if (__dirname.includes("/dist/") || process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1")
+    return "production";
+
+  // Step 5b: port inference (source checkout only)
   const port = portFromBaseUrl(baseUrl);
   if (port === 3180) return "production";
   return "development";
@@ -91,7 +104,7 @@ export function resolveLocalTransportEnv(baseUrl?: string): "production" | "deve
  */
 function warnOnEnvBaseUrlMismatch(
   resolvedEnv: "production" | "development",
-  baseUrl?: string,
+  baseUrl?: string
 ): void {
   const port = portFromBaseUrl(baseUrl);
   if (port == null) return;
@@ -107,7 +120,7 @@ function warnOnEnvBaseUrlMismatch(
   process.stderr.write(
     `Warning: local transport env mismatch. Running API at :${port} serves ${apiDb}, ` +
       `but local transport will spawn with ${localDb}. Reads and writes may target different ` +
-      `SQLite files. Use ${fix} to align, or set NEOTOMA_ENV explicitly.\n`,
+      `SQLite files. Use ${fix} to align, or set NEOTOMA_ENV explicitly.\n`
   );
 }
 

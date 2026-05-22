@@ -8,6 +8,8 @@ import { initSiteAnalytics, installOutboundLinkTracking } from "./utils/analytic
 import { installViteChunkRecovery } from "./utils/vite_chunk_recovery";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ThemeProvider } from "./hooks/useTheme";
+import { MDXProvider } from "@mdx-js/react";
+import { mdxSiteProviderComponents } from "@/components/mdx/mdx_site_components";
 import "./index.css";
 
 initSiteAnalytics();
@@ -17,7 +19,7 @@ installOutboundLinkTracking();
 function initializeTheme() {
   const stored = localStorage.getItem("theme") || "system";
   const root = document.documentElement;
-  
+
   if (stored === "system") {
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     root.classList.toggle("dark", systemPrefersDark);
@@ -43,11 +45,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter basename={getRouterBasename()}>
         <LocaleProvider>
           <ThemeProvider>
-            <App />
+            <MDXProvider components={mdxSiteProviderComponents}>
+              <App />
+            </MDXProvider>
           </ThemeProvider>
         </LocaleProvider>
       </BrowserRouter>
     </HelmetProvider>
   </React.StrictMode>
 );
-

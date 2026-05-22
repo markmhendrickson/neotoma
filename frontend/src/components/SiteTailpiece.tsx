@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { CalendarClock, FileText, MessageSquare } from "lucide-react";
 import heroPackratHoldingRecordIllus from "@/assets/images/hero/hero_illus_packrat_holding_record.png";
@@ -5,6 +6,7 @@ import { useIndexableMarkdownSourcePath } from "@/hooks/useIndexableMarkdownSour
 import { useRepoMetaClient } from "@/hooks/useRepoMetaClient";
 import { useLocale } from "@/i18n/LocaleContext";
 import { REPO_RELEASES_COUNT, REPO_STARS_COUNT, REPO_VERSION } from "@/site/site_data";
+import { staticAssetPath } from "@/site/spa_path";
 import { rawMarkdownTo } from "@/site/site_page_markdown";
 import { LanguageNavButton, ThemeToggleNavButton } from "@/components/SiteChromeControls";
 import { sendCtaClick } from "@/utils/analytics";
@@ -13,33 +15,8 @@ import {
   FOOTER_SECONDARY_CTA_CLASS,
 } from "@/components/code_block_copy_button_classes";
 
-const PRODUCT_LINKS = [
-  { label: "Install", href: "/install" },
-  { label: "Architecture", href: "/architecture" },
-  { label: "Memory guarantees", href: "/memory-guarantees" },
-  { label: "FAQ", href: "/faq" },
-];
-
-const DOC_LINKS = [
-  { label: "Docs", href: "/docs" },
-  { label: "API", href: "/api" },
-  { label: "MCP", href: "/mcp" },
-  { label: "CLI", href: "/cli" },
-];
-
-const EXTERNAL_LINKS = [
-  { label: "GitHub", href: "https://github.com/markmhendrickson/neotoma" },
-  { label: "npm", href: "https://www.npmjs.com/package/neotoma" },
-  { label: "Blog", href: "https://markmhendrickson.com/blog" },
-];
-
-const LEGAL_LINKS = [
-  { label: "Privacy", href: "/privacy" },
-  { label: "Terms", href: "/terms" },
-];
-
 const footerMarkdownLinkClass =
-  "inline-flex h-9 min-h-9 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground no-underline transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "inline-flex h-9 min-h-9 items-center gap-1.5 rounded-md px-2 text-ui text-muted-foreground no-underline transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 /** Markdown (when available), language, and theme — shown in the global footer and use case landing shells. */
 export function SiteFooterUtilities() {
@@ -76,7 +53,7 @@ function FooterLink({
 }) {
   const isExternal = href.startsWith("http://") || href.startsWith("https://");
   const linkClassName =
-    "text-[13px] text-muted-foreground no-underline transition-colors hover:text-foreground";
+    "text-ui text-muted-foreground no-underline transition-colors hover:text-foreground";
 
   if (isExternal) {
     return (
@@ -100,11 +77,48 @@ function FooterLink({
 
 export function SiteTailpiece() {
   const year = new Date().getFullYear();
-  const { pack } = useLocale();
+  const { pack, dict, subpage } = useLocale();
   const { version: liveVersion, releasesCount: liveReleasesCount } = useRepoMetaClient(
     REPO_VERSION,
     REPO_RELEASES_COUNT,
     REPO_STARS_COUNT
+  );
+
+  const productLinks = useMemo(
+    () => [
+      { label: dict.install, href: "/install" },
+      { label: dict.architecture, href: "/architecture" },
+      { label: dict.footerLinkMemoryGuarantees, href: "/memory-guarantees" },
+      { label: subpage.faq.title, href: "/faq" },
+    ],
+    [dict.install, dict.architecture, dict.footerLinkMemoryGuarantees, subpage.faq.title],
+  );
+
+  const docLinks = useMemo(
+    () => [
+      { label: dict.docs, href: "/docs" },
+      { label: "API", href: "/api" },
+      { label: "MCP", href: "/mcp" },
+      { label: "CLI", href: "/cli" },
+    ],
+    [dict.docs],
+  );
+
+  const externalLinks = useMemo(
+    () => [
+      { label: "GitHub", href: "https://github.com/markmhendrickson/neotoma" },
+      { label: "npm", href: "https://www.npmjs.com/package/neotoma" },
+      { label: dict.footerLinkBlog, href: "https://markmhendrickson.com/posts" },
+    ],
+    [dict.footerLinkBlog],
+  );
+
+  const legalLinks = useMemo(
+    () => [
+      { label: subpage.privacy.title, href: "/privacy" },
+      { label: subpage.terms.title, href: "/terms" },
+    ],
+    [subpage.privacy.title, subpage.terms.title],
   );
 
   return (
@@ -124,18 +138,16 @@ export function SiteTailpiece() {
                 aria-hidden="true"
               />
             </figure>
-            <p className="text-[13px] font-medium text-foreground">Neotoma</p>
-            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-              The state layer for AI agents. Open-source and local-first.
-            </p>
+            <img src={staticAssetPath("/neotoma-wordmark.svg")} alt="Neotoma" className="h-7 w-auto dark:invert" />
+            <p className="mt-2 text-ui leading-6 text-muted-foreground">{dict.footerTagline}</p>
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
-              Product
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+              {dict.footerColumnProduct}
             </p>
             <div className="mt-3 flex flex-col gap-2">
-              {PRODUCT_LINKS.map((link) => (
+              {productLinks.map((link) => (
                 <FooterLink
                   key={link.href}
                   href={link.href}
@@ -149,33 +161,33 @@ export function SiteTailpiece() {
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
-              Documentation
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+              {dict.footerColumnDocumentation}
             </p>
             <div className="mt-3 flex flex-col gap-2">
-              {DOC_LINKS.map((link) => (
+              {docLinks.map((link) => (
                 <FooterLink key={link.href} href={link.href} label={link.label} />
               ))}
             </div>
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
-              External
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+              {dict.footerColumnExternal}
             </p>
             <div className="mt-3 flex flex-col gap-2">
-              {EXTERNAL_LINKS.map((link) => (
+              {externalLinks.map((link) => (
                 <FooterLink key={link.href} href={link.href} label={link.label} />
               ))}
             </div>
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
-              Legal
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+              {dict.footerColumnLegal}
             </p>
             <div className="mt-3 flex flex-col gap-2">
-              {LEGAL_LINKS.map((link) => (
+              {legalLinks.map((link) => (
                 <FooterLink key={link.href} href={link.href} label={link.label} />
               ))}
             </div>
@@ -184,10 +196,7 @@ export function SiteTailpiece() {
 
         <div className="mt-8 border-t border-border/60 pt-6 space-y-6">
           <div className="w-full space-y-3 sm:max-w-xl">
-            <p className="text-[12px] leading-5 text-muted-foreground">
-              Re-prompting costs time. Wrong state costs trust. Find out if
-              Neotoma fits before either compounds.
-            </p>
+            <p className="text-fine leading-5 text-muted-foreground">{dict.footerCtaBlurb}</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Link
                 to="/evaluate"
@@ -208,9 +217,10 @@ export function SiteTailpiece() {
             </div>
           </div>
           <div className="flex flex-col gap-3 border-t border-border/40 pt-4 md:flex-row md:items-center md:justify-between">
-            <p className="max-w-full text-[12px] leading-relaxed text-muted-foreground">
+            <p className="max-w-full text-fine leading-relaxed text-muted-foreground">
               © {year} Neotoma · v{liveVersion} · {liveReleasesCount}{" "}
-              {liveReleasesCount === 1 ? "release" : "releases"} · MIT-licensed · Built by{" "}
+              {liveReleasesCount === 1 ? dict.footerReleaseSingular : dict.footerReleasePlural} ·{" "}
+              {dict.footerMitLicensed} · {dict.footerBuiltBy}{" "}
               <a
                 href="https://markmhendrickson.com"
                 target="_blank"

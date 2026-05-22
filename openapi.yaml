@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://spec.openapis.org/oas/3.1/schema/2022-10-07
 openapi: 3.1.0
 info:
   title: Neotoma API
@@ -106,11 +107,11 @@ components:
         related_entities:
           type: array
           items:
-            $ref: '#/components/schemas/RecentConversationRelatedEntity'
+            $ref: "#/components/schemas/RecentConversationRelatedEntity"
         hook_summary:
           anyOf:
             - type: "null"
-            - $ref: '#/components/schemas/ConversationTurnHookSummary'
+            - $ref: "#/components/schemas/ConversationTurnHookSummary"
     RecentConversationItem:
       type: object
       properties:
@@ -133,7 +134,7 @@ components:
         messages:
           type: array
           items:
-            $ref: '#/components/schemas/RecentConversationMessage'
+            $ref: "#/components/schemas/RecentConversationMessage"
     StoreResolutionIssue:
       type: object
       description: |
@@ -150,6 +151,8 @@ components:
           enum:
             - ERR_CANONICAL_NAME_UNRESOLVED
             - ERR_MERGE_REFUSED
+            - ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT
+            - ERR_RELATIONSHIP_ENTITY_ID_FORMAT
         message:
           type: string
         details:
@@ -171,7 +174,7 @@ components:
                     Short, actionable instruction for the caller (e.g. "Declare
                     `conversation_id` on entity_type \"conversation\"…"). PII-free.
                 required_identity_fields:
-                  $ref: '#/components/schemas/RequiredIdentityFields'
+                  $ref: "#/components/schemas/RequiredIdentityFields"
           description: |
             Optional structured upgrade guidance. Populated when the server can
             detect a common caller mistake (e.g. wrapping fields inside
@@ -240,7 +243,7 @@ components:
             issues:
               type: array
               items:
-                $ref: '#/components/schemas/StoreResolutionIssue'
+                $ref: "#/components/schemas/StoreResolutionIssue"
     SplitPredicate:
       type: object
       description: |
@@ -290,7 +293,7 @@ components:
         source_entity_id:
           type: string
         predicate:
-          $ref: '#/components/schemas/SplitPredicate'
+          $ref: "#/components/schemas/SplitPredicate"
         new_entity:
           type: object
           required:
@@ -653,6 +656,17 @@ components:
             Per record-type count (`observation`, `source`,
             `interpretation`, `timeline_event`, `relationship`).
             Missing buckets mean zero.
+        observation_entity_type_counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: |
+            For each distinct agent, counts of **observation** rows grouped
+            by the target entity's `entity_type` (join `entities` on
+            `observations.entity_id`). Surfaces who submitted
+            `issue` reports, who touched protected `agent_grant` rows,
+            `issue` sync traffic, etc. Omitted when no typed observations
+            exist for that agent.
     AgentCapabilityEntry:
       type: object
       required:
@@ -662,6 +676,7 @@ components:
         op:
           type: string
           enum:
+            - store
             - store_structured
             - create_relationship
             - correct
@@ -859,6 +874,22 @@ components:
           description: Optional ordered list of the most important snapshot fields for overview display.
           items:
             type: string
+        schema_instructions:
+          type: string
+          nullable: true
+          description: |
+            Markdown instructions from the entity's schema definition. Injected into agent context
+            when this entity is retrieved. Agents MUST treat this as behavioral context for the
+            entity type and apply it to the current turn. Sourced from
+            `SchemaDefinition.agent_instructions` on the registered schema.
+        entity_instructions:
+          type: string
+          nullable: true
+          description: |
+            Markdown instructions stored on this specific entity (from the entity's snapshot
+            `agent_instructions` field). Extends or overrides `schema_instructions` for this
+            individual entity. Agents MUST treat this as behavioral context and apply it to the
+            current turn.
     Source:
       type: object
       properties:
@@ -891,7 +922,7 @@ components:
             the ingestion pipeline.
           additionalProperties: true
           allOf:
-            - $ref: '#/components/schemas/AgentAttribution'
+            - $ref: "#/components/schemas/AgentAttribution"
     Observation:
       type: object
       properties:
@@ -919,7 +950,7 @@ components:
         observation_source:
           type: string
           nullable: true
-          enum: [sensor, llm_summary, workflow_state, human, import]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync]
           description: |
             Classifies the *kind* of write that produced this observation,
             orthogonal to `source_priority` (numeric ranking) and to
@@ -935,6 +966,7 @@ components:
             - `human` — direct human write (acceptance of a suggestion,
               Inspector edit, `entities correct`, manual annotation).
             - `import` — batch ingestion / ETL / scheduled imports.
+            - `sync` — cross-instance replication from a configured Neotoma peer.
 
             Null / missing for legacy rows written before the field
             existed; writes default to `llm_summary` when unspecified
@@ -957,7 +989,7 @@ components:
             free-form provenance keys supplied at write time.
           additionalProperties: true
           allOf:
-            - $ref: '#/components/schemas/AgentAttribution'
+            - $ref: "#/components/schemas/AgentAttribution"
     RelationshipSnapshot:
       type: object
       properties:
@@ -999,7 +1031,7 @@ components:
             row. `null` when no contributing observation carried
             attribution keys.
           allOf:
-            - $ref: '#/components/schemas/AgentAttribution'
+            - $ref: "#/components/schemas/AgentAttribution"
         user_id:
           type: string
         source_entity_name:
@@ -1060,7 +1092,7 @@ components:
             the `AgentAttribution` keys stamped by the AAuth middleware.
           additionalProperties: true
           allOf:
-            - $ref: '#/components/schemas/AgentAttribution'
+            - $ref: "#/components/schemas/AgentAttribution"
     EntitySchema:
       type: object
       properties:
@@ -1097,7 +1129,111 @@ components:
             the `AgentAttribution` keys stamped by the AAuth middleware.
           additionalProperties: true
           allOf:
-            - $ref: '#/components/schemas/AgentAttribution'
+            - $ref: "#/components/schemas/AgentAttribution"
+    InterpretationConfig:
+      type: object
+      additionalProperties: true
+      description: |
+        Audit configuration for a parser or agent-authored interpretation run.
+        Callers may include extractor_type, extractor_version, model,
+        prompt_hash, schema_version, agent_notes, and other provenance fields
+        needed to explain how extracted observations were produced.
+      properties:
+        extractor_type:
+          type: string
+        extractor_version:
+          type: string
+        model:
+          type: string
+        prompt_hash:
+          type: string
+        schema_version:
+          type: string
+        agent_notes:
+          type: string
+    StoreInterpretationInput:
+      type: object
+      additionalProperties: false
+      description: |
+        Optional interpretation provenance for source-derived structured
+        extraction. Supplying this creates an interpretation row and links new
+        observations to it. Omit for ordinary already-structured/chat-native
+        facts, which keep observations.interpretation_id NULL.
+      properties:
+        source_id:
+          type: string
+          description: Existing source to interpret.
+        source_ref:
+          type: string
+          enum: [structured, unstructured]
+          description: |
+            Source created by this store request. Use `unstructured` for the raw
+            file source in combined file+entities requests, or `structured`
+            for the generated JSON source.
+        interpretation_config:
+          $ref: "#/components/schemas/InterpretationConfig"
+    CreateInterpretationRequest:
+      type: object
+      additionalProperties: false
+      required: [source_id, entities]
+      properties:
+        source_id:
+          type: string
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        interpretation_config:
+          $ref: "#/components/schemas/InterpretationConfig"
+        relationships:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoreRelationshipInput"
+        idempotency_key:
+          type: string
+        user_id:
+          type: string
+    CreateInterpretationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        interpretation_id:
+          type: string
+        source_id:
+          type: string
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        observations_created:
+          type: integer
+        unknown_fields_count:
+          type: integer
+        unknown_fields:
+          type: array
+          items:
+            type: string
+          description: |
+            Names of fields that were dropped because they are not declared in
+            the entity's active schema. Present when `unknown_fields_count > 0`.
+            Use `update_schema_incremental` or `register_schema` to add these
+            fields before re-storing.
+        hint:
+          type: string
+          description: |
+            Actionable guidance when fields were dropped to `raw_fragments`.
+            Present only when `unknown_fields_count > 0`. Directs the caller
+            to use `update_schema_incremental` with `migrate_existing: true`
+            to promote the unknown fields into the schema and backfill existing
+            data.
+        relationships_created:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
     Stats:
       type: object
       properties:
@@ -1155,11 +1291,135 @@ components:
           properties:
             relationship_type:
               type: string
-              enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+              enum:
+                [
+                  PART_OF,
+                  CORRECTS,
+                  REFERS_TO,
+                  SETTLES,
+                  DUPLICATE_OF,
+                  DEPENDS_ON,
+                  SUPERSEDES,
+                  EMBEDS,
+                  works_at,
+                  owns,
+                  manages,
+                  part_of,
+                  related_to,
+                  depends_on,
+                  references,
+                  transacted_with,
+                  member_of,
+                  reports_to,
+                  located_at,
+                  created_by,
+                  funded_by,
+                  acquired_by,
+                  subsidiary_of,
+                  partner_of,
+                  competitor_of,
+                  supplies_to,
+                  contracted_with,
+                  invested_in,
+                ]
             source_index:
               type: integer
               minimum: 0
               description: Index into the entities array for the source entity.
+            target_index:
+              type: integer
+              minimum: 0
+              description: Index into the entities array for the target entity.
+            metadata:
+              type: object
+              additionalProperties: true
+        - type: object
+          required: [relationship_type, source_index, target_entity_id]
+          additionalProperties: false
+          properties:
+            relationship_type:
+              type: string
+              enum:
+                [
+                  PART_OF,
+                  CORRECTS,
+                  REFERS_TO,
+                  SETTLES,
+                  DUPLICATE_OF,
+                  DEPENDS_ON,
+                  SUPERSEDES,
+                  EMBEDS,
+                  works_at,
+                  owns,
+                  manages,
+                  part_of,
+                  related_to,
+                  depends_on,
+                  references,
+                  transacted_with,
+                  member_of,
+                  reports_to,
+                  located_at,
+                  created_by,
+                  funded_by,
+                  acquired_by,
+                  subsidiary_of,
+                  partner_of,
+                  competitor_of,
+                  supplies_to,
+                  contracted_with,
+                  invested_in,
+                ]
+            source_index:
+              type: integer
+              minimum: 0
+              description: Index into the entities array for the source entity.
+            target_entity_id:
+              type: string
+              description: Existing target entity ID.
+            metadata:
+              type: object
+              additionalProperties: true
+        - type: object
+          required: [relationship_type, source_entity_id, target_index]
+          additionalProperties: false
+          properties:
+            relationship_type:
+              type: string
+              enum:
+                [
+                  PART_OF,
+                  CORRECTS,
+                  REFERS_TO,
+                  SETTLES,
+                  DUPLICATE_OF,
+                  DEPENDS_ON,
+                  SUPERSEDES,
+                  EMBEDS,
+                  works_at,
+                  owns,
+                  manages,
+                  part_of,
+                  related_to,
+                  depends_on,
+                  references,
+                  transacted_with,
+                  member_of,
+                  reports_to,
+                  located_at,
+                  created_by,
+                  funded_by,
+                  acquired_by,
+                  subsidiary_of,
+                  partner_of,
+                  competitor_of,
+                  supplies_to,
+                  contracted_with,
+                  invested_in,
+                ]
+            source_entity_id:
+              type: string
+              description: Existing source entity ID.
             target_index:
               type: integer
               minimum: 0
@@ -1173,7 +1433,37 @@ components:
           properties:
             relationship_type:
               type: string
-              enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+              enum:
+                [
+                  PART_OF,
+                  CORRECTS,
+                  REFERS_TO,
+                  SETTLES,
+                  DUPLICATE_OF,
+                  DEPENDS_ON,
+                  SUPERSEDES,
+                  EMBEDS,
+                  works_at,
+                  owns,
+                  manages,
+                  part_of,
+                  related_to,
+                  depends_on,
+                  references,
+                  transacted_with,
+                  member_of,
+                  reports_to,
+                  located_at,
+                  created_by,
+                  funded_by,
+                  acquired_by,
+                  subsidiary_of,
+                  partner_of,
+                  competitor_of,
+                  supplies_to,
+                  contracted_with,
+                  invested_in,
+                ]
             source_entity_id:
               type: string
               description: Existing source entity ID.
@@ -1183,6 +1473,43 @@ components:
             metadata:
               type: object
               additionalProperties: true
+    ExternalActorInput:
+      type: object
+      additionalProperties: false
+      description: |
+        Upstream artifact author (e.g. GitHub user) stamped into observation
+        provenance alongside AAuth agent attribution. Matches
+        `ExternalActorInputSchema` in `action_schemas.ts`.
+      required:
+        - provider
+        - login
+        - id
+      properties:
+        provider:
+          type: string
+          enum: [github]
+        login:
+          type: string
+        id:
+          type: number
+        type:
+          type: string
+          enum: [User, Bot, Organization]
+          default: User
+        verified_via:
+          type: string
+          enum: [claim, linked_attestation, oauth_link, webhook_signature]
+          default: claim
+        delivery_id:
+          type: string
+        event_type:
+          type: string
+        repository:
+          type: string
+        event_id:
+          type: number
+        comment_id:
+          type: number
     StoreRequest:
       type: object
       additionalProperties: false
@@ -1209,21 +1536,30 @@ components:
           type: array
           description: |
             Optional. Create relationships between entities in this request.
-            Use `source_index`/`target_index` for entities in the request, or
-            `source_entity_id`/`target_entity_id` for existing entities.
+            Use `source_index` or `target_index` for entities in this request,
+            and `source_entity_id` or `target_entity_id` for existing entities.
+            Index and id endpoints may be mixed in one relationship.
           items:
-            $ref: '#/components/schemas/StoreRelationshipInput'
+            $ref: "#/components/schemas/StoreRelationshipInput"
+        interpretation:
+          $ref: "#/components/schemas/StoreInterpretationInput"
         source_priority:
           type: integer
         observation_source:
           type: string
-          enum: [sensor, llm_summary, workflow_state, human, import]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync]
           description: |
             Classifies the *kind* of write being performed, orthogonal to
             `source_priority`. See `Observation.observation_source` for
             the full semantic contract. Defaults to `llm_summary` when
             unspecified. Applies to every observation created by this
             request.
+        external_actor:
+          $ref: "#/components/schemas/ExternalActorInput"
+          description: |
+            Optional upstream author (e.g. GitHub user for issue submission).
+            Stamped into observation provenance; must align with
+            `ExternalActorInputSchema` (strict — no extra keys).
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only path.
@@ -1259,13 +1595,18 @@ components:
             the entity's schema declares canonical_name_fields that the request
             matches, or when target_id is supplied. Prevents accidental
             coalescing into a pre-existing record.
+        source_peer_id:
+          type: string
+          description: |
+            Optional Neotoma peer id to stamp on observations for cross-instance
+            sync loop prevention (Phase 5). Requires `observation_source: sync` in practice.
     StoreResponse:
       type: object
       properties:
         structured:
-          $ref: '#/components/schemas/StoreStructuredResponse'
+          $ref: "#/components/schemas/StoreStructuredResponse"
         unstructured:
-          $ref: '#/components/schemas/StoreUnstructuredResponse'
+          $ref: "#/components/schemas/StoreUnstructuredResponse"
     StoreStructuredRequest:
       type: object
       additionalProperties: false
@@ -1290,16 +1631,19 @@ components:
           type: array
           description: |
             Optional. Create relationships between entities in this request.
-            Use `source_index`/`target_index` for entities in the request, or
-            `source_entity_id`/`target_entity_id` for existing entities.
+            Use `source_index` or `target_index` for entities in this request,
+            and `source_entity_id` or `target_entity_id` for existing entities.
+            Index and id endpoints may be mixed in one relationship.
             Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
           items:
-            $ref: '#/components/schemas/StoreRelationshipInput'
+            $ref: "#/components/schemas/StoreRelationshipInput"
+        interpretation:
+          $ref: "#/components/schemas/StoreInterpretationInput"
         source_priority:
           type: integer
         observation_source:
           type: string
-          enum: [sensor, llm_summary, workflow_state, human, import]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync]
           description: |
             Classifies the *kind* of write being performed, orthogonal to
             `source_priority`. See `Observation.observation_source` for
@@ -1331,6 +1675,9 @@ components:
             the entity's schema declares canonical_name_fields that the request
             matches, or when target_id is supplied. Prevents accidental
             coalescing into a pre-existing record.
+        source_peer_id:
+          type: string
+          description: Optional peer id stamped on observations for sync loop prevention.
     StoreStructuredResponse:
       type: object
       properties:
@@ -1340,9 +1687,12 @@ components:
           type: boolean
           description: |
             True when the response is an idempotency replay (no new observations
-            or entities were written for this request). Consumers can use this
-            to distinguish a genuine fresh commit from a replayed earlier result
-            when `entities_created_count` is 0.
+            or entities were written for this request). The key was already used
+            with identical content so the original result is returned. Consumers
+            can use this to distinguish a genuine fresh commit from a replayed
+            earlier result when `entities_created_count` is 0. If the same key
+            is reused with *different* content the request is rejected with
+            `ERR_IDEMPOTENCY_MISMATCH` (HTTP 400).
         entities:
           type: array
           items:
@@ -1391,7 +1741,7 @@ components:
                   values). See
                   `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
                 items:
-                  $ref: '#/components/schemas/ResolverWarning'
+                  $ref: "#/components/schemas/ResolverWarning"
         warnings:
           type: array
           description: |
@@ -1401,13 +1751,89 @@ components:
             walking every entity trace.
           items:
             allOf:
-              - $ref: '#/components/schemas/ResolverWarning'
+              - $ref: "#/components/schemas/ResolverWarning"
               - type: object
                 properties:
                   observation_index:
                     type: integer
                   entity_id:
                     type: string
+        store_warnings:
+          type: array
+          description: |
+            Schema-driven non-fatal warnings emitted when a stored observation
+            omits all fields listed by a schema's `store_warnings` rule. Used
+            by schemas to surface identity-quality issues (e.g. a
+            `product_feedback` observation that supplies none of the declared
+            feedback-source identity fields) without rejecting the write.
+            Schema-agnostic: the rule lives on the entity's `SchemaDefinition`,
+            not in per-type code. Present only when at least one rule fired
+            during this request.
+          items:
+            type: object
+            required:
+              - code
+              - message
+              - observation_index
+              - entity_type
+              - entity_id
+            properties:
+              code:
+                type: string
+                description: |
+                  Schema-defined warning code (declared in the schema's
+                  `store_warnings[].code`). Stable identifier callers can
+                  switch on.
+              message:
+                type: string
+                description: Human-readable description from the schema rule.
+              observation_index:
+                type: integer
+                description: |
+                  Index into the request's `entities[]` array identifying which
+                  observation triggered the warning.
+              entity_type:
+                type: string
+              entity_id:
+                type: string
+        interpretation_id:
+          type: string
+          nullable: true
+          description: Interpretation row linked to observations when the request supplied an explicit interpretation block.
+        unknown_fields:
+          type: array
+          items:
+            type: string
+          description: |
+            Names of fields that were dropped because they are not declared in
+            the entity's active schema. Present when `unknown_fields_count > 0`.
+            Use `update_schema_incremental` or `register_schema` to add these
+            fields before re-storing.
+        no_schema_entity_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Entity types whose payloads were routed to raw_fragments because no
+            schema could be found or auto-registered. Each element is a distinct
+            entity_type string. An empty array (or absent field) means all entity
+            types had an active schema and were processed normally. When this list
+            is non-empty, run `register_schema` for each type to create a schema
+            so future ingestion produces observations instead of fragments.
+        unknown_fields_count:
+          type: integer
+          description: |
+            Number of entity fields that were dropped because they are not
+            declared in the entity's active schema. These fields were stored in
+            `raw_fragments` and can be recovered.
+        hint:
+          type: string
+          description: |
+            Actionable guidance when fields were dropped to `raw_fragments`.
+            Present only when `unknown_fields_count > 0`. Directs the caller
+            to use `update_schema_incremental` with `migrate_existing: true`
+            to promote the unknown fields into the schema and backfill existing
+            data.
     ResolverWarning:
       type: object
       description: |
@@ -1491,7 +1917,37 @@ components:
       properties:
         relationship_type:
           type: string
-          enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+          enum:
+            [
+              PART_OF,
+              CORRECTS,
+              REFERS_TO,
+              SETTLES,
+              DUPLICATE_OF,
+              DEPENDS_ON,
+              SUPERSEDES,
+              EMBEDS,
+              works_at,
+              owns,
+              manages,
+              part_of,
+              related_to,
+              depends_on,
+              references,
+              transacted_with,
+              member_of,
+              reports_to,
+              located_at,
+              created_by,
+              funded_by,
+              acquired_by,
+              subsidiary_of,
+              partner_of,
+              competitor_of,
+              supplies_to,
+              contracted_with,
+              invested_in,
+            ]
         source_entity_id:
           type: string
         target_entity_id:
@@ -1504,7 +1960,7 @@ components:
       required: [snapshot, observations]
       properties:
         snapshot:
-          $ref: '#/components/schemas/RelationshipSnapshot'
+          $ref: "#/components/schemas/RelationshipSnapshot"
         observations:
           type: array
           items:
@@ -1560,22 +2016,22 @@ paths:
           required: false
           schema: { type: integer }
       responses:
-        '200':
+        "200":
           description: Signed URL
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FileUrlResponse'
-        '400':
+                $ref: "#/components/schemas/FileUrlResponse"
+        "400":
           description: Invalid parameters
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
           description: Missing or invalid bearer token
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema: { $ref: "#/components/schemas/Error" }
 
   /health:
     get:
@@ -1583,7 +2039,7 @@ paths:
       operationId: healthCheck
       security: []
       responses:
-        '200':
+        "200":
           description: Server is healthy
           content:
             application/json:
@@ -1599,7 +2055,7 @@ paths:
       operationId: getOpenApiSpec
       security: []
       responses:
-        '200':
+        "200":
           description: OpenAPI specification in YAML
           content:
             application/yaml:
@@ -1611,7 +2067,7 @@ paths:
       summary: Get server info
       operationId: getServerInfo
       responses:
-        '200':
+        "200":
           description: Server info
           content:
             application/json:
@@ -1631,18 +2087,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/OAuthInitiateRequest' }
+            schema: { $ref: "#/components/schemas/OAuthInitiateRequest" }
       responses:
-        '200':
+        "200":
           description: OAuth initiation result
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OAuthInitiateResponse' }
-        '400':
+              schema: { $ref: "#/components/schemas/OAuthInitiateResponse" }
+        "400":
           description: Invalid request
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /mcp/oauth/authorize:
     get:
@@ -1674,7 +2130,7 @@ paths:
           required: false
           schema: { type: string }
       responses:
-        '302':
+        "302":
           description: Redirect to authorization URL
 
   /mcp/oauth/token:
@@ -1693,7 +2149,7 @@ paths:
                 code:
                   type: string
       responses:
-        '200':
+        "200":
           description: OAuth token response
           content:
             application/json:
@@ -1706,7 +2162,7 @@ paths:
                     type: string
                   expires_in:
                     type: integer
-        '400':
+        "400":
           description: Token exchange error
           content:
             application/json:
@@ -1719,7 +2175,7 @@ paths:
       summary: Get current authenticated user
       operationId: getMe
       responses:
-        '200':
+        "200":
           description: Current user details
           content:
             application/json:
@@ -1740,11 +2196,11 @@ paths:
                         type: string
                       sqlite_db:
                         type: string
-        '401':
+        "401":
           description: Not authenticated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema: { $ref: "#/components/schemas/Error" }
 
   /mcp/oauth/status:
     get:
@@ -1756,23 +2212,23 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Connection status
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OAuthStatusResponse' }
-        '400':
+              schema: { $ref: "#/components/schemas/OAuthStatusResponse" }
+        "400":
           description: Invalid request
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /mcp/oauth/connections:
     get:
       summary: List OAuth connections
       operationId: mcpOAuthListConnections
       responses:
-        '200':
+        "200":
           description: Connection list
           content:
             application/json:
@@ -1784,11 +2240,11 @@ paths:
                     items:
                       type: object
                       additionalProperties: true
-        '401':
+        "401":
           description: Unauthorized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema: { $ref: "#/components/schemas/Error" }
 
   /mcp/oauth/connections/{connection_id}:
     delete:
@@ -1800,7 +2256,7 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Revoked
           content:
             application/json:
@@ -1815,7 +2271,7 @@ paths:
       summary: OAuth 2.0 Authorization Server Metadata (RFC 8414)
       operationId: oauthServerMetadata
       responses:
-        '200':
+        "200":
           description: Authorization server metadata
           content:
             application/json:
@@ -1827,7 +2283,7 @@ paths:
       summary: OAuth 2.0 Protected Resource Metadata
       operationId: oauthProtectedResource
       responses:
-        '200':
+        "200":
           description: Protected resource metadata
           content:
             application/json:
@@ -1846,7 +2302,7 @@ paths:
           name: state
           schema: { type: string }
       responses:
-        '302':
+        "302":
           description: Redirect after OAuth callback
 
   /mcp/oauth/key-auth:
@@ -1858,7 +2314,7 @@ paths:
           name: next
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Key auth HTML page
           content:
             text/html:
@@ -1877,7 +2333,7 @@ paths:
                 key:
                   type: string
       responses:
-        '302':
+        "302":
           description: Redirect after key auth
 
   /mcp/oauth/local-login:
@@ -1885,7 +2341,7 @@ paths:
       summary: Local login for development (auto-creates dev user)
       operationId: mcpOAuthLocalLogin
       responses:
-        '302':
+        "302":
           description: Redirect after local login
 
   /mcp/oauth/register:
@@ -1905,7 +2361,7 @@ paths:
                   type: array
                   items: { type: string }
       responses:
-        '201':
+        "201":
           description: Client registered
           content:
             application/json:
@@ -1917,7 +2373,7 @@ paths:
       summary: Authorization details proxy
       operationId: mcpOAuthAuthorizationDetails
       responses:
-        '200':
+        "200":
           description: Authorization details
           content:
             application/json:
@@ -1939,7 +2395,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Signed in
           content:
             application/json:
@@ -1975,16 +2431,19 @@ paths:
                 sort_by:
                   type: string
                   enum:
-                  - entity_id
-                  - canonical_name
-                  - observation_count
-                  - last_observation_at
-                  description: "Non-default values cannot be combined with `search`."
+                    - entity_id
+                    - canonical_name
+                    - observation_count
+                    - last_observation_at
+                    - submitted_at
+                  description: |
+                    Non-default values cannot be combined with `search`.
+                    `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
                 sort_order:
                   type: string
                   enum:
-                  - asc
-                  - desc
+                    - asc
+                    - desc
                   description: "`desc` cannot be combined with `search`."
                 published:
                   type: boolean
@@ -2026,8 +2485,19 @@ paths:
                     Primary use case is the Inspector "ambiguous / heuristic
                     resolution" filter so operators can audit entities that
                     were matched by name/title rather than by a schema rule.
+                exclude_bookkeeping:
+                  type: boolean
+                  default: false
+                  description: |
+                    When true, omit chat bookkeeping types (`conversation`,
+                    `conversation_message`, and other entries in
+                    `BOOKKEEPING_ENTITY_TYPES`) from results. Default false —
+                    bookkeeping entities are included unless the caller
+                    explicitly opts in to exclusion. Has no effect when
+                    `entity_type` already filters to a single bookkeeping
+                    type (the explicit type filter wins).
       responses:
-        '200':
+        "200":
           description: Entity list
           content:
             application/json:
@@ -2037,7 +2507,7 @@ paths:
                   entities:
                     type: array
                     items:
-                      $ref: '#/components/schemas/EntitySnapshot'
+                      $ref: "#/components/schemas/EntitySnapshot"
                   total:
                     type: integer
                   limit:
@@ -2048,6 +2518,11 @@ paths:
   /entities/{id}:
     get:
       summary: Get entity by ID
+      description: >
+        Returns an entity snapshot for the authenticated user. Also accepts a
+        scoped guest capability (`access_token` query parameter or AAuth
+        submitter identity) for entity types whose guest access policy permits
+        reads.
       operationId: getEntityById
       parameters:
         - in: path
@@ -2059,17 +2534,22 @@ paths:
           required: false
           description: Optional user scope. When omitted the authenticated user is used.
           schema: { type: string }
+        - in: query
+          name: access_token
+          required: false
+          description: Optional guest read-back token scoped to this entity.
+          schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Entity
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EntitySnapshot' }
-        '404':
+              schema: { $ref: "#/components/schemas/EntitySnapshot" }
+        "404":
           description: Entity not found
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /entities/{id}/observations:
     get:
@@ -2081,7 +2561,7 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Observations
           content:
             application/json:
@@ -2091,7 +2571,7 @@ paths:
                   observations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Observation'
+                      $ref: "#/components/schemas/Observation"
 
   /entities/{id}/relationships:
     get:
@@ -2112,7 +2592,7 @@ paths:
             `source_entity_type`, `target_entity_type`, and their labels).
           schema: { type: boolean }
       responses:
-        '200':
+        "200":
           description: Relationships
           content:
             application/json:
@@ -2122,15 +2602,15 @@ paths:
                   outgoing:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
                   incoming:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
                   relationships:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
                   related_entities:
                     type: object
                     nullable: true
@@ -2188,7 +2668,7 @@ paths:
             minimum: 1
             maximum: 200
       responses:
-        '200':
+        "200":
           description: Ranked list of candidate duplicate pairs.
           content:
             application/json:
@@ -2248,7 +2728,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Merge result
           content:
             application/json:
@@ -2296,28 +2776,28 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SplitEntityRequest'
+              $ref: "#/components/schemas/SplitEntityRequest"
       responses:
-        '200':
+        "200":
           description: Split result (or idempotent replay).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SplitEntityResponse'
-        '400':
+                $ref: "#/components/schemas/SplitEntityResponse"
+        "400":
           description: |
             Invalid predicate, idempotency mismatch, or the predicate matched
             zero / all observations.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '404':
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
           description: Source entity not found.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /sources:
     get:
@@ -2349,7 +2829,7 @@ paths:
           required: false
           schema: { type: integer }
       responses:
-        '200':
+        "200":
           description: Sources
           content:
             application/json:
@@ -2359,7 +2839,7 @@ paths:
                   sources:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Source'
+                      $ref: "#/components/schemas/Source"
 
   /sources/{id}:
     get:
@@ -2371,11 +2851,11 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Source
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Source' }
+              schema: { $ref: "#/components/schemas/Source" }
 
   /sources/{id}/relationships:
     get:
@@ -2399,7 +2879,7 @@ paths:
           required: false
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Relationships and optional related entity expansions
           content:
             application/json:
@@ -2408,7 +2888,7 @@ paths:
                 properties:
                   relationships:
                     type: array
-                    items: { $ref: '#/components/schemas/RelationshipSnapshot' }
+                    items: { $ref: "#/components/schemas/RelationshipSnapshot" }
                   related_entities:
                     type: object
                     additionalProperties: true
@@ -2439,7 +2919,7 @@ paths:
           required: false
           schema: { type: integer }
       responses:
-        '200':
+        "200":
           description: Observations
           content:
             application/json:
@@ -2449,7 +2929,7 @@ paths:
                   observations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Observation'
+                      $ref: "#/components/schemas/Observation"
 
   /observations/query:
     post:
@@ -2485,7 +2965,7 @@ paths:
                     ISO 8601 timestamp. Return only observations whose
                     observed_at is greater than or equal to this value.
       responses:
-        '200':
+        "200":
           description: Observations
           content:
             application/json:
@@ -2495,7 +2975,7 @@ paths:
                   observations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Observation'
+                      $ref: "#/components/schemas/Observation"
                   total:
                     type: integer
                   limit:
@@ -2536,7 +3016,7 @@ paths:
           required: false
           schema: { type: integer }
       responses:
-        '200':
+        "200":
           description: Recent record activity
           content:
             application/json:
@@ -3047,7 +3527,7 @@ paths:
           description: Filter by latest observation attribution key (same as GET /agents `agent_key`)
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Recent conversations
           content:
             application/json:
@@ -3144,18 +3624,18 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Conversation with nested messages
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RecentConversationItem'
-        '404':
+                $ref: "#/components/schemas/RecentConversationItem"
+        "404":
           description: Conversation not found or not visible to the caller
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /observations/create:
     post:
@@ -3169,7 +3649,7 @@ paths:
               type: object
               additionalProperties: true
       responses:
-        '200':
+        "200":
           description: Observation created
           content:
             application/json:
@@ -3182,7 +3662,7 @@ paths:
       summary: List relationships
       operationId: listRelationships
       responses:
-        '200':
+        "200":
           description: Relationships
           content:
             application/json:
@@ -3192,7 +3672,7 @@ paths:
                   relationships:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
 
   /relationships/{id}:
     get:
@@ -3204,11 +3684,11 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Relationship
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RelationshipSnapshot' }
+              schema: { $ref: "#/components/schemas/RelationshipSnapshot" }
 
   /relationships/snapshot:
     post:
@@ -3218,13 +3698,13 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/GetRelationshipSnapshotRequest' }
+            schema: { $ref: "#/components/schemas/GetRelationshipSnapshotRequest" }
       responses:
-        '200':
+        "200":
           description: Relationship snapshot and observations
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/GetRelationshipSnapshotResponse' }
+              schema: { $ref: "#/components/schemas/GetRelationshipSnapshotResponse" }
 
   /timeline:
     get:
@@ -3264,7 +3744,7 @@ paths:
             enum: [event_timestamp, created_at]
             default: event_timestamp
       responses:
-        '200':
+        "200":
           description: Timeline events
           content:
             application/json:
@@ -3274,7 +3754,7 @@ paths:
                   events:
                     type: array
                     items:
-                      $ref: '#/components/schemas/TimelineEvent'
+                      $ref: "#/components/schemas/TimelineEvent"
 
   /timeline/{id}:
     get:
@@ -3290,7 +3770,7 @@ paths:
           required: false
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Timeline event
           content:
             application/json:
@@ -3298,19 +3778,41 @@ paths:
                 type: object
                 properties:
                   event:
-                    $ref: '#/components/schemas/TimelineEvent'
+                    $ref: "#/components/schemas/TimelineEvent"
 
   /schemas:
     get:
       summary: List entity schemas
+      description: |
+        List available entity types. Without `keyword`: returns a short summary
+        (entity_type, schema_version, field_count) for all types. With `keyword`:
+        returns matching types via hybrid keyword/semantic search; pass
+        `summary: true` to keep the response shape compact even when keyword is
+        supplied. Use before storing structured data to determine the correct
+        entity_type and its declared field names.
       operationId: listSchemas
       parameters:
         - in: query
           name: user_id
           required: false
           schema: { type: string }
+        - in: query
+          name: keyword
+          required: false
+          description: |
+            Optional keyword for hybrid keyword + semantic search across
+            entity_type names and schema field summaries.
+          schema: { type: string }
+        - in: query
+          name: summary
+          required: false
+          description: |
+            When true, return summary-only response (entity_type,
+            schema_version, field_count) even when `keyword` is supplied.
+            Defaults to false when `keyword` is present, true when it is not.
+          schema: { type: boolean }
       responses:
-        '200':
+        "200":
           description: Schemas
           content:
             application/json:
@@ -3320,7 +3822,7 @@ paths:
                   schemas:
                     type: array
                     items:
-                      $ref: '#/components/schemas/EntitySchema'
+                      $ref: "#/components/schemas/EntitySchema"
 
   /schemas/{entity_type}:
     get:
@@ -3332,11 +3834,11 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Schema
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EntitySchema' }
+              schema: { $ref: "#/components/schemas/EntitySchema" }
 
   /interpretations:
     get:
@@ -3360,7 +3862,7 @@ paths:
           required: false
           schema: { type: integer }
       responses:
-        '200':
+        "200":
           description: Interpretations
           content:
             application/json:
@@ -3370,7 +3872,23 @@ paths:
                   interpretations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Interpretation'
+                      $ref: "#/components/schemas/Interpretation"
+
+  /interpretations/create:
+    post:
+      summary: Create an interpretation from agent-extracted entities
+      operationId: createInterpretation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInterpretationRequest" }
+      responses:
+        "200":
+          description: Interpretation result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateInterpretationResponse" }
 
   /stats:
     get:
@@ -3382,58 +3900,82 @@ paths:
           required: false
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: Stats
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Stats' }
+              schema: { $ref: "#/components/schemas/Stats" }
+
+  /access_policies:
+    get:
+      summary: List effective guest access policies for all entity types
+      operationId: getAccessPolicies
+      description: |
+        Returns the effective resolved guest access policy for every entity type
+        that has a non-default (non-closed) policy, plus the default mode.
+        Resolution precedence per type: env var > SchemaMetadata > config file > closed.
+      responses:
+        "200":
+          description: Map of entity types to their effective guest access policy mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: object
+                    additionalProperties:
+                      type: string
+                      enum: [closed, read_only, submit_only, submitter_scoped, open]
+                    description: Entity type to effective policy mode
+                  default_mode:
+                    type: string
+                    enum: [closed, read_only, submit_only, submitter_scoped, open]
+                    description: Default mode for entity types not in the policies map
+                required:
+                  - policies
+                  - default_mode
 
   /store:
     post:
       summary: Store structured entities, unstructured files, or both
-      operationId: storeStructured
+      operationId: store
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/StoreRequest' }
+            schema: { $ref: "#/components/schemas/StoreRequest" }
       responses:
-        '200':
+        "200":
           description: Store result
           content:
             application/json:
               schema:
                 oneOf:
-                  - { $ref: '#/components/schemas/StoreStructuredResponse' }
-                  - { $ref: '#/components/schemas/StoreUnstructuredResponse' }
-                  - { $ref: '#/components/schemas/StoreResponse' }
-        '400':
+                  - { $ref: "#/components/schemas/StoreStructuredResponse" }
+                  - { $ref: "#/components/schemas/StoreUnstructuredResponse" }
+                  - { $ref: "#/components/schemas/StoreResponse" }
+        "400":
           description: |
             Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-            `StoreResolutionErrorEnvelope` shape; other validation errors fall
-            back to the generic `ErrorEnvelope`.
+            `StoreResolutionErrorEnvelope` shape. `ERR_IDEMPOTENCY_MISMATCH` is
+            returned when the same `idempotency_key` is reused with materially
+            different content — use a new key for a different payload. Other
+            validation errors fall back to the generic `ErrorEnvelope`.
           content:
             application/json:
               schema:
                 oneOf:
-                  - { $ref: '#/components/schemas/StoreResolutionErrorEnvelope' }
-                  - { $ref: '#/components/schemas/ErrorEnvelope' }
-
-  /store/unstructured:
-    post:
-      summary: Store unstructured file (raw upload with optional AI interpretation)
-      operationId: storeUnstructured
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/StoreUnstructuredRequest' }
-      responses:
-        '200':
-          description: Store result with source_id and optional interpretation
+                  - { $ref: "#/components/schemas/StoreResolutionErrorEnvelope" }
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: |
+            Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+            idempotency_key was already used for a store call with different
+            content. Use a new idempotency_key to write the updated payload.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/StoreUnstructuredResponse' }
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /get_entity_snapshot:
     post:
@@ -3459,11 +4001,11 @@ paths:
                     deterministic markdown for KV-cache stability. `json` returns the raw
                     snapshot payload for programmatic callers.
       responses:
-        '200':
+        "200":
           description: Entity snapshot
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EntitySnapshot' }
+              schema: { $ref: "#/components/schemas/EntitySnapshot" }
 
   /list_observations:
     post:
@@ -3493,7 +4035,7 @@ paths:
                     ISO 8601 timestamp. Return only observations whose
                     observed_at is greater than or equal to this value.
       responses:
-        '200':
+        "200":
           description: Observations
           content:
             application/json:
@@ -3503,7 +4045,7 @@ paths:
                   observations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Observation'
+                      $ref: "#/components/schemas/Observation"
 
   /get_field_provenance:
     post:
@@ -3521,7 +4063,7 @@ paths:
                 field:
                   type: string
       responses:
-        '200':
+        "200":
           description: Provenance
           content:
             application/json:
@@ -3532,6 +4074,12 @@ paths:
   /create_relationship:
     post:
       summary: Create relationship
+      description: |
+        Create a single typed relationship between two existing entities. For
+        bulk creation use `/create_relationships`. For embedding-style links
+        (post embeds image, document embeds attachment) prefer
+        `relationship_type: EMBEDS` with the container as source and the asset
+        as target.
       operationId: createRelationship
       requestBody:
         required: true
@@ -3539,13 +4087,75 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              required: [relationship_type, source_entity_id, target_entity_id]
+              additionalProperties: false
+              properties:
+                relationship_type:
+                  type: string
+                  description: |
+                    Typed relationship category. Canonical structural types are
+                    `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`,
+                    `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Domain
+                    types (e.g. `works_at`, `owns`, `manages`) are also accepted.
+                  enum:
+                    [
+                      PART_OF,
+                      CORRECTS,
+                      REFERS_TO,
+                      SETTLES,
+                      DUPLICATE_OF,
+                      DEPENDS_ON,
+                      SUPERSEDES,
+                      EMBEDS,
+                      works_at,
+                      owns,
+                      manages,
+                      part_of,
+                      related_to,
+                      depends_on,
+                      references,
+                      transacted_with,
+                      member_of,
+                      reports_to,
+                      located_at,
+                      created_by,
+                      funded_by,
+                      acquired_by,
+                      subsidiary_of,
+                      partner_of,
+                      competitor_of,
+                      supplies_to,
+                      contracted_with,
+                      invested_in,
+                    ]
+                source_entity_id:
+                  type: string
+                  description: Existing entity id at the source end of the edge.
+                target_entity_id:
+                  type: string
+                  description: Existing entity id at the target end of the edge.
+                source_id:
+                  type: string
+                  description: |
+                    Optional `sources` row id stamped as provenance on the
+                    relationship observation.
+                metadata:
+                  type: object
+                  additionalProperties: true
+                  description: |
+                    Optional metadata attached to the relationship (e.g.
+                    `caption`, `order` for `EMBEDS` edges).
+                user_id:
+                  type: string
+                  description: |
+                    Optional explicit user id; inferred from authentication
+                    when omitted.
       responses:
-        '200':
+        "200":
           description: Relationship created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RelationshipSnapshot' }
+              schema: { $ref: "#/components/schemas/RelationshipSnapshot" }
 
   /create_relationships:
     post:
@@ -3570,7 +4180,37 @@ paths:
                     properties:
                       relationship_type:
                         type: string
-                        enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+                        enum:
+                          [
+                            PART_OF,
+                            CORRECTS,
+                            REFERS_TO,
+                            SETTLES,
+                            DUPLICATE_OF,
+                            DEPENDS_ON,
+                            SUPERSEDES,
+                            EMBEDS,
+                            works_at,
+                            owns,
+                            manages,
+                            part_of,
+                            related_to,
+                            depends_on,
+                            references,
+                            transacted_with,
+                            member_of,
+                            reports_to,
+                            located_at,
+                            created_by,
+                            funded_by,
+                            acquired_by,
+                            subsidiary_of,
+                            partner_of,
+                            competitor_of,
+                            supplies_to,
+                            contracted_with,
+                            invested_in,
+                          ]
                       source_entity_id:
                         type: string
                       target_entity_id:
@@ -3585,7 +4225,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Relationships created
           content:
             application/json:
@@ -3603,7 +4243,7 @@ paths:
                   relationships:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
                   errors:
                     type: array
                     items:
@@ -3614,15 +4254,101 @@ paths:
     post:
       summary: List relationships
       operationId: listRelationshipsForEntity
+      description: |
+        Query relationships filtered by entity ID, source entity ID, target entity ID, or
+        relationship type. At least one of `entity_id`, `source_entity_id`,
+        `target_entity_id`, or `relationship_type` must be provided. Results are paginated.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              # additionalProperties retained as `true` for legacy back-compat (clients
+              # pre-v0.13 may emit ambient fields). A future release may tighten this
+              # to `false` per change_guardrails_rules.mdc § Validation tightening.
               additionalProperties: true
+              anyOf:
+                - required: [entity_id]
+                - required: [source_entity_id]
+                - required: [target_entity_id]
+                - required: [relationship_type]
+              properties:
+                entity_id:
+                  type: string
+                  description: |
+                    Entity ID to match against either the source or target of each
+                    relationship (filtered further by `direction`). Legacy filter pattern;
+                    prefer `source_entity_id` / `target_entity_id` for new code.
+                source_entity_id:
+                  type: string
+                  description: Match relationships whose `source_entity_id` equals this value.
+                target_entity_id:
+                  type: string
+                  description: Match relationships whose `target_entity_id` equals this value.
+                direction:
+                  type: string
+                  enum: [inbound, outbound, incoming, outgoing, both]
+                  default: both
+                  description: |
+                    Direction applied when `entity_id` is set. `incoming`/`inbound` matches
+                    relationships where the entity is the target; `outgoing`/`outbound`
+                    matches relationships where the entity is the source; `both` (default)
+                    matches either side.
+                relationship_type:
+                  type: string
+                  enum:
+                    [
+                      PART_OF,
+                      CORRECTS,
+                      REFERS_TO,
+                      SETTLES,
+                      DUPLICATE_OF,
+                      DEPENDS_ON,
+                      SUPERSEDES,
+                      EMBEDS,
+                      works_at,
+                      owns,
+                      manages,
+                      part_of,
+                      related_to,
+                      depends_on,
+                      references,
+                      transacted_with,
+                      member_of,
+                      reports_to,
+                      located_at,
+                      created_by,
+                      funded_by,
+                      acquired_by,
+                      subsidiary_of,
+                      partner_of,
+                      competitor_of,
+                      supplies_to,
+                      contracted_with,
+                      invested_in,
+                    ]
+                  description: |
+                    Optional relationship_type filter. Closed enum matching the handler's
+                    accepted values; spec-driven clients passing any other value will be
+                    rejected at runtime with a Zod validation error.
+                limit:
+                  type: integer
+                  minimum: 1
+                  default: 100
+                  description: Maximum number of relationships to return.
+                offset:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                  description: Number of relationships to skip before returning results.
+                user_id:
+                  type: string
+                  description: |
+                    Optional user_id override (scoped to callers with privilege to query on
+                    behalf of another user). When omitted, the authenticated user is used.
       responses:
-        '200':
+        "200":
           description: Relationships
           content:
             application/json:
@@ -3632,7 +4358,16 @@ paths:
                   relationships:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
+                  total:
+                    type: integer
+                    description: Total number of matching relationships before pagination.
+                  limit:
+                    type: integer
+                    description: Echo of the requested `limit`.
+                  offset:
+                    type: integer
+                    description: Echo of the requested `offset`.
 
   /retrieve_entity_by_identifier:
     post:
@@ -3684,7 +4419,7 @@ paths:
                     Maximum observations to attach per entity when
                     include_observations is true. Ignored otherwise.
       responses:
-        '200':
+        "200":
           description: Entity search results
           content:
             application/json:
@@ -3695,7 +4430,7 @@ paths:
                     type: array
                     items:
                       allOf:
-                        - $ref: '#/components/schemas/Entity'
+                        - $ref: "#/components/schemas/Entity"
                         - type: object
                           properties:
                             observations:
@@ -3710,11 +4445,11 @@ paths:
                                 additionalProperties: true
                   total:
                     type: integer
-        '400':
+        "400":
           description: Invalid request
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /retrieve_related_entities:
     post:
@@ -3747,7 +4482,7 @@ paths:
                   type: boolean
                   default: true
       responses:
-        '200':
+        "200":
           description: Related entities
           content:
             application/json:
@@ -3787,14 +4522,487 @@ paths:
                 include_observations:
                   type: boolean
                   default: false
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  default: 100
+                  description: Maximum number of relationships to return. Default 100, max 500.
+                offset:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                  description: Number of relationships to skip before returning results.
+                user_id:
+                  type: string
       responses:
-        '200':
+        "200":
           description: Graph neighborhood
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: true
+                properties:
+                  node_id:
+                    type: string
+                  node_type:
+                    type: string
+                  entity:
+                    type: object
+                    additionalProperties: true
+                  relationships:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  related_entities:
+                    type: array
+                    description: Entities connected to the node via relationships. Each item uses `entity_id` (not `id`).
+                    items:
+                      type: object
+                      additionalProperties: true
+                      properties:
+                        entity_id:
+                          type: string
+                          description: The entity identifier. Always present as `entity_id`; the raw database `id` column is not exposed.
+                  observations:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  total_count:
+                    type: integer
+                    description: Total number of relationships for this node (before pagination).
+                  has_more:
+                    type: boolean
+                    description: True when additional relationships exist beyond the current page.
+
+  /issues/bulk_close:
+    post:
+      summary: Bulk close issues
+      description: >
+        For each `issue` entity id owned by the caller, closes the GitHub issue when
+        `github_number` is linked, then records `status: closed` in Neotoma.
+      operationId: bulkCloseIssues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_ids
+              properties:
+                entity_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Per-entity outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - results
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /issues/bulk_remove:
+    post:
+      summary: Bulk remove issues from Neotoma
+      description: >
+        Soft-deletes each `issue` entity. When the issue is still open and linked to
+        GitHub (`github_number` > 0), closes the GitHub issue first.
+      operationId: bulkRemoveIssues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_ids
+              properties:
+                entity_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Per-entity outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - results
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /issues/add_message:
+    post:
+      summary: Add message to issue thread
+      description: >
+        Appends a conversation_message to the issue thread (same flow as MCP add_issue_message).
+        May submit to the configured operator Neotoma instance and post a GitHub comment when the issue is linked.
+        Authenticated users can append to their scoped issues; scoped guest
+        callers can append with `guest_access_token` or submitter AAuth identity.
+      operationId: issuesAddMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - body
+              properties:
+                entity_id:
+                  type: string
+                  minLength: 1
+                  description: Neotoma issue entity id (preferred for Inspector deep links).
+                issue_number:
+                  type: integer
+                  minimum: 1
+                  description: GitHub issue number in the configured repo (MCP parity).
+                body:
+                  type: string
+                  minLength: 1
+                  description: Markdown message body.
+                guest_access_token:
+                  type: string
+                  minLength: 1
+                  description: >
+                    Optional guest token for operator Neotoma read-through / remote append when the local
+                    issue mirrors a remote instance. If omitted, guest_access_token on the issue snapshot is used.
+                reporter_git_sha:
+                  type: string
+                  description: |
+                    Soft requirement on public issue threads (server emits a warning when both
+                    `reporter_git_sha` and `reporter_app_version` are missing). Persisted on the
+                    `conversation_message` row so debugging steps stay correlated with the build under test.
+                reporter_git_ref:
+                  type: string
+                reporter_channel:
+                  type: string
+                reporter_app_version:
+                  type: string
+                  description: |
+                    Soft requirement on public issue threads (server emits a warning when both
+                    `reporter_git_sha` and `reporter_app_version` are missing).
+                entity_ids_to_link:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  description: >
+                    Entity IDs to link to the issue entity via REFERS_TO relationships.
+                    Created server-side in the same operation as the message is stored.
+                user_id:
+                  type: string
+              description: |
+                Provide `entity_id` and/or `issue_number` (at least one required); same rule as MCP add_issue_message.
+                On public issue threads, supply at least one of `reporter_git_sha` / `reporter_app_version` so each
+                message records the environment it was authored against. Missing both emits a server-side warning;
+                the message still persists.
+      responses:
+        "200":
+          description: Message stored; flags indicate GitHub / remote submission outcomes.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - github_comment_id
+                  - message_entity_id
+                  - pushed_to_github
+                  - submitted_to_neotoma
+                  - remote_submission_error
+                properties:
+                  github_comment_id:
+                    type: string
+                    nullable: true
+                  message_entity_id:
+                    type: string
+                  pushed_to_github:
+                    type: boolean
+                  submitted_to_neotoma:
+                    type: boolean
+                  remote_submission_error:
+                    type: string
+                    nullable: true
+                    description: Non-null when remote Neotoma append was attempted but failed after local and/or GitHub side effects were recorded.
+
+  /issues/submit:
+    post:
+      summary: Submit issue
+      description: |
+        Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
+        to the configured operator instance (same flow as MCP submit_issue).
+        Authenticated users use the normal user scope. AAuth-signed guest
+        submitters may create operator-side issues when the `issue`,
+        `conversation`, and `conversation_message` guest access policies allow
+        writes; the response includes a guest read-back token.
+
+        **Reporter environment is required.** Callers MUST supply at least
+        one of `reporter_git_sha` or `reporter_app_version`. Submissions
+        missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.
+        See `docs/subsystems/issues.md` § Reporter provenance.
+      operationId: issuesSubmit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - title
+                - body
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                body:
+                  type: string
+                  minLength: 1
+                labels:
+                  type: array
+                  items:
+                    type: string
+                visibility:
+                  type: string
+                  enum: [public, private]
+                reporter_git_sha:
+                  type: string
+                  description: |
+                    Required (this OR `reporter_app_version`). Git SHA the reporter is reproducing against
+                    (`git rev-parse HEAD`).
+                reporter_git_ref:
+                  type: string
+                reporter_channel:
+                  type: string
+                reporter_app_version:
+                  type: string
+                  description: |
+                    Required (this OR `reporter_git_sha`). App / CLI version (semver) the reporter is using.
+                reporter_ci_run_id:
+                  type: string
+                reporter_patch_source_id:
+                  type: string
+                github_url:
+                  type: string
+                  description: Guest submitter compatibility field for an already-created GitHub issue URL.
+                github_number:
+                  type: integer
+                  minimum: 1
+                  description: Guest submitter compatibility field for an already-created GitHub issue number.
+                author:
+                  type: string
+                  description: Guest submitter display author stored on the issue and first thread message.
+                local_issue_id:
+                  type: string
+                  description: Guest submitter deterministic local issue id for non-GitHub-backed threads.
+                submission_timestamp:
+                  type: string
+                  description: Guest submitter timestamp used for deterministic local thread identity.
+                entity_ids_to_link:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  description: >
+                    Entity IDs to link to this issue via REFERS_TO relationships.
+                    Created server-side in the same operation as issue creation.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Issue created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - issue_number
+                  - github_url
+                  - entity_id
+                  - conversation_id
+                  - remote_entity_id
+                  - pushed_to_github
+                  - submitted_to_neotoma
+                  - github_mirror_guidance
+                properties:
+                  issue_number:
+                    type: integer
+                  github_url:
+                    type: string
+                  entity_id:
+                    type: string
+                  issue_entity_id:
+                    type: string
+                    description: Alias for `entity_id` returned for guest submitter compatibility.
+                  conversation_id:
+                    type: string
+                  remote_entity_id:
+                    type: string
+                  pushed_to_github:
+                    type: boolean
+                  submitted_to_neotoma:
+                    type: boolean
+                  guest_access_token:
+                    type: string
+                    description: Guest token returned by the operator instance for remote read-back and append.
+                  entity_ids:
+                    type: array
+                    items:
+                      type: string
+                    description: Entity ids written by the guest submitter flow.
+                  github_mirror_guidance:
+                    type: string
+                    nullable: true
+        "400":
+          description: |
+            Validation error. `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`
+            is returned when neither `reporter_git_sha` nor
+            `reporter_app_version` is provided. `details.acceptable_field_groups`
+            lists the alternatives the caller can supply.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /issues/status:
+    post:
+      summary: Get issue status
+      description: >
+        Returns issue snapshot and thread messages; may sync from GitHub when stale and read through
+        to the operator instance when the local row mirrors remote (MCP get_issue_status parity).
+        Authenticated users read within their user scope. Scoped guest callers
+        can read with `guest_access_token` or submitter AAuth identity.
+      operationId: issuesGetStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                entity_id:
+                  type: string
+                  minLength: 1
+                issue_number:
+                  type: integer
+                  minimum: 1
+                skip_sync:
+                  type: boolean
+                guest_access_token:
+                  type: string
+                  minLength: 1
+                user_id:
+                  type: string
+              description: Provide `entity_id` and/or `issue_number` (at least one required).
+      responses:
+        "200":
+          description: Issue status payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /issues/sync:
+    post:
+      summary: Sync issues bidirectionally with GitHub
+      description: >
+        Bidirectional sync between local Neotoma and the configured GitHub repo.
+        Push leg (default on): local public issues with no github_number are sanitized
+        (PII stripped) and created on GitHub, then updated locally with the returned number/url.
+        Pull leg: GitHub issues and their comments are pulled into local entities.
+        MCP sync_issues parity.
+      operationId: issuesSync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                since:
+                  type: string
+                state:
+                  type: string
+                  enum: [open, closed, all]
+                labels:
+                  type: array
+                  items:
+                    type: string
+                push:
+                  type: boolean
+                  description: When false, skip the push leg (local public → GitHub). Default true.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Sync counts and errors
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - issues_synced
+                  - messages_synced
+                  - errors
+                  - issues_pushed
+                  - push_errors
+                properties:
+                  issues_synced:
+                    type: integer
+                  messages_synced:
+                    type: integer
+                  errors:
+                    type: array
+                    items:
+                      type: string
+                  issues_pushed:
+                    type: integer
+                  push_errors:
+                    type: array
+                    items:
+                      type: string
 
   /delete_entity:
     post:
@@ -3820,7 +5028,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Entity deleted
           content:
             application/json:
@@ -3852,7 +5060,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Entity restored
           content:
             application/json:
@@ -3878,7 +5086,37 @@ paths:
               properties:
                 relationship_type:
                   type: string
-                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+                  enum:
+                    [
+                      PART_OF,
+                      CORRECTS,
+                      REFERS_TO,
+                      SETTLES,
+                      DUPLICATE_OF,
+                      DEPENDS_ON,
+                      SUPERSEDES,
+                      EMBEDS,
+                      works_at,
+                      owns,
+                      manages,
+                      part_of,
+                      related_to,
+                      depends_on,
+                      references,
+                      transacted_with,
+                      member_of,
+                      reports_to,
+                      located_at,
+                      created_by,
+                      funded_by,
+                      acquired_by,
+                      subsidiary_of,
+                      partner_of,
+                      competitor_of,
+                      supplies_to,
+                      contracted_with,
+                      invested_in,
+                    ]
                 source_entity_id:
                   type: string
                 target_entity_id:
@@ -3888,7 +5126,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Relationship deleted
           content:
             application/json:
@@ -3914,7 +5152,37 @@ paths:
               properties:
                 relationship_type:
                   type: string
-                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+                  enum:
+                    [
+                      PART_OF,
+                      CORRECTS,
+                      REFERS_TO,
+                      SETTLES,
+                      DUPLICATE_OF,
+                      DEPENDS_ON,
+                      SUPERSEDES,
+                      EMBEDS,
+                      works_at,
+                      owns,
+                      manages,
+                      part_of,
+                      related_to,
+                      depends_on,
+                      references,
+                      transacted_with,
+                      member_of,
+                      reports_to,
+                      located_at,
+                      created_by,
+                      funded_by,
+                      acquired_by,
+                      subsidiary_of,
+                      partner_of,
+                      competitor_of,
+                      supplies_to,
+                      contracted_with,
+                      invested_in,
+                    ]
                 source_entity_id:
                   type: string
                 target_entity_id:
@@ -3924,7 +5192,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Relationship restored
           content:
             application/json:
@@ -3955,7 +5223,7 @@ paths:
                   type: number
                   default: 0.8
       responses:
-        '200':
+        "200":
           description: Schema candidates
           content:
             application/json:
@@ -3988,7 +5256,7 @@ paths:
                   type: string
                   enum: [pending, approved, rejected]
       responses:
-        '200':
+        "200":
           description: Schema recommendations
           content:
             application/json:
@@ -4046,7 +5314,7 @@ paths:
                   type: boolean
                   default: false
       responses:
-        '200':
+        "200":
           description: Schema updated
           content:
             application/json:
@@ -4090,7 +5358,7 @@ paths:
                   type: boolean
                   default: false
       responses:
-        '200':
+        "200":
           description: Schema registered
           content:
             application/json:
@@ -4129,7 +5397,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Correction created
           content:
             application/json:
@@ -4149,7 +5417,7 @@ paths:
             schema:
               type: object
       responses:
-        '200':
+        "200":
           description: User ID
           content:
             application/json:
@@ -4201,7 +5469,7 @@ paths:
             type: string
           required: false
       responses:
-        '200':
+        "200":
           description: Session attribution + policy
           content:
             application/json:
@@ -4224,7 +5492,7 @@ paths:
                   type: boolean
                   default: false
       responses:
-        '200':
+        "200":
           description: Health check results
           content:
             application/json:
@@ -4232,3 +5500,438 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /subscribe:
+    post:
+      summary: Create a substrate event subscription (webhook or SSE)
+      operationId: subscribe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - delivery_method
+              properties:
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                entity_ids:
+                  type: array
+                  items:
+                    type: string
+                event_types:
+                  type: array
+                  items:
+                    type: string
+                delivery_method:
+                  type: string
+                  enum: [webhook, sse]
+                webhook_url:
+                  type: string
+                webhook_secret:
+                  type: string
+                max_failures:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                sync_peer_id:
+                  type: string
+                  description: |
+                    When set, webhook deliveries skip substrate events whose
+                    `source_peer_id` equals this value (prevents notifying a peer
+                    about changes that originated from that peer).
+      responses:
+        "200":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  subscription_id:
+                    type: string
+                  entity_id:
+                    type: string
+                  webhook_secret:
+                    type: string
+
+  /unsubscribe:
+    post:
+      summary: Deactivate a subscription
+      operationId: unsubscribe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - subscription_id
+              properties:
+                subscription_id:
+                  type: string
+      responses:
+        "200":
+          description: Subscription deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /list_subscriptions:
+    post:
+      summary: List active subscriptions for the current user
+      operationId: listSubscriptions
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: Active subscriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /get_subscription_status:
+    post:
+      summary: Get subscription delivery status
+      operationId: getSubscriptionStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - subscription_id
+              properties:
+                subscription_id:
+                  type: string
+      responses:
+        "200":
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /events/stream:
+    get:
+      summary: Server-sent events stream for a subscription
+      operationId: eventsStream
+      parameters:
+        - in: query
+          name: subscription_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: text/event-stream
+
+  /peers:
+    get:
+      summary: List configured Neotoma peers for the authenticated user
+      operationId: listPeers
+      responses:
+        "200":
+          description: Peer rows (shared_secret omitted)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      summary: Add a Neotoma peer configuration
+      operationId: addPeer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - peer_id
+                - peer_name
+                - peer_url
+                - direction
+                - entity_types
+                - sync_scope
+                - auth_method
+                - conflict_strategy
+              properties:
+                peer_id:
+                  type: string
+                peer_name:
+                  type: string
+                peer_url:
+                  type: string
+                direction:
+                  type: string
+                  enum: [push, pull, bidirectional]
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                sync_scope:
+                  type: string
+                  enum: [all, tagged]
+                auth_method:
+                  type: string
+                  enum: [aauth, shared_secret]
+                conflict_strategy:
+                  type: string
+                  enum: [last_write_wins, source_priority, manual]
+                shared_secret:
+                  type: string
+                  description: Optional; generated when auth_method is shared_secret and omitted.
+                peer_public_key_thumbprint:
+                  type: string
+                  description: Optional AAuth public-key thumbprint expected from this peer when auth_method is aauth.
+                sync_target_user_id:
+                  type: string
+                  format: uuid
+                  description: Optional. Authenticated user_id on the peer instance for outbound POST /sync/webhook target_user_id.
+      responses:
+        "201":
+          description: Peer created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /peers/{peer_id}:
+    get:
+      summary: Get one peer configuration (secret redacted) plus remote /health probe and semver compat vs this server
+      operationId: getPeerStatus
+      parameters:
+        - in: path
+          name: peer_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Peer snapshot with remote health and local API version
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - peer
+                  - local_api_version
+                  - remote_health
+                properties:
+                  local_api_version:
+                    type: string
+                    description: This Neotoma instance package version (same source as GET /health)
+                  peer:
+                    type: object
+                    additionalProperties: true
+                  remote_health:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - reachable
+                      - version
+                      - compatible
+                    properties:
+                      reachable:
+                        type: boolean
+                      ok:
+                        type: boolean
+                        description: Present when reachable; true when /health returned ok true
+                      version:
+                        type: string
+                        description: Peer /health version string or unknown
+                      compatible:
+                        type: boolean
+                        description: Semver compat vs local_api_version (same rules as neotoma compat); false when unreachable or /health not ok
+                      warning:
+                        type: string
+                        nullable: true
+                      error:
+                        type: string
+                        nullable: true
+    delete:
+      summary: Deactivate a peer configuration
+      operationId: removePeer
+      parameters:
+        - in: path
+          name: peer_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Peer deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /peers/{peer_id}/sync:
+    post:
+      summary: Bounded outbound peer sync (POST signed /sync/webhook per observation)
+      operationId: syncPeer
+      parameters:
+        - in: path
+          name: peer_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  description: Max observations to consider this run (default 200)
+      responses:
+        "200":
+          description: Sync acknowledgement
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /peers/resolve_sync_conflict:
+    post:
+      summary: Resolve a sync conflict (prefer_remote re-fetches remote guest snapshot; prefer_local is a no-op with guidance)
+      operationId: resolveSyncConflict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_id
+                - strategy
+              properties:
+                entity_id:
+                  type: string
+                strategy:
+                  type: string
+                  enum: [prefer_local, prefer_remote, last_write_wins, source_priority, manual]
+                sender_peer_url:
+                  type: string
+                  description: Required for prefer_remote — remote Neotoma base URL (GET /entities/{entity_id})
+                guest_access_token:
+                  type: string
+                  description: Optional query access_token for guest read on the remote instance
+      responses:
+        "200":
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /sync/webhook:
+    post:
+      summary: Apply one inbound cross-instance sync notification
+      operationId: applySyncWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - sender_peer_id
+                - sender_peer_url
+                - target_user_id
+                - entity_id
+                - source_observation_id
+              properties:
+                sender_peer_id:
+                  type: string
+                sender_peer_url:
+                  type: string
+                target_user_id:
+                  type: string
+                  format: uuid
+                entity_id:
+                  type: string
+                source_observation_id:
+                  type: string
+                guest_access_token:
+                  type: string
+      responses:
+        "200":
+          description: Sync notification applied
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /sync/entities:
+    post:
+      summary: List local entity snapshots for an authenticated peer sync pull
+      operationId: listSyncEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - sender_peer_id
+                - target_user_id
+                - entity_types
+              properties:
+                sender_peer_id:
+                  type: string
+                target_user_id:
+                  type: string
+                  format: uuid
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                observed_after:
+                  type: string
+                  format: date-time
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+      responses:
+        "200":
+          description: Entity snapshots available to the peer
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true

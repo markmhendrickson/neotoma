@@ -1,0 +1,30 @@
+The full sequence of observations can be replayed to reconstruct state at any timestamp. This enables
+deterministic debugging and incident analysis.
+
+## Before vs after
+
+Before: after an incident, you only have current snapshots and partial logs. After: replay from
+observations reproduces the exact state transition path that led to failure.
+
+```bash
+# List timeline events
+neotoma timeline list
+
+# Get one event and inspect linked entities
+neotoma timeline get <event_id>
+neotoma relationships list --entity-id <entity_id>
+```
+
+Replay depends on
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+and supports
+<MdxI18nLink to="/reproducible-state-reconstruction" className="text-foreground underline hover:text-foreground">
+  reproducible state reconstruction
+</MdxI18nLink>
+. See
+<MdxI18nLink to="/auditable-change-log" className="text-foreground underline hover:text-foreground">
+  auditable change log
+</MdxI18nLink>
+for provenance.

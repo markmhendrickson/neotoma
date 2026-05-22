@@ -7,8 +7,8 @@
  *    timeline reflects the agent's work even if the agent never writes a
  *    structured memory via MCP.
  *
- * 2. Prompt-local reinforcement: when the agent has not yet emitted a
- *    `store_structured` call this turn, return `additional_context`
+ * 2. Prompt-local reinforcement: when the agent has not yet emitted an
+ *    MCP **`store`** call this turn, return `additional_context`
  *    reminding it of the Neotoma must-do list. Cursor honors
  *    `additional_context` on
  *    `postToolUse` (verified against the documented contract). This is

@@ -1,0 +1,11 @@
+{
+  "path": "/neotoma-with-codex-connect-remote-http-oauth",
+  "locale": "es",
+  "page_title": "Codex remote setup (HTTP with OAuth)",
+  "translation_of": "/neotoma-with-codex-connect-remote-http-oauth",
+  "source_locale": "en",
+  "translated_from_revision": "2026-05-07",
+  "translation_status": "machine_draft",
+  "nav_group": "integrations",
+  "nav_order": 41
+}

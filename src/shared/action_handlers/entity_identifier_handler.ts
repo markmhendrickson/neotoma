@@ -66,7 +66,7 @@ type SnapshotRow = {
 function snapshotFieldsMatch(
   snapshot: Record<string, unknown> | null,
   needleLower: string,
-  fields: readonly string[],
+  fields: readonly string[]
 ): boolean {
   if (!snapshot) return false;
   for (const field of fields) {
@@ -84,7 +84,7 @@ function snapshotFieldsMatch(
 async function attachObservations(
   entities: RetrievedEntity[],
   userId: string,
-  observationsLimit: number,
+  observationsLimit: number
 ): Promise<RetrievedEntity[]> {
   if (entities.length === 0) return entities;
   const entityIds = entities.map((e) => e.id);
@@ -175,7 +175,7 @@ export async function retrieveEntityByIdentifierWithFallback(
     }
     const { data: snapshotRows } = await snapshotQuery.limit(500);
     const snapshotMatches = ((snapshotRows as SnapshotRow[] | null) || []).filter((row) =>
-      snapshotFieldsMatch(row.snapshot, needleLower, snapshotFields),
+      snapshotFieldsMatch(row.snapshot, needleLower, snapshotFields)
     );
     if (snapshotMatches.length > 0) {
       const matchedIds = snapshotMatches.map((r) => r.entity_id);

@@ -5,6 +5,7 @@
  */
 
 import { expect } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { test } from "../fixtures/servers.js";
 import {
   clearClientState,
@@ -14,8 +15,11 @@ import {
 } from "./helpers.js";
 import { db } from "../../src/db.js";
 
-async function detectOrphanNodes() {
-  const { data: entities, error: entityError } = await db.from("entities").select("id");
+async function detectOrphanNodes(userId: string) {
+  const { data: entities, error: entityError } = await db
+    .from("entities")
+    .select("id")
+    .eq("user_id", userId);
   if (entityError) throw entityError;
 
   const { data: edges, error: edgeError } = await db.from("source_entity_edges").select("entity_id");
@@ -33,7 +37,7 @@ async function detectOrphanNodes() {
 
 async function detectCycles() {
   const { data: rels, error } = await db
-    .from("relationships")
+    .from("relationship_observations")
     .select("source_entity_id,target_entity_id,relationship_type");
   if (error) throw error;
 
@@ -90,7 +94,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
   test.afterEach(async () => {
     // Clean up test data
     if (createdRelationshipIds.length > 0) {
-      await db.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationship_observations").delete().in("id", createdRelationshipIds);
       createdRelationshipIds.length = 0;
     }
     if (createdEntityIds.length > 0) {
@@ -114,7 +118,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
       .from("sources")
       .insert({
         user_id: testUserId,
-        content_hash: "hash_graph_integrity_1",
+        content_hash: `hash_graph_integrity_${randomUUID()}`,
         original_filename: "integrity_test.pdf",
         mime_type: "application/pdf",
         file_size: 1000,
@@ -146,7 +150,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
       });
 
     // Run orphan detection
-    const orphans = await detectOrphanNodes();
+    const orphans = await detectOrphanNodes(testUserId);
     
     // Our test entities should not be orphans
     expect(orphans.orphanRecords).toBe(0);
@@ -181,7 +185,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     createdEntityIds.push(entity.data!.id);
 
     // Run orphan detection
-    const orphans = await detectOrphanNodes();
+    const orphans = await detectOrphanNodes(testUserId);
     
     // Should detect at least one orphan entity
     expect(orphans.orphanEntities).toBeGreaterThan(0);
@@ -232,8 +236,10 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
 
     // Create cycle: A→B→C→A
     const relAB = await db
-      .from("relationships")
+      .from("relationship_observations")
       .insert({
+        id: randomUUID(),
+        relationship_key: randomUUID(),
         user_id: testUserId,
         relationship_type: "PART_OF",
         source_entity_id: entityA.data!.id,
@@ -246,8 +252,10 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     if (relAB.data?.id) createdRelationshipIds.push(relAB.data.id);
 
     const relBC = await db
-      .from("relationships")
+      .from("relationship_observations")
       .insert({
+        id: randomUUID(),
+        relationship_key: randomUUID(),
         user_id: testUserId,
         relationship_type: "PART_OF",
         source_entity_id: entityB.data!.id,
@@ -260,8 +268,10 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     if (relBC.data?.id) createdRelationshipIds.push(relBC.data.id);
 
     const relCA = await db
-      .from("relationships")
+      .from("relationship_observations")
       .insert({
+        id: randomUUID(),
+        relationship_key: randomUUID(),
         user_id: testUserId,
         relationship_type: "PART_OF",
         source_entity_id: entityC.data!.id,
@@ -314,8 +324,10 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
 
     // Create relationship
     const relationship = await db
-      .from("relationships")
+      .from("relationship_observations")
       .insert({
+        id: randomUUID(),
+        relationship_key: randomUUID(),
         user_id: testUserId,
         relationship_type: "PART_OF",
         source_entity_id: entityA.data!.id,
@@ -333,7 +345,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
 
     // Verify relationship handling (cascade or orphan, depends on FK constraints)
     const { data: remainingRels } = await db
-      .from("relationships")
+      .from("relationship_observations")
       .select("*")
       .eq("source_entity_id", entityA.data!.id);
     

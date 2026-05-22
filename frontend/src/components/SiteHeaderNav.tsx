@@ -61,11 +61,11 @@ import {
   localizeHashHref,
   localizePath,
   normalizeToDefaultRoute,
-  stripLocaleFromPath,
 } from "@/i18n/routing";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
 import { isMarketingFullPageRoute } from "@/site/full_page_paths";
-import { FAQ_ITEMS, faqQuestionToSectionId } from "@/site/faq_items";
+import { staticAssetPath } from "@/site/spa_path";
+import { getFaqItems } from "@/site/faq_items";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -78,6 +78,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { IronClawIcon } from "@/components/icons/IronClawIcon";
@@ -97,6 +98,7 @@ const sidebarNavItemClass =
   "!bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground";
 
 const DOC_DROPDOWN_FEATURED_HREFS = new Set([
+  "/skills",
   "/neotoma-with-claude-code",
   "/neotoma-with-claude",
   "/neotoma-with-chatgpt",
@@ -324,6 +326,8 @@ function isProductBasePath(): boolean {
   return segment.toLowerCase().startsWith("neotoma-with-");
 }
 
+const headerChromeLinkClass = cn(navigationMenuTriggerStyle(), sidebarNavItemClass);
+
 function NavLink({
   href,
   children,
@@ -347,48 +351,36 @@ function NavLink({
 
   if (external) {
     return (
-      <NavigationMenuLink
-        asChild
-        className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-      >
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {children}
-        </a>
-      </NavigationMenuLink>
+      <a href={href} target="_blank" rel="noopener noreferrer" className={headerChromeLinkClass}>
+        {children}
+      </a>
     );
   }
   if (href.startsWith("#")) {
     return (
-      <NavigationMenuLink
-        asChild
-        className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
+      <a
+        href={localizedHref}
+        className={headerChromeLinkClass}
+        onClick={(e) => {
+          if (isModifiedClick(e)) return;
+          e.preventDefault();
+          const targetId = href.slice(1);
+          const target = document.getElementById(targetId);
+          if (isMarketingHomeForHash && target) {
+            target.scrollIntoView({ behavior: "smooth" });
+            return;
+          }
+          navigate(localizedHref);
+        }}
       >
-        <a
-          href={localizedHref}
-          onClick={(e) => {
-            if (isModifiedClick(e)) return;
-            e.preventDefault();
-            const targetId = href.slice(1);
-            const target = document.getElementById(targetId);
-            if (isMarketingHomeForHash && target) {
-              target.scrollIntoView({ behavior: "smooth" });
-              return;
-            }
-            navigate(localizedHref);
-          }}
-        >
-          {children}
-        </a>
-      </NavigationMenuLink>
+        {children}
+      </a>
     );
   }
   return (
-    <NavigationMenuLink
-      asChild
-      className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-    >
-      <Link to={localizedHref}>{children}</Link>
-    </NavigationMenuLink>
+    <Link to={localizedHref} className={headerChromeLinkClass}>
+      {children}
+    </Link>
   );
 }
 
@@ -432,7 +424,7 @@ function SiteNavSearch({
   alwaysShowInput?: boolean;
 }) {
   const navigate = useNavigate();
-  const { dict } = useLocale();
+  const { dict, subpage } = useLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
@@ -440,7 +432,10 @@ function SiteNavSearch({
   /** Start collapsed so mobile sheet open does not autofocus the input (keyboard). Visibility uses alwaysShowInput. */
   const [expanded, setExpanded] = useState(false);
 
-  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
+  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict, locale), [
+    dict,
+    locale,
+  ]);
 
   const useCasePathSet = useMemo(() => new Set(USE_CASE_LANDING_PATHS), []);
 
@@ -453,8 +448,8 @@ function SiteNavSearch({
         byHref.set(item.href, { label: item.label, href: item.href, category: category.title });
       }
     }
-    for (const item of FAQ_ITEMS) {
-      const href = `/faq#${faqQuestionToSectionId(item.question)}`;
+    for (const item of getFaqItems(locale)) {
+      const href = `/faq#${item.sectionId}`;
       const searchText = [item.question, item.answer, item.detail]
         .filter(Boolean)
         .join(" ")
@@ -462,12 +457,12 @@ function SiteNavSearch({
       byHref.set(href, {
         label: item.question,
         href,
-        category: "FAQ",
+        category: subpage.faq.title,
         searchText,
       });
     }
     return [...byHref.values()];
-  }, [localizedDocCategories, useCasePathSet]);
+  }, [localizedDocCategories, useCasePathSet, locale, subpage.faq.title]);
 
   const topPages = useMemo(() => {
     const byHref = new Map(pages.map((p) => [p.href, p]));
@@ -577,7 +572,7 @@ function SiteNavSearch({
           placeholder={searchLabel}
           aria-label={searchLabel}
           className={`absolute top-1/2 h-8 -translate-y-1/2 border-sidebar-border bg-sidebar/70 pl-8 ${
-            alwaysShowInput ? "text-base" : "text-[13px]"
+            alwaysShowInput ? "text-base" : "text-ui"
           } text-sidebar-foreground placeholder:text-sidebar-foreground/60 transition-[width,opacity] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-inset focus-visible:border-sidebar-border ${
             showInput
               ? "left-0 w-full opacity-100"
@@ -592,12 +587,12 @@ function SiteNavSearch({
           }`}
         >
           {isShowingTopPages && (
-            <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
+            <div className="px-3 pt-2 pb-1 text-caption font-medium uppercase tracking-wider text-sidebar-foreground/50">
               {dict.topPages}
             </div>
           )}
           {displayItems.length === 0 ? (
-            <div className="px-3 py-2 text-[12px] text-sidebar-foreground/70">
+            <div className="px-3 py-2 text-fine text-sidebar-foreground/70">
               {dict.noResults}
             </div>
           ) : (
@@ -609,8 +604,8 @@ function SiteNavSearch({
                     onClick={() => handleSelect(item.href)}
                     className="w-full rounded-sm px-2 py-2 text-left hover:bg-sidebar-accent"
                   >
-                    <div className="text-[13px] text-sidebar-foreground">{item.label}</div>
-                    <div className="text-[11px] text-sidebar-foreground/70">
+                    <div className="text-ui text-sidebar-foreground">{item.label}</div>
+                    <div className="text-caption text-sidebar-foreground/70">
                       {item.category} · {siteSearchResultPathDisplay(item.href)}
                     </div>
                   </button>
@@ -659,7 +654,10 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   useEffect(() => {
     setAppNavBarVisible(headerScrollVisible);
   }, [headerScrollVisible, setAppNavBarVisible]);
-  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
+  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict, locale), [
+    dict,
+    locale,
+  ]);
 
   const featuredDocCategories = useMemo(() => {
     const featured = localizedDocCategories
@@ -691,11 +689,11 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         headerScrollVisible ? "translate-y-0" : "-translate-y-full pointer-events-none"
       } bg-sidebar/90 text-sidebar-foreground backdrop-blur-sm shadow-[inset_0_-10px_20px_-10px_rgba(0,0,0,0.05)]`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-0.5">
         {showSidebarTrigger && <SidebarTrigger className="shrink-0" aria-label="Toggle sidebar" />}
         <a
           href="/"
-          className={`text-[15px] font-semibold text-sidebar-foreground no-underline hover:text-sidebar-accent-foreground transition-colors ${!showSidebarTrigger ? "pl-3" : ""}`}
+          className={`no-underline hover:opacity-80 transition-opacity ${!showSidebarTrigger ? "pl-3" : ""}`}
           aria-label="Neotoma home"
           onClick={(e) => {
             if (isMarketingHomeChrome && !isModifiedClick(e)) {
@@ -704,20 +702,33 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             }
           }}
         >
-          Neotoma
+          <img
+            src={staticAssetPath("/neotoma-wordmark.svg")}
+            alt="Neotoma"
+            className="h-5 w-auto dark:invert"
+          />
         </a>
         {!isMarketingFullPageRoute(routeBase) && (
-          <span className="hidden md:inline-flex min-w-0 max-w-[140px] items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-[11px] text-sidebar-foreground/80">
-            <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
-            <a
-              href="https://markmhendrickson.com/posts/neotoma-developer-release"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
-            >
-              {dict.developerPreview}
-            </a>
-          </span>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="hidden md:inline-flex min-w-0 max-w-[140px] cursor-default items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-caption text-sidebar-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
+                  <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
+                  <a
+                    href="https://markmhendrickson.com/posts/neotoma-developer-release"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
+                  >
+                    {dict.developerPreview}
+                  </a>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-sm text-fine leading-snug">
+                {dict.developerPreview}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </div>
 
@@ -733,7 +744,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         {!hideHeaderEvaluateInstallNav && (
           <Link
             to={localizePath("/evaluate", locale)}
-            className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="rounded-md px-1.5 py-1.5 text-ui text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={() => sendCtaClick("header_evaluate")}
           >
             {dict.evaluate}
@@ -744,7 +755,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             to={localizePath("/install", locale)}
             className={cn(
               HOME_DEMO_INSTALL_CTA_CLASS,
-              "px-2 py-1 text-[13px] focus-visible:ring-offset-sidebar",
+              "px-2 py-1 text-ui focus-visible:ring-offset-sidebar",
             )}
             onClick={() => sendCtaClick("header_install")}
           >
@@ -754,7 +765,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         <Link
           to={localizePath("/architecture", locale)}
           className={cn(
-            "rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            "rounded-md px-1.5 py-1.5 text-ui text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             hideHeaderEvaluateInstallNav ? "inline-flex" : "hidden sm:inline-flex",
           )}
           onClick={() => sendCtaClick("view_architecture")}
@@ -763,134 +774,127 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         </Link>
       </nav>
 
-      <NavigationMenu className="hidden md:block">
-        <NavigationMenuList>
-          {!hideHeaderEvaluateInstallNav && (
+      {/*
+        Radix NavigationMenu viewport is anchored to the menu root's left edge, not the active
+        trigger. Keep a single-item NavigationMenu for Docs so the dropdown aligns under Docs.
+      */}
+      <nav
+        className="relative z-10 hidden max-w-max flex-1 list-none items-center justify-center gap-1 md:flex"
+        aria-label="Main"
+      >
+        {!hideHeaderEvaluateInstallNav && (
+          <Link
+            to={localizePath("/evaluate", locale)}
+            className={headerChromeLinkClass}
+            onClick={() => sendCtaClick("header_evaluate")}
+          >
+            {dict.evaluate}
+          </Link>
+        )}
+        {!hideHeaderEvaluateInstallNav && (
+          <Link
+            to={localizePath("/install", locale)}
+            className={cn(
+              HOME_DEMO_INSTALL_CTA_CLASS,
+              "px-2.5 py-1 text-sm focus-visible:ring-offset-sidebar",
+            )}
+            onClick={() => sendCtaClick("header_install")}
+          >
+            {dict.install}
+          </Link>
+        )}
+        <Link
+          to={localizePath("/architecture", locale)}
+          className={headerChromeLinkClass}
+          onClick={() => sendCtaClick("view_architecture")}
+        >
+          {dict.architecture}
+        </Link>
+        <NavigationMenu className="flex-none">
+          <NavigationMenuList>
             <NavigationMenuItem>
-              <NavigationMenuLink asChild>
-                <Link
-                  to={localizePath("/evaluate", locale)}
-                  className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-                  onClick={() => sendCtaClick("header_evaluate")}
-                >
-                  {dict.evaluate}
-                </Link>
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-          )}
-          {!hideHeaderEvaluateInstallNav && (
-            <NavigationMenuItem className="hidden md:flex">
-              <NavigationMenuLink asChild>
-                <Link
-                  to={localizePath("/install", locale)}
-                  className={cn(
-                    HOME_DEMO_INSTALL_CTA_CLASS,
-                    "px-2.5 py-1 text-sm focus-visible:ring-offset-sidebar",
-                  )}
-                  onClick={() => sendCtaClick("header_install")}
-                >
-                  {dict.install}
-                </Link>
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-          )}
-          <NavigationMenuItem className="hidden md:flex">
-            <NavigationMenuLink asChild>
-              <Link
-                to={localizePath("/architecture", locale)}
-                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-                onClick={() => sendCtaClick("view_architecture")}
+              <NavigationMenuTrigger
+                className={`text-base ${sidebarNavItemClass}`}
+                onClick={() => navigate(localizePath("/docs", locale))}
               >
-                {dict.architecture}
-              </Link>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
-          <NavigationMenuItem className="hidden md:flex">
-            <NavigationMenuTrigger
-              className={`text-[14px] ${sidebarNavItemClass}`}
-              onClick={() => navigate(localizePath("/docs", locale))}
-            >
-              {dict.docs}
-            </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <ul className="grid w-[260px] max-h-[min(70vh,520px)] overflow-y-auto overscroll-contain gap-0.5 p-2 border border-sidebar-border bg-sidebar text-sidebar-foreground rounded-md shadow-sm">
-                {featuredDocCategories.map((cat) => (
-                  <li key={cat.title}>
-                    <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
-                      {cat.title}
-                    </div>
-                    <ul className="list-none p-0">
-                      {cat.items.map((item) => (
-                        <li key={item.href}>
-                          {(() => {
-                            const isIntegrations = cat.items.some((candidate) =>
-                              candidate.href.startsWith("/neotoma-with-")
-                            );
-                            const BrandIcon =
-                              isIntegrations && item.href.startsWith("/")
-                                ? INTEGRATION_BRAND_ICONS[item.href]
-                                : null;
-                            const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
-                            return (
-                            <NavigationMenuLink asChild>
-                              <Link
-                                to={
-                                  item.href.startsWith("/")
-                                    ? localizePath(item.href, locale)
-                                    : item.href
-                                }
-                                className="flex select-none items-center gap-2 rounded-sm px-3 py-2 text-[14px] leading-none text-sidebar-foreground no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
-                                onClick={() => sendDocsNavClick(item.href, "header_nav")}
-                              >
-                                {BrandIcon ? (
-                                  <BrandIcon className="h-4 w-4 shrink-0" aria-hidden />
-                                ) : Icon ? (
-                                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                                ) : null}
-                                <span>{item.label}</span>
-                              </Link>
-                            </NavigationMenuLink>
+                {dict.docs}
+              </NavigationMenuTrigger>
+              <NavigationMenuContent>
+                <ul className="grid w-[260px] max-h-[min(70vh,520px)] overflow-y-auto overscroll-contain gap-0.5 p-2 border border-sidebar-border bg-sidebar text-sidebar-foreground rounded-md shadow-sm">
+                  {featuredDocCategories.map((cat) => (
+                    <li key={cat.title}>
+                      <div className="px-3 pt-2 pb-1 text-caption font-medium uppercase tracking-wider text-sidebar-foreground/50">
+                        {cat.title}
+                      </div>
+                      <ul className="list-none p-0">
+                        {cat.items.map((item) => (
+                          <li key={item.href}>
+                            {(() => {
+                              const isIntegrations = cat.items.some((candidate) =>
+                                candidate.href.startsWith("/neotoma-with-")
+                              );
+                              const BrandIcon =
+                                isIntegrations && item.href.startsWith("/")
+                                  ? INTEGRATION_BRAND_ICONS[item.href]
+                                  : null;
+                              const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
+                              return (
+                                <NavigationMenuLink asChild>
+                                  <Link
+                                    to={
+                                      item.href.startsWith("/")
+                                        ? localizePath(item.href, locale)
+                                        : item.href
+                                    }
+                                    className="flex select-none items-center gap-2 rounded-sm px-3 py-2 text-base leading-none text-sidebar-foreground no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
+                                    onClick={() => sendDocsNavClick(item.href, "header_nav")}
+                                  >
+                                    {BrandIcon ? (
+                                      <BrandIcon className="h-4 w-4 shrink-0" aria-hidden />
+                                    ) : Icon ? (
+                                      <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                                    ) : null}
+                                    <span>{item.label}</span>
+                                  </Link>
+                                </NavigationMenuLink>
                               );
                             })()}
-                        </li>
-                      ))}
-                    </ul>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                  <li className="border-t border-sidebar-border mt-1 pt-1">
+                    <NavigationMenuLink asChild>
+                      <Link
+                        to={localizePath("/docs", locale)}
+                        className="block select-none rounded-sm px-3 py-2 text-ui leading-none text-sidebar-foreground/70 no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
+                      >
+                        {dict.viewAll} →
+                      </Link>
+                    </NavigationMenuLink>
                   </li>
-                ))}
-                <li className="border-t border-sidebar-border mt-1 pt-1">
-                  <NavigationMenuLink asChild>
-                    <Link
-                      to={localizePath("/docs", locale)}
-                      className="block select-none rounded-sm px-3 py-2 text-[13px] leading-none text-sidebar-foreground/70 no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
-                    >
-                      {dict.viewAll} →
-                    </Link>
-                  </NavigationMenuLink>
-                </li>
-              </ul>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-          <NavigationMenuItem className="hidden md:flex px-1">
-            <SiteNavSearch
-              locale={locale}
-              searchLabel={dict.search}
-              className="w-[180px] xl:w-[220px]"
-            />
-          </NavigationMenuItem>
-          <NavigationMenuItem>
-            <NavLink href="https://github.com/markmhendrickson/neotoma" locale={locale} external>
-              <SiGithub className="h-4 w-4" aria-hidden />
-              <span className="sr-only">GitHub</span>
-            </NavLink>
-          </NavigationMenuItem>
-          <NavigationMenuItem>
-            <NavLink href="https://www.npmjs.com/package/neotoma" locale={locale} external>
-              <SiNpm className="h-4 w-4" aria-hidden />
-              <span className="sr-only">npm</span>
-            </NavLink>
-          </NavigationMenuItem>
-        </NavigationMenuList>
-      </NavigationMenu>
+                </ul>
+              </NavigationMenuContent>
+            </NavigationMenuItem>
+          </NavigationMenuList>
+        </NavigationMenu>
+        <div className="px-1">
+          <SiteNavSearch
+            locale={locale}
+            searchLabel={dict.search}
+            className="w-[180px] xl:w-[220px]"
+          />
+        </div>
+        <NavLink href="https://github.com/markmhendrickson/neotoma" locale={locale} external>
+          <SiGithub className="h-4 w-4" aria-hidden />
+          <span className="sr-only">GitHub</span>
+        </NavLink>
+        <NavLink href="https://www.npmjs.com/package/neotoma" locale={locale} external>
+          <SiNpm className="h-4 w-4" aria-hidden />
+          <span className="sr-only">npm</span>
+        </NavLink>
+      </nav>
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         {typeof document !== "undefined" &&
           createPortal(
@@ -923,7 +927,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             <div className="flex h-12 items-center border-b border-sidebar-border px-4">
               <a
                 href="/"
-                className="text-[15px] font-semibold text-sidebar-foreground no-underline hover:text-sidebar-accent-foreground transition-colors"
+                className="no-underline hover:opacity-80 transition-opacity"
                 onClick={(e) => {
                   setMobileMenuOpen(false);
                   if (isMarketingHomeChrome && !isModifiedClick(e)) {
@@ -932,7 +936,11 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   }
                 }}
               >
-                Neotoma
+                <img
+                  src={staticAssetPath("/neotoma-wordmark.svg")}
+                  alt="Neotoma"
+                  className="h-5 w-auto dark:invert"
+                />
               </a>
             </div>
             <div
@@ -944,7 +952,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   {!hideHeaderEvaluateInstallNav && (
                     <Link
                       to={localizePath("/evaluate", locale)}
-                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      className="rounded-md px-3 py-2 text-base text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       onClick={() => {
                         sendCtaClick("header_evaluate");
                         setMobileMenuOpen(false);
@@ -958,7 +966,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                       to={localizePath("/install", locale)}
                       className={cn(
                         HOME_DEMO_INSTALL_CTA_CLASS,
-                        "w-full justify-center px-3 py-2 text-[14px] focus-visible:ring-offset-sidebar",
+                        "w-full justify-center px-3 py-2 text-base focus-visible:ring-offset-sidebar",
                       )}
                       onClick={() => {
                         sendCtaClick("header_install");
@@ -970,7 +978,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   )}
                   <Link
                     to={localizePath("/architecture", locale)}
-                    className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    className="rounded-md px-3 py-2 text-base text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     onClick={() => {
                       sendCtaClick("view_architecture");
                       setMobileMenuOpen(false);
@@ -981,14 +989,14 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                 </>
                 <Link
                   to={localizePath("/docs", locale)}
-                  className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  className="rounded-md px-3 py-2 text-base text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   {dict.docs}
                 </Link>
                 <Link
                   to={localizePath("/faq", locale)}
-                  className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  className="rounded-md px-3 py-2 text-base text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   FAQ
@@ -997,7 +1005,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   href="https://github.com/markmhendrickson/neotoma"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  className="rounded-md px-3 py-2 text-base text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   GitHub
@@ -1006,7 +1014,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   href="https://www.npmjs.com/package/neotoma"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  className="rounded-md px-3 py-2 text-base text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   npm

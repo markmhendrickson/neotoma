@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "I bought a new laptop for $1,499 from Apple\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Persist all entities the user mentions via store_structured (conversation, conversation_message, and extracted entities with PART_OF and REFERS_TO relationships). After storing, reply with a brief confirmation that includes a Neotoma section showing what was stored.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Persist all entities the user mentions via the MCP store tool (conversation, conversation_message, and extracted entities with PART_OF and REFERS_TO relationships). After storing, reply with a brief confirmation that includes a Neotoma section showing what was stored.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-display-rule-001",
         "entities": [

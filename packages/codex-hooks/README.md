@@ -5,8 +5,10 @@ Lifecycle hooks that plug [Neotoma](https://neotoma.io) into [OpenAI Codex CLI](
 | Codex hook | Neotoma behavior |
 | --- | --- |
 | `history.session_start_command` | Create a `conversation` entity for the session. |
-| `notify.command` | Record a `context_event` for each Codex notification (turn complete, approval needed, error). |
+| `notify` (root argv array) | Record a `context_event` for each Codex notification (turn complete, approval needed, error). Same as `notify = ["python3", "/…/notify.py"]` in Codex sample config. |
 | `history.session_end_command` | Record a `session_end` marker and persist the final assistant reply. |
+
+Codex’s `[history]` table also requires `persistence` (`"save-all"` or `"none"`). The installer appends the hook block and, if the file still has no `persistence =` line, inserts `persistence = "save-all"` immediately after the first `[history]` header so older configs stay valid on current Codex builds.
 
 Tool-call capture is not exposed by Codex CLI at this time. Agents that need richer observability should pair this with the Neotoma MCP server — the hooks set the reliability floor, MCP provides the quality ceiling.
 
