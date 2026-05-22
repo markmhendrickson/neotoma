@@ -612,6 +612,19 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Peers & cross-instance sync", path: "/inspector/peers" },
     ],
   },
+  "/inspector/usage": {
+    title: "Inspector, Usage | Neotoma",
+    description:
+      "Monitor API usage metrics, request counts, token consumption, and quota status for your Neotoma instance in the Inspector.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Usage", path: "/inspector/usage" },
+    ],
+  },
   "/inspector/search": {
     title: "Inspector, Search | Neotoma",
     description:
