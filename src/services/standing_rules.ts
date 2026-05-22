@@ -40,7 +40,7 @@ export async function getActiveStandingRules(userId: string): Promise<StandingRu
       .select("id, canonical_name, entity_snapshots!inner(snapshot)")
       .eq("user_id", userId)
       .eq("entity_type", "standing_rule")
-      .is("merged_into", null);
+      .is("merged_to_entity_id", null);
 
     if (error) {
       logger.warn(`[standing_rules] query failed: ${error.message}`);
