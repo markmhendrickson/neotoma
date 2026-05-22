@@ -102,12 +102,14 @@ class NeotomaMemory:
         turn_id: str,
         assistant_message: str,
         refers_to: list[str] | None = None,
+        turn_number: int | None = None,
     ) -> CloseTurnResult:
         """Step 5 (closing store of assistant reply)."""
         asst_msg_id = self._store_assistant_turn(
             turn_id=turn_id,
             assistant_message=assistant_message,
             refers_to=refers_to or [],
+            turn_number=turn_number,
         )
         return CloseTurnResult(turn_id=turn_id, assistant_message_entity_id=asst_msg_id)
 
@@ -144,11 +146,13 @@ class NeotomaMemory:
         turn_id: str,
         assistant_message: str,
         refers_to: list[str] | None = None,
+        turn_number: int | None = None,
     ) -> CloseTurnResult:
         asst_msg_id = await self._astore_assistant_turn(
             turn_id=turn_id,
             assistant_message=assistant_message,
             refers_to=refers_to or [],
+            turn_number=turn_number,
         )
         return CloseTurnResult(turn_id=turn_id, assistant_message_entity_id=asst_msg_id)
 
@@ -187,7 +191,7 @@ class NeotomaMemory:
         result = self._transport.store({
             "entities": entities,
             "relationships": relationships,
-            "idempotency_key": f"conversation-{self.conversation_id}-{turn_id}",
+            "idempotency_key": f"conversation-{self.conversation_id}-{turn_id}-user",
         })
         return self._parse_user_store(result, len(entities))
 
@@ -197,11 +201,13 @@ class NeotomaMemory:
         turn_id: str,
         assistant_message: str,
         refers_to: list[str],
+        turn_number: int | None = None,
     ) -> str | None:
         entities, relationships = self._build_assistant_phase(
             turn_id=turn_id,
             assistant_message=assistant_message,
             refers_to=refers_to,
+            turn_number=turn_number,
         )
         result = self._transport.store({
             "entities": entities,
@@ -246,7 +252,7 @@ class NeotomaMemory:
         result = await self._transport.astore({
             "entities": entities,
             "relationships": relationships,
-            "idempotency_key": f"conversation-{self.conversation_id}-{turn_id}",
+            "idempotency_key": f"conversation-{self.conversation_id}-{turn_id}-user",
         })
         return self._parse_user_store(result, len(entities))
 
@@ -256,11 +262,13 @@ class NeotomaMemory:
         turn_id: str,
         assistant_message: str,
         refers_to: list[str],
+        turn_number: int | None = None,
     ) -> str | None:
         entities, relationships = self._build_assistant_phase(
             turn_id=turn_id,
             assistant_message=assistant_message,
             refers_to=refers_to,
+            turn_number=turn_number,
         )
         result = await self._transport.astore({
             "entities": entities,
@@ -289,6 +297,7 @@ class NeotomaMemory:
         }
         if self._platform:
             conv_entity["platform"] = self._platform  # type: ignore[typeddict-unknown-key]
+            conv_entity["harness"] = self._platform  # type: ignore[typeddict-unknown-key]
         if self._client_name:
             conv_entity["client_name"] = self._client_name  # type: ignore[typeddict-unknown-key]
 
@@ -323,6 +332,7 @@ class NeotomaMemory:
         turn_id: str,
         assistant_message: str,
         refers_to: list[str],
+        turn_number: int | None = None,
     ) -> tuple[list[StoreEntityInput], list[StoreRelationshipInput]]:
         conv_entity: StoreEntityInput = {
             "entity_type": "conversation",
@@ -335,6 +345,8 @@ class NeotomaMemory:
             "content": assistant_message,
             "turn_key": f"{self.conversation_id}:{turn_id}:assistant",
         }
+        if turn_number is not None:
+            msg_entity["turn_number"] = turn_number  # type: ignore[typeddict-unknown-key]
         if self._platform:
             msg_entity["platform"] = self._platform  # type: ignore[typeddict-unknown-key]
 

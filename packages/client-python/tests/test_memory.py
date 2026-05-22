@@ -178,7 +178,7 @@ class TestCloseTurn:
 
 class TestIdempotencyKeys:
     def test_canonical_key_shapes(self) -> None:
-        """User key = conversation-{id}-{turn_id}; assistant key appends -assistant."""
+        """User key = conversation-{id}-{turn_id}-user; assistant key uses -assistant suffix."""
         transport = make_transport()
         transport.store.side_effect = [
             {"entities": [{"entity_id": "c1", "entity_type": "conversation"}, {"entity_id": "u1", "entity_type": "conversation_message"}]},
@@ -192,7 +192,7 @@ class TestIdempotencyKeys:
         calls = transport.store.call_args_list
         user_key = calls[0][0][0]["idempotency_key"]
         assistant_key = calls[1][0][0]["idempotency_key"]
-        assert user_key == "conversation-conv-99-turn-7"
+        assert user_key == "conversation-conv-99-turn-7-user"
         assert assistant_key == "conversation-conv-99-turn-7-assistant"
 
 

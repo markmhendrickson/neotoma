@@ -100,6 +100,7 @@ flowchart TD
 - Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `validate:test-catalog`, and `validate:doc-deps`.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
+- Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.
 - Remote integration nightly runs `npm run test:remote:critical` when enabled.
 
 ## Automated test suites
@@ -666,6 +667,14 @@ flowchart TD
 **Requirements:** Basic `.env` if required by the module under test.
 **Files (1):**
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
+
+### Python unit tests
+**Directory:** `packages/client-python/tests/`
+**Runner:** `pytest`
+**Command:** `pytest packages/client-python/tests/ -v`
+**Requirements:** `pip install -e packages/client-python[dev]`
+**Files (1):**
+- `packages/client-python/tests/test_memory.py` — NeotomaMemory open/close turn lifecycle, with_memory wrapper, store_chat_turn and retrieve_or_store helpers, idempotency key contract, REFERS_TO deduplication, async acall with asyncio.to_thread
 
 ## Agent instructions
 ### When to load this document
