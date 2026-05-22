@@ -7655,7 +7655,7 @@ app.post("/list_relationships", async (req, res) => {
       );
     } else {
       relationships = await relationshipsService.getRelationshipsForEntity(
-        entity_id,
+        entity_id!,
         normalizedDirection
       );
     }
