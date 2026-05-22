@@ -1126,6 +1126,7 @@ components:
           description: Sorted list of declared field names. Empty when registered is false.
         schema_definition:
           type: object
+          nullable: true
           additionalProperties: true
           description: |
             Full SchemaDefinition object including fields, canonical_name_fields,
@@ -1133,6 +1134,7 @@ components:
             other declared schema properties. Null when registered is false.
         reducer_config:
           type: object
+          nullable: true
           additionalProperties: true
           description: Reducer configuration with merge policies. Null when registered is false.
     Interpretation:

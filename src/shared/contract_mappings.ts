@@ -345,9 +345,8 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "describeEntityType",
     method: "post",
     path: "/schemas/describe",
-    adapter: "both",
+    adapter: "mcp",
     mcpTool: "describe_entity_type",
-    cliCommand: "schemas describe <entityType>",
   },
   {
     operationId: "listInterpretations",
