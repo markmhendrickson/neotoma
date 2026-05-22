@@ -144,6 +144,8 @@ Run after Step 3.5 passes, before Step 4. Symmetric in role to the security revi
 
 **Why this lane exists:** Tests-exist is not the same as tests-cover-the-thing-users-will-do. A surface can ship with a named test file that exercises only the happy path of an internal helper, leaving destructive operations, external-file-shape parsing, or new CLI commands effectively unverified. The v0.13.0 audit found 5 such gaps after the supplement was confirmed; this lane catches them before execute.
 
+0. **Run `/review <last-tag>..HEAD`** before writing the coverage file. The `/review` skill (`.claude/skills/review/SKILL.md`) walks the full pre-PR checklist against the diff and emits structured findings (BLOCKING / ADVISORY / NIT) covering architecture, schema-agnostic design, determinism, immutability, auth, contract seams, and user-facing-surface coverage in a single pass. Append its verdict and blocking findings to `docs/releases/in_progress/vX.Y.Z/test_coverage_review.md` under a `## Code review` section. A `NEEDS-CHANGES` verdict from `/review` is a hard gate on Step 4 — resolve all BLOCKING findings before proceeding, even if they were introduced by commits that bypassed PR review.
+
 1. **Walk the supplement's user-facing surfaces** (from "New CLI commands", "New CLI flags on existing commands", "Behavior changes in existing commands", "API surface & contracts"). For each, locate the test file(s) and read what they assert. Note specifically:
 
    **Surfaces that need a regression test before shipping:**
@@ -323,31 +325,61 @@ After the RC PR is merged and the user confirms execute, run **every** step belo
 
 2. **Publish any draft security advisories linked from this release (mandatory when `Security hardening` section is non-trivial):**
 
-   After the tag is live and before declaring the release complete, check whether any advisory referenced in the supplement's `Security hardening` section is still in draft/private state.
+   After the tag is live and before declaring the release complete, check and publish every advisory referenced in the supplement's `Security hardening` section. The local doc status field is **not** authoritative — always check the live GHSA state via the API.
 
    a. **Scan the supplement for advisory links:**
       ```bash
       grep -oE 'docs/security/advisories/[^ )]+\.md' docs/releases/in_progress/vX.Y.Z/github_release_supplement.md
       ```
 
-   b. **For each linked advisory file, check its status field:**
+   b. **For each linked advisory file, extract the GHSA ID:**
       ```bash
-      head -20 docs/security/advisories/<slug>.md | grep -i status
+      grep -i 'ghsa\|github.com/.*security/advisories' docs/security/advisories/<slug>.md | head -5
       ```
-      If status is `draft` or `private`, it must be published now.
 
-   c. **Run `/advisory close <slug> vX.Y.Z`** for each unpublished advisory. This skill will:
-      - Update the advisory doc status to `disclosed`
-      - Record the fix version
-      - Publish the corresponding GitHub Security Advisory (GHSA) via `gh api`
-
-   d. **Verify the GHSA is public** after publication:
+   c. **Check the live GHSA state via GitHub API** (do not rely on the local doc `status` field):
       ```bash
-      gh api repos/markmhendrickson/neotoma/security-advisories --jq '.[] | select(.ghsa_id == "<GHSA-ID>") | {state, published_at}'
+      gh api repos/markmhendrickson/neotoma/security-advisories \
+        --jq '.[] | select(.ghsa_id == "<GHSA-ID>") | {ghsa_id, state, published_at, vulnerabilities}'
       ```
-      State must be `published`. If the GHSA publish step fails (auth, scope), STOP and surface the exact error — do not declare the release complete with a draft GHSA.
+      If `state` is anything other than `published`, publish it now.
+
+   d. **Before publishing, ensure `patched_versions` is set** for the fix version:
+      ```bash
+      gh api repos/markmhendrickson/neotoma/security-advisories/<GHSA-ID> \
+        --method PATCH \
+        --input - <<'EOF'
+      {
+        "vulnerabilities": [
+          {
+            "package": { "ecosystem": "npm", "name": "neotoma" },
+            "vulnerable_version_range": ">=X.Y.0, <X.Y.Z",
+            "patched_versions": "X.Y.Z"
+          }
+        ]
+      }
+      EOF
+      ```
+
+   e. **Publish the GHSA:**
+      ```bash
+      gh api repos/markmhendrickson/neotoma/security-advisories/<GHSA-ID> \
+        --method PATCH \
+        --input - <<'EOF'
+      {"state": "published"}
+      EOF
+      ```
+
+   f. **Verify the GHSA is public:**
+      ```bash
+      gh api repos/markmhendrickson/neotoma/security-advisories/<GHSA-ID> \
+        --jq '{ghsa_id, state, published_at}'
+      ```
+      `state` must be `published` and `published_at` must be non-null. If the publish step fails (auth, scope), STOP and surface the exact error — do not declare the release complete with a draft GHSA.
 
    **Why this step is here and not in Step 3.5:** The GHSA should only go public after the fix is actually tagged and shipped. Publishing before the tag leaks attack vector details before users can protect themselves. The advisory doc is written during Step 3.5; the GHSA is published here.
+
+   **Do not rely on the local advisory doc `status` field.** A doc marked `disclosed` locally may still have a draft GHSA. Always verify via the API (step c above).
 
    **Skip this step** only when the supplement's `Security hardening` section reads `No security-sensitive surfaces touched.`
 

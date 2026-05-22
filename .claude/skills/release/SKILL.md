@@ -325,31 +325,61 @@ After the RC PR is merged and the user confirms execute, run **every** step belo
 
 2. **Publish any draft security advisories linked from this release (mandatory when `Security hardening` section is non-trivial):**
 
-   After the tag is live and before declaring the release complete, check whether any advisory referenced in the supplement's `Security hardening` section is still in draft/private state.
+   After the tag is live and before declaring the release complete, check and publish every advisory referenced in the supplement's `Security hardening` section. The local doc status field is **not** authoritative — always check the live GHSA state via the API.
 
    a. **Scan the supplement for advisory links:**
       ```bash
       grep -oE 'docs/security/advisories/[^ )]+\.md' docs/releases/in_progress/vX.Y.Z/github_release_supplement.md
       ```
 
-   b. **For each linked advisory file, check its status field:**
+   b. **For each linked advisory file, extract the GHSA ID:**
       ```bash
-      head -20 docs/security/advisories/<slug>.md | grep -i status
+      grep -i 'ghsa\|github.com/.*security/advisories' docs/security/advisories/<slug>.md | head -5
       ```
-      If status is `draft` or `private`, it must be published now.
 
-   c. **Run `/advisory close <slug> vX.Y.Z`** for each unpublished advisory. This skill will:
-      - Update the advisory doc status to `disclosed`
-      - Record the fix version
-      - Publish the corresponding GitHub Security Advisory (GHSA) via `gh api`
-
-   d. **Verify the GHSA is public** after publication:
+   c. **Check the live GHSA state via GitHub API** (do not rely on the local doc `status` field):
       ```bash
-      gh api repos/markmhendrickson/neotoma/security-advisories --jq '.[] | select(.ghsa_id == "<GHSA-ID>") | {state, published_at}'
+      gh api repos/markmhendrickson/neotoma/security-advisories \
+        --jq '.[] | select(.ghsa_id == "<GHSA-ID>") | {ghsa_id, state, published_at, vulnerabilities}'
       ```
-      State must be `published`. If the GHSA publish step fails (auth, scope), STOP and surface the exact error — do not declare the release complete with a draft GHSA.
+      If `state` is anything other than `published`, publish it now.
+
+   d. **Before publishing, ensure `patched_versions` is set** for the fix version:
+      ```bash
+      gh api repos/markmhendrickson/neotoma/security-advisories/<GHSA-ID> \
+        --method PATCH \
+        --input - <<'EOF'
+      {
+        "vulnerabilities": [
+          {
+            "package": { "ecosystem": "npm", "name": "neotoma" },
+            "vulnerable_version_range": ">=X.Y.0, <X.Y.Z",
+            "patched_versions": "X.Y.Z"
+          }
+        ]
+      }
+      EOF
+      ```
+
+   e. **Publish the GHSA:**
+      ```bash
+      gh api repos/markmhendrickson/neotoma/security-advisories/<GHSA-ID> \
+        --method PATCH \
+        --input - <<'EOF'
+      {"state": "published"}
+      EOF
+      ```
+
+   f. **Verify the GHSA is public:**
+      ```bash
+      gh api repos/markmhendrickson/neotoma/security-advisories/<GHSA-ID> \
+        --jq '{ghsa_id, state, published_at}'
+      ```
+      `state` must be `published` and `published_at` must be non-null. If the publish step fails (auth, scope), STOP and surface the exact error — do not declare the release complete with a draft GHSA.
 
    **Why this step is here and not in Step 3.5:** The GHSA should only go public after the fix is actually tagged and shipped. Publishing before the tag leaks attack vector details before users can protect themselves. The advisory doc is written during Step 3.5; the GHSA is published here.
+
+   **Do not rely on the local advisory doc `status` field.** A doc marked `disclosed` locally may still have a draft GHSA. Always verify via the API (step c above).
 
    **Skip this step** only when the supplement's `Security hardening` section reads `No security-sensitive surfaces touched.`
 
