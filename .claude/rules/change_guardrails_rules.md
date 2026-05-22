@@ -79,7 +79,7 @@ These rules sit between subsystems. Each canonical doc covers its own surface; o
 2. Every `operationId` has a `src/shared/contract_mappings.ts` row; every new MCP tool or CLI command is reachable from that table.
 3. Behavioral rules that affect agents appear in both `docs/developer/mcp/instructions.md` and `docs/developer/cli_agent_instructions.md`, mirrored via the anchor rule.
 4. Runtime overrides follow `flag > env > default`, are read in the `preAction` hook with a `NEOTOMA_`-prefixed name, and appear in the `cli_reference.md` Runtime overrides table.
-5. Authorization goes through `getAuthenticatedUserId`. Body / query `user_id` is never read directly for access control.
+5. Authorization goes through `getAuthenticatedUserId`. Body / query `user_id` is never read directly for access control. Authentication alone is insufficient — every authenticated query that reads user-owned tables (entities, observations, sources, relationship_snapshots, timeline_events, entity_snapshots) MUST apply `.eq("user_id", userId)` to scope the query to the requesting user's data. New query endpoints MUST add a row to `tests/security/tenant_isolation_matrix.test.ts` asserting cross-user reads are blocked. See `docs/security/advisories/2026-05-21-relationship-endpoint-tenant-isolation.md` (GHSA-wrr4-782v-jhwh) for the regression class.
 6. New response or error fields are declared in `openapi.yaml` first; clients gate on declared fields, not on the presence or absence of ambient rich properties.
 7. Post-release fixes ship as a new patch (or higher) version. Historical supplements under `docs/releases/completed/` are not rewritten.
 8. New top-level CLI commands are added to `tests/cli/cli_command_coverage_guard.test.ts` in the same change.
