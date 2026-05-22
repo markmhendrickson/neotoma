@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **397**
-- Backend and repo Vitest files: **364**
+- Total automated test files: **399**
+- Backend and repo Vitest files: **366**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 97 |
+| Vitest unit tests | 98 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 111 |
+| Vitest integration tests | 112 |
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (97):**
+**Files (98):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -203,6 +203,7 @@ flowchart TD
 - `tests/unit/subscription_types.test.ts`
 - `tests/unit/substrate_event_bus.test.ts`
 - `tests/unit/timeline_events.test.ts`
+- `tests/unit/turn_summary_widget.test.ts`
 - `tests/unit/unknown_fields_guard.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
@@ -303,7 +304,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (111):**
+**Files (112):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -412,6 +413,7 @@ flowchart TD
 - `tests/integration/sync_webhook_inbound.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
 - `tests/integration/tunnel_discovery.test.ts`
+- `tests/integration/turn_summary_mcp_apps.test.ts`
 - `tests/integration/turn_summary.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
