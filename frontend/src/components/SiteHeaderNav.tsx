@@ -314,6 +314,7 @@ function useMobileNavFabVisibility(
   }, [pathname, forceVisible]);
 
   if (forceVisible) return true;
+  if (marketingHomeChrome) return true;
 
   const blockedByHomeSection = introInView || evaluateInView;
   return fabShownByScroll && !blockedByHomeSection;
@@ -649,7 +650,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   const homeEvaluateScrollBannerVisible = useSiteHomeEvaluateScrollBannerVisible();
   const mobileNavFabVisible =
     mobileMenuOpen ||
-    (mobileNavFabBaseVisible && !homeEvaluateScrollBannerVisible);
+    (mobileNavFabBaseVisible && (isMarketingHomeChrome || !homeEvaluateScrollBannerVisible));
   const setAppNavBarVisible = useSiteAppNavBarVisibleSetter();
   useEffect(() => {
     setAppNavBarVisible(headerScrollVisible);
