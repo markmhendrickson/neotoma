@@ -105,12 +105,16 @@ import {
   SESSION_COOKIE_NAME,
 } from "./services/sandbox/sessions.js";
 import {
+  buildEndpointsMap,
   buildLandingContext,
   buildRootLandingHtml,
   buildRootLandingJson,
   buildRootLandingMarkdown,
   buildRobotsTxt,
+  readGitSha,
   readNeotomaConfigEnvironment,
+  readPackageVersion,
+  resolveLandingMode,
   wantsHtml as acceptWantsHtml,
   wantsMarkdown as acceptWantsMarkdown,
 } from "./services/root_landing/index.js";
@@ -578,13 +582,23 @@ app.get("/favicon.ico", (_req, res) => res.status(204).end());
     );
   }
 }
-app.get("/", (req, res) => {
+app.get("/", (req, res, next) => {
   try {
     const ctx = buildLandingContext(req);
     res.setHeader("Cache-Control", "public, max-age=60");
+    // For HTML requests, serve the server-rendered landing page only in
+    // hosted_sandbox mode (public funnel).  In all other modes (local, personal,
+    // prod) the Inspector SPA is the primary UI: fall through to the SPA
+    // fallback handler registered by installInspectorSpaFallback so the
+    // Inspector's HomePage loads instead.
     if (acceptWantsHtml(req.headers.accept)) {
-      return res.type("html").send(buildRootLandingHtml(ctx));
+      if (ctx.hostedSandbox) {
+        return res.type("html").send(buildRootLandingHtml(ctx));
+      }
+      return next();
     }
+    // JSON and Markdown consumers (agents, curl) always get the structured
+    // server-rendered payload regardless of mode.
     if (acceptWantsMarkdown(req.headers.accept)) {
       res.type("text/markdown; charset=utf-8");
       return res.send(buildRootLandingMarkdown(ctx));
@@ -747,17 +761,24 @@ app.get("/.well-known/aauth-resource.json", (_req, res) => {
 
 // Server info endpoint (no-auth) - exposes server port for MCP configuration
 // When NEOTOMA_MCP_PROXY_URL or MCP_PROXY_URL is set (e.g. ngrok tunnel), mcpUrl uses it so "Add to Cursor" uses the proxy.
-app.get("/server-info", (_req, res) => {
+// Extended to include version, git_sha, and endpoints map so the Inspector
+// Settings page can surface "This instance" and "Endpoints" info without
+// requiring auth.
+app.get("/server-info", (req, res) => {
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
   const httpPort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;
   const mcpBase = process.env.NEOTOMA_MCP_PROXY_URL || process.env.MCP_PROXY_URL || config.apiBase;
   const base = mcpBase.replace(/\/$/, "");
   const mcpUrl = base.endsWith("/mcp") ? base : `${base}/mcp`;
+  const mode = resolveLandingMode(req);
   res.json({
     httpPort,
     apiBase: config.apiBase,
     mcpUrl,
     neotoma_env: readNeotomaConfigEnvironment(),
+    version: readPackageVersion(),
+    git_sha: readGitSha(),
+    endpoints: buildEndpointsMap(mode),
   });
 });
 

@@ -627,6 +627,12 @@ export interface ServerInfo {
   mcpUrl?: string;
   /** Resolved `NEOTOMA_ENV` on the API process (`development` | `production`). */
   neotoma_env?: string;
+  /** Package version (`x.y.z`). */
+  version?: string;
+  /** Git SHA or fly machine version from the server environment. */
+  git_sha?: string | null;
+  /** Named endpoint paths relative to the API base. */
+  endpoints?: Record<string, string>;
 }
 
 /**

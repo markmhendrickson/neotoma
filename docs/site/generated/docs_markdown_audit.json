@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-05-14T08:55:56.690Z",
-  "total_files": 415,
+  "generated_at": "2026-05-21T09:20:11.708Z",
+  "total_files": 663,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 19,
     "conventions": 12,
     "coverage_manifest.md": 1,
-    "developer": 94,
+    "developer": 113,
     "examples": 1,
     "feature_units": 20,
     "foundation": 21,
@@ -19,20 +19,20 @@
     "NEOTOMA_MANIFEST.md": 1,
     "observability": 3,
     "operations": 4,
-    "plans": 5,
-    "proposals": 13,
+    "plans": 68,
+    "proposals": 10,
     "prototypes": 2,
     "reference": 1,
     "reports": 48,
+    "research": 1,
     "security": 3,
-    "site": 5,
+    "site": 169,
     "skills": 1,
-    "specs": 12,
-    "subsystems": 44,
+    "specs": 14,
+    "subsystems": 45,
     "templates": 2,
-    "testing-instructions-init-env-fix.md": 1,
     "testing": 10,
-    "ui": 40,
+    "ui": 42,
     "use_cases": 17,
     "vocabulary": 1
   },
@@ -170,6 +170,10 @@
       "top": "coverage_manifest.md"
     },
     {
+      "rel": "docs/developer/aauth_overview.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/agent_cli_configuration.md",
       "top": "developer"
     },
@@ -179,6 +183,10 @@
     },
     {
       "rel": "docs/developer/agent_installation_instructions.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_instructions_overview.md",
       "top": "developer"
     },
     {
@@ -207,6 +215,10 @@
     },
     {
       "rel": "docs/developer/canonical_walkthrough.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/chatgpt_actions_setup.md",
       "top": "developer"
     },
     {
@@ -278,6 +290,10 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/docs_index_route.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/environment_distinction_audit.md",
       "top": "developer"
     },
@@ -346,6 +362,54 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/inspector/agents.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/conversations.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/dashboard.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/entities.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/observations_and_sources.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/peers.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/README.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/relationships_and_graph.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/schemas.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/search.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/settings.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/inspector/timeline.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/launchd_dev_servers.md",
       "top": "developer"
     },
@@ -363,10 +427,6 @@
     },
     {
       "rel": "docs/developer/mcp_authentication_summary.md",
-      "top": "developer"
-    },
-    {
-      "rel": "docs/developer/chatgpt_actions_setup.md",
       "top": "developer"
     },
     {
@@ -438,11 +498,19 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/mcp/compact_instructions.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/mcp/instructions.md",
       "top": "developer"
     },
     {
       "rel": "docs/developer/mcp/invalid_connection_id_handling.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp/mobile_setup.md",
       "top": "developer"
     },
     {
@@ -463,6 +531,10 @@
     },
     {
       "rel": "docs/developer/package_scripts.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/pr_review_reading_list.md",
       "top": "developer"
     },
     {
@@ -519,6 +591,10 @@
     },
     {
       "rel": "docs/developer/site_mdx_documentation.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/skills_guide.md",
       "top": "developer"
     },
     {
@@ -878,23 +954,275 @@
       "top": "operations"
     },
     {
-      "rel": "docs/plans/agent_identity_attribution_pilot.md",
+      "rel": "docs/plans/aauth-attribution-parity-cli-mcp-agent-instructions.md",
       "top": "plans"
     },
     {
-      "rel": "docs/plans/issues_transport_full_parity.md",
+      "rel": "docs/plans/aeo-agent-evaluation-optimization-long-running-agent-operationalization-full.md",
       "top": "plans"
     },
     {
-      "rel": "docs/plans/multi_tenant_operations.md",
+      "rel": "docs/plans/agent-behavior-enforcement-plan.md",
       "top": "plans"
     },
     {
-      "rel": "docs/plans/observer_wire_feedback_channel.md",
+      "rel": "docs/plans/agent-swarm-testing-plan-for-neotoma.md",
       "top": "plans"
     },
     {
-      "rel": "docs/plans/schema_introspection.md",
+      "rel": "docs/plans/agent-trust-framework.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/agentic-eval-tier-1-hook-fixture-replay-matrix.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/agentic-eval-tier-2-real-llm-replay-harness.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/agentic-eval-tier-3-compliance-scorecard-cli.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/all-storage-unstructured-provenance.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/bug-report-and-contribution-client-guidance.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/chrome-extension-auto-capture.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/convert-1password-sync-to-mcp.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/design-system-plans-consolidated-full-markdown-body.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/execution-plan-mirage-neotoma-skills-activation.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/filesystem-markdown-record-export.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/fix-issue-40-access-reset-effective-policy-mismatch.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/fix-issue-41-null-correction-field-clearing.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/fu-2026-05-003-inspector-conversation-turn-anchors-ext-apps-widget-host.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/index.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/issue-43-add-issue-message-partial-success-handling.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/issues-agents.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/issues-transport-full-parity-mcp-cli-http.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-1-openapi-contract-authority.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-10-canonical-ingest-to-replay-walkthrough.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-11-fixtures-repository-with-expected-outputs.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-12-determinism-failure-gallery.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-2-enforce-1-to-1-mapping.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-3-log-cli-equivalents-for-mcp.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-6-strict-error-taxonomy.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-7-replayable-fixtures-with-expected-graphs.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-8-cli-as-reference-executor.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-cli-action-item-9-keep-mcp-tools-boring-and-atomic.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/mcp-source-path-documentation.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/me-and-get-authenticated-user-response-updates.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/migrate-release-ci-automatable-steps-to-github-actions.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/multi-llm-provider-support.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/multi-tenant-operational-patterns.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/neotoma-first-website-preview.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/neotoma-harness-hooks-integration.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/neotoma-harness-landing-page-net-plan.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/neotoma-harness-plan.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/neotoma-io-serp-snippet-spacing-and-sitelinks-positioning.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/neotoma-markdown-mirror-migration.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/notification-ingestion-and-triage-plan.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/observer-wire-agent-feedback-channel-lemonbrand.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/per-agent-identity-attribution-pilot-lemonbrand.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/plan-agent-swarm-testing-plan-for-neotoma.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/plan-fix-issue-40-access-reset-effective-policy-mismatch.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/plan-fix-issue-41-null-correction-field-clearing.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/plan-issue-43-add-issue-message-partial-success-handling.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/plan-migration-command-integrated-with-commit.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/redo-lost-design-system-surface-unification.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/release-readiness-sub-plans-v0-12-0.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/revised-neotoma-hooks-plan.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/safe-db-cloud-sync.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/schema-icon-enhancements.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/schema-introspection-and-field-promotion.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/schema-packs-strategy.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/security-advisory-distribution.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/simplify-neotoma-onboarding-flow.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/site-react-tailwind-parity.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/sources-first-ingestion-v10.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/standing-rules-long-form-essay-voice-human-inversion-neotoma-email-corpus.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/steelman-informed-repo-recommendations.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/sync-agents.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/task-organize-automate-skill-implementation-plan.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/update-advisory-agents.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/use-case-pages-recovery.md",
       "top": "plans"
     },
     {
@@ -910,10 +1238,6 @@
       "top": "proposals"
     },
     {
-      "rel": "docs/proposals/IMPLEMENTATION_SUMMARY.md",
-      "top": "proposals"
-    },
-    {
       "rel": "docs/proposals/iterative_chat_store_mcp_instructions.md",
       "top": "proposals"
     },
@@ -926,10 +1250,6 @@
       "top": "proposals"
     },
     {
-      "rel": "docs/proposals/MIGRATION_REPORT.md",
-      "top": "proposals"
-    },
-    {
       "rel": "docs/proposals/plan-migration-command-integrated-with-commit.md",
       "top": "proposals"
     },
@@ -939,10 +1259,6 @@
     },
     {
       "rel": "docs/proposals/README.md",
-      "top": "proposals"
-    },
-    {
-      "rel": "docs/proposals/sources-first-ingestion-v10.md",
       "top": "proposals"
     },
     {
@@ -1154,6 +1470,10 @@
       "top": "reports"
     },
     {
+      "rel": "docs/research/determinism_immutability_lint_landscape.md",
+      "top": "research"
+    },
+    {
       "rel": "docs/security/advisories/2026-05-11-inspector-auth-bypass.md",
       "top": "security"
     },
@@ -1182,12 +1502,676 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/pages/en/agent-auth.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/api.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/auditable-change-log.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/build-vs-buy.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/building-pipelines.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/cases.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/changelog.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/cli.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/compliance.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/conflicting-facts-risk.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/contracts.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/crm.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/crypto-engineering.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/customer-ops.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/debugging-infrastructure.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/deterministic-state-evolution.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/diligence.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/direct-human-editability.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/false-closure-risk.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/faq.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/financial-ops.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/foundation-problem-statement.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/government.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/healthcare.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/home.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/hosted.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/human-inspectability.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/install-docker.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/install-manual.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/install.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/integrations.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/issue-reporting.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/logistics.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/mcp.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/memory-guarantees.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-vs-database.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-vs-files.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-vs-mem0.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-vs-platform-memory.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-vs-rag.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-vs-zep.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-chatgpt-connect-custom-gpt.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-chatgpt-connect-remote-mcp.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-chatgpt.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-claude-agent-sdk.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-claude-code.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-claude-connect-desktop.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-claude-connect-remote-mcp.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-claude.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-codex-connect-local-stdio.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-codex-connect-remote-http-oauth.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-codex.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-continue.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-cursor.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-ironclaw.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-letta.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-openclaw-connect-local-stdio.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-openclaw-connect-remote-http.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-openclaw.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-opencode.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-vscode.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/neotoma-with-windsurf.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/non-destructive-testing.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/operating.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/peer-sync.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/personal-data.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/portfolio.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives/entities.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives/entity-snapshots.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives/interpretations.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives/observations.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives/relationships.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives/sources.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/primitives/timeline-events.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/privacy.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/procurement.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/replayable-timeline.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/reproducible-state-reconstruction.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/sandbox.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schema-constraints.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schema-management.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schemas.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schemas/merge-policies.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schemas/registry.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schemas/storage-layers.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schemas/versioning.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/security-hardening.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/semantic-similarity-search.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/silent-mutation-risk.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/strong-consistency.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/subscriptions.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/terms.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/trading.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/transactional-writes.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/troubleshooting.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/versioned-history.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/zero-setup-onboarding.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/agent-auth.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/build-vs-buy.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/building-pipelines.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/cases.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/changelog.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/compliance.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/contracts.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/crm.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/crypto-engineering.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/customer-ops.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/debugging-infrastructure.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/diligence.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/faq.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/financial-ops.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/government.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/healthcare.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/home.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/hosted.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/install-docker.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/install-manual.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/install.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/logistics.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/memory-guarantees.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-vs-database.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-vs-files.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-vs-mem0.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-vs-platform-memory.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-vs-rag.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-vs-zep.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-chatgpt-connect-custom-gpt.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-chatgpt-connect-remote-mcp.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-chatgpt.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-claude-agent-sdk.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-claude-code.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-claude-connect-desktop.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-claude-connect-remote-mcp.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-claude.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-codex-connect-local-stdio.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-codex-connect-remote-http-oauth.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-codex.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-cursor.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-ironclaw.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-openclaw-connect-local-stdio.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-openclaw-connect-remote-http.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-openclaw.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/neotoma-with-opencode.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/non-destructive-testing.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/operating.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/personal-data.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/portfolio.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives/entities.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives/entity-snapshots.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives/interpretations.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives/observations.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives/relationships.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives/sources.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/primitives/timeline-events.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/procurement.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/sandbox.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/schemas.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/schemas/merge-policies.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/schemas/registry.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/schemas/storage-layers.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/schemas/versioning.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/es/trading.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/README.md",
       "top": "site"
     },
     {
       "rel": "docs/skills/skill_strategy.md",
       "top": "skills"
+    },
+    {
+      "rel": "docs/specs/agent_evaluation_operational_long_running_agent.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/agent_evaluation_optimization_playbook.md",
+      "top": "specs"
     },
     {
       "rel": "docs/specs/DATA_MODELS.md",
@@ -1283,6 +2267,10 @@
     },
     {
       "rel": "docs/subsystems/entities.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/entity_field_semantics.md",
       "top": "subsystems"
     },
     {
@@ -1420,10 +2408,6 @@
     {
       "rel": "docs/templates/pr_template.md",
       "top": "templates"
-    },
-    {
-      "rel": "docs/testing-instructions-init-env-fix.md",
-      "top": "testing-instructions-init-env-fix.md"
     },
     {
       "rel": "docs/testing/automated_test_catalog.md",
@@ -1583,6 +2567,14 @@
     },
     {
       "rel": "docs/ui/dsl_spec.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/inspector_shadcn_audit.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/inspector_shadcn_rules.mdc",
       "top": "ui"
     },
     {

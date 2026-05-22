@@ -28,6 +28,12 @@ export interface LandingHtmlContext {
   sandboxPacks?: { id: string; kind: string; label: string }[];
   sandboxDefaultPackId?: string;
   activeSessionBearer?: string | null;
+  /**
+   * True when the sandbox is in hosted_sandbox topology (per-visitor ephemeral sessions,
+   * public internet). Suppresses the inspector link and harness section on the landing page —
+   * visitors reach the inspector only after redeeming a session code.
+   */
+  hostedSandbox?: boolean;
 }
 
 export function escapeHtml(s: string): string {
@@ -418,9 +424,10 @@ export function renderLandingHtml(ctx: LandingHtmlContext): string {
       ? `<p class="muted">Sandbox-specific: <a href="${escapeHtml(ctx.base)}/sandbox/terms">/sandbox/terms</a> (acceptable-use JSON) and <code>POST /sandbox/report</code> for abuse / PII reports.</p>`
       : "";
 
-  const inspectorNote = ctx.inspectorUrl
-    ? `<p>Inspector UI: <a href="${escapeHtml(ctx.inspectorUrl)}">${escapeHtml(ctx.inspectorUrl)}</a></p>`
-    : "";
+  const inspectorNote =
+    ctx.inspectorUrl && !ctx.hostedSandbox
+      ? `<p>Inspector UI: <a href="${escapeHtml(ctx.inspectorUrl)}">${escapeHtml(ctx.inspectorUrl)}</a></p>`
+      : "";
 
   const harnessLede =
     ctx.mode === "local"
@@ -472,12 +479,16 @@ ${sandboxEndpointsNote}
 
 ${ctx.mode === "sandbox" ? renderPackPicker(ctx) : ""}
 
-<section>
+${
+  !ctx.hostedSandbox
+    ? `<section>
 <h2>Connect your harness</h2>
 <p class="muted">${harnessLede}</p>
 ${connectHarnessCliNote}
 ${ctx.harnesses.map(renderHarnessSection).join("\n")}
-</section>
+</section>`
+    : ""
+}
 
 <section>
 <h2>Learn</h2>

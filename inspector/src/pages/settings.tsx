@@ -29,12 +29,89 @@ import { areDestructiveActionsHidden, isApiUrlOverrideDisabled } from "@/lib/san
 import { readStoredSandboxSession } from "@/lib/sandbox_session";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Circle, RefreshCw } from "lucide-react";
+import { Check, Circle, Copy, RefreshCw } from "lucide-react";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { InspectorThemeToggle } from "@/components/shared/inspector_theme_toggle";
 
 const LOCAL_PROXY_PLACEHOLDER = "/api";
+
+/** Inline copy button used inside ConnectHarnessCard. */
+function CopyButton({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* ignore */
+    }
+  }
+  return (
+    <Button variant="outline" size="sm" onClick={handleCopy} className="shrink-0 gap-1.5">
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-emerald-600" />
+      ) : (
+        <Copy className="h-3.5 w-3.5 opacity-70" />
+      )}
+      {label ?? "Copy"}
+    </Button>
+  );
+}
+
+/** Harness connection snippets for Claude Code and Claude Desktop. */
+function ConnectHarnessCard({ mcpUrl }: { mcpUrl: string }) {
+  const claudeCodeSnippet = `claude mcp add neotoma --transport http ${mcpUrl}`;
+  const claudeDesktopSnippet = JSON.stringify(
+    {
+      mcpServers: {
+        neotoma: {
+          type: "http",
+          url: mcpUrl,
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  return (
+    <Card className="min-w-0">
+      <CardHeader>
+        <CardTitle className="text-base">Connect your harness</CardTitle>
+      </CardHeader>
+      <CardContent className="min-w-0 space-y-5 text-sm">
+        <div className="space-y-2">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <span className="font-medium">Claude Code</span>
+            <CopyButton text={claudeCodeSnippet} label="Copy command" />
+          </div>
+          <pre className="min-w-0 overflow-x-auto rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs break-all whitespace-pre-wrap">
+            {claudeCodeSnippet}
+          </pre>
+        </div>
+        <div className="space-y-2">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div>
+              <span className="font-medium">Claude Desktop</span>
+              <p className="text-xs text-muted-foreground">
+                Add to <span className="font-mono">claude_desktop_config.json</span>
+              </p>
+            </div>
+            <CopyButton text={claudeDesktopSnippet} label="Copy JSON" />
+          </div>
+          <pre className="min-w-0 overflow-x-auto rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs break-all whitespace-pre-wrap">
+            {claudeDesktopSnippet}
+          </pre>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          MCP URL: <span className="font-mono break-all">{mcpUrl}</span>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -121,6 +198,20 @@ export default function SettingsPage() {
                   <span className="text-muted-foreground">MCP URL</span>
                   <p className="font-mono text-xs break-all">{serverInfo.data.mcpUrl || "—"}</p>
                 </div>
+                {serverInfo.data.version && (
+                  <div className="flex min-w-0 justify-between gap-2">
+                    <span className="shrink-0 text-muted-foreground">Version</span>
+                    <span className="min-w-0 text-right font-mono text-xs">{serverInfo.data.version}</span>
+                  </div>
+                )}
+                {serverInfo.data.git_sha && (
+                  <div className="flex min-w-0 justify-between gap-2">
+                    <span className="shrink-0 text-muted-foreground">Git SHA</span>
+                    <span className="min-w-0 truncate text-right font-mono text-xs" title={serverInfo.data.git_sha}>
+                      {serverInfo.data.git_sha.slice(0, 12)}
+                    </span>
+                  </div>
+                )}
               </>
             ) : (
               <span className="text-muted-foreground">Unable to load server info.</span>
@@ -315,6 +406,41 @@ export default function SettingsPage() {
         </Card>
         )}
       </div>
+
+      {/* Endpoints + Connect harness — shown when serverInfo is loaded */}
+      {serverInfo.data && (
+        <>
+          <Separator className="my-6" />
+          <div className="grid min-w-0 gap-6 lg:grid-cols-2">
+            {/* Endpoints card */}
+            {serverInfo.data.endpoints && Object.keys(serverInfo.data.endpoints).length > 0 && (
+              <Card className="min-w-0">
+                <CardHeader>
+                  <CardTitle className="text-base">Endpoints</CardTitle>
+                </CardHeader>
+                <CardContent className="min-w-0 space-y-2 text-sm">
+                  {Object.entries(serverInfo.data.endpoints).map(([key, path]) => {
+                    const fullUrl = serverInfo.data!.apiBase
+                      ? `${serverInfo.data!.apiBase.replace(/\/$/, "")}${path}`
+                      : path;
+                    return (
+                      <div key={key} className="flex min-w-0 justify-between gap-2">
+                        <span className="shrink-0 text-muted-foreground">{key.replace(/_/g, " ")}</span>
+                        <span className="min-w-0 break-all text-right font-mono text-xs">{fullUrl}</span>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Connect your harness card */}
+            {serverInfo.data.mcpUrl && (
+              <ConnectHarnessCard mcpUrl={serverInfo.data.mcpUrl} />
+            )}
+          </div>
+        </>
+      )}
 
       <Separator className="my-6" />
 
