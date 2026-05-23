@@ -6,17 +6,17 @@ import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 
+export interface SnapshotFilter {
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  value?: unknown;
+}
+
 interface QueryEntitiesParams {
   userId: string;
   entityType?: string;
   includeMerged?: boolean;
   includeSnapshots?: boolean;
-  sortBy?:
-    | "entity_id"
-    | "canonical_name"
-    | "observation_count"
-    | "last_observation_at"
-    | "submitted_at";
+  sortBy?: string;
   sortOrder?: "asc" | "desc";
   published?: boolean;
   publishedAfter?: string;
@@ -34,6 +34,7 @@ interface QueryEntitiesParams {
     | "heuristic_name"
     | "heuristic_fallback"
     | "target_id";
+  snapshotFilters?: Record<string, SnapshotFilter>;
 }
 
 const MAX_LEXICAL_CANDIDATES = 5000;
@@ -636,6 +637,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     updatedSince,
     createdSince,
     identityBasis,
+    snapshotFilters,
   } = params;
 
   let entities: EntityWithProvenance[];
@@ -753,12 +755,13 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       updatedSince,
       createdSince,
       identityBasis,
+      snapshotFilters,
     });
 
     // R3: when filtering by identity_basis, the visible count must reflect
     // the same pre-filter, so derive the total from the non-paginated result
     // set rather than counting all entities.
-    if (identityBasis) {
+    if (identityBasis || snapshotFilters) {
       const allMatches = await queryEntities({
         userId,
         entityType,
@@ -774,6 +777,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         updatedSince,
         createdSince,
         identityBasis,
+        snapshotFilters,
       });
       total = allMatches.length;
     } else {

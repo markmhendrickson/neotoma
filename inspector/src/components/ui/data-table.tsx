@@ -2,6 +2,7 @@ import {
   flexRender,
   type ColumnDef,
   type OnChangeFn,
+  type RowSelectionState,
   type VisibilityState,
   useReactTable,
   getCoreRowModel,
@@ -15,6 +16,10 @@ interface DataTableProps<TData> {
   emptyLabel?: string;
   columnVisibility?: VisibilityState;
   onColumnVisibilityChange?: OnChangeFn<VisibilityState>;
+  enableRowSelection?: boolean;
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>;
+  getRowId?: (row: TData) => string;
 }
 
 /**
@@ -32,13 +37,23 @@ export function DataTable<TData>({
   emptyLabel = "No data",
   columnVisibility,
   onColumnVisibilityChange,
+  enableRowSelection = false,
+  rowSelection,
+  onRowSelectionChange,
+  getRowId,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    state: columnVisibility !== undefined ? { columnVisibility } : undefined,
+    enableRowSelection,
+    state: {
+      ...(columnVisibility !== undefined ? { columnVisibility } : {}),
+      ...(rowSelection !== undefined ? { rowSelection } : {}),
+    },
     onColumnVisibilityChange,
+    onRowSelectionChange,
+    getRowId,
   });
 
   return (
@@ -77,7 +92,10 @@ export function DataTable<TData>({
             table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="border-b bg-card transition-colors hover:bg-muted/50"
+                className={cn(
+                  "border-b bg-card transition-colors hover:bg-muted/50",
+                  row.getIsSelected() && "bg-accent/40",
+                )}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-4 py-3">

@@ -3503,6 +3503,7 @@ app.post("/entities/query", async (req, res) => {
       updated_since,
       created_since,
       identity_basis,
+      snapshot_filters,
     } = parsed.data;
     const { entities, total } = await queryEntitiesWithCount({
       userId,
@@ -3520,6 +3521,7 @@ app.post("/entities/query", async (req, res) => {
       updatedSince: updated_since,
       createdSince: created_since,
       identityBasis: identity_basis,
+      snapshotFilters: snapshot_filters,
     });
 
     return res.json({

@@ -3,18 +3,18 @@
 
 import { db } from "../db.js";
 
+export interface SnapshotFilter {
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  value?: unknown;
+}
+
 export interface EntityQueryOptions {
   userId?: string;
   entityType?: string;
   includeMerged?: boolean;
   includeDeleted?: boolean;
   includeSnapshots?: boolean;
-  sortBy?:
-    | "entity_id"
-    | "canonical_name"
-    | "observation_count"
-    | "last_observation_at"
-    | "submitted_at";
+  sortBy?: string;
   sortOrder?: "asc" | "desc";
   published?: boolean;
   publishedAfter?: string;
@@ -43,6 +43,8 @@ export interface EntityQueryOptions {
     | "heuristic_name"
     | "heuristic_fallback"
     | "target_id";
+  /** Filter entities by snapshot field values. */
+  snapshotFilters?: Record<string, SnapshotFilter>;
 }
 
 export interface EntityWithProvenance {
@@ -149,6 +151,7 @@ export async function queryEntities(
     updatedSince,
     createdSince,
     identityBasis,
+    snapshotFilters,
   } = options;
 
   // R3: when an `identity_basis` filter is set, resolve candidate entity_ids
@@ -226,10 +229,15 @@ export async function queryEntities(
     entityQuery = entityQuery.order("id", { ascending: sortBy === "entity_id" ? ascending : true });
   }
 
+  const isSnapshotFieldSort = typeof sortBy === "string" && sortBy.startsWith("snapshot.");
+  const hasSnapshotFilters = snapshotFilters && Object.keys(snapshotFilters).length > 0;
+
   const shouldUseSnapshotDrivenScan =
     sortBy === "observation_count" ||
     sortBy === "last_observation_at" ||
     sortBy === "submitted_at" ||
+    isSnapshotFieldSort ||
+    hasSnapshotFilters ||
     published !== undefined ||
     Boolean(publishedAfter) ||
     Boolean(publishedBefore);
@@ -287,12 +295,46 @@ export async function queryEntities(
         snapshotQuery = snapshotQuery.lte("snapshot->>published_date", publishedBefore);
       }
 
+      if (snapshotFilters) {
+        for (const [field, filter] of Object.entries(snapshotFilters)) {
+          const col = `snapshot->>${field}`;
+          switch (filter.op) {
+            case "eq":
+              snapshotQuery = snapshotQuery.eq(col, String(filter.value));
+              break;
+            case "in":
+              if (Array.isArray(filter.value)) {
+                snapshotQuery = snapshotQuery.in(col, filter.value.map(String));
+              }
+              break;
+            case "gt":
+              snapshotQuery = snapshotQuery.gt(col, String(filter.value));
+              break;
+            case "lt":
+              snapshotQuery = snapshotQuery.lt(col, String(filter.value));
+              break;
+            case "gte":
+              snapshotQuery = snapshotQuery.gte(col, String(filter.value));
+              break;
+            case "lte":
+              snapshotQuery = snapshotQuery.lte(col, String(filter.value));
+              break;
+            case "contains":
+              snapshotQuery = snapshotQuery.ilike(col, `%${String(filter.value)}%`);
+              break;
+          }
+        }
+      }
+
       if (sortBy === "observation_count") {
         snapshotQuery = snapshotQuery.order("observation_count", { ascending });
       } else if (sortBy === "last_observation_at") {
         snapshotQuery = snapshotQuery.order("last_observation_at", { ascending });
       } else if (sortBy === "submitted_at") {
         snapshotQuery = snapshotQuery.order("snapshot->>created_at", { ascending });
+      } else if (isSnapshotFieldSort) {
+        const snapshotField = sortBy.replace("snapshot.", "");
+        snapshotQuery = snapshotQuery.order(`snapshot->>${snapshotField}`, { ascending });
       } else {
         snapshotQuery = snapshotQuery.order("entity_id", { ascending: true });
       }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEntitiesQuery } from "@/hooks/use_entities";
 import { useAgentGrants } from "@/hooks/use_agents";
@@ -13,12 +13,13 @@ import { Button } from "@/components/ui/button";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { formatDate, truncateId } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
-import type { ColumnDef } from "@tanstack/react-table";
-import type { EntitySnapshot } from "@/types/api";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { EntitySnapshot, SnapshotFilter } from "@/types/api";
 import { EntityListAdmissionCell } from "@/components/shared/entity_list_admission_cell";
 import { EntityTypeSelect } from "@/components/shared/entity_type_select";
 import { EntityTableColumnToggle } from "@/components/shared/entity_table_column_toggle";
 import { FieldValue } from "@/components/shared/field_value";
+import { InlineEditCell } from "@/components/shared/inline_edit_cell";
 import { PinPrimitiveButton } from "@/components/shared/pin_primitive_button";
 import { entityTypeFilterPinHref } from "@/lib/pinned_primitives";
 import { entityTypeListPath, pluralizeEntityTypeLabel } from "@/lib/entity_type_labels";
@@ -33,6 +34,13 @@ import {
 } from "@/lib/entity_table_columns";
 import type { EntitySchema } from "@/types/api";
 import type { VisibilityState } from "@tanstack/react-table";
+import { EntityFieldFilterBar } from "@/components/shared/entity_field_filter_bar";
+import { BulkActionBar } from "@/components/shared/bulk_action_bar";
+import { EntityBoardView } from "@/components/shared/entity_board_view";
+import { CreateEntityDialog } from "@/components/shared/create_entity_dialog";
+import { getSavedViews, saveView, deleteView, generateViewId, type SavedView } from "@/lib/saved_views";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Filter, LayoutGrid, List, Plus, Save } from "lucide-react";
 
 const PAGE_SIZE = 25;
 
@@ -54,6 +62,12 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
     DEFAULT_ENTITIES_LIST_COLUMN_VISIBILITY,
   );
+  const [snapshotFilters, setSnapshotFilters] = useState<Record<string, SnapshotFilter>>({});
+  const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "board">("list");
+  const [boardGroupField, setBoardGroupField] = useState<string>("");
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const grantsQ = useAgentGrants({ status: "all" });
   const schemasQ = useSchemas();
@@ -73,6 +87,25 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
         listColumnConfig.columnLabels,
       ),
     [listColumnConfig.columnIds, listColumnConfig.columnLabels, columnVisibility],
+  );
+
+  const schemaFields = useMemo(() => schemaFieldKeys(schemaQ.data), [schemaQ.data]);
+
+  const categoricalFields = useMemo(() => {
+    if (!schemaQ.data) return [];
+    const fields = schemaQ.data.schema_definition?.fields ?? {};
+    return Object.entries(fields)
+      .filter(([, def]) => {
+        const d = def as { type?: string };
+        return d.type === "string" || d.type === "enum";
+      })
+      .map(([k]) => k);
+  }, [schemaQ.data]);
+
+  // Saved views
+  const savedViews = useMemo(
+    () => (entityType ? getSavedViews(entityType) : []),
+    [entityType, viewMode, sortBy, sortOrder],
   );
 
   useEffect(() => {
@@ -105,6 +138,9 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
   useEffect(() => {
     setEntityType(initialType);
     setOffset(0);
+    setSnapshotFilters({});
+    setRowSelection({});
+    setBoardGroupField("");
   }, [initialType]);
 
   useEffect(() => {
@@ -133,6 +169,11 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
     });
   }
 
+  const activeSnapshotFilters = useMemo(() => {
+    if (Object.keys(snapshotFilters).length === 0) return undefined;
+    return snapshotFilters;
+  }, [snapshotFilters]);
+
   const query = useEntitiesQuery({
     search: search || undefined,
     entity_type: entityType || undefined,
@@ -148,7 +189,16 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
         | "heuristic_name"
         | "heuristic_fallback"
         | "target_id") || undefined,
+    snapshot_filters: activeSnapshotFilters,
   });
+
+  const selectedEntities = useMemo(() => {
+    const entities = query.data?.entities ?? [];
+    return Object.keys(rowSelection)
+      .filter((k) => rowSelection[k])
+      .map((id) => entities.find((e) => entityRowId(e) === id))
+      .filter(Boolean) as EntitySnapshot[];
+  }, [rowSelection, query.data?.entities]);
 
   const headerSearch = useMemo<HeaderSearchContextValue>(
     () => ({
@@ -188,6 +238,25 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
 
   const columns: ColumnDef<EntitySnapshot, unknown>[] = useMemo(() => {
     const fixed: ColumnDef<EntitySnapshot, unknown>[] = [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(v) => row.toggleSelected(!!v)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
       {
         id: "name",
         header: "Name",
@@ -243,11 +312,39 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
     const schema = entityType ? schemaQ.data : null;
     const fieldKeys = schemaFieldKeys(schema);
     const snapshotColumns = fieldKeys.map((fieldKey) =>
-      schemaFieldColumnDef(fieldKey, schema),
+      schemaFieldColumnDef(fieldKey, schema, entityType),
     );
 
     return [...fixed, ...snapshotColumns];
   }, [admissionGrants, entityType, schemaQ.data]);
+
+  function handleSaveView() {
+    if (!entityType) return;
+    const name = prompt("View name:");
+    if (!name) return;
+    saveView({
+      id: generateViewId(),
+      name,
+      entity_type: entityType,
+      filters: snapshotFilters,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+      column_visibility: columnVisibility as Record<string, boolean>,
+      view_mode: viewMode,
+      board_group_field: boardGroupField || undefined,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  function handleLoadView(view: SavedView) {
+    setSnapshotFilters(view.filters);
+    setSortBy(view.sort_by);
+    setSortOrder(view.sort_order);
+    setColumnVisibility(view.column_visibility);
+    setViewMode(view.view_mode);
+    if (view.board_group_field) setBoardGroupField(view.board_group_field);
+    setOffset(0);
+  }
 
   return (
     <PageShell
@@ -256,6 +353,9 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
       search={headerSearch}
       actions={
         <>
+          <Button variant="outline" size="sm" onClick={() => setCreateDialogOpen(true)}>
+            <Plus className="mr-1 h-3 w-3" /> New entity
+          </Button>
           {entityType ? (
             <>
               <PinPrimitiveButton
@@ -297,6 +397,13 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
                     {option.label}
                   </SelectItem>
                 ))}
+                {schemaFields
+                  .filter((f) => !visibleSortOptions.some((o) => o.value === `snapshot.${f}`))
+                  .map((f) => (
+                    <SelectItem key={`snapshot.${f}`} value={`snapshot.${f}`}>
+                      {humanizeKey(f)}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>
@@ -329,12 +436,115 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
           columnVisibility={columnVisibility}
           onColumnVisibilityChange={setColumnVisibility}
         />
+
+        {entityType && (
+          <>
+            <Button
+              variant={showFilters ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="mr-1 h-3 w-3" /> Filters
+              {Object.keys(snapshotFilters).length > 0 && (
+                <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
+                  {Object.keys(snapshotFilters).length}
+                </span>
+              )}
+            </Button>
+
+            <div className="flex items-center rounded-md border">
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-r-none"
+                onClick={() => setViewMode("list")}
+              >
+                <List className="h-3 w-3" />
+              </Button>
+              <Button
+                variant={viewMode === "board" ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-l-none"
+                onClick={() => setViewMode("board")}
+              >
+                <LayoutGrid className="h-3 w-3" />
+              </Button>
+            </div>
+
+            {viewMode === "board" && categoricalFields.length > 0 && (
+              <Select
+                value={boardGroupField || "__none__"}
+                onValueChange={(v) => setBoardGroupField(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Group by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Group by...</SelectItem>
+                  {categoricalFields.map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {humanizeKey(f)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </>
+        )}
+
+        {savedViews.length > 0 && (
+          <Select
+            value="__none__"
+            onValueChange={(v) => {
+              if (v === "__none__") return;
+              const view = savedViews.find((sv) => sv.id === v);
+              if (view) handleLoadView(view);
+            }}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Saved views" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Saved views</SelectItem>
+              {savedViews.map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {entityType && (
+          <Button variant="ghost" size="sm" onClick={handleSaveView} title="Save current view">
+            <Save className="h-3 w-3" />
+          </Button>
+        )}
       </div>
+
+      {showFilters && entityType && (
+        <div className="mt-3 rounded-md border bg-muted/20 p-3">
+          <EntityFieldFilterBar
+            schema={schemaQ.data}
+            filters={snapshotFilters}
+            onFiltersChange={(next) => {
+              setSnapshotFilters(next);
+              setOffset(0);
+            }}
+          />
+        </div>
+      )}
 
       {showInitialQuerySkeleton(query) ? (
         <DataTableSkeleton rows={12} cols={6} />
       ) : query.error ? (
         <QueryErrorAlert title="Could not load entities">{query.error.message}</QueryErrorAlert>
+      ) : viewMode === "board" && boardGroupField ? (
+        <EntityBoardView
+          entities={query.data?.entities ?? []}
+          groupField={boardGroupField}
+          schema={schemaQ.data}
+        />
       ) : (
         <>
           <DataTable
@@ -342,12 +552,28 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
             data={query.data?.entities ?? []}
             columnVisibility={columnVisibility}
             onColumnVisibilityChange={setColumnVisibility}
+            enableRowSelection
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            getRowId={(row) => entityRowId(row)}
           />
           {query.data && query.data.total > PAGE_SIZE && (
             <Pagination offset={offset} limit={PAGE_SIZE} total={query.data.total} onPageChange={setOffset} />
           )}
         </>
       )}
+
+      <BulkActionBar
+        selectedEntities={selectedEntities}
+        schema={schemaQ.data}
+        onClearSelection={() => setRowSelection({})}
+      />
+
+      <CreateEntityDialog
+        entityType={entityType || undefined}
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
     </PageShell>
   );
 }
@@ -355,6 +581,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
 function schemaFieldColumnDef(
   fieldKey: string,
   schema: EntitySchema | null | undefined,
+  entityType: string,
 ): ColumnDef<EntitySnapshot, unknown> {
   const typeHint =
     (schema?.schema_definition?.fields?.[fieldKey] as { type?: string } | undefined)?.type ??
@@ -370,6 +597,18 @@ function schemaFieldColumnDef(
           : null;
       return snap?.[fieldKey];
     },
-    cell: ({ getValue }) => <FieldValue value={getValue()} typeHint={typeHint} />,
+    cell: ({ row, getValue }) => {
+      const eid = entityRowId(row.original);
+      return (
+        <InlineEditCell
+          entityId={eid}
+          entityType={row.original.entity_type}
+          field={fieldKey}
+          value={getValue()}
+          typeHint={typeHint}
+          lastObservationAt={row.original.last_observation_at}
+        />
+      );
+    },
   };
 }

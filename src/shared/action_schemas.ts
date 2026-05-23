@@ -167,13 +167,16 @@ export const TimelineEventsRequestSchema = z.object({
 });
 
 const EntityQuerySortBySchema = z
-  .enum([
-    "entity_id",
-    "canonical_name",
-    "observation_count",
-    "last_observation_at",
-    /** ISO string at `snapshot.created_at` (e.g. GitHub issue opened / submitted time). */
-    "submitted_at",
+  .union([
+    z.enum([
+      "entity_id",
+      "canonical_name",
+      "observation_count",
+      "last_observation_at",
+      /** ISO string at `snapshot.created_at` (e.g. GitHub issue opened / submitted time). */
+      "submitted_at",
+    ]),
+    z.string().startsWith("snapshot."),
   ])
   .optional()
   .default("entity_id");
@@ -182,12 +185,7 @@ const EntityQuerySortOrderSchema = z.enum(["asc", "desc"]).optional().default("a
 function validateEntityQueryCombinations(
   value: {
     search?: string;
-    sort_by?:
-      | "entity_id"
-      | "canonical_name"
-      | "observation_count"
-      | "last_observation_at"
-      | "submitted_at";
+    sort_by?: string;
     sort_order?: "asc" | "desc";
     published?: boolean;
     published_after?: string;
@@ -235,6 +233,11 @@ function validateEntityQueryCombinations(
   }
 }
 
+const SnapshotFilterSchema = z.object({
+  op: z.enum(["eq", "in", "gt", "lt", "gte", "lte", "contains"]),
+  value: z.any(),
+});
+
 const EntitiesQueryRequestBaseSchema = z
   .object({
     entity_type: z.string().optional(),
@@ -261,6 +264,11 @@ const EntitiesQueryRequestBaseSchema = z
     identity_basis: z
       .enum(["schema_rule", "schema_lookup", "heuristic_name", "heuristic_fallback", "target_id"])
       .optional(),
+    /**
+     * Filter entities by snapshot field values. Keys are field names (e.g. "status"),
+     * values specify operator and comparison value.
+     */
+    snapshot_filters: z.record(z.string(), SnapshotFilterSchema).optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 

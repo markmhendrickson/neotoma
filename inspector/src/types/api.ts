@@ -712,6 +712,11 @@ export interface PaginatedResponse<T> {
   items: T[];
 }
 
+export interface SnapshotFilter {
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  value: unknown;
+}
+
 export interface EntitiesQueryParams {
   entity_type?: string;
   search?: string;
@@ -736,6 +741,8 @@ export interface EntitiesQueryParams {
     | "heuristic_name"
     | "heuristic_fallback"
     | "target_id";
+  /** Filter entities by snapshot field values. */
+  snapshot_filters?: Record<string, SnapshotFilter>;
 }
 
 export interface ObservationsQueryParams {
