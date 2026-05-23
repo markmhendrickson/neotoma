@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import type express from "express";
 import type { RequestHandler, Response } from "express";
 import expressStatic from "express";
+import { injectInspectorSkinConfig, resolveInspectorSkin } from "./inspector_skin.js";
 
 const DEFAULT_BASE_PATH = "/inspector";
 
@@ -237,6 +238,15 @@ export function installInspectorMount(
     staticDir = resolveLiveInspectorStaticDir(staticDir);
   }
 
+  const inspectorSkin = resolveInspectorSkin(env, { staticDir });
+  if (inspectorSkin.warning) {
+    logger.warn(`[Inspector] ${inspectorSkin.warning}`);
+  } else if (inspectorSkin.skin) {
+    logger.info(
+      `[Inspector] Skin active: ${inspectorSkin.skin.name} (${inspectorSkin.source}${inspectorSkin.label ? `:${inspectorSkin.label}` : ""})`
+    );
+  }
+
   try {
     const rawHtml = readInspectorIndexHtml(staticDir);
     if (!rawHtml) {
@@ -355,7 +365,7 @@ export function installInspectorMount(
           const latest = readInspectorIndexHtml(activeStaticDir);
           if (!latest) return next();
           const html = appendInspectorLiveReloadScript(
-            injectInspectorApiBaseMeta(latest, origin),
+            injectInspectorSkinConfig(injectInspectorApiBaseMeta(latest, origin), inspectorSkin.skin),
             buildStampPath
           );
           res.set("Content-Type", "text/html; charset=utf-8");
@@ -366,7 +376,10 @@ export function installInspectorMount(
 
         const latestShell = readInspectorIndexHtml(staticDir);
         if (!latestShell) return next();
-        const html = injectInspectorApiBaseMeta(latestShell, origin);
+        const html = injectInspectorSkinConfig(
+          injectInspectorApiBaseMeta(latestShell, origin),
+          inspectorSkin.skin
+        );
 
         res.set("Content-Type", "text/html; charset=utf-8");
         res.set("Cache-Control", "no-store");
