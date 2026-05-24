@@ -17,7 +17,8 @@
       "mcp__mcpsrv_neotoma_dev__retrieve_entity_by_identifier",
       "mcp__mcpsrv_neotoma_dev__get_session_identity",
       "Bash(mkdir -p /Users/markmhendrickson/repos/neotoma/.claude/skills/shadcn)",
-      "mcp__mcpsrv_neotoma__get_authenticated_user"
+      "mcp__mcpsrv_neotoma__get_authenticated_user",
+      "mcp__751abb6c-449b-4851-9f0e-2c90a18da349__retrieve_entities"
     ]
   },
   "enableAllProjectMcpServers": true,
