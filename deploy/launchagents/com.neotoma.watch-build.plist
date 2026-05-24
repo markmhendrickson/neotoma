@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.neotoma.watch-build</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/markmhendrickson/repos/neotoma/scripts/run_watch_build_launchd.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/markmhendrickson/repos/neotoma</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/markmhendrickson/repos/neotoma/data/logs/launchd-watch-build.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/markmhendrickson/repos/neotoma/data/logs/launchd-watch-build.error.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>NEOTOMA_LAUNCHD_NODE</key>
+    <string>/Users/markmhendrickson/.nvm/versions/node/v20.20.0/bin/node</string>
+    <key>NEOTOMA_LAUNCHD_NPM_CLI</key>
+    <string>/Users/markmhendrickson/.nvm/versions/node/v20.20.0/lib/node_modules/npm/bin/npm-cli.js</string>
+    <key>NEOTOMA_LAUNCHD_NPM_BIN</key>
+    <string>/usr/local/bin/npm</string>
+    <key>TSC_WATCHFILE</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
+    <key>TSC_WATCHDIRECTORY</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
+  </dict>
+</dict>
+</plist>
