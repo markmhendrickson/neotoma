@@ -12,11 +12,10 @@ to recover if it was not already established.
 This document is constitutional. Amending it requires the deliberate process in
 [Amendment](#amendment), not ordinary product or business decisions.
 
-**Scope:** This document covers the product redlines (R1–R9) that any reader of
-the open-source repository can verify against the code. Company-level redlines
-(funding, customer commitments, governance, positioning, pricing, marketing
-claims, acquisition) are maintained as internal governance and are not part of
-the public repository. The amendment process in this document governs both.
+It is public on purpose. A precommitment binds only when it is witnessed:
+publishing the commitments that protect Neotoma, including the company-level
+ones a founder or board might be tempted to quietly translate, is what makes
+them costly to cross.
 
 ## The substantive position
 
@@ -138,6 +137,74 @@ features that fragment user data, mandatory account requirements, or terms that
 claim rights over user observations. Sovereignty is the deepest commitment; every
 other commitment serves it.
 
+## Company redlines
+
+The product redlines above are verifiable against the code. The company redlines
+below protect the conditions under which that code can stay what it is, under
+capital, customer, and competitive pressure. They have no architectural
+invariant to cite because they are commitments about how the project is funded,
+sold, governed, positioned, and exited. They name values and refusals, not
+prices, term-sheet positions, or counterparties.
+
+### R10. No funding terms that allow override of architectural decisions
+
+Investor rights, board veto provisions, or governance structures that put
+append-only, schema enforcement, hash identity, or provenance up for discussion
+at the board level fail the redline test. The architectural commitments are not
+negotiable under capital pressure. Term sheets that require them to be must be
+refused, regardless of valuation.
+
+### R11. No customer commitments that require violating the substrate
+
+Enterprise asks for "just one mutable table" or "skip schema validation for this
+pipeline" in exchange for a contract are refused. Once the substrate has an
+exception, it has no integrity. The deal that requires violating Neotoma to win
+is the deal that destroys Neotoma's reason to exist.
+
+### R12. No governance structure that allows unilateral capture
+
+The substantive position requires institutional embedding that survives any
+single individual, including the founder. Governance where one party can quietly
+translate the integrity commitments into something more market-compatible
+(through quiet license changes, soft policy drift, or authority concentrated in
+one person) is a redline. Foundation structures, multi-party stewardship, or
+constitutional governance documents that name the commitments as non-amendable
+must exist before the leverage to capture them does.
+
+### R13. No category drift in positioning
+
+When competitors ship something compelling in adjacent frames (retrieval-first,
+memory-as-cognition, embeddings-centric), the temptation is to reframe Neotoma in
+their terms to compete. This is narrative contamination. The redline is marketing
+copy or product positioning that implies Neotoma is "also" a retrieval system,
+"also" an embeddings system, or "also" memory-as-cognition. Neotoma is the
+state-integrity position. Other positions exist; Neotoma is not them.
+
+### R14. No pricing model that punishes integrity use
+
+If storing more observations (the natural consequence of append-only) costs
+customers proportionally more than a mutable competitor, and that pricing
+pressure makes them want to delete history, the business model is fighting the
+architecture. Any pricing structure that economically incentivizes customers to
+violate the integrity commitments the product exists to provide crosses this
+redline.
+
+### R15. No claims you cannot cryptographically substantiate
+
+Terms like "provably correct," "tamper-evident," "verifiable," and
+"deterministic" have specific technical meaning. Marketing language stronger than
+what the implementation backs makes Neotoma a hope system rather than a trust
+system. The redline is shipping language stronger than the code, ever.
+
+### R16. No acquisition that dissolves the substantive position
+
+An acquirer that wants Neotoma's brand and team but plans to fold the technology
+into a retrieval-first product, close-source the core, or remove the integrity
+guarantees as "complexity" is not offering an exit. They are offering capture.
+Acquirer money where the explicit or implicit plan is to translate Neotoma into
+something its current architecture refuses to be is not on the table, regardless
+of multiple.
+
 ## The meta-redline
 
 Underneath all of the above is the same test, applied at the project level:
@@ -161,6 +228,10 @@ This document is amendable, but not casually. Amendments require:
    the change is not being made under acute pressure.
 3. Recording the amendment with full provenance (what changed, when, why, and who
    ratified it) in the repository history.
+
+Per R12, ratification authority must not be concentrated in one party; the
+amendment process is itself one of the institutions the redlines exist to
+protect.
 
 The substance survives translation only if the institutions that hold it survive
 translation. This document, and the process around it, is one of those
