@@ -140,6 +140,35 @@ describe("renderEntityMarkdown", () => {
     expect(md).not.toContain("## entity_type");
     expect(md).toContain("schema_version: 1.0"); // frontmatter is fine
   });
+
+  it("skips the ## heading for the content_field when opts.content_field is set (#262)", () => {
+    const entity: RenderEntityInput = {
+      ...BASE_ENTITY,
+      snapshot: {
+        title: "My Note",
+        body: "This is the body content.",
+        tags: ["a", "b"],
+      },
+    };
+    const md = renderEntityMarkdown(entity, ["title", "body", "tags"], {
+      content_field: "body",
+    });
+    // The body value is rendered without a ## body heading
+    expect(md).not.toContain("## body");
+    expect(md).toContain("This is the body content.");
+    // Other fields still get their headings
+    expect(md).toContain("## title");
+    expect(md).toContain("## tags");
+  });
+
+  it("still emits the content_field heading when opts.content_field is not set", () => {
+    const entity: RenderEntityInput = {
+      ...BASE_ENTITY,
+      snapshot: { title: "My Note", body: "Body text." },
+    };
+    const md = renderEntityMarkdown(entity, ["title", "body"], {});
+    expect(md).toContain("## body");
+  });
 });
 
 describe("renderEntityCompactText", () => {

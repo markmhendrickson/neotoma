@@ -661,6 +661,7 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
         };
         profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
           includeProvenance: false,
+          content_field: profile.content_field,
         });
       }
       const profilePath = profileEntityFilePath(
@@ -1456,7 +1457,7 @@ async function rebuildProfile(
           provenance: undefined,
         },
         schemaFieldOrder,
-        { includeProvenance: false }
+        { includeProvenance: false, content_field: profile.content_field }
       );
     }
 
