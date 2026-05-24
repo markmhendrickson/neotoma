@@ -3153,6 +3153,64 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  pull_request: {
+    entity_type: "pull_request",
+    schema_version: "1.0",
+    metadata: {
+      label: "Pull Request",
+      description: "A GitHub pull request.",
+      category: "knowledge",
+      aliases: ["pr", "github_pr"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // GitHub PR number — primary identifier within a repo.
+        pr_number: { type: "number", required: true },
+        title: { type: "string", required: true, preserveCase: true },
+        // Current state: open | closed | merged | draft.
+        status: { type: "string", required: false },
+        // Target branch the PR merges into.
+        base_branch: { type: "string", required: false },
+        // Source branch the PR is merging from.
+        head_branch: { type: "string", required: false },
+        // Canonical URL for the PR on GitHub.
+        github_url: { type: "string", required: false },
+        // PR description body (markdown).
+        body: { type: "string", required: false, preserveCase: true },
+        // ISO timestamp when the PR was merged; null/absent when not merged.
+        merged_at: { type: "string", required: false },
+        // Repository slug in owner/repo format (e.g. "markmhendrickson/neotoma").
+        repo: { type: "string", required: false },
+        // GitHub login of the PR author.
+        author: { type: "string", required: false },
+      },
+      // A pull request is uniquely identified by its number within a repo.
+      // The composite [pr_number, repo] is the primary rule; title is a
+      // fallback for cases where only the title is supplied.
+      canonical_name_fields: [{ composite: ["pr_number", "repo"] }, "title"],
+      agent_instructions:
+        "A pull_request entity represents a single GitHub pull request. " +
+        "Use pr_number and repo together as the primary identifier. " +
+        "The status field should reflect the current state: open, closed, merged, or draft. " +
+        "Set merged_at to the ISO timestamp when the PR was merged.",
+    },
+    reducer_config: {
+      merge_policies: {
+        pr_number: { strategy: "last_write" },
+        title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        status: { strategy: "last_write" },
+        base_branch: { strategy: "last_write" },
+        head_branch: { strategy: "last_write" },
+        github_url: { strategy: "last_write" },
+        body: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        merged_at: { strategy: "last_write" },
+        repo: { strategy: "last_write" },
+        author: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
