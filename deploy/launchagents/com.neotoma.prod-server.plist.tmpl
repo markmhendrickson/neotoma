@@ -6,18 +6,18 @@
   <string>com.neotoma.prod-server</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/markmhendrickson/repos/neotoma/scripts/run_prod_server_launchd.sh</string>
+    <string>{{NEOTOMA_REPO_PATH}}/scripts/run_prod_server_launchd.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/markmhendrickson/repos/neotoma</string>
+  <string>{{NEOTOMA_REPO_PATH}}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/markmhendrickson/repos/neotoma/data/logs/launchd-prod-server.log</string>
+  <string>{{NEOTOMA_REPO_PATH}}/data/logs/launchd-prod-server.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/markmhendrickson/repos/neotoma/data/logs/launchd-prod-server.error.log</string>
+  <string>{{NEOTOMA_REPO_PATH}}/data/logs/launchd-prod-server.error.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
@@ -27,11 +27,11 @@
     <key>TSC_WATCHDIRECTORY</key>
     <string>UseFsEventsWithFallbackDynamicPolling</string>
     <key>NEOTOMA_LAUNCHD_NODE</key>
-    <string>/Users/markmhendrickson/.nvm/versions/node/v20.20.0/bin/node</string>
+    <string>{{NODE_BIN}}</string>
     <key>NEOTOMA_LAUNCHD_NPM_CLI</key>
-    <string>/Users/markmhendrickson/.nvm/versions/node/v20.20.0/lib/node_modules/npm/bin/npm-cli.js</string>
+    <string>{{NPM_CLI}}</string>
     <key>NEOTOMA_LAUNCHD_NPM_BIN</key>
-    <string>/usr/local/bin/npm</string>
+    <string>{{NPM_BIN}}</string>
   </dict>
 </dict>
 </plist>

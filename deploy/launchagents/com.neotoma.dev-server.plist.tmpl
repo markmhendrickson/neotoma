@@ -6,18 +6,18 @@
   <string>com.neotoma.dev-server</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/markmhendrickson/repos/neotoma/scripts/run_dev_server_launchd.sh</string>
+    <string>{{NEOTOMA_REPO_PATH}}/scripts/run_dev_server_launchd.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/markmhendrickson/repos/neotoma</string>
+  <string>{{NEOTOMA_REPO_PATH}}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/markmhendrickson/repos/neotoma/data/logs/launchd-dev-server.log</string>
+  <string>{{NEOTOMA_REPO_PATH}}/data/logs/launchd-dev-server.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/markmhendrickson/repos/neotoma/data/logs/launchd-dev-server.error.log</string>
+  <string>{{NEOTOMA_REPO_PATH}}/data/logs/launchd-dev-server.error.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
