@@ -1,1 +1,1 @@
-/Users/markmhendrickson/repos/neotoma/foundation/agent_instructions/cursor_commands/commit.md
+../../foundation/agent_instructions/cursor_commands/commit.md
