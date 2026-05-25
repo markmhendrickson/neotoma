@@ -56,7 +56,15 @@ export function writeLocalHttpPortFile(
   environment: string = "development"
 ): void {
   if (!Number.isFinite(port) || port < 1 || port > 65535) return;
-  const profile = neotomaEnvironmentToDiskProfile(environment);
+  // NEOTOMA_LOCAL_PORT_DISK_PROFILE lets the dev LaunchAgent (which runs
+  // NEOTOMA_ENV=production so it uses the prod DB) write to `local_http_port_dev`
+  // instead of `local_http_port_prod`. Without this override both servers write
+  // to the same file and whichever binds last wins.
+  const explicitWriteProfile = process.env.NEOTOMA_LOCAL_PORT_DISK_PROFILE?.trim().toLowerCase();
+  const profile: LocalHttpPortDiskProfile =
+    explicitWriteProfile === "dev" || explicitWriteProfile === "prod"
+      ? explicitWriteProfile
+      : neotomaEnvironmentToDiskProfile(environment);
   const profilePath = localHttpPortFilePathForProfile(projectRoot, profile);
   try {
     mkdirSync(dirname(profilePath), { recursive: true });
