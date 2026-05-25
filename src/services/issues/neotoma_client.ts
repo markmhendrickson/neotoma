@@ -78,7 +78,8 @@ export async function submitIssueToRemote(params: {
     );
   }
 
-  const client = createRemoteClient(config.target_url.trim());
+  const targetUrl = config.target_url.trim();
+  const client = createRemoteClient(targetUrl);
   const now =
     typeof params.submission_timestamp === "string" && params.submission_timestamp.trim().length > 0
       ? params.submission_timestamp.trim()
@@ -112,9 +113,7 @@ export async function submitIssueToRemote(params: {
     guestBody.local_issue_id = localId;
   }
 
-  const { data, error } = (await client.POST("/issues/submit" as any, {
-    body: guestBody,
-  })) as {
+  type SubmitResponse = {
     data?: {
       entity_ids?: string[];
       issue_entity_id?: string;
@@ -124,10 +123,38 @@ export async function submitIssueToRemote(params: {
     error?: unknown;
   };
 
+  let { data, error } = (await client.POST("/issues/submit" as any, {
+    body: guestBody,
+  })) as SubmitResponse;
+
   if (error) {
-    // Surface the actionable hint when the remote returns AUTH_REQUIRED so the
-    // agent (and user) know exactly what step to take instead of seeing a raw
-    // JSON blob. (closes #183, #206)
+    // The remote `/issues/submit` handler accepts unsigned guest submissions for
+    // payloads carrying `local_issue_id` or `submission_timestamp` (both
+    // present here). When AAuth signing produces a signature the remote cannot
+    // verify (e.g. no agent grant), retry once as an unsigned guest before
+    // surfacing AUTH_REQUIRED. (closes #936)
+    const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
+    if (errObj?.["error_code"] === "AUTH_REQUIRED") {
+      const signingDisabled = process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1";
+      if (!signingDisabled) {
+        const unsignedClient = createApiClient({
+          baseUrl: targetUrl,
+          signWithCliAAuth: false,
+        });
+        const retry = (await unsignedClient.POST("/issues/submit" as any, {
+          body: guestBody,
+        })) as SubmitResponse;
+        if (!retry.error) {
+          data = retry.data;
+          error = undefined;
+        } else {
+          error = retry.error;
+        }
+      }
+    }
+  }
+
+  if (error) {
     const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
     if (errObj?.["error_code"] === "AUTH_REQUIRED") {
       const hint =
