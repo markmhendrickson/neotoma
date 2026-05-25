@@ -86,6 +86,10 @@ export HTTP_PORT="$DEV_HTTP_PORT"
 # Both LaunchAgents run NEOTOMA_ENV=production (prod DB), so without this
 # override they both write to local_http_port_prod and whichever binds last wins.
 export NEOTOMA_LOCAL_PORT_DISK_PROFILE=dev
+# Trust loopback in production mode so browser requests from localhost are
+# authenticated as the local dev user without a Bearer token. Safe for a
+# single-host setup with no reverse proxy; do not set on tunnel-exposed servers.
+export NEOTOMA_TRUST_PROD_LOOPBACK=1
 
 RESTART_DELAY=5
 while true; do
