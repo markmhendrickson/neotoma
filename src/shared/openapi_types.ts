@@ -2348,13 +2348,28 @@ export interface components {
     };
     AgentCapabilityEntry: {
       /** @enum {string} */
-      op: "store" | "store_structured" | "create_relationship" | "correct" | "retrieve";
+      op:
+        | "store"
+        | "store_structured"
+        | "create_relationship"
+        | "correct"
+        | "retrieve"
+        | "github_harness:read"
+        | "github_harness:write"
+        | "github_harness:*";
       /**
        * @description Allowed entity types for this op. The single string `*` widens
        *     to any entity_type that is not protected (see
-       *     `protected_entity_types`).
+       *     `protected_entity_types`). Empty array is valid for
+       *     `github_harness:*` ops which use `repos` instead.
        */
       entity_types: string[];
+      /**
+       * @description Repo-scope for `github_harness:*` ops. List of
+       *     "owner/repo" strings; `"*"` wildcards any repo. Required for
+       *     github_harness ops; ignored for Neotoma-native ops.
+       */
+      repos?: string[];
     };
     /**
      * @description First-class persistent grant that admits a verified AAuth

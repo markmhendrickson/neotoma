@@ -30,18 +30,34 @@ import { getCurrentAAuthAdmission } from "./request_context.js";
 /**
  * Canonical operation identifier. Mirrors the top-level MCP/REST entry
  * points that touch durable Neotoma state.
+ *
+ * The `github_harness:*` family covers repo-scoped operations performed
+ * by the mcp-server-github-harness MCP server on behalf of swarm agents.
+ * These ops are validated by the harness, not by Neotoma admission — they
+ * live here so agent_grant entities can carry them without a validation
+ * error, and so the harness can look them up from Neotoma instead of
+ * falling back to HARNESS_GRANTS_JSON.
  */
 export type AgentCapabilityOp =
   | "store"
   | "store_structured"
   | "create_relationship"
   | "correct"
-  | "retrieve";
+  | "retrieve"
+  | "github_harness:read"
+  | "github_harness:write"
+  | "github_harness:*";
 
 export interface AgentCapabilityEntry {
   op: AgentCapabilityOp;
   /** Allowed entity types for this op. `"*"` widens to any entity_type. */
   entity_types: string[];
+  /**
+   * Repo-scope for `github_harness:*` ops — list of "owner/repo" strings.
+   * `"*"` wildcards any repo. Only meaningful for github_harness ops;
+   * ignored for Neotoma-native ops.
+   */
+  repos?: string[];
 }
 
 /** Identity match shape (still used by import / Inspector serialisation). */

@@ -48,6 +48,9 @@ const ALLOWED_OPS: ReadonlySet<AgentCapabilityOp> = new Set([
   "create_relationship",
   "correct",
   "retrieve",
+  "github_harness:read",
+  "github_harness:write",
+  "github_harness:*",
 ]);
 
 /**
@@ -175,11 +178,16 @@ function trimOrNull(value: unknown): string | null {
  * array so callers can pass the result straight to the entity store
  * without worrying about prototype pollution or extra fields.
  */
+/** True for github_harness:* family ops which use `repos` instead of `entity_types`. */
+function isHarnessOp(op: string): boolean {
+  return op === "github_harness:read" || op === "github_harness:write" || op === "github_harness:*";
+}
+
 export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
     throw new AgentGrantValidationError(
-      "capabilities must be an array of { op, entity_types }",
+      "capabilities must be an array of { op, entity_types } or { op, repos } for github_harness ops",
       "capabilities"
     );
   }
@@ -198,27 +206,66 @@ export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
         `capabilities[${i}].op`
       );
     }
-    const types = entry.entity_types;
-    if (!Array.isArray(types) || types.length === 0) {
-      throw new AgentGrantValidationError(
-        `capabilities[${i}].entity_types must be a non-empty array of strings`,
-        `capabilities[${i}].entity_types`
-      );
-    }
-    const normalisedTypes: string[] = [];
-    for (const [j, t] of types.entries()) {
-      if (typeof t !== "string" || t.trim().length === 0) {
+
+    const harness = isHarnessOp(op);
+
+    // For github_harness ops, `repos` is required and `entity_types` defaults to [].
+    // For Neotoma-native ops, `entity_types` is required.
+    let normalisedTypes: string[] = [];
+    let normalisedRepos: string[] | undefined;
+
+    if (harness) {
+      const repos = entry.repos;
+      if (!Array.isArray(repos) || repos.length === 0) {
         throw new AgentGrantValidationError(
-          `capabilities[${i}].entity_types[${j}] must be a non-empty string`,
-          `capabilities[${i}].entity_types[${j}]`
+          `capabilities[${i}].repos must be a non-empty array of "owner/repo" strings for ${op}`,
+          `capabilities[${i}].repos`
         );
       }
-      normalisedTypes.push(t.trim());
+      const repoList: string[] = [];
+      for (const [j, r] of repos.entries()) {
+        if (typeof r !== "string" || r.trim().length === 0) {
+          throw new AgentGrantValidationError(
+            `capabilities[${i}].repos[${j}] must be a non-empty string`,
+            `capabilities[${i}].repos[${j}]`
+          );
+        }
+        repoList.push(r.trim());
+      }
+      normalisedRepos = Array.from(new Set(repoList));
+      // entity_types accepted but not required for harness ops.
+      const types = entry.entity_types;
+      if (Array.isArray(types)) {
+        normalisedTypes = types
+          .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+          .map((t) => t.trim());
+      }
+    } else {
+      const types = entry.entity_types;
+      if (!Array.isArray(types) || types.length === 0) {
+        throw new AgentGrantValidationError(
+          `capabilities[${i}].entity_types must be a non-empty array of strings`,
+          `capabilities[${i}].entity_types`
+        );
+      }
+      for (const [j, t] of types.entries()) {
+        if (typeof t !== "string" || t.trim().length === 0) {
+          throw new AgentGrantValidationError(
+            `capabilities[${i}].entity_types[${j}] must be a non-empty string`,
+            `capabilities[${i}].entity_types[${j}]`
+          );
+        }
+        normalisedTypes.push(t.trim());
+      }
+      normalisedTypes = Array.from(new Set(normalisedTypes));
     }
-    out.push({
+
+    const validated: AgentCapabilityEntry = {
       op: op as AgentCapabilityOp,
-      entity_types: Array.from(new Set(normalisedTypes)),
-    });
+      entity_types: normalisedTypes,
+    };
+    if (normalisedRepos !== undefined) validated.repos = normalisedRepos;
+    out.push(validated);
   }
   return out;
 }
