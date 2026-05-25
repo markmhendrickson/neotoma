@@ -3,10 +3,12 @@
 # Used by com.neotoma.prod-server.plist so the server starts at login, restarts
 # after reboot, and picks up source changes automatically via node --watch + tsx.
 #
-# Runs `dev:server:prod` (node --watch on src/actions.ts + tsc --watch, prod env,
-# port 3180) instead of the build-once start:server:prod. Pre-kills any incumbent
-# on port 3180 so prod always binds 3180 and never drifts via pick-port.js's
-# scan-up fallback. This guarantees the `neotoma` MCP entry
+# Calls `dev:server` directly (not `dev:server:prod`) to bypass pick-port.js /
+# with-branch-ports.js, which would assign a branch-hash-derived port instead of
+# the deterministic 3180.  HTTP_PORT and NEOTOMA_HTTP_PORT are set explicitly so
+# the process always binds $PROD_HTTP_PORT (default 3180).  NEOTOMA_ENV=production
+# is forwarded so the server uses the prod SQLite database.  Pre-kills any
+# incumbent on 3180 before start.  This guarantees the `neotoma` MCP entry
 # (NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod) and the Cloudflare tunnel for
 # https://neotoma.markmhendrickson.com/ both target the same bound process.
 set -euo pipefail
@@ -61,7 +63,14 @@ done
 
 RESTART_DELAY=5
 while true; do
-  run_npm run dev:server:prod || true
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] dev:server:prod exited, restarting in ${RESTART_DELAY}s..."
+  # Invoke dev:server directly with explicit port env vars so we bypass
+  # pick-port.js / with-branch-ports.js entirely.  Those scripts scan upward
+  # from 3180 and assign a branch-hash-derived port, which is wrong for a
+  # deterministic production launchagent that must always bind 3180.
+  HTTP_PORT="$PROD_HTTP_PORT" \
+  NEOTOMA_HTTP_PORT="$PROD_HTTP_PORT" \
+  NEOTOMA_ENV=production \
+    run_npm run dev:server || true
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] dev:server exited, restarting in ${RESTART_DELAY}s..."
   sleep "$RESTART_DELAY"
 done
