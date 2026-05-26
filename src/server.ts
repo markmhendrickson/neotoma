@@ -5184,15 +5184,39 @@ export class NeotomaServer {
         // Best-effort; never block store on registry IO failure.
       }
       const storeWarningRules = schemaEntry?.schema_definition?.store_warnings;
-      if (!storeWarningRules?.length) continue;
-      for (const rule of storeWarningRules) {
-        const hasIdentityField = rule.fields.some(
-          (f) => entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
-        );
-        if (!hasIdentityField) {
+      if (storeWarningRules?.length) {
+        for (const rule of storeWarningRules) {
+          const hasIdentityField = rule.fields.some(
+            (f) =>
+              entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
+          );
+          if (!hasIdentityField) {
+            schemaStoreWarnings.push({
+              code: rule.code,
+              message: rule.message,
+              observation_index: i,
+              entity_type: e.entityType,
+              entity_id: e.entityId,
+            });
+          }
+        }
+      }
+
+      // Schema-driven content_field warning: when a schema declares
+      // `content_field`, emit MISSING_CONTENT_FIELD if the stored payload
+      // omits that field or leaves it empty. See issue #949.
+      const contentField = schemaEntry?.schema_definition?.content_field;
+      if (contentField) {
+        const value = entityFields[contentField];
+        const isMissing =
+          value === undefined || value === null || (typeof value === "string" && value === "");
+        if (isMissing) {
           schemaStoreWarnings.push({
-            code: rule.code,
-            message: rule.message,
+            code: "MISSING_CONTENT_FIELD",
+            message:
+              `${e.entityType} stored without its primary content field "${contentField}". ` +
+              "For document-derived entities, include the full original markdown/prose " +
+              "in this field; structured fields complement it but do not replace it.",
             observation_index: i,
             entity_type: e.entityType,
             entity_id: e.entityId,

@@ -241,6 +241,7 @@ function buildSchemaDefinition(): SchemaDefinition {
       "title",
     ],
     temporal_fields: [{ field: "created_at", event_type: "plan_created" }],
+    content_field: "body",
   };
 }
 

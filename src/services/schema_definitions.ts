@@ -1343,6 +1343,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         { composite: ["thread_id", "sender", "sent_at"] },
         { composite: ["sender", "sent_at"] },
       ],
+      content_field: "body",
     },
     reducer_config: {
       merge_policies: {
@@ -1381,6 +1382,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // R2: title is a natural identifier when present; content is the
       // fallback so title-less scratchpads still resolve deterministically.
       canonical_name_fields: ["title", { composite: ["source", "created_date"] }],
+      content_field: "content",
     },
     reducer_config: {
       merge_policies: {
@@ -2856,6 +2858,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // Callers commonly supply a pre-formed canonical_name or a stable gist_id;
       // identity_opt_out allows both paths without requiring composite fields.
       identity_opt_out: "heuristic_canonical_name",
+      content_field: "content",
     },
     reducer_config: {
       merge_policies: {
