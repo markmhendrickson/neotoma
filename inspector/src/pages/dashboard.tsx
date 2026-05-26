@@ -2,23 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { isApiUrlConfigured, MISSING_API_URL_MESSAGE } from "@/api/client";
 import { useStats } from "@/hooks/use_stats";
-import { useEntitiesQuery } from "@/hooks/use_entities";
 import { usePeersList } from "@/hooks/use_peers";
-import { useRecentConversations } from "@/hooks/use_recent_conversations";
 import { useHealthCheck, useServerInfo, useHealthCheckSnapshots } from "@/hooks/use_infra";
 import { PageShell } from "@/components/layout/page_shell";
-import { RecentConversationsFeed } from "@/components/shared/recent_conversations_feed";
 import { AttributionSummary } from "@/components/shared/attribution_summary";
-import { StatCard } from "@/components/shared/stat_card";
 import { TypeBadge } from "@/components/shared/type_badge";
 import {
   DashboardStatsSkeleton,
-  ListSkeleton,
   QueryErrorAlert,
 } from "@/components/shared/query_status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -32,20 +26,7 @@ import { entityTypeListPath } from "@/lib/entity_type_labels";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { formatDate } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
-import {
-  Bell,
-  Box,
-  ChevronDown,
-  Clock,
-  Cpu,
-  Eye,
-  FileText,
-  GitBranch,
-  ListFilter,
-  MessageSquareText,
-  RefreshCw,
-  Shield,
-} from "lucide-react";
+import { ChevronDown, ListFilter, Shield } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 /** Default number of entity types shown in the bar chart (by count, highest first). */
@@ -55,14 +36,7 @@ const BADGE_INCREMENT = 10;
 
 export default function DashboardPage() {
   const stats = useStats();
-  const subscriptionStats = useEntitiesQuery({
-    entity_type: "subscription",
-    limit: 1,
-    offset: 0,
-    include_snapshots: false,
-  });
   const peersList = usePeersList();
-  const recentConversations = useRecentConversations({ limit: 10, offset: 0 });
   const health = useHealthCheck();
   const serverInfo = useServerInfo();
   const snapshotHealth = useHealthCheckSnapshots();
@@ -169,62 +143,6 @@ export default function DashboardPage() {
         <QueryErrorAlert title="Could not load analytics stats">{stats.error.message}</QueryErrorAlert>
       ) : s ? (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            <StatCard title="Entities" value={s.total_entities} icon={Box} />
-            <StatCard title="Observations" value={s.total_observations} icon={Eye} />
-            <StatCard title="Sources" value={s.sources_count} icon={FileText} />
-            <StatCard title="Relationships" value={s.total_relationships} icon={GitBranch} />
-            <StatCard title="Events" value={s.total_events} icon={Clock} />
-            <StatCard title="Interpretations" value={s.total_interpretations} icon={Cpu} />
-            <Link
-              to="/subscriptions"
-              className="block rounded-md ring-offset-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <StatCard
-                title="Subscriptions"
-                value={subscriptionStats.data?.total ?? (subscriptionStats.isPending ? "…" : 0)}
-                icon={Bell}
-                description="Substrate webhooks / SSE"
-              />
-            </Link>
-            <Link
-              to="/peers"
-              className="block rounded-md ring-offset-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <StatCard
-                title="Peers"
-                value={peersList.data?.peers?.length ?? (peersList.isPending ? "…" : 0)}
-                icon={RefreshCw}
-                description="Cross-instance sync"
-              />
-            </Link>
-          </div>
-
-          <Separator />
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <MessageSquareText className="h-4 w-4" /> Recent conversations
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {showInitialQuerySkeleton(recentConversations) ? (
-                <ListSkeleton rows={4} />
-              ) : recentConversations.error ? (
-                <QueryErrorAlert title="Could not load conversations">
-                  {recentConversations.error.message}
-                </QueryErrorAlert>
-              ) : (
-                <RecentConversationsFeed
-                  conversations={(recentConversations.data?.items ?? []).slice(0, 10)}
-                  compact
-                  showViewAll
-                />
-              )}
-            </CardContent>
-          </Card>
-
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-4">

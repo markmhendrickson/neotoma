@@ -1,6 +1,8 @@
 import { FaqPreviewSection } from "@/components/home/faq_preview_section";
 import { BundledDocsFooter } from "@/components/layout/bundled_docs_footer";
 import { PageShell } from "@/components/layout/page_shell";
+import { StatTotalsGrid } from "@/components/shared/stat_totals_grid";
+import { isApiUrlConfigured } from "@/api/client";
 import { NEOTOMA_TAGLINE } from "@/lib/site_copy";
 
 export default function HomePage() {
@@ -12,6 +14,7 @@ export default function HomePage() {
             {NEOTOMA_TAGLINE}
           </h1>
         </header>
+        {isApiUrlConfigured() ? <StatTotalsGrid /> : null}
         <FaqPreviewSection />
       </PageShell>
       <BundledDocsFooter />
