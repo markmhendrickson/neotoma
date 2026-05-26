@@ -8,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/markmhendrickson/repos/neotoma && npm run mirror:plans 2>&1 | tail -5"
+            "command": "command -v neotoma >/dev/null 2>&1 && cd \"${CLAUDE_PROJECT_DIR:-.}\" && neotoma mirror rebuild --profile neotoma-plans 2>&1 | tail -5 || true"
           }
         ]
       }
