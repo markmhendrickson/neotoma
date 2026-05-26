@@ -39,6 +39,8 @@ function cleanEnv(overrides: Record<string, string | undefined> = {}): NodeJS.Pr
   delete env.NEOTOMA_INSPECTOR_BASE_PATH;
   delete env.NEOTOMA_INSPECTOR_BUNDLED_DISABLE;
   delete env.NEOTOMA_INSPECTOR_LIVE_BUILD;
+  delete env.NEOTOMA_INSPECTOR_SKIN;
+  delete env.NEOTOMA_INSPECTOR_SKIN_CONFIG;
   return { ...env, ...overrides } as NodeJS.ProcessEnv;
 }
 
@@ -264,6 +266,39 @@ describe("installInspectorMount — integration", () => {
     const body = await res.text();
     expect(body).toContain("neotoma-api-base");
     expect(body).toContain("127.0.0.1");
+  });
+
+  it("injects configured Inspector skin into the SPA shell", async () => {
+    tmpDir = path.join(process.cwd(), "tmp", "inspector-test-skin-" + Date.now());
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(path.join(tmpDir, "index.html"), FIXTURE_HTML);
+    const skinPath = path.join(tmpDir, "skin.json");
+    writeFileSync(
+      skinPath,
+      JSON.stringify({
+        name: "lemonbrand",
+        label: "Lemonbrand",
+        light: { primary: "49 96% 52%" },
+      }),
+    );
+
+    const app = express();
+    installInspectorMount(
+      app,
+      cleanEnv({
+        NEOTOMA_INSPECTOR_STATIC_DIR: tmpDir,
+        NEOTOMA_INSPECTOR_SKIN_CONFIG: skinPath,
+      }),
+      noopLogger(),
+    );
+
+    const base = await listenApp(app);
+    const res = await fetch(`${base}/inspector`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("window.__NEOTOMA_INSPECTOR_SKIN__");
+    expect(body).toContain('"name":"lemonbrand"');
+    expect(body).toContain("neotoma-api-base");
   });
 
   it("redirects GET /inspector (no trailing slash) to /inspector/", async () => {

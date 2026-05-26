@@ -111,6 +111,10 @@ import {
 } from "./services/root_landing/index.js";
 import { mountDocsRoutes } from "./services/docs/index.js";
 import { installInspectorMount } from "./services/inspector_mount.js";
+import {
+  getTimelineEventForUser,
+  listTimelineEventsForUser,
+} from "./services/timeline_user_query.js";
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
 import type { SandboxReportReason } from "./services/sandbox/types.js";
@@ -4305,89 +4309,19 @@ app.get("/timeline", async (req, res) => {
       .toLowerCase();
     const orderByColumn = rawOrderBy === "created_at" ? "created_at" : "event_timestamp";
 
-    // Get source IDs for this user first (timeline_events doesn't have user_id)
-    const { data: userSources, error: sourcesError } = await db
-      .from("sources")
-      .select("id")
-      .eq("user_id", userId);
-
-    if (sourcesError) throw sourcesError;
-
-    const sourceIds = (userSources || []).map((s: any) => s.id);
-
-    // Build query - filter by source_ids that belong to authenticated user
-    let query = db.from("timeline_events").select("*", { count: "exact" });
-
-    // SECURITY: Only return events from sources that belong to authenticated user
-    if (sourceIds.length > 0) {
-      query = query.in("source_id", sourceIds);
-    } else {
-      // User has no sources - return empty result
-      return res.json({
-        events: [],
-        total: 0,
-        limit,
-        offset,
-      });
-    }
-
-    // Filter by date range
-    if (startDate) {
-      query = query.gte("event_timestamp", startDate);
-    }
-    if (endDate) {
-      query = query.lte("event_timestamp", endDate);
-    }
-
-    // Filter by event type
-    if (eventType) {
-      query = query.eq("event_type", eventType);
-    }
-
-    // Filter by entity_id
-    if (entityId) {
-      query = query.eq("entity_id", entityId);
-    }
-
-    // Default: sort by event_timestamp (document dates). Use order_by=created_at for "what changed recently".
-    // Secondary sort on id is a deterministic tie-breaker — events with identical
-    // event_timestamp values (common when many are ingested from the same source)
-    // otherwise produce non-stable page boundaries across offset queries.
-    query = query.order(orderByColumn, { ascending: false }).order("id", { ascending: true });
-
-    // Pagination
-    query = query.range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      const err = error as { code?: string; message?: string };
-      const errorDetails =
-        typeof error === "object" && error && "details" in error
-          ? (error as { details?: string }).details
-          : undefined;
-      const errorHint =
-        typeof error === "object" && error && "hint" in error
-          ? (error as { hint?: string }).hint
-          : undefined;
-
-      logError("APIError:timeline_query", req, error, {
-        errorCode: err.code,
-        errorMessage: err.message,
-        errorDetails,
-        errorHint,
-        userId: userId || "none",
-      });
-
-      return sendError(res, 500, "DB_QUERY_FAILED", "Failed to query timeline events", {
-        code: err.code,
-        message: err.message,
-        hint: errorHint,
-      });
-    }
+    const { data, count } = listTimelineEventsForUser({
+      userId,
+      startDate,
+      endDate,
+      eventType,
+      entityId,
+      limit,
+      offset,
+      orderByColumn: orderByColumn as "event_timestamp" | "created_at",
+    });
 
     // Enrich events with entity canonical names and types
-    const events = data || [];
+    const events = data;
     const entityIds = [...new Set(events.map((e: any) => e.entity_id).filter(Boolean))];
     const entityLookup = new Map<string, { canonical_name: string; entity_type: string }>();
     if (entityIds.length > 0) {
@@ -4439,33 +4373,7 @@ app.get("/timeline/:id", async (req, res) => {
     const eventId = decodeURIComponent(req.params.id);
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
-    // Get source IDs for this user first (timeline_events doesn't have user_id)
-    const { data: userSources, error: sourcesError } = await db
-      .from("sources")
-      .select("id")
-      .eq("user_id", userId);
-
-    if (sourcesError) throw sourcesError;
-    const sourceIds = (userSources || []).map((source: { id: string }) => source.id);
-
-    if (sourceIds.length === 0) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
-    }
-
-    const { data: event, error } = await db
-      .from("timeline_events")
-      .select("*")
-      .eq("id", eventId)
-      .in("source_id", sourceIds)
-      .maybeSingle();
-
-    if (error) {
-      const err = error as { code?: string; message?: string };
-      if (err.code === "PGRST116") {
-        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
-      }
-      throw error;
-    }
+    const event = getTimelineEventForUser(userId, eventId);
 
     if (!event) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
