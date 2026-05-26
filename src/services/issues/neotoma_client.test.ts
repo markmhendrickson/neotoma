@@ -16,6 +16,10 @@ vi.mock("../../shared/api_client.js", () => ({
   })),
 }));
 
+vi.mock("../../cli/aauth_signer.js", () => ({
+  hasCliAAuthKeypair: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("./config.js", () => ({
   loadIssuesConfig: vi.fn().mockResolvedValue({
     target_url: "https://neotoma.example.com",
@@ -35,6 +39,7 @@ import {
   fetchRemoteIssueThread,
 } from "./neotoma_client.js";
 import { createApiClient } from "../../shared/api_client.js";
+import { hasCliAAuthKeypair } from "../../cli/aauth_signer.js";
 import { IssueTransportError } from "./errors.js";
 
 type MockIssueApiClient = {
@@ -84,6 +89,21 @@ describe("Neotoma Issue Client", () => {
       });
     });
 
+    it("passes signWithCliAAuth false when no AAuth keypair is present on disk", async () => {
+      // Simulates Claude.ai MCP context: no ~/.neotoma/aauth/private.jwk
+      vi.mocked(hasCliAAuthKeypair).mockResolvedValueOnce(false);
+      await submitIssueToRemote({
+        title: "No-keypair Issue",
+        body: "Body",
+        visibility: "private",
+      });
+      // Should go straight to unsigned (guest) without attempting AAuth — resolves #944
+      expect(createApiClient).toHaveBeenCalledWith({
+        baseUrl: "https://neotoma.example.com",
+        signWithCliAAuth: false,
+      });
+    });
+
     it("includes github_url in the payload when provided", async () => {
       await submitIssueToRemote({
         title: "Public Issue",
@@ -112,6 +132,68 @@ describe("Neotoma Issue Client", () => {
       expect(path).toBe("/issues/submit");
       expect(request.body.github_number).toBeUndefined();
       expect(String(request.body.local_issue_id)).toMatch(/^local:test\/repo:/);
+    });
+
+    it("retries as unsigned guest when AAuth-signed request returns AUTH_REQUIRED", async () => {
+      // First call (AAuth-signed) → AUTH_REQUIRED
+      const signedPost = vi.fn().mockResolvedValueOnce({
+        error: {
+          error_code: "AUTH_REQUIRED",
+          details: { hint: "Create an agent grant." },
+        },
+      });
+      // Second call (unsigned guest) → success
+      const guestPost = vi.fn().mockResolvedValueOnce({
+        data: {
+          entity_ids: ["issue-entity-retry", "conv-entity-retry"],
+          issue_entity_id: "issue-entity-retry",
+          conversation_id: "conv-entity-retry",
+          guest_access_token: "guest-token-retry",
+        },
+      });
+      vi.mocked(createApiClient)
+        .mockReturnValueOnce({ POST: signedPost, GET: vi.fn() } as unknown as ReturnType<
+          typeof createApiClient
+        >)
+        .mockReturnValueOnce({ POST: guestPost, GET: vi.fn() } as unknown as ReturnType<
+          typeof createApiClient
+        >);
+
+      const result = await submitIssueToRemote({
+        title: "Retry Issue",
+        body: "Retry body",
+        visibility: "private",
+      });
+
+      expect(result.issue_entity_id).toBe("issue-entity-retry");
+      expect(result.access_token).toBe("guest-token-retry");
+      // First client was signed, second was unsigned
+      expect(vi.mocked(createApiClient).mock.calls[0][0]).toMatchObject({ signWithCliAAuth: true });
+      expect(vi.mocked(createApiClient).mock.calls[1][0]).toMatchObject({
+        signWithCliAAuth: false,
+      });
+      expect(signedPost).toHaveBeenCalledTimes(1);
+      expect(guestPost).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws with AUTH_REQUIRED hint when both signed and unsigned requests fail", async () => {
+      const failPost = vi.fn().mockResolvedValue({
+        error: {
+          error_code: "AUTH_REQUIRED",
+          details: { hint: "Create an agent grant." },
+        },
+      });
+      vi.mocked(createApiClient)
+        .mockReturnValueOnce({ POST: failPost, GET: vi.fn() } as unknown as ReturnType<
+          typeof createApiClient
+        >)
+        .mockReturnValueOnce({ POST: failPost, GET: vi.fn() } as unknown as ReturnType<
+          typeof createApiClient
+        >);
+
+      await expect(
+        submitIssueToRemote({ title: "Fail Issue", body: "Fail body", visibility: "private" })
+      ).rejects.toThrow("authentication required (AUTH_REQUIRED)");
     });
 
     it("returns guest token from the guest issue submit endpoint", async () => {

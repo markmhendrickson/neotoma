@@ -134,18 +134,26 @@ describe("Issue Operations (Neotoma-canonical)", () => {
   });
 
   describe("submitIssue", () => {
-    it("pushes public issues to GitHub first, then Neotoma", async () => {
-      mockCreateIssue.mockResolvedValue({
-        number: 42,
-        html_url: "https://github.com/test/repo/issues/42",
-        user: { login: "tester" },
-        created_at: "2026-05-01T00:00:00Z",
+    it("submits to Neotoma first, then mirrors to GitHub (Neotoma-first ordering)", async () => {
+      // Verify the call order: Neotoma must be called before GitHub (resolves #944)
+      const callOrder: string[] = [];
+      mockSubmitIssueToRemote.mockImplementation(async () => {
+        callOrder.push("neotoma");
+        return {
+          entity_ids: ["remote-issue-1", "remote-conv-1", "remote-msg-1"],
+          issue_entity_id: "remote-issue-1",
+          conversation_id: "remote-conv-1",
+          access_token: "token-abc",
+        };
       });
-      mockSubmitIssueToRemote.mockResolvedValue({
-        entity_ids: ["remote-issue-1", "remote-conv-1", "remote-msg-1"],
-        issue_entity_id: "remote-issue-1",
-        conversation_id: "remote-conv-1",
-        access_token: "token-abc",
+      mockCreateIssue.mockImplementation(async () => {
+        callOrder.push("github");
+        return {
+          number: 42,
+          html_url: "https://github.com/test/repo/issues/42",
+          user: { login: "tester" },
+          created_at: "2026-05-01T00:00:00Z",
+        };
       });
 
       const result = await submitIssue(ops, {
@@ -156,23 +164,43 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         reporter_git_sha: "abc1234",
       });
 
+      expect(callOrder).toEqual(["neotoma", "github"]);
       expect(mockCreateIssue).toHaveBeenCalledWith({
         title: "Public Bug",
         body: "Something broke",
         labels: ["neotoma", "bug"],
       });
+      // Neotoma call has no githubUrl/githubNumber yet — those are set by the GitHub step
       expect(mockSubmitIssueToRemote).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Public Bug",
           visibility: "public",
-          githubUrl: "https://github.com/test/repo/issues/42",
-          githubNumber: 42,
         })
+      );
+      expect(mockSubmitIssueToRemote).toHaveBeenCalledWith(
+        expect.not.objectContaining({ githubUrl: expect.anything() })
       );
       expect(result.pushed_to_github).toBe(true);
       expect(result.submitted_to_neotoma).toBe(true);
       expect(result.issue_number).toBe(42);
       expect(result.guest_access_token).toBe("token-abc");
+    });
+
+    it("does NOT push to GitHub when Neotoma submission fails", async () => {
+      // Neotoma fails → GitHub must NOT be published (resolves #944)
+      mockSubmitIssueToRemote.mockRejectedValue(new Error("Remote submission failed"));
+
+      const result = await submitIssue(ops, {
+        title: "Failing Issue",
+        body: "Something broke",
+        visibility: "public",
+        reporter_git_sha: "abc1234",
+      });
+
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(result.pushed_to_github).toBe(false);
+      expect(result.submitted_to_neotoma).toBe(false);
+      expect(result.remote_submission_error).toMatch(/Remote submission failed/);
     });
 
     it("does NOT push private issues to GitHub", async () => {

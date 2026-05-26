@@ -15,6 +15,7 @@
  */
 
 import { createApiClient, type NeotomaApiClient } from "../../shared/api_client.js";
+import { hasCliAAuthKeypair } from "../../cli/aauth_signer.js";
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError } from "./errors.js";
 import {
@@ -46,12 +47,17 @@ function formatRemoteIssueError(error: unknown): string {
   }
 }
 
-function createRemoteClient(targetUrl: string): NeotomaApiClient {
+async function createRemoteClient(targetUrl: string): Promise<NeotomaApiClient> {
   const signingDisabled = process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1";
+  // Skip AAuth entirely when no keypair is present (e.g. Claude.ai MCP context).
+  // Without a keypair, cliSignedFetch silently falls back to plain fetch anyway,
+  // making the signed attempt identical to the unsigned retry — wasting a round
+  // trip and surfacing a confusing AUTH_REQUIRED error. Detect the absence here
+  // and go straight to the unsigned (guest) path. (resolves #944)
+  const signWithCliAAuth = !signingDisabled && (await hasCliAAuthKeypair());
   return createApiClient({
     baseUrl: targetUrl,
-    /** Explicit false when tests set `NEOTOMA_CLI_AAUTH_DISABLE=1` on the submitter child. */
-    signWithCliAAuth: !signingDisabled,
+    signWithCliAAuth,
   });
 }
 
@@ -78,7 +84,7 @@ export async function submitIssueToRemote(params: {
     );
   }
 
-  const client = createRemoteClient(config.target_url.trim());
+  const client = await createRemoteClient(config.target_url.trim());
   const now =
     typeof params.submission_timestamp === "string" && params.submission_timestamp.trim().length > 0
       ? params.submission_timestamp.trim()
@@ -125,11 +131,46 @@ export async function submitIssueToRemote(params: {
   };
 
   if (error) {
-    // Surface the actionable hint when the remote returns AUTH_REQUIRED so the
-    // agent (and user) know exactly what step to take instead of seeing a raw
-    // JSON blob. (closes #183, #206)
+    // When AAuth-signed request is rejected with AUTH_REQUIRED, retry as an
+    // unsigned guest request. The remote /issues/submit handler accepts guest
+    // payloads (resolveRoutePrincipal allows "guest") and the guestSubmitPayload
+    // detection fires on local_issue_id / submission_timestamp which we already
+    // send — so the retry succeeds via submitGuestIssue on the remote side.
+    // Only fall through to the error path if the unsigned retry also fails.
+    // (closes #936)
     const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
     if (errObj?.["error_code"] === "AUTH_REQUIRED") {
+      const guestClient = createApiClient({
+        baseUrl: config.target_url.trim(),
+        signWithCliAAuth: false,
+      });
+      const { data: guestData, error: guestError } = (await guestClient.POST(
+        "/issues/submit" as any,
+        { body: guestBody }
+      )) as {
+        data?: {
+          entity_ids?: string[];
+          issue_entity_id?: string;
+          conversation_id?: string;
+          guest_access_token?: string;
+        };
+        error?: unknown;
+      };
+      if (!guestError && guestData) {
+        const issueEntityId = guestData.issue_entity_id ?? guestData.entity_ids?.[0] ?? "";
+        const conversationId = guestData.conversation_id ?? guestData.entity_ids?.[1] ?? "";
+        const entityIds =
+          Array.isArray(guestData.entity_ids) && guestData.entity_ids.length > 0
+            ? guestData.entity_ids
+            : [issueEntityId, conversationId].filter(Boolean);
+        return {
+          entity_ids: entityIds,
+          conversation_id: conversationId,
+          issue_entity_id: issueEntityId,
+          access_token: guestData.guest_access_token,
+        };
+      }
+      // Unsigned retry also failed — surface the original AUTH_REQUIRED hint.
       const hint =
         typeof errObj?.["details"] === "object" &&
         errObj["details"] !== null &&
@@ -180,7 +221,7 @@ export async function addMessageToRemote(params: {
     );
   }
 
-  const client = createRemoteClient(config.target_url.trim());
+  const client = await createRemoteClient(config.target_url.trim());
   const now = new Date().toISOString();
 
   const tokenTrim =
@@ -319,7 +360,7 @@ export async function getRemoteIssueStatus(params: {
   const config = await loadIssuesConfig();
   if (!config.target_url?.trim()) return null;
 
-  const client = createRemoteClient(config.target_url.trim());
+  const client = await createRemoteClient(config.target_url.trim());
 
   const { data, error } = (await client.GET("/entities/{id}" as any, {
     params: {
@@ -343,7 +384,7 @@ export async function fetchRemoteIssueThread(params: {
   if (!config.target_url?.trim()) return null;
 
   const targetUrl = config.target_url.trim();
-  const client = createRemoteClient(targetUrl);
+  const client = await createRemoteClient(targetUrl);
   const token = params.accessToken?.trim();
   const { data, error } = (await client.POST("/api/issues/status" as any, {
     body: {
