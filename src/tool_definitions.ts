@@ -1006,6 +1006,7 @@ export function buildToolDefinitions(
           "When a non-empty target URL is configured, the tool fails (MCP error) if that remote store is unreachable or rejects the request; a local row with sync_pending may still be written first. " +
           "When the operator accepts the issue, the response includes guest_access_token for token-scoped get_issue_status / add_issue_message read-back when the local snapshot does not already carry the token. " +
           "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps. " +
+          "To file issues about a repo other than the one Neotoma is globally configured for, pass `target_repo` in `owner/repo` format. This overrides the GitHub mirror destination only — the Neotoma authoring home remains unchanged. " +
           "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`."
       ),
       inputSchema: {
@@ -1046,6 +1047,13 @@ export function buildToolDefinitions(
           reporter_patch_source_id: {
             type: "string",
             description: "Optional source id for reporter patch artifact.",
+          },
+          target_repo: {
+            type: "string",
+            description:
+              "Optional GitHub mirror destination override (`owner/repo`). " +
+              "Use when filing issues about a repo other than the one Neotoma is globally configured for " +
+              "(e.g. `markmhendrickson/ateles`). Overrides only the GitHub mirror — Neotoma authoring home is unchanged.",
           },
         },
         required: ["title", "body"],

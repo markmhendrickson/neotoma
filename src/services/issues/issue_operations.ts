@@ -876,11 +876,10 @@ export async function submitIssue(
   const githubMirrorAllowed = !remoteSubmissionAttempted || submittedToNeotoma;
   if (visibility === "public" && githubMirrorAllowed) {
     try {
-      githubIssue = await github.createIssue({
-        title: params.title,
-        body: params.body,
-        labels: toolingLabels,
-      });
+      githubIssue = await github.createIssue(
+        { title: params.title, body: params.body, labels: toolingLabels },
+        params.target_repo ? { repo: params.target_repo } : undefined
+      );
       pushedToGithub = true;
       githubUrl = githubIssue.html_url;
       issueNumber = githubIssue.number;

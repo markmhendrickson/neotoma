@@ -165,11 +165,10 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       });
 
       expect(callOrder).toEqual(["neotoma", "github"]);
-      expect(mockCreateIssue).toHaveBeenCalledWith({
-        title: "Public Bug",
-        body: "Something broke",
-        labels: ["neotoma", "bug"],
-      });
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        { title: "Public Bug", body: "Something broke", labels: ["neotoma", "bug"] },
+        undefined
+      );
       // Neotoma call has no githubUrl/githubNumber yet — those are set by the GitHub step
       expect(mockSubmitIssueToRemote).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1333,7 +1332,8 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(mockCreateIssue).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Public test via unsigned-dev 2026-05-12T07-10 flow3",
-        })
+        }),
+        undefined
       );
       const remoteCall = mockSubmitIssueToRemote.mock.calls[0]?.[0] as { title: string };
       expect(remoteCall.title).toBe("Public test via unsigned-dev 2026-05-12T07-10 flow3");
@@ -1356,6 +1356,33 @@ describe("Issue Operations (Neotoma-canonical)", () => {
 
       const remoteCall = mockSubmitIssueToRemote.mock.calls[0]?.[0] as { body: string };
       expect(remoteCall.body).toContain("alice@example.com");
+    });
+
+    it("passes target_repo override to github.createIssue", async () => {
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["r1", "rc1"],
+        issue_entity_id: "r1",
+        conversation_id: "rc1",
+      });
+      mockCreateIssue.mockResolvedValue({
+        number: 7,
+        html_url: "https://github.com/markmhendrickson/ateles/issues/7",
+        user: { login: "tester" },
+        created_at: "2026-05-26T00:00:00Z",
+      });
+
+      await submitIssue(ops, {
+        title: "Ateles bug",
+        body: "Something broke in ateles",
+        visibility: "public",
+        reporter_git_sha: "deadbeef",
+        target_repo: "markmhendrickson/ateles",
+      });
+
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Ateles bug" }),
+        { repo: "markmhendrickson/ateles" }
+      );
     });
 
     it("persists reporter env on conversation_message for addIssueMessage", async () => {

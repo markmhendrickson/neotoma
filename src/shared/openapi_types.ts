@@ -5899,6 +5899,13 @@ export interface operations {
           local_issue_id?: string;
           /** @description Guest submitter timestamp used for deterministic local thread identity. */
           submission_timestamp?: string;
+          /**
+           * @description Optional GitHub mirror destination in `owner/repo` format (e.g. `markmhendrickson/ateles`).
+           *     Overrides the globally-configured `NEOTOMA_ISSUES_REPO` / `issues.repo` for this call only.
+           *     The Neotoma authoring home (operator instance) is unaffected.
+           *     Use when filing issues about a repo other than the one Neotoma is configured for.
+           */
+          target_repo?: string;
           /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
           entity_ids_to_link?: string[];
           user_id?: string;

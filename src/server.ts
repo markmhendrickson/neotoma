@@ -982,6 +982,7 @@ export class NeotomaServer {
       reporter_app_version: z.string().optional(),
       reporter_ci_run_id: z.string().optional(),
       reporter_patch_source_id: z.string().optional(),
+      target_repo: z.string().optional(),
       entity_ids_to_link: z.array(z.string().min(1)).optional(),
     });
     const parsed = schema.parse(args ?? {});
@@ -1012,6 +1013,7 @@ export class NeotomaServer {
         reporter_app_version: effectiveReporterAppVersion,
         reporter_ci_run_id: parsed.reporter_ci_run_id,
         reporter_patch_source_id: parsed.reporter_patch_source_id,
+        ...(parsed.target_repo ? { target_repo: parsed.target_repo } : {}),
         ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
       });
 
