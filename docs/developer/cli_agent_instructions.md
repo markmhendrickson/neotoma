@@ -20,6 +20,7 @@ When a Neotoma CLI session starts (dev or prod), applied rule files (e.g. `.curs
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MCP tools visible in the session | Follow MCP `instructions` / tool surface only for Neotoma behavior.                                                                                   |
 | MCP not available                | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout. |
+| Install / MCP / configuration tasks | Read `install.md` (repo root) **first**. It is the canonical CLI-driven setup sequence covering `neotoma auth keygen`, `neotoma mcp config`, LaunchAgent install, transport presets, and data-directory configuration. Do not substitute shell introspection or manual JSON/plist edits for the CLI commands it documents. |
 
 Index and dual-host notes: `docs/developer/agent_instructions.md`.
 

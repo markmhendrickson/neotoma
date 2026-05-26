@@ -499,7 +499,7 @@ export function analyzeMcpConfigIssues(
 type McpServerEntry =
   | { url: string }
   | { command: string; args?: string[]; env?: Record<string, string> };
-export type McpTransportChoice = "a" | "b" | "c" | "d";
+export type McpTransportChoice = "a" | "b" | "c" | "d" | "e";
 
 /** Default HTTP /mcp for `neotoma api start --env dev` (port 3080). */
 const DEFAULT_DEV_MCP_URL = "http://127.0.0.1:3080/mcp";
@@ -591,6 +591,7 @@ export function parseMcpTransportChoice(answer: string | undefined): McpTranspor
   if (a === "2" || a === "b" || a === "dev-shim" || a === "shim") return "b";
   if (a === "3" || a === "c" || a === "direct" || a === "stdio") return "c";
   if (a === "4" || a === "d" || a === "prod" || a === "prod-parity") return "d";
+  if (a === "5" || a === "e" || a === "signed-prod-profile" || a === "prod-signed") return "e";
   return "b";
 }
 
@@ -627,7 +628,12 @@ async function promptMcpTransport(): Promise<McpTransportChoice> {
         "      neotoma-dev and neotoma both use the prod /mcp URL (default\n" +
         "      http://127.0.0.1:3180/mcp). Use when you want prod data behind both entries.\n" +
         "\n" +
-        "Choose [1-4] (default: 2): ",
+        "  (5) E — Signed HTTP proxy, prod profile, single neotoma slot\n" +
+        "      Single neotoma slot using the signed shim with NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1\n" +
+        "      and NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod. For local dev with\n" +
+        "      NEOTOMA_ENV=production (port 3080, prod DB, live-reload).\n" +
+        "\n" +
+        "Choose [1-5] (default: 2): ",
       (answer) => {
         if (settled) return;
         settled = true;
@@ -651,6 +657,19 @@ export function neotomaServerEntriesForTransport(
   const launchTarget = resolveMcpLaunchTarget(repoRoot);
   if (launchTarget.mode === "scripts") {
     const scriptsDir = path.join(launchTarget.root, "scripts");
+
+    if (transport === "e") {
+      const signedShimScript = path.join(scriptsDir, "run_neotoma_mcp_signed_stdio_dev_shim.sh");
+      const eProdEntry: McpServerEntry = {
+        command: signedShimScript,
+        env: {
+          NEOTOMA_MCP_USE_LOCAL_PORT_FILE: "1",
+          NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+        },
+      };
+      return { "neotoma-dev": eProdEntry, neotoma: eProdEntry };
+    }
+
     if (transport === "b") {
       const shimScript = path.join(scriptsDir, "run_neotoma_mcp_stdio_dev_shim.sh");
       const devDownstreamUrlB = downstreamUrlForEnv("dev", sessionPorts);
@@ -721,6 +740,18 @@ export function neotomaServerEntriesForTransport(
     };
   }
 
+  if (transport === "e") {
+    const eProdEntryDist: McpServerEntry = {
+      command: process.execPath,
+      args: [cliEntrypoint, "mcp", "proxy", "--aauth"],
+      env: {
+        NEOTOMA_MCP_USE_LOCAL_PORT_FILE: "1",
+        NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+      },
+    };
+    return { "neotoma-dev": eProdEntryDist, neotoma: eProdEntryDist };
+  }
+
   const devDownstreamUrl =
     transport === "d"
       ? downstreamUrlForEnv("prod", sessionPorts)
@@ -762,7 +793,7 @@ export async function ensureAAuthKeysForSignedTransport(
   transport: McpTransportChoice,
   silent: boolean
 ): Promise<void> {
-  if (transport !== "a" && transport !== "d") return;
+  if (transport !== "a" && transport !== "d" && transport !== "e") return;
   if (hasAAuthKeys()) return;
 
   const { generateAndStoreKeypair } = await import("./aauth_signer.js");

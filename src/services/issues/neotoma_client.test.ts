@@ -134,66 +134,65 @@ describe("Neotoma Issue Client", () => {
       expect(String(request.body.local_issue_id)).toMatch(/^local:test\/repo:/);
     });
 
-    it("retries as unsigned guest when AAuth-signed request returns AUTH_REQUIRED", async () => {
-      // First call (AAuth-signed) → AUTH_REQUIRED
+    it("retries unsigned when the signed submission returns AUTH_REQUIRED", async () => {
       const signedPost = vi.fn().mockResolvedValueOnce({
-        error: {
-          error_code: "AUTH_REQUIRED",
-          details: { hint: "Create an agent grant." },
-        },
+        error: { error_code: "AUTH_REQUIRED", message: "agent grant missing" },
       });
-      // Second call (unsigned guest) → success
-      const guestPost = vi.fn().mockResolvedValueOnce({
+      const unsignedPost = vi.fn().mockResolvedValueOnce({
         data: {
-          entity_ids: ["issue-entity-retry", "conv-entity-retry"],
-          issue_entity_id: "issue-entity-retry",
-          conversation_id: "conv-entity-retry",
-          guest_access_token: "guest-token-retry",
+          entity_ids: ["issue-entity-2", "conversation-entity-2"],
+          issue_entity_id: "issue-entity-2",
+          conversation_id: "conversation-entity-2",
+          guest_access_token: "guest-token-after-retry",
         },
       });
       vi.mocked(createApiClient)
-        .mockReturnValueOnce({ POST: signedPost, GET: vi.fn() } as unknown as ReturnType<
-          typeof createApiClient
-        >)
-        .mockReturnValueOnce({ POST: guestPost, GET: vi.fn() } as unknown as ReturnType<
-          typeof createApiClient
-        >);
+        .mockReturnValueOnce({
+          POST: signedPost,
+          GET: vi.fn(),
+        } as unknown as ReturnType<typeof createApiClient>)
+        .mockReturnValueOnce({
+          POST: unsignedPost,
+          GET: vi.fn(),
+        } as unknown as ReturnType<typeof createApiClient>);
 
       const result = await submitIssueToRemote({
-        title: "Retry Issue",
-        body: "Retry body",
-        visibility: "private",
+        title: "Issue",
+        body: "Body",
+        visibility: "public",
       });
 
-      expect(result.issue_entity_id).toBe("issue-entity-retry");
-      expect(result.access_token).toBe("guest-token-retry");
-      // First client was signed, second was unsigned
-      expect(vi.mocked(createApiClient).mock.calls[0][0]).toMatchObject({ signWithCliAAuth: true });
-      expect(vi.mocked(createApiClient).mock.calls[1][0]).toMatchObject({
+      expect(result.issue_entity_id).toBe("issue-entity-2");
+      expect(result.access_token).toBe("guest-token-after-retry");
+      expect(signedPost).toHaveBeenCalledTimes(1);
+      expect(unsignedPost).toHaveBeenCalledTimes(1);
+      expect(createApiClient).toHaveBeenNthCalledWith(2, {
+        baseUrl: "https://neotoma.example.com",
         signWithCliAAuth: false,
       });
-      expect(signedPost).toHaveBeenCalledTimes(1);
-      expect(guestPost).toHaveBeenCalledTimes(1);
     });
 
-    it("throws with AUTH_REQUIRED hint when both signed and unsigned requests fail", async () => {
-      const failPost = vi.fn().mockResolvedValue({
-        error: {
-          error_code: "AUTH_REQUIRED",
-          details: { hint: "Create an agent grant." },
-        },
+    it("surfaces AUTH_REQUIRED when both signed and unsigned attempts fail", async () => {
+      const signedPost = vi.fn().mockResolvedValueOnce({
+        error: { error_code: "AUTH_REQUIRED", message: "agent grant missing" },
+      });
+      const unsignedPost = vi.fn().mockResolvedValueOnce({
+        error: { error_code: "AUTH_REQUIRED", message: "guest path disabled" },
       });
       vi.mocked(createApiClient)
-        .mockReturnValueOnce({ POST: failPost, GET: vi.fn() } as unknown as ReturnType<
-          typeof createApiClient
-        >)
-        .mockReturnValueOnce({ POST: failPost, GET: vi.fn() } as unknown as ReturnType<
-          typeof createApiClient
-        >);
+        .mockReturnValueOnce({
+          POST: signedPost,
+          GET: vi.fn(),
+        } as unknown as ReturnType<typeof createApiClient>)
+        .mockReturnValueOnce({
+          POST: unsignedPost,
+          GET: vi.fn(),
+        } as unknown as ReturnType<typeof createApiClient>);
 
       await expect(
-        submitIssueToRemote({ title: "Fail Issue", body: "Fail body", visibility: "private" })
-      ).rejects.toThrow("authentication required (AUTH_REQUIRED)");
+        submitIssueToRemote({ title: "Issue", body: "Body", visibility: "public" })
+      ).rejects.toThrow(/AUTH_REQUIRED/);
+      expect(unsignedPost).toHaveBeenCalledTimes(1);
     });
 
     it("returns guest token from the guest issue submit endpoint", async () => {

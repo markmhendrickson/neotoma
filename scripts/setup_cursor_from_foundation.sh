@@ -38,6 +38,12 @@ if [ -d "$FOUNDATION/.cursor/skills" ]; then
   echo "[setup_cursor_from_foundation] Installed $count skill(s) to .cursor/skills/ and .claude/skills/"
 fi
 
+# Compute a relative path from $2 (a directory) to $1 (a file/dir).
+# Uses Python for portability (macOS lacks GNU realpath --relative-to).
+_rel_path() {
+  python3 -c "import os.path; print(os.path.relpath('$1', '$2'))"
+}
+
 # Rules: if foundation has cursor_rules, symlink or copy into .cursor/rules/
 if [ -d "$FOUNDATION/agent_instructions/cursor_rules" ]; then
   RULES_DST="$REPO_ROOT/.cursor/rules"
@@ -46,7 +52,8 @@ if [ -d "$FOUNDATION/agent_instructions/cursor_rules" ]; then
   for rule in "$FOUNDATION/agent_instructions/cursor_rules"/*; do
     [ -f "$rule" ] || continue
     name=$(basename "$rule")
-    target="$(cd "$(dirname "$rule")" && pwd)/$name"
+    # Use relative path so the symlink works on any checkout, not just this machine.
+    target="$(_rel_path "$rule" "$RULES_DST")"
     rm -f "$RULES_DST/$name"
     ln -sf "$target" "$RULES_DST/$name" 2>/dev/null || cp "$rule" "$RULES_DST/$name"
     count=$((count + 1))
@@ -62,7 +69,8 @@ if [ -d "$FOUNDATION/agent_instructions/cursor_commands" ]; then
   for cmd in "$FOUNDATION/agent_instructions/cursor_commands"/*; do
     [ -f "$cmd" ] || continue
     name=$(basename "$cmd")
-    target="$(cd "$(dirname "$cmd")" && pwd)/$name"
+    # Use relative path so the symlink works on any checkout, not just this machine.
+    target="$(_rel_path "$cmd" "$CMDS_DST")"
     rm -f "$CMDS_DST/$name"
     ln -sf "$target" "$CMDS_DST/$name" 2>/dev/null || cp "$cmd" "$CMDS_DST/$name"
     count=$((count + 1))

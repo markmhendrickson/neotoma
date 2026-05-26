@@ -84,7 +84,8 @@ export async function submitIssueToRemote(params: {
     );
   }
 
-  const client = await createRemoteClient(config.target_url.trim());
+  const targetUrl = config.target_url.trim();
+  const client = await createRemoteClient(targetUrl);
   const now =
     typeof params.submission_timestamp === "string" && params.submission_timestamp.trim().length > 0
       ? params.submission_timestamp.trim()
@@ -118,9 +119,7 @@ export async function submitIssueToRemote(params: {
     guestBody.local_issue_id = localId;
   }
 
-  const { data, error } = (await client.POST("/issues/submit" as any, {
-    body: guestBody,
-  })) as {
+  type SubmitResponse = {
     data?: {
       entity_ids?: string[];
       issue_entity_id?: string;
@@ -130,47 +129,40 @@ export async function submitIssueToRemote(params: {
     error?: unknown;
   };
 
+  let { data, error } = (await client.POST("/issues/submit" as any, {
+    body: guestBody,
+  })) as SubmitResponse;
+
   if (error) {
-    // When AAuth-signed request is rejected with AUTH_REQUIRED, retry as an
-    // unsigned guest request. The remote /issues/submit handler accepts guest
-    // payloads (resolveRoutePrincipal allows "guest") and the guestSubmitPayload
-    // detection fires on local_issue_id / submission_timestamp which we already
-    // send — so the retry succeeds via submitGuestIssue on the remote side.
-    // Only fall through to the error path if the unsigned retry also fails.
-    // (closes #936)
+    // The remote `/issues/submit` handler accepts unsigned guest submissions for
+    // payloads carrying `local_issue_id` or `submission_timestamp` (both
+    // present here). When AAuth signing produces a signature the remote cannot
+    // verify (e.g. no agent grant), retry once as an unsigned guest before
+    // surfacing AUTH_REQUIRED. (closes #936)
     const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
     if (errObj?.["error_code"] === "AUTH_REQUIRED") {
-      const guestClient = createApiClient({
-        baseUrl: config.target_url.trim(),
-        signWithCliAAuth: false,
-      });
-      const { data: guestData, error: guestError } = (await guestClient.POST(
-        "/issues/submit" as any,
-        { body: guestBody }
-      )) as {
-        data?: {
-          entity_ids?: string[];
-          issue_entity_id?: string;
-          conversation_id?: string;
-          guest_access_token?: string;
-        };
-        error?: unknown;
-      };
-      if (!guestError && guestData) {
-        const issueEntityId = guestData.issue_entity_id ?? guestData.entity_ids?.[0] ?? "";
-        const conversationId = guestData.conversation_id ?? guestData.entity_ids?.[1] ?? "";
-        const entityIds =
-          Array.isArray(guestData.entity_ids) && guestData.entity_ids.length > 0
-            ? guestData.entity_ids
-            : [issueEntityId, conversationId].filter(Boolean);
-        return {
-          entity_ids: entityIds,
-          conversation_id: conversationId,
-          issue_entity_id: issueEntityId,
-          access_token: guestData.guest_access_token,
-        };
+      const signingDisabled = process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1";
+      if (!signingDisabled) {
+        const unsignedClient = createApiClient({
+          baseUrl: targetUrl,
+          signWithCliAAuth: false,
+        });
+        const retry = (await unsignedClient.POST("/issues/submit" as any, {
+          body: guestBody,
+        })) as SubmitResponse;
+        if (!retry.error) {
+          data = retry.data;
+          error = undefined;
+        } else {
+          error = retry.error;
+        }
       }
-      // Unsigned retry also failed — surface the original AUTH_REQUIRED hint.
+    }
+  }
+
+  if (error) {
+    const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
+    if (errObj?.["error_code"] === "AUTH_REQUIRED") {
       const hint =
         typeof errObj?.["details"] === "object" &&
         errObj["details"] !== null &&

@@ -61,6 +61,11 @@ for env_file in ".env" ".env.production"; do
   fi
 done
 
+# Trust loopback in production mode so browser requests from localhost (Inspector)
+# are authenticated as the local dev user without a Bearer token. Safe for a
+# single-host setup with no reverse proxy; do not set on tunnel-exposed servers.
+export NEOTOMA_TRUST_PROD_LOOPBACK=1
+
 RESTART_DELAY=5
 while true; do
   # Invoke dev:server directly with explicit port env vars so we bypass

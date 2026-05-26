@@ -1,1 +1,1 @@
-/Users/markmhendrickson/repos/neotoma/foundation/agent_instructions/cursor_commands/create_feature_unit.md
+../../foundation/agent_instructions/cursor_commands/create_feature_unit.md
