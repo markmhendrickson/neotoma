@@ -29,6 +29,7 @@ import { renderIndexHtml, renderDocHtml, renderNotFoundHtml } from "./html_templ
 import { lookupDoc } from "./render.js";
 import { loadManifest } from "./manifest_loader.js";
 import type { VisibilityEnv } from "./visibility.js";
+import { acceptPrefersHtml } from "../inspector_mount.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -121,13 +122,40 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
   const docsRoot = path.join(repoRoot, "docs");
   const manifestPath = path.join(repoRoot, "docs", "site", "site_doc_manifest.yaml");
 
-  app.get("/docs", (req, res) => {
+  // Content negotiation: the inspector SPA navigates to /docs and /docs/<slug>
+  // and expects HTML (the SPA shell) — it then fetches JSON from the same URL
+  // with `?format=json`. Server-rendered HTML is preserved as a no-JS fallback
+  // for `Accept: text/html` requests that do not pass `?format=json`. JSON
+  // responses are returned when `?format=json` is present OR the client sends
+  // `Accept: application/json`.
+  //
+  // The SPA fallback handler registered later in `src/actions.ts` catches the
+  // HTML case before this route fires; this handler runs for direct curl /
+  // legacy clients and for the JSON requests the SPA makes.
+  const wantsJson = (req: express.Request): boolean => {
+    if (req.query.format === "json") return true;
+    const accept = req.get("accept") ?? "";
+    return accept.includes("application/json") && !accept.includes("text/html");
+  };
+
+  app.get("/docs", (req, res, next) => {
     const env = opts.envSource ?? (process.env as VisibilityEnv);
     const index = getDocsIndex({
       docsRoot,
       manifestPath,
       env,
     });
+    if (wantsJson(req)) {
+      res.set("Cache-Control", "public, max-age=60");
+      res.status(200).json(index);
+      return;
+    }
+    // Browser hard-refresh: fall through to the SPA shell fallback so the
+    // inspector owns docs rendering. The legacy server-rendered HTML is
+    // preserved only for clients that explicitly opt out of the SPA — i.e.
+    // those that send neither `Accept: text/html` (browsers) nor
+    // `?format=json` (the SPA's fetch path).
+    if (acceptPrefersHtml(req.headers.accept)) return next();
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "public, max-age=60");
     res.status(200).send(renderIndexHtml(index));
@@ -135,7 +163,7 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
 
   // `*` matches the rest of the path; Express puts the captured segment in
   // `req.params[0]`.
-  app.get("/docs/*", (req, res) => {
+  app.get("/docs/*", (req, res, next) => {
     const env = opts.envSource ?? (process.env as VisibilityEnv);
     const manifest = loadManifest(manifestPath);
     const rawSlug = (req.params as Record<string, string>)[0] ?? "";
@@ -144,6 +172,16 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
       env,
       manifestEntries: manifest.entries,
     });
+    if (wantsJson(req)) {
+      res.set("Cache-Control", "public, max-age=60");
+      if (!lookup.ok) {
+        res.status(404).json({ error: "doc_not_found", slug: rawSlug });
+        return;
+      }
+      res.status(200).json(lookup.doc);
+      return;
+    }
+    if (acceptPrefersHtml(req.headers.accept)) return next();
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "public, max-age=60");
     if (!lookup.ok) {
