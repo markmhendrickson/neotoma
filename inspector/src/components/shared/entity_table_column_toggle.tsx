@@ -9,10 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  ENTITY_TABLE_COLUMN_LABELS,
-  type EntityTableColumnId,
-} from "@/lib/entity_table_columns";
+import { ENTITY_TABLE_COLUMN_LABELS } from "@/lib/entity_table_columns";
 
 export function EntityTableColumnToggle({
   columnIds,

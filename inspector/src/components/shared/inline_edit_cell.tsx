@@ -17,7 +17,7 @@ interface InlineEditCellProps {
 
 export function InlineEditCell({
   entityId,
-  entityType,
+  entityType: _entityType,
   field,
   value,
   typeHint,

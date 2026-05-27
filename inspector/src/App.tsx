@@ -9,7 +9,7 @@ const DocsPage = lazy(() => import("@/pages/docs"));
 const SearchPage = lazy(() => import("@/pages/search"));
 const EntityTypesPage = lazy(() => import("@/pages/entity_types"));
 const EntitiesPage = lazy(() => import("@/pages/entities"));
-const EntityDetailPage = lazy(() => import("@/pages/entity_detail"));
+
 const EntitySegmentPage = lazy(() => import("@/pages/entity_segment_page"));
 const EntityCorrectPage = lazy(() => import("@/pages/entity_correct"));
 const EntityTimelinePage = lazy(() => import("@/pages/entity_timeline"));

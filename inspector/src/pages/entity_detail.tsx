@@ -21,7 +21,6 @@ import {
   QueryErrorAlert,
 } from "@/components/shared/query_status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EntityLink } from "@/components/shared/entity_link";
 import { JsonViewer } from "@/components/shared/json_viewer";

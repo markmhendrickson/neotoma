@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEntitiesQuery } from "@/hooks/use_entities";
 import { useAgentGrants } from "@/hooks/use_agents";
@@ -18,7 +18,6 @@ import type { EntitySnapshot, SnapshotFilter } from "@/types/api";
 import { EntityListAdmissionCell } from "@/components/shared/entity_list_admission_cell";
 import { EntityTypeSelect } from "@/components/shared/entity_type_select";
 import { EntityTableColumnToggle } from "@/components/shared/entity_table_column_toggle";
-import { FieldValue } from "@/components/shared/field_value";
 import { InlineEditCell } from "@/components/shared/inline_edit_cell";
 import { PinPrimitiveButton } from "@/components/shared/pin_primitive_button";
 import { entityTypeFilterPinHref } from "@/lib/pinned_primitives";
@@ -38,7 +37,7 @@ import { EntityFieldFilterBar } from "@/components/shared/entity_field_filter_ba
 import { BulkActionBar } from "@/components/shared/bulk_action_bar";
 import { EntityBoardView } from "@/components/shared/entity_board_view";
 import { CreateEntityDialog } from "@/components/shared/create_entity_dialog";
-import { getSavedViews, saveView, deleteView, generateViewId, type SavedView } from "@/lib/saved_views";
+import { getSavedViews, saveView, generateViewId, type SavedView } from "@/lib/saved_views";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Filter, LayoutGrid, List, Plus, Save } from "lucide-react";
 
@@ -581,7 +580,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
 function schemaFieldColumnDef(
   fieldKey: string,
   schema: EntitySchema | null | undefined,
-  entityType: string,
+  _entityType: string,
 ): ColumnDef<EntitySnapshot, unknown> {
   const typeHint =
     (schema?.schema_definition?.fields?.[fieldKey] as { type?: string } | undefined)?.type ??

@@ -7,7 +7,7 @@ import { AgentBadge } from "@/components/shared/agent_badge";
 import { MarkdownBodySheet } from "@/components/shared/markdown_body_sheet";
 import { Button } from "@/components/ui/button";
 import { useFieldProvenance } from "@/hooks/use_entities";
-import { humanizeKey, shortId } from "@/lib/humanize";
+import { shortId } from "@/lib/humanize";
 import {
   filterSnapshotKeysForDisplay,
   snapshotFieldDisplayLabel,
