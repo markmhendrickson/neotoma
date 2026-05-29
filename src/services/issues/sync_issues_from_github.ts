@@ -163,20 +163,33 @@ async function pushUnsyncedIssues(
     }
 
     // Write github_number/url back and clear sync_pending.
-    try {
-      await ops.correct({
-        entity_id: entityId,
-        corrections: {
-          github_number: created.number,
-          github_url: created.html_url,
-          sync_pending: false,
-          last_synced_at: new Date().toISOString(),
-        },
-      });
-    } catch (err) {
+    // Use individual correct calls (field+value) rather than a corrections map — the
+    // correct MCP tool requires entity_id, entity_type, field, value, idempotency_key.
+    const now = new Date().toISOString();
+    const fieldUpdates: Array<{ field: string; value: unknown }> = [
+      { field: "github_number", value: created.number },
+      { field: "github_url", value: created.html_url },
+      { field: "sync_pending", value: false },
+      { field: "last_synced_at", value: now },
+    ];
+    const updateErrors: string[] = [];
+    for (const { field, value } of fieldUpdates) {
+      try {
+        await ops.correct({
+          entity_id: entityId,
+          entity_type: "issue",
+          field,
+          value,
+          idempotency_key: `push-sync-${entityId}-${field}-${created.number}`,
+        });
+      } catch (err) {
+        updateErrors.push(`${field}: ${(err as Error).message}`);
+      }
+    }
+    if (updateErrors.length > 0) {
       // Push succeeded but local update failed — not fatal, but notable.
       result.push_errors.push(
-        `GitHub issue #${created.number} created but local update failed for ${entityId}: ${(err as Error).message}`
+        `GitHub issue #${created.number} created but local update failed for ${entityId}: ${updateErrors.join("; ")}`
       );
       // Still count as pushed since the GitHub issue exists.
     }

@@ -211,14 +211,29 @@ describe("syncIssuesFromGitHub", () => {
           body: "[redacted] Details here",
         }),
       );
+      // Each field is written as a separate correct call.
       expect(ops.correct).toHaveBeenCalledWith(
         expect.objectContaining({
           entity_id: "ent-public-1",
-          corrections: expect.objectContaining({
-            github_number: 42,
-            github_url: "https://github.com/test/repo/issues/42",
-            sync_pending: false,
-          }),
+          entity_type: "issue",
+          field: "github_number",
+          value: 42,
+        }),
+      );
+      expect(ops.correct).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity_id: "ent-public-1",
+          entity_type: "issue",
+          field: "github_url",
+          value: "https://github.com/test/repo/issues/42",
+        }),
+      );
+      expect(ops.correct).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity_id: "ent-public-1",
+          entity_type: "issue",
+          field: "sync_pending",
+          value: false,
         }),
       );
       expect(result.issues_pushed).toBe(1);

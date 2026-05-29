@@ -145,7 +145,13 @@ export interface Operations {
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
 
   /** Correct an observation (creates a new observation that supersedes the prior). */
-  correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
+  correct(input: {
+    entity_id: string;
+    entity_type: string;
+    field: string;
+    value: unknown;
+    idempotency_key: string;
+  }): Promise<unknown>;
 
   /** List registered entity types (schema-level discovery). */
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
