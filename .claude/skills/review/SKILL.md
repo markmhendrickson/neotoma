@@ -53,17 +53,11 @@ Perform a structured code review of a GitHub PR, a branch, or the current workin
 
 ### Phase 2 — Load docs
 
-**Always load** (establish invariants):
+**Always load** (3 docs — true invariant kernel only):
 
 - `docs/NEOTOMA_MANIFEST.md`
-- `docs/foundation/core_identity.md`
-- `docs/foundation/philosophy.md`
 - `docs/foundation/layered_architecture.md`
 - `.claude/rules/change_guardrails_rules.md`
-- `docs/foundation/schema_agnostic_design_rules.md`
-- `docs/architecture/determinism.md`
-- `docs/subsystems/errors.md`
-- `docs/security/threat_model.md`
 
 **Load conditionally** based on paths in the diff (per `docs/developer/pr_review_reading_list.md`):
 
@@ -84,9 +78,14 @@ Perform a structured code review of a GitHub PR, a branch, or the current workin
 | `src/tool_definitions.ts`, `src/server.ts`, `docs/developer/mcp/` | `docs/developer/mcp/instructions.md`, `docs/developer/agent_instructions_sync_rules.mdc` |
 | `src/cli/` | `docs/developer/cli_reference.md` |
 | `src/actions.ts`, `src/services/local_auth*`, `src/middleware/` | `docs/subsystems/auth.md`, `docs/security/advisories/2026-05-11-inspector-auth-bypass.md` |
-| `src/services/root_landing/` | `docs/security/threat_model.md` (already loaded) |
+| `src/actions.ts`, `src/server.ts`, any auth/middleware path | `docs/security/threat_model.md` |
 | Guest access, public routes | `docs/subsystems/guest_access_policy.md` |
-| New entity type or schema field | `docs/subsystems/record_types.md`, `docs/foundation/data_models.md` |
+| `src/services/root_landing/` | `docs/security/threat_model.md` |
+| New call to `registry.register()` (i.e. a new entity type being registered, not a schema field addition) | `docs/subsystems/record_types.md`, `docs/foundation/data_models.md` |
+| Any `if (entityType`, `switch (entity_type`, or hardcoded entity-type list in diff | `docs/foundation/schema_agnostic_design_rules.md` |
+| Any new error code, tightened validation, or changed error response shape | `docs/subsystems/errors.md` |
+| `Math.random`, `Date.now` in non-observability paths, new sort/grouping in stored-output path | `docs/architecture/determinism.md` |
+| Any change to stored fields, observation shape, or entity snapshot output | `docs/foundation/core_identity.md`, `docs/foundation/philosophy.md` |
 | Logging, metrics, tracing | `docs/observability/logging.md`, `docs/observability/metrics_standard.md`, `docs/subsystems/privacy.md` |
 | `tests/` | `docs/testing/testing_standard.md` |
 | `docs/releases/` | `docs/developer/github_release_process.md` |
