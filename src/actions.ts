@@ -7998,7 +7998,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
         if (sourceIds.length > 0) {
           const { data: sources, error: srcError } = await db
-            .from("source")
+            .from("sources")
             .select("*")
             .in("id", sourceIds)
             .eq("user_id", userId);
@@ -8011,7 +8011,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
     } else if (node_type === "source") {
       // Get source
       const { data: source, error: srcError } = await db
-        .from("source")
+        .from("sources")
         .select("*")
         .eq("id", node_id)
         .eq("user_id", userId)
