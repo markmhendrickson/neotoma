@@ -162,6 +162,32 @@ export interface ResolverWarning {
 }
 
 /**
+ * A pre-existing entity surfaced as a possible duplicate of the entity being
+ * resolved. Emitted by the single-token prefix-match pass: when a single-token
+ * input (e.g. a contact stored as just "Simon") is a strict prefix of an
+ * existing same-type multi-token canonical name (e.g. "Simon Bergeron"), the
+ * resolver still mints the new single-token entity (no auto-merge) but attaches
+ * the existing entity here for operator/agent review.
+ *
+ * Keep this shape PII-free in any observable surface: it carries the entity_id
+ * (a content hash, not PII) and the candidate's canonical_name. The
+ * canonical_name is included because, like {@link DuplicateCandidatePair} from
+ * the post-hoc detector, the surfacing is review-facing and the name is the
+ * signal the reviewer needs. Callers that forward this to logs/metrics MUST
+ * drop or redact `candidateCanonicalName` per docs/subsystems/privacy.md.
+ */
+export interface ResolverDuplicateCandidate {
+  /** Stable machine code for the surfacing reason. */
+  code: "PREFIX_DUPLICATE_CANDIDATE";
+  /** entity_type the candidate shares with the resolving entity. */
+  entityType: string;
+  /** Deterministic id of the existing candidate entity. */
+  candidateEntityId: string;
+  /** canonical_name of the existing candidate entity (review-facing). */
+  candidateCanonicalName: string;
+}
+
+/**
  * Full trace for a single entity resolution. Populated by
  * {@link resolveEntityWithTrace} and surfaced per-observation.
  */
@@ -188,6 +214,14 @@ export interface ResolverTrace {
    * heuristic path. Empty/undefined otherwise. See {@link ResolverWarning}.
    */
   warnings?: ResolverWarning[];
+  /**
+   * Existing entities surfaced as possible duplicates of the entity being
+   * resolved. Populated by the single-token prefix-match pass (see
+   * {@link ResolverDuplicateCandidate}). Empty/undefined when no candidates
+   * were found or the input was not a single token. Deterministically ordered
+   * by `candidateEntityId` ascending. Never causes an auto-merge.
+   */
+  duplicateCandidates?: ResolverDuplicateCandidate[];
 }
 
 /**
@@ -571,6 +605,107 @@ export function deriveCanonicalNameFromFields(
   return deriveCanonicalNameFromFieldsWithTrace(entityType, fields, schema).canonicalName;
 }
 
+/**
+ * Maximum number of same-first-token candidates the prefix-match pass will
+ * surface. When more existing entities share the single-token first token than
+ * this, every match is still surfaced (capped) rather than forcing a single
+ * "winner" — this is the pathological-false-positive guard. Deterministic:
+ * candidates are ordered by entity_id ascending before slicing.
+ */
+const MAX_PREFIX_DUPLICATE_CANDIDATES = 25;
+
+/**
+ * Split a normalized canonical value into its token sequence. Uses the same
+ * normalization as entity-id hashing so token boundaries match how identity is
+ * computed (punctuation collapsed to spaces, lowercased, trimmed).
+ */
+function tokenizeForPrefixMatch(entityType: string, raw: string): string[] {
+  const normalized = normalizeEntityValue(entityType, raw);
+  if (normalized === "") return [];
+  return normalized.split(" ").filter((t) => t !== "");
+}
+
+/**
+ * Single-token prefix-match pass.
+ *
+ * Runs only when the resolving input is a single token (multi-token inputs are
+ * unaffected). Finds existing same-`entityType` entities whose canonical_name
+ * token sequence (a) has more than one token and (b) begins with the exact
+ * single-token input as its first token. These existing entities are surfaced
+ * as duplicate candidates so the caller can review them instead of silently
+ * accumulating duplicates (e.g. "Simon" alongside "Simon Bergeron").
+ *
+ * Doctrine preserved (this is the State Layer):
+ * - Read-only: never mutates or merges; only surfaces candidates.
+ * - Deterministic: candidates ordered by entity_id ascending, no wall-clock,
+ *   no randomness.
+ * - False-positive guard: when many entities share the first token, all are
+ *   surfaced (capped at {@link MAX_PREFIX_DUPLICATE_CANDIDATES}) rather than
+ *   forcing a single match.
+ *
+ * @param resolvingEntityId - id of the entity currently being resolved, so it
+ *   is never surfaced as its own duplicate candidate.
+ */
+async function findSingleTokenPrefixCandidates(params: {
+  entityType: string;
+  canonicalName: string;
+  resolvingEntityId: string;
+  userId?: string;
+}): Promise<ResolverDuplicateCandidate[]> {
+  const { entityType, canonicalName, resolvingEntityId, userId } = params;
+
+  const inputTokens = tokenizeForPrefixMatch(entityType, canonicalName);
+  // Gate strictly on single-token inputs. Multi-token inputs are unaffected.
+  if (inputTokens.length !== 1) return [];
+  const firstToken = inputTokens[0];
+
+  let query = db
+    .from("entities")
+    .select("id, canonical_name, entity_type, user_id, merged_to_entity_id")
+    .eq("entity_type", entityType);
+
+  // Scope to the resolving user when known so we never surface another user's
+  // entities (tenant isolation). When userId is absent (legacy positional
+  // callers don't reach this path), the query stays type-scoped only.
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  const candidates: ResolverDuplicateCandidate[] = [];
+  for (const row of data as Array<{
+    id: string;
+    canonical_name: string | null;
+    merged_to_entity_id?: string | null;
+  }>) {
+    // Skip the entity we are resolving (defensive — it should not exist yet),
+    // and skip rows already merged away.
+    if (row.id === resolvingEntityId) continue;
+    if (row.merged_to_entity_id) continue;
+    if (!row.canonical_name) continue;
+
+    const existingTokens = tokenizeForPrefixMatch(entityType, row.canonical_name);
+    // Strict prefix: existing name must have MORE tokens and share the first
+    // token. A single-token existing name with the same token would have been
+    // caught by the exact-match pass and is not a "prefix" relationship.
+    if (existingTokens.length < 2) continue;
+    if (existingTokens[0] !== firstToken) continue;
+
+    candidates.push({
+      code: "PREFIX_DUPLICATE_CANDIDATE",
+      entityType,
+      candidateEntityId: row.id,
+      candidateCanonicalName: row.canonical_name,
+    });
+  }
+
+  // Deterministic ordering by entity_id (content hash); stable across runs.
+  candidates.sort((a, b) => (a.candidateEntityId < b.candidateEntityId ? -1 : 1));
+  return candidates.slice(0, MAX_PREFIX_DUPLICATE_CANDIDATES);
+}
+
 export interface ResolveEntityOptions {
   entityType: string;
   fields: Record<string, unknown>;
@@ -880,6 +1015,28 @@ export async function resolveEntityWithTrace(
     };
   }
 
+  // Single-token prefix-match pass. Runs AFTER the exact-match check above
+  // (which short-circuits on `existing`). Only the no-exact-match branch can
+  // reach here, so this surfaces candidates precisely when the resolver would
+  // otherwise silently mint a new single-token entity that prefixes an
+  // existing multi-token same-type entity (e.g. "Simon" vs "Simon Bergeron").
+  // Read-only and never blocks creation — surfaced as candidates, not merged.
+  let duplicateCandidates: ResolverDuplicateCandidate[] = [];
+  try {
+    duplicateCandidates = await findSingleTokenPrefixCandidates({
+      entityType,
+      canonicalName,
+      resolvingEntityId: entityId,
+      userId,
+    });
+  } catch (err) {
+    // Candidate surfacing is best-effort; never block resolution on it.
+    logger.warn(
+      `[ENTITY_RESOLUTION] prefix-match candidate scan failed for ${entityType}: ` +
+        `${(err as Error).message}`
+    );
+  }
+
   if (commit) {
     // Create new entity
     const now = new Date().toISOString();
@@ -911,6 +1068,7 @@ export async function resolveEntityWithTrace(
       identityBasis,
       identityRule,
       action: commit ? "created" : "would_create",
+      ...(duplicateCandidates.length > 0 ? { duplicateCandidates } : {}),
     },
   };
 }
