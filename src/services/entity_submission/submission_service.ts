@@ -115,6 +115,19 @@ export async function submitEntity(
 
   const structured = storeResult.structured?.entities ?? [];
   const entity_id = structured[0]?.entity_id ?? "";
+  // Write-integrity: an empty entity_id means the underlying store produced no
+  // primary entity. Returning it as a success is a silent write loss — the
+  // caller believes its entity was created when nothing persisted. Fail loud
+  // so the caller can recover instead of moving on against a phantom record.
+  if (!entity_id) {
+    throw new Error(
+      `submit_entity for entity_type "${entity_type}" produced no primary entity ` +
+        `(empty entity_id). The underlying store returned ${structured.length} ` +
+        `structured entit${structured.length === 1 ? "y" : "ies"}; expected the ` +
+        `primary entity at index 0. This is a write-integrity failure, not a ` +
+        `success — no record was persisted.`
+    );
+  }
   const conversation_id = cfg.enable_conversation_threading ? structured[1]?.entity_id : undefined;
 
   let guest_access_token: string | undefined;
