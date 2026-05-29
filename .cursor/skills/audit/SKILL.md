@@ -31,6 +31,7 @@ Neotoma has strong write-path discipline (idempotency, schema-first, immutabilit
 - **`/audit --scope=<entity_type|relationship|schema|fragments>`** — Restrict checks to one category.
 - **`/audit --since=<ISO date>`** — Restrict to entities/observations created or updated since the date.
 - **`/audit --user=<user_id>`** — Audit a specific user's records (defaults to authenticated user).
+- **`/audit --dup-min-count=<N>`** — Minimum entity count for a type to be auto-scanned for potential duplicates beyond the always-checked `contact`/`person`/`organization` set (default 100).
 - **`/audit --format=<table|json|markdown>`** — Output shape; `table` default for interactive, `json` for piping into repair tooling.
 
 ## Prerequisites
@@ -91,7 +92,7 @@ Run all of the following. Each check produces zero or more `Finding` records. Ea
 
 #### Implementation notes for each check
 
-- **`DUP_ENTITIES_BY_RESOLVER`** — Call `list_potential_duplicates`; for each pair, populate `args_hint` with `{ source_entity_id, target_entity_id, strategy: "prefer_more_recent" | "prefer_more_observations" }`.
+- **`DUP_ENTITIES_BY_RESOLVER`** — Always run for the high-cardinality entity types where duplicates accumulate fastest: `contact`, `person`, `organization`. Call `list_potential_duplicates` once per type (passing `entity_type`). When `--scope=entity` or `--scope=entity_type` is not set, also include any other registered type whose entity count exceeds the per-run high-cardinality threshold (default 100; override with `--dup-min-count=N`). Skip types with fewer than 2 entities. For each returned pair, emit one `Finding`: `entity_ids` is `[entity_a.id, entity_b.id]`; `summary` names both `canonical_name` values; `detail` includes `score`, `matched_fields`, and `entity_type`; populate `args_hint` with `{ source_entity_id: entity_b.id, target_entity_id: entity_a.id, strategy: "prefer_more_recent" | "prefer_more_observations" }` (merge the lower-ranked pair member *into* the higher-ranked one — `entity_a` ranks first by score). Severity is `high` when `score >= 0.95`, otherwise `medium`. Detection only — never call `merge_entities` from a check.
 - **`DUP_TYPE_ALIASES`** — Call `list_entity_types`; build a graph of (canonical_name → aliases). Edges where two distinct canonical names appear in each other's alias sets, OR where alias arrays intersect, become findings. Levenshtein < 2 on short names emits as `low` severity.
 - **`PLURAL_TYPE_NAMES`** — `list_entity_types` and apply the same singularization rule used by `validateSchemaDefinition` (load from `NEOTOMA_ALLOWED_PLURAL_TYPES` env var or fall back to a hardcoded allowlist: `news`, `data`, `analytics`, `status`, `series`, `species`). Extend the in-skill allowlist with confirmed **legacy import artifacts** where the plural name is semantically intentional (one entity representing many items imported in bulk): `reads` (IndieWeb URL export, 2017-2018), `sections` (website section config blob), `songs`, `talking_points`, `crypto_transactions`. Emit these as `info` severity with a note that they are legacy import artifacts, not schema violations — do not co-emit `DUP_TYPE_ALIASES` for them. Validated against the live registry on 2026-05-16: surfaces `places`, `plans`, `reads`, `songs`, `sections`, `crypto_transactions`, `talking_points`, `meeting_notes` (before legacy allowlist). After applying legacy allowlist, actionable findings are `places`, `plans`, `meeting_notes` only. Three of those (`places`/`plans`/`meeting_notes`) also have singular siblings already registered — co-emit `DUP_TYPE_ALIASES` for those, ranked as the highest-priority repair candidates since rows are split across both types.
 - **`ORPHAN_ENTITIES`** — `retrieve_entities` per entity_type; for each entity, `list_relationships` with the entity as source or target. Empty → orphan.
@@ -126,10 +127,11 @@ Run these only if the API key is present. Each check batches entities and asks t
 Output sections, in this order:
 
 1. **Summary line** — counts by severity: `Found 47 issues (3 high, 12 medium, 32 low/info)`.
-2. **High-severity findings** — list each with `check_id`, summary, affected entity ids (truncated to 5 with `(+N more)`), and remediation one-liner.
-3. **Medium-severity findings** — same format, collapsed by default in interactive mode.
-4. **Low/info findings** — collapsed group; show count only unless `--verbose`.
-5. **Repair menu** — numbered list of remediation actions the user can authorize: `1. Merge 7 duplicate pairs (merge_entities)`, `2. Rename 2 plural entity types (register_schema)`, etc. The user picks individually; no batch auto-apply.
+2. **Potential duplicates** — a dedicated section for all `DUP_ENTITIES_BY_RESOLVER` findings, broken out from the generic severity lists because duplicate accumulation is the most common silent graph-health failure. Group by `entity_type`; within each type list the candidate pairs ranked by `score` (truncate to 10 with `(+N more)` unless `--verbose`). Each row shows both `canonical_name` values, the `score`, the `matched_fields`, and the merge hint. End the section with the always-checked types that returned zero candidates so the operator sees the check ran (`contact: no candidates`). If no pairs were found across any type, print `Potential duplicates: none detected`. Remediation is `merge_entities` only — emit the hint, never merge.
+3. **High-severity findings** — list each remaining (non-duplicate) high finding with `check_id`, summary, affected entity ids (truncated to 5 with `(+N more)`), and remediation one-liner.
+4. **Medium-severity findings** — same format, collapsed by default in interactive mode.
+5. **Low/info findings** — collapsed group; show count only unless `--verbose`.
+6. **Repair menu** — numbered list of remediation actions the user can authorize: `1. Merge 7 duplicate pairs (merge_entities)`, `2. Rename 2 plural entity types (register_schema)`, etc. The user picks individually; no batch auto-apply.
 
 ### Phase 5 — Repair (delegated, opt-in)
 
@@ -172,11 +174,19 @@ Running 14 deterministic checks…
 
 Summary: 47 findings (3 high, 12 medium, 32 low/info)
 
-HIGH (3)
-  [DUP_ENTITIES_BY_RESOLVER] 7 duplicate entity pairs detected by server-side resolver
-    → ent_aaa…, ent_bbb… (+5 more)
-    → Remediation: merge_entities (7 candidate pairs)
+Potential duplicates (DUP_ENTITIES_BY_RESOLVER) — 7 candidate pairs
+  contact (5 pairs)
+    "Jane Doe" ↔ "Jane R. Doe"          score 0.97  [canonical_name, email]
+      → merge_entities(source=ent_bbb…, target=ent_aaa…, strategy=prefer_more_observations)
+    "Acme, Inc." ↔ "Acme Inc"           score 0.93  [canonical_name]
+      → merge_entities(source=ent_ddd…, target=ent_ccc…, strategy=prefer_more_recent)
+    … (+3 more, run --verbose)
+  organization (2 pairs)
+    "Vercel" ↔ "Vercel Inc."            score 0.91  [canonical_name]
+      → merge_entities(source=ent_fff…, target=ent_eee…, strategy=prefer_more_recent)
+  person: no candidates
 
+HIGH (2)
   [CYCLE_HIERARCHY] 1 cycle detected in PART_OF graph
     → ent_ccc → ent_ddd → ent_eee → ent_ccc
     → Remediation: manual review + delete_relationship
@@ -190,7 +200,7 @@ MEDIUM (12) — collapsed, run with --verbose
 LOW/INFO (32) — collapsed, run with --verbose
 
 Repair menu:
-  1. Merge 7 duplicate pairs (merge_entities)              [y/n]
+  1. Merge 7 potential duplicate pairs (merge_entities, review each)  [y/n]
   2. Resolve cycle in PART_OF graph (manual)               [skip]
   3. Add canonical_name_fields to "note" schema            [y/n]
   Run --verbose for medium/low remediations.
