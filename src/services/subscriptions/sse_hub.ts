@@ -14,9 +14,19 @@ type RingEntry = { id: string; event: SubstrateEvent };
 const ring: RingEntry[] = [];
 let seq = 0n;
 
-export function pushSubstrateEventToRing(event: SubstrateEvent): string {
-  seq += 1n;
-  const id = seq.toString();
+export function pushSubstrateEventToRing(event: SubstrateEvent, explicitId?: string): string {
+  // Prefer a caller-supplied id so the ring shares the durable event log's id
+  // space (the AUTOINCREMENT `seq`). That id never resets across restarts,
+  // which is what makes a client's Last-Event-ID a stable, restart-surviving
+  // cursor. The internal counter is only a fallback for callers without a
+  // durable seq (e.g. tests that push directly).
+  let id: string;
+  if (explicitId !== undefined) {
+    id = explicitId;
+  } else {
+    seq += 1n;
+    id = seq.toString();
+  }
   ring.push({ id, event });
   while (ring.length > BUFFER_CAP) {
     ring.shift();
@@ -71,6 +81,11 @@ export function replayRingAfterLastId(
       void e;
     }
   }
+}
+
+/** True when the given event id is currently present in the in-memory ring. */
+export function ringHasId(eventId: string): boolean {
+  return ring.some((e) => e.id === eventId);
 }
 
 export function getRingEntriesAfter(

@@ -296,6 +296,19 @@ const SCHEMA_STATEMENTS = [
     entity_type TEXT NOT NULL,
     merged INTEGER DEFAULT 0
   )`,
+  // Durable substrate-event log (#1464 Tier 2): persists every emitted
+  // SubstrateEvent so SSE resume survives a server restart or a gap larger than
+  // the in-memory ring. `seq` is the durable monotonic cursor (distinct from
+  // the in-memory ring id). Pruned to NEOTOMA_EVENT_RETENTION_DAYS (default 7).
+  `CREATE TABLE IF NOT EXISTS substrate_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    ring_id TEXT,
+    event_type TEXT NOT NULL,
+    user_id TEXT,
+    entity_id TEXT,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
 ];
 
 /** Legacy tables that may exist in older neotoma.db files. Dropped on open so DB matches canonical schema. */
@@ -410,6 +423,15 @@ function ensureSchema(db: SqliteDatabase): void {
     ).run();
     db.prepare(
       "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
+    ).run();
+
+    // Durable substrate-event log (#1464 Tier 2): resume queries read by
+    // (user_id, seq); pruning reads by created_at.
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
     ).run();
 
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication

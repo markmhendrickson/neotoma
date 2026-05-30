@@ -128,6 +128,7 @@ import {
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
 import type { SandboxReportReason } from "./services/sandbox/types.js";
+import type { SubstrateEvent } from "./events/types.js";
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
 import { getMcpAuthToken } from "./crypto/mcp_auth_token.js";
 import {
@@ -9412,10 +9413,12 @@ app.get("/events/stream", async (req, res) => {
       (await getAuthenticatedUserId(req, req.query.user_id as string | undefined));
     const { getSubscriptionStatus } =
       await import("./services/subscriptions/subscription_actions.js");
-    const { registerSseClient, resumeRingAfter } =
+    const { registerSseClient, getRingEntriesAfter, ringHasId } =
       await import("./services/subscriptions/sse_hub.js");
     const { subscriptionMatchesEvent } =
       await import("./services/subscriptions/subscription_types.js");
+    const { getEventsAfterSeq, hasDurableCursor } =
+      await import("./services/subscriptions/event_log.js");
 
     const sub = await getSubscriptionStatus({ userId, subscription_id });
     if (!sub) {
@@ -9444,32 +9447,59 @@ app.get("/events/stream", async (req, res) => {
     const lastEventIdHeader = req.headers["last-event-id"];
     const lastEventId = Array.isArray(lastEventIdHeader) ? lastEventIdHeader[0] : lastEventIdHeader;
 
-    const resume = resumeRingAfter(lastEventId, (ev) => subscriptionMatchesEvent(sub, ev));
+    // Resume strategy (#1464). The event id is the durable monotonic `seq`, so
+    // it survives restarts. Resolve resume against, in order:
+    //   1. the in-memory ring (hot path, fastest);
+    //   2. the durable event log, if the cursor is still within retention but
+    //      no longer in the ring (e.g. after a restart or a gap > buffer);
+    //   3. a one-time `gap` signal, only when the cursor predates the retained
+    //      window — a true unrecoverable gap that requires a full reconcile.
+    const writeEvent = (id: string, ev: SubstrateEvent): void => {
+      res.write(`id: ${id}\n`);
+      res.write(`event: ${ev.event_type}\n`);
+      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+    };
 
-    // If the requested cursor fell out of the in-memory buffer (eviction past
-    // the cap, or a server restart), tell the client before replaying the
-    // current head. This converts silent drift into a recoverable signal: a
-    // consumer projecting events into an external index should treat a gap as
-    // "reconcile via a full read", not as a continuation from its last cursor.
-    if (resume.gap_detected) {
-      res.write(`event: gap\n`);
-      res.write(
-        `data: ${JSON.stringify({
-          reason: "cursor_not_in_buffer",
-          requested_last_event_id: lastEventId,
-          latest_ring_id: resume.latest_ring_id,
-          message:
-            "Requested Last-Event-ID is no longer in the in-memory event buffer " +
-            "(evicted or lost to a restart). Replaying from the current buffer head; " +
-            "reconcile via a full read if gap-free delivery is required.",
-        })}\n\n`
-      );
-    }
-
-    for (const entry of resume.entries) {
-      res.write(`id: ${entry.id}\n`);
-      res.write(`event: ${entry.event.event_type}\n`);
-      res.write(`data: ${JSON.stringify(entry.event)}\n\n`);
+    if (lastEventId !== undefined && !ringHasId(lastEventId)) {
+      const cursorSeq = Number(lastEventId);
+      if (Number.isFinite(cursorSeq) && hasDurableCursor(userId, cursorSeq)) {
+        // Recoverable from durable storage: replay from the log, paging until
+        // drained, then continue from the ring tail for anything newer.
+        let after = cursorSeq;
+        for (;;) {
+          const batch = getEventsAfterSeq(userId, after, 1000);
+          if (batch.length === 0) break;
+          for (const d of batch) {
+            if (subscriptionMatchesEvent(sub, d.event)) writeEvent(String(d.seq), d.event);
+          }
+          after = batch[batch.length - 1]!.seq;
+          if (batch.length < 1000) break;
+        }
+      } else {
+        // Cursor is gone (older than retention, or never valid): signal the gap
+        // so the client reconciles, then resume from the current ring head.
+        res.write(`event: gap\n`);
+        res.write(
+          `data: ${JSON.stringify({
+            reason: "cursor_beyond_retention",
+            requested_last_event_id: lastEventId,
+            message:
+              "Requested Last-Event-ID is older than the durable event-log " +
+              "retention window (or not a valid cursor). Replaying from the " +
+              "current head; reconcile via a full read for gap-free delivery.",
+          })}\n\n`
+        );
+        for (const entry of getRingEntriesAfter(undefined, (ev) => subscriptionMatchesEvent(sub, ev))) {
+          writeEvent(entry.id, entry.event);
+        }
+      }
+    } else {
+      // Cursor is in the ring (or this is a fresh subscriber): serve from ring.
+      for (const entry of getRingEntriesAfter(lastEventId, (ev) =>
+        subscriptionMatchesEvent(sub, ev)
+      )) {
+        writeEvent(entry.id, entry.event);
+      }
     }
 
     const client = {
