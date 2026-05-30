@@ -16,6 +16,9 @@ const runFrontendTests = process.env.RUN_FRONTEND_TESTS === "1";
 /** When set to "1", write Markdown run reports under `.vitest/reports/` via `vitest.markdown_reporter.ts`. */
 const writeTestRunReport = process.env.WRITE_TEST_RUN_REPORT === "1";
 
+/** When set to "1", run performance benchmarks under tests/performance/. Default: excluded — they seed large datasets and are slow, so they stay out of the default `npm test` lane. Run via `npm run test:bench`. */
+const runBench = process.env.RUN_BENCH === "1";
+
 export default defineConfig({
   plugins: [
     {
@@ -81,6 +84,8 @@ export default defineConfig({
       "data_backups/**",
       // Imported app tests (data/imports): run only with RUN_REMOTE_TESTS=1
       ...(!runRemoteTests ? ["data/imports/**"] : []),
+      // Performance benchmarks: slow, seed large datasets. Run only with RUN_BENCH=1.
+      ...(!runBench ? ["tests/performance/**"] : []),
       // Integration/service tests that fail on local SQLite (run with RUN_REMOTE_TESTS=1)
       ...(!runRemoteTests
         ? [

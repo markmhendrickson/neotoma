@@ -9412,7 +9412,7 @@ app.get("/events/stream", async (req, res) => {
       (await getAuthenticatedUserId(req, req.query.user_id as string | undefined));
     const { getSubscriptionStatus } =
       await import("./services/subscriptions/subscription_actions.js");
-    const { registerSseClient, getRingEntriesAfter } =
+    const { registerSseClient, resumeRingAfter } =
       await import("./services/subscriptions/sse_hub.js");
     const { subscriptionMatchesEvent } =
       await import("./services/subscriptions/subscription_types.js");
@@ -9444,9 +9444,29 @@ app.get("/events/stream", async (req, res) => {
     const lastEventIdHeader = req.headers["last-event-id"];
     const lastEventId = Array.isArray(lastEventIdHeader) ? lastEventIdHeader[0] : lastEventIdHeader;
 
-    for (const entry of getRingEntriesAfter(lastEventId, (ev) =>
-      subscriptionMatchesEvent(sub, ev)
-    )) {
+    const resume = resumeRingAfter(lastEventId, (ev) => subscriptionMatchesEvent(sub, ev));
+
+    // If the requested cursor fell out of the in-memory buffer (eviction past
+    // the cap, or a server restart), tell the client before replaying the
+    // current head. This converts silent drift into a recoverable signal: a
+    // consumer projecting events into an external index should treat a gap as
+    // "reconcile via a full read", not as a continuation from its last cursor.
+    if (resume.gap_detected) {
+      res.write(`event: gap\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          reason: "cursor_not_in_buffer",
+          requested_last_event_id: lastEventId,
+          latest_ring_id: resume.latest_ring_id,
+          message:
+            "Requested Last-Event-ID is no longer in the in-memory event buffer " +
+            "(evicted or lost to a restart). Replaying from the current buffer head; " +
+            "reconcile via a full read if gap-free delivery is required.",
+        })}\n\n`
+      );
+    }
+
+    for (const entry of resume.entries) {
       res.write(`id: ${entry.id}\n`);
       res.write(`event: ${entry.event.event_type}\n`);
       res.write(`data: ${JSON.stringify(entry.event)}\n\n`);
