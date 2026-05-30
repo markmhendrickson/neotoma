@@ -7971,77 +7971,102 @@ app.post("/retrieve_related_entities", async (req, res) => {
       entity_id,
       relationship_types,
       direction = "both",
-      max_hops: _max_hops = 1,
+      max_hops = 1,
       include_entities = true,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
 
-    // Simple 1-hop query implementation
+    // Breadth-first traversal up to max_hops. Mirrors the MCP handler
+    // (server.ts retrieveRelatedEntities): a visited set provides cycle
+    // protection and de-duplicates entities discovered via multiple paths.
+    // max_hops defaults to 1, so single-hop callers see identical results.
     const relationships: any[] = [];
+    const visited = new Set<string>([entity_id]);
+    const relatedIds = new Set<string>();
+    let currentLevel = [entity_id];
 
-    // Get outbound relationships
-    if (direction === "outbound" || direction === "both") {
-      let query = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("source_entity_id", entity_id)
-        .eq("user_id", userId)
-        .order("relationship_key", { ascending: true });
+    for (let hop = 0; hop < max_hops; hop++) {
+      const nextLevel: string[] = [];
 
-      if (relationship_types && relationship_types.length > 0) {
-        query = query.in("relationship_type", relationship_types);
+      for (const currentId of currentLevel) {
+        // Get outbound relationships
+        if (direction === "outbound" || direction === "both") {
+          let query = db
+            .from("relationship_snapshots")
+            .select("*")
+            .eq("source_entity_id", currentId)
+            .eq("user_id", userId)
+            .order("relationship_key", { ascending: true });
+
+          if (relationship_types && relationship_types.length > 0) {
+            query = query.in("relationship_type", relationship_types);
+          }
+
+          const { data, error } = await query;
+          if (!error && data) {
+            relationships.push(...data);
+            for (const rel of data) {
+              if (!visited.has(rel.target_entity_id)) {
+                visited.add(rel.target_entity_id);
+                relatedIds.add(rel.target_entity_id);
+                nextLevel.push(rel.target_entity_id);
+              }
+            }
+          }
+        }
+
+        // Get inbound relationships
+        if (direction === "inbound" || direction === "both") {
+          let query = db
+            .from("relationship_snapshots")
+            .select("*")
+            .eq("target_entity_id", currentId)
+            .eq("user_id", userId)
+            .order("relationship_key", { ascending: true });
+
+          if (relationship_types && relationship_types.length > 0) {
+            query = query.in("relationship_type", relationship_types);
+          }
+
+          const { data, error } = await query;
+          if (!error && data) {
+            relationships.push(...data);
+            for (const rel of data) {
+              if (!visited.has(rel.source_entity_id)) {
+                visited.add(rel.source_entity_id);
+                relatedIds.add(rel.source_entity_id);
+                nextLevel.push(rel.source_entity_id);
+              }
+            }
+          }
+        }
       }
 
-      const { data, error } = await query;
-      if (!error && data) {
-        relationships.push(...data);
-      }
-    }
-
-    // Get inbound relationships
-    if (direction === "inbound" || direction === "both") {
-      let query = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("target_entity_id", entity_id)
-        .eq("user_id", userId)
-        .order("relationship_key", { ascending: true });
-
-      if (relationship_types && relationship_types.length > 0) {
-        query = query.in("relationship_type", relationship_types);
-      }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        relationships.push(...data);
-      }
+      if (nextLevel.length === 0) break;
+      currentLevel = nextLevel;
     }
 
     // Get entities if requested
     let entities: any[] = [];
-    if (include_entities && relationships.length > 0) {
-      const relatedIds = new Set<string>();
-      relationships.forEach((rel) => {
-        if (rel.source_entity_id !== entity_id) relatedIds.add(rel.source_entity_id);
-        if (rel.target_entity_id !== entity_id) relatedIds.add(rel.target_entity_id);
-      });
+    if (include_entities && relatedIds.size > 0) {
+      const { data, error } = await db
+        .from("entities")
+        .select("*")
+        .eq("user_id", userId)
+        .order("canonical_name", { ascending: true })
+        .order("id", { ascending: true })
+        .in("id", Array.from(relatedIds));
 
-      if (relatedIds.size > 0) {
-        const { data, error } = await db
-          .from("entities")
-          .select("*")
-          .eq("user_id", userId)
-          .order("canonical_name", { ascending: true })
-          .order("id", { ascending: true })
-          .in("id", Array.from(relatedIds));
-
-        if (!error && data) {
-          entities = data;
-        }
+      if (!error && data) {
+        entities = data;
       }
     }
 
-    logDebug("Success:retrieve_related_entities", req, { entity_id, count: relationships.length });
+    logDebug("Success:retrieve_related_entities", req, {
+      entity_id,
+      count: relationships.length,
+      max_hops,
+    });
     return res.json({ relationships, entities });
   } catch (error) {
     return handleApiError(
