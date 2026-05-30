@@ -28,14 +28,24 @@ Resolution order:
 - The `LOCAL_DEV_USER_ID` override is a deliberate dev-flow affordance; widening it to other users requires an explicit security review.
 
 ## Authorization
-**MVP:** All authenticated users can access all records (no per-user isolation).
-**Future:** Row-Level Security (RLS) by `user_id`.
-```sql
--- Future RLS policy
-CREATE POLICY "Users see only their records" ON records
-  FOR SELECT
-  USING (user_id = auth.uid());
-```
+
+**Per-user isolation is enforced today, in application code, on every user-scoped read.** This is not a future RLS aspiration — it ships and is regression-tested.
+
+- Every user-scoped query applies `.eq("user_id", userId)` before returning rows. The `userId` is the value resolved by `getAuthenticatedUserId` (see [User-ID Resolution](#user-id-resolution)), never a raw body/query field. Enforcement lives in `src/services/entity_queries.ts` (observations, entities, snapshots, relationships) and the per-handler query builders in `src/server.ts`.
+- A caller cannot read across tenants by supplying someone else's id: `getAuthenticatedUserId` rejects a `providedUserId` that differs from the authenticated identity (the only exception is the `LOCAL_DEV_USER_ID` dev stub overriding to an explicit test user).
+- The protection covers **graph and relationship reads**, not just flat entity lists. Cross-user `entity_id` / `source_id` lookups, `/list_relationships`, and `/retrieve_graph_neighborhood` all return empty rather than leaking another tenant's data.
+- This is asserted by `tests/security/tenant_isolation_matrix.test.ts` (regression coverage for advisory **GHSA-wrr4-782v-jhwh**): user A, knowing a cross-user identifier, cannot reach user B's data through any read path.
+
+**Two distinct multi-tenant models** — do not conflate them:
+
+| Model | Isolation mechanism | Use |
+| --- | --- | --- |
+| **One instance, many users** | Per-`user_id` scoping enforced on every query (above), with AAuth binding the request to an identity | A single hosted server backing multiple users/tenants — the SaaS-memory-backend case |
+| **Instance-per-tenant** | Physical: each tenant is a separate SQLite database / data directory | Fleet of independent deployments; see [`docs/plans/multi-tenant-operational-patterns.md`](../plans/multi-tenant-operational-patterns.md) |
+
+The **local single-user default** (`LOCAL_DEV_USER_ID`, no credentials) is a convenience for one-machine development, not the multi-user contract. Under authenticated access (OAuth, Bearer, or AAuth), the per-`user_id` scoping above is what governs who can read what.
+
+**Database-level RLS** (a Postgres `auth.uid()` policy) remains a possible future hardening layer that would enforce the same boundary *below* the application. It is defense-in-depth, not the current line of defense — the application-layer scoping above is the enforced contract today.
 ## AAuth (Agent Authentication) and the Trust-Tier Contract
 
 AAuth gives every write a cryptographically verifiable *agent identity* that is orthogonal to the human `user_id` above. Where `user_id` answers "whose data is this?", AAuth answers "which agent wrote it?". The two live side-by-side on every durable row.

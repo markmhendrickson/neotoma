@@ -141,9 +141,17 @@ export function HostedLandingPageBody() {
 
       <IntegrationSection title="Local first" sectionKey="local-first">
         <p className="text-[15px] leading-7 text-muted-foreground mb-3">
-          Most Neotoma users run locally. Your data stays on your machine, every agent on that
-          machine shares one dataset, and you can expose it to remote agents later via a{" "}
+          Most Neotoma users run locally. Your data stays on your machine, and in the default
+          single-user setup every agent on that machine shares one dataset. You can expose it to
+          remote agents later via a{" "}
           <Link to="/tunnel" className={extLink}>tunnel</Link> without migrating storage.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          The shared-dataset default is a single-user convenience, not a limitation. Under
+          authenticated access, Neotoma enforces per-user isolation server-side: every query is
+          scoped to the requesting user&apos;s <code>user_id</code> (including graph and
+          relationship reads), a token cannot read another user&apos;s data, and that boundary is
+          regression-tested. One hosted instance can safely back many users.
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground">
           <Link to="/install" className={extLink}>Install guide →</Link>
