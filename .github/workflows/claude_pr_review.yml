@@ -99,8 +99,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           model: claude-opus-4-7
-          timeout_minutes: 30
-          max_turns: 30
+          timeout_minutes: 60
+          max_turns: 60
           trigger_phrase: "@claude review"
           allowed_tools: "Edit,MultiEdit,Glob,Grep,LS,Read,Write,mcp__github_comment__update_claude_comment,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git rm:*),Bash(git fetch:*)"
           direct_prompt: |
