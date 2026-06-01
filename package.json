@@ -170,7 +170,7 @@
     "setup:launchd-issues-sync": "node scripts/install_launchd_issues_sync.js",
     "reload:launchd-neotoma": "bash scripts/reload_neotoma_launchagents.sh",
     "shutdown:launchd-neotoma": "bash scripts/shutdown_neotoma_launchagents.sh",
-    "copy:env": "node scripts/colpy-env-to-worktree.js",
+    "copy:env": "node scripts/copy-env-to-worktree.js",
     "tunnel:https": "bash scripts/setup-https-tunnel.sh",
     "setup:worktree": "bash scripts/cursor-worktree-init.sh",
     "setup:data": "node scripts/setup-data-symlink.js",
