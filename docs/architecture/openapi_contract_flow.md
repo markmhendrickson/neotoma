@@ -18,7 +18,7 @@ Handlers in `src/actions.ts` are **downstream**. When handlers and spec disagree
 Follow this order; do not skip steps:
 
 1. **Edit `openapi.yaml`.** Add the path, operationId, request body, responses, and any query/path parameters. Reuse existing `components/schemas` where possible.
-2. **Run `npm run openapi:generate`.** Regenerates `src/shared/openapi_types.ts`. Commit the regenerated file in the same change as the spec.
+2. **Run `npm run openapi:generate`.** Regenerates `src/shared/openapi_types.ts` and formats it with Prettier so the output is byte-stable and matches `npm run format:check`. Commit the regenerated file in the same change as the spec. CI re-runs this generate and fails if the committed file drifts (the "OpenAPI types are in sync with openapi.yaml" step in `ci_test_lanes.yml`), so always regenerate rather than hand-editing the file. Do not run the bare `openapi-typescript` binary without the format pass — its raw output uses a different indentation width and produces a spurious whole-file diff.
 3. **Update `src/shared/contract_mappings.ts`.** Every `operationId` needs a row declaring `adapter: "mcp" | "cli" | "both" | "infra"` and, where applicable, `mcpTool` and `cliCommand` names.
 4. **Implement / update the handler** in `src/actions.ts` (or wherever the route is registered). Use the generated types for the request and response shape.
 5. **Wire MCP / CLI surfaces** if `adapter` includes them:

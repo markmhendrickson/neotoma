@@ -143,7 +143,7 @@
     "docs:build": "npm run build:docs",
     "docs:dev": "npm run dev:docs",
     "docs:serve": "npm run dev:docs:serve",
-    "openapi:generate": "openapi-typescript ./openapi.yaml --default-non-nullable false -o src/shared/openapi_types.ts",
+    "openapi:generate": "openapi-typescript ./openapi.yaml --default-non-nullable false -o src/shared/openapi_types.ts && prettier --write src/shared/openapi_types.ts",
     "openapi:bc-diff": "node scripts/openapi_bc_diff.js",
     "security:classify-diff": "node scripts/security/classify_diff.js",
     "security:lint": "node scripts/security/run_semgrep.js",
