@@ -54,12 +54,14 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # Must run AFTER format:check so a stale committed file cannot be silently
+      # re-formatted by `openapi:generate` (which runs prettier --write) before
+      # the format gate sees it. Do not move this step above format:check.
       - name: OpenAPI types are in sync with openapi.yaml
         run: |
           npm run openapi:generate
           if ! git diff --quiet -- src/shared/openapi_types.ts; then
-            echo "::error::src/shared/openapi_types.ts is out of sync with openapi.yaml."
-            echo "Run 'npm run openapi:generate' and commit the result."
+            echo "::error::src/shared/openapi_types.ts is out of sync with openapi.yaml. If you edited openapi.yaml, run 'npm run openapi:generate' and commit the regenerated src/shared/openapi_types.ts."
             git --no-pager diff -- src/shared/openapi_types.ts | head -100
             exit 1
           fi
