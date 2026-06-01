@@ -966,9 +966,13 @@ export class NeotomaServer {
     args: unknown,
     userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Normalize escape sequences that MCP clients sometimes send as literal
+    // two-character sequences (e.g. backslash-n) instead of real control chars.
+    const unescapeBody = (s: string) => s.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+
     const schema = z.object({
       title: z.string().min(1),
-      body: z.string().min(1),
+      body: z.string().min(1).transform(unescapeBody),
       labels: z.array(z.string()).optional(),
       visibility: z.enum(["public", "private", "advisory"]).optional(),
       reporter_git_sha: z.string().optional(),
