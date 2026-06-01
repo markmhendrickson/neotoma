@@ -24,6 +24,7 @@ export {
 } from "./types.js";
 
 export {
+  extractStoredEntities,
   storeChatTurn,
   retrieveOrStore,
   snapshotOnUpdate,
