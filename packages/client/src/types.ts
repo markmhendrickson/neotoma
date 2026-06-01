@@ -41,6 +41,28 @@ export interface StoredEntityRef {
 }
 
 export interface StoreResult {
+  /**
+   * Stored entities, returned at the **top level** by the live `/store`
+   * endpoint (`StoreStructuredResponse` in `openapi.yaml`) and by both
+   * `HttpTransport` and `LocalTransport`. This is the canonical location to
+   * read created/updated entity_ids from.
+   */
+  entities?: StoredEntityRef[];
+  /** True when the request committed successfully. */
+  success?: boolean;
+  /**
+   * True when the response is an idempotency replay (no new observations or
+   * entities were written for this request).
+   */
+  replayed?: boolean;
+  source_id?: string;
+  relationships?: unknown[];
+  /**
+   * @deprecated Legacy nested shape. The live transport returns `entities` at
+   * the top level (see above); this wrapper does not appear on real responses.
+   * Retained only so helpers can tolerate pre-v0.x clients that nested the
+   * payload. New code should read {@link StoreResult.entities}.
+   */
   structured?: {
     entities: StoredEntityRef[];
     relationships?: unknown[];
