@@ -114,7 +114,11 @@ describe("retrieve_graph_neighborhood pagination", () => {
     const resp = await fetch(`${API_BASE}/retrieve_graph_neighborhood`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ node_id: centerEntityId, ...params }),
+      // Scope the query to TEST_USER_ID. The unauthenticated/local request
+      // otherwise resolves to the local-dev default user, which owns none of
+      // the seeded fixtures. Body user_id override is honored for the local
+      // dev user (see getAuthenticatedUserId).
+      body: JSON.stringify({ node_id: centerEntityId, user_id: TEST_USER_ID, ...params }),
     });
     return resp.json() as Promise<Record<string, unknown>>;
   }
@@ -173,5 +177,43 @@ describe("retrieve_graph_neighborhood pagination", () => {
     const p1 = await callNeighborhood({ limit: 2, offset: 0 });
     const p2 = await callNeighborhood({ limit: 2, offset: 2 });
     expect(p1.total_count).toBe(p2.total_count);
+  });
+
+  // Regression for #276: related_entities items must expose the canonical
+  // `entity_id` (not only the raw `id`) so callers can correlate them against
+  // relationships[].source_entity_id / target_entity_id.
+  it("returns related_entities items keyed by canonical entity_id", async () => {
+    const body = await callNeighborhood({ limit: 100, offset: 0 });
+
+    const related = body.related_entities as Array<Record<string, unknown>> | undefined;
+    expect(Array.isArray(related)).toBe(true);
+    expect((related ?? []).length).toBe(SPOKE_COUNT);
+
+    const relatedIds = new Set<string>();
+    for (const item of related ?? []) {
+      // Canonical field is always present and a string.
+      expect(typeof item.entity_id).toBe("string");
+      expect((item.entity_id as string).length).toBeGreaterThan(0);
+      relatedIds.add(item.entity_id as string);
+
+      // `id` is retained as a deprecated back-compat alias with the same value.
+      expect(item.id).toBe(item.entity_id);
+    }
+
+    // Every spoke entity is reachable via its entity_id.
+    for (const spokeId of spokeEntityIds) {
+      expect(relatedIds.has(spokeId)).toBe(true);
+    }
+
+    // entity_id values must match the relationship target ids exactly, proving
+    // cross-referencing now works without a field rename.
+    const relationshipTargetIds = new Set(
+      (body.relationships as Array<{ target_entity_id?: string }>)
+        .map((r) => r.target_entity_id)
+        .filter((v): v is string => typeof v === "string")
+    );
+    for (const targetId of relationshipTargetIds) {
+      expect(relatedIds.has(targetId)).toBe(true);
+    }
   });
 });

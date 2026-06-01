@@ -7971,8 +7971,14 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
               .eq("user_id", userId);
 
             if (!relatedEntitiesError) {
+              // Expose the canonical `entity_id` (issue #276) so callers can
+              // correlate against relationships[].source_entity_id /
+              // target_entity_id. Keep `id` as a deprecated alias with the same
+              // value for one minor release to avoid breaking callers that read
+              // the legacy field. Prefer `entity_id`; `id` will be removed later.
               result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
                 entity_id: id,
+                id,
                 ...rest,
               }));
             }

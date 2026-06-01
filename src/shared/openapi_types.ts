@@ -5660,10 +5660,15 @@ export interface operations {
             relationships?: {
               [key: string]: unknown;
             }[];
-            /** @description Entities connected to the node via relationships. Each item uses `entity_id` (not `id`). */
+            /** @description Entities connected to the node via relationships. Each item carries the canonical `entity_id`. A deprecated `id` alias with the same value is also present for one minor release to preserve backward compatibility; prefer `entity_id` and stop reading `id`. */
             related_entities?: ({
-              /** @description The entity identifier. Always present as `entity_id`; the raw database `id` column is not exposed. */
+              /** @description The canonical entity identifier, matching `relationships[].source_entity_id` / `target_entity_id` and every other Neotoma response surface. Always present. */
               entity_id?: string;
+              /**
+               * @deprecated
+               * @description Deprecated alias of `entity_id`, retained for one minor release for backward compatibility. Equal to `entity_id`. Will be removed in a future release; use `entity_id` instead.
+               */
+              id?: string;
             } & {
               [key: string]: unknown;
             })[];
