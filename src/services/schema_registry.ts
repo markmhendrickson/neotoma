@@ -258,21 +258,21 @@ export interface SchemaDefinition {
 
   /**
    * Name of the field that carries the primary long-form content for an
-   * entity of this type. Declaring this turns the schema into a "document"
-   * type from the perspective of rendering and store-time validation:
+   * entity of this type. Declaring this marks the schema as a "document"
+   * type for store-time validation:
    *
-   * 1. The canonical markdown renderer (`src/services/canonical_markdown.ts`)
-   *    uses this field as the document body — it is rendered without a
-   *    `## <field>` heading and excluded from the structured field list.
-   * 2. The store path emits a non-blocking `MISSING_CONTENT_FIELD` warning
-   *    when this field is absent or empty on a stored observation, so agents
-   *    receive feedback when they save only structured facets of a document
-   *    (title, summary, risk_level, …) and drop the full body.
+   * - The store path emits a non-blocking `MISSING_CONTENT_FIELD` warning
+   *   when this field is absent or empty on a stored observation, so agents
+   *   receive feedback when they save only structured facets of a document
+   *   (title, summary, risk_level, …) and drop the full body.
    *
-   * Convention: prefer `"body"` for new document types so the renderer's
-   * default contract holds. Established alternatives like `"content"`
-   * (used by `note`/`gist`) are also valid — the declaration only requires
-   * the named field to exist on the schema.
+   * Future: the canonical markdown renderer (`src/services/canonical_markdown.ts`)
+   * will use this declaration to identify the document body field by schema
+   * rather than by per-type heuristic (tracked in issue #949).
+   *
+   * Convention: prefer `"body"` for new document types. Established
+   * alternatives like `"content"` (used by `note`/`gist`) are also valid —
+   * the declaration only requires the named field to exist on the schema.
    *
    * See docs/foundation/schema_agnostic_design_rules.md and issue #949.
    */
@@ -1058,6 +1058,11 @@ export class SchemaRegistryService {
       }
     }
     if (preserved.content_field && removalSet.has(preserved.content_field)) {
+      console.warn(
+        `[schema_registry] updateSchemaIncremental: content_field "${preserved.content_field}" ` +
+          `removed from entity_type "${options.entity_type}" because its target field was removed. ` +
+          `The MISSING_CONTENT_FIELD store warning will no longer fire for this schema.`
+      );
       delete preserved.content_field;
     }
 
