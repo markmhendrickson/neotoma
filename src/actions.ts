@@ -4065,8 +4065,13 @@ app.get("/relationships", async (req, res) => {
       query = query.eq("target_entity_id", targetEntityId);
     }
 
+    // Stable pagination: tiebreak on the `relationship_key` primary key so rows
+    // sharing a `last_observation_at` value (batch upserts) keep a fixed order
+    // across paginated calls (docs/architecture/determinism.md). Same defect
+    // class as issue #368 on /list_relationships and /retrieve_graph_neighborhood.
     const { data, error, count } = await query
       .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
@@ -7685,7 +7690,16 @@ app.post("/list_relationships", async (req, res) => {
       query = query.eq("relationship_type", relationship_type);
     }
 
-    query = query.order("last_observation_at", { ascending: false });
+    // Deterministic ordering: `last_observation_at` is mutable and produces ties
+    // for rows upserted within the same millisecond (common in batch ingestion).
+    // `relationship_key` is the table's primary key — a stable, unique, monotonic
+    // tiebreaker that fully determines order. Without it, tied rows can move
+    // between pages across successive calls, breaking pagination stability and
+    // violating the determinism invariant (docs/architecture/determinism.md §
+    // "Sorting MUST use deterministic tiebreakers"). See issue #368.
+    query = query
+      .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true });
 
     const { data, error } = await query;
     if (error) {
@@ -7941,11 +7955,19 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         result.total_count = total;
         result.has_more = offset + limit < total;
 
+        // Deterministic ordering before paginating: this query previously had no
+        // `.order()` clause, so Postgres scan order (unspecified) decided which
+        // rows landed on each page — non-deterministic across calls. Order by the
+        // mutable `last_observation_at` first, then by the primary key
+        // `relationship_key` as a stable, unique tiebreaker so pagination is
+        // reproducible (docs/architecture/determinism.md). See issue #368.
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
           .eq("user_id", userId)
+          .order("last_observation_at", { ascending: false })
+          .order("relationship_key", { ascending: true })
           .range(offset, offset + limit - 1);
 
         if (!relError) {
