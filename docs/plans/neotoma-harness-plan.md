@@ -699,6 +699,28 @@ Two rules govern this taxonomy:
 
 The immediate next win after skills/rules/config is **subagents** — `agent_definition` already exists, the artifact is pure content, and the gap is only sync wiring. Hooks are deliberately deferred to their own security-focused treatment because auto-executing code installed into a user's harness is a materially higher-trust action than any inert file.
 
+#### Context-triggered artifacts: relating rules and skills to the entities they govern
+
+Putting harness artifacts in the graph unlocks something a flat file install cannot do: an artifact can be **related to the entities it governs**, so it surfaces *only when those entities are in play* rather than globally on every turn. A globally-installed rule consumes context every turn; a graph-related rule fires only when its target entity is retrieved. This is the scaling answer for "I have 40 rules but only 2 are relevant to what the agent is touching right now" — and it is the feature that makes the whole artifacts-in-the-graph investment pay off.
+
+The triggering substrate already exists. The MCP contract's `schema_instructions` / `entity_instructions` mechanism returns agent-behavioral guidance in an entity's retrieval snapshot and requires agents to apply it that turn ([RETRIEVAL] "Schema and entity agent instructions"). Today that guidance is **inline text** on the entity or its schema. The extension is to let it **resolve through a graph edge to a `standing_rule` / `skill` / `agent_definition` artifact**, so one artifact can govern many entities, be edited in one place, and be queryable ("what governs all my tasks?").
+
+The model has three parts:
+
+- **A governance relationship verb.** Add `GOVERNED_BY` (entity → artifact) to the relationship vocabulary: `task —GOVERNED_BY→ standing_rule`, `task —GOVERNED_BY→ skill`. This is a deliberate, reviewed addition to the closed relationship enum — not a casual one. Per-**instance** governance ("this specific task follows this rule") lives as this edge.
+- **A schema-level `governed_by` field for per-type governance.** "Any `transaction` is governed by the financial-review rule" should not require wiring every instance. Declare it once on the schema via `update_schema_incremental` as a `governed_by: [entity_id]` field — the same place type-level agent behavior already belongs. Rule of thumb: **per-instance = edge, per-type = schema field.**
+- **Retrieval-time resolution through the existing channel.** When `retrieve_entity_snapshot` / `retrieve_entities` returns an entity, the server walks its `GOVERNED_BY` edges (and its type's `governed_by`) and includes the linked artifact summaries in the response, reusing the `entity_instructions` MUST-apply contract. No new agent behavior to define — the agent already must apply what comes back on that channel.
+
+Indicative-usage metadata rides on the edge (relationships already carry a `metadata` object): `{ trigger: "on_read" | "on_write" | "on_consideration", strength: "must" | "should" | "suggested", reason: "..." }`. This is what keeps the feature disciplined — the edge says not just *that* an artifact applies but *how strongly* and *at what moment*. `suggested` edges surface on demand rather than auto-injecting; only `must`/`should` enter the turn's working context.
+
+This is strictly better than the alternatives it sits between: better than inline `entity_instructions` text (one artifact governs many entities, single edit point, queryable); better than global install (contextual firing, no per-turn context tax); and more precise than the skill `triggers` keyword array (fires on *entity presence*, not on the user happening to say a trigger word).
+
+Discipline to hold:
+
+- **Don't over-link.** If everything is `GOVERNED_BY` something, every retrieval drags in instructions and you have re-created the global-install problem inside the graph. The `strength`/`trigger` metadata is the throttle; default to `suggested` unless the artifact genuinely must fire.
+- **Bound resolution and guard cycles.** Walking governance edges on every retrieval needs a depth bound and a guard against a rule governing an entity that governs the rule.
+- **Reuse the MUST-apply contract.** Do not invent a parallel "apply this artifact" agent behavior; resolve governed artifacts onto the existing `entity_instructions` channel so the contract agents already follow does the work.
+
 ### The inspector as layout foundation
 
 The inspector is not a peer surface to the harness — it is the *layout container* in which the harness lives. The page's structure is the inspector's existing left-nav layout (Dashboard, Entities, Observations, Sources, Relationships, Graph Explorer, Schemas, Timeline, Interpretations, Settings), with the harness occupying the main content area on the default Dashboard route. The bundled docs sidebar lives on the right. Three panels: substrate state on the left, conversational interaction in the middle, reference material on the right.
