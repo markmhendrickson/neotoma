@@ -40,6 +40,7 @@ import {
   structuredEntities,
   structuredEntityIdAt,
 } from "../submitted_thread/submitted_thread.js";
+import { decodeOverEscapedBody } from "./body_newline_decode.js";
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError, IssueValidationError } from "./errors.js";
 import { runRedactionGuard } from "./redaction_guard.js";
@@ -539,6 +540,11 @@ export async function submitGuestIssue(
 ): Promise<GuestIssueSubmitResult> {
   await assertGuestWriteAllowed(["issue"], {});
 
+  // Guest submissions arriving directly at the operator endpoint are the only
+  // boundary for their body, so decode over-escaped `\n` here too. Idempotent
+  // for bodies forwarded from a remote `submitIssue` that already decoded. (#1484)
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const now =
     typeof params.submission_timestamp === "string" && params.submission_timestamp.trim().length > 0
@@ -658,6 +664,10 @@ export async function appendGuestIssueMessage(
   ops: Operations,
   params: { issue_entity_id: string; body: string }
 ): Promise<{ message_entity_id: string }> {
+  // Decode over-escaped `\n` in guest-appended message bodies at this boundary.
+  // Idempotent for already-decoded bodies forwarded from a remote append. (#1484)
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const raw = (await ops.retrieveEntitySnapshot({
     entity_id: params.issue_entity_id,
     format: "json",
@@ -788,6 +798,14 @@ export async function submitIssue(
   params: IssueCreateParams
 ): Promise<SubmitIssueResult> {
   assertSubmitIssueReporterEnvironment(params);
+
+  // Decode over-escaped bodies (literal `\n` two-char sequences) into real
+  // newlines before the body reaches the GitHub mirror or the canonical Neotoma
+  // record. Some clients double-encode the body argument; without this the issue
+  // renders as a single run-on block. Applied before redaction so the backstop
+  // scans the real text. See body_newline_decode.ts and issue #1484.
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const now = new Date().toISOString();
   const visibility = params.visibility ?? "public";
@@ -1011,6 +1029,11 @@ export async function addIssueMessage(
   ops: Operations,
   params: IssueMessageParams
 ): Promise<AddMessageResult> {
+  // Decode over-escaped comment bodies (literal `\n`) into real newlines before
+  // the message reaches GitHub or the canonical Neotoma record, mirroring the
+  // submitIssue boundary. See body_newline_decode.ts and issue #1484.
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const resolved = await resolveIssueRow(ops, params);
   const { issue_entity_id: issueEntityId, snapshot, githubNumber, localIssueId } = resolved;

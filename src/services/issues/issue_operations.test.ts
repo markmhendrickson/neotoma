@@ -405,6 +405,81 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(mockCreateRelationships).not.toHaveBeenCalled();
       expect(result.entity_id).toBeTruthy();
     });
+
+    // Regression: issue #1484 — over-escaped bodies (literal `\n` two-char
+    // sequences) must be decoded to real newlines before reaching the GitHub
+    // mirror AND the canonical Neotoma record, so the issue renders as markdown
+    // instead of a single run-on block.
+    it("decodes literal \\n in an over-escaped body before mirroring to GitHub (#1484)", async () => {
+      mockCreateIssue.mockResolvedValue({
+        number: 1484,
+        html_url: "https://github.com/test/repo/issues/1484",
+        user: { login: "tester" },
+        created_at: "2026-05-01T00:00:00Z",
+      });
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["remote-issue-1", "remote-conv-1", "remote-msg-1"],
+        issue_entity_id: "remote-issue-1",
+        conversation_id: "remote-conv-1",
+        access_token: "token-abc",
+      });
+
+      const overEscapedBody = "## Summary\\n\\nFirst paragraph.\\n\\n## Steps\\n\\n1. One\\n2. Two";
+
+      await submitIssue(ops, {
+        title: "Run-on body",
+        body: overEscapedBody,
+        visibility: "public",
+        reporter_git_sha: "abc1234",
+      });
+
+      // GitHub mirror receives real newlines, not the literal escape sequence.
+      const githubBody = mockCreateIssue.mock.calls[0]?.[0]?.body as string;
+      expect(githubBody).not.toContain("\\n");
+      expect(githubBody).toContain("\n");
+      expect(githubBody).toBe("## Summary\n\nFirst paragraph.\n\n## Steps\n\n1. One\n2. Two");
+      expect(githubBody.split("\n")[0]).toBe("## Summary");
+
+      // Canonical remote Neotoma submission receives the same decoded body.
+      const remoteBody = mockSubmitIssueToRemote.mock.calls[0]?.[0]?.body as string;
+      expect(remoteBody).not.toContain("\\n");
+      expect(remoteBody).toBe(githubBody);
+
+      // The locally-stored issue entity and conversation_message also carry
+      // real newlines, so reads from Neotoma match the rendered GitHub body.
+      const storeInput = mockStore.mock.calls[0]?.[0] as {
+        entities: Array<Record<string, unknown>>;
+      };
+      const [issueEntity, , messageEntity] = storeInput.entities;
+      expect(issueEntity.body).toBe(githubBody);
+      expect(messageEntity.content).toBe(githubBody);
+    });
+
+    it("leaves a correctly multi-line body untouched (#1484 no-regression)", async () => {
+      mockCreateIssue.mockResolvedValue({
+        number: 1485,
+        html_url: "https://github.com/test/repo/issues/1485",
+        user: { login: "tester" },
+        created_at: "2026-05-01T00:00:00Z",
+      });
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["remote-issue-1", "remote-conv-1", "remote-msg-1"],
+        issue_entity_id: "remote-issue-1",
+        conversation_id: "remote-conv-1",
+        access_token: "token-abc",
+      });
+
+      const properBody = "## Summary\n\nAlready has real newlines.\n";
+
+      await submitIssue(ops, {
+        title: "Proper body",
+        body: properBody,
+        visibility: "public",
+        reporter_git_sha: "abc1234",
+      });
+
+      expect(mockCreateIssue.mock.calls[0]?.[0]?.body).toBe(properBody);
+    });
   });
 
   describe("submitGuestIssue", () => {
@@ -511,6 +586,32 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           issue_entity_id: "local-issue-1",
         })
       );
+    });
+
+    // Regression: issue #1484 — the same over-escaped-body decode applies to
+    // comments appended via add_issue_message.
+    it("decodes literal \\n in an over-escaped comment body before posting (#1484)", async () => {
+      mockAddMessageToRemote.mockResolvedValue({ message_entity_id: "remote-msg-1" });
+      mockAddIssueComment.mockResolvedValue({
+        id: 789,
+        body: "Comment",
+        user: { login: "commenter" },
+        created_at: "2026-05-01T10:00:00Z",
+        updated_at: "2026-05-01T10:00:00Z",
+        html_url: "https://github.com/test/repo/issues/1#issuecomment-789",
+      });
+
+      await addIssueMessage(ops, {
+        issue_number: 1,
+        body: "Update:\\n\\n- did the thing\\n- verified it",
+      });
+
+      const commentBody = mockAddIssueComment.mock.calls[0]?.[1] as string;
+      expect(commentBody).not.toContain("\\n");
+      expect(commentBody).toBe("Update:\n\n- did the thing\n- verified it");
+
+      const remoteBody = mockAddMessageToRemote.mock.calls[0]?.[0]?.body as string;
+      expect(remoteBody).toBe(commentBody);
     });
 
     it("resolves by entity_id and submits to remote with that id", async () => {
