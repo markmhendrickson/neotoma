@@ -618,6 +618,87 @@ A few risks worth designing against:
 
 This addition strengthens rather than complicates the philosophy revision. The harness is a strategy-layer surface that consumes the substrate; bundled docs are *reference material the strategy layer uses*; the sidebar is a peer reference surface to the harness. None of these are part of the substrate, none affect determinism, and they're a clean expression of "strategy-layer surfaces under proper architectural separation." If anything, having the harness's authoritative source be the project's own docs (versioned, reviewed, public) is a more honest grounding than any system-prompt-encoded knowledge would be.
 
+### Bundled Neotoma-sourced skills and rules as a personalizable instruction layer
+
+The provisioning capability (see "The Neotoma Agent: scope and authority") already generates and applies *client instructions* — global, per-harness, or per-repo. This section extends that capability with a concrete, opt-out-able payload: **Neotoma ships a curated set of skills and rules, sourced from Neotoma itself, that the provisioning flow installs into the user's harnesses by default.**
+
+This is the productization of a pattern that already exists in dogfooding (the personal/Ateles setup syncs `skill` entities to `.cursor/skills/<slug>/SKILL.md` mirrors with `entity_id` stamped back; rules have the same shape available via the `standing_rule` entity type — see `docs/developer/rule_neotoma_sync.md`). What's dogfood-only today becomes a bundled, personalizable capability for every Neotoma user.
+
+#### The model
+
+Two entity types are the source of truth, both already registered:
+
+- **`skill`** (schema 2.4.0) — `name`, `triggers`, `content`, `slug`, `supported_harnesses`, `enabled`, `user_invocable`, `version`. The skill definition the user invokes.
+- **`standing_rule`** (schema 1.1.0) — `title`, `instruction`, `content`, `scope`, `domain`, `status`, `priority`. The persistent behavioral rule.
+
+Plus the existing learnings model: retrospective improvements to a skill or rule are `note` entities linked `REFERS_TO` the `skill`/`standing_rule` they improve (NOT a parallel `skill_learnings`/`rule_learnings` type — that reuse mistake is already documented).
+
+The harness's read mirror is the same two-layer pattern as bundled docs: **Neotoma entity = source of truth; the harness file (`.cursor/skills/<slug>/SKILL.md`, `.claude/rules/<name>.md`, or the harness-native equivalent) = read mirror, regenerated from the entity with `entity_id` stamped into frontmatter.** When the harness ships, it ships the curated skill/rule set as of that version, exactly as it ships docs as of that version.
+
+#### Personalization, folded into instruction customization
+
+This folds into the general "personalize Neotoma instructions" capability rather than standing as a separate system. The provisioning flow already composes client instructions from canonical templates with user-specific parameters. Neotoma-sourced skills and rules become **one more layer in that composition**, controlled by user preference:
+
+- A **`user_preference`** entity (e.g. `name: "neotoma_sourced_skills_rules"`, `value: "on" | "off" | "selective"`) records whether the user wants the bundled skills/rules installed and kept in sync.
+- **Default: on.** New users get the curated set during onboarding. The default is on because the curated set is genuinely useful and the whole point of bundling is that users shouldn't have to assemble it themselves — but it is one click to turn off, and turning it off loses no core functionality (same disclosure discipline as opt-in-default-on telemetry).
+- **Granularity matches the existing instruction scopes:** global, per-harness, or per-repo, plus per-skill/per-rule enable/disable for users who want the set but not every member of it (`value: "selective"` with an allow/deny list).
+- **Onboarding decision point.** The onboarding flow (see install.md / `agent_onboarding_confirmation.md`) surfaces this as one of the provisioning choices: *"Install Neotoma's curated skills and rules into your harnesses? They keep in sync as Neotoma updates. (default: yes — one click to skip or customize.)"* The user decides up front whether to leverage this approach at all.
+
+#### What this gives the project
+
+- **Skills and rules become a versioned, queryable, shippable capability** — not scattered repo files. The same single-source-of-truth and automatic-versioning benefits that bundled docs get (above) apply: the curated set ships with the build, stays consistent with the installed version, and is authored under the same review discipline.
+- **The customization is honest and reversible.** Per the configuration-write discipline, installing skills/rules into `.cursor/skills/`, `.claude/rules/`, etc. is user-owned territory: dry-run by default, explicit confirmation, full audit trail written as observations, easy rollback, provenance back to the Neotoma entity. Nothing is invented; every installed skill/rule traces to its source entity.
+- **Learnings compound.** Because skills/rules are entities, the learnings that improve them (`note → skill`/`standing_rule`) accumulate in the graph across sessions and can feed future curated-set versions — the `/learn`-style retrospective loop becomes a product input, not a private dogfooding artifact.
+
+#### Discipline to hold
+
+- **Curated, not a firehose.** Like featured docs, the bundled skill/rule set is small and deliberate — a manifest maintained alongside the harness. Not every dogfood skill belongs in the shipped set.
+- **Reuse, don't proliferate types.** Skills are `skill`, rules are `standing_rule`, learnings are `note` linked to them. No new entity types for this feature. (This is the explicit lesson from the `skill_learnings` over-modeling.)
+- **Scope boundary preserved.** The Neotoma Agent installs *Neotoma-related* skills and rules. It does not author general-purpose skills for the user's unrelated workflows; that would violate the "does not configure unrelated aspects of the user's environment" boundary.
+- **Default-on is a trust commitment.** Defaulting on is only acceptable because the writes are disclosed, dry-run-confirmed, audit-logged, and one-click reversible. If any of those weaken, the default should flip to opt-in.
+
+#### MCP config as a stored recipe (the secret-aware sibling)
+
+The same store-in-Neotoma-and-mirror-to-harness pattern extends to **MCP configuration** — the per-harness wiring that points a tool at Neotoma (`.cursor/mcp.json`, `claude_desktop_config.json`, `claude mcp add` registration, etc.). `runSetup` already *generates and writes* these from canonical templates (`src/services/root_landing/harness_snippets.ts`) in the same provisioning flow that installs skills; what's missing is a Neotoma-entity backing so the config has a queryable, versioned source of truth like `skill` and `standing_rule` have.
+
+MCP config is modeled as an **`mcp_config` recipe entity**, with three deliberate differences from skills/rules because config carries credentials and lives in shared files:
+
+- **Secret-free by construction.** The entity stores the config *shape* — transport (`stdio` vs proxy, signed vs unsigned), command/script, base URL, target harness, and a *reference* to where the secret resolves (env var name, 1Password item) — but **never the materialized token or key.** Secrets are resolved at mirror-write time from the existing key-discovery flow (see "LLM access and key configuration"). This keeps credentials out of the graph entirely.
+- **The mirror is a MERGE, not a regeneration.** `.cursor/mcp.json` holds the user's *other* MCP servers too. Unlike skill/rule files (Neotoma-namespaced, safe to regenerate), the config mirror must merge the Neotoma server entry into a shared, user-owned file without clobbering the rest. `src/cli/mcp_config_scan.ts` already does this detection; the mirror step composes onto it.
+- **Confirmed even when the bundle toggle is on.** Because a bad write can sever the harness's connection to Neotoma or leak a token into a git-tracked file, config provisioning stays an explicitly confirmed step regardless of the `neotoma_sourced_skills_rules` preference. The blast radius is higher than an inert skill file.
+
+What the entity buys, concretely, is the **audit trail and queryability**: "which harnesses is Neotoma wired into, on what transport and base URL, and when did each config change and why" — answerable from the graph instead of by reading scattered config files. The config content itself is highly derivable (`runSetup` reconstructs it deterministically from harness + base URL + transport + identity), so the entity's value is provenance and cross-harness visibility, not reuse. Reuse the `mcp_config` recipe entity; do not store resolved secrets; do not mint a secret-bearing variant.
+
+#### The full harness-native artifact taxonomy
+
+Skills, rules, and MCP config are three members of a larger family of **harness-native artifacts** — the files a harness reads from `.claude/`, `.cursor/`, and equivalents. The store-in-Neotoma-and-mirror pattern generalizes across all of them, but they split into **two classes** with different write disciplines. The classification, not the individual artifact, is what determines how each is handled.
+
+**Content-class artifacts** — pure, inert content. Store full content as the source-of-truth entity; the mirror is a *regeneration* of a Neotoma-namespaced file; can be default-on under the `neotoma_sourced_skills_rules` preference. Each already maps to a registered entity type:
+
+| Artifact | Harness file(s) | Entity type | Status |
+|---|---|---|---|
+| Skills | `.cursor/skills/<slug>/SKILL.md`, `.claude/skills/` | `skill` (2.4.0) | shipping (dogfood) |
+| Rules | `.claude/rules/*.md`, `.cursor/rules/*.mdc` | `standing_rule` (1.1.0) | specced (`rule_neotoma_sync.md`) |
+| Subagents | `.claude/agents/*.md` (e.g. scout, verifier, worker) | `agent_definition` (1.7.0) | type exists, sync not wired |
+| Slash commands | `.cursor/commands/`, foundation cursor_commands | `skill` (commands ≈ skills with a different trigger surface) | partial (foundation syncer treats commands→skills) |
+| Memory / always-apply context | `CLAUDE.md`, always-apply `.mdc` | `standing_rule` (scope: repo) or `agent_memory` | candidate |
+
+**Config/executable-class artifacts** — carry secrets, live in shared user-owned files, and/or execute automatically. Store a *secret-free recipe*; the mirror is a *merge* into a shared file; always an explicitly confirmed step; **hooks are never default-on because they auto-execute**:
+
+| Artifact | Harness file(s) | Entity type | Notes |
+|---|---|---|---|
+| MCP config | `.cursor/mcp.json`, `claude_desktop_config.json` | `mcp_config` recipe | specced above; secret-free, merge |
+| Permissions / settings | `.claude/settings.json`, `settings.local.json` (`permissions.allow`), `.cursor/allowlist.json` | `agent_policy` (exists) | security surface; merge; confirm-always |
+| Lifecycle hooks | `.cursor/hooks.json` + `.cursor/hooks/*.sh`, `.claude` hooks | (hook recipe) | **executable** — highest trust; store recipe, install always-confirmed, never default-on |
+| Environment config | `.cursor/environment.json`, `.env` references | (reuse key-discovery flow) | secret-references only; same secret-free rule as MCP config |
+
+Two rules govern this taxonomy:
+
+1. **Classify before modeling.** A new harness artifact is content-class or config/executable-class first; that decision determines store shape (full content vs secret-free recipe), mirror operation (regenerate vs merge), and default-on eligibility (yes vs confirm-always / never).
+2. **Reuse the registered type for the artifact's nature.** Skills→`skill`, subagents→`agent_definition`, rules/memory→`standing_rule`, permissions→`agent_policy`, config→`mcp_config`. Do not mint per-artifact types when an existing one fits (the `skill_learnings` lesson). Learnings about any artifact remain `note` entities linked `REFERS_TO` the artifact entity.
+
+The immediate next win after skills/rules/config is **subagents** — `agent_definition` already exists, the artifact is pure content, and the gap is only sync wiring. Hooks are deliberately deferred to their own security-focused treatment because auto-executing code installed into a user's harness is a materially higher-trust action than any inert file.
+
 ### The inspector as layout foundation
 
 The inspector is not a peer surface to the harness — it is the *layout container* in which the harness lives. The page's structure is the inspector's existing left-nav layout (Dashboard, Entities, Observations, Sources, Relationships, Graph Explorer, Schemas, Timeline, Interpretations, Settings), with the harness occupying the main content area on the default Dashboard route. The bundled docs sidebar lives on the right. Three panels: substrate state on the left, conversational interaction in the middle, reference material on the right.
