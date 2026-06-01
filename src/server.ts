@@ -34,6 +34,7 @@ import {
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   MergeEntitiesRequestSchema,
+  SplitEntityRequestSchema,
   DeleteEntityRequestSchema,
   DeleteRelationshipRequestSchema,
   RestoreEntityRequestSchema,
@@ -1748,6 +1749,8 @@ export class NeotomaServer {
         return await this.correct(args);
       case "merge_entities":
         return await this.mergeEntities(args);
+      case "split_entity":
+        return await this.splitEntity(args);
       case "list_potential_duplicates":
         return await this.listPotentialDuplicates(args);
       case "delete_entity":
@@ -5376,6 +5379,66 @@ export class NeotomaServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to merge entities: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  // R5: MCP split_entity() Tool — inverse of merge_entities. Re-points a
+  // predicate-selected subset of an entity's observations onto a new (or
+  // pre-existing) entity to repair over-merges. Mirrors the HTTP
+  // POST /entities/split handler in actions.ts and the mergeEntities() shape.
+  private async splitEntity(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = SplitEntityRequestSchema.parse(args);
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const {
+      splitEntity: splitEntityService,
+      EntityNotFoundError,
+      EntityAlreadyMergedError,
+      SplitPredicateMatchedNothingError,
+      SplitPredicateMatchedAllError,
+      IdempotencyMismatchError,
+    } = await import("./services/entity_split.js");
+
+    try {
+      const result = await splitEntityService({
+        sourceEntityId: parsed.source_entity_id,
+        userId,
+        predicate: parsed.predicate,
+        newEntity: {
+          entity_type: parsed.new_entity.entity_type,
+          canonical_name: parsed.new_entity.canonical_name,
+          target_entity_id: parsed.new_entity.target_entity_id,
+        },
+        idempotencyKey: parsed.idempotency_key,
+        reason: parsed.reason,
+        splitBy: "mcp",
+      });
+
+      return this.buildTextResponse({
+        split_id: result.split_id,
+        source_entity_id: result.source_entity_id,
+        new_entity_id: result.new_entity_id,
+        observations_moved: result.observations_moved,
+        split_at: result.split_at,
+        replayed: result.replayed,
+        reason: parsed.reason,
+      });
+    } catch (err) {
+      if (
+        err instanceof EntityNotFoundError ||
+        err instanceof EntityAlreadyMergedError ||
+        err instanceof SplitPredicateMatchedNothingError ||
+        err instanceof SplitPredicateMatchedAllError ||
+        err instanceof IdempotencyMismatchError
+      ) {
+        throw new McpError(ErrorCode.InvalidParams, err.message);
+      }
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to split entity: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
