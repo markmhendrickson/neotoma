@@ -658,8 +658,9 @@ Application layer MUST distinguish and signal retry eligibility.
 - Database-level row-level security (RLS) is a possible future defense-in-depth layer, not the current line of defense — see [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization) for the enforced contract and the two multi-tenant models
 ### 7.2 Data Security
 **At Rest:**
-- Database encryption at rest
-- File storage encryption (S3 server-side encryption)
+- The default SQLite backend (`better-sqlite3`) writes a **plaintext database file** on disk. Encryption at rest is **not provided by the database layer today** and must be supplied by the deployment: an encrypted volume/disk (LUKS, cloud-provider volume encryption), or a SQLCipher-style encrypted SQLite build (not yet a shipped/tested Neotoma configuration). The `NEOTOMA_ENCRYPTION_ENABLED` / key-file / mnemonic settings gate **key-based auth and optional log encryption**, not database-file encryption — do not rely on them for at-rest data protection.
+- File storage encryption (S3 server-side encryption) when an S3-compatible backend is configured.
+- The planned local-first E2EE architecture (v2.x, browser SQLite WASM + OPFS, server stores only ciphertext) is the eventual native at-rest story; it is aspirational, not current.
 **In Transit:**
 - HTTPS for all HTTP API calls
 - WSS (WebSocket Secure) for MCP connections
