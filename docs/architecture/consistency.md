@@ -63,11 +63,22 @@ Neotoma MVP uses **bounded eventual consistency** where needed, never unbounded 
 | **Graph Edges** (record→entity, record→event, relationships) | Strong            | 0s        | Immediate display          |
 | **Entities** (creation, linking)                             | Strong            | 0s        | Immediate display          |
 | **Timeline Events**                                          | Strong            | 0s        | Immediate display          |
-| **Full-Text Search Index**                                   | Bounded Eventual  | 5s        | "Indexing..." message      |
-| **Vector Embeddings Index**                                  | Bounded Eventual  | 10s       | "Generating embeddings..." |
-| **Cross-Entity Search**                                      | Bounded Eventual  | 5s        | "Indexing..." message      |
+| **Full-Text Search Index**                                   | Strong            | 0s        | Immediate display          |
+| **Vector Embeddings Index**                                  | Strong¹           | 0s        | Immediate display          |
+| **Cross-Entity Search**                                      | Strong¹           | 0s        | Immediate display          |
 | **Provenance Metadata**                                      | Strong            | 0s        | Immediate display          |
 | **Auth Permissions**                                         | Strong            | 0s        | Block on permission change |
+
+¹ **Embeddings are generated synchronously during snapshot upsert**, not on a deferred/async lag. `prepareEntitySnapshotWithEmbedding` (`src/services/entity_snapshot_embedding.ts`) awaits `generateEmbedding` inline, and every caller (`src/server.ts`, `src/actions.ts`, `src/services/interpretation.ts`) awaits it before the `entity_snapshots` upsert. The embedding is committed in the same store path as the snapshot, so an entity is semantically searchable as soon as its store call returns — provided an embedding provider is configured (`OPENAI_API_KEY`). When no provider is configured, embedding is skipped and semantic search degrades to keyword/lexical matching (still strongly consistent, just not vector-ranked). This is a change from an earlier design that treated embeddings as bounded-eventual (~10s); the synchronous behavior is the current contract.
+
+### 2.1.1 Read-after-write contract (for interactive callers)
+
+For callers issuing a query immediately after a store in the same turn (e.g. an interactive chat assistant), the guarantee is:
+
+- **Structured retrieval is strongly consistent.** `retrieve_entities` (by id, by canonical name, by filter), `retrieve_entity_snapshot`, `retrieve_related_entities`, and `retrieve_graph_neighborhood` reflect a just-completed store with no lag. A fact stored in this turn is readable in this turn.
+- **Semantic search is strongly consistent with respect to the write when an embedding provider is configured**, because the embedding is written in the same synchronous path (¹ above). With no provider configured, `search` falls back to keyword matching.
+- **Practical guidance:** for read-after-write correctness in an interactive path, query the *structured* surface (id / canonical-name / filter), which is always strongly consistent. Treat semantic ranking as a best-effort relevance layer on top, not as the consistency boundary. No freshness token or "block until indexed" call is required — the structured read already reflects the write.
+
 ### 2.2 Subsystem Details
 #### 2.2.1 Core Records (Strong Consistency)
 **What:**

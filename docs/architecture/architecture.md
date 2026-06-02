@@ -652,9 +652,10 @@ Application layer MUST distinguish and signal retry eligibility.
 - MCP connections authenticated via session tokens
 - No anonymous access
 **Authorization:**
-- Row-level security (RLS) in PostgreSQL
-- User can only access their own records, entities, events
-- Application layer enforces user_id filtering
+- Per-`user_id` isolation is enforced **today** in the application layer: every user-scoped query applies `.eq("user_id", userId)` (`src/services/entity_queries.ts`), and `getAuthenticatedUserId` rejects a mismatched caller-supplied id, so a token cannot read across tenants
+- Covers graph and relationship reads, not just flat lists; regression-tested in `tests/security/tenant_isolation_matrix.test.ts` (advisory GHSA-wrr4-782v-jhwh)
+- A user can only access their own records, entities, events
+- Database-level row-level security (RLS) is a possible future defense-in-depth layer, not the current line of defense — see [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization) for the enforced contract and the two multi-tenant models
 ### 7.2 Data Security
 **At Rest:**
 - Database encryption at rest
@@ -706,7 +707,7 @@ Application layer MUST distinguish and signal retry eligibility.
 3. **All errors MUST use ErrorEnvelope structure**
 4. **All external calls MUST go through Infrastructure layer**
 5. **All database writes MUST be transactional**
-6. **All user data MUST be isolated by user_id** (RLS)
+6. **All user data MUST be isolated by user_id** (enforced in the application layer on every query; see `docs/subsystems/auth.md`)
 7. **All MCP actions MUST validate inputs**
 8. **All timeline events MUST trace to source fields**
 9. **All entities MUST have canonical IDs**
@@ -790,7 +791,7 @@ Load `docs/architecture/architecture.md` when:
 3. **Use ErrorEnvelope:** All errors follow structured format
 4. **Validate inputs:** Every layer validates its inputs
 5. **Transactional writes:** All graph writes in transactions
-6. **User isolation:** RLS enforced for all user data
+6. **User isolation:** per-`user_id` scoping enforced in the application layer on every user-scoped read (see `docs/subsystems/auth.md`)
 7. **No global state:** Dependency injection for all services
 8. **State Layer purity:** No strategy, execution, or agent logic in Neotoma
 9. **Event-sourced updates:** All state changes via Domain Events → Reducers

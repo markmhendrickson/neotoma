@@ -523,6 +523,28 @@ flyctl releases rollback <release-id>
 # Rollback to previous release
 flyctl releases rollback
 ```
+## SQLite concurrency and the multi-writer model
+
+Neotoma's default storage backend is SQLite (`better-sqlite3`), configured in `src/repositories/sqlite/sqlite_client.ts`. For anyone running a single hosted instance that serves multiple users, the concurrency envelope is:
+
+**What is configured today**
+
+- **WAL mode is enabled** (`PRAGMA journal_mode = WAL`). Under WAL, readers do not block the writer and the writer does not block readers — concurrent reads proceed while a write is in flight. This is the property that makes one instance safely serve many concurrent read requests.
+- **`PRAGMA foreign_keys = ON`** for referential integrity.
+- **A single cached connection per server process** (`cachedDb` singleton). `better-sqlite3` is a synchronous, in-process driver, so all writes from the server process are **serialized through one connection** — there is no in-process write contention to tune, and no connection pool to size.
+
+**The practical envelope**
+
+- **Reads:** effectively unbounded concurrency. WAL lets many reads run against a consistent snapshot while writes continue.
+- **Writes:** serialized in-process. A web backend that fans many requests into one Neotoma server process gets correct, ordered writes without extra configuration. Throughput is bounded by single-writer SQLite write speed, which is high for the row sizes Neotoma stores (observations, snapshots, relationships) but is not horizontally scalable within one DB file.
+- **Multi-process access is the real caveat:** if a *second* process opens the same database file concurrently with the server (e.g. a CLI `backup`, a `doctor` run, or an out-of-band migration), the two processes contend for the WAL write lock. `busy_timeout` is **not** currently set, so a second writer can see `SQLITE_BUSY` immediately rather than waiting. Guidance: run write-heavy maintenance (backup, vacuum, migration) against a quiesced instance, or serialize it with the server, rather than concurrently. Read-only out-of-process access (a reporting query) is safe under WAL.
+
+**When this envelope is not enough**
+
+For a deployment that needs multiple *writer processes* against shared state, or write throughput beyond a single SQLite file, SQLite is off its primary path. The options, in increasing order of effort, are: (1) one Neotoma instance per tenant (physical isolation — see `docs/plans/multi-tenant-operational-patterns.md`), (2) front all writes through the single server process (the current model — keep maintenance writes serialized), or (3) a Postgres-backed storage adapter (not yet implemented; tracked separately). For most single-instance multi-user web backends, option (2) with WAL is sufficient and is what ships today.
+
+> Note: a `busy_timeout` PRAGMA would make out-of-process writers wait rather than fail fast on `SQLITE_BUSY`. Adding one is a small, safe hardening step for deployments that knowingly run concurrent maintenance processes; it is not currently set because the single-server-process model does not require it.
+
 ## Agent Instructions
 ### When to Load This Document
 Load when:
