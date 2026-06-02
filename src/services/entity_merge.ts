@@ -7,7 +7,10 @@
  */
 
 import { db } from "../db.js";
-import { rewriteObservationEntityId } from "./observation_storage.js";
+import {
+  rewriteObservationEntityId,
+  repointRelationshipObservations,
+} from "./observation_storage.js";
 import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 export interface MergeEntitiesParams {
@@ -20,6 +23,7 @@ export interface MergeEntitiesParams {
 
 export interface MergeResult {
   observations_moved: number;
+  relationships_repointed: number;
   merged_at: string;
 }
 
@@ -53,6 +57,11 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
   }
 
   const observations_moved = await rewriteObservationEntityId(fromEntityId, toEntityId, userId);
+  const relationships_repointed = await repointRelationshipObservations(
+    fromEntityId,
+    toEntityId,
+    userId
+  );
 
   const merged_at = new Date().toISOString();
 
@@ -92,7 +101,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
     timestamp: merged_at,
   });
 
-  return { observations_moved, merged_at };
+  return { observations_moved, relationships_repointed, merged_at };
 }
 
 export class EntityNotFoundError extends Error {
