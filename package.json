@@ -86,6 +86,7 @@
     "eval:tier1:update": "cross-env UPDATE_AGENTIC_EVAL_SNAPSHOTS=1 vitest run tests/integration/agentic_eval_matrix.test.ts",
     "test:remote:critical": "cross-env RUN_REMOTE_TESTS=1 vitest run tests/integration/mcp_actions_matrix.test.ts tests/integration/mcp_resources.test.ts tests/integration/mcp_store_unstructured.test.ts tests/integration/mcp_store_parquet.test.ts tests/integration/mcp_schema_actions.test.ts tests/integration/schema_recommendation_integration.test.ts tests/integration/observation_ingestion.test.ts tests/integration/relationship_snapshots.test.ts tests/services/auto_enhancement_converter_detection.test.ts tests/services/auto_enhancement_processor.test.ts",
     "test:contract": "vitest run tests/contract",
+    "test:bench": "cross-env RUN_BENCH=1 vitest run tests/performance",
     "test:cross-layer": "vitest run tests/integration/cli_to_mcp_store.test.ts tests/integration/cli_to_mcp_entities.test.ts tests/integration/cli_to_mcp_relationships.test.ts tests/integration/cli_to_mcp_schemas.test.ts",
     "test:parity": "vitest run tests/contract/contract_mcp_cli_parity.test.ts",
     "test:e2e:coverage": "npm run test:contract && npm run test:cross-layer",

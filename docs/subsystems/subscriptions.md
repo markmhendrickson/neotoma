@@ -101,7 +101,8 @@ The bridge is wired once at server startup by `installSubscriptionBridge`. The i
 - Endpoint: `GET /events/stream?subscription_id=<id>` (auth required; subscription must be owned by the caller). This is the canonical path (registered in `src/actions.ts` and exposed in `openapi.yaml`); the legacy `GET /subscriptions/sse` shorthand was dropped before v0.12.0 — update any older clients.
 - Frame format: `id: <ring_id>\nevent: <event_type>\ndata: <json>\n\n`.
 - Resume: clients should send `Last-Event-ID: <ring_id>` so the hub replays buffered events newer than that id (subject to the ring cap).
-- Buffer eviction: when the ring exceeds `NEOTOMA_SSE_EVENT_BUFFER`, the oldest entries are dropped; reconnects past that watermark resume from the live tail.
+- Buffer eviction and gap detection: when the ring exceeds `NEOTOMA_SSE_EVENT_BUFFER`, the oldest entries are dropped. If a reconnecting client sends a `Last-Event-ID` that is **no longer in the ring** — because it was evicted past the cap, or because the server restarted (the ring is in-memory and does not survive a restart) — the stream emits a one-time `event: gap` frame **before** replaying, with `data` of the form `{ reason: "cursor_not_in_buffer", requested_last_event_id, latest_ring_id, message }`. The hub then resumes from the current buffer head so the client still makes forward progress.
+- Delivery guarantee: SSE resume is **best-effort and non-durable**. Within the in-memory window it is gap-free; outside it (eviction or restart) the `gap` frame signals a discontinuity. A consumer that requires gap-free delivery — for example, projecting substrate events into an external index — must treat a `gap` frame as "reconcile via a full read" rather than trusting the replayed slice. Durable, restart-surviving replay (a persistent event log) is not yet implemented; see issue #1464.
 
 ## Loop prevention with peer sync
 

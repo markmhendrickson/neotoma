@@ -86,3 +86,57 @@ export function getRingEntriesAfter(
   }
   return out;
 }
+
+/**
+ * Result of a resume attempt against the in-memory ring.
+ *
+ * `gap_detected` is true when the caller supplied a `lastEventId` that is no
+ * longer present in the ring — i.e. it was evicted past the buffer cap, or the
+ * server restarted (the ring is in-memory and does not survive a restart). In
+ * that case the entries returned are the full filtered buffer from its current
+ * head, NOT a true continuation from the requested cursor. A consumer that
+ * needs gap-free delivery (e.g. a projection into an external index) must treat
+ * a gap as "reconcile via a full read" rather than trusting the replayed slice.
+ *
+ * When `lastEventId` is undefined (a fresh subscriber) `gap_detected` is false:
+ * there is no prior position to have missed.
+ */
+export interface RingResumeResult {
+  entries: RingEntry[];
+  gap_detected: boolean;
+  /** The newest ring id at read time, or null when the ring is empty. */
+  latest_ring_id: string | null;
+}
+
+export function resumeRingAfter(
+  lastEventId: string | undefined,
+  filter: (ev: SubstrateEvent) => boolean
+): RingResumeResult {
+  const latestRingId = ring.length > 0 ? ring[ring.length - 1]!.id : null;
+
+  if (lastEventId === undefined) {
+    return {
+      entries: getRingEntriesAfter(undefined, filter),
+      gap_detected: false,
+      latest_ring_id: latestRingId,
+    };
+  }
+
+  const idx = ring.findIndex((e) => e.id === lastEventId);
+  if (idx === -1) {
+    // Cursor not in the ring: evicted past the cap or lost to a restart.
+    // Resume from the current head but flag the gap so the consumer can
+    // reconcile rather than silently trust a discontinuous slice.
+    return {
+      entries: getRingEntriesAfter(undefined, filter),
+      gap_detected: true,
+      latest_ring_id: latestRingId,
+    };
+  }
+
+  return {
+    entries: getRingEntriesAfter(lastEventId, filter),
+    gap_detected: false,
+    latest_ring_id: latestRingId,
+  };
+}
