@@ -125,7 +125,7 @@ This document does NOT cover:
    - Data loss or corruption
    - Inability to fulfill data subject rights
 4. **Identify mitigating measures:**
-   - Encryption in transit (HTTPS/WSS) and at-rest column encryption (AES-256-GCM) for sensitive content when enabled; volume encryption for the plaintext-required vector-embedding store
+   - Encryption in transit (HTTPS/WSS) and at-rest column encryption (AES-256-GCM) for sensitive content when enabled; operator-provided volume encryption for the plaintext-required vector-embedding store
    - Per-user data isolation enforced at the application layer (queries scoped to the authenticated user)
    - Access controls and audit logs
    - Regular security assessments
@@ -146,7 +146,7 @@ This document does NOT cover:
 | **Recipients**                  | Who receives data         | User (data owner), AI agents via MCP (with user consent)  |
 | **Third countries**             | Data transfers outside EU | When deployed to cloud: hosting provider location — requires safeguards |
 | **Retention periods**           | How long data is kept     | Until user deletion request                               |
-| **Security measures**           | How data is protected     | At-rest column encryption (AES-256-GCM) + TLS in transit, application-layer per-user isolation, access controls |
+| **Security measures**           | How data is protected     | At-rest column encryption (AES-256-GCM) + TLS in transit (embedding/vector store relies on operator-provided volume encryption), application-layer per-user isolation, access controls |
 **Maintenance:**
 - Update quarterly or when processing changes
 - Store in `docs/legal/processing_records.md`
