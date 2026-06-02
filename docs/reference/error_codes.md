@@ -237,6 +237,28 @@ declares one of `canonical_name_fields` or `identity_opt_out`, then retry
 - `OAUTH_ENCRYPTION_KEY_MISSING`: MCP_TOKEN_ENCRYPTION_KEY not set in environment
 - `OAUTH_DECRYPTION_FAILED`: Invalid encrypted token format or wrong encryption key
 
+## Store Warnings
+
+Non-fatal codes emitted in `store_warnings[]` on a successful `/store` response.
+These do not prevent the write from completing; they surface data-quality issues
+agents should address. Switch on the `code` field.
+
+| Code                      | Description                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| `MISSING_CONTENT_FIELD`   | A schema declares `content_field` and the stored observation omits or empties that field.    |
+| `MISSING_IDENTITY_FIELDS` | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
+
+**`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
+`content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
+observation leaves that field absent or empty-string. For document-derived entities,
+agents MUST include the full original markdown/prose in this field. Structured fields
+(title, summary, tags, etc.) complement the body but do not replace it.
+
+**`MISSING_IDENTITY_FIELDS`** — fired when a schema declares `store_warnings` with
+identity-field rules (e.g. `product_feedback` requires at least one of `github_url`,
+`conversation_id`, `session_id`) and the stored observation supplies none of them.
+Used to surface identity-quality issues without rejecting the write.
+
 ## Validation Errors
 
 | Code                        | HTTP | Retry? | Description                          |

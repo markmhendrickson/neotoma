@@ -255,6 +255,28 @@ export interface SchemaDefinition {
     /** Human-readable warning message included in the response. */
     message: string;
   }>;
+
+  /**
+   * Name of the field that carries the primary long-form content for an
+   * entity of this type. Declaring this marks the schema as a "document"
+   * type for store-time validation:
+   *
+   * - The store path emits a non-blocking `MISSING_CONTENT_FIELD` warning
+   *   when this field is absent or empty on a stored observation, so agents
+   *   receive feedback when they save only structured facets of a document
+   *   (title, summary, risk_level, …) and drop the full body.
+   *
+   * Future: the canonical markdown renderer (`src/services/canonical_markdown.ts`)
+   * will use this declaration to identify the document body field by schema
+   * rather than by per-type heuristic (tracked in issue #949).
+   *
+   * Convention: prefer `"body"` for new document types. Established
+   * alternatives like `"content"` (used by `note`/`gist`) are also valid —
+   * the declaration only requires the named field to exist on the schema.
+   *
+   * See docs/foundation/schema_agnostic_design_rules.md and issue #949.
+   */
+  content_field?: string;
 }
 
 /** Known opt-out tokens for {@link SchemaDefinition.identity_opt_out}. */
@@ -1034,6 +1056,14 @@ export class SchemaRegistryService {
       if (preserved.reference_fields.length === 0) {
         delete preserved.reference_fields;
       }
+    }
+    if (preserved.content_field && removalSet.has(preserved.content_field)) {
+      console.warn(
+        `[schema_registry] updateSchemaIncremental: content_field "${preserved.content_field}" ` +
+          `removed from entity_type "${options.entity_type}" because its target field was removed. ` +
+          `The MISSING_CONTENT_FIELD store warning will no longer fire for this schema.`
+      );
+      delete preserved.content_field;
     }
 
     // 5. Register new version (start inactive, we'll activate separately if needed)
@@ -1993,6 +2023,15 @@ export class SchemaRegistryService {
         definition.agent_instructions.trim().length === 0
       ) {
         throw new Error("agent_instructions must be a non-empty string when present");
+      }
+    }
+
+    if (definition.content_field !== undefined) {
+      if (typeof definition.content_field !== "string" || !definition.content_field.trim()) {
+        throw new Error("content_field must be a non-empty string when present");
+      }
+      if (!definition.fields[definition.content_field]) {
+        throw new Error(`content_field references unknown field: ${definition.content_field}`);
       }
     }
   }
