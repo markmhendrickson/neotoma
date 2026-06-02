@@ -206,7 +206,7 @@ Neotoma stores user data and requires secure configuration.
 
 - **Authentication:** Local auth (dev stub or key-based when encryption is enabled).
 - **Authorization:** Local data isolation and explicit operation-level access controls.
-- **Data protection:** User-controlled data with full export and deletion control. Never used for training. At-rest encryption of the SQLite database is provided at the deployment layer (encrypted volume) — the database file is plaintext on disk by default; the key-based settings gate auth and optional log encryption, not database-file encryption.
+- **Data protection:** User-controlled data with full export and deletion control. Never used for training. Optional at-rest encryption: AES-256-GCM column encryption of the sensitive content/metadata columns when enabled with a key file or mnemonic (some tables, e.g. the event log and embeddings, are not yet column-encrypted — pair with an encrypted volume for full coverage). See [architecture § 7.2](docs/architecture/architecture.md).
 - **Verify your setup:** Run `npm run doctor` for environment, database, and security checks. See [Auth](docs/subsystems/auth.md), [Privacy](docs/subsystems/privacy.md), [Compliance](docs/legal/compliance.md).
 
 ## Development

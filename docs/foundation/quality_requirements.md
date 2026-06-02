@@ -63,6 +63,6 @@ All operations MUST emit:
 - MVP: All authenticated users see all records (single-user)
 - Future: Per-user isolation via `user_id` column + RLS policies
 **Data Protection:**
-- At-rest encryption of the SQLite database file is **not provided by the database layer today** — the file is plaintext on disk. Provide it at the deployment layer (encrypted volume) or via a SQLCipher-style build (not yet a shipped/tested configuration). The key-file / mnemonic settings gate key-based auth and optional log encryption, not database-file encryption.
+- At-rest: application-layer **AES-256-GCM column encryption** of the sensitive content/metadata columns (observation fields, entity/relationship snapshots + provenance, raw fragments, schema-recommendation and enhancement payloads) when encryption is enabled (`NEOTOMA_ENCRYPTION_ENABLED` + key file or mnemonic). IDs/timestamps/hashes/signatures stay plaintext for integrity and indexing. Not yet column-encrypted: the `substrate_events` durable log and the vector embedding tables (written via the raw client) — use an encrypted volume for those and for defense in depth. See `docs/architecture/architecture.md` § 7.2.
 - HTTPS for all API calls
 - WSS (WebSocket Secure) for MCP connections
