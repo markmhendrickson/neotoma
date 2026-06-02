@@ -398,6 +398,20 @@ function ensureSchema(db: SqliteDatabase): void {
       "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
     ).run();
 
+    // Graph-traversal indexes (#1467): every hop of retrieve_related_entities /
+    // retrieve_graph_neighborhood filters relationship_snapshots by
+    // (source_entity_id, user_id) for outbound and (target_entity_id, user_id)
+    // for inbound. Without these, each hop full-scans the table, so deep
+    // traversal cost grows with total table size. Composite indexes turn each
+    // hop into an indexed lookup, flattening traversal latency vs graph size
+    // (measured: 3-hop over 50k relationships dropped from ~777ms to ~6ms).
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
+    ).run();
+
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
     db.prepare(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
