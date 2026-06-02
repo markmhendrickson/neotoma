@@ -79,19 +79,24 @@ current state, not a target. Status is one of:
   a guarantee.
 - **Not yet** — neither the mechanism nor the policy is in place.
 
-| #   | Commitment                                 | Status   | What exists / what's missing                                                                                                                         |
-| --- | ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Schema stability + versioned evolution     | Partial  | `schema_version` and additive expansion exist (`docs/architecture/schema_expansion.md`); a single stated compatibility policy is not yet written.    |
-| 2   | Contract stability                         | Partial  | OpenAPI-first flow, legacy-payload corpus, and BC-diff gate exist; a stated **deprecation window** does not.                                         |
-| 3   | Backward compatibility + replay            | Partial  | Immutability of observations/source is enforced (`docs/subsystems/observation_architecture.md`); a stated **support window** is not yet set.         |
-| 4   | Deterministic extraction across versions   | In place | Content-derived IDs, stable ordering, deterministic reducers are enforced invariants (`docs/architecture/determinism.md`).                           |
-| 5   | Redlines demonstrated, not just stated     | Partial  | `redlines.md` is in force; MIT + open core are real and verifiable; a recurring demonstration record is still being built.                           |
-| 6   | Portability + exit proven                  | Partial  | Export (`memory-export`, `snapshots export`), bulk import, and deletion commands exist; a tested end-to-end leave-and-rebuild is not yet documented. |
-| 7   | Change governance published                | Partial  | Breaking-change discipline (release supplements, BC gate) exists; the deprecation window and decision process are not yet written down.              |
-| 8   | Supported multi-tenant deployment topology | Partial  | The topology decision aid exists (`docs/infrastructure/multi_tenant_deployment_topology.md`); a _tested_ production topology is not yet established. |
-| 9   | Security review cadence                    | In place | Pre-release security gates (diff classifier, protected-routes manifest, security review) run on sensitive releases.                                  |
-| 10  | Observability + operational docs           | In place | Logging, metrics, and privacy (no-PII) surfaces are documented (`docs/observability/`, `docs/subsystems/privacy.md`).                                |
-| 11  | Stated support posture                     | Not yet  | No support / SLA / version-support-window document exists yet.                                                                                       |
+Every row that is not yet **In place** has a tracking issue in the **Tracking**
+column scoping the exact remaining work to flip it. That is what makes this a
+live scorecard rather than a static claim: you can watch each row move, and the
+work behind each move is open and itemized.
+
+| #   | Commitment                                 | Status   | What exists / what's missing                                                                                                                         | Tracking                                                         |
+| --- | ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1   | Schema stability + versioned evolution     | Partial  | `schema_version` and additive expansion exist (`docs/architecture/schema_expansion.md`); a single stated compatibility policy is not yet written.    | [#1520](https://github.com/markmhendrickson/neotoma/issues/1520) |
+| 2   | Contract stability                         | Partial  | OpenAPI-first flow, legacy-payload corpus, and BC-diff gate exist; a stated **deprecation window** does not.                                         | [#1521](https://github.com/markmhendrickson/neotoma/issues/1521) |
+| 3   | Backward compatibility + replay            | Partial  | Immutability of observations/source is enforced (`docs/subsystems/observation_architecture.md`); a stated **support window** is not yet set.         | [#1522](https://github.com/markmhendrickson/neotoma/issues/1522) |
+| 4   | Deterministic extraction across versions   | In place | Content-derived IDs, stable ordering, deterministic reducers are enforced invariants (`docs/architecture/determinism.md`).                           | —                                                                |
+| 5   | Redlines demonstrated, not just stated     | Partial  | `redlines.md` is in force; MIT + open core are real and verifiable; a recurring demonstration record is still being built.                           | [#1523](https://github.com/markmhendrickson/neotoma/issues/1523) |
+| 6   | Portability + exit proven                  | Partial  | Export (`memory-export`, `snapshots export`), bulk import, and deletion commands exist; a tested end-to-end leave-and-rebuild is not yet documented. | [#1524](https://github.com/markmhendrickson/neotoma/issues/1524) |
+| 7   | Change governance published                | Partial  | Breaking-change discipline (release supplements, BC gate) exists; the deprecation window and decision process are not yet written down.              | [#1525](https://github.com/markmhendrickson/neotoma/issues/1525) |
+| 8   | Supported multi-tenant deployment topology | Partial  | The topology decision aid exists (`docs/infrastructure/multi_tenant_deployment_topology.md`); a _tested_ production topology is not yet established. | [#1526](https://github.com/markmhendrickson/neotoma/issues/1526) |
+| 9   | Security review cadence                    | In place | Pre-release security gates (diff classifier, protected-routes manifest, security review) run on sensitive releases.                                  | —                                                                |
+| 10  | Observability + operational docs           | In place | Logging, metrics, and privacy (no-PII) surfaces are documented (`docs/observability/`, `docs/subsystems/privacy.md`).                                | —                                                                |
+| 11  | Stated support posture                     | Not yet  | No support / SLA / version-support-window document exists yet.                                                                                       | [#1527](https://github.com/markmhendrickson/neotoma/issues/1527) |
 
 The detail for each follows.
 
