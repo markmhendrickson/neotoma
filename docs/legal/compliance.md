@@ -125,8 +125,8 @@ This document does NOT cover:
    - Data loss or corruption
    - Inability to fulfill data subject rights
 4. **Identify mitigating measures:**
-   - Encryption at rest and in transit
-   - Row-Level Security (RLS)
+   - Encryption in transit (HTTPS/WSS) and at-rest column encryption (AES-256-GCM) for sensitive content when enabled; volume encryption for the plaintext-required vector-embedding store
+   - Per-user data isolation enforced at the application layer (queries scoped to the authenticated user)
    - Access controls and audit logs
    - Regular security assessments
 5. **Document DPIA:**
@@ -146,7 +146,7 @@ This document does NOT cover:
 | **Recipients**                  | Who receives data         | User (data owner), AI agents via MCP (with user consent)  |
 | **Third countries**             | Data transfers outside EU | When deployed to cloud: hosting provider location — requires safeguards |
 | **Retention periods**           | How long data is kept     | Until user deletion request                               |
-| **Security measures**           | How data is protected     | Encryption, RLS, access controls                          |
+| **Security measures**           | How data is protected     | At-rest column encryption (AES-256-GCM) + TLS in transit, application-layer per-user isolation, access controls |
 **Maintenance:**
 - Update quarterly or when processing changes
 - Store in `docs/legal/processing_records.md`
@@ -396,7 +396,7 @@ This document does NOT cover:
    - Until user deletion request
    - Legal obligations (if applicable)
 8. **Security Measures:**
-   - Encryption, access controls, RLS
+   - Encryption (at-rest column encryption, TLS in transit), access controls, application-layer per-user isolation
 9. **International Transfers:**
    - Data stored in US (when deployed to US hosting)
    - Safeguards (Standard Contractual Clauses)
@@ -617,8 +617,8 @@ This document does NOT cover:
    - Review data retention and deletion procedures
    - Verify consent records
 2. **Security Compliance:**
-   - Access controls (RLS policies, API authentication)
-   - Encryption (at rest, in transit)
+   - Access controls (application-layer per-user isolation, API authentication; database RLS is a possible future defense-in-depth layer, not the current mechanism)
+   - Encryption (at-rest column encryption, TLS in transit)
    - Logging (PII exclusion)
    - Incident response procedures
 3. **Vendor Compliance:**

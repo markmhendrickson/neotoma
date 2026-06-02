@@ -90,8 +90,8 @@ You have the right to:
 - **Logs:** Application logs (90 days), access logs (1 year), audit logs (7 years)
 ## 8. Data Security
 We implement security measures to protect your data:
-- **Encryption:** Data encrypted at rest and in transit (HTTPS, WSS)
-- **Access Controls:** Row-Level Security (RLS), authentication required
+- **Encryption:** In transit via HTTPS/WSS. At rest, sensitive content columns (record fields, entity/relationship snapshots, raw fragments, and event-log payloads) are encrypted with AES-256-GCM when encryption is enabled; the vector-embedding store, which must hold plaintext vectors for similarity search, relies on volume/disk encryption instead.
+- **Access Controls:** Per-user data isolation enforced at the application layer (every query is scoped to the authenticated user); authentication required
 - **Logging:** No PII in logs (only record IDs, error codes)
 - **Vendor Security:** We use vendors with security certifications (SOC 2, ISO 27001)
 **However, no method of transmission or storage is 100% secure. We cannot guarantee absolute security.**
