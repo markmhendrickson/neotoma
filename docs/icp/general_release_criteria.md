@@ -2,7 +2,9 @@
 
 Criteria for exiting the developer release and entering general release. The developer release exists to validate architecture, ICP, and activation path. General release means Neotoma can sustain unassisted discovery, adoption, and retention at scale.
 
-**Related docs:** [`primary_icp.md`](./primary_icp.md) (durable ICP definition) · [`developer_release_targeting.md`](./developer_release_targeting.md) (dev release targeting and activation risks)
+**Related docs:** [`primary_icp.md`](./primary_icp.md) (durable ICP definition) · [`developer_release_targeting.md`](./developer_release_targeting.md) (dev release targeting and activation risks) · [`adopter_dependency_commitments.md`](../foundation/adopter_dependency_commitments.md) (the orthogonal _dependency-safety_ lens — stability/governance/exit commitments an adopter holds us to, distinct from the go-to-market readiness gates here)
+
+> **Two lenses, not one.** This document is the _go-to-market_ readiness gate (can Neotoma sustain unassisted adoption at scale?). It is distinct from [`adopter_dependency_commitments.md`](../foundation/adopter_dependency_commitments.md), the _dependency-safety_ bar (is it safe for an external product to build on the substrate?). A version can satisfy one before the other; they are tracked separately on purpose.
 
 ---
 
@@ -25,6 +27,7 @@ General release readiness means sufficient evidence on all three.
 **Threshold:** 5+ genuinely active users who have reached the expansion stage of the adoption funnel.
 
 **"Active" defined as:**
+
 - Observations being stored weekly
 - 3+ entity types in use (beyond default auto-stored types)
 - No reversion to workarounds (markdown files, Notion, manual re-prompting for domains Neotoma covers)
@@ -56,6 +59,7 @@ Pre-install evaluators (those who have not completed install on their own machin
 **What this proves:** The docs, onboarding flow, error messages, and agent instructions are sufficient for self-service adoption. During the dev release, personal intervention is expected; for general release, it can't scale.
 
 **Evidence to track:**
+
 - Did they install from docs alone, on their own machine?
 - Did they hit a blocker that required human help between install and first sustained write?
 - Did they discover Priority 2+ data types without being prompted?
@@ -69,15 +73,15 @@ Pre-install evaluators (those who have not completed install on their own machin
 
 Each of the activation risk classes from [`developer_release_targeting.md`](./developer_release_targeting.md) needs minimum resolution. The first four rows are the original risk classes; the four rows below are sub-gates promoted to first-class measurement based on the round-2 evaluator corpus.
 
-| Risk class / sub-gate | Minimum status for general release | Current status |
-|---|---|---|
-| **Cognitive cold-start** (`gate4_cognitive_coldstart`) | ≤25% of evaluators report `friction` or `blocked` on cognitive cold-start; Priority 1 data auto-stores; "what to store" guide has worked examples; agent proactively suggests next entity types | Failing — 7/16 = 44% `friction\|blocked` in current corpus |
-| **UX friction** | Error messages guide recovery; successful storage is confirmed to user; duplicate entity edge cases resolved or surfaced gracefully | Pending |
-| **Trust barrier** | SBOM or dependency audit published (if proven to be a real blocker); supply chain posture surfaced in install docs | Pending |
-| **Prior bad experience** | Onboarding surface includes integrity-first framing; at least one user-facing comparison (fuzzy memory vs. Neotoma guarantees) exists | Pending |
-| **Install-path friction** (`gate4_install_path_friction`) | Cold install on evaluator's actual machine completes with ≤2 approval prompts, in ≤5 minutes, respecting version-managed Node (Mise / asdf / nvm / volta), and emits a canonical `installed at <path>` line | Failing — 0/3 round-2 fresh-install attempts met threshold |
-| **Retrieval transparency** (`gate4_retrieval_transparency`) | The harness surfaces a visible breadcrumb of which observations the agent just used during a turn (e.g. "read N observations from Neotoma"), enabling the user to verify what informed an agent response | Pending |
-| **Privacy / local-LLM compatibility** (`gate4_privacy_local_llm_compatibility`) | A documented `/local-llm` (or equivalent) surface plus a working walkthrough for at least one local-LLM topology (Ollama / LM Studio / Alaris-class), including a Neotoma-CLI-without-MCP path for harnesses that do not speak MCP | Pending |
+| Risk class / sub-gate                                                           | Minimum status for general release                                                                                                                                                                                                 | Current status                                             |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Cognitive cold-start** (`gate4_cognitive_coldstart`)                          | ≤25% of evaluators report `friction` or `blocked` on cognitive cold-start; Priority 1 data auto-stores; "what to store" guide has worked examples; agent proactively suggests next entity types                                    | Failing — 7/16 = 44% `friction\|blocked` in current corpus |
+| **UX friction**                                                                 | Error messages guide recovery; successful storage is confirmed to user; duplicate entity edge cases resolved or surfaced gracefully                                                                                                | Pending                                                    |
+| **Trust barrier**                                                               | SBOM or dependency audit published (if proven to be a real blocker); supply chain posture surfaced in install docs                                                                                                                 | Pending                                                    |
+| **Prior bad experience**                                                        | Onboarding surface includes integrity-first framing; at least one user-facing comparison (fuzzy memory vs. Neotoma guarantees) exists                                                                                              | Pending                                                    |
+| **Install-path friction** (`gate4_install_path_friction`)                       | Cold install on evaluator's actual machine completes with ≤2 approval prompts, in ≤5 minutes, respecting version-managed Node (Mise / asdf / nvm / volta), and emits a canonical `installed at <path>` line                        | Failing — 0/3 round-2 fresh-install attempts met threshold |
+| **Retrieval transparency** (`gate4_retrieval_transparency`)                     | The harness surfaces a visible breadcrumb of which observations the agent just used during a turn (e.g. "read N observations from Neotoma"), enabling the user to verify what informed an agent response                           | Pending                                                    |
+| **Privacy / local-LLM compatibility** (`gate4_privacy_local_llm_compatibility`) | A documented `/local-llm` (or equivalent) surface plus a working walkthrough for at least one local-LLM topology (Ollama / LM Studio / Alaris-class), including a Neotoma-CLI-without-MCP path for harnesses that do not speak MCP | Pending                                                    |
 
 <!-- Evidence basis for sub-gates:
   - Cognitive cold-start promotion: 7/16 friction|blocked across N=16 corpus.
@@ -93,6 +97,7 @@ Each of the activation risk classes from [`developer_release_targeting.md`](./de
 **Threshold:** Zero data integrity failures observed across active users.
 
 **Specifically:**
+
 - No silent overwrites (append-only guarantee held)
 - No schema violations that slipped through validation
 - No provenance gaps (every stored observation traceable to source)
@@ -108,6 +113,7 @@ Each of the activation risk classes from [`developer_release_targeting.md`](./de
 **Threshold:** Enough observed usage data to build a general release roadmap from evidence, not speculation.
 
 **Questions that should be answerable from observed behavior:**
+
 - Which entity types do users actually store first, second, third?
 - What does the real (not hypothesized) expansion path look like?
 - Which MCP workflows are most common?
