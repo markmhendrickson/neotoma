@@ -66,58 +66,87 @@ label alone cannot express.
 Dependency-stability requires **all** of the following. Each is checkable, and
 each links to where its evidence lives or will live.
 
+### Status at a glance
+
+This is a v0.x preview, so most commitments are **partially** met: the
+_mechanism_ usually exists in the codebase while the _stated policy_ that turns
+it into a guarantee an adopter can rely on does not yet. The table is the honest
+current state, not a target. Status is one of:
+
+- **In place** — the commitment is satisfied today, with the cited evidence.
+- **Partial** — the underlying mechanism exists and is enforced, but a stated
+  policy, support window, or end-to-end test still has to be written before it is
+  a guarantee.
+- **Not yet** — neither the mechanism nor the policy is in place.
+
+| #   | Commitment                                 | Status   | What exists / what's missing                                                                                                                         |
+| --- | ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Schema stability + versioned evolution     | Partial  | `schema_version` and additive expansion exist (`docs/architecture/schema_expansion.md`); a single stated compatibility policy is not yet written.    |
+| 2   | Contract stability                         | Partial  | OpenAPI-first flow, legacy-payload corpus, and BC-diff gate exist; a stated **deprecation window** does not.                                         |
+| 3   | Backward compatibility + replay            | Partial  | Immutability of observations/source is enforced (`docs/subsystems/observation_architecture.md`); a stated **support window** is not yet set.         |
+| 4   | Deterministic extraction across versions   | In place | Content-derived IDs, stable ordering, deterministic reducers are enforced invariants (`docs/architecture/determinism.md`).                           |
+| 5   | Redlines demonstrated, not just stated     | Partial  | `redlines.md` is in force; MIT + open core are real and verifiable; a recurring demonstration record is still being built.                           |
+| 6   | Portability + exit proven                  | Partial  | Export (`memory-export`, `snapshots export`), bulk import, and deletion commands exist; a tested end-to-end leave-and-rebuild is not yet documented. |
+| 7   | Change governance published                | Partial  | Breaking-change discipline (release supplements, BC gate) exists; the deprecation window and decision process are not yet written down.              |
+| 8   | Supported multi-tenant deployment topology | Partial  | The topology decision aid exists (`docs/infrastructure/multi_tenant_deployment_topology.md`); a _tested_ production topology is not yet established. |
+| 9   | Security review cadence                    | In place | Pre-release security gates (diff classifier, protected-routes manifest, security review) run on sensitive releases.                                  |
+| 10  | Observability + operational docs           | In place | Logging, metrics, and privacy (no-PII) surfaces are documented (`docs/observability/`, `docs/subsystems/privacy.md`).                                |
+| 11  | Stated support posture                     | Not yet  | No support / SLA / version-support-window document exists yet.                                                                                       |
+
+The detail for each follows.
+
 ### Stability
 
-1. **Schema stability and versioned evolution.** Registered entity-type schemas
+1. **Schema stability and versioned evolution.** _(Partial.)_ Registered entity-type schemas
    evolve under a documented compatibility policy: additive changes are safe,
    breaking changes are versioned and migrated, and a schema in use does not
    change shape under a consumer without an explicit version bump and migration
    path.
-2. **Contract stability.** The HTTP/MCP/CLI contract surface is governed by the
+2. **Contract stability.** _(Partial.)_ The HTTP/MCP/CLI contract surface is governed by the
    OpenAPI-first flow and the breaking-change discipline already in place
    (breaking changes named in release supplements, legacy-payload corpus, BC
    diff gate). At this bar, the contract carries a stated deprecation policy: how
    long a deprecated field or endpoint is supported before removal.
-3. **Backward compatibility and replay.** Data written by an earlier version
+3. **Backward compatibility and replay.** _(Partial.)_ Data written by an earlier version
    remains readable and reducible by a later version within a stated support
    window. Observations and source remain immutable; reinterpretation across
    versions is additive, never destructive.
-4. **Deterministic extraction across versions.** The canonicalization that bounds
+4. **Deterministic extraction across versions.** _(In place.)_ The canonicalization that bounds
    LLM stochasticity (content-derived IDs, stable ordering, deterministic
    reducers) is stable across releases, so the same inputs continue to produce the
    same stored truth.
 
 ### Governance
 
-5. **The redline commitments hold and are demonstrated, not just stated.**
+5. **The redline commitments hold and are demonstrated, not just stated.** _(Partial.)_
    `docs/foundation/redlines.md` (R1–R16) is in force, and this bar requires
    evidence that the load-bearing ones are real: open-source core under MIT (R6),
    no hosted-only features that compromise local-first (R5), no unilateral
    capture or quiet license/policy drift (R12), no category drift into the
    vertical applications built on the substrate (R13).
-6. **Portability and exit are proven.** Export, deletion, and rebuild-from-source-
+6. **Portability and exit are proven.** _(Partial.)_ Export, deletion, and rebuild-from-source-
    of-record are documented and tested end-to-end, so an adopter can leave with
    their data at any time. Dependence on Neotoma is reversible by construction,
    not by promise.
-7. **Change governance is published.** How breaking changes are decided,
+7. **Change governance is published.** _(Partial.)_ How breaking changes are decided,
    announced, and supported — including the deprecation window above — is written
    down, so an adopter can predict the cost of staying current.
 
 ### Operability
 
-8. **A supported multi-tenant deployment story.** At least one documented,
+8. **A supported multi-tenant deployment story.** _(Partial.)_ At least one documented,
    tested production deployment topology (see
    `docs/infrastructure/multi_tenant_deployment_topology.md`) with its concurrency
    envelope, backup/restore, and isolation guarantees stated — not just
    "runs on a laptop."
-9. **Security review cadence.** The pre-release security gates run on every
+9. **Security review cadence.** _(In place.)_ The pre-release security gates run on every
    sensitive release, and this bar requires a stated ongoing cadence (review on
    sensitive change, advisory disclosure process, a documented response path for
    reported issues) rather than a one-time audit.
-10. **Observability and operational documentation.** The logging, metrics, and
+10. **Observability and operational documentation.** _(In place.)_ The logging, metrics, and
     event surfaces an operator needs to run Neotoma in production are documented,
     with no PII in any observable surface.
-11. **A stated support posture.** What support, SLAs (if any), and version-support
+11. **A stated support posture.** _(Not yet.)_ What support, SLAs (if any), and version-support
     windows an adopter can expect are written down — even if the answer for some
     tiers is "self-hosted, community-supported." The point is that the posture is
     explicit, not that it is maximal.
