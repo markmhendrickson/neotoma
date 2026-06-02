@@ -127,5 +127,6 @@ Inbound signals (email, file uploads, API responses, agent writes, ...)
 - [`core_identity.md`](core_identity.md) — what Neotoma is and is not
 - [`philosophy.md`](philosophy.md) — invariants and the substrate signaling rule (§5.9)
 - [`composability_analysis.md`](composability_analysis.md) — full composability rationale
+- [`substrate_and_applications.md`](substrate_and_applications.md) — the collaboration boundary: what is shared vs. owned when building a product on Neotoma, and why the two layers are complementary
 - [`scope_decisions.md`](scope_decisions.md) — scope boundaries (SD-002 substrate vs. strategy)
 - [`docs/architecture/architecture.md`](../architecture/architecture.md) — platform-level architecture
