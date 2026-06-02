@@ -238,6 +238,23 @@ const SnapshotFilterSchema = z.object({
   value: z.any(),
 });
 
+/**
+ * Snapshot field names are interpolated into a PostgREST column reference
+ * (`snapshot->>${field}`) in `queryEntities`. Constrain them to safe
+ * identifier characters so a crafted key cannot smuggle PostgREST operators
+ * or filter syntax into the column expression. Dotted paths (e.g.
+ * `address.city`) are permitted for nested snapshot access; every segment
+ * must be a snake_case identifier.
+ */
+const SnapshotFieldNameSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(
+    /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$/,
+    "snapshot_filters keys must be snake_case field identifiers (optionally dotted)"
+  );
+
 const EntitiesQueryRequestBaseSchema = z
   .object({
     entity_type: z.string().optional(),
@@ -277,7 +294,7 @@ const EntitiesQueryRequestBaseSchema = z
      * Filter entities by snapshot field values. Keys are field names (e.g. "status"),
      * values specify operator and comparison value.
      */
-    snapshot_filters: z.record(z.string(), SnapshotFilterSchema).optional(),
+    snapshot_filters: z.record(SnapshotFieldNameSchema, SnapshotFilterSchema).optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 

@@ -145,6 +145,9 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
       manifestPath,
       env,
     });
+    // Response content-type varies by Accept (+ ?format=json); set Vary so
+    // shared caches never serve a JSON body to an HTML client or vice versa.
+    res.set("Vary", "Accept");
     if (wantsJson(req)) {
       res.set("Cache-Control", "public, max-age=60");
       res.status(200).json(index);
@@ -172,6 +175,9 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
       env,
       manifestEntries: manifest.entries,
     });
+    // Response content-type varies by Accept (+ ?format=json); set Vary so
+    // shared caches never serve a JSON body to an HTML client or vice versa.
+    res.set("Vary", "Accept");
     if (wantsJson(req)) {
       res.set("Cache-Control", "public, max-age=60");
       if (!lookup.ok) {
