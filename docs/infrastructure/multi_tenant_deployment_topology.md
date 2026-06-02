@@ -32,9 +32,11 @@ These are the constraints any topology choice has to start from, verified agains
   but only the SQLite binding exists today — there is no Postgres adapter.
 - **WAL is enabled** (`journal_mode = WAL`), and `foreign_keys = ON`. WAL allows
   concurrent readers alongside a single writer.
-- **`busy_timeout` is not set.** With `better-sqlite3`'s default of 0, a second
-  _process_ that contends for the write lock fails immediately with `SQLITE_BUSY`
-  rather than waiting. This is the single most important fact for multi-process plans.
+- **`busy_timeout` is set** (default 5000ms, override `NEOTOMA_SQLITE_BUSY_TIMEOUT_MS`).
+  A second _process_ that contends for the write lock now waits up to the timeout
+  rather than failing immediately with `SQLITE_BUSY` — closing the sharpest edge in
+  the single-file multi-process case. (`better-sqlite3`'s own default is 0, i.e. fail
+  immediately; Neotoma overrides it on connection open.)
 - **Writes serialize within one process.** `better-sqlite3` is synchronous, so a
   single Node process is itself a single writer; there is no in-process write
   contention. The server runs as one process (no clustering/forking), so today the
@@ -45,9 +47,11 @@ These are the constraints any topology choice has to start from, verified agains
   depend on physical separation; it holds within a shared database.
 
 Net: the current single-process + single-file model is correct and safe for one
-writer. It is not, as shipped, a multi-writer or multi-process serving story —
-`busy_timeout` unset means a naive "run two processes against one file" deployment
-will throw under concurrent writes.
+writer. It is not, as shipped, a multi-writer serving story — a single Node
+process is still one writer. But with `busy_timeout` now set, an occasional second
+process against the same file (a backup, a migration) degrades to a bounded wait
+rather than an immediate `SQLITE_BUSY` throw. Sustained multi-writer concurrency is
+a Postgres-backend question, not a PRAGMA one.
 
 ## The three topologies
 
@@ -116,10 +120,11 @@ Neotoma reversible:
    instance is a standalone Neotoma that can be lifted out and self-run with zero
    migration. The cost is the fleet control plane, which is already on the roadmap.
 
-2. **Set `busy_timeout` and document the single-writer envelope now**, regardless of
-   topology, so that even an instance-per-tenant host with an occasional second process
-   (a backup job, a migration) degrades to waiting rather than throwing `SQLITE_BUSY`.
-   This is a small, unambiguous hardening with no downside.
+2. **`busy_timeout` is set** (done), so that even an instance-per-tenant host with an
+   occasional second process (a backup job, a migration) degrades to waiting rather
+   than throwing `SQLITE_BUSY`, regardless of topology. This was a small, unambiguous
+   hardening with no downside; documenting the single-writer envelope around it is the
+   remaining piece.
 
 3. **Treat Topology B (shared Postgres) as the scale path, not the starting point.**
    Build the Postgres adapter when tenant count or write concurrency actually exceeds
