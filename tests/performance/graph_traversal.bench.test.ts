@@ -185,3 +185,131 @@ describe("graph traversal scale benchmark (#1467)", () => {
     }, 120_000);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Fan-out (high-degree hub) benchmark (#1467)
+// ---------------------------------------------------------------------------
+//
+// The scale benchmark above grows the *total* table size while holding the
+// traversal neighbourhood fixed (fan-out 8, ~585 nodes at 3 hops). That answers
+// "does traversal stay flat as the graph grows?" but NOT "what happens at a
+// single high-degree node?" — the super-connector case (one entity linked to
+// thousands of others) where a single hop must materialise a very wide
+// frontier. This block isolates that dimension: one hub with `degree`
+// direct neighbours, each neighbour carrying a small secondary fan-out so the
+// 2-hop frontier is genuinely wide. Degree varies; everything else is held.
+
+const HUB_DEGREES = [100, 1_000, 5_000, 20_000];
+const SECONDARY_FANOUT = 4;
+
+interface FanoutRow {
+  hub_degree: number;
+  total_relationships: number;
+  hop1_ms: number;
+  hop2_ms: number;
+  visited_at_1: number;
+  visited_at_2: number;
+}
+
+/**
+ * Seed a single high-degree hub: `degree` direct neighbours off one hub node,
+ * each neighbour linked to `SECONDARY_FANOUT` second-level nodes. The hub's
+ * 1-hop frontier is `degree` wide; its 2-hop frontier is `degree *
+ * SECONDARY_FANOUT` wide — the wide-frontier shape the balanced tree never
+ * exercises.
+ */
+async function seedHub(prefix: string, degree: number): Promise<{ hub: string; keys: string[] }> {
+  const hub = `${prefix}_hub`;
+  const rows: Array<Record<string, unknown>> = [];
+  const keys: string[] = [];
+
+  for (let i = 0; i < degree; i++) {
+    const neighbour = `${prefix}_d${i}`;
+    const hubKey = `related_to:${hub}:${neighbour}`;
+    keys.push(hubKey);
+    rows.push({
+      relationship_key: hubKey,
+      relationship_type: "related_to",
+      source_entity_id: hub,
+      target_entity_id: neighbour,
+      schema_version: "1.0",
+      snapshot: {},
+      user_id: USER_ID,
+    });
+    for (let s = 0; s < SECONDARY_FANOUT; s++) {
+      const leaf = `${prefix}_d${i}_s${s}`;
+      const leafKey = `related_to:${neighbour}:${leaf}`;
+      keys.push(leafKey);
+      rows.push({
+        relationship_key: leafKey,
+        relationship_type: "related_to",
+        source_entity_id: neighbour,
+        target_entity_id: leaf,
+        schema_version: "1.0",
+        snapshot: {},
+        user_id: USER_ID,
+      });
+    }
+  }
+
+  const CHUNK = 1000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await db.from("relationship_snapshots").insert(rows.slice(i, i + CHUNK));
+  }
+  return { hub, keys };
+}
+
+describe("graph traversal fan-out (high-degree hub) benchmark (#1467)", () => {
+  const prefix = `fanbench_${process.hrtime.bigint()}`;
+  const results: FanoutRow[] = [];
+  const allKeys: string[] = [];
+
+  afterAll(async () => {
+    await cleanup(allKeys);
+
+    const header =
+      "| hub degree | total relationships | 1-hop (ms) | 2-hop (ms) | visited@1 | visited@2 |";
+    const sep = "|---|---|---|---|---|---|";
+    const lines = results.map(
+      (r) =>
+        `| ${r.hub_degree} | ${r.total_relationships} | ${r.hop1_ms.toFixed(1)} | ${r.hop2_ms.toFixed(
+          1
+        )} | ${r.visited_at_1} | ${r.visited_at_2} |`
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      ["", "Graph traversal fan-out benchmark (#1467)", header, sep, ...lines, ""].join("\n")
+    );
+  });
+
+  for (const degree of HUB_DEGREES) {
+    it(`traverses a hub with ${degree} direct neighbours at 1/2 hops`, async () => {
+      const degPrefix = `${prefix}_g${degree}`;
+      const { hub, keys } = await seedHub(degPrefix, degree);
+      allKeys.push(...keys);
+
+      const start1 = process.hrtime.bigint();
+      const visited1 = await traverse(hub, 1);
+      const hop1 = Number(process.hrtime.bigint() - start1) / 1_000_000;
+
+      const start2 = process.hrtime.bigint();
+      const visited2 = await traverse(hub, 2);
+      const hop2 = Number(process.hrtime.bigint() - start2) / 1_000_000;
+
+      results.push({
+        hub_degree: degree,
+        total_relationships: degree * (1 + SECONDARY_FANOUT),
+        hop1_ms: hop1,
+        hop2_ms: hop2,
+        visited_at_1: visited1,
+        visited_at_2: visited2,
+      });
+
+      // Loose sanity bounds only. The hub's 1-hop neighbourhood is exactly its
+      // degree (plus the hub itself); 2-hop adds the secondary fan-out.
+      expect(visited1).toBe(degree + 1);
+      expect(visited2).toBe(degree + 1 + degree * SECONDARY_FANOUT);
+      expect(hop1).toBeGreaterThan(0);
+    }, 180_000);
+  }
+});
