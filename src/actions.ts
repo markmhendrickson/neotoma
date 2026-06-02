@@ -9465,9 +9465,17 @@ app.get("/events/stream", async (req, res) => {
       if (Number.isFinite(cursorSeq) && hasDurableCursor(userId, cursorSeq)) {
         // Recoverable from durable storage: replay from the log, paging until
         // drained, then continue from the ring tail for anything newer.
+        // Push the subscription's column-backed predicates into SQL so a narrow
+        // subscription does not scan the whole user log. Payload-only predicates
+        // (entity_type, peer-loop) are still enforced by subscriptionMatchesEvent
+        // below — the SQL filter only narrows, never widens.
+        const durableFilter = {
+          eventTypes: sub.watch_event_types,
+          entityIds: sub.watch_entity_ids,
+        };
         let after = cursorSeq;
         for (;;) {
-          const batch = getEventsAfterSeq(userId, after, 1000);
+          const batch = getEventsAfterSeq(userId, after, 1000, durableFilter);
           if (batch.length === 0) break;
           for (const d of batch) {
             if (subscriptionMatchesEvent(sub, d.event)) writeEvent(String(d.seq), d.event);

@@ -16,18 +16,21 @@ import {
   hasDurableCursor,
   pruneEventLog,
 } from "../../src/services/subscriptions/event_log.js";
-import type { SubstrateEvent } from "../../src/events/types.js";
+import type { SubstrateEvent, SubstrateEventType } from "../../src/events/types.js";
 
 const USER = "00000000-0000-0000-0000-000000000000";
 
-function ev(entityId: string): SubstrateEvent {
+function ev(
+  entityId: string,
+  opts?: { eventType?: SubstrateEventType; entityType?: string }
+): SubstrateEvent {
   return {
     event_id: `evt_${entityId}`,
-    event_type: "entity.created",
+    event_type: opts?.eventType ?? "entity.created",
     timestamp: "2026-01-01T00:00:00.000Z",
     user_id: USER,
     entity_id: entityId,
-    entity_type: "thing",
+    entity_type: opts?.entityType ?? "thing",
     action: "created",
   };
 }
@@ -104,5 +107,70 @@ describe("durable substrate-event log (#1464 Tier 2)", () => {
     expect(seq).toBeGreaterThan(0);
     // Stored with NULL user_id; a user-scoped read does not return it.
     expect(getEventsAfterSeq(USER, 0).length).toBe(0);
+  });
+
+  // --- Advisory 1: SQL-side narrowing (#1482 review) ---
+
+  it("narrows by event_type in SQL without widening the result set", () => {
+    persistSubstrateEvent(ev("created-1", { eventType: "entity.created" }), null);
+    persistSubstrateEvent(ev("updated-1", { eventType: "entity.updated" }), null);
+    persistSubstrateEvent(ev("created-2", { eventType: "entity.created" }), null);
+
+    const filtered = getEventsAfterSeq(USER, 0, 1000, {
+      eventTypes: ["entity.updated"],
+    });
+    expect(filtered.map((d) => d.event.entity_id)).toEqual(["updated-1"]);
+
+    // No filter still returns everything (narrowing never widens or hides).
+    expect(getEventsAfterSeq(USER, 0).length).toBe(3);
+  });
+
+  it("narrows by entity_id in SQL and combines with event_type", () => {
+    persistSubstrateEvent(ev("a", { eventType: "entity.created" }), null);
+    persistSubstrateEvent(ev("b", { eventType: "entity.created" }), null);
+    persistSubstrateEvent(ev("b", { eventType: "entity.updated" }), null);
+
+    expect(
+      getEventsAfterSeq(USER, 0, 1000, { entityIds: ["b"] }).length
+    ).toBe(2);
+    const combined = getEventsAfterSeq(USER, 0, 1000, {
+      entityIds: ["b"],
+      eventTypes: ["entity.updated"],
+    });
+    expect(combined.length).toBe(1);
+    expect(combined[0]!.event.event_type).toBe("entity.updated");
+  });
+
+  it("treats an empty filter array as no restriction", () => {
+    persistSubstrateEvent(ev("x"), null);
+    persistSubstrateEvent(ev("y"), null);
+    expect(getEventsAfterSeq(USER, 0, 1000, { eventTypes: [], entityIds: [] }).length).toBe(2);
+  });
+
+  // --- Advisory 2: cursor-ahead-of-head false positive (#1482 review) ---
+
+  it("hasDurableCursor is false when the cursor is ahead of the durable head", () => {
+    const seq = persistSubstrateEvent(ev("only"), null);
+    // Exactly at head: nothing strictly newer to replay, but it is the boundary —
+    // recoverable (replay returns empty, then falls through to ring).
+    expect(hasDurableCursor(USER, seq)).toBe(true);
+    // Ahead of head (e.g. a ring-only id or future seq): NOT durably recoverable,
+    // must fall through to the ring rather than silently deliver nothing.
+    expect(hasDurableCursor(USER, seq + 1)).toBe(false);
+    expect(hasDurableCursor(USER, seq + 50)).toBe(false);
+  });
+
+  it("hasDurableCursor is false for a quiet user with no durable events", () => {
+    // No rows persisted for this user at all.
+    expect(hasDurableCursor("11111111-1111-1111-1111-111111111111", 0)).toBe(false);
+    expect(hasDurableCursor("11111111-1111-1111-1111-111111111111", 999)).toBe(false);
+  });
+
+  it("hasDurableCursor still accepts a cursor one below the oldest retained seq", () => {
+    const seq = persistSubstrateEvent(ev("first"), null);
+    // Resuming from just before the oldest event replays it gap-free.
+    expect(hasDurableCursor(USER, seq - 1)).toBe(true);
+    // Two below the oldest means an event was pruned between cursor and window.
+    expect(hasDurableCursor(USER, seq - 2)).toBe(false);
   });
 });
