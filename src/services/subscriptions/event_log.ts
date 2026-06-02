@@ -160,8 +160,6 @@ export function pruneEventLog(retentionDays = EVENT_RETENTION_DAYS, nowMs?: numb
   const db = getSqliteDb();
   const cutoffMs = (nowMs ?? Date.now()) - retentionDays * 24 * 60 * 60 * 1000;
   const cutoffIso = new Date(cutoffMs).toISOString();
-  const info = db
-    .prepare(`DELETE FROM substrate_events WHERE created_at < ?`)
-    .run(cutoffIso);
+  const info = db.prepare(`DELETE FROM substrate_events WHERE created_at < ?`).run(cutoffIso);
   return Number(info.changes ?? 0);
 }

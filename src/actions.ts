@@ -9497,7 +9497,9 @@ app.get("/events/stream", async (req, res) => {
               "current head; reconcile via a full read for gap-free delivery.",
           })}\n\n`
         );
-        for (const entry of getRingEntriesAfter(undefined, (ev) => subscriptionMatchesEvent(sub, ev))) {
+        for (const entry of getRingEntriesAfter(undefined, (ev) =>
+          subscriptionMatchesEvent(sub, ev)
+        )) {
           writeEvent(entry.id, entry.event);
         }
       }
