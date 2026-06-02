@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **407**
-- Backend and repo Vitest files: **374**
+- Total automated test files: **409**
+- Backend and repo Vitest files: **376**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -76,7 +76,7 @@ flowchart TD
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
-| Vitest subscription tests | 3 |
+| Vitest subscription tests | 4 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
@@ -84,6 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 2 |
+| Tests Performance | 1 |
 | Tests Scripts | 1 |
 
 ## Primary validation commands
@@ -522,8 +523,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
-**Files (3):**
+**Files (4):**
 - `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
+- `tests/subscriptions/sse_ring_gap_detection.test.ts`
 - `tests/subscriptions/subscription_guest_auth.test.ts`
 - `tests/subscriptions/subscription_loop_prevention.test.ts`
 
@@ -612,6 +614,14 @@ flowchart TD
 **Files (2):**
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
+
+### Tests Performance
+**Directory:** `tests/performance/`
+**Runner:** `vitest`
+**Command:** `npx vitest run tests/performance`
+**Requirements:** Basic `.env` if required by the module under test.
+**Files (1):**
+- `tests/performance/graph_traversal.bench.test.ts`
 
 ### Tests Scripts
 **Directory:** `tests/scripts/`
