@@ -2733,7 +2733,7 @@ export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" |
         path === "/list_subscriptions" ||
         path === "/get_subscription_status")) ||
     (req.method === "GET" &&
-      (/^\/entities\/[^/]+(?:\/(?:observations|relationships))?$/.test(path) ||
+      (/^\/entities\/[^/]+(?:\/(?:observations|relationships|html))?$/.test(path) ||
         path === "/events/stream"))
   ) {
     return true;
@@ -3654,6 +3654,68 @@ app.get("/entities/:id/markdown", async (req, res) => {
     }
     logError("APIError:entity_markdown", req, error);
     const message = error instanceof Error ? error.message : "Failed to render entity markdown";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// GET /entities/:id/html - Render a `rendered_page` entity as a standalone HTML
+// page. Accepts ?access_token=<guest_token> for unauthenticated (guest) reads;
+// authenticated users may omit it. 404s for any entity_type other than
+// `rendered_page` so the publish surface stays explicit.
+app.get("/entities/:id/html", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+
+    if (principal.kind === "guest") {
+      await resolveGuestScopedEntityAccess(principal, entityId);
+    } else {
+      const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      const { data: entity, error: entityError } = await db
+        .from("entities")
+        .select("id, user_id, entity_type")
+        .eq("id", entityId)
+        .eq("user_id", userId)
+        .single();
+      if (entityError || !entity) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+    }
+
+    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+    const current = await getEntityWithProvenance(entityId);
+    if (!current) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+    if (current.entity_type !== "rendered_page") {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity is not a rendered_page");
+    }
+
+    const snap = (current.snapshot ?? {}) as Record<string, unknown>;
+    const title = typeof snap.title === "string" ? snap.title : "Untitled";
+    const htmlBody = typeof snap.html_body === "string" ? snap.html_body : "";
+    const metaDescription =
+      typeof snap.meta_description === "string" ? snap.meta_description : undefined;
+    const customCss = typeof snap.custom_css === "string" ? snap.custom_css : undefined;
+
+    const { renderRenderedPageHtml } = await import("./services/rendered_page/html_template.js");
+    const html = renderRenderedPageHtml({ title, htmlBody, metaDescription, customCss });
+
+    const etag = current.last_observation_at
+      ? `W/"${Buffer.from(current.last_observation_at).toString("base64")}"`
+      : undefined;
+    if (etag) res.setHeader("ETag", etag);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(html);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
+        hint: "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. Create a grant via Inspector → Agents → Grants.",
+        sandbox: { available: false },
+      });
+    }
+    logError("APIError:entity_html", req, error);
+    const message = error instanceof Error ? error.message : "Failed to render entity HTML";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
