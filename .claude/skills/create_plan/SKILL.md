@@ -1,12 +1,10 @@
 ---
-name: create-plan
-description: Create a new plan as a Neotoma entity, optionally linked to objectives, releases, or other plans.
-triggers:
-  - create plan
-  - new plan
-  - create a plan
-  - /create-plan
+name: create_plan
+description: Create New Plan
 ---
+
+<!-- Source: .cursor/skills/create-plan/SKILL.md -->
+
 
 # Create New Plan
 
@@ -14,7 +12,7 @@ Create a new plan entity in Neotoma with title = {{input:title}}.
 
 Follow the complete workflow in `foundation/development/plan_workflow.md`. Configuration is read from `foundation-config.yaml`.
 
-This workflow can also be triggered automatically via `.cursor/rules/plan_detection.mdc` when you mention planning-related patterns in natural language (e.g., "create plan", "new plan"). Both paths execute the same workflow.
+This workflow can also be triggered automatically via `.claude/rules/plan_detection.mdc` when you mention planning-related patterns in natural language (e.g., "create plan", "new plan"). Both paths execute the same workflow.
 
 ## Workflow Overview
 

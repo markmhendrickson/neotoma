@@ -65,3 +65,35 @@ describe("Entity query schema validation", () => {
     }
   });
 });
+
+describe("snapshot_filters field-name guard", () => {
+  it("accepts snake_case field names", () => {
+    const parsed = EntitiesQueryRequestSchema.safeParse({
+      snapshot_filters: { status: { op: "eq", value: "open" } },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("accepts dotted nested field paths", () => {
+    const parsed = EntitiesQueryRequestSchema.safeParse({
+      snapshot_filters: { "address.city": { op: "eq", value: "Paris" } },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects field names carrying PostgREST filter syntax", () => {
+    const parsed = EntitiesQueryRequestSchema.safeParse({
+      snapshot_filters: { "id&or=(role.eq.admin)": { op: "eq", value: "x" } },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects field names with operator or delimiter characters", () => {
+    for (const bad of ["a->>b", "a,b", "a)b", "a b", "a;b", ""]) {
+      const parsed = EntitiesQueryRequestSchema.safeParse({
+        snapshot_filters: { [bad]: { op: "eq", value: "x" } },
+      });
+      expect(parsed.success, `expected "${bad}" to be rejected`).toBe(false);
+    }
+  });
+});

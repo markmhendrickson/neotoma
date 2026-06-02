@@ -74,6 +74,8 @@ export interface RootLandingContext {
   sandboxPacks: SandboxPack[];
   sandboxDefaultPackId: string;
   activeSessionBearer: string | null;
+  /** True when sandbox is in hosted_sandbox topology; suppresses inspector link and harness section. */
+  hostedSandbox?: boolean;
 }
 
 function resolveStdioMcpScriptPath(): string | null {
@@ -178,7 +180,7 @@ function resolveBaseUrl(req: express.Request): string {
   return `${proto}://${host}`.replace(/\/+$/, "");
 }
 
-function readPackageVersion(): string {
+export function readPackageVersion(): string {
   try {
     const candidates = [
       path.resolve(process.cwd(), "package.json"),
@@ -199,7 +201,7 @@ function readPackageVersion(): string {
   return "0.0.0";
 }
 
-function readGitSha(env: NodeJS.ProcessEnv = process.env): string | null {
+export function readGitSha(env: NodeJS.ProcessEnv = process.env): string | null {
   const candidates = [env.NEOTOMA_GIT_SHA, env.GIT_SHA, env.SOURCE_COMMIT, env.FLY_MACHINE_VERSION];
   for (const value of candidates) {
     if (value && value.trim().length) return value.trim();
@@ -211,7 +213,7 @@ function defaultPublicDocsUrl(env: NodeJS.ProcessEnv = process.env): string {
   return (env.NEOTOMA_PUBLIC_DOCS_URL || "https://neotoma.io").trim().replace(/\/+$/, "");
 }
 
-function buildEndpointsMap(mode: LandingMode): Record<string, string> {
+export function buildEndpointsMap(mode: LandingMode): Record<string, string> {
   const base: Record<string, string> = {
     mcp: "/mcp",
     server_info: "/server-info",
@@ -278,6 +280,18 @@ export function buildLandingContext(
     }
   }
 
+  // Determine whether this sandbox instance is in hosted_sandbox topology.
+  // We use the same inputs as the boot-time resolver but only need the mode verdict.
+  // Avoid importing the full resolver (needs bind-topology info not available here);
+  // instead replicate the two signal checks that produce "hosted_sandbox":
+  //   1. NEOTOMA_FORCE_MODE=hosted_sandbox (dev override)
+  //   2. NEOTOMA_SANDBOX_MODE=1 without a loopback-only bind (i.e. the real hosted case)
+  // For landing purposes, either signal is enough — both mean "public internet sandbox".
+  const forceMode = (env.NEOTOMA_FORCE_MODE ?? "").trim();
+  const hostedSandbox =
+    mode === "sandbox" &&
+    (forceMode === "hosted_sandbox" || (isSandboxMode(env) && forceMode !== "local_sandbox"));
+
   return {
     mode,
     configEnvironment,
@@ -296,6 +310,7 @@ export function buildLandingContext(
     sandboxPacks: [...PACK_REGISTRY],
     sandboxDefaultPackId: DEFAULT_SANDBOX_PACK_ID,
     activeSessionBearer,
+    hostedSandbox,
   };
 }
 

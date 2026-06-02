@@ -6,17 +6,17 @@ import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 
+export interface SnapshotFilter {
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  value?: unknown;
+}
+
 interface QueryEntitiesParams {
   userId: string;
   entityType?: string;
   includeMerged?: boolean;
   includeSnapshots?: boolean;
-  sortBy?:
-    | "entity_id"
-    | "canonical_name"
-    | "observation_count"
-    | "last_observation_at"
-    | "submitted_at";
+  sortBy?: string;
   sortOrder?: "asc" | "desc";
   published?: boolean;
   publishedAfter?: string;
@@ -34,6 +34,7 @@ interface QueryEntitiesParams {
     | "heuristic_name"
     | "heuristic_fallback"
     | "target_id";
+  snapshotFilters?: Record<string, SnapshotFilter>;
   /**
    * When true, omit chat bookkeeping types (`conversation`, `conversation_message`,
    * etc.) from results. Default false — bookkeeping is included unless the caller
@@ -138,6 +139,27 @@ export function buildEntityTypeFilterTokens(
     }
   }
   return filters;
+}
+
+/**
+ * Multi-word queries often include registered entity type names in titles
+ * (e.g. "Schema Packs Strategy" should match a plan, not filter to strategy rows).
+ * Drop type-filter tokens when removing them still leaves two or more text tokens.
+ */
+export function refineTypeFilterTokens(
+  searchTokens: string[],
+  typeFilterTokens: Set<string>
+): Set<string> {
+  if (typeFilterTokens.size === 0 || searchTokens.length <= 1) {
+    return typeFilterTokens;
+  }
+  const textTokens = searchTokens.filter(
+    (token) => !tokenIsEntityTypeFilter(token, typeFilterTokens)
+  );
+  if (textTokens.length >= 2) {
+    return new Set();
+  }
+  return typeFilterTokens;
 }
 
 /** When the query names an entity type, that token filters by type instead of snapshot text. */
@@ -314,7 +336,10 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   }
 
   const registryTypes = await loadKnownEntityTypes(userId, []);
-  const typeFilterTokens = buildEntityTypeFilterTokens(searchTokens, registryTypes);
+  const typeFilterTokens = refineTypeFilterTokens(
+    searchTokens,
+    buildEntityTypeFilterTokens(searchTokens, registryTypes)
+  );
 
   let entityQuery = db
     .from("entities")
@@ -625,6 +650,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     updatedSince,
     createdSince,
     identityBasis,
+    snapshotFilters,
     excludeBookkeeping = false,
   } = params;
 
@@ -635,7 +661,10 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     const trimmedSearch = search.trim();
     const searchTokens = normalizeSearchText(trimmedSearch).split(" ").filter(Boolean);
     const registryTypes = await loadKnownEntityTypes(userId, []);
-    const typeFilterTokens = buildEntityTypeFilterTokens(searchTokens, registryTypes);
+    const typeFilterTokens = refineTypeFilterTokens(
+      searchTokens,
+      buildEntityTypeFilterTokens(searchTokens, registryTypes)
+    );
     // Bookkeeping exclusion is caller-controlled (per docs/foundation/product_principles.md
     // §10.2 Explicit Over Implicit). If the caller explicitly filters to a bookkeeping
     // entity_type, the explicit type filter wins and excludeBookkeeping is ignored.
@@ -744,12 +773,13 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       updatedSince,
       createdSince,
       identityBasis,
+      snapshotFilters,
     });
 
     // R3: when filtering by identity_basis, the visible count must reflect
     // the same pre-filter, so derive the total from the non-paginated result
     // set rather than counting all entities.
-    if (identityBasis) {
+    if (identityBasis || snapshotFilters) {
       const allMatches = await queryEntities({
         userId,
         entityType,
@@ -765,6 +795,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         updatedSince,
         createdSince,
         identityBasis,
+        snapshotFilters,
       });
       total = allMatches.length;
     } else {

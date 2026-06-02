@@ -75,17 +75,18 @@ function resolveProjectRootFromRuntime(): string {
 }
 
 const projectRoot = resolveProjectRootFromRuntime();
-hydrateDataDirFromUserEnvConfig();
 
-// Load environment-specific .env files
+// Load project-local .env first so it takes precedence over ~/.config/neotoma/.env.
+// Use override:true so a worktree .env can pin NEOTOMA_DATA_DIR to a branch-specific path.
 if (env === "production") {
-  // Try .env.production first, then fallback to .env
-  dotenv.config({ path: join(projectRoot, ".env.production"), override: false });
-  dotenv.config({ path: join(projectRoot, ".env"), override: false }); // Load .env as fallback
+  dotenv.config({ path: join(projectRoot, ".env.production"), override: true });
+  dotenv.config({ path: join(projectRoot, ".env"), override: false }); // .env as fallback for prod
 } else {
-  // Development/test: load .env
-  dotenv.config({ path: join(projectRoot, ".env"), override: false });
+  dotenv.config({ path: join(projectRoot, ".env"), override: true });
 }
+
+// Hydrate NEOTOMA_DATA_DIR from ~/.config/neotoma/.env only when no project .env set it.
+hydrateDataDirFromUserEnvConfig();
 
 function getOpenAIConfig() {
   // Use OPENAI_API_KEY (set by 1Password sync based on ENVIRONMENT variable)

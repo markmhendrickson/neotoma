@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **404**
-- Backend and repo Vitest files: **371**
+- Total automated test files: **406**
+- Backend and repo Vitest files: **373**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,10 +72,10 @@ flowchart TD
 | Vitest unit tests | 99 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 47 |
-| Vitest integration tests | 111 |
+| Vitest integration tests | 112 |
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 12 |
-| Vitest security tests | 2 |
+| Vitest security tests | 3 |
 | Vitest subscription tests | 3 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -307,7 +307,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (111):**
+**Files (112):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -348,6 +348,7 @@ flowchart TD
 - `tests/integration/idempotency_collision.test.ts`
 - `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
+- `tests/integration/inspector_content_negotiation.test.ts`
 - `tests/integration/interpretation_fragment_ordering.test.ts`
 - `tests/integration/interpretation_no_schema_fallback.test.ts`
 - `tests/integration/interpretation_store.test.ts`
@@ -510,8 +511,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (2):**
+**Files (3):**
 - `tests/security/auth_topology_matrix.test.ts`
+- `tests/security/sandbox_mode_resolver.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
 
 ### Vitest subscription tests

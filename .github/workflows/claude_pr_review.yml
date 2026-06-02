@@ -93,6 +93,25 @@ jobs:
             echo "substantial=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Comment on skipped review
+        if: steps.diff_check.outputs.substantial == 'false' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+
+          FILES=$(gh pr view $PR_NUMBER --repo $REPO --json files --jq '.files | length')
+          ADDITIONS=$(gh pr view $PR_NUMBER --repo $REPO --json additions --jq '.additions')
+          DELETIONS=$(gh pr view $PR_NUMBER --repo $REPO --json deletions --jq '.deletions')
+          LINES=$((ADDITIONS + DELETIONS))
+
+          gh pr comment $PR_NUMBER --repo $REPO --body "**Claude review skipped** — diff is below the automatic-review threshold (${FILES} file(s), ${LINES} line(s) changed).
+
+Thresholds that trigger a review: >5 files, >150 lines, any \`packages/\` change, any auth-related path, or a simultaneous \`src/\` + \`openapi.yaml\` change.
+
+To request a review anyway, comment \`@claude review\` on this PR."
+
       - uses: anthropics/claude-code-action@beta
         if: steps.diff_check.outputs.substantial == 'true'
         with:

@@ -1,0 +1,404 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+ * Inspector design tokens
+ *
+ * Mirrors the canonical warm-cream palette declared in
+ * `frontend/src/index.css` and `docs/ui/design_system/color_palette.md`.
+ * Inspector ships fewer token families (no soft-callout, surface, or code
+ * accents at this time) but the values it does declare must match the
+ * canonical registry exactly. The design-system validator
+ * (`scripts/validate_design_system.js`) enforces parity via the
+ * `palette_divergences` registry in
+ * `docs/ui/design_system/dependencies.yaml`.
+ *
+ * Adding a new token? Declare it in `frontend/src/index.css` first, then
+ * mirror the value here and update the canonical YAML block in
+ * `color_palette.md`.
+ * ------------------------------------------------------------------------- */
+
+@layer base {
+  :root {
+    /* Surfaces — warm cream; higher lightness = more elevated (overlay), lower = more inset.
+       Depth ladder: sidebar (darkest) → body → cards / floating UI (lightest). */
+    --background: 38 14% 98%;             /* Main body (header + content canvas) */
+    --foreground: 28 22% 18%;             /* Warm dark brown */
+    --card: 38 10% 100%;                  /* Elevated body children (panels, dialogs) */
+    --card-foreground: 28 22% 18%;
+    --popover: 38 8% 100%;               /* Floating overlays (menus, tooltips) */
+    --popover-foreground: 28 22% 18%;
+
+    /* Action — primary red */
+    --primary: 0 85% 51%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary / muted / accent — warm tan */
+    --secondary: 38 12% 99%;              /* Subtle wells on the body (between body and card) */
+    --secondary-foreground: 28 22% 18%;
+    --muted: 38 12% 99%;                 /* Table stripes, recessed blocks on the body */
+    --muted-foreground: 28 14% 44%;
+    --skeleton: 32 14% 84%;              /* Loading placeholders — darker than muted for contrast */
+    --inset: 32 12% 90%;                 /* Recessed bands (table header, loading wells) */
+    --accent: 35 12% 94%;                 /* Hover / pressed troughs (deepest inset) */
+    --accent-foreground: 28 22% 18%;
+
+    /* Status */
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders / inputs / focus ring */
+    --border: 32 10% 93%;
+    --input: 32 10% 93%;
+    --ring: 0 85% 51%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar — inspector uses `--sidebar` (singular) where the marketing
+       site uses `--sidebar-background`. Tailwind config maps both to
+       `bg-sidebar`. Values match the canonical sidebar registry. */
+    --sidebar: 35 12% 95%;               /* Darkest inset — nav rail */
+    --sidebar-foreground: 28 26% 14%;     /* Slightly darker than body text for contrast on the rail */
+    --sidebar-accent: 35 10% 92%;
+    --sidebar-accent-foreground: 28 26% 14%;
+    --sidebar-border: 32 10% 93%;
+  }
+
+  .dark {
+    /* Surfaces — deep slate; sidebar darkest → body → cards / popover lightest */
+    --background: 222 36% 16%;
+    --foreground: 210 36% 97%;
+    --card: 217 24% 22%;
+    --card-foreground: 210 36% 97%;
+    --popover: 217 22% 26%;
+    --popover-foreground: 210 40% 95%;
+
+    /* Action — brighter blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary / muted / accent */
+    --secondary: 217 24% 29%;
+    --secondary-foreground: 210 36% 97%;
+    --muted: 217 24% 29%;
+    --muted-foreground: 215 16% 70%;
+    --skeleton: 217 26% 36%;
+    --inset: 217 24% 24%;
+    --accent: 217 24% 29%;
+    --accent-foreground: 210 36% 97%;
+
+    /* Status */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders / inputs / focus ring */
+    --border: 217 22% 30%;
+    --input: 217 22% 30%;
+    --ring: 217 91% 60%;
+
+    /* Sidebar */
+    --sidebar: 222 38% 13%;
+    --sidebar-foreground: 210 32% 90%;
+    --sidebar-accent: 217 24% 18%;
+    --sidebar-accent-foreground: 210 32% 90%;
+    --sidebar-border: 217 22% 30%;
+  }
+}
+
+@layer base {
+  /*
+   * Compact UI scale — match frontend design system (13px body at 16px root).
+   * Slightly bumped from pure Claude Code density: 0.875rem ≈ 14px body text.
+   * Tailwind `rem` utilities still derive from 16px root.
+   */
+  html {
+    font-size: 16px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family:
+      Inter,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: "JetBrains Mono", "Fira Code", "Roboto Mono", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+}
+
+@layer base {
+  /* Doc/marketing palette — mirrors frontend/src/index.css for pattern specimens */
+  :root {
+    --doc-background: 38 22% 98%;
+    --doc-foreground: 28 22% 18%;
+    --doc-secondary: 28 14% 44%;
+    --doc-border: 32 18% 88%;
+    --doc-code-bg: 35 18% 92%;
+    --doc-primary: 12 48% 38%;
+    --doc-primary-hover: 12 48% 30%;
+    --doc-primary-foreground: 0 0% 100%;
+    --doc-radius-minimal: 2px;
+    --doc-radius-default: 4px;
+  }
+
+  .dark {
+    --doc-background: 222 47% 11%;
+    --doc-foreground: 210 40% 98%;
+    --doc-secondary: 215 16% 47%;
+    --doc-border: 217 33% 24%;
+    --doc-code-bg: 217 33% 17%;
+    --doc-primary: 217 91% 60%;
+    --doc-primary-hover: 217 91% 52%;
+    --doc-primary-foreground: 0 0% 100%;
+  }
+}
+
+/* Shared table scroll UX (marketing/docs tables) */
+.table-scroll-outer {
+  @apply relative;
+}
+.table-scroll-outer .table-scroll-viewport {
+  @apply min-w-0 max-w-full;
+}
+.table-scroll-outer.table-scrollable .table-scroll-inner {
+  display: flex;
+  flex-direction: row;
+  width: max-content;
+  min-width: 100%;
+}
+.table-scroll-outer.table-scrollable .table-scroll-inner > table {
+  flex: 0 0 auto;
+}
+.table-scroll-outer.table-scrollable .table-scroll-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2.5rem;
+  pointer-events: none;
+}
+.table-scroll-outer.table-scrollable .table-scroll-hint {
+  @apply flex items-center gap-1 rounded-md bg-background px-2 py-1.5 text-caption text-muted-foreground;
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  white-space: nowrap;
+}
+
+@layer components {
+  .code-block-shell {
+    backdrop-filter: saturate(115%);
+  }
+
+  .code-block-palette {
+    border-width: 1px;
+    border-color: color-mix(in srgb, hsl(var(--primary)) 35%, hsl(var(--doc-border)) 65%);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--background)) 88%),
+      color-mix(in srgb, hsl(var(--doc-code-bg)) 84%, hsl(var(--background)) 16%)
+    );
+    color: color-mix(in srgb, hsl(var(--doc-foreground)) 94%, hsl(var(--foreground)) 6%);
+    box-shadow:
+      0 1px 3px color-mix(in srgb, hsl(var(--primary)) 15%, transparent),
+      inset 0 1px 0 color-mix(in srgb, hsl(var(--card)) 42%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, hsl(var(--border)) 65%, transparent);
+  }
+
+  .mdx-site-page-content {
+    @apply text-body leading-7 text-foreground;
+  }
+  .mdx-site-page-content h2 {
+    @apply mb-3 mt-8 text-body-lg font-medium tracking-tight text-foreground;
+  }
+  .mdx-site-page-content h3 {
+    @apply mb-2 mt-4 text-body-lg font-medium text-foreground;
+  }
+  .mdx-site-page-content p {
+    @apply mb-4;
+  }
+  .mdx-site-page-content li {
+    @apply mb-1;
+  }
+  .mdx-site-page-content ul,
+  .mdx-site-page-content ol {
+    @apply text-body leading-7 text-foreground;
+  }
+  .mdx-site-page-content pre {
+    @apply code-block-palette mb-6 overflow-x-auto whitespace-pre-wrap break-words rounded-lg border p-4 font-mono text-base;
+  }
+
+  .dark .code-block-palette {
+    border-color: color-mix(in srgb, hsl(var(--primary)) 40%, hsl(var(--doc-border)) 60%);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, hsl(var(--primary)) 25%, hsl(var(--doc-code-bg)) 75%),
+      color-mix(in srgb, hsl(var(--doc-code-bg)) 90%, black 10%)
+    );
+    color: color-mix(in srgb, hsl(var(--doc-foreground)) 93%, hsl(var(--foreground)) 7%);
+    box-shadow:
+      0 1px 3px color-mix(in srgb, hsl(var(--primary)) 20%, transparent),
+      inset 0 1px 0 color-mix(in srgb, hsl(var(--foreground)) 5%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, hsl(var(--border)) 55%, transparent);
+  }
+
+  .doc-inline-code {
+    @apply rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-ui text-foreground;
+  }
+
+  .blockquote-callout {
+    @apply border-l-2 border-primary/45 py-1 pl-4 text-ui leading-6 text-muted-foreground;
+  }
+
+  .blockquote-muted {
+    @apply mb-0 border-l-2 border-muted-foreground/30 pl-4 text-body italic leading-7 text-muted-foreground;
+  }
+
+  .translation-banner {
+    @apply rounded-md border border-border bg-muted/40 px-3 py-2 text-ui leading-5 text-muted-foreground;
+  }
+
+  .post-prose-cta {
+    @apply inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-2 text-ui font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-muted;
+  }
+
+  .doc-step-rail {
+    @apply space-y-3 border-l-2 border-border pl-4;
+  }
+
+  .doc-tip-panel {
+    @apply rounded-lg border border-primary/20 bg-primary/5 p-4;
+  }
+
+  .doc-step-number {
+    @apply mr-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui font-medium text-primary;
+  }
+
+  .doc-section-kicker {
+    @apply text-caption font-medium uppercase tracking-wide text-primary;
+  }
+
+  .doc-arrow-accent {
+    @apply shrink-0 text-primary;
+  }
+
+  .doc-plain-table {
+    @apply w-full text-ui;
+  }
+
+  .doc-plain-table thead tr {
+    @apply border-b border-border text-left;
+  }
+
+  .doc-plain-table th {
+    @apply pb-2 font-medium text-foreground;
+  }
+
+  .doc-plain-table tbody tr {
+    @apply border-b border-border;
+  }
+
+  .doc-plain-table td {
+    @apply py-2 text-foreground;
+  }
+
+  .snippet-pill-label {
+    @apply inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-primary/30 bg-primary/15 px-2.5 py-1 text-caption font-semibold uppercase tracking-widest text-foreground;
+  }
+
+  .snippet-pill-dot {
+    @apply h-2 w-2 shrink-0 rounded-full bg-primary/80;
+  }
+
+  .integration-pill-label {
+    @apply inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-border bg-muted px-2.5 py-1 text-caption font-semibold uppercase tracking-widest text-foreground;
+  }
+
+  .integration-pill-dot {
+    @apply h-2 w-2 shrink-0 rounded-full bg-muted-foreground/60;
+  }
+
+  .env-chip {
+    @apply inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-fine font-medium;
+  }
+
+  .env-chip-sandbox {
+    @apply env-chip border-secondary/30 bg-secondary/10 text-secondary;
+  }
+
+  .env-chip-preview {
+    @apply env-chip border-primary/30 bg-primary/10 text-foreground;
+  }
+
+  .env-chip-destructive {
+    @apply env-chip border-destructive/30 bg-destructive/10 text-destructive;
+  }
+
+  .gradient-hero-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.14), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.1), transparent 35%);
+  }
+  .dark .gradient-hero-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.2), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.14), transparent 35%);
+  }
+
+  .gradient-section-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.1), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.08), transparent 35%);
+  }
+  .dark .gradient-section-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.14), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.12), transparent 35%);
+  }
+
+  .toc-panel {
+    border-width: 1px;
+    border-color: hsl(var(--border));
+    background: linear-gradient(to bottom, hsl(var(--card) / 0.95), hsl(var(--muted) / 0.9));
+    box-shadow: none;
+  }
+
+  .dark .toc-panel {
+    border-color: hsl(var(--border));
+    background: linear-gradient(to bottom, hsl(var(--card) / 0.92), hsl(var(--muted) / 0.88));
+    box-shadow: none;
+  }
+
+  .post-prose a:not([data-post-prose-cta]):not([class*="no-underline"]) {
+    @apply text-foreground underline underline-offset-2;
+  }
+  .post-prose a:not([data-post-prose-cta]):not([class*="no-underline"]):hover {
+    @apply text-foreground no-underline;
+  }
+  .post-prose section[data-integration-section="getting-started"] a {
+    @apply no-underline;
+  }
+  .post-prose section[data-integration-section="getting-started"] a:hover {
+    @apply no-underline;
+  }
+
+  .pattern-specimen-note {
+    @apply text-caption text-muted-foreground;
+  }
+
+  .pattern-specimen-note code {
+    @apply font-mono text-ui;
+  }
+}
