@@ -16,6 +16,9 @@ import {
   hasDurableCursor,
   pruneEventLog,
 } from "../../src/services/subscriptions/event_log.js";
+import { clearCachedDataKey } from "../../src/repositories/sqlite/local_db_adapter.js";
+import { isEncryptedColumn } from "../../src/crypto/column_encryption.js";
+import { config } from "../../src/config.js";
 import type { SubstrateEvent, SubstrateEventType } from "../../src/events/types.js";
 
 const USER = "00000000-0000-0000-0000-000000000000";
@@ -130,9 +133,7 @@ describe("durable substrate-event log (#1464 Tier 2)", () => {
     persistSubstrateEvent(ev("b", { eventType: "entity.created" }), null);
     persistSubstrateEvent(ev("b", { eventType: "entity.updated" }), null);
 
-    expect(
-      getEventsAfterSeq(USER, 0, 1000, { entityIds: ["b"] }).length
-    ).toBe(2);
+    expect(getEventsAfterSeq(USER, 0, 1000, { entityIds: ["b"] }).length).toBe(2);
     const combined = getEventsAfterSeq(USER, 0, 1000, {
       entityIds: ["b"],
       eventTypes: ["entity.updated"],
@@ -172,5 +173,81 @@ describe("durable substrate-event log (#1464 Tier 2)", () => {
     expect(hasDurableCursor(USER, seq - 1)).toBe(true);
     // Two below the oldest means an event was pruned between cursor and window.
     expect(hasDurableCursor(USER, seq - 2)).toBe(false);
+  });
+});
+
+// --- Encryption at rest for the durable-log payload ---
+
+describe("durable substrate-event log: payload encryption at rest", () => {
+  // A 24-word BIP39 mnemonic (test-only) to drive the data key.
+  const TEST_MNEMONIC =
+    "test test test test test test test test test test test test " +
+    "test test test test test test test test test test test junk";
+
+  beforeEach(() => {
+    getSqliteDb().prepare("DELETE FROM substrate_events").run();
+  });
+  afterEach(() => {
+    getSqliteDb().prepare("DELETE FROM substrate_events").run();
+    config.encryption.enabled = false;
+    config.encryption.mnemonic = "";
+    clearCachedDataKey();
+  });
+
+  function enableEncryption(): void {
+    config.encryption.enabled = true;
+    config.encryption.mnemonic = TEST_MNEMONIC;
+    config.encryption.mnemonicPassphrase = "";
+    config.encryption.keyFilePath = "";
+    clearCachedDataKey();
+  }
+
+  function rawPayload(seq: number): string {
+    const row = getSqliteDb()
+      .prepare("SELECT payload FROM substrate_events WHERE seq = ?")
+      .get(seq) as { payload: string } | undefined;
+    return row?.payload ?? "";
+  }
+
+  it("writes the payload as ciphertext on disk when encryption is enabled", () => {
+    enableEncryption();
+    const seq = persistSubstrateEvent(ev("secret-entity"), null);
+
+    const stored = rawPayload(seq);
+    // Stored value is the iv:authTag:ciphertext format, not the plaintext JSON.
+    expect(isEncryptedColumn(stored)).toBe(true);
+    expect(stored).not.toContain("secret-entity");
+    expect(stored).not.toContain("entity.created");
+  });
+
+  it("round-trips an encrypted payload back to the original event on read", () => {
+    enableEncryption();
+    const seq = persistSubstrateEvent(ev("rt"), null);
+
+    const recovered = getEventsAfterSeq(USER, seq - 1);
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.event.entity_id).toBe("rt");
+    expect(recovered[0]!.event.event_type).toBe("entity.created");
+  });
+
+  it("reads legacy plaintext rows written before encryption was enabled", () => {
+    // Write a plaintext row (encryption disabled), then enable encryption.
+    const plainSeq = persistSubstrateEvent(ev("legacy"), null);
+    expect(isEncryptedColumn(rawPayload(plainSeq))).toBe(false);
+
+    enableEncryption();
+    const encSeq = persistSubstrateEvent(ev("modern"), null);
+    expect(isEncryptedColumn(rawPayload(encSeq))).toBe(true);
+
+    // Both the legacy-plaintext and the newly-encrypted row read back correctly.
+    const recovered = getEventsAfterSeq(USER, plainSeq - 1);
+    expect(recovered.map((d) => d.event.entity_id)).toEqual(["legacy", "modern"]);
+  });
+
+  it("still writes plaintext when encryption is disabled (no key)", () => {
+    const seq = persistSubstrateEvent(ev("plain"), null);
+    expect(isEncryptedColumn(rawPayload(seq))).toBe(false);
+    const recovered = getEventsAfterSeq(USER, seq - 1);
+    expect(recovered[0]!.event.entity_id).toBe("plain");
   });
 });

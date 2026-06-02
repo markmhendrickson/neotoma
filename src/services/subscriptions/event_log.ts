@@ -13,8 +13,38 @@
  */
 
 import { getSqliteDb } from "../../repositories/sqlite/sqlite_client.js";
+import { getDataKey } from "../../repositories/sqlite/local_db_adapter.js";
+import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { logger } from "../../utils/logger.js";
 import type { SubstrateEvent } from "../../events/types.js";
+
+/**
+ * Encryption-at-rest for the durable-event-log payload.
+ *
+ * The `substrate_events.payload` column persists the full event JSON to disk.
+ * Unlike the entity tables, this table is written through the raw SQLite client
+ * (not the column-encrypting `local_db_adapter`), so it would otherwise be
+ * plaintext even when encryption is enabled. These helpers close that gap by
+ * encrypting the payload with the same AES-256-GCM data key when encryption is
+ * configured, and transparently reading both encrypted and legacy-plaintext
+ * rows so enabling encryption never breaks resume of pre-existing events.
+ */
+function maybeEncryptPayload(plaintext: string): string {
+  const key = getDataKey();
+  return key ? encryptColumn(plaintext, key) : plaintext;
+}
+
+function maybeDecryptPayload(stored: string): string {
+  if (!isEncryptedColumn(stored)) {
+    return stored; // legacy plaintext row, or encryption disabled at write time
+  }
+  const key = getDataKey();
+  if (!key) {
+    // Row is encrypted but no key is configured now — cannot recover it.
+    throw new Error("durable event payload is encrypted but no data key is configured");
+  }
+  return decryptColumn(stored, key);
+}
 
 export const EVENT_RETENTION_DAYS = Math.max(
   1,
@@ -62,7 +92,7 @@ export function persistSubstrateEvent(
       event.event_type,
       event.user_id ?? null,
       event.entity_id ?? null,
-      JSON.stringify(event),
+      maybeEncryptPayload(JSON.stringify(event)),
       createdAt
     );
   return Number(info.lastInsertRowid);
@@ -113,10 +143,13 @@ export function getEventsAfterSeq(
   const out: DurableEvent[] = [];
   for (const row of rows) {
     try {
-      out.push({ seq: row.seq, event: JSON.parse(row.payload) as SubstrateEvent });
+      out.push({
+        seq: row.seq,
+        event: JSON.parse(maybeDecryptPayload(row.payload)) as SubstrateEvent,
+      });
     } catch {
-      // Skip a corrupt payload rather than fail the whole resume.
-      logger.warn("[event_log] skipping unparseable durable event", { seq: row.seq });
+      // Skip a corrupt or undecryptable payload rather than fail the whole resume.
+      logger.warn("[event_log] skipping unreadable durable event", { seq: row.seq });
     }
   }
   return out;
