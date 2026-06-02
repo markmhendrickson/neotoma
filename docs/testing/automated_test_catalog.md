@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **409**
-- Backend and repo Vitest files: **376**
+- Total automated test files: **410**
+- Backend and repo Vitest files: **377**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -76,7 +76,7 @@ flowchart TD
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
-| Vitest subscription tests | 4 |
+| Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
@@ -523,7 +523,8 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
-**Files (4):**
+**Files (5):**
+- `tests/subscriptions/durable_event_log.test.ts`
 - `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
 - `tests/subscriptions/sse_ring_gap_detection.test.ts`
 - `tests/subscriptions/subscription_guest_auth.test.ts`
