@@ -3,6 +3,31 @@ import path from "path";
 import { config } from "../../config.js";
 import Database, { type SqliteDatabase } from "./sqlite_driver.js";
 
+/**
+ * Milliseconds a SQLite connection waits for a contended lock before failing
+ * with SQLITE_BUSY. better-sqlite3 defaults to 0 (fail immediately), which
+ * surfaces as a hard error the moment a second process (a backup job, a
+ * migration, an instance-per-tenant host running an out-of-band task) touches
+ * the write lock. A non-zero busy_timeout makes that case degrade to a short
+ * wait-and-retry instead. Override via NEOTOMA_SQLITE_BUSY_TIMEOUT_MS; default
+ * 5000ms. See docs/infrastructure/multi_tenant_deployment_topology.md.
+ */
+export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
+  0,
+  Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
+);
+
+/**
+ * Apply the connection PRAGMAs every Neotoma SQLite handle needs: WAL for
+ * concurrent readers alongside a single writer, foreign-key enforcement, and a
+ * busy_timeout so lock contention waits rather than throwing immediately.
+ */
+function applyConnectionPragmas(db: SqliteDatabase): void {
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+}
+
 let cachedDb: SqliteDatabase | null = null;
 
 const SCHEMA_STATEMENTS = [
@@ -468,8 +493,7 @@ export function getSqliteDb(): SqliteDatabase {
   mkdirSync(dir, { recursive: true });
 
   const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  applyConnectionPragmas(db);
 
   ensureSchema(db);
   cachedDb = db;
@@ -485,8 +509,7 @@ export function ensureSqliteDbInitialized(dbPath: string): void {
   mkdirSync(dir, { recursive: true });
   const db = new Database(dbPath);
   try {
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
+    applyConnectionPragmas(db);
     ensureSchema(db);
   } finally {
     db.close();
