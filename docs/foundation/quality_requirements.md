@@ -63,6 +63,6 @@ All operations MUST emit:
 - MVP: All authenticated users see all records (single-user)
 - Future: Per-user isolation via `user_id` column + RLS policies
 **Data Protection:**
-- Database encryption at rest (optional, key file or mnemonic)
+- At-rest encryption of the SQLite database file is **not provided by the database layer today** — the file is plaintext on disk. Provide it at the deployment layer (encrypted volume) or via a SQLCipher-style build (not yet a shipped/tested configuration). The key-file / mnemonic settings gate key-based auth and optional log encryption, not database-file encryption.
 - HTTPS for all API calls
 - WSS (WebSocket Secure) for MCP connections
