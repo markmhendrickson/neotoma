@@ -135,10 +135,11 @@ This sequences risk correctly: ship on what exists (A), harden the known sharp e
 (`busy_timeout`), and earn the larger storage investment (B) against real load rather
 than a hypothetical.
 
-## Open questions for the working session
+## Open questions for a deployment decision
 
-These are the operator-specific inputs that move the recommendation, and the agenda for
-a deployment conversation:
+These are the operator-specific inputs that move the recommendation. A team choosing a
+topology should answer them against its real workload; they also form a natural agenda
+for a deployment review:
 
 - **Tenant count and growth curve** — tens, hundreds, thousands? This is the main fork
   between Topology A and Topology B.
