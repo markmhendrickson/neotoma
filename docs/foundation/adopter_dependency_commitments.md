@@ -97,56 +97,56 @@ The detail for each follows.
 
 ### Stability
 
-1. **Schema stability and versioned evolution.** _(Partial.)_ Registered entity-type schemas
+1. **Schema stability and versioned evolution.** _(Partial)_ Registered entity-type schemas
    evolve under a documented compatibility policy: additive changes are safe,
    breaking changes are versioned and migrated, and a schema in use does not
    change shape under a consumer without an explicit version bump and migration
    path.
-2. **Contract stability.** _(Partial.)_ The HTTP/MCP/CLI contract surface is governed by the
+2. **Contract stability.** _(Partial)_ The HTTP/MCP/CLI contract surface is governed by the
    OpenAPI-first flow and the breaking-change discipline already in place
    (breaking changes named in release supplements, legacy-payload corpus, BC
    diff gate). At this bar, the contract carries a stated deprecation policy: how
    long a deprecated field or endpoint is supported before removal.
-3. **Backward compatibility and replay.** _(Partial.)_ Data written by an earlier version
+3. **Backward compatibility and replay.** _(Partial)_ Data written by an earlier version
    remains readable and reducible by a later version within a stated support
    window. Observations and source remain immutable; reinterpretation across
    versions is additive, never destructive.
-4. **Deterministic extraction across versions.** _(In place.)_ The canonicalization that bounds
+4. **Deterministic extraction across versions.** _(In place)_ The canonicalization that bounds
    LLM stochasticity (content-derived IDs, stable ordering, deterministic
    reducers) is stable across releases, so the same inputs continue to produce the
    same stored truth.
 
 ### Governance
 
-5. **The redline commitments hold and are demonstrated, not just stated.** _(Partial.)_
+5. **The redline commitments hold and are demonstrated, not just stated.** _(Partial)_
    `docs/foundation/redlines.md` (R1–R16) is in force, and this bar requires
    evidence that the load-bearing ones are real: open-source core under MIT (R6),
    no hosted-only features that compromise local-first (R5), no unilateral
    capture or quiet license/policy drift (R12), no category drift into the
    vertical applications built on the substrate (R13).
-6. **Portability and exit are proven.** _(Partial.)_ Export, deletion, and rebuild-from-source-
+6. **Portability and exit are proven.** _(Partial)_ Export, deletion, and rebuild-from-source-
    of-record are documented and tested end-to-end, so an adopter can leave with
    their data at any time. Dependence on Neotoma is reversible by construction,
    not by promise.
-7. **Change governance is published.** _(Partial.)_ How breaking changes are decided,
+7. **Change governance is published.** _(Partial)_ How breaking changes are decided,
    announced, and supported — including the deprecation window above — is written
    down, so an adopter can predict the cost of staying current.
 
 ### Operability
 
-8. **A supported multi-tenant deployment story.** _(Partial.)_ At least one documented,
+8. **A supported multi-tenant deployment story.** _(Partial)_ At least one documented,
    tested production deployment topology (see
    `docs/infrastructure/multi_tenant_deployment_topology.md`) with its concurrency
    envelope, backup/restore, and isolation guarantees stated — not just
    "runs on a laptop."
-9. **Security review cadence.** _(In place.)_ The pre-release security gates run on every
+9. **Security review cadence.** _(In place)_ The pre-release security gates run on every
    sensitive release, and this bar requires a stated ongoing cadence (review on
    sensitive change, advisory disclosure process, a documented response path for
    reported issues) rather than a one-time audit.
-10. **Observability and operational documentation.** _(In place.)_ The logging, metrics, and
+10. **Observability and operational documentation.** _(In place)_ The logging, metrics, and
     event surfaces an operator needs to run Neotoma in production are documented,
     with no PII in any observable surface.
-11. **A stated support posture.** _(Not yet.)_ What support, SLAs (if any), and version-support
+11. **A stated support posture.** _(Not yet)_ What support, SLAs (if any), and version-support
     windows an adopter can expect are written down — even if the answer for some
     tiers is "self-hosted, community-supported." The point is that the posture is
     explicit, not that it is maximal.
