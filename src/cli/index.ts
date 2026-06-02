@@ -12046,10 +12046,14 @@ entitiesCommand
         token,
       });
 
-      const batchSize = Number.isFinite(opts.batchSize) && opts.batchSize > 0 ? opts.batchSize : 200;
+      const batchSize =
+        Number.isFinite(opts.batchSize) && opts.batchSize > 0 ? opts.batchSize : 200;
       const commit = Boolean(opts.commit);
       const raw = await fs.readFile(file, "utf8");
-      const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+      const lines = raw
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
 
       const entities: Record<string, unknown>[] = [];
       lines.forEach((line, idx) => {
