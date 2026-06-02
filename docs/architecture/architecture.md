@@ -29,7 +29,7 @@ All foundational architectural components described in this document are now ful
 See `docs/releases/v0.1.0/` for release details.
 ### Planned Releases
 **v0.2.0:** Sources-First [Ingestion](../vocabulary/canonical_terms.md#ingestion) Architecture — Minimal [Ingestion](../vocabulary/canonical_terms.md#ingestion) + Correction Loop
-- [Source](../vocabulary/canonical_terms.md#source) table migration (content-addressed raw storage with RLS)
+- [Source](../vocabulary/canonical_terms.md#source) table migration (content-addressed raw storage with per-owner `user_id` scoping)
 - [Interpretations](../vocabulary/canonical_terms.md#interpretation) table for versioned [interpretation](../vocabulary/canonical_terms.md#interpretation) tracking
 - [Observation](../vocabulary/canonical_terms.md#observation) and raw fragments extensions with [provenance](../vocabulary/canonical_terms.md#provenance) (`source_id`, `interpretation_id` linkage)
 - [Entity](../vocabulary/canonical_terms.md#entity) extensions with user_id and merge tracking
@@ -826,7 +826,7 @@ Load `docs/architecture/architecture.md` when:
 - [ ] Domain logic is deterministic and testable
 - [ ] Errors use ErrorEnvelope structure
 - [ ] Database writes are transactional
-- [ ] User data isolation maintained (RLS)
+- [ ] User data isolation maintained (application-layer `user_id` scoping via `getAuthenticatedUserId`)
 - [ ] MCP actions validate inputs
 - [ ] Performance targets considered
 - [ ] Security boundaries respected

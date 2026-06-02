@@ -303,11 +303,11 @@ test("snapshot is immediately readable after computation", async () => {
 - Reducer execution is part of observation creation transaction
 #### 2.2.11 Auth Permissions (Strong Consistency)
 **What:**
-- User permissions, workspace access, RLS policies
+- User permissions, workspace access, per-owner data isolation
 **Consistency Guarantee:**
 - After permission change, subsequent API calls MUST enforce new permissions immediately.
 **Implementation:**
-- Row-level security (RLS) evaluated per query
+- Application-layer enforcement: every query resolves the caller via `getAuthenticatedUserId` and scopes by `user_id` (`.eq("user_id", userId)`) on each request. Database-level row-level security (RLS) is a possible future defense-in-depth layer, not the current mechanism — see [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization).
 - No caching of permissions
 **UI Behavior:**
 - Block user immediately if permission revoked
