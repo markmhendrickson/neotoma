@@ -34,6 +34,7 @@ import {
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   MergeEntitiesRequestSchema,
+  SplitEntityRequestSchema,
   DeleteEntityRequestSchema,
   DeleteRelationshipRequestSchema,
   RestoreEntityRequestSchema,
@@ -966,9 +967,13 @@ export class NeotomaServer {
     args: unknown,
     userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Normalize escape sequences that MCP clients sometimes send as literal
+    // two-character sequences (e.g. backslash-n) instead of real control chars.
+    const unescapeBody = (s: string) => s.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+
     const schema = z.object({
       title: z.string().min(1),
-      body: z.string().min(1),
+      body: z.string().min(1).transform(unescapeBody),
       labels: z.array(z.string()).optional(),
       visibility: z.enum(["public", "private", "advisory"]).optional(),
       reporter_git_sha: z.string().optional(),
@@ -1748,6 +1753,8 @@ export class NeotomaServer {
         return await this.correct(args);
       case "merge_entities":
         return await this.mergeEntities(args);
+      case "split_entity":
+        return await this.splitEntity(args);
       case "list_potential_duplicates":
         return await this.listPotentialDuplicates(args);
       case "delete_entity":
@@ -2765,6 +2772,12 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = ListRelationshipsRequestSchema.parse(args ?? {});
+
+    // Tenant isolation: scope all queries to the authenticated user.
+    // See docs/security/advisories/2026-05-21-relationship-endpoint-
+    // tenant-isolation.md for context.
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
     const normalizedDirection =
       parsed.direction === "incoming" || parsed.direction === "inbound"
         ? "inbound"
@@ -2779,7 +2792,8 @@ export class NeotomaServer {
       let outboundQuery = db
         .from("relationship_snapshots")
         .select("*")
-        .eq("source_entity_id", parsed.entity_id);
+        .eq("source_entity_id", parsed.entity_id)
+        .eq("user_id", userId);
 
       if (parsed.relationship_type) {
         outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
@@ -2812,7 +2826,8 @@ export class NeotomaServer {
       let inboundQuery = db
         .from("relationship_snapshots")
         .select("*")
-        .eq("target_entity_id", parsed.entity_id);
+        .eq("target_entity_id", parsed.entity_id)
+        .eq("user_id", userId);
 
       if (parsed.relationship_type) {
         inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
@@ -3184,6 +3199,11 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveGraphNeighborhoodSchema.parse(args ?? {});
 
+    // Tenant isolation: scope all queries to the authenticated user.
+    // See docs/security/advisories/2026-05-21-relationship-endpoint-
+    // tenant-isolation.md for context.
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
     const includeSources = parsed.include_sources;
 
     const result: any = {
@@ -3197,6 +3217,7 @@ export class NeotomaServer {
         .from("entities")
         .select("*")
         .eq("id", parsed.node_id)
+        .eq("user_id", userId)
         .single();
 
       if (entityError || !entity) {
@@ -3210,6 +3231,7 @@ export class NeotomaServer {
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", parsed.node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!snapError && snapshot) {
@@ -3221,7 +3243,8 @@ export class NeotomaServer {
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
-          .or(`source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`);
+          .or(`source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`)
+          .eq("user_id", userId);
 
         if (!relError && relationships) {
           result.relationships = relationships;
@@ -3240,7 +3263,8 @@ export class NeotomaServer {
             const { data: relatedEntities, error: relEntError } = await db
               .from("entities")
               .select("*")
-              .in("id", Array.from(relatedEntityIds));
+              .in("id", Array.from(relatedEntityIds))
+              .eq("user_id", userId);
 
             if (!relEntError && relatedEntities) {
               result.related_entities = relatedEntities;
@@ -3255,6 +3279,7 @@ export class NeotomaServer {
           .from("observations")
           .select("*")
           .eq("entity_id", parsed.node_id)
+          .eq("user_id", userId)
           .order("observed_at", { ascending: false })
           .limit(100);
 
@@ -3270,7 +3295,8 @@ export class NeotomaServer {
               const { data: sources, error: sourceError } = await db
                 .from("sources")
                 .select("id, mime_type, file_size, original_filename, created_at")
-                .in("id", sourceIds);
+                .in("id", sourceIds)
+                .eq("user_id", userId);
 
               if (!sourceError && sources) {
                 result.related_sources = sources;
@@ -3280,7 +3306,8 @@ export class NeotomaServer {
                   const { data: events, error: evtError } = await db
                     .from("timeline_events")
                     .select("*")
-                    .in("source_id", sourceIds);
+                    .in("source_id", sourceIds)
+                    .eq("user_id", userId);
 
                   if (!evtError && events) {
                     result.timeline_events = events;
@@ -3297,6 +3324,7 @@ export class NeotomaServer {
         .from("sources")
         .select("*")
         .eq("id", parsed.node_id)
+        .eq("user_id", userId)
         .single();
 
       if (sourceError || !source) {
@@ -3310,7 +3338,8 @@ export class NeotomaServer {
         const { data: events, error: evtError } = await db
           .from("timeline_events")
           .select("*")
-          .eq("source_id", parsed.node_id);
+          .eq("source_id", parsed.node_id)
+          .eq("user_id", userId);
 
         if (!evtError && events) {
           result.timeline_events = events;
@@ -3321,7 +3350,8 @@ export class NeotomaServer {
       const { data: observations, error: obsError } = await db
         .from("observations")
         .select("*")
-        .eq("source_id", parsed.node_id);
+        .eq("source_id", parsed.node_id)
+        .eq("user_id", userId);
 
       if (!obsError && observations) {
         result.observations = observations;
@@ -3335,7 +3365,8 @@ export class NeotomaServer {
             const { data: entities, error: entError } = await db
               .from("entities")
               .select("*")
-              .in("id", entityIds);
+              .in("id", entityIds)
+              .eq("user_id", userId);
 
             if (!entError && entities) {
               result.related_entities = entities;
@@ -3350,6 +3381,7 @@ export class NeotomaServer {
                       ","
                     )}),target_entity_id.in.(${entityIds.join(",")})`
                   )
+                  .eq("user_id", userId)
                   .limit(1000);
 
                 if (!relError && relationships) {
@@ -3553,8 +3585,8 @@ export class NeotomaServer {
           error_code: "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
           no_schema_for_entity_type: true,
           hint:
-            `No schema is registered for entity_type "${parsed.entity_type}". ` +
-            "update_schema_incremental requires an existing schema to extend. " +
+            "No schema is registered for this entity_type. " +
+            "update_schema_incremental requires an existing SchemaDefinition to extend. " +
             "Call register_schema first with a full schema_definition that includes " +
             "canonical_name_fields (or identity_opt_out), then optionally call " +
             "update_schema_incremental to add more fields. " +
@@ -3605,7 +3637,7 @@ export class NeotomaServer {
           entity_type: parsed.entity_type,
           error_code: "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
           hint:
-            `The existing schema for entity_type "${parsed.entity_type}" does not declare ` +
+            "The existing SchemaDefinition for this entity_type does not declare " +
             "canonical_name_fields or identity_opt_out, which are required before fields can " +
             "be added incrementally. Call register_schema with a full schema_definition that " +
             'includes canonical_name_fields (or identity_opt_out: "heuristic_canonical_name") ' +
@@ -5351,6 +5383,66 @@ export class NeotomaServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to merge entities: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  // R5: MCP split_entity() Tool — inverse of merge_entities. Re-points a
+  // predicate-selected subset of an entity's observations onto a new (or
+  // pre-existing) entity to repair over-merges. Mirrors the HTTP
+  // POST /entities/split handler in actions.ts and the mergeEntities() shape.
+  private async splitEntity(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = SplitEntityRequestSchema.parse(args);
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const {
+      splitEntity: splitEntityService,
+      EntityNotFoundError,
+      EntityAlreadyMergedError,
+      SplitPredicateMatchedNothingError,
+      SplitPredicateMatchedAllError,
+      IdempotencyMismatchError,
+    } = await import("./services/entity_split.js");
+
+    try {
+      const result = await splitEntityService({
+        sourceEntityId: parsed.source_entity_id,
+        userId,
+        predicate: parsed.predicate,
+        newEntity: {
+          entity_type: parsed.new_entity.entity_type,
+          canonical_name: parsed.new_entity.canonical_name,
+          target_entity_id: parsed.new_entity.target_entity_id,
+        },
+        idempotencyKey: parsed.idempotency_key,
+        reason: parsed.reason,
+        splitBy: "mcp",
+      });
+
+      return this.buildTextResponse({
+        split_id: result.split_id,
+        source_entity_id: result.source_entity_id,
+        new_entity_id: result.new_entity_id,
+        observations_moved: result.observations_moved,
+        split_at: result.split_at,
+        replayed: result.replayed,
+        reason: parsed.reason,
+      });
+    } catch (err) {
+      if (
+        err instanceof EntityNotFoundError ||
+        err instanceof EntityAlreadyMergedError ||
+        err instanceof SplitPredicateMatchedNothingError ||
+        err instanceof SplitPredicateMatchedAllError ||
+        err instanceof IdempotencyMismatchError
+      ) {
+        throw new McpError(ErrorCode.InvalidParams, err.message);
+      }
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to split entity: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }

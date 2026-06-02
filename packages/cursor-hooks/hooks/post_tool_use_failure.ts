@@ -25,6 +25,7 @@ import {
   isNeotomaRelevantTool,
   log,
   makeIdempotencyKey,
+  pickStoredEntityId,
   recordConversationTurn,
   runHook,
   turnContextFields,
@@ -136,15 +137,15 @@ async function handle(
   };
   let failureEntityId: string | undefined;
   try {
-    const result = (await client.store({
+    const result = await client.store({
       entities: [entity],
       idempotency_key: makeIdempotencyKey(
         sessionId,
         turnId,
         `tool-failure-${toolName}-${errorClass}-${Date.now()}`
       ),
-    })) as { structured?: { entities?: Array<{ entity_id?: string }> } };
-    const id = result.structured?.entities?.[0]?.entity_id;
+    });
+    const id = pickStoredEntityId(result);
     if (typeof id === "string") failureEntityId = id;
   } catch (err) {
     log("debug", `${hookEventName} store failed: ${(err as Error).message}`);

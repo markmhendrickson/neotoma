@@ -128,9 +128,21 @@ For the full flag surface (`--install-scope` for MCP + CLI instruction files,
 permission `--scope`, `--mcp-transport`, `--rewrite-neotoma-mcp`,
 `--skip-hooks`, `--all-harnesses`, `--dry-run`, and `--skip-permissions`), see
 [`docs/developer/cli_reference.md#harness-setup`](docs/developer/cli_reference.md#harness-setup).
-The default MCP transport is **B**: local stdio for normal npm onboarding, with
-transport **A** available when you want signed HTTP `/mcp` proxy entries and
-the API is already running.
+
+**MCP transport presets** (`--mcp-transport <preset>`):
+
+| Preset | Description | Requires |
+|--------|-------------|----------|
+| `a` | Signed HTTP proxy via `/mcp`, auto-detected port | AAuth keypair, running API |
+| `b` | Unsigned local stdio (npm global binary) — **default for npm onboarding** | npm global install |
+| `c` | Direct stdio via `tsx src/actions.ts` (source checkout, hot-reload) | Source checkout, tsx |
+| `d` | Two slots: `neotoma` (signed proxy) + `neotoma-dev` (direct stdio) | Source checkout, AAuth keypair |
+| `e` | Single slot, signed shim, prod port profile (source-checkout recommended) | AAuth keypair, running API |
+
+The default MCP transport is **B** for standard npm onboarding. Use **E** when
+working from a source checkout with a running dev server (`neotoma auth keygen
+--register` first). See [Developer setup (source checkout)](#developer-setup-source-checkout)
+for the full workflow.
 
 **Step 2.5 — Verify install (grep for canonical confirmation line)**
 
@@ -776,6 +788,110 @@ automatically upload source artifacts via `file_content` instead of
 - Deployment runbook: [`docs/operations/runbook.md`](docs/operations/runbook.md)
 - CLI reference (including ingest auto-upload and size cap): [`docs/developer/cli_reference.md`](docs/developer/cli_reference.md)
 - Environment conventions and env-var naming: [`docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md`](docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md)
+
+## Developer setup (source checkout)
+
+When working from a git clone of the Neotoma repo — as a contributor or a local-first power user who wants a dev server that rebuilds on file changes — several steps differ from the standard agent-led onboarding above. Use this section in place of the npm-global install path.
+
+### When to use this path
+
+- You have cloned the repo and want to iterate against the source
+- You want a persistent background server via macOS LaunchAgent
+- You want a dev server that reloads on source changes (`npm run dev:server`)
+- You need AAuth-signed MCP entries (preset `a` or `e`)
+
+### Pre-setup decision checklist
+
+| Question | Answer → action |
+|----------|----------------|
+| Source checkout or npm global install? | Source checkout → this section; global → [Phase 2](#phase-2-installation) |
+| macOS or Linux? | macOS → LaunchAgent steps below; Linux → [Production deployment](#production-deployment-headless--systemd) |
+| Do you need AAuth-signed MCP entries? | Yes → run `neotoma auth keygen --register` (Step D2); No → skip D2 |
+| Which MCP transport? | See preset table in Step D3; use `e` for source-checkout with running dev server |
+| Dev server or prod server? | Dev (hot-reload, `NEOTOMA_ENV=production`) → `com.neotoma.dev-server`; compiled dist → `com.neotoma.prod-server` |
+
+### Step D1: Install LaunchAgents (macOS)
+
+The repo ships LaunchAgent templates that manage server processes on login. Run the install script once after cloning:
+
+```bash
+cd deploy/launchagents
+./install.sh           # renders templates → ~/Library/LaunchAgents/
+./install.sh --dry-run # preview rendered output without writing
+```
+
+The script auto-detects `NODE_BIN`, `NPM_CLI`, `NPM_BIN`, and `NEOTOMA_REPO_PATH` from your environment. Override any by exporting before running:
+
+```bash
+NODE_BIN=/path/to/node ./install.sh
+```
+
+Load agents after install:
+
+```bash
+# Dev server (reloads on source changes; sets NEOTOMA_ENV=production)
+launchctl load ~/Library/LaunchAgents/com.neotoma.dev-server.plist
+
+# Production server (compiled dist, KeepAlive)
+launchctl load ~/Library/LaunchAgents/com.neotoma.prod-server.plist
+```
+
+Status and logs:
+
+```bash
+launchctl list | grep neotoma
+tail -f ~/repos/neotoma/data/logs/launchd-dev-server.log
+tail -f ~/repos/neotoma/data/logs/launchd-dev-server.error.log
+```
+
+See `deploy/launchagents/README.md` for the full agent inventory, reload commands, and template variable reference.
+
+**After changing `NEOTOMA_DATA_DIR` or any environment variable:** unload and reload the affected agents to pick up the new value.
+
+### Step D2: AAuth keypair (signed transports only)
+
+Transports **A** and **E** require an AAuth ES256 keypair and a registered `agent_grant` record. Generate and register in one step (server must be running):
+
+```bash
+neotoma auth keygen --register
+```
+
+Keys are written to `~/.neotoma/aauth/`. The `--register` flag calls the running API to create the `agent_grant`. Re-run after data-directory changes (grants are database-scoped).
+
+Verify the grant is active:
+
+```bash
+neotoma auth status
+```
+
+### Step D3: Configure MCP entries
+
+Use the CLI — do not hand-edit MCP JSON files. The source of truth for the repo is `.cursor/mcp.json`; run `npm run sync:mcp` to propagate changes to `.mcp.json` and `.codex/config.toml`.
+
+```bash
+# Configure a single signed-shim entry (preset e) with prod port profile
+neotoma mcp config --mcp-transport e --rewrite-neotoma-mcp --yes
+
+# User-level (writes to claude_desktop_config.json and ~/.cursor/mcp.json)
+neotoma mcp config --mcp-transport e --user-level --rewrite-neotoma-mcp --yes
+
+# Sync to .mcp.json and .codex/config.toml
+npm run sync:mcp
+```
+
+The resulting entry reads `.dev-serve/local_http_port_prod` (written by the dev server running with `NEOTOMA_ENV=production`) to discover the port at startup.
+
+**Note on Claude Desktop:** Claude Desktop overwrites `mcpServers` when saving preferences. After any Claude Desktop settings save, re-run:
+
+```bash
+neotoma mcp config --mcp-transport e --user-level --rewrite-neotoma-mcp --yes
+```
+
+### Tooling principle
+
+Use `neotoma mcp config`, `neotoma auth keygen`, `neotoma doctor --json`, and `neotoma launchagent` (when available) for all configuration. Avoid direct edits to MCP JSON files, plists, or `.env` files unless the CLI does not cover the specific change. CLI commands are idempotent; manual edits risk drift between `.cursor/mcp.json`, `.mcp.json`, and `claude_desktop_config.json`.
+
+---
 
 ## Standing instruction handoff
 

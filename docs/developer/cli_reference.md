@@ -352,7 +352,7 @@ neotoma init --data-dir /path/to/data
   - `--tool <claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode>`: Target harness. If omitted, `doctor` supplies the current tool hint when available. `windsurf`, `continue`, and `vscode` are MCP-only targets (no skills or hook installation; setup writes the MCP config entry only).
   - `--install-scope <project|user|both>`: Scope for MCP entries and agent CLI instruction files.
   - `--scope <project|user|both>`: Permission-file scope only. This is intentionally separate from `--install-scope`.
-  - `--mcp-transport <a|b|c|d>`: Same transport presets as `neotoma mcp config`.
+  - `--mcp-transport <a|b|c|d|e>`: Same transport presets as `neotoma mcp config`.
   - `--rewrite-neotoma-mcp`: Rewrite existing Neotoma MCP entries in the selected install scope.
   - `--skip-hooks`: Skip lifecycle hook/plugin installation.
   - `--all-harnesses`: Infer hook-capable harnesses from MCP configs and install hooks for all of them. The default remains one harness via `--tool` or the `doctor` hint.
@@ -441,7 +441,7 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
   - `--user-level`: Include user-level MCP config paths (e.g. `~/.cursor/mcp.json`, Claude, Windsurf) in scan (default: project-local only).
   - `--install-hooks` / `--no-hooks`: Install or skip matching Neotoma lifecycle hooks when a configured MCP path maps to a hook-capable harness. Hook installation is enabled by default for non-JSON runs; use `--no-hooks` to limit the command to MCP config only.
   - `--yes`: Skip hook installation confirmation prompts. MCP server config prompts still follow the normal interactive flow.
-  - `--mcp-transport <a|b|c|d>`: Transport preset. TTY installs prompt when omitted; non-TTY defaults to `b`.
+  - `--mcp-transport <a|b|c|d|e>`: Transport preset. TTY installs prompt when omitted; non-TTY defaults to `b`.
 
 **MCP transport presets:**
 
@@ -451,6 +451,7 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
 | `b` | You want the lowest-friction local MCP setup. | Default. Packaged npm installs launch Neotoma directly over stdio; source checkouts use the unsigned dev shim. |
 | `c` | You explicitly want direct stdio entries. | Best for simple local clients that do not need HTTP proxy parity. |
 | `d` | You want both MCP slots to point at prod HTTP `/mcp`. | Signed proxy path; requires prod API reachability. |
+| `e` | You want both MCP slots to point at prod HTTP `/mcp` using the local port file. | Signed proxy using `NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1` + `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod`. Requires prod API reachable on the port recorded by the local port file. |
   - Scans for known config file patterns:
     - **Cursor:** `.cursor/mcp.json`, `.mcp.json` (project), `~/.cursor/mcp.json` (user-level with `--user-level`)
     - **Claude Code:** `claude_desktop_config.json` (project or user-level with `--user-level`):

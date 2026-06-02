@@ -15,6 +15,7 @@
    - `product_principles.md` — Product design principles
    - `agent_instructions_rules.mdc` — Repository-wide agent instructions and validation checklist
 3. **Task-specific docs** as indicated by the index (e.g. subsystems, architecture, testing)
+   - **For install / MCP / configuration tasks:** MUST load `install.md` (repo root) before any work involving installing Neotoma, configuring MCP entries, setting up LaunchAgents, changing data directories, or onboarding a new environment. `install.md` is the canonical CLI-driven setup sequence; never substitute shell introspection or hand-editing of config files for the CLI commands documented there.
 
 **Why this order:** Foundation establishes constraints (determinism, immutability, State Layer boundaries) that all work must respect.
 

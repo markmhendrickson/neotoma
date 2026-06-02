@@ -6,13 +6,22 @@ on:
       - opened
       - ready_for_review
       - synchronize
-    # Only run when code or contract surfaces change — skip pure docs/config PRs.
+    # Run when code, contract, or agent-facing surfaces change. Agent instructions
+    # ship to every MCP client, so changes there are user-facing behavior even
+    # when no src/ file changed.
     paths:
       - "src/**"
       - "packages/**"
       - "openapi.yaml"
       - "package.json"
       - "tests/**"
+      - "docs/developer/mcp/instructions.md"
+      - "docs/developer/cli_agent_instructions.md"
+      - "docs/foundation/**"
+      - "docs/architecture/**"
+      - "docs/subsystems/**"
+      - ".claude/skills/**"
+      - ".claude/rules/**"
   issue_comment:
     types:
       - created
@@ -68,13 +77,17 @@ jobs:
           TOUCHES_PACKAGES=$(echo "$CHANGED_FILES" | grep -c "^packages/" || true)
           TOUCHES_OPENAPI=$(echo "$CHANGED_FILES" | grep -c "^openapi.yaml" || true)
           TOUCHES_AUTH=$(echo "$CHANGED_FILES" | grep -cE "(auth|token|session|credential|permission|middleware)" || true)
+          TOUCHES_AGENT_INSTRUCTIONS=$(echo "$CHANGED_FILES" | grep -cE "(docs/developer/mcp/instructions.md|docs/developer/cli_agent_instructions.md)" || true)
+          TOUCHES_FOUNDATION=$(echo "$CHANGED_FILES" | grep -cE "^docs/(foundation|architecture)/" || true)
 
-          echo "files=$FILES lines=$LINES src=$TOUCHES_SRC packages=$TOUCHES_PACKAGES openapi=$TOUCHES_OPENAPI auth=$TOUCHES_AUTH"
+          echo "files=$FILES lines=$LINES src=$TOUCHES_SRC packages=$TOUCHES_PACKAGES openapi=$TOUCHES_OPENAPI auth=$TOUCHES_AUTH agent_instructions=$TOUCHES_AGENT_INSTRUCTIONS foundation=$TOUCHES_FOUNDATION"
 
           if [ "$FILES" -gt 5 ] || [ "$LINES" -gt 150 ] || \
              ( [ "$TOUCHES_SRC" -gt 0 ] && [ "$TOUCHES_OPENAPI" -gt 0 ] ) || \
              [ "$TOUCHES_PACKAGES" -gt 0 ] || \
-             [ "$TOUCHES_AUTH" -gt 0 ]; then
+             [ "$TOUCHES_AUTH" -gt 0 ] || \
+             [ "$TOUCHES_AGENT_INSTRUCTIONS" -gt 0 ] || \
+             [ "$TOUCHES_FOUNDATION" -gt 0 ]; then
             echo "substantial=true" >> $GITHUB_OUTPUT
           else
             echo "substantial=false" >> $GITHUB_OUTPUT
@@ -105,23 +118,22 @@ To request a review anyway, comment \`@claude review\` on this PR."
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           model: claude-opus-4-7
-          timeout_minutes: 30
-          max_turns: 30
+          timeout_minutes: 60
+          max_turns: 60
           trigger_phrase: "@claude review"
           allowed_tools: "Edit,MultiEdit,Glob,Grep,LS,Read,Write,mcp__github_comment__update_claude_comment,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git rm:*),Bash(git fetch:*)"
           direct_prompt: |
-            Before reviewing, read docs/developer/pr_review_reading_list.md.
-            It tells you which docs to always read and which to read based on what paths changed in this PR.
-            Follow it exactly — read the always-read docs first, then load the conditional docs for any touched paths.
+            Invoke the `/review` skill (`.claude/skills/review/SKILL.md`) against this pull request.
 
-            Then review the PR diff against those constraints. Cover:
-            - Correctness and logic errors
-            - Violations of any invariant in the docs you read
-            - Security issues (auth bypasses, PII in logs, unprotected routes, proxy trust)
-            - Missing idempotency_key on mutating operations
-            - Contract surface changes without matching openapi.yaml edits
-            - Test coverage gaps for changed behavior
-            - Breaking changes that need a release supplement entry
-            - Scope creep (production changes bundled into unrelated fixes)
+            Resolve the diff range as `PR#${{ github.event.pull_request.number || github.event.issue.number }}` — use `gh pr diff` and `gh pr view` to fetch the diff and metadata. Treat the PR's base ref as the review base.
 
-            Be direct and specific. Cite file and line numbers. Skip praise.
+            Follow the skill in full:
+            - Phase 1: scope the diff (files changed, lines, surface categories, high-risk yes/no)
+            - Phase 2: load the always-read invariant docs and any conditional docs implied by the changed paths (the skill links to `docs/developer/pr_review_reading_list.md`)
+            - Phase 3: read the full diff for every changed file, not just stat output
+            - Phase 4: walk the `change_guardrails_rules.mdc` pre-PR checklist and mark each item ✓ / ✗ BLOCKING / ~ advisory / — N/A
+            - Phase 5: architectural review (State Layer boundaries, schema-agnostic design, determinism, immutability, auth surface, error envelope, search/ranking specifics when entity_handlers.ts is touched)
+            - Phase 5b: product/UX and principles alignment — product principles (explicit over implicit, no silent behavior, provenance), silent behavior changes, agent instruction coherence (verify referenced tools/entities/preferences actually exist), error/hint quality, API naming and semantic consistency, discoverability, supplement accuracy
+            - Phase 6: emit findings in the structured `[BLOCKING|ADVISORY|NIT] <category>` format the skill defines, then a summary block with the verdict (APPROVED / APPROVED-WITH-NOTES / NEEDS-CHANGES)
+
+            Post the review as a single PR comment. Be direct and specific — cite file and line numbers; skip praise. Verdict rules are non-negotiable: any BLOCKING finding requires NEEDS-CHANGES.

@@ -1,1 +1,1 @@
-/Users/markmhendrickson/repos/neotoma/foundation/agent_instructions/cursor_commands/run_feature_workflow.md
+../../foundation/agent_instructions/cursor_commands/run_feature_workflow.md

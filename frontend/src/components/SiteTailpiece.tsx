@@ -6,6 +6,7 @@ import { useIndexableMarkdownSourcePath } from "@/hooks/useIndexableMarkdownSour
 import { useRepoMetaClient } from "@/hooks/useRepoMetaClient";
 import { useLocale } from "@/i18n/LocaleContext";
 import { REPO_RELEASES_COUNT, REPO_STARS_COUNT, REPO_VERSION } from "@/site/site_data";
+import { staticAssetPath } from "@/site/spa_path";
 import { rawMarkdownTo } from "@/site/site_page_markdown";
 import { LanguageNavButton, ThemeToggleNavButton } from "@/components/SiteChromeControls";
 import { sendCtaClick } from "@/utils/analytics";
@@ -137,7 +138,7 @@ export function SiteTailpiece() {
                 aria-hidden="true"
               />
             </figure>
-            <img src="/neotoma-wordmark.svg" alt="Neotoma" className="h-7 w-auto dark:invert" />
+            <img src={staticAssetPath("/neotoma-wordmark.svg")} alt="Neotoma" className="h-7 w-auto dark:invert" />
             <p className="mt-2 text-ui leading-6 text-muted-foreground">{dict.footerTagline}</p>
           </div>
 

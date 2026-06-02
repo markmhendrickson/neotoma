@@ -45,6 +45,7 @@ import {
   renderTimelineDayMarkdown,
   renderSchemaMarkdown,
   renderIndexMarkdown,
+  renderProfileEntity,
   type RenderEntityInput,
   type RenderRelationshipInput,
   type RenderSourceInput,
@@ -637,7 +638,6 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
       const renderMode = profile.render_mode ?? "entity";
       let profileRendered: string;
       if (renderMode === "frontmatter_content" || renderMode === "content_only") {
-        const { renderProfileEntity } = await import("./canonical_markdown.js");
         profileRendered = renderProfileEntity(
           filteredSnapshot,
           {
@@ -661,6 +661,7 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
         };
         profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
           includeProvenance: false,
+          content_field: profile.content_field,
         });
       }
       const profilePath = profileEntityFilePath(
@@ -1426,7 +1427,6 @@ async function rebuildProfile(
     const renderMode = profile.render_mode ?? "entity";
     let rendered: string;
     if (renderMode === "frontmatter_content" || renderMode === "content_only") {
-      const { renderProfileEntity } = await import("./canonical_markdown.js");
       rendered = renderProfileEntity(
         filteredSnapshot,
         {
@@ -1456,7 +1456,7 @@ async function rebuildProfile(
           provenance: undefined,
         },
         schemaFieldOrder,
-        { includeProvenance: false }
+        { includeProvenance: false, content_field: profile.content_field }
       );
     }
 

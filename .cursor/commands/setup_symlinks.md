@@ -1,1 +1,1 @@
-/Users/markmhendrickson/repos/neotoma/foundation/agent_instructions/cursor_commands/setup_symlinks.md
+../../foundation/agent_instructions/cursor_commands/setup_symlinks.md

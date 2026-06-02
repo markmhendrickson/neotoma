@@ -271,9 +271,12 @@ export class RelationshipsService {
         .or(`source_entity_id.eq.${entityId},target_entity_id.eq.${entityId}`);
     }
 
-    const { data, error } = await query.order("last_observation_at", {
-      ascending: false,
-    });
+    // Order by recency, then by relationship_key (the relationship_snapshots
+    // PRIMARY KEY) as a stable secondary sort so ties on last_observation_at
+    // are deterministic. See docs/architecture/determinism.md.
+    const { data, error } = await query
+      .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true });
 
     if (error) {
       throw new Error(`Failed to get relationships: ${error.message}`);
@@ -337,11 +340,15 @@ export class RelationshipsService {
     type: RelationshipType,
     includeDeleted: boolean = false
   ): Promise<RelationshipSnapshot[]> {
+    // Order by recency, then by relationship_key (the relationship_snapshots
+    // PRIMARY KEY) as a stable secondary sort so ties on last_observation_at
+    // are deterministic. See docs/architecture/determinism.md.
     const { data, error } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_type", type)
-      .order("last_observation_at", { ascending: false });
+      .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true });
 
     if (error) {
       throw new Error(`Failed to get relationships by type: ${error.message}`);

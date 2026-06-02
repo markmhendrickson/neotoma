@@ -26,6 +26,25 @@
 import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "./types.js";
 
 /**
+ * Extract the stored-entity list from a {@link StoreResult}, tolerating both
+ * the live transport shape and the legacy nested shape.
+ *
+ * The `/store` endpoint (`StoreStructuredResponse` in `openapi.yaml`) and both
+ * `HttpTransport` and `LocalTransport` return entities at the **top level**:
+ * `{ success, replayed, entities: [...] }`. There is no `structured` wrapper on
+ * the live response. Earlier helper code read `result.structured.entities`,
+ * which is always `undefined`, silently dropping every created `entity_id`
+ * (see issue #316).
+ *
+ * This reads `result.entities` first and falls back to
+ * `result.structured?.entities` so it keeps working against any pre-v0.x client
+ * that still nests the payload.
+ */
+export function extractStoredEntities(result: StoreResult | undefined): StoredEntityRef[] {
+  return result?.entities ?? result?.structured?.entities ?? [];
+}
+
+/**
  * Authoritative sender category for a chat message.
  *
  * `user` and `assistant` are the conventional chat roles. `agent` is used
@@ -157,7 +176,7 @@ export async function storeChatTurn(
     idempotency_key: `${keyPrefix}-turn`,
   });
 
-  const stored = storeResult.structured?.entities ?? [];
+  const stored = extractStoredEntities(storeResult);
   const conversationEntityId = stored[0]?.entity_id ?? "";
 
   return {
@@ -222,7 +241,7 @@ export async function retrieveOrStore(
     idempotency_key: input.idempotencyKey ?? `${input.entityType}-${input.identifier}`,
   });
 
-  const stored: StoredEntityRef | undefined = result.structured?.entities?.[0];
+  const stored: StoredEntityRef | undefined = extractStoredEntities(result)[0];
   if (!stored?.entity_id) {
     throw new Error(
       `retrieveOrStore: store returned no entity_id for ${input.entityType} identifier=${input.identifier}`
@@ -374,5 +393,5 @@ export async function recordConversationTurn(
     entities: [entity],
     idempotency_key: idempotencyKey,
   })) as StoreResult;
-  return { entityId: result.structured?.entities?.[0]?.entity_id };
+  return { entityId: extractStoredEntities(result)[0]?.entity_id };
 }

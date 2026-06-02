@@ -1272,7 +1272,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** List relationships */
+    /**
+     * List relationships
+     * @description Query relationships filtered by entity ID, source entity ID, target entity ID, or
+     *     relationship type. At least one of `entity_id`, `source_entity_id`,
+     *     `target_entity_id`, or `relationship_type` must be provided. Results are paginated.
+     */
     post: operations["listRelationshipsForEntity"];
     delete?: never;
     options?: never;
@@ -2343,13 +2348,29 @@ export interface components {
     };
     AgentCapabilityEntry: {
       /** @enum {string} */
-      op: "store" | "store_structured" | "create_relationship" | "correct" | "retrieve";
+      op:
+        | "store"
+        | "store_structured"
+        | "create_relationship"
+        | "correct"
+        | "retrieve"
+        | "github_harness:read"
+        | "github_harness:write"
+        | "github_harness:*";
       /**
        * @description Allowed entity types for this op. The single string `*` widens
        *     to any entity_type that is not protected (see
-       *     `protected_entity_types`).
+       *     `protected_entity_types`). Empty array is valid for
+       *     `github_harness:*` ops, which use `repos` instead.
        */
       entity_types: string[];
+      /**
+       * @description Repo-scope for `github_harness:*` ops. List of `owner/repo`
+       *     strings. The single string `*` wildcards any repo. Only
+       *     meaningful for `github_harness:*` ops; ignored for
+       *     Neotoma-native ops.
+       */
+      repos?: string[];
     };
     /**
      * @description First-class persistent grant that admits a verified AAuth
@@ -3903,6 +3924,17 @@ export interface operations {
             | "heuristic_name"
             | "heuristic_fallback"
             | "target_id";
+          /**
+           * @description When true, omit chat bookkeeping types (`conversation`,
+           *     `conversation_message`, and other entries in
+           *     `BOOKKEEPING_ENTITY_TYPES`) from results. Default false —
+           *     bookkeeping entities are included unless the caller
+           *     explicitly opts in to exclusion. Has no effect when
+           *     `entity_type` already filters to a single bookkeeping
+           *     type (the explicit type filter wins).
+           * @default false
+           */
+          exclude_bookkeeping?: boolean;
         };
       };
     };
@@ -5361,9 +5393,84 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": {
-          [key: string]: unknown;
-        };
+        "application/json":
+          | ({
+              /**
+               * @description Entity ID to match against either the source or target of each
+               *     relationship (filtered further by `direction`). Legacy filter pattern;
+               *     prefer `source_entity_id` / `target_entity_id` for new code.
+               */
+              entity_id?: string;
+              /** @description Match relationships whose `source_entity_id` equals this value. */
+              source_entity_id?: string;
+              /** @description Match relationships whose `target_entity_id` equals this value. */
+              target_entity_id?: string;
+              /**
+               * @description Direction applied when `entity_id` is set. `incoming`/`inbound` matches
+               *     relationships where the entity is the target; `outgoing`/`outbound`
+               *     matches relationships where the entity is the source; `both` (default)
+               *     matches either side.
+               * @default both
+               * @enum {string}
+               */
+              direction?: "inbound" | "outbound" | "incoming" | "outgoing" | "both";
+              /**
+               * @description Optional relationship_type filter. Closed enum matching the handler's
+               *     accepted values; spec-driven clients passing any other value will be
+               *     rejected at runtime with a Zod validation error.
+               * @enum {string}
+               */
+              relationship_type?:
+                | "PART_OF"
+                | "CORRECTS"
+                | "REFERS_TO"
+                | "SETTLES"
+                | "DUPLICATE_OF"
+                | "DEPENDS_ON"
+                | "SUPERSEDES"
+                | "EMBEDS"
+                | "works_at"
+                | "owns"
+                | "manages"
+                | "part_of"
+                | "related_to"
+                | "depends_on"
+                | "references"
+                | "transacted_with"
+                | "member_of"
+                | "reports_to"
+                | "located_at"
+                | "created_by"
+                | "funded_by"
+                | "acquired_by"
+                | "subsidiary_of"
+                | "partner_of"
+                | "competitor_of"
+                | "supplies_to"
+                | "contracted_with"
+                | "invested_in";
+              /**
+               * @description Maximum number of relationships to return.
+               * @default 100
+               */
+              limit?: number;
+              /**
+               * @description Number of relationships to skip before returning results.
+               * @default 0
+               */
+              offset?: number;
+              /**
+               * @description Optional user_id override (scoped to callers with privilege to query on
+               *     behalf of another user). When omitted, the authenticated user is used.
+               */
+              user_id?: string;
+            } & {
+              [key: string]: unknown;
+            })
+          | unknown
+          | unknown
+          | unknown
+          | unknown;
       };
     };
     responses: {
@@ -5375,6 +5482,12 @@ export interface operations {
         content: {
           "application/json": {
             relationships?: components["schemas"]["RelationshipSnapshot"][];
+            /** @description Total number of matching relationships before pagination. */
+            total?: number;
+            /** @description Echo of the requested `limit`. */
+            limit?: number;
+            /** @description Echo of the requested `offset`. */
+            offset?: number;
           };
         };
       };
@@ -5547,10 +5660,15 @@ export interface operations {
             relationships?: {
               [key: string]: unknown;
             }[];
-            /** @description Entities connected to the node via relationships. Each item uses `entity_id` (not `id`). */
+            /** @description Entities connected to the node via relationships. Each item carries the canonical `entity_id`. A deprecated `id` alias with the same value is also present for one minor release to preserve backward compatibility; prefer `entity_id` and stop reading `id`. */
             related_entities?: ({
-              /** @description The entity identifier. Always present as `entity_id`; the raw database `id` column is not exposed. */
+              /** @description The canonical entity identifier, matching `relationships[].source_entity_id` / `target_entity_id` and every other Neotoma response surface. Always present. */
               entity_id?: string;
+              /**
+               * @deprecated
+               * @description Deprecated alias of `entity_id`, retained for one minor release for backward compatibility. Equal to `entity_id`. Will be removed in a future release; use `entity_id` instead.
+               */
+              id?: string;
             } & {
               [key: string]: unknown;
             })[];

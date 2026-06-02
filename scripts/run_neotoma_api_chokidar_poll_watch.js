@@ -54,7 +54,7 @@ let restartChain = Promise.resolve();
 // immediate child orphans grandchildren under PPID=1 and they keep holding
 // their bound port forever (see docs/developer/launchd_dev_servers.md).
 function spawnApi() {
-  const args = [runDevTaskJs, "node", "--import", "tsx", entryAbs];
+  const args = [runDevTaskJs, process.execPath, "--import", "tsx", entryAbs];
   const c = spawn(process.execPath, args, {
     stdio: "inherit",
     env: process.env,

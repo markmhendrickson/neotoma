@@ -108,7 +108,7 @@ Use this only when you want the MCP client connection to survive local source re
 }
 ```
 
-`neotoma setup --tool cursor --yes` and `neotoma mcp config` both use the same MCP installer. Transport presets: **`b`** (default) local stdio for low-friction npm onboarding; **`a`** signed shim + AAuth — `neotoma-dev` → dev `/mcp` (default `:3080`), `neotoma` → prod `/mcp` (default `:3180`); **`c`** direct stdio; **`d`** signed shim with **both** slots → prod `/mcp` (default `http://127.0.0.1:3180/mcp`). Pass `--rewrite-neotoma-mcp` to refresh existing Neotoma entries to a different preset.
+`neotoma setup --tool cursor --yes` and `neotoma mcp config` both use the same MCP installer. Transport presets: **`b`** (default) local stdio for low-friction npm onboarding; **`a`** signed shim + AAuth — `neotoma-dev` → dev `/mcp` (default `:3080`), `neotoma` → prod `/mcp` (default `:3180`); **`c`** direct stdio; **`d`** signed shim with **both** slots → prod `/mcp` (default `http://127.0.0.1:3180/mcp`); **`e`** signed HTTP proxy, prod profile, single `neotoma` slot — uses `run_neotoma_mcp_signed_stdio_dev_shim.sh` with `NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1` and `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod`, for local dev with `NEOTOMA_ENV=production` (port 3080, prod DB, live-reload). Pass `--rewrite-neotoma-mcp` to refresh existing Neotoma entries to a different preset.
 
 ### AAuth attribution: HTTP URL vs signed proxy
 

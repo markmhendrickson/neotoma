@@ -61,21 +61,21 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **395**
-- Backend and repo Vitest files: **362**
+- Total automated test files: **406**
+- Backend and repo Vitest files: **373**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 96 |
+| Vitest unit tests | 99 |
 | Vitest service tests | 33 |
-| Source-adjacent tests | 45 |
-| Vitest integration tests | 109 |
+| Source-adjacent tests | 47 |
+| Vitest integration tests | 112 |
 | Vitest CLI tests | 59 |
-| Vitest contract tests | 10 |
-| Vitest security tests | 2 |
+| Vitest contract tests | 12 |
+| Vitest security tests | 3 |
 | Vitest subscription tests | 3 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (96):**
+**Files (99):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -130,6 +130,7 @@ flowchart TD
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
+- `tests/unit/canonical_markdown_body_heading.test.ts`
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
@@ -179,8 +180,10 @@ flowchart TD
 - `tests/unit/observation_reducer_provenance.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
+- `tests/unit/plan_schema_body_field.test.ts`
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
+- `tests/unit/pull_request_schema.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
 - `tests/unit/relationship_reducer.test.ts`
 - `tests/unit/request_context.test.ts`
@@ -250,7 +253,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (45):**
+**Files (47):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -279,6 +282,7 @@ flowchart TD
 - `src/services/docs/render.test.ts`
 - `src/services/docs/visibility.test.ts`
 - `src/services/guest_access_token.test.ts`
+- `src/services/issues/body_newline_decode.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
 - `src/services/issues/redaction_guard.test.ts`
@@ -287,6 +291,7 @@ flowchart TD
 - `src/services/plans/capture_harness_plan.test.ts`
 - `src/services/plans/seed_schema.test.ts`
 - `src/services/sync/peer_health.test.ts`
+- `src/shared/action_handlers/entity_handlers.test.ts`
 - `src/shared/action_schemas.test.ts`
 - `src/utils/__tests__/csv_summary.test.ts`
 - `src/utils/__tests__/lucide_icons.test.ts`
@@ -302,7 +307,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (109):**
+**Files (112):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -335,6 +340,7 @@ flowchart TD
 - `tests/integration/fixture_mcp_store_replay.test.ts`
 - `tests/integration/gdpr_deletion.test.ts`
 - `tests/integration/graph_neighborhood_pagination.test.ts`
+- `tests/integration/graph_neighborhood_source_branch.test.ts`
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
@@ -389,6 +395,8 @@ flowchart TD
 - `tests/integration/public_key_registry.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
 - `tests/integration/relationship_agent_attribution_api.test.ts`
+- `tests/integration/relationship_pagination_determinism.test.ts`
+- `tests/integration/relationship_query_determinism.test.ts`
 - `tests/integration/relationship_snapshots.test.ts`
 - `tests/integration/retrieval_transport_reliability.test.ts`
 - `tests/integration/root_landing.test.ts`
@@ -484,12 +492,14 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (10):**
+**Files (12):**
+- `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
 - `tests/contract/legacy_payloads/replay.test.ts`
 - `tests/contract/mcp_stdio_output_safety.test.ts`
+- `tests/contract/mcp_tool_dispatch_coverage.test.ts`
 - `tests/contract/openapi_schema.test.ts`
 - `tests/contract/openclaw_plugin.test.ts`
 - `tests/contract/package_contents.test.ts`
@@ -501,9 +511,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (2):**
+**Files (3):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`
+- `tests/security/tenant_isolation_matrix.test.ts`
 
 ### Vitest subscription tests
 **Directory:** `tests/subscriptions/`

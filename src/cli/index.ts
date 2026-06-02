@@ -2321,7 +2321,7 @@ type InitAuthMode = "dev_local" | "oauth" | "key_derived" | "skip";
 type InitInstallScope = "user" | "project" | "both";
 type InitScopeSelection = InitInstallScope | "skip";
 type InitMcpEnv = "dev" | "prod" | "both";
-type InitMcpTransport = "a" | "b" | "c" | "d";
+type InitMcpTransport = "a" | "b" | "c" | "d" | "e";
 type InitKeySource = "create" | "existing" | "skip";
 
 type InitAuthSummary = {
@@ -2422,6 +2422,14 @@ function normalizeInitMcpTransport(input?: string): InitMcpTransport | null {
     normalized === "prod-parity"
   ) {
     return "d";
+  }
+  if (
+    normalized === "5" ||
+    normalized === "e" ||
+    normalized === "signed-prod-profile" ||
+    normalized === "prod-signed"
+  ) {
+    return "e";
   }
   return null;
 }
@@ -4594,7 +4602,7 @@ const initCommand = program
   )
   .option(
     "--mcp-transport <mode>",
-    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp, e signed HTTP proxy prod profile single neotoma slot (local dev with NEOTOMA_ENV=production)"
   )
   .option(
     "--configure-cli <choice>",
@@ -4708,7 +4716,7 @@ const initCommand = program
         }
         const mcpTransportFromFlag = normalizeInitMcpTransport(opts.mcpTransport);
         if (opts.mcpTransport && !mcpTransportFromFlag) {
-          throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+          throw new Error("Invalid --mcp-transport. Use a, b, c, d, or e.");
         }
         let keySourceFromFlag = normalizeInitKeySource(opts.keySource);
         if (opts.keySource && !keySourceFromFlag) {
@@ -7672,7 +7680,7 @@ mcpCommand
   .option("--yes", "Skip confirmation prompts for hook installation", false)
   .option(
     "--mcp-transport <mode>",
-    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp, e signed HTTP proxy prod profile single neotoma slot (local dev with NEOTOMA_ENV=production)"
   )
   .option(
     "--rewrite-neotoma-mcp",
@@ -7695,7 +7703,7 @@ mcpCommand
       const outputMode = resolveOutputMode();
       const mcpTransportFromFlag = normalizeInitMcpTransport(opts.mcpTransport);
       if (opts.mcpTransport && !mcpTransportFromFlag) {
-        throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+        throw new Error("Invalid --mcp-transport. Use a, b, c, d, or e.");
       }
 
       try {
@@ -9362,7 +9370,7 @@ program
   )
   .option(
     "--mcp-transport <mode>",
-    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp, e signed HTTP proxy prod profile single neotoma slot (local dev with NEOTOMA_ENV=production)"
   )
   .option(
     "--rewrite-neotoma-mcp",
@@ -9388,7 +9396,7 @@ program
     const outputMode = resolveOutputMode();
     const mcpTransport = normalizeInitMcpTransport(opts.mcpTransport);
     if (opts.mcpTransport && !mcpTransport) {
-      throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+      throw new Error("Invalid --mcp-transport. Use a, b, c, d, or e.");
     }
     const installScopeInput = String(opts.installScope ?? "project").toLowerCase();
     const installScope =
@@ -13196,7 +13204,7 @@ schemasCommand
     const outputMode = resolveOutputMode();
     const dryRun = !opts.apply;
 
-    const { repairAllPluralTypes } = await import("../../services/plural_type_repair.js" as string);
+    const { repairAllPluralTypes } = await import("../services/plural_type_repair.js" as string);
 
     if (dryRun) {
       process.stdout.write(

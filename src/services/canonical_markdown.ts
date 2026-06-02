@@ -120,6 +120,13 @@ export interface RenderOpts {
    * do not blow a MEMORY.md line budget.
    */
   maxFieldChars?: number;
+  /**
+   * When set, the named snapshot field is treated as the document body.
+   * Its value is rendered directly (without a `## <field>` heading prefix).
+   * Mirrors the `content_field` option in ProfileRenderOpts for use in
+   * "entity" render mode profiles that still want heading-skip behaviour.
+   */
+  content_field?: string;
 }
 
 // ============================================================================
@@ -290,8 +297,13 @@ export function renderEntityMarkdown(
   for (const key of orderedKeys) {
     const value = snapshot[key];
     if (value === undefined) continue;
-    parts.push(`## ${key}`);
-    parts.push(formatFieldValueMarkdown(value));
+    if (opts.content_field && key === opts.content_field) {
+      // Render the content field directly without a ## heading prefix.
+      parts.push(formatFieldValueMarkdown(value));
+    } else {
+      parts.push(`## ${key}`);
+      parts.push(formatFieldValueMarkdown(value));
+    }
   }
 
   if (opts.includeProvenance && entity.provenance && Object.keys(entity.provenance).length > 0) {
@@ -643,7 +655,11 @@ export function renderProfileEntity(
   parts.push(fmLines.join("\n"));
 
   if (hasContent) {
-    parts.push(contentValue as string);
+    // Strip a spurious leading `## body` / `# body` heading that some harnesses
+    // emit when they serialise the plan body as markdown (e.g. "## body\n\n## Problem\n…").
+    // The heading is redundant: the mirror already knows which field is the body.
+    const strippedContent = (contentValue as string).replace(/^##?\s+body\s*\n+/i, "");
+    parts.push(strippedContent);
   } else {
     // No body — fall back: render all snapshot fields (except those already in frontmatter) as ## sections
     const bodyFields = Object.keys(snapshot).filter(

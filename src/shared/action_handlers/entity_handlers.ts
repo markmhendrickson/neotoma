@@ -35,6 +35,12 @@ interface QueryEntitiesParams {
     | "heuristic_fallback"
     | "target_id";
   snapshotFilters?: Record<string, SnapshotFilter>;
+  /**
+   * When true, omit chat bookkeeping types (`conversation`, `conversation_message`,
+   * etc.) from results. Default false — bookkeeping is included unless the caller
+   * opts in. Has no effect when `entityType` already filters to a bookkeeping type.
+   */
+  excludeBookkeeping?: boolean;
 }
 
 const MAX_LEXICAL_CANDIDATES = 5000;
@@ -212,7 +218,14 @@ async function resolveEntityTypesForTypeFilters(typeFilterTokens: Set<string>): 
 
   const { data, error } = await db.from("schema_registry").select("entity_type").eq("active", true);
   if (error) {
-    throw new Error(`Failed to resolve entity types for search filters: ${error.message}`);
+    // Degrade gracefully: a transient schema_registry hiccup should not 500
+    // the entire search request. Returning an empty set falls back to the
+    // unfiltered candidate query (capped at MAX_LEXICAL_CANDIDATES), matching
+    // the symmetric loadKnownEntityTypes behavior just above.
+    logger.warn(
+      `[lexicalSearch] Failed to resolve entity types for search filters: ${error.message}`
+    );
+    return [];
   }
 
   const matched = new Set<string>();
@@ -638,6 +651,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     createdSince,
     identityBasis,
     snapshotFilters,
+    excludeBookkeeping = false,
   } = params;
 
   let entities: EntityWithProvenance[];
@@ -651,7 +665,11 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       searchTokens,
       buildEntityTypeFilterTokens(searchTokens, registryTypes)
     );
-    const excludeBookkeeping = shouldExcludeBookkeepingFromSearch(entityType);
+    // Bookkeeping exclusion is caller-controlled (per docs/foundation/product_principles.md
+    // §10.2 Explicit Over Implicit). If the caller explicitly filters to a bookkeeping
+    // entity_type, the explicit type filter wins and excludeBookkeeping is ignored.
+    const effectiveExcludeBookkeeping =
+      excludeBookkeeping && !(entityType && BOOKKEEPING_ENTITY_TYPES.has(entityType));
 
     const lexicalParams = {
       userId,
@@ -667,7 +685,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       createdSince,
       identityBasis,
       search: trimmedSearch,
-      excludeBookkeeping,
+      excludeBookkeeping: effectiveExcludeBookkeeping,
       limit,
       offset,
     };
@@ -711,7 +729,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           createdSince,
           identityBasis,
         });
-        if (excludeBookkeeping) {
+        if (effectiveExcludeBookkeeping) {
           entities = entities.filter((entity) => !BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type));
         }
         if (entities.length > 0) {

@@ -40,6 +40,7 @@ import {
   structuredEntities,
   structuredEntityIdAt,
 } from "../submitted_thread/submitted_thread.js";
+import { decodeOverEscapedBody } from "./body_newline_decode.js";
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError, IssueValidationError } from "./errors.js";
 import { runRedactionGuard } from "./redaction_guard.js";
@@ -539,6 +540,11 @@ export async function submitGuestIssue(
 ): Promise<GuestIssueSubmitResult> {
   await assertGuestWriteAllowed(["issue"], {});
 
+  // Guest submissions arriving directly at the operator endpoint are the only
+  // boundary for their body, so decode over-escaped `\n` here too. Idempotent
+  // for bodies forwarded from a remote `submitIssue` that already decoded. (#1484)
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const now =
     typeof params.submission_timestamp === "string" && params.submission_timestamp.trim().length > 0
@@ -658,6 +664,10 @@ export async function appendGuestIssueMessage(
   ops: Operations,
   params: { issue_entity_id: string; body: string }
 ): Promise<{ message_entity_id: string }> {
+  // Decode over-escaped `\n` in guest-appended message bodies at this boundary.
+  // Idempotent for already-decoded bodies forwarded from a remote append. (#1484)
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const raw = (await ops.retrieveEntitySnapshot({
     entity_id: params.issue_entity_id,
     format: "json",
@@ -788,6 +798,14 @@ export async function submitIssue(
   params: IssueCreateParams
 ): Promise<SubmitIssueResult> {
   assertSubmitIssueReporterEnvironment(params);
+
+  // Decode over-escaped bodies (literal `\n` two-char sequences) into real
+  // newlines before the body reaches the GitHub mirror or the canonical Neotoma
+  // record. Some clients double-encode the body argument; without this the issue
+  // renders as a single run-on block. Applied before redaction so the backstop
+  // scans the real text. See body_newline_decode.ts and issue #1484.
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const now = new Date().toISOString();
   const visibility = params.visibility ?? "public";
@@ -804,14 +822,59 @@ export async function submitIssue(
     params = { ...params, title: guarded.title, body: guarded.body };
   }
 
+  const authorAlias =
+    typeof config.author_alias === "string" && config.author_alias.trim().length > 0
+      ? config.author_alias.trim()
+      : null;
+
+  // Step 1: Submit to operator's Neotoma instance (canonical).
+  // Neotoma runs first so we only publish the GitHub mirror when the canonical
+  // record is already committed. This prevents the fail-open split where GitHub
+  // receives a public issue with no corresponding Neotoma record. (resolves #944)
+  let submittedToNeotoma = false;
+  let remoteEntityId = "";
+  let remoteConversationId = "";
+  let remoteGuestAccessToken: string | undefined;
+  const issuesTargetUrl = config.target_url?.trim() ?? "";
+  let remoteSubmissionAttempted = false;
+  let remoteSubmissionError: Error | null = null;
+
+  // localId is derived before remote submission so both the remote call and the
+  // local shadow issue share the same thread identity.
+  const localId = localIssueId(config.repo, params.title, now);
+
+  if (issuesTargetUrl) {
+    remoteSubmissionAttempted = true;
+    try {
+      const remoteResult = await neotomaClient.submitIssueToRemote({
+        title: params.title,
+        body: params.body,
+        labels: toolingLabels,
+        visibility,
+        author: authorAlias ?? "local",
+        submission_timestamp: now,
+        local_issue_id: localId,
+      });
+      submittedToNeotoma = true;
+      remoteEntityId = remoteResult.issue_entity_id;
+      remoteConversationId = remoteResult.conversation_id;
+      remoteGuestAccessToken = remoteResult.access_token?.trim() || undefined;
+    } catch (err) {
+      remoteSubmissionError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
   let githubIssue: GitHubIssue | null = null;
   let pushedToGithub = false;
   let githubUrl = "";
   let issueNumber = 0;
   let githubMirrorFailure: unknown = null;
 
-  // Step 1: For public issues, optionally push to GitHub first for discoverability
-  if (visibility === "public") {
+  // Step 2: For public issues, mirror to GitHub for discoverability.
+  // Only attempt when Neotoma succeeded (or when no Neotoma instance is
+  // configured, preserving the existing behaviour for users without an operator).
+  const githubMirrorAllowed = !remoteSubmissionAttempted || submittedToNeotoma;
+  if (visibility === "public" && githubMirrorAllowed) {
     try {
       githubIssue = await github.createIssue({
         title: params.title,
@@ -823,52 +886,11 @@ export async function submitIssue(
       issueNumber = githubIssue.number;
     } catch (err) {
       githubMirrorFailure = err;
-      // GitHub push failed — continue with Neotoma-only submission
+      // GitHub push failed — Neotoma record already exists; issue stored locally
     }
   }
 
-  const authorAlias =
-    typeof config.author_alias === "string" && config.author_alias.trim().length > 0
-      ? config.author_alias.trim()
-      : null;
   const author = githubIssue?.user?.login ?? authorAlias ?? "local";
-
-  // Step 2: Submit to operator's Neotoma instance (canonical)
-  let submittedToNeotoma = false;
-  let remoteEntityId = "";
-  let remoteConversationId = "";
-  let remoteGuestAccessToken: string | undefined;
-  const issuesTargetUrl = config.target_url?.trim() ?? "";
-  let remoteSubmissionAttempted = false;
-  let remoteSubmissionError: Error | null = null;
-
-  // Derive once so remote submission and local shadow issue share the same local thread identity.
-  const localId = issueNumber > 0 ? undefined : localIssueId(config.repo, params.title, now);
-
-  if (issuesTargetUrl) {
-    remoteSubmissionAttempted = true;
-    try {
-      const remoteResult = await neotomaClient.submitIssueToRemote({
-        title: params.title,
-        body: params.body,
-        labels: toolingLabels,
-        visibility,
-        githubUrl: githubUrl || undefined,
-        githubNumber: issueNumber || undefined,
-        author,
-        authorGithubId: githubIssue?.user?.id,
-        authorGithubType: githubIssue?.user?.type,
-        submission_timestamp: now,
-        ...(localId ? { local_issue_id: localId } : {}),
-      });
-      submittedToNeotoma = true;
-      remoteEntityId = remoteResult.issue_entity_id;
-      remoteConversationId = remoteResult.conversation_id;
-      remoteGuestAccessToken = remoteResult.access_token?.trim() || undefined;
-    } catch (err) {
-      remoteSubmissionError = err instanceof Error ? err : new Error(String(err));
-    }
-  }
 
   // Step 3: Store local reference for tracking
   const threadConversationId =
@@ -1007,6 +1029,11 @@ export async function addIssueMessage(
   ops: Operations,
   params: IssueMessageParams
 ): Promise<AddMessageResult> {
+  // Decode over-escaped comment bodies (literal `\n`) into real newlines before
+  // the message reaches GitHub or the canonical Neotoma record, mirroring the
+  // submitIssue boundary. See body_newline_decode.ts and issue #1484.
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const resolved = await resolveIssueRow(ops, params);
   const { issue_entity_id: issueEntityId, snapshot, githubNumber, localIssueId } = resolved;

@@ -3504,6 +3504,7 @@ app.post("/entities/query", async (req, res) => {
       created_since,
       identity_basis,
       snapshot_filters,
+      exclude_bookkeeping,
     } = parsed.data;
     const { entities, total } = await queryEntitiesWithCount({
       userId,
@@ -3522,6 +3523,7 @@ app.post("/entities/query", async (req, res) => {
       createdSince: created_since,
       identityBasis: identity_basis,
       snapshotFilters: snapshot_filters,
+      excludeBookkeeping: exclude_bookkeeping,
     });
 
     return res.json({
@@ -4194,8 +4196,13 @@ app.get("/relationships", async (req, res) => {
       query = query.eq("target_entity_id", targetEntityId);
     }
 
+    // Stable pagination: tiebreak on the `relationship_key` primary key so rows
+    // sharing a `last_observation_at` value (batch upserts) keep a fixed order
+    // across paginated calls (docs/architecture/determinism.md). Same defect
+    // class as issue #368 on /list_relationships and /retrieve_graph_neighborhood.
     const { data, error, count } = await query
       .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
@@ -7777,9 +7784,14 @@ app.post("/list_relationships", async (req, res) => {
   } = parsed.data;
 
   try {
+    // Tenant isolation: resolve authenticated user and scope all queries to
+    // their records. See docs/security/advisories/2026-05-21-relationship-
+    // endpoint-tenant-isolation.md for context.
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
-    let query = db.from("relationship_snapshots").select("*");
+    let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
 
     if (source_entity_id && target_entity_id) {
       query = query
@@ -7809,7 +7821,16 @@ app.post("/list_relationships", async (req, res) => {
       query = query.eq("relationship_type", relationship_type);
     }
 
-    query = query.order("last_observation_at", { ascending: false });
+    // Deterministic ordering: `last_observation_at` is mutable and produces ties
+    // for rows upserted within the same millisecond (common in batch ingestion).
+    // `relationship_key` is the table's primary key — a stable, unique, monotonic
+    // tiebreaker that fully determines order. Without it, tied rows can move
+    // between pages across successive calls, breaking pagination stability and
+    // violating the determinism invariant (docs/architecture/determinism.md §
+    // "Sorting MUST use deterministic tiebreakers"). See issue #368.
+    query = query
+      .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true });
 
     const { data, error } = await query;
     if (error) {
@@ -7829,12 +7850,13 @@ app.post("/list_relationships", async (req, res) => {
     });
     return res.json({ relationships: paginated, total: all.length, limit, offset });
   } catch (error) {
-    logError("RelationshipQueryError:list_relationships", req, error);
-    return sendError(
+    return handleApiError(
+      req,
       res,
-      500,
+      error,
+      "Failed to query relationships",
       "DB_QUERY_FAILED",
-      error instanceof Error ? error.message : "Failed to query relationships"
+      "RelationshipQueryError:list_relationships"
     );
   }
 });
@@ -8031,6 +8053,11 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       offset = 0,
     } = parsed.data;
 
+    // Tenant isolation: scope all queries to the authenticated user.
+    // See docs/security/advisories/2026-05-21-relationship-endpoint-
+    // tenant-isolation.md for context.
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     const result: any = { node_id, node_type };
 
     if (node_type === "entity") {
@@ -8039,6 +8066,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         .from("entities")
         .select("*")
         .eq("id", node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!entityError && entity) {
@@ -8051,16 +8079,26 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { count: totalCount, error: countError } = await db
           .from("relationship_snapshots")
           .select("*", { count: "exact", head: true })
-          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .eq("user_id", userId);
 
         const total = countError ? 0 : (totalCount ?? 0);
         result.total_count = total;
         result.has_more = offset + limit < total;
 
+        // Deterministic ordering before paginating: this query previously had no
+        // `.order()` clause, so Postgres scan order (unspecified) decided which
+        // rows landed on each page — non-deterministic across calls. Order by the
+        // mutable `last_observation_at` first, then by the primary key
+        // `relationship_key` as a stable, unique tiebreaker so pagination is
+        // reproducible (docs/architecture/determinism.md). See issue #368.
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .eq("user_id", userId)
+          .order("last_observation_at", { ascending: false })
+          .order("relationship_key", { ascending: true })
           .range(offset, offset + limit - 1);
 
         if (!relError) {
@@ -8082,11 +8120,18 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
             const { data: relatedEntities, error: relatedEntitiesError } = await db
               .from("entities")
               .select("*")
-              .in("id", relatedEntityIds);
+              .in("id", relatedEntityIds)
+              .eq("user_id", userId);
 
             if (!relatedEntitiesError) {
+              // Expose the canonical `entity_id` (issue #276) so callers can
+              // correlate against relationships[].source_entity_id /
+              // target_entity_id. Keep `id` as a deprecated alias with the same
+              // value for one minor release to avoid breaking callers that read
+              // the legacy field. Prefer `entity_id`; `id` will be removed later.
               result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
                 entity_id: id,
+                id,
                 ...rest,
               }));
             }
@@ -8099,7 +8144,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("entity_id", node_id);
+          .eq("entity_id", node_id)
+          .eq("user_id", userId);
 
         if (!obsError) {
           result.observations = observations || [];
@@ -8111,9 +8157,10 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
         if (sourceIds.length > 0) {
           const { data: sources, error: srcError } = await db
-            .from("source")
+            .from("sources")
             .select("*")
-            .in("id", sourceIds);
+            .in("id", sourceIds)
+            .eq("user_id", userId);
 
           if (!srcError) {
             result.sources = sources || [];
@@ -8123,9 +8170,10 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
     } else if (node_type === "source") {
       // Get source
       const { data: source, error: srcError } = await db
-        .from("source")
+        .from("sources")
         .select("*")
         .eq("id", node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!srcError && source) {
@@ -8137,7 +8185,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
-          .eq("source_id", node_id);
+          .eq("source_id", node_id)
+          .eq("user_id", userId);
 
         if (!obsError) {
           result.observations = observations || [];

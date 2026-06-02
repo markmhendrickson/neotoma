@@ -49,14 +49,14 @@ function main() {
 
   const cursorServers = cursor.mcpServers;
 
-  // 1. Merge into .mcp.json so all Cursor MCPs are available to Claude Code etc.
+  // 1. Replace mcpServers in .mcp.json with the exact set from .cursor/mcp.json.
+  // We replace rather than merge so that servers removed from .cursor/mcp.json are
+  // not left as stale entries in .mcp.json.  Any server that should live only in
+  // Claude Code (not Cursor) belongs in user-level config, not here.
   let mcpContent = readJson(MCP_JSON) || {};
-  if (!mcpContent.mcpServers) mcpContent.mcpServers = {};
-  for (const [id, config] of Object.entries(cursorServers)) {
-    mcpContent.mcpServers[id] = config;
-  }
+  mcpContent.mcpServers = { ...cursorServers };
   writeJson(MCP_JSON, mcpContent);
-  console.log("Updated .mcp.json with", Object.keys(cursorServers).length, "server(s) from .cursor/mcp.json");
+  console.log("Replaced .mcp.json mcpServers with", Object.keys(cursorServers).length, "server(s) from .cursor/mcp.json");
 
   // 2. Append [mcp_servers.<id>] to .codex/config.toml for stdio servers
   let codexText = "";

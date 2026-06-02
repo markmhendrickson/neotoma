@@ -3113,6 +3113,104 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  preference: {
+    entity_type: "preference",
+    schema_version: "1.0",
+    metadata: {
+      label: "Preference",
+      description:
+        "User preference / setting persisted across sessions (e.g. issue_filing_consent).",
+      category: "agent_runtime",
+      aliases: ["setting"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // Stable identifier for the preference (e.g. "issue_filing_consent"). Acts as the key.
+        title: { type: "string", required: true, preserveCase: false },
+        // Current value of the preference (e.g. "always" | "ask" | "never"). Type is freeform
+        // string because preference shape varies; agents and UIs interpret per-title.
+        value: { type: "string", required: true, preserveCase: true },
+        // Optional scope qualifier — e.g. "global", "project:neotoma". Default behavior treats
+        // a preference as global when scope is omitted.
+        scope: { type: "string", required: false },
+        // Optional human-readable description of what the preference controls.
+        description: { type: "string", required: false, preserveCase: true },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+      },
+      // A preference is uniquely identified by its title (plus optional scope when present).
+      // Two stores with the same title collapse to one entity; the latest write wins on value.
+      canonical_name_fields: ["title", { composite: ["scope", "title"] }],
+    },
+    reducer_config: {
+      merge_policies: {
+        value: { strategy: "last_write" },
+        scope: { strategy: "last_write" },
+        description: { strategy: "highest_priority" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  pull_request: {
+    entity_type: "pull_request",
+    schema_version: "1.0",
+    metadata: {
+      label: "Pull Request",
+      description: "A GitHub pull request.",
+      category: "knowledge",
+      aliases: ["pr", "github_pr"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // GitHub PR number — primary identifier within a repo.
+        pr_number: { type: "number", required: true },
+        title: { type: "string", required: true, preserveCase: true },
+        // Current state: open | closed | merged | draft.
+        status: { type: "string", required: false },
+        // Target branch the PR merges into.
+        base_branch: { type: "string", required: false },
+        // Source branch the PR is merging from.
+        head_branch: { type: "string", required: false },
+        // Canonical URL for the PR on GitHub.
+        github_url: { type: "string", required: false },
+        // PR description body (markdown).
+        body: { type: "string", required: false, preserveCase: true },
+        // ISO timestamp when the PR was merged; null/absent when not merged.
+        merged_at: { type: "string", required: false },
+        // Repository slug in owner/repo format (e.g. "markmhendrickson/neotoma").
+        repo: { type: "string", required: false },
+        // GitHub login of the PR author.
+        author: { type: "string", required: false },
+      },
+      // A pull request is uniquely identified by its number within a repo.
+      // The composite [pr_number, repo] is the primary rule; title is a
+      // fallback for cases where only the title is supplied.
+      canonical_name_fields: [{ composite: ["pr_number", "repo"] }, "title"],
+      agent_instructions:
+        "A pull_request entity represents a single GitHub pull request. " +
+        "Use pr_number and repo together as the primary identifier. " +
+        "The status field should reflect the current state: open, closed, merged, or draft. " +
+        "Set merged_at to the ISO timestamp when the PR was merged.",
+    },
+    reducer_config: {
+      merge_policies: {
+        pr_number: { strategy: "last_write" },
+        title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        status: { strategy: "last_write" },
+        base_branch: { strategy: "last_write" },
+        head_branch: { strategy: "last_write" },
+        github_url: { strategy: "last_write" },
+        body: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        merged_at: { strategy: "last_write" },
+        repo: { strategy: "last_write" },
+        author: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
