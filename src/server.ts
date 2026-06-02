@@ -3087,6 +3087,7 @@ export class NeotomaServer {
     const relatedEntityIds = new Set<string>();
     const allRelationships: any[] = [];
     let currentLevel = [parsed.entity_id];
+    let hopsTraversed = 0;
 
     // Traverse relationships up to max_hops
     for (let hop = 0; hop < parsed.max_hops; hop++) {
@@ -3148,6 +3149,9 @@ export class NeotomaServer {
         }
       }
 
+      // This hop produced at least one relationship lookup over a non-empty
+      // frontier, so count it as traversed.
+      hopsTraversed = hop + 1;
       if (nextLevel.length === 0) break;
       currentLevel = nextLevel;
     }
@@ -3190,7 +3194,7 @@ export class NeotomaServer {
       relationships: allRelationships,
       total_entities: entities.length,
       total_relationships: allRelationships.length,
-      hops_traversed: Math.min(parsed.max_hops, Array.from(visited).length > 1 ? 1 : 0),
+      hops_traversed: hopsTraversed,
     });
   }
 

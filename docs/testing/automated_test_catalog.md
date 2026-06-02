@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **412**
-- Backend and repo Vitest files: **379**
+- Total automated test files: **414**
+- Backend and repo Vitest files: **381**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,8 +72,8 @@ flowchart TD
 | Vitest unit tests | 102 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 47 |
-| Vitest integration tests | 112 |
-| Vitest CLI tests | 59 |
+| Vitest integration tests | 113 |
+| Vitest CLI tests | 60 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
 | Vitest subscription tests | 5 |
@@ -311,7 +311,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (112):**
+**Files (113):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -349,6 +349,7 @@ flowchart TD
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
+- `tests/integration/http_related_entities_multihop.test.ts`
 - `tests/integration/idempotency_collision.test.ts`
 - `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
@@ -430,7 +431,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (59):**
+**Files (60):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -444,6 +445,7 @@ flowchart TD
 - `tests/cli/cli_direct_invocation_parity.test.ts`
 - `tests/cli/cli_doctor_setup.test.ts`
 - `tests/cli/cli_edit_commands.test.ts`
+- `tests/cli/cli_entities_import.test.ts`
 - `tests/cli/cli_entity_commands.test.ts`
 - `tests/cli/cli_entity_subcommands.test.ts`
 - `tests/cli/cli_infra_commands.test.ts`

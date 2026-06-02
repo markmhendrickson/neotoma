@@ -533,6 +533,12 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - Preferred: positional `identifier` or `--identifier <id>`
   - Compatibility alias: `--query <id>` (equivalent to `--identifier`)
   - If both `--identifier` and `--query` are provided, they must match
+- `neotoma entities import <file>`: bulk-import entities from a JSONL file (one entity JSON object per line) by chunking them into batched `POST /store` calls.
+  - `--batch-size <n>`: entities per store call (default `200`). Lower it if a request exceeds the server body limit.
+  - `--idempotency-prefix <prefix>`: prefix for the per-chunk idempotency key (default derived from the file name). Re-running with the same prefix and file is a safe no-op, so a large backfill can be replayed without duplicating data.
+  - `--user-id <userId>`: store under a specific user.
+  - `--commit`: actually write. Without it the command runs in dry-run/plan mode.
+  - The `/store` endpoint already writes each batch transactionally; this command owns file reading, chunking, and per-chunk idempotency. For very large backfills, this is the supported "replay from an external source" path.
 
 ### Sources
 

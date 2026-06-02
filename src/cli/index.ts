@@ -12007,6 +12007,109 @@ entitiesCommand
   );
 
 entitiesCommand
+  .command("import")
+  .description(
+    "Bulk-import entities from a JSONL file (one entity JSON object per line) by " +
+      "chunking them into batched POST /store calls. The store endpoint already writes " +
+      "each batch transactionally; this command handles file reading, chunking, and " +
+      "per-chunk idempotency so a large backfill can be replayed safely."
+  )
+  .argument("<file>", "Path to a JSONL file: one entity object per line")
+  .option(
+    "--batch-size <n>",
+    "Entities per POST /store call (default 200). Lower this if requests exceed the server body limit.",
+    (v) => Number(v),
+    200
+  )
+  .option(
+    "--idempotency-prefix <prefix>",
+    "Prefix for the per-chunk idempotency key (default: derived from the file name). " +
+      "Re-running with the same prefix and file is a safe no-op."
+  )
+  .option("--user-id <userId>", "Store under this user ID")
+  .option("--commit", "Actually write. Without this flag the command runs in dry-run/plan mode.")
+  .action(
+    async (
+      file: string,
+      opts: {
+        batchSize: number;
+        idempotencyPrefix?: string;
+        userId?: string;
+        commit?: boolean;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+
+      const batchSize =
+        Number.isFinite(opts.batchSize) && opts.batchSize > 0 ? opts.batchSize : 200;
+      const commit = Boolean(opts.commit);
+      const raw = await fs.readFile(file, "utf8");
+      const lines = raw
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      const entities: Record<string, unknown>[] = [];
+      lines.forEach((line, idx) => {
+        try {
+          entities.push(JSON.parse(line) as Record<string, unknown>);
+        } catch {
+          throw new Error(`Invalid JSON on line ${idx + 1} of ${file}`);
+        }
+      });
+
+      if (entities.length === 0) {
+        throw new Error(`No entities found in ${file} (expected one JSON object per line)`);
+      }
+
+      // Stable prefix so re-running the same file is idempotent. Derived from
+      // the file's base name when not supplied; chunk index is appended below.
+      const baseName = file.split("/").pop() ?? file;
+      const prefix = opts.idempotencyPrefix ?? `import:${baseName}`;
+
+      const totalChunks = Math.ceil(entities.length / batchSize);
+      const results: Array<Record<string, unknown>> = [];
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const chunk = entities.slice(chunkIndex * batchSize, (chunkIndex + 1) * batchSize);
+        const { data, error } = await api.POST("/store", {
+          body: {
+            entities: chunk,
+            idempotency_key: `${prefix}:${chunkIndex}`,
+            user_id: opts.userId,
+            commit,
+          },
+        });
+        if (error) {
+          throw new Error(
+            `Failed to store chunk ${chunkIndex + 1}/${totalChunks}: ${JSON.stringify(error)}`
+          );
+        }
+        results.push({ chunk: chunkIndex + 1, size: chunk.length, result: data });
+      }
+
+      writeOutput(
+        {
+          file,
+          total_entities: entities.length,
+          batch_size: batchSize,
+          chunks: totalChunks,
+          committed: commit,
+          idempotency_prefix: prefix,
+          results,
+        },
+        outputMode
+      );
+    }
+  );
+
+entitiesCommand
   .command("related")
   .description("Get entities related to a given entity via relationships")
   .argument("<entityId>", "Entity ID")
