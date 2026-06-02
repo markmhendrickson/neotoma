@@ -45,6 +45,16 @@ These are the constraints any topology choice has to start from, verified agains
   `getAuthenticatedUserId` + `.eq("user_id", userId)`, with a cross-tenant read
   matrix (`tests/security/tenant_isolation_matrix.test.ts`). Isolation does not
   depend on physical separation; it holds within a shared database.
+- **Encryption at rest is available, with a documented boundary.** When enabled
+  (`NEOTOMA_ENCRYPTION_ENABLED` + a key file or mnemonic), the sensitive content
+  and derived-metadata columns are AES-256-GCM column-encrypted on disk
+  (observation fields, entity/relationship snapshots, provenance, raw fragments,
+  and the durable event-log payload). The vector embedding tables are the one
+  store that cannot be column-encrypted — `sqlite-vec` computes similarity over
+  the raw vectors in the index — so they rely on volume-level encryption. See
+  `docs/architecture/architecture.md` § 7.2 for the exact covered/uncovered set.
+  This makes the at-rest posture a per-topology choice: column encryption plus an
+  encrypted volume under the instance, regardless of which topology below.
 
 Net: the current single-process + single-file model is correct and safe for one
 writer. It is not, as shipped, a multi-writer serving story — a single Node
@@ -91,7 +101,10 @@ enforced in the query layer) — optionally hardened with row-level security.
   semantics; isolation becomes logical-only, so the `user_id` scoping and (recommended)
   RLS are now load-bearing for tenant separation rather than belt-and-suspenders;
   a Postgres dependency raises the self-hosting bar for a tenant who later wants to run
-  their own instance.
+  their own instance. **Data-sovereignty caveat:** a shared database co-locates tenants'
+  data by definition, so a tenant whose requirement is a strict per-tenant walled garden
+  (no co-mingling with other tenants' data, even logically separated) is served by A or
+  C, not B — for that constraint, B is ruled out regardless of its scaling advantages.
 - **Practical ceiling:** the standard multi-tenant SaaS ceiling — thousands+ of tenants
   on one cluster, bounded by Postgres scaling rather than by Neotoma.
 
@@ -150,9 +163,16 @@ for a deployment review:
   between Topology A and Topology B.
 - **Write concurrency per tenant** — bursty interactive writes vs. steady ingestion
   changes how much the single-writer envelope matters.
-- **Isolation requirement** — is per-row scoping (with RLS) acceptable, or is physical
-  separation a hard requirement (regulatory, contractual)? A hard requirement points at
-  A or C and rules out B.
+- **Isolation requirement** — is application-layer per-row scoping (`user_id` on every
+  query, the current enforced mechanism) acceptable, or is physical separation a hard
+  requirement (regulatory, contractual)? A hard requirement points at A or C and rules
+  out B.
+- **Data-sovereignty / encryption posture** — does the deployment require that all data
+  _and_ derived metadata (snapshots, provenance, embeddings, event payloads) stay inside
+  a controlled perimeter with at-rest encryption? If so, the answer is column encryption
+  enabled plus an encrypted volume under the instance (the embedding store relies on the
+  volume layer; see the encryption-at-rest note in _Current state_). This is independent
+  of the A/B/C choice but is a Phase-0 gate item for sovereignty-sensitive tenants.
 - **Self-host appetite per tenant** — does the application self-host the whole fleet, or
   do some tenants want to run their own instance (Topology C)?
 - **System-of-record relationship** — if Neotoma is a rebuildable derived layer over the
