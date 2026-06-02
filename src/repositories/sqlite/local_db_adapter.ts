@@ -69,9 +69,11 @@ let cachedDataKey: Uint8Array | null = null;
 
 /**
  * Load the data encryption key from config (key file or mnemonic).
- * Returns null if encryption is not enabled.
+ * Returns null if encryption is not enabled. Exported so other at-rest write
+ * paths that bypass this adapter (e.g. the durable substrate-event log) can
+ * reuse the same derived key rather than duplicating key-loading logic.
  */
-function getDataKey(): Uint8Array | null {
+export function getDataKey(): Uint8Array | null {
   if (!config.encryption.enabled) {
     return null;
   }
