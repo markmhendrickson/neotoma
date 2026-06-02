@@ -4503,6 +4503,8 @@ export interface operations {
         content: {
           "application/json": {
             observations_moved?: number;
+            /** @description Number of relationship_observations rows repointed from the merged-away entity to the survivor. Self-loops and duplicates already present on the survivor are deleted and not counted here. */
+            relationships_repointed?: number;
             /** Format: date-time */
             merged_at?: string;
           };
