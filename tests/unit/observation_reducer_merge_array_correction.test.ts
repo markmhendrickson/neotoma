@@ -3,11 +3,13 @@
  * correct() on an array-typed (merge_array) field must fully REPLACE the
  * array, not union the correction's array into the prior observations'.
  *
- * Corrections are created with source_priority 1000 (highest). The reducer's
- * merge_array strategy now restricts the union to observations at the maximum
- * source_priority present, so:
+ * The gate is `source_priority`-based and applies to ANY higher-priority
+ * write — corrections are merely the motivating case (correct() hard-codes
+ * source_priority 1000). The reducer's merge_array strategy restricts the
+ * union to observations at the maximum source_priority present, so:
  *   - all-equal-priority observations still union (normal behavior), and
- *   - a higher-priority correction replaces lower-priority arrays.
+ *   - a strictly higher-priority write (e.g. a correction, or a sensor)
+ *     replaces lower-priority arrays.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -123,12 +125,12 @@ describe("ObservationReducer - merge_array correction replacement (#1541)", () =
   );
 
   it(
-    "a later correction supersedes an earlier malformed correction at the same tier",
+    "a higher-priority correction supersedes an earlier malformed lower-priority write",
     async () => {
-      // Simulates the original #1541 artifact: an earlier correction left a
-      // stringified-array element; a later clean correction must win, and
-      // among same-priority corrections the union still applies, so the test
-      // asserts the malformed element from a LOWER-priority write is dropped.
+      // Simulates the original #1541 artifact: a lower-priority observation
+      // left a stringified-array element; a higher-priority correction must
+      // win and the malformed lower-priority element must be dropped by the
+      // priority gate.
       const malformed: Observation = {
         id: "obs_malformed",
         entity_id: testEntityId,
@@ -162,6 +164,87 @@ describe("ObservationReducer - merge_array correction replacement (#1541)", () =
       expect(new Set(items)).toEqual(new Set(["one", "two", "three"]));
       expect(items).not.toContain('["nested","stringified","array"]');
       expect(items).not.toContain("leftover");
+    }
+  );
+
+  it(
+    "unions two corrections at the SAME (top) priority tier",
+    async () => {
+      // Design intent: the gate excludes only LOWER-priority observations.
+      // Two writes at the same max priority still union with each other.
+      const corrA: Observation = {
+        id: "obs_corr_a",
+        entity_id: testEntityId,
+        entity_type: testEntityType,
+        schema_version: "1.0.0",
+        source_id: null,
+        observed_at: "2026-01-01T00:00:00Z",
+        specificity_score: 1.0,
+        source_priority: 1000,
+        fields: { items: ["p", "q"] },
+        created_at: "2026-01-01T00:00:00Z",
+        user_id: testUserId,
+      };
+      const corrB: Observation = {
+        id: "obs_corr_b",
+        entity_id: testEntityId,
+        entity_type: testEntityType,
+        schema_version: "1.0.0",
+        source_id: null,
+        observed_at: "2026-01-02T00:00:00Z",
+        specificity_score: 1.0,
+        source_priority: 1000,
+        fields: { items: ["q", "r"] },
+        created_at: "2026-01-02T00:00:00Z",
+        user_id: testUserId,
+      };
+
+      const snapshot = await reducer.computeSnapshot(testEntityId, [corrA, corrB]);
+      const items = snapshot.snapshot.items as unknown[];
+
+      expect(new Set(items)).toEqual(new Set(["p", "q", "r"]));
+    }
+  );
+
+  it(
+    "a top-priority null correction clears the array to [] (lower-priority arrays are gated out)",
+    async () => {
+      // After the priority gate, a strictly-higher-priority null correction
+      // excludes the lower-priority array contributions; the only remaining
+      // (top-priority) observation is the null one, which is skipped by the
+      // inner null guard, so merge_array writes [] — consistent with §4.3 of
+      // docs/subsystems/reducer.md.
+      const base: Observation = {
+        id: "obs_base_for_null",
+        entity_id: testEntityId,
+        entity_type: testEntityType,
+        schema_version: "1.0.0",
+        source_id: "src_base",
+        observed_at: "2026-01-01T00:00:00Z",
+        specificity_score: 1.0,
+        source_priority: 100,
+        fields: { items: ["a", "b"] },
+        created_at: "2026-01-01T00:00:00Z",
+        user_id: testUserId,
+      };
+      const nullCorrection: Observation = {
+        id: "obs_null_correction",
+        entity_id: testEntityId,
+        entity_type: testEntityType,
+        schema_version: "1.0.0",
+        source_id: null,
+        observed_at: "2026-01-02T00:00:00Z",
+        specificity_score: 1.0,
+        source_priority: 1000,
+        fields: { items: null },
+        created_at: "2026-01-02T00:00:00Z",
+        user_id: testUserId,
+      };
+
+      const snapshot = await reducer.computeSnapshot(testEntityId, [base, nullCorrection]);
+
+      // Snapshot value is an empty array (not the accumulated ["a","b"]).
+      expect(snapshot.snapshot.items).toEqual([]);
     }
   );
 });

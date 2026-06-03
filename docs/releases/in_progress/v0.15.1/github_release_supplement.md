@@ -17,10 +17,12 @@ This patch makes `retrieve_graph_neighborhood` expose the canonical `entity_id` 
 
 - Callers reading `related_entities[].entity_id` now receive a value instead of `undefined`.
 - Callers still reading `related_entities[].id` continue to receive the same value (now formally deprecated).
+- **`merge_array` fields are now priority-gated (#1541).** A `correct()` (or any strictly higher-priority write) on an array-typed `merge_array` field now fully **replaces** lower-priority array contributions instead of unioning with them, so corrections can cleanly reset an array. Two consequences for callers: (1) a top-priority `field: null` correction now clears such a field to `[]`; (2) `provenance[<field>]` / `source_observation_id` for a `merge_array` field now lists only the top-`source_priority` contributing observation IDs, not every observation that ever contributed an element. Same-priority observations still union as before.
 
 ## Fixes
 
 - #276 — `retrieve_graph_neighborhood` `related_entities` exposed only the raw `id`; now exposes the canonical `entity_id`, with `id` retained as a deprecated alias.
+- #1541 — `correct()` on an array-typed (`merge_array`) field unioned the correction into the prior array instead of replacing it; the reducer now priority-gates the `merge_array` union so corrections replace lower-priority arrays.
 
 ## Tests and validation
 
