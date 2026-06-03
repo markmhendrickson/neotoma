@@ -3728,7 +3728,7 @@ app.post("/entities/query", async (req, res) => {
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total } = await queryEntitiesWithCount({
+    const { entities, total, applied_search_strategies } = await queryEntitiesWithCount({
       userId,
       entityType: entity_type,
       includeMerged: include_merged,
@@ -3753,6 +3753,7 @@ app.post("/entities/query", async (req, res) => {
       total,
       limit,
       offset,
+      ...(applied_search_strategies ? { applied_search_strategies } : {}),
     });
   } catch (error) {
     return handleApiError(

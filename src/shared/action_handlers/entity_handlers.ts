@@ -4,6 +4,7 @@ import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
+import { loadConceptTypeSynonyms } from "../../services/schema_registry.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 
 export interface SnapshotFilter {
@@ -49,25 +50,6 @@ const MAX_LEXICAL_CANDIDATES = 5000;
 export const ENTITY_TYPE_KEYWORD_BOOST = 280;
 
 /**
- * Concept → entity_type bridging for lexical search (#1496). Natural-language
- * queries name a concept ("bank account", "savings") rather than the stored
- * `entity_type` ("financial_account"). When a query token (or adjacent token
- * pair) maps to a concept here, the corresponding entity_type is treated as a
- * type-filter hint so those rows are not dropped purely because the literal
- * type name is absent from the query. This is deterministic and additive: it
- * only widens which entity types a query *can* match, never narrows results.
- *
- * Keyed by normalized concept phrase (already lowercased, punctuation-stripped).
- */
-export const CONCEPT_TYPE_SYNONYMS: Record<string, string> = {
-  bank: "financial_account",
-  "bank account": "financial_account",
-  account: "financial_account",
-  savings: "financial_account",
-  checking: "financial_account",
-};
-
-/**
  * Tokens that carry no identity signal in a descriptive multi-term query.
  * Used only by the partial-token fallback (#1551) to avoid letting filler
  * words inflate overlap scores. Strict all-token matching is unaffected.
@@ -96,19 +78,31 @@ const PARTIAL_MATCH_MIN_OVERLAP_RATIO = 0.5;
 
 /**
  * Concept tokens / phrases present in a query that bridge to entity types.
- * Scans single tokens and adjacent token pairs (e.g. "bank account").
+ * Scans single tokens and adjacent token pairs (e.g. "bank account"). The
+ * concept → entity_type map is supplied by the caller from schema
+ * `query_synonyms` declarations (see {@link loadConceptTypeSynonyms}); this
+ * function holds no hardcoded type knowledge per
+ * docs/foundation/schema_agnostic_design_rules.md.
  */
-export function conceptEntityTypeHints(searchTokens: string[]): Set<string> {
+export function conceptEntityTypeHints(
+  searchTokens: string[],
+  conceptSynonyms: Map<string, string>
+): Set<string> {
   const hints = new Set<string>();
+  if (conceptSynonyms.size === 0) {
+    return hints;
+  }
   for (let i = 0; i < searchTokens.length; i++) {
     const single = searchTokens[i];
-    if (single && CONCEPT_TYPE_SYNONYMS[single]) {
-      hints.add(CONCEPT_TYPE_SYNONYMS[single]);
+    const singleHit = single ? conceptSynonyms.get(single) : undefined;
+    if (singleHit) {
+      hints.add(singleHit);
     }
     if (i + 1 < searchTokens.length) {
       const pair = `${searchTokens[i]} ${searchTokens[i + 1]}`;
-      if (CONCEPT_TYPE_SYNONYMS[pair]) {
-        hints.add(CONCEPT_TYPE_SYNONYMS[pair]);
+      const pairHit = conceptSynonyms.get(pair);
+      if (pairHit) {
+        hints.add(pairHit);
       }
     }
   }
@@ -391,15 +385,25 @@ async function loadRawFragmentTextByEntityId(entityIds: string[]): Promise<Map<s
   return fragmentTextByEntityId;
 }
 
+/**
+ * Non-strict retrieval strategies that can contribute to a search result set.
+ * Surfaced to callers via the `applied_search_strategies` response field so a
+ * relaxed-pass match is distinguishable from an exact one (#1495/#1496/#1551
+ * silent-behavior advisory).
+ */
+export type SearchStrategy = "strict" | "semantic" | "partial_overlap" | "concept_bridge";
+
 async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Promise<{
   entityIds: string[];
   total: number;
+  strategies: Set<SearchStrategy>;
 }> {
   const { userId, entityType, includeMerged = false, search, excludeBookkeeping = false } = params;
+  const strategies = new Set<SearchStrategy>();
   const normalizedSearch = normalizeSearchText(search);
   const searchTokens = normalizedSearch.split(" ").filter(Boolean);
   if (searchTokens.length === 0) {
-    return { entityIds: [], total: 0 };
+    return { entityIds: [], total: 0, strategies };
   }
 
   const registryTypes = await loadKnownEntityTypes(userId, []);
@@ -409,9 +413,11 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   );
   // Concept → type hints ("bank account" → financial_account) so the partial
   // fallback can credit a type match even when the literal type name is absent
-  // from the query (#1496). Only used to boost ranking, never to narrow the
-  // candidate set away from the full scan.
-  const conceptTypeHints = conceptEntityTypeHints(searchTokens);
+  // from the query (#1496). The concept → entity_type map comes from schema
+  // `query_synonyms` declarations, not hardcoded here. Only used to boost
+  // ranking, never to narrow the candidate set away from the full scan.
+  const conceptSynonyms = await loadConceptTypeSynonyms(userId);
+  const conceptTypeHints = conceptEntityTypeHints(searchTokens, conceptSynonyms);
 
   let entityQuery = db
     .from("entities")
@@ -441,7 +447,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     throw new Error(`Failed lexical candidate query: ${entitiesError.message}`);
   }
   if (!entities || entities.length === 0) {
-    return { entityIds: [], total: 0 };
+    return { entityIds: [], total: 0, strategies };
   }
 
   const entityIds = entities.map((entity: { id: string }) => entity.id);
@@ -532,6 +538,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
         }
       }
       score += entityTypeKeywordBoost(entity.entity_type, searchTokens);
+      strategies.add("strict");
       lexicalMatches.push({
         entityId: entity.id,
         canonicalName: entity.canonical_name,
@@ -576,8 +583,10 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
           continue;
         }
         let score = effectiveOverlap * 20;
+        strategies.add("partial_overlap");
         if (conceptMatch) {
           score += ENTITY_TYPE_KEYWORD_BOOST;
+          strategies.add("concept_bridge");
         }
         if (candidate.normalizedCanonical) {
           for (const token of meaningfulTokens) {
@@ -608,7 +617,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 
   const matchedIds = lexicalMatches.map((match) => match.entityId);
 
-  return { entityIds: matchedIds, total: matchedIds.length };
+  return { entityIds: matchedIds, total: matchedIds.length, strategies };
 }
 
 async function countVisibleEntities(params: {
@@ -733,8 +742,16 @@ async function queryEntitiesFromLexicalSearch(params: {
   excludeBookkeeping: boolean;
   limit: number;
   offset: number;
-}): Promise<{ entities: EntityWithProvenance[]; total: number }> {
-  const { entityIds: lexicalIds, total: lexicalTotal } = await lexicalSearchEntityIds({
+}): Promise<{
+  entities: EntityWithProvenance[];
+  total: number;
+  strategies: Set<SearchStrategy>;
+}> {
+  const {
+    entityIds: lexicalIds,
+    total: lexicalTotal,
+    strategies,
+  } = await lexicalSearchEntityIds({
     userId: params.userId,
     entityType: params.entityType,
     includeMerged: params.includeMerged,
@@ -743,7 +760,7 @@ async function queryEntitiesFromLexicalSearch(params: {
   });
 
   if (lexicalIds.length === 0) {
-    return { entities: [], total: 0 };
+    return { entities: [], total: 0, strategies };
   }
 
   const paginatedIds = lexicalIds.slice(params.offset, params.offset + params.limit);
@@ -772,13 +789,19 @@ async function queryEntitiesFromLexicalSearch(params: {
     return ai - bi;
   });
 
-  return { entities, total: lexicalTotal };
+  return { entities, total: lexicalTotal, strategies };
 }
 
 export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promise<{
   entities: EntityWithProvenance[];
   total: number;
   excluded_merged: boolean;
+  /**
+   * Non-strict retrieval strategies that contributed to a `search` result set
+   * (#1495/#1496/#1551 silent-behavior signal). `undefined` for non-search
+   * listings; an empty array when a search matched nothing.
+   */
+  applied_search_strategies?: SearchStrategy[];
 }> {
   const {
     userId,
@@ -803,8 +826,12 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
 
   let entities: EntityWithProvenance[];
   let total: number;
+  // Collected only on the search path; left undefined for plain listings so
+  // the response omits `applied_search_strategies` entirely.
+  let appliedStrategies: Set<SearchStrategy> | undefined;
 
   if (search && search.trim()) {
+    appliedStrategies = new Set<SearchStrategy>();
     const trimmedSearch = search.trim();
     const searchTokens = normalizeSearchText(trimmedSearch).split(" ").filter(Boolean);
     const registryTypes = await loadKnownEntityTypes(userId, []);
@@ -844,6 +871,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       const lexicalResult = await queryEntitiesFromLexicalSearch(lexicalParams);
       entities = lexicalResult.entities;
       total = lexicalResult.total;
+      for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
     } else {
       logger.info(
         `[queryEntitiesWithCount] semantic search path: userId=${userId} search=${trimmedSearch.slice(0, 50)} entityType=${entityType ?? "(any)"}`
@@ -893,15 +921,18 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
             )
           );
           total = semanticTotal;
+          appliedStrategies.add("semantic");
         } else {
           const lexicalResult = await queryEntitiesFromLexicalSearch(lexicalParams);
           entities = lexicalResult.entities;
           total = lexicalResult.total;
+          for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
         }
       } else {
         const lexicalResult = await queryEntitiesFromLexicalSearch(lexicalParams);
         entities = lexicalResult.entities;
         total = lexicalResult.total;
+        for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
       }
     }
   } else {
@@ -963,6 +994,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     entities,
     total,
     excluded_merged: !includeMerged,
+    applied_search_strategies: appliedStrategies ? [...appliedStrategies].sort() : undefined,
   };
 }
 

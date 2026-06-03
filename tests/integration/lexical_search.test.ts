@@ -296,6 +296,137 @@ describe("Lexical retrieval fallback", () => {
     expect(ids).not.toContain(decoyId);
   });
 
+  it("partial fallback boundary: 3-of-6 meaningful tokens passes, 2-of-6 fails", async () => {
+    // Six meaningful query tokens => required overlap = ceil(6 * 0.5) = 3.
+    // The target overlaps exactly 3 tokens (boundary pass); the decoy overlaps
+    // exactly 2 (boundary fail). Tokens chosen to avoid PARTIAL_MATCH_STOP_TOKENS.
+    const passId = `ent_overlap_pass_${Date.now()}`;
+    const failId = `ent_overlap_fail_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: passId,
+      entityType: "research_report",
+      canonicalName: "doc_overlap_pass",
+      // Contains alpha, beta, gamma => 3 of 6.
+      snapshot: { title: "alpha beta gamma unrelated heading" },
+    });
+    await createEntityWithSnapshot({
+      id: failId,
+      entityType: "research_report",
+      canonicalName: "doc_overlap_fail",
+      // Contains only alpha, beta => 2 of 6.
+      snapshot: { title: "alpha beta unrelated heading" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      search: "alpha beta gamma delta epsilon zeta",
+      limit: 25,
+      offset: 0,
+    });
+
+    const ids = result.entities.map((entity) => entity.entity_id);
+    expect(ids).toContain(passId);
+    expect(ids).not.toContain(failId);
+  });
+
+  it("partial fallback boundary: 2-token minimum requires both tokens to match", async () => {
+    // Two meaningful query tokens => required overlap = max(2, ceil(2 * 0.5)) = 2,
+    // i.e. BOTH must match. A row overlapping only one token must not surface.
+    const bothId = `ent_two_token_both_${Date.now()}`;
+    const oneId = `ent_two_token_one_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: bothId,
+      entityType: "research_report",
+      canonicalName: "doc_two_token_both",
+      snapshot: { title: "kappa lambda combined report" },
+    });
+    await createEntityWithSnapshot({
+      id: oneId,
+      entityType: "research_report",
+      canonicalName: "doc_two_token_one",
+      snapshot: { title: "kappa only report" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      search: "kappa lambda",
+      limit: 25,
+      offset: 0,
+    });
+
+    const ids = result.entities.map((entity) => entity.entity_id);
+    expect(ids).toContain(bothId);
+    expect(ids).not.toContain(oneId);
+  });
+
+  it("partial fallback: an all-stop-token query returns empty without throwing", async () => {
+    // Every token is a stop token, so there are zero meaningful tokens and the
+    // partial fallback must short-circuit (no overlap pass, no exception).
+    const entityId = `ent_all_stop_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "research_report",
+      canonicalName: "doc_all_stop",
+      snapshot: { title: "the report for now" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      search: "the to of for with now",
+      limit: 25,
+      offset: 0,
+    });
+
+    // No meaningful tokens => no strict and no partial matches; the call must
+    // resolve cleanly rather than throw.
+    expect(result.entities.map((entity) => entity.entity_id)).not.toContain(entityId);
+  });
+
+  it("surfaces applied_search_strategies including concept_bridge for the #1496 path", async () => {
+    const entityId = `ent_fa_strategy_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "financial_account",
+      canonicalName: "account_xyz_002",
+      snapshot: { institution: "Revolut", account_name: "Revolut Main", provider: "Revolut" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search: "bank account Revolut Main",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
+    expect(result.applied_search_strategies).toBeDefined();
+    expect(result.applied_search_strategies).toEqual(
+      expect.arrayContaining(["partial_overlap", "concept_bridge"])
+    );
+  });
+
+  it("omits applied_search_strategies for non-search listings", async () => {
+    const entityId = `ent_list_no_strategy_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "research_report",
+      canonicalName: "doc_list_no_strategy",
+      snapshot: { title: "Plain listing entry" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      entityType: "research_report",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.applied_search_strategies).toBeUndefined();
+  });
+
   it("ranks cross-type lexical matches deterministically without entity_type filter", async () => {
     const runId = Date.now();
     const canonicalFirstId = `ent_lex_rank_canonical_${runId}`;
