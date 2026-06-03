@@ -1,7 +1,11 @@
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { attachMcpSseKeepalive } from "../../src/actions.js";
+import {
+  attachMcpSseKeepalive,
+  parseMcpSseKeepaliveMs,
+  MCP_SSE_KEEPALIVE_DEFAULT_MS,
+} from "../../src/actions.js";
 
 /**
  * Minimal Express-shaped response stub backed by an EventEmitter so we can
@@ -159,7 +163,7 @@ describe("attachMcpSseKeepalive (issue #1483)", () => {
     expect(res.writes).toHaveLength(0);
   });
 
-  it("disables the heartbeat when keepaliveMs <= 0 but still enables TCP keepalive", () => {
+  it("disables the heartbeat when keepaliveMs <= 0 but still enables a bounded TCP keepalive", () => {
     const { req, res } = makeReqRes("GET");
     attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 0 });
 
@@ -168,5 +172,99 @@ describe("attachMcpSseKeepalive (issue #1483)", () => {
     vi.advanceTimersByTime(60000);
     expect(res.writes).toHaveLength(0);
     expect(res.socket.keepAlive?.enable).toBe(true);
+    // Even with the heartbeat disabled, the TCP probe delay is floored to 15s
+    // (not 0 / "OS default") so the socket survives proxy idle windows.
+    expect(res.socket.keepAlive?.initialDelay).toBe(15000);
+  });
+
+  it("floors a tiny positive keepaliveMs to the 15s TCP keepalive minimum", () => {
+    const { req, res } = makeReqRes("GET");
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000 });
+    // App-level heartbeat still uses 1000ms, but the TCP probe delay is floored.
+    expect(res.socket.keepAlive?.initialDelay).toBe(15000);
+  });
+
+  it("warns once if the SSE stream ticks repeatedly without X-Accel-Buffering landing", () => {
+    const warn = vi.fn();
+    const { req, res } = makeReqRes("GET");
+    // Simulate an adapter that snapshotted the original writeHead: bypass the
+    // patch by setting the content-type and headersSent directly without the
+    // X-Accel-Buffering header ever being injected.
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000, logger: { warn } });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.headersSent = true; // headers "sent" without writeHead patch running
+
+    vi.advanceTimersByTime(5000); // 5 ticks -> warn threshold
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/X-Accel-Buffering/);
+
+    vi.advanceTimersByTime(5000); // still only warned once
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT warn when X-Accel-Buffering is present", () => {
+    const warn = vi.fn();
+    const { req, res } = makeReqRes("GET");
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000, logger: { warn } });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.writeHead(200); // patch injects X-Accel-Buffering
+
+    vi.advanceTimersByTime(10000);
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("parseMcpSseKeepaliveMs (issue #1483 review BLOCKING fix)", () => {
+  it("falls back to the default for unset / empty / non-numeric values", () => {
+    expect(parseMcpSseKeepaliveMs(undefined)).toBe(MCP_SSE_KEEPALIVE_DEFAULT_MS);
+    expect(parseMcpSseKeepaliveMs("")).toBe(MCP_SSE_KEEPALIVE_DEFAULT_MS);
+    expect(parseMcpSseKeepaliveMs("   ")).toBe(MCP_SSE_KEEPALIVE_DEFAULT_MS);
+    expect(parseMcpSseKeepaliveMs("abc")).toBe(MCP_SSE_KEEPALIVE_DEFAULT_MS);
+  });
+
+  it("passes a literal 0 through as the disable sentinel (NOT coerced to default)", () => {
+    // This is the BLOCKING regression: `parseInt("0",10) || 25000` returned
+    // 25000. The disable knob must yield 0.
+    expect(parseMcpSseKeepaliveMs("0")).toBe(0);
+  });
+
+  it("passes negative values through (also disable, via the <= 0 guard)", () => {
+    expect(parseMcpSseKeepaliveMs("-1")).toBe(-1);
+    expect(parseMcpSseKeepaliveMs("-1000")).toBe(-1000);
+  });
+
+  it("returns the parsed value for valid positive integers", () => {
+    expect(parseMcpSseKeepaliveMs("5000")).toBe(5000);
+    expect(parseMcpSseKeepaliveMs("25000")).toBe(25000);
+    expect(parseMcpSseKeepaliveMs(" 5000 ")).toBe(5000);
+  });
+});
+
+describe("attachMcpSseKeepalive env-driven disable (issue #1483 review)", () => {
+  const ORIG = process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS;
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    if (ORIG === undefined) delete process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS;
+    else process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS = ORIG;
+  });
+
+  // The module-level MCP_SSE_KEEPALIVE_MS is bound at import time, so this test
+  // exercises the env-path end-to-end by passing the parsed env value the same
+  // way the module computes it — proving 0 from the env reaches the disable
+  // guard rather than being coerced to the default.
+  it("writes no heartbeat when the env value parses to 0", () => {
+    process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS = "0";
+    const keepaliveMs = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS);
+    expect(keepaliveMs).toBe(0);
+
+    const { req, res } = makeReqRes("GET");
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.writeHead(200);
+    vi.advanceTimersByTime(60000);
+    expect(res.writes).toHaveLength(0);
   });
 });

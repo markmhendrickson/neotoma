@@ -273,11 +273,11 @@ These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for out
 
 ### MCP / SSE transport tuning (server process)
 
-These are read by the Neotoma HTTP server when it serves the MCP StreamableHTTP transport at `/mcp`. They keep the long-lived SSE stream alive behind reverse proxies (Cloudflare Tunnel, nginx, ngrok) and clients with idle timeouts. See issue #1483 and `docs/security/threat_model.md`.
+These are read by the Neotoma HTTP server when it serves the MCP StreamableHTTP transport at `/mcp`. They keep the long-lived SSE stream alive behind reverse proxies (Cloudflare Tunnel, nginx, ngrok) and clients with idle timeouts. This is a reliability/transport concern; see issue #1483 and the [v0.15.1 release supplement](../releases/in_progress/v0.15.1/github_release_supplement.md).
 
 | Environment variable | Default | Purpose |
 |----------------------|---------|---------|
-| `NEOTOMA_MCP_SSE_KEEPALIVE_MS` | `25000` | Interval (ms) between SSE comment heartbeat frames (`: hb\n\n`) on the MCP GET SSE stream. The frames keep proxies and clients from treating the stream as idle and silently closing it. Set to `0` to disable the heartbeat (restores prior behavior). |
+| `NEOTOMA_MCP_SSE_KEEPALIVE_MS` | `25000` | Interval (ms) between SSE comment heartbeat frames (`: hb\n\n`) on the MCP GET SSE stream. The frames keep proxies and clients from treating the stream as idle and silently closing it. Set to `0` (or any value `<= 0`) to disable the heartbeat (restores prior behavior); an unset, empty, or non-numeric value uses the default. TCP keepalive on the socket stays enabled regardless. |
 | `NEOTOMA_KEEPALIVE_TIMEOUT_MS` | `120000` | Node HTTP `server.keepAliveTimeout` (ms). Extended from Node's 5 s default so idle keep-alive sockets are not closed before typical proxy idle windows (60–300 s), which otherwise surfaces as a mid-stream RST / 502 reconnect cycle. |
 | `NEOTOMA_HEADERS_TIMEOUT_MS` | `125000` | Node HTTP `server.headersTimeout` (ms). Must exceed `NEOTOMA_KEEPALIVE_TIMEOUT_MS` to avoid a Node bug where the socket is closed before the headers timeout fires. |
 
