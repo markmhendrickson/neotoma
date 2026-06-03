@@ -42,11 +42,13 @@ The SDK's `retryInterval` transport option was evaluated and deliberately not us
 
 - **#1483:** the MCP GET SSE stream emits `: hb\n\n` comment frames (invisible to clients per the SSE spec) and carries `X-Accel-Buffering: no`.
 - **#276:** callers reading `related_entities[].entity_id` now receive a value instead of `undefined`; callers still reading `related_entities[].id` continue to receive the same value (now formally deprecated).
+- **#1541:** `merge_array` fields are now priority-gated. A `correct()` (or any strictly higher-priority write) on an array-typed `merge_array` field now fully **replaces** lower-priority array contributions instead of unioning with them, so corrections can cleanly reset an array. Two consequences for callers: (1) a top-priority `field: null` correction now clears such a field to `[]`; (2) `provenance[<field>]` / `source_observation_id` for a `merge_array` field now lists only the top-`source_priority` contributing observation IDs, not every observation that ever contributed an element. Same-priority observations still union as before.
 
 ## Fixes
 
 - #1483 — Neotoma MCP SSE connection drops under load. Added an application-level heartbeat (`: hb\n\n` comment frames), `X-Accel-Buffering: no`, and a bounded TCP keepalive to the MCP StreamableHTTP transport's GET SSE stream so it survives proxy and client idle timeouts without manual reconnection. This is the application-level layer above the v0.13.0 `keepAliveTimeout` fix (#148), which addressed socket reuse but not SSE stream idle. The `NEOTOMA_MCP_SSE_KEEPALIVE_MS` disable knob parses defensively so a literal `0` (or negative) value disables the heartbeat rather than silently falling back to the default.
 - #276 — `retrieve_graph_neighborhood` `related_entities` exposed only the raw `id`; now exposes the canonical `entity_id`, with `id` retained as a deprecated alias.
+- #1541 — `correct()` on an array-typed (`merge_array`) field unioned the correction into the prior array instead of replacing it; the reducer now priority-gates the `merge_array` union so corrections replace lower-priority arrays.
 
 ## Tests and validation
 
@@ -62,3 +64,5 @@ No security-sensitive surface changed by either fix. The #1483 diff classifier r
 ## Breaking changes
 
 No breaking changes. Re-adding the `related_entities[].id` alias (#276) is additive; the field is now marked deprecated and will be removed in a future minor release after callers migrate to `entity_id`.
+
+The #1541 `merge_array` changes listed under "Behavior changes" are **not** classified as breaking: they correct `correct()` to its documented semantics (corrections "always win"). (a) The provenance-shape change only affects code that walks `provenance[<field>]` / `source_observation_id` for a `merge_array` field on a correction code path — non-correction paths are unaffected, and the documented contract was always "the contributing source(s)", not "every observation that ever touched the field"; callers should walk only the IDs listed and not assume every contributor appears. (b) The null-correction-clears-to-`[]` behavior is a new capability (previously there was no single-call way to clear such a field), not a narrowing of any previously-accepted input. No API contract is narrowed and no field is removed.
