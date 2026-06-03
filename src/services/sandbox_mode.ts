@@ -143,6 +143,62 @@ export function resolveSandboxMode(inputs: ResolveSandboxModeInputs): ResolveSan
 }
 
 /**
+ * Build the boot banner lines for a resolved sandbox mode. Pure (no IO) so the
+ * refuse-mode remediation text is unit-testable. The caller writes the joined
+ * result to stderr.
+ *
+ * Remediation under `refuse` differs by environment: resolveSandboxMode() gates
+ * the local_sandbox loopback escape on `!productionEnv` (step 4), so binding to
+ * 127.0.0.1 under NEOTOMA_ENV=production does NOT escape refuse mode. The banner
+ * therefore only advertises the loopback escape when it actually works. See
+ * issue #1505.
+ */
+export function buildSandboxBootBannerLines(inputs: {
+  mode: NeotomaSandboxModeName;
+  reason: string;
+  shouldRefuseBoot: boolean;
+  refusePolicy: "warn" | "enforce";
+  productionEnv: boolean;
+}): string[] {
+  const { mode, reason, shouldRefuseBoot, refusePolicy, productionEnv } = inputs;
+  const lines: string[] = [];
+  lines.push("");
+  lines.push("─────────────────────────────────────────────────────────────");
+  lines.push(`[neotoma] Sandbox mode resolved: ${mode}`);
+  lines.push(`[neotoma] Reason: ${reason}`);
+  if (mode === "refuse") {
+    lines.push(
+      `[neotoma] WARNING: this server topology matches the v0.11.1 inspector ` +
+        `auth-bypass advisory class.`
+    );
+    if (productionEnv) {
+      lines.push(
+        `[neotoma] Under NEOTOMA_ENV=production, loopback bind does NOT escape ` +
+          `refuse mode. Set NEOTOMA_REQUIRE_AUTH=1 + provision auth, OR opt into ` +
+          `NEOTOMA_SANDBOX_MODE=1 for the hosted-sandbox profile.`
+      );
+    } else {
+      lines.push(
+        `[neotoma] Set NEOTOMA_REQUIRE_AUTH=1 + provision auth, OR bind to ` +
+          `loopback (NEOTOMA_HTTP_HOST=127.0.0.1), OR opt into ` +
+          `NEOTOMA_SANDBOX_MODE=1 for the hosted-sandbox profile.`
+      );
+    }
+    if (shouldRefuseBoot) {
+      lines.push(`[neotoma] NEOTOMA_REFUSE_MODE=enforce — refusing to start. ` + `Exit code 1.`);
+    } else {
+      lines.push(
+        `[neotoma] NEOTOMA_REFUSE_MODE=${refusePolicy} — boot continues; set ` +
+          `NEOTOMA_REFUSE_MODE=enforce to make this fatal.`
+      );
+    }
+  }
+  lines.push("─────────────────────────────────────────────────────────────");
+  lines.push("");
+  return lines;
+}
+
+/**
  * Read NEOTOMA_REFUSE_MODE from env. Defaults to "warn" for the first cut so
  * upgrades do not regress existing self-host configs. Operators flip to
  * "enforce" once they have confirmed their topology.
