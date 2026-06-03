@@ -821,6 +821,200 @@ const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
 // Store server instances by session ID to preserve authentication state
 const mcpServerInstances = new Map<string, NeotomaServer>();
 
+// ----------------------------------------------------------------------------
+// MCP SSE keepalive (issue #1483)
+//
+// The MCP StreamableHTTP transport (SDK >= 1.29) holds a long-lived GET SSE
+// stream open for server-initiated messages, but the SDK emits no heartbeat
+// frames on that stream and Node's `keepAliveTimeout` only governs socket
+// reuse, not application-level idle. A reverse proxy (Cloudflare Tunnel,
+// nginx, ngrok) or the client's own idle timeout then silently closes the
+// idle stream mid-session; `/health` stays green because the process is alive,
+// only the stream is gone. The client loses the tool registry and the only
+// recovery is a manual disconnect/reconnect.
+//
+// Fix: for the standalone GET SSE stream we (1) inject `X-Accel-Buffering: no`
+// onto the SDK's `text/event-stream` response so buffering proxies flush each
+// frame immediately, (2) enable TCP keepalive on the socket, and (3) write a
+// periodic SSE comment frame (`: hb\n\n`) so intermediaries and clients see
+// regular traffic and never treat the stream as idle. SSE comment lines are
+// ignored by the client per the spec and interleave safely between the SDK's
+// own events because Node serializes writes on the response stream.
+//
+// The heartbeat interval is env-configurable; a value of 0 (or any value <= 0)
+// disables the heartbeat for parity with the prior behavior.
+//
+// Note on the SDK's `retryInterval` option: it is intentionally NOT used here.
+// In SDK 1.29 `retryInterval` only emits an SSE `retry:` field inside the
+// *priming event*, which the transport writes solely on the POST->SSE path and
+// solely when an `eventStore` is configured (resumability opt-in). We do not
+// configure an event store, and the stream that drops is the standalone GET
+// SSE stream, which never emits a priming event. Setting `retryInterval` would
+// therefore be an inert knob with no runtime effect, so it is omitted.
+
+/** Default MCP SSE heartbeat interval in ms when the env var is unset/invalid. */
+export const MCP_SSE_KEEPALIVE_DEFAULT_MS = 25_000;
+
+/**
+ * Parse the `NEOTOMA_MCP_SSE_KEEPALIVE_MS` env value into a heartbeat interval.
+ *
+ * Only an unset / empty / non-numeric value falls back to the default. A
+ * literal `0` (or any negative number) is a VALID, intentional "disable the
+ * heartbeat" sentinel and MUST flow through unchanged to the `keepaliveMs <= 0`
+ * guard in `attachMcpSseKeepalive` — using `parseInt(...) || DEFAULT` would
+ * silently coerce `0`/negatives back to the default and break the documented
+ * disable knob (issue #1483 review BLOCKING finding).
+ */
+export function parseMcpSseKeepaliveMs(raw: string | undefined): number {
+  if (raw === undefined) return MCP_SSE_KEEPALIVE_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return MCP_SSE_KEEPALIVE_DEFAULT_MS;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : MCP_SSE_KEEPALIVE_DEFAULT_MS;
+}
+
+const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS);
+
+/**
+ * Attach SSE keepalive behavior to a `/mcp` GET request before the transport
+ * takes over the response. Safe to call on every GET `/mcp`; it is a no-op
+ * once the response finishes and tears itself down when the stream closes.
+ *
+ * Exported for unit testing of the heartbeat lifecycle. See issue #1483.
+ */
+export function attachMcpSseKeepalive(
+  req: express.Request,
+  res: express.Response,
+  options?: { keepaliveMs?: number; logger?: { warn: (msg: string) => void } }
+): void {
+  const keepaliveMs = options?.keepaliveMs ?? MCP_SSE_KEEPALIVE_MS;
+  const log = options?.logger ?? logger;
+
+  // Inject X-Accel-Buffering only when the SDK actually opens an SSE stream.
+  // The @hono/node-server adapter calls res.writeHead() with a fresh header
+  // record built from the SDK's Web Response, so headers set earlier via
+  // res.setHeader() would be discarded; patching writeHead is the only place
+  // that survives. We add the header solely for text/event-stream responses
+  // so plain JSON-RPC POST replies are unaffected.
+  const originalWriteHead = res.writeHead as typeof res.writeHead;
+  let writeHeadPatched = true;
+  (res as express.Response).writeHead = function patchedWriteHead(
+    this: express.Response,
+    ...args: Parameters<typeof res.writeHead>
+  ): express.Response {
+    try {
+      const contentType = String(res.getHeader("content-type") || "").toLowerCase();
+      if (
+        writeHeadPatched &&
+        contentType.includes("text/event-stream") &&
+        !res.getHeader("x-accel-buffering")
+      ) {
+        res.setHeader("X-Accel-Buffering", "no");
+      }
+    } catch {
+      // Header inspection is best-effort; never block the response.
+    }
+    return originalWriteHead.apply(this, args) as express.Response;
+  } as typeof res.writeHead;
+
+  // Enable OS-level TCP keepalive so the kernel probes the peer and the
+  // connection is not reaped by an idle NAT/proxy before our heartbeat fires.
+  // Bound the probe delay independently of the app-level heartbeat: even when
+  // the heartbeat is disabled (keepaliveMs <= 0) we still want a sane,
+  // proxy-survivable TCP probe interval, so clamp into [15s, 60s].
+  const TCP_KEEPALIVE_MIN_MS = 15_000;
+  const TCP_KEEPALIVE_MAX_MS = 60_000;
+  const tcpKeepaliveDelay =
+    keepaliveMs > 0
+      ? Math.min(Math.max(keepaliveMs, TCP_KEEPALIVE_MIN_MS), TCP_KEEPALIVE_MAX_MS)
+      : TCP_KEEPALIVE_MIN_MS;
+  const socket = res.socket ?? req.socket;
+  if (socket && typeof socket.setKeepAlive === "function") {
+    try {
+      socket.setKeepAlive(true, tcpKeepaliveDelay);
+    } catch {
+      // Non-fatal: heartbeat frames below are the primary mechanism.
+    }
+  }
+
+  if (keepaliveMs <= 0) {
+    return;
+  }
+
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const stop = () => {
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = undefined;
+    }
+  };
+
+  // Runtime guard for the X-Accel-Buffering injection. The writeHead patch
+  // assumes the @hono/node-server adapter calls our patched res.writeHead; a
+  // future adapter that snapshots the original method reference before we patch
+  // would silently no-op the header, re-enabling proxy buffering. FakeRes in
+  // the unit test cannot reproduce that adapter behavior, so warn once at
+  // runtime if the SSE stream has ticked several times without the header
+  // landing — operators learn the proxy-flush path regressed.
+  const ACCEL_BUFFERING_WARN_AFTER_TICKS = 5;
+  let ticksOnStream = 0;
+  let accelBufferingWarned = false;
+
+  heartbeat = setInterval(() => {
+    // Only write once the SSE stream is established (headers sent) and still
+    // writable. For non-SSE responses (plain POST replies) headersSent flips
+    // after a synchronous write and writableEnded becomes true, so this stops
+    // on its own without ever emitting a stray frame into a JSON body.
+    if (res.writableEnded || res.destroyed) {
+      stop();
+      return;
+    }
+    if (!res.headersSent) {
+      return;
+    }
+    const contentType = String(res.getHeader("content-type") || "").toLowerCase();
+    if (!contentType.includes("text/event-stream")) {
+      // Not an SSE stream (e.g. a buffered JSON-RPC reply); nothing to keep
+      // alive. Stop so we never corrupt a non-SSE body.
+      stop();
+      return;
+    }
+    ticksOnStream += 1;
+    if (
+      !accelBufferingWarned &&
+      ticksOnStream >= ACCEL_BUFFERING_WARN_AFTER_TICKS &&
+      !res.getHeader("x-accel-buffering")
+    ) {
+      accelBufferingWarned = true;
+      log.warn(
+        "[MCP HTTP] SSE stream is alive but X-Accel-Buffering header is absent after " +
+          `${ticksOnStream} heartbeats; a buffering proxy may delay frames. The ` +
+          "res.writeHead patch may not be reaching the SDK adapter (possible @hono/node-server upgrade)."
+      );
+    }
+    try {
+      // Bare SSE comment frame: ignored by clients, keeps the stream warm.
+      res.write(": hb\n\n");
+    } catch {
+      stop();
+    }
+  }, keepaliveMs);
+  if (typeof heartbeat.unref === "function") {
+    heartbeat.unref();
+  }
+
+  const cleanup = () => {
+    stop();
+    if (writeHeadPatched) {
+      writeHeadPatched = false;
+      (res as express.Response).writeHead = originalWriteHead;
+    }
+  };
+  res.on("close", cleanup);
+  res.on("finish", cleanup);
+  req.on("close", cleanup);
+}
+
 function isLoopbackAddress(value: string | undefined): boolean {
   const remote = (value || "").trim().toLowerCase();
   if (!remote) return false;
@@ -1576,6 +1770,15 @@ app.all("/mcp", async (req, res) => {
         connectionId: typeof connId === "string" ? connId : undefined,
       });
     })();
+
+    // For the long-lived GET SSE stream, attach keepalive (heartbeat frames +
+    // X-Accel-Buffering + TCP keepalive) before the transport takes over the
+    // response, so the stream survives proxy/client idle timeouts (#1483).
+    // The helper inspects the response content-type at write time and is a
+    // no-op for buffered JSON-RPC POST replies.
+    if (req.method === "GET") {
+      attachMcpSseKeepalive(req, res);
+    }
 
     // Handle request with the transport inside the attribution context.
     const attributionDecision = getAttributionDecisionFromRequest(req);
