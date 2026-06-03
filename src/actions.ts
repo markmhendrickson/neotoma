@@ -120,9 +120,10 @@ import {
 } from "./services/root_landing/index.js";
 import { mountDocsRoutes } from "./services/docs/index.js";
 import {
-  installInspectorMount,
+  installInspectorLegacyRedirect,
   installInspectorRootStaticAssets,
   installInspectorSpaFallback,
+  installInspectorSpaShellEarly,
   resolveBundledInspectorDir,
 } from "./services/inspector_mount.js";
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
@@ -293,23 +294,27 @@ if (isSandboxMode()) {
   );
 }
 
-// Inspector SPA mount. Deliberately registered before all auth / rate-limit
-// middleware so the SPA shell + assets are reachable without a bearer — the
-// API calls the Inspector makes still flow through the normal auth stack below.
+// Inspector SPA mount at the server root `/` (content-negotiation
+// unification, plan ent_1f176dbbe9a39e6bbad27f1f). Deliberately registered
+// before all auth / rate-limit middleware so the SPA shell + assets are
+// reachable without a bearer — the API calls the SPA makes still flow through
+// the normal auth stack below.
 //
-// Two parallel mounts run today (content-negotiation unification, plan
-// ent_1f176dbbe9a39e6bbad27f1f):
 //   - installInspectorRootStaticAssets: serves /assets/*, /favicon.svg from
-//     dist/inspector at the server root. Inspector built with
-//     VITE_PUBLIC_BASE_PATH=/ resolves its asset URLs here.
-//   - installInspectorMount: legacy /inspector/* mount for back-compat with
-//     any existing links (MCP instructions, conversation summary, etc.).
-//     Will be removed once all links migrate to the unprefixed form.
+//     dist/inspector at the server root. The SPA is built with
+//     VITE_PUBLIC_BASE_PATH=/ so its asset + router base resolve here.
+//   - installInspectorLegacyRedirect: 308 /inspector/* → /* so stale links
+//     (MCP instructions, conversation summary URLs) keep working without a
+//     second SPA mount.
 //
-// The SPA shell itself is served by installInspectorSpaFallback (registered
-// at the END of route registration) for any HTML request to a non-API path.
+// The SPA shell is served by the content-negotiation handler in two places:
+//   - installInspectorSpaShellEarly (registered just before the auth gate):
+//     browser HTML requests to SPA client routes (/sources, /entities/:id, …)
+//     get the shell BEFORE the JSON data routes can intercept them.
+//   - installInspectorSpaFallback (registered at the END): catches any
+//     remaining unmatched HTML request. Both reuse the same handler.
 installInspectorRootStaticAssets(app, process.env, logger);
-installInspectorMount(app, process.env, logger);
+installInspectorLegacyRedirect(app, logger);
 
 // ── Sandbox session endpoints ───────────────────────────────────────────
 // Registered before general auth so the session handshake works for
@@ -3027,6 +3032,16 @@ async function resolveGuestScopedEntityAccess(
 
   return { userId: entity.user_id, entityType: entity.entity_type };
 }
+
+// Inspector SPA shell — early content-negotiation handler. Registered BEFORE
+// the auth gate and the JSON data routes (/sources, /entities/:id, /schemas, …)
+// so that a browser navigating to a SPA client route (Accept: text/html) gets
+// the SPA shell instead of a 401/JSON from the data route. API / agent / curl
+// clients (Accept: application/json | */* | absent) fall through to the real
+// data route. Excludes API-only paths and entity rendered-page surfaces
+// (/entities/:id/html|markdown). Registered after GET / (so the hosted_sandbox
+// funnel still wins), mountDocsRoutes, /me, and /server-info.
+installInspectorSpaShellEarly(app, process.env, logger);
 
 // Public key-based authentication middleware
 // MCP-style auth (same patterns as /mcp): encryption off = no auth or dev token; encryption on = key-derived token

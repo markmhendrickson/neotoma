@@ -234,12 +234,15 @@ export function installInspectorMount(
   let { staticDir } = cfg;
   if (!staticDir) return;
 
-  // NOTE: We intentionally do NOT mount Inspector assets at `/` here. The API
-  // route namespace (e.g. `/entities/:id`, `/relationships`, `/schemas`,
-  // `/sources`) overlaps with Inspector client routes by design — the
-  // `/inspector/*` prefix is load-bearing to keep them separated. A future
-  // feature unit will migrate the API to `/api/*` and unify the Inspector at
-  // `/`; see plan ent_c1d65039242aa2a920d805c7.
+  // NOTE: This legacy `/inspector/*` mount is retained only as an asset/shell
+  // surface for back-compat. The SPA is now served at `/` via content
+  // negotiation: `installInspectorRootStaticAssets` serves `/assets/*`, and
+  // `installInspectorSpaShellEarly` serves the shell to browsers
+  // (Accept: text/html) on SPA client routes (`/sources`, `/entities/:id`, …)
+  // BEFORE the data routes return JSON. The API route namespace overlap is
+  // resolved by Accept-based dispatch, not by a path prefix — no `/api/*`
+  // migration is required. Callers preferring a hard cutover replace this
+  // mount with `installInspectorLegacyRedirect` (308 `/inspector → /`).
   if (inspectorLiveBuild) {
     staticDir = resolveLiveInspectorStaticDir(staticDir);
   }
@@ -442,11 +445,9 @@ export function installInspectorRootStaticAssets(
  * to `/` so legacy links continue to work. Deep paths like
  * `/inspector/entities/foo` are also redirected, preserving query and hash.
  *
- * Not currently invoked from `src/actions.ts` — the legacy `/inspector/*`
- * mount is intentionally kept active for back-compat with stale links
- * (MCP instructions, conversation summary URLs, third-party docs). Call
- * this helper instead of `installInspectorMount` once all known link
- * sources have migrated to the unprefixed form.
+ * Invoked from `src/actions.ts` in place of `installInspectorMount` to retire
+ * the `/inspector` prefix: the SPA is served at `/` via content negotiation,
+ * and legacy `/inspector/*` links 308-redirect to their unprefixed form.
  */
 export function installInspectorLegacyRedirect(
   app: express.Application,
@@ -505,6 +506,21 @@ export function isApiOnlyPath(pathname: string): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Entity rendered-page surfaces: `GET /entities/:id/html` and
+ * `GET /entities/:id/markdown` serve a server-rendered published page (the
+ * HTML variant supports `?access_token=` guest reads) directly to browsers
+ * with `Accept: text/html`. These are NOT Inspector SPA client routes, so the
+ * content-negotiation SPA-shell handler MUST exclude them — otherwise a
+ * browser navigating to a published page would get the blank SPA shell
+ * instead of the rendered page. Suffix-matched (not prefix), so it cannot be
+ * expressed via {@link API_ONLY_PREFIXES}.
+ */
+export function isEntityRenderedSurfacePath(pathname: string): boolean {
+  const normalized = normalizeInspectorUrlPathname(pathname);
+  return /^\/entities\/[^/]+\/(html|markdown)$/.test(normalized);
 }
 
 /**
@@ -574,6 +590,61 @@ export function acceptPrefersHtml(accept: string | undefined): boolean {
  * The `Vary: Accept` header is set on every HTML response so caches do not
  * cross-contaminate JSON and HTML clients.
  */
+/**
+ * Build the content-negotiation SPA-shell middleware shared by the early
+ * mount (registered before the data routes so browser navigations to SPA
+ * client routes like `/sources` get the shell instead of JSON) and the late
+ * fallback (catches genuinely-unmatched paths). A request is served the shell
+ * only when ALL hold: GET/HEAD, Accept prefers HTML (q-aware), the path is not
+ * API-only, and the path is not an entity rendered-page surface.
+ */
+function makeInspectorSpaShellMiddleware(bundledDir: string): express.RequestHandler {
+  return (req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (!acceptPrefersHtml(req.headers.accept)) return next();
+    if (isApiOnlyPath(req.path)) return next();
+    if (isEntityRenderedSurfacePath(req.path)) return next();
+    const shell = readInspectorIndexHtml(bundledDir);
+    if (!shell) return next();
+    const proto = req.protocol;
+    const host = req.get("host") || "localhost";
+    const origin = `${proto}://${host}`;
+    const html = injectInspectorApiBaseMeta(shell, origin);
+    res.setHeader("Vary", "Accept");
+    res.setHeader("Cache-Control", "no-store");
+    res.type("text/html; charset=utf-8").send(html);
+  };
+}
+
+/**
+ * Install the SPA-shell content-negotiation handler EARLY — before the global
+ * auth gate and the data routes (`/sources`, `/entities/:id`, `/schemas`, …)
+ * in `src/actions.ts`. Those routes return JSON unconditionally and 401
+ * unauthenticated browsers, so without this early handler a browser navigating
+ * to a SPA client route would never reach the late fallback. Browsers
+ * (Accept: text/html) get the shell here; API/agent/curl clients (json,
+ * wildcard, or absent Accept) fall through to the real data route and get JSON.
+ *
+ * MUST be registered AFTER `GET /` (so the hosted_sandbox funnel HTML still
+ * wins), `mountDocsRoutes`, and the `/me` / `/server-info` routes, and BEFORE
+ * the auth gate. Reuses the same handler as the late fallback.
+ */
+export function installInspectorSpaShellEarly(
+  app: express.Application,
+  _env: NodeJS.ProcessEnv = process.env,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void }
+): void {
+  const bundledDir = resolveBundledInspectorDir();
+  if (!bundledDir) {
+    logger.info("[Inspector] No bundled SPA found; early SPA-shell handler NOT installed.");
+    return;
+  }
+  app.use(makeInspectorSpaShellMiddleware(bundledDir));
+  logger.info(
+    "[Inspector] Early SPA-shell handler installed (browser HTML requests to SPA client routes serve shell before data routes)."
+  );
+}
+
 export function installInspectorSpaFallback(
   app: express.Application,
   _env: NodeJS.ProcessEnv = process.env,
@@ -586,20 +657,7 @@ export function installInspectorSpaFallback(
     );
     return;
   }
-  app.use((req, res, next) => {
-    if (req.method !== "GET" && req.method !== "HEAD") return next();
-    if (!acceptPrefersHtml(req.headers.accept)) return next();
-    if (isApiOnlyPath(req.path)) return next();
-    const shell = readInspectorIndexHtml(bundledDir);
-    if (!shell) return next();
-    const proto = req.protocol;
-    const host = req.get("host") || "localhost";
-    const origin = `${proto}://${host}`;
-    const html = injectInspectorApiBaseMeta(shell, origin);
-    res.setHeader("Vary", "Accept");
-    res.setHeader("Cache-Control", "no-store");
-    res.type("text/html; charset=utf-8").send(html);
-  });
+  app.use(makeInspectorSpaShellMiddleware(bundledDir));
   logger.info(`[Inspector] SPA fallback installed (HTML requests to non-API paths serve shell).`);
 }
 
