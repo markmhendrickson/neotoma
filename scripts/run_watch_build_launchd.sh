@@ -41,12 +41,43 @@ ensure_global_cli_linked
 
 # Full build once at startup (tsc + copy_pdf_worker_wrapper) so dist/ is complete before watch runs.
 if run_npm run build:server; then
-  echo "[$(timestamp)] Initial build completed."
+  echo "[$(timestamp)] Initial server build completed."
 else
-  echo "[$(timestamp)] Initial build failed; continuing with watch mode." >&2
+  echo "[$(timestamp)] Initial server build failed; continuing with watch mode." >&2
+fi
+
+# Build the bundled Inspector SPA into dist/inspector so the prod server serves
+# the latest UI. The watch loop below keeps it current on subsequent edits.
+# Without this the server hot-reloads but the SPA bundle goes stale (the cause
+# of the marketing-home-not-deploying issue on 2026-06-03).
+if run_npm run build:inspector:prod-target; then
+  echo "[$(timestamp)] Initial inspector build completed."
+else
+  echo "[$(timestamp)] Initial inspector build failed; continuing with watch mode." >&2
 fi
 
 RESTART_DELAY=5
+
+# Inspector watcher: vite build --watch into dist/inspector so SPA source edits
+# rebuild the served bundle, mirroring how dev:types keeps server types current.
+inspector_watch_loop() {
+  while true; do
+    run_npm run watch:inspector:prod || true
+    echo "[$(timestamp)] watch:inspector:prod exited, restarting in ${RESTART_DELAY}s..." >&2
+    sleep "$RESTART_DELAY"
+  done
+}
+inspector_watch_loop &
+INSPECTOR_WATCH_PID=$!
+
+# Stop the inspector watcher if this script is terminated by launchd.
+cleanup() {
+  if [[ -n "${INSPECTOR_WATCH_PID:-}" ]]; then
+    kill "${INSPECTOR_WATCH_PID}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
 while true; do
   run_npm run dev:types || true
   echo "[$(timestamp)] dev:types exited, restarting in ${RESTART_DELAY}s..."
