@@ -415,7 +415,28 @@ export class ObservationReducer {
     const values = new Set<unknown>();
     const observationIds: string[] = [];
 
-    for (const obs of observations) {
+    // A correction (or any higher-priority write) must fully REPLACE the
+    // array, not union into it — corrections are documented as highest
+    // priority and "always win" (see issue #1541). Without this, a
+    // `correct()` observation's array would be merged with every lower-
+    // priority observation's array, so the field could never be cleanly
+    // reset (and a prior malformed correction would persist forever).
+    //
+    // We restrict the union to only the observations carrying this field at
+    // the MAXIMUM source_priority present. When all observations share the
+    // same priority (the common, non-correction case) this is identical to
+    // the previous union-all behavior. When a correction (priority 1000)
+    // exists, only correction-tier observations are merged, so the
+    // correction replaces lower-priority arrays.
+    const maxPriority = observations.reduce(
+      (max, obs) => (obs.source_priority > max ? obs.source_priority : max),
+      Number.NEGATIVE_INFINITY
+    );
+    const topPriorityObservations = observations.filter(
+      (obs) => obs.source_priority === maxPriority
+    );
+
+    for (const obs of topPriorityObservations) {
       const rawValue = obs.fields[field];
       if (rawValue !== undefined && rawValue !== null) {
         // Handle array values
