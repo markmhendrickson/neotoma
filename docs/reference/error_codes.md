@@ -247,6 +247,8 @@ agents should address. Switch on the `code` field.
 | ------------------------- | -------------------------------------------------------------------------------------------- |
 | `MISSING_CONTENT_FIELD`   | A schema declares `content_field` and the stored observation omits or empties that field.    |
 | `MISSING_IDENTITY_FIELDS` | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
+| `UNKNOWN_FIELD`           | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
+| `MISSING_REQUIRED_FIELD`  | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -258,6 +260,24 @@ agents MUST include the full original markdown/prose in this field. Structured f
 identity-field rules (e.g. `product_feedback` requires at least one of `github_url`,
 `conversation_id`, `session_id`) and the stored observation supplies none of them.
 Used to surface identity-quality issues without rejecting the write.
+
+**`UNKNOWN_FIELD`** — fired once per undeclared field on a stored observation
+(issue #1552). The store path does not reject undeclared fields; the value is
+preserved on the observation but the reducer projects only declared schema fields,
+so it does not surface in the entity snapshot. The top-level `unknown_fields`,
+`unknown_fields_count`, and `hint` fields aggregate the same information. The `hint`
+is conditional on the schema's identity configuration (issue #1549): when the schema
+declares `canonical_name_fields` it points to `update_schema_incremental`; otherwise
+it points to `correct`-ing into a declared field or `register_schema`, because
+`update_schema_incremental` would dead-end on `ERR_SCHEMA_MISSING_IDENTITY_CONFIG`.
+
+**`MISSING_REQUIRED_FIELD`** — fired once per schema field declared `required: true`
+that the stored observation omits or leaves empty (issue #1559). The write is
+non-fatally accepted (mirror of the `unknown_fields` contract); the top-level
+`required_fields_missing[]` array carries the same `{ entity_type, field,
+observation_index }` tuples. Agents SHOULD repair in-turn by `correct`-ing the
+missing field. Use `describe_entity_type` before storing to learn which fields a type
+requires.
 
 ## Validation Errors
 

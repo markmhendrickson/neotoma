@@ -31,6 +31,7 @@ import {
   FieldProvenanceRequestSchema,
   GetSchemaRecommendationsRequestSchema,
   ListEntityTypesRequestSchema,
+  DescribeEntityTypeRequestSchema,
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   MergeEntitiesRequestSchema,
@@ -1731,6 +1732,8 @@ export class NeotomaServer {
         return await this.getEntityTypeCounts(args);
       case "list_entity_types":
         return await this.listEntityTypes(args);
+      case "describe_entity_type":
+        return await this.describeEntityType(args);
       case "analyze_schema_candidates":
         return await this.analyzeSchemaCandidates(args);
       case "get_schema_recommendations":
@@ -3485,6 +3488,63 @@ export class NeotomaServer {
   }
 
   /**
+   * Issue #247: Field-level schema introspection. Returns the full active schema
+   * definition for a single entity_type (field names, types, descriptions,
+   * required flags, schema version) so agents can learn the exact field shape
+   * before storing — yielding zero unknown_fields / required_fields_missing on
+   * the first store. Read-only; no persistence side effects.
+   */
+  private async describeEntityType(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = DescribeEntityTypeRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const { schemaRegistry, loadCodeDefinedSchemaEntry } =
+      await import("./services/schema_registry.js");
+
+    let schema = await schemaRegistry.loadActiveSchema(parsed.entity_type, userId);
+    if (!schema) {
+      const normalized = parsed.entity_type.toLowerCase().trim().replace(/\s+/g, "_");
+      schema =
+        (await loadCodeDefinedSchemaEntry(parsed.entity_type)) ??
+        (await loadCodeDefinedSchemaEntry(normalized));
+    }
+
+    if (!schema) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `No active schema for entity type: ${parsed.entity_type}. ` +
+          "Use list_entity_types to discover available types, or register_schema to create one."
+      );
+    }
+
+    const fieldDefs = schema.schema_definition?.fields ?? {};
+    const fieldNames = Object.keys(fieldDefs);
+    // Compact, agent-friendly per-field summary mirroring the EntitySchema
+    // field_summary shape used by list_entity_types detail mode.
+    const fieldSummary: Record<string, { type: string; required: boolean; description?: string }> =
+      {};
+    for (const [name, def] of Object.entries(fieldDefs)) {
+      fieldSummary[name] = {
+        type: def.type,
+        required: def.required === true,
+        ...(def.description ? { description: def.description } : {}),
+      };
+    }
+
+    return this.buildTextResponse({
+      entity_type: schema.entity_type,
+      schema_version: schema.schema_version,
+      field_names: fieldNames,
+      field_count: fieldNames.length,
+      required_fields: fieldNames.filter((n) => fieldDefs[n]?.required === true),
+      field_summary: fieldSummary,
+      schema_definition: schema.schema_definition,
+    });
+  }
+
+  /**
    * Analyze raw_fragments to identify schema candidates
    */
   private async analyzeSchemaCandidates(
@@ -5186,6 +5246,19 @@ export class NeotomaServer {
       entity_type: string;
       entity_id: string;
     }> = [];
+    // Issue #1559: surface a non-fatal signal when a stored observation omits a
+    // field its schema marks `required: true`. Mirror of the unknown_fields
+    // contract — the write is accepted; the caller repairs in-turn via correct().
+    const requiredFieldsMissing: Array<{
+      entity_type: string;
+      field: string;
+      observation_index: number;
+    }> = [];
+    // Issue #1549: the unknown_fields hint must reflect whether the flagged
+    // schema(s) actually support update_schema_incremental (requires
+    // canonical_name_fields). Track it so the batch hint names the working path.
+    let anyUnknownFieldSchemaHasIdentityConfig = false;
+    const NON_SCHEMA_META_KEYS = new Set(["canonical_name", "schema_version", "_deleted"]);
     for (let i = 0; i < createdEntities.length; i++) {
       const e = createdEntities[i];
       const entityFields = resolvedFieldsByIndex.get(i) ?? {};
@@ -5195,7 +5268,8 @@ export class NeotomaServer {
       } catch {
         // Best-effort; never block store on registry IO failure.
       }
-      const storeWarningRules = schemaEntry?.schema_definition?.store_warnings;
+      const schemaDef = schemaEntry?.schema_definition;
+      const storeWarningRules = schemaDef?.store_warnings;
       if (storeWarningRules?.length) {
         for (const rule of storeWarningRules) {
           const hasIdentityField = rule.fields.some(
@@ -5217,7 +5291,7 @@ export class NeotomaServer {
       // Schema-driven content_field warning: when a schema declares
       // `content_field`, emit MISSING_CONTENT_FIELD if the stored payload
       // omits that field or leaves it empty. See issue #949.
-      const contentField = schemaEntry?.schema_definition?.content_field;
+      const contentField = schemaDef?.content_field;
       if (contentField) {
         const value = entityFields[contentField];
         const isMissing =
@@ -5235,7 +5309,90 @@ export class NeotomaServer {
           });
         }
       }
+
+      const schemaFieldDefs = schemaDef?.fields;
+      if (schemaFieldDefs) {
+        const declaredFieldNames = new Set(Object.keys(schemaFieldDefs));
+        let entityHadUnknown = false;
+
+        // Issue #1552: emit a per-field UNKNOWN_FIELD store_warning for each
+        // undeclared field present on this entity. Driven by the batch
+        // unknownFieldNamesSet (the authoritative source for the top-level
+        // unknown_fields[] list) intersected with this entity's payload, so the
+        // store_warning entries stay consistent with the top-level list (hoisted
+        // identity fields and date-like unknowns promoted to the observation are
+        // already excluded from that set and so are not re-flagged here).
+        for (const key of Object.keys(entityFields)) {
+          if (NON_SCHEMA_META_KEYS.has(key)) continue;
+          if (entityFields[key] === undefined) continue;
+          if (declaredFieldNames.has(key)) continue;
+          if (!unknownFieldNamesSet.has(key)) continue;
+          entityHadUnknown = true;
+          schemaStoreWarnings.push({
+            code: "UNKNOWN_FIELD",
+            message:
+              `${e.entityType} stored with field "${key}" that is not declared on its ` +
+              "active schema. The value is preserved on the observation but excluded from " +
+              "the entity snapshot until the field is added to the schema.",
+            observation_index: i,
+            entity_type: e.entityType,
+            entity_id: e.entityId,
+          });
+        }
+
+        if (
+          entityHadUnknown &&
+          Array.isArray(schemaDef?.canonical_name_fields) &&
+          schemaDef.canonical_name_fields.length > 0
+        ) {
+          anyUnknownFieldSchemaHasIdentityConfig = true;
+        }
+
+        // Issue #1559: missing required fields.
+        for (const [fieldName, fieldDef] of Object.entries(schemaFieldDefs)) {
+          if (fieldName === "schema_version") continue;
+          if (!fieldDef?.required) continue;
+          const value = entityFields[fieldName];
+          const isMissing =
+            value === undefined || value === null || (typeof value === "string" && value === "");
+          if (isMissing) {
+            requiredFieldsMissing.push({
+              entity_type: e.entityType,
+              field: fieldName,
+              observation_index: i,
+            });
+            schemaStoreWarnings.push({
+              code: "MISSING_REQUIRED_FIELD",
+              message:
+                `${e.entityType} stored without required field "${fieldName}". The schema marks ` +
+                "this field required; the write was accepted but the entity is incomplete. " +
+                "Use correct() to supply the missing field.",
+              observation_index: i,
+              entity_type: e.entityType,
+              entity_id: e.entityId,
+            });
+          }
+        }
+      }
     }
+
+    // Issue #1549: conditional unknown_fields hint. update_schema_incremental
+    // requires canonical_name_fields, else it dead-ends on
+    // ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Only prescribe it when at least one
+    // flagged schema has identity config; otherwise point at the path that works.
+    const unknownFieldsHint =
+      unknownFieldsCount === 0
+        ? undefined
+        : anyUnknownFieldSchemaHasIdentityConfig
+          ? "Undeclared fields are preserved on the observation but excluded from the entity " +
+            "snapshot. To promote them, call update_schema_incremental to add the fields, then " +
+            "set migrate_existing: true to backfill existing observations. If an existing " +
+            "declared field already fits the data, prefer correct()-ing into that field instead."
+          : "Undeclared fields are preserved on the observation but excluded from the entity " +
+            "snapshot. This schema has no canonical_name_fields, so update_schema_incremental " +
+            "would fail with ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Instead: correct() the data into " +
+            "an already-declared field (use describe_entity_type to see declared fields), or call " +
+            "register_schema with a new version that adds the field.";
 
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
@@ -5264,13 +5421,9 @@ export class NeotomaServer {
       })),
       unknown_fields_count: unknownFieldsCount,
       unknown_fields: Array.from(unknownFieldNamesSet).sort(),
-      ...(unknownFieldsCount > 0
-        ? {
-            hint:
-              "Unknown fields were stored in raw_fragments. " +
-              "Call update_schema_incremental to promote them to schema fields, " +
-              "then set migrate_existing: true to backfill existing data.",
-          }
+      ...(unknownFieldsHint ? { hint: unknownFieldsHint } : {}),
+      ...(requiredFieldsMissing.length > 0
+        ? { required_fields_missing: requiredFieldsMissing }
         : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
@@ -5356,12 +5509,14 @@ export class NeotomaServer {
       );
     }
 
-    if (!schemaEntry.schema_definition.fields[parsed.field]) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Unknown field for entity type ${parsed.entity_type}: ${parsed.field}`
-      );
-    }
+    // Issue #1540: a field not declared on the schema is no longer rejected.
+    // Mirror store()'s behavior — accept the correction (append path) and route
+    // the value to raw_fragments so it is recoverable and can be promoted to the
+    // schema later. The correction observation is still written so the value is
+    // immutable and auditable, but the reducer projects only declared fields, so
+    // the value will not surface in the entity snapshot until the field is added
+    // to the schema. The response carries `unknown_field: true` + a hint.
+    const isUnknownField = !schemaEntry.schema_definition.fields[parsed.field];
 
     const { createCorrection } = await import("./services/correction.js");
 
@@ -5375,6 +5530,49 @@ export class NeotomaServer {
         user_id: userId,
         idempotency_key: parsed.idempotency_key,
       });
+
+      if (isUnknownField) {
+        // Best-effort raw_fragments mirror (parity with the store interpretation
+        // path). Never fail the correction if the fragment write fails — the
+        // observation is the durable record.
+        try {
+          const { storeFragment } = await import("./services/raw_fragments.js");
+          await storeFragment({
+            sourceId: result.observation_id,
+            userId,
+            entityId: parsed.entity_id,
+            entityType: parsed.entity_type,
+            schemaVersion: schemaEntry.schema_version,
+            key: parsed.field,
+            value: parsed.value,
+            reason: "unknown_field",
+          });
+        } catch (fragErr) {
+          logger.warn(
+            `[correct] raw_fragments mirror failed for ${parsed.entity_type}.${parsed.field}: ${
+              fragErr instanceof Error ? fragErr.message : String(fragErr)
+            }`
+          );
+        }
+
+        return this.buildTextResponse({
+          observation_id: result.observation_id,
+          entity_id: parsed.entity_id,
+          field: parsed.field,
+          value: parsed.value,
+          unknown_field: true,
+          message:
+            `Correction recorded for undeclared field "${parsed.field}" on ` +
+            `${parsed.entity_type}. The value is preserved on the observation and in ` +
+            "raw_fragments, but is excluded from the entity snapshot until the field is " +
+            "added to the schema.",
+          hint:
+            `Field "${parsed.field}" is not declared on the ${parsed.entity_type} schema. ` +
+            "Use describe_entity_type to see declared fields. To surface this value in the " +
+            "snapshot, add the field via register_schema (or update_schema_incremental when " +
+            "the schema declares canonical_name_fields).",
+        });
+      }
 
       return this.buildTextResponse({
         observation_id: result.observation_id,

@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **419**
-- Backend and repo Vitest files: **386**
+- Total automated test files: **422**
+- Backend and repo Vitest files: **389**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 104 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 48 |
-| Vitest integration tests | 114 |
+| Vitest integration tests | 117 |
 | Vitest CLI tests | 60 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
@@ -315,7 +315,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (114):**
+**Files (117):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -336,10 +336,12 @@ flowchart TD
 - `tests/integration/cli_to_mcp_stats_snapshots.test.ts`
 - `tests/integration/cli_to_mcp_store.test.ts`
 - `tests/integration/conversation_turn_accrual.test.ts`
+- `tests/integration/correct_unknown_field_append.test.ts`
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/csp_local_http.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
+- `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
 - `tests/integration/entity_queries.test.ts`
@@ -420,6 +422,7 @@ flowchart TD
 - `tests/integration/store_external_link_schema.test.ts`
 - `tests/integration/store_prefix_duplicate_candidates.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
+- `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
