@@ -1277,6 +1277,13 @@ export interface paths {
      * @description Query relationships filtered by entity ID, source entity ID, target entity ID, or
      *     relationship type. At least one of `entity_id`, `source_entity_id`,
      *     `target_entity_id`, or `relationship_type` must be provided. Results are paginated.
+     *
+     *     Relationship-type discovery: to find the relationship type(s) between two
+     *     specific entities (for example before calling `/delete_relationship`, which
+     *     requires the exact `relationship_type`), pass both `source_entity_id` and
+     *     `target_entity_id`. Each returned `RelationshipSnapshot` carries its
+     *     `relationship_type`, so the caller can read the type(s) directly without
+     *     knowing them in advance.
      */
     post: operations["listRelationshipsForEntity"];
     delete?: never;
@@ -1526,7 +1533,14 @@ export interface paths {
     put?: never;
     /**
      * Delete relationship
-     * @description Soft delete relationship (creates deletion observation, reversible)
+     * @description Soft delete a relationship (creates a deletion observation, reversible).
+     *     The exact `relationship_type` between two entities must be supplied. If
+     *     the type is unknown, first call `/list_relationships` with
+     *     `source_entity_id` and `target_entity_id` to discover the typed edges
+     *     between them, then pass one of the returned `relationship_type` values
+     *     here. When no live relationship matches the supplied triple, a 404
+     *     `RESOURCE_NOT_FOUND` is returned with a `hint` pointing to the discovery
+     *     path rather than silently recording a no-op deletion.
      */
     post: operations["deleteRelationship"];
     delete?: never;
@@ -6135,6 +6149,20 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description No live relationship matches the supplied
+       *     `relationship_type` / `source_entity_id` / `target_entity_id`
+       *     triple. `details.hint` points to `/list_relationships` for
+       *     discovering the actual typed edges between the two entities.
+       */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

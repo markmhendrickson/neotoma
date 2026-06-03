@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **419**
-- Backend and repo Vitest files: **386**
+- Total automated test files: **420**
+- Backend and repo Vitest files: **387**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 104 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 48 |
-| Vitest integration tests | 114 |
+| Vitest integration tests | 115 |
 | Vitest CLI tests | 60 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
@@ -315,7 +315,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (114):**
+**Files (115):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -404,6 +404,7 @@ flowchart TD
 - `tests/integration/public_key_registry.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
 - `tests/integration/relationship_agent_attribution_api.test.ts`
+- `tests/integration/relationship_delete_discovery.test.ts`
 - `tests/integration/relationship_pagination_determinism.test.ts`
 - `tests/integration/relationship_query_determinism.test.ts`
 - `tests/integration/relationship_snapshots.test.ts`

@@ -8974,6 +8974,38 @@ app.post("/delete_relationship", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { relationship_type, source_entity_id, target_entity_id, reason } = parsed.data;
 
+    // Discovery guard (#277): deletion requires the exact relationship_type
+    // between two entities, but a caller who does not know the type can only
+    // guess. Without this check the soft-delete silently "succeeds" by writing
+    // a deletion observation for an edge that never existed, masking the gap.
+    // Verify a live (non-deleted) relationship matches the supplied triple
+    // first; if not, return 404 with a structured hint pointing to
+    // `list_relationships` for type discovery.
+    const { relationshipsService } = await import("./services/relationships.js");
+    const liveRelationship = await relationshipsService.getRelationshipSnapshot(
+      relationship_type,
+      source_entity_id,
+      target_entity_id,
+      userId
+    );
+    if (!liveRelationship) {
+      return sendError(
+        res,
+        404,
+        "RESOURCE_NOT_FOUND",
+        "No live relationship matches the supplied relationship_type, source_entity_id, and target_entity_id.",
+        {
+          relationship_type,
+          source_entity_id,
+          target_entity_id,
+          hint:
+            "Call list_relationships with source_entity_id and target_entity_id to discover the " +
+            "relationship_type(s) between these two entities, then retry delete_relationship with " +
+            "one of the returned types.",
+        }
+      );
+    }
+
     const { softDeleteRelationship } = await import("./services/deletion.js");
 
     // Construct relationship key
