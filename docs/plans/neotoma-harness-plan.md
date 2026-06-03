@@ -721,6 +721,34 @@ Discipline to hold:
 - **Bound resolution and guard cycles.** Walking governance edges on every retrieval needs a depth bound and a guard against a rule governing an entity that governs the rule.
 - **Reuse the MUST-apply contract.** Do not invent a parallel "apply this artifact" agent behavior; resolve governed artifacts onto the existing `entity_instructions` channel so the contract agents already follow does the work.
 
+#### Subagents: the next content-class win (no new schema)
+
+Subagents (`.claude/agents/*.md` — e.g. `scout`, `verifier`, `worker`) are the immediate next artifact to wire, and they need **zero new schema**. The registered `agent_definition` type (v1.7.0) already models everything a subagent file carries: `name`, `description`, `prompt_markdown`, `tool_allowlist` / `allowed_tools`, `triggers`, `user_invocable`, `model_tier` / `model_pin`, `harness_preferences`, `status`, `version`, plus the `skill_*` fields that bridge a subagent to its invocable-skill surface. The gap is sync wiring only — exactly the situation rules were in.
+
+Treatment (identical two-layer pattern to skills):
+
+- **Source of truth:** an `agent_definition` entity per subagent. Map the `.md` frontmatter + body: name/description → `name`/`description`, the system prompt body → `prompt_markdown`, tool grants → `tool_allowlist`/`allowed_tools`, model pin → `model_tier`/`model_pin`, trigger phrases → `triggers`.
+- **Read mirror:** `.claude/agents/<name>.md` (and harness-native equivalents), regenerated from the entity with `entity_id` stamped into frontmatter.
+- **Identity:** key by `name`, matching how skills key by `name`/`slug`.
+- **Class:** content-class — inert prompt content, so default-on eligible under the `neotoma_sourced_skills_rules` preference and `GOVERNED_BY`-relatable to the entities a subagent operates over (a `verifier` subagent could be `GOVERNED_BY`-linked to the `issue` or `pull_request` entity types it checks).
+
+Note the existing `agent_definition_override` type (v1.0) for per-deployment field overrides (`agent_name`, `field_name`, `overridden_value`, `override_reason`) — the personalization layer for subagents already has a home; reuse it rather than minting a parallel override mechanism.
+
+#### The curated-set manifest
+
+"Default-on bundled skills and rules" must NOT mean "install all 41 dogfood skills + 41 rules." Most of the dogfood corpus is Neotoma-internal (release workflow, foundation setup, repo-specific commands) and would be noise — or actively wrong — in an external user's harness. The bundle is defined by an explicit, reviewed **curated-set manifest**, maintained alongside the harness build (same discipline as the bundled-docs featured list).
+
+Selection criteria — an artifact ships in the curated set only if it is:
+
+1. **Neotoma-general, not repo-specific.** It helps any Neotoma user operate the substrate, not just this monorepo's release/CI/foundation flows. (Excludes: `create-release`, `setup-cursor-copies`, `publish-plan`, foundation-command stubs, etc.)
+2. **Self-contained.** It does not depend on private docs, internal paths, or repo structure the user won't have.
+3. **Safe by class.** Content-class artifacts can be default-on; config/executable-class (and especially hooks) are confirm-always and excluded from the auto-installed default set regardless of curation.
+4. **Stable.** Its triggers and content are settled enough to version and ship, not actively churning.
+
+Manifest shape: a small declarative list (entity ids + version pins + class + default-on flag) that the provisioner reads to decide what to install for a user whose `neotoma_sourced_skills_rules` preference is `on`. `selective` users get an allow/deny list layered over the manifest. The manifest is itself reviewable and versioned with the build, so "what ships by default" is an explicit, auditable decision rather than an implicit "whatever's in the skills dir."
+
+Candidate seed (illustrative, to be confirmed at build time): substrate-operation helpers (store/retrieve patterns, the `remember-*` family), general analysis/feedback skills (`analyze`, `process-feedback`), and broadly-applicable rules (risk-management hold points, schema-agnostic-design). Explicitly excluded from the default set: release/CI/foundation tooling, anything keyed to this repo's layout, and all hooks.
+
 ### The inspector as layout foundation
 
 The inspector is not a peer surface to the harness — it is the *layout container* in which the harness lives. The page's structure is the inspector's existing left-nav layout (Dashboard, Entities, Observations, Sources, Relationships, Graph Explorer, Schemas, Timeline, Interpretations, Settings), with the harness occupying the main content area on the default Dashboard route. The bundled docs sidebar lives on the right. Three panels: substrate state on the left, conversational interaction in the middle, reference material on the right.
