@@ -48,6 +48,73 @@ const MAX_LEXICAL_CANDIDATES = 5000;
 /** Extra lexical/semantic rank when a query token equals the row's entity_type (e.g. "plan" → plan). */
 export const ENTITY_TYPE_KEYWORD_BOOST = 280;
 
+/**
+ * Concept → entity_type bridging for lexical search (#1496). Natural-language
+ * queries name a concept ("bank account", "savings") rather than the stored
+ * `entity_type` ("financial_account"). When a query token (or adjacent token
+ * pair) maps to a concept here, the corresponding entity_type is treated as a
+ * type-filter hint so those rows are not dropped purely because the literal
+ * type name is absent from the query. This is deterministic and additive: it
+ * only widens which entity types a query *can* match, never narrows results.
+ *
+ * Keyed by normalized concept phrase (already lowercased, punctuation-stripped).
+ */
+export const CONCEPT_TYPE_SYNONYMS: Record<string, string> = {
+  bank: "financial_account",
+  "bank account": "financial_account",
+  account: "financial_account",
+  savings: "financial_account",
+  checking: "financial_account",
+};
+
+/**
+ * Tokens that carry no identity signal in a descriptive multi-term query.
+ * Used only by the partial-token fallback (#1551) to avoid letting filler
+ * words inflate overlap scores. Strict all-token matching is unaffected.
+ */
+const PARTIAL_MATCH_STOP_TOKENS = new Set([
+  "a",
+  "an",
+  "and",
+  "or",
+  "the",
+  "to",
+  "of",
+  "for",
+  "with",
+  "now",
+  "try",
+  "site",
+]);
+
+/**
+ * Minimum fraction of meaningful query tokens an entity must contain for the
+ * partial-token fallback to surface it (#1551). Keeps precision reasonable on
+ * long descriptive queries while still recovering rows that overlap most terms.
+ */
+const PARTIAL_MATCH_MIN_OVERLAP_RATIO = 0.5;
+
+/**
+ * Concept tokens / phrases present in a query that bridge to entity types.
+ * Scans single tokens and adjacent token pairs (e.g. "bank account").
+ */
+export function conceptEntityTypeHints(searchTokens: string[]): Set<string> {
+  const hints = new Set<string>();
+  for (let i = 0; i < searchTokens.length; i++) {
+    const single = searchTokens[i];
+    if (single && CONCEPT_TYPE_SYNONYMS[single]) {
+      hints.add(CONCEPT_TYPE_SYNONYMS[single]);
+    }
+    if (i + 1 < searchTokens.length) {
+      const pair = `${searchTokens[i]} ${searchTokens[i + 1]}`;
+      if (CONCEPT_TYPE_SYNONYMS[pair]) {
+        hints.add(CONCEPT_TYPE_SYNONYMS[pair]);
+      }
+    }
+  }
+  return hints;
+}
+
 interface LexicalSearchEntityIdsParams {
   userId: string;
   entityType?: string;
@@ -340,6 +407,11 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     searchTokens,
     buildEntityTypeFilterTokens(searchTokens, registryTypes)
   );
+  // Concept → type hints ("bank account" → financial_account) so the partial
+  // fallback can credit a type match even when the literal type name is absent
+  // from the query (#1496). Only used to boost ranking, never to narrow the
+  // candidate set away from the full scan.
+  const conceptTypeHints = conceptEntityTypeHints(searchTokens);
 
   let entityQuery = db
     .from("entities")
@@ -402,6 +474,17 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     knownEntityTypes.add(token);
   }
 
+  type Candidate = {
+    id: string;
+    canonical_name: string;
+    entity_type: string;
+    normalizedCanonical: string;
+    normalizedSnapshot: string;
+    searchableText: string;
+    textTokens: string[];
+  };
+
+  const candidates: Candidate[] = [];
   const lexicalMatches: LexicalMatch[] = [];
   for (const entity of entities as Array<{
     id: string;
@@ -420,6 +503,15 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
       fragmentTextByEntityId.get(entity.id)
     );
     const textTokens = textTokensForEntityMatch(searchTokens, entity.entity_type, typeFilterTokens);
+    candidates.push({
+      id: entity.id,
+      canonical_name: entity.canonical_name,
+      entity_type: entity.entity_type,
+      normalizedCanonical,
+      normalizedSnapshot,
+      searchableText,
+      textTokens,
+    });
     if (matchesSearchTokens(searchableText, textTokens)) {
       let score = 0;
       if (normalizedCanonical.includes(normalizedSearch)) {
@@ -445,6 +537,61 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
         canonicalName: entity.canonical_name,
         score,
       });
+    }
+  }
+
+  // Partial-token fallback (#1496, #1551): strict all-token matching drops rows
+  // for descriptive multi-term queries ("bank account Ibercaja Wise") and long
+  // queries whose terms only partially overlap a stored title/body. When no row
+  // satisfies the strict every-token gate, recover rows that contain at least
+  // PARTIAL_MATCH_MIN_OVERLAP_RATIO of the *meaningful* query tokens, ranked by
+  // overlap count. Concept→type hints credit a type match (financial_account
+  // for "bank account"). This only runs as a fallback, so precision on queries
+  // that already match exactly is unchanged.
+  if (lexicalMatches.length === 0) {
+    const meaningfulTokens = searchTokens.filter(
+      (token) => token.length > 1 && !PARTIAL_MATCH_STOP_TOKENS.has(token)
+    );
+    if (meaningfulTokens.length >= 2) {
+      const required = Math.max(
+        2,
+        Math.ceil(meaningfulTokens.length * PARTIAL_MATCH_MIN_OVERLAP_RATIO)
+      );
+      for (const candidate of candidates) {
+        const conceptMatch = conceptTypeHints.has(candidate.entity_type);
+        let overlap = 0;
+        for (const token of meaningfulTokens) {
+          if (candidate.searchableText.includes(token)) {
+            overlap += 1;
+          }
+        }
+        // A concept→type hint counts as one satisfied token so e.g. an
+        // "Ibercaja Wise" financial_account is recovered for "bank account
+        // ibercaja wise" even though "bank"/"account" are not in its text.
+        const effectiveOverlap = conceptMatch ? overlap + 1 : overlap;
+        if (overlap === 0) {
+          continue;
+        }
+        if (effectiveOverlap < required) {
+          continue;
+        }
+        let score = effectiveOverlap * 20;
+        if (conceptMatch) {
+          score += ENTITY_TYPE_KEYWORD_BOOST;
+        }
+        if (candidate.normalizedCanonical) {
+          for (const token of meaningfulTokens) {
+            if (candidate.normalizedCanonical.includes(token)) {
+              score += 12;
+            }
+          }
+        }
+        lexicalMatches.push({
+          entityId: candidate.id,
+          canonicalName: candidate.canonical_name,
+          score,
+        });
+      }
     }
   }
 

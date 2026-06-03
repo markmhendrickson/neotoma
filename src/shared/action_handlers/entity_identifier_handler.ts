@@ -47,7 +47,10 @@ export interface RetrieveEntityByIdentifierResult {
 /**
  * Fields to scan inside entity snapshots when canonical_name/alias matching
  * misses. Keep this conservative: email and domain surfaces are the highest
- * signal for natural-language identifiers.
+ * signal for natural-language identifiers. `institution` and `account_name`
+ * are the identity-bearing fields for financial_account snapshots (#1495),
+ * where the institution name (e.g. "Ibercaja") is the primary identifier a
+ * caller searches by but never reaches canonical_name as a standalone token.
  */
 const DEFAULT_SNAPSHOT_SEARCH_FIELDS = [
   "name",
@@ -56,6 +59,8 @@ const DEFAULT_SNAPSHOT_SEARCH_FIELDS = [
   "email",
   "domain",
   "company",
+  "institution",
+  "account_name",
 ] as const;
 
 type SnapshotRow = {
@@ -69,6 +74,10 @@ function snapshotFieldsMatch(
   fields: readonly string[]
 ): boolean {
   if (!snapshot) return false;
+  // Leading token of a compound identifier (e.g. "ibercaja regular (spain
+  // domestic)" → "ibercaja") so a single-word institution name resolves a
+  // financial_account whose snapshot institution holds only that word (#1495).
+  const needleLeadingToken = needleLower.split(/\s+/).filter(Boolean)[0] ?? needleLower;
   for (const field of fields) {
     const value = (snapshot as Record<string, unknown>)[field];
     if (value == null) continue;
@@ -77,6 +86,11 @@ function snapshotFieldsMatch(
     if (str === needleLower) return true;
     if (str.includes(needleLower)) return true;
     if (field === "email" && str.split("@").pop() === needleLower) return true;
+    // Token-level match: the field value equals the leading token of a compound
+    // needle, or the needle equals the leading token of a compound field value.
+    if (str === needleLeadingToken) return true;
+    const fieldLeadingToken = str.split(/\s+/).filter(Boolean)[0] ?? str;
+    if (fieldLeadingToken === needleLower) return true;
   }
   return false;
 }

@@ -191,6 +191,111 @@ describe("Lexical retrieval fallback", () => {
     expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
   });
 
+  it("#1496 bridges 'bank account' concept to financial_account via partial fallback", async () => {
+    // financial_account whose only identity-bearing text is the institution
+    // field. The query "bank account Ibercaja Wise" names a concept (bank
+    // account), not the literal entity_type, and the strict all-token gate
+    // cannot match because "bank"/"account" are absent from the row's text.
+    const entityId = `ent_fa_ibercaja_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "financial_account",
+      canonicalName: "ibercaja regular (spain domestic)",
+      snapshot: {
+        institution: "Ibercaja",
+        account_name: "Ibercaja Regular",
+        provider: "Wise",
+      },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search: "bank account Ibercaja Wise",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.total).toBeGreaterThanOrEqual(1);
+    expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
+  });
+
+  it("#1551 recovers a descriptive multi-term query via partial-token overlap", async () => {
+    // Long descriptive query whose terms only partially overlap the stored
+    // title. The strict every-token gate drops it; the partial fallback should
+    // recover it because a majority of meaningful tokens overlap.
+    const entityId = `ent_inspector_build_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "plan",
+      canonicalName: "plan:unified server build inspector",
+      snapshot: {
+        title: "Unified server build: serve site, inspector sandbox",
+        body: "Build the unified server and inspector sandbox for agentic evaluation.",
+      },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search:
+        "unified server build serve site inspector sandbox agentic try now evaluate experience",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.total).toBeGreaterThanOrEqual(1);
+    expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
+  });
+
+  it("#1551 partial fallback matches a subset query against a stored title", async () => {
+    const entityId = `ent_build_server_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "research_report",
+      canonicalName: "doc_build_server",
+      snapshot: { title: "Build Server architecture and deployment notes" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search: "build serve deployment notes architecture",
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.total).toBeGreaterThanOrEqual(1);
+    expect(result.entities.some((entity) => entity.entity_id === entityId)).toBe(true);
+  });
+
+  it("partial fallback does not match an entity sharing only a single stop-ish token", async () => {
+    // Precision guard: a row that overlaps only one meaningful token must not
+    // be surfaced by the partial fallback (min overlap is 2 / 50%).
+    const targetId = `ent_partial_target_${Date.now()}`;
+    const decoyId = `ent_partial_decoy_${Date.now()}`;
+    await createEntityWithSnapshot({
+      id: targetId,
+      entityType: "research_report",
+      canonicalName: "doc_partial_target",
+      snapshot: { title: "Quarterly revenue forecast spreadsheet" },
+    });
+    await createEntityWithSnapshot({
+      id: decoyId,
+      entityType: "research_report",
+      canonicalName: "doc_partial_decoy",
+      snapshot: { title: "Unrelated revenue document" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search: "quarterly forecast spreadsheet planning",
+      limit: 25,
+      offset: 0,
+    });
+
+    const ids = result.entities.map((entity) => entity.entity_id);
+    expect(ids).toContain(targetId);
+    expect(ids).not.toContain(decoyId);
+  });
+
   it("ranks cross-type lexical matches deterministically without entity_type filter", async () => {
     const runId = Date.now();
     const canonicalFirstId = `ent_lex_rank_canonical_${runId}`;
