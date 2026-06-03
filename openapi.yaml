@@ -1934,6 +1934,19 @@ components:
           description: |
             canonical_name of the existing candidate entity. Review-facing;
             callers MUST NOT forward to logs or metrics without redaction.
+        truncated:
+          type: boolean
+          description: |
+            Present and true on every item in a truncated candidate set. When
+            the total number of prefix matches exceeded the server-side cap
+            (currently 25), only the first 25 (ordered by candidate_entity_id
+            ascending) are returned and this flag is set so callers can
+            distinguish "exactly 25 matches" from "25+ matches".
+        matched_count:
+          type: integer
+          description: |
+            Total number of candidates found before the cap was applied.
+            Only present when truncated is true.
     StoreUnstructuredRequest:
       type: object
       additionalProperties: false

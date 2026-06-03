@@ -6536,6 +6536,9 @@ export async function storeStructuredForApi(params: {
                   entity_type: c.entityType,
                   candidate_entity_id: c.candidateEntityId,
                   candidate_canonical_name: c.candidateCanonicalName,
+                  ...(c.truncated
+                    ? { truncated: c.truncated, matched_count: c.matched_count }
+                    : {}),
                 })),
               }
             : {}),

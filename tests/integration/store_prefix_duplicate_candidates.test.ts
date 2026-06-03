@@ -26,6 +26,8 @@ type EntityResult = {
     entity_type: string;
     candidate_entity_id: string;
     candidate_canonical_name: string;
+    truncated?: boolean;
+    matched_count?: number;
   }>;
 };
 
@@ -110,6 +112,53 @@ describe("store response: prefix_duplicate_candidates", () => {
     expect(candidate!.code).toBe("PREFIX_DUPLICATE_CANDIDATE");
     expect(candidate!.entity_type).toBe("contact");
     expect(candidate!.candidate_canonical_name).toBe("Simon Bergeron");
+  });
+
+  it("sets truncated and matched_count on candidates when the 25-item cap fires", async () => {
+    const storeAs = server as unknown as {
+      store: (params: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
+    };
+
+    // Store 26 distinct multi-token contacts all sharing "Yuki" as the first token.
+    // MAX_PREFIX_DUPLICATE_CANDIDATES = 25, so a 27th single-token "Yuki" triggers truncation.
+    const multiTokenNames = Array.from(
+      { length: 26 },
+      (_, i) => `Yuki Person${String(i).padStart(2, "0")}`
+    );
+    for (const name of multiTokenNames) {
+      const r = await storeAs.store({
+        user_id: TEST_USER_ID,
+        idempotency_key: `prefix-trunc-seed-${name.replace(/ /g, "-")}-${Date.now()}`,
+        commit: true,
+        entities: [{ entity_type: "contact", name, schema_version: "1.0" }],
+      });
+      const b = JSON.parse(r.content[0].text) as StoreResponse;
+      expect(b.error).toBeUndefined();
+    }
+
+    // Now store single-token "Yuki" — should trigger truncation.
+    const result = await storeAs.store({
+      user_id: TEST_USER_ID,
+      idempotency_key: `prefix-trunc-single-yuki-${Date.now()}`,
+      commit: true,
+      entities: [{ entity_type: "contact", name: "Yuki", schema_version: "1.0" }],
+    });
+    const body = JSON.parse(result.content[0].text) as StoreResponse;
+
+    expect(body.error).toBeUndefined();
+    expect(body.entities).toHaveLength(1);
+
+    const entity = body.entities![0];
+    expect(entity.action).toBe("created");
+
+    const candidates = entity.prefix_duplicate_candidates ?? [];
+    // Capped at 25.
+    expect(candidates).toHaveLength(25);
+    // Every returned candidate must carry the truncation signal.
+    for (const c of candidates) {
+      expect(c.truncated).toBe(true);
+      expect(c.matched_count).toBe(26);
+    }
   });
 
   it("does not include prefix_duplicate_candidates when no multi-token entities share the first token", async () => {

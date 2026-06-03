@@ -185,6 +185,17 @@ export interface ResolverDuplicateCandidate {
   candidateEntityId: string;
   /** canonical_name of the existing candidate entity (review-facing). */
   candidateCanonicalName: string;
+  /**
+   * True when the result set was capped at {@link MAX_PREFIX_DUPLICATE_CANDIDATES}
+   * and more matches existed. Lets consumers distinguish "exactly N matches"
+   * from "N+ matches". Present on all items in a truncated set; absent otherwise.
+   */
+  truncated?: boolean;
+  /**
+   * Total number of candidates found before the cap was applied. Only present
+   * when {@link truncated} is true.
+   */
+  matched_count?: number;
 }
 
 /**
@@ -620,6 +631,10 @@ const MAX_PREFIX_DUPLICATE_CANDIDATES = 25;
  * computed (punctuation collapsed to spaces, lowercased, trimmed).
  */
 function tokenizeForPrefixMatch(entityType: string, raw: string): string[] {
+  // normalizeEntityValue is idempotent on already-stored canonical_name values:
+  // formatCanonicalNameForStorage (which produces what is persisted) applies the
+  // same structural rules, so tokenizing a stored value yields the same tokens
+  // as tokenizing the original input. See §15.1 of entity_resolution.md.
   const normalized = normalizeEntityValue(entityType, raw);
   if (normalized === "") return [];
   return normalized.split(" ").filter((t) => t !== "");
@@ -659,10 +674,24 @@ async function findSingleTokenPrefixCandidates(params: {
   if (inputTokens.length !== 1) return [];
   const firstToken = inputTokens[0];
 
+  // MAX_CANDIDATES_PER_TYPE mirrors the limit used by duplicate_detection.ts
+  // (src/services/duplicate_detection.ts:48) so the two passes share the same
+  // upper bound on the number of candidates pulled into memory.
+  const MAX_CANDIDATES_PER_TYPE = 2000;
+
   let query = db
     .from("entities")
     .select("id, canonical_name, entity_type, user_id, merged_to_entity_id")
-    .eq("entity_type", entityType);
+    .eq("entity_type", entityType)
+    // Server-side prefix filter: only fetch rows whose canonical_name begins
+    // with "<firstToken> " (space after ensures we match "Simon Bergeron" but
+    // not "Simone Bergeron"). ilike is case-insensitive, matching how
+    // normalizeEntityValue lowercases names before hashing.
+    .ilike("canonical_name", `${firstToken} %`)
+    // Skip merged-away rows at the DB layer (mirrors duplicate_detection.ts:99).
+    .is("merged_to_entity_id", null)
+    // Hard cap so a large type namespace never pulls unbounded rows into memory.
+    .limit(MAX_CANDIDATES_PER_TYPE);
 
   // Scope to the resolving user when known so we never surface another user's
   // entities (tenant isolation). When userId is absent (legacy positional
@@ -672,7 +701,14 @@ async function findSingleTokenPrefixCandidates(params: {
   }
 
   const { data, error } = await query;
-  if (error || !data) return [];
+  if (error) {
+    logger.warn(
+      `[ENTITY_RESOLUTION] prefix-match DB query failed for ${entityType}: ` +
+        `${(error as { message?: string }).message ?? String(error)}`
+    );
+    return [];
+  }
+  if (!data) return [];
 
   const candidates: ResolverDuplicateCandidate[] = [];
   for (const row of data as Array<{
@@ -703,7 +739,19 @@ async function findSingleTokenPrefixCandidates(params: {
 
   // Deterministic ordering by entity_id (content hash); stable across runs.
   candidates.sort((a, b) => (a.candidateEntityId < b.candidateEntityId ? -1 : 1));
-  return candidates.slice(0, MAX_PREFIX_DUPLICATE_CANDIDATES);
+
+  // Truncation transparency: when the raw candidate set exceeds the cap, attach
+  // metadata so callers can distinguish "exactly 25 matches" from "25+ matches".
+  const matchedCount = candidates.length;
+  const truncated = matchedCount > MAX_PREFIX_DUPLICATE_CANDIDATES;
+  const sliced = candidates.slice(0, MAX_PREFIX_DUPLICATE_CANDIDATES);
+  if (truncated) {
+    for (const c of sliced) {
+      c.truncated = true;
+      c.matched_count = matchedCount;
+    }
+  }
+  return sliced;
 }
 
 export interface ResolveEntityOptions {

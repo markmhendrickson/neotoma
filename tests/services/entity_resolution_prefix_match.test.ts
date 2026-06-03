@@ -32,11 +32,35 @@ vi.mock("../../src/db.js", () => {
   // collects `.eq()` filters and resolves them lazily on terminal calls
   // (maybeSingle / single / await). This mirrors the supabase-style API the
   // resolver consumes without pulling in a real client.
+  //
+  // Supported chain methods:
+  //   .eq()     — equality filter
+  //   .is()     — is-null / IS DISTINCT FROM filter (supports null check)
+  //   .ilike()  — case-insensitive LIKE prefix filter ("%foo %")
+  //   .limit()  — no-op in tests (in-memory data is always small)
   function builder(initialFilters: Array<[string, unknown]> = []) {
     const filters: Array<[string, unknown]> = [...initialFilters];
+    // ilike patterns to apply after equality filters
+    const ilikeFilters: Array<[string, string]> = [];
+    // is-null filters: list of field names that must be null
+    const isNullFields: string[] = [];
 
     function matches(): EntityRow[] {
-      return table.filter((row) => filters.every(([k, v]) => (row as Record<string, unknown>)[k] === v));
+      return table.filter((row) => {
+        if (!filters.every(([k, v]) => (row as Record<string, unknown>)[k] === v)) return false;
+        for (const field of isNullFields) {
+          if ((row as Record<string, unknown>)[field] != null) return false;
+        }
+        for (const [field, pattern] of ilikeFilters) {
+          const val = ((row as Record<string, unknown>)[field] ?? "") as string;
+          // Convert SQL ilike pattern "foo %" to a prefix test.
+          const prefix = pattern.endsWith(" %")
+            ? pattern.slice(0, -2).toLowerCase()
+            : pattern.replace(/%/g, "").toLowerCase();
+          if (!val.toLowerCase().startsWith(prefix.toLowerCase())) return false;
+        }
+        return true;
+      });
     }
 
     const chain: Record<string, unknown> = {
@@ -45,6 +69,18 @@ vi.mock("../../src/db.js", () => {
         filters.push([key, value]);
         return chain;
       },
+      // Supports .is("field", null) to filter rows where field IS NULL.
+      is: (key: string, value: unknown) => {
+        if (value === null) isNullFields.push(key);
+        return chain;
+      },
+      // Supports .ilike("field", "prefix %") case-insensitive prefix match.
+      ilike: (key: string, pattern: string) => {
+        ilikeFilters.push([key, pattern]);
+        return chain;
+      },
+      // .limit() is a no-op in tests; in-memory data is always small enough.
+      limit: () => chain,
       maybeSingle: () => {
         const rows = matches();
         return Promise.resolve({ data: rows[0] ?? null, error: null });
@@ -283,5 +319,36 @@ describe("entity resolver: single-token prefix-match pass", () => {
     });
 
     expect(result.trace.duplicateCandidates).toBeUndefined();
+  });
+
+  it("sets truncated=true and matched_count when candidates exceed the 25-item cap", async () => {
+    const { resolveEntityWithTrace, generateEntityId } = await loadResolver();
+
+    // Seed 26 distinct multi-token contacts all sharing "Simon" as the first token.
+    // MAX_PREFIX_DUPLICATE_CANDIDATES = 25, so the 26th is dropped.
+    const names = Array.from({ length: 26 }, (_, i) => `Simon Person${String(i).padStart(2, "0")}`);
+    seed(
+      names.map((name) => ({
+        id: generateEntityId("contact", name),
+        entity_type: "contact",
+        canonical_name: name,
+      }))
+    );
+
+    const result = await resolveEntityWithTrace({
+      entityType: "contact",
+      fields: { name: "Simon" },
+      userId: TEST_USER,
+      schema: null,
+    });
+
+    const candidates = result.trace.duplicateCandidates ?? [];
+    // Capped at 25.
+    expect(candidates).toHaveLength(25);
+    // Every returned item carries the truncation signal.
+    for (const c of candidates) {
+      expect(c.truncated).toBe(true);
+      expect(c.matched_count).toBe(26);
+    }
   });
 });

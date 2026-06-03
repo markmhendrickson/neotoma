@@ -3266,6 +3266,19 @@ export interface components {
        *     callers MUST NOT forward to logs or metrics without redaction.
        */
       candidate_canonical_name: string;
+      /**
+       * @description Present and true on every item in a truncated candidate set. When
+       *     the total number of prefix matches exceeded the server-side cap
+       *     (currently 25), only the first 25 (ordered by candidate_entity_id
+       *     ascending) are returned and this flag is set so callers can
+       *     distinguish "exactly 25 matches" from "25+ matches".
+       */
+      truncated?: boolean;
+      /**
+       * @description Total number of candidates found before the cap was applied.
+       *     Only present when truncated is true.
+       */
+      matched_count?: number;
     };
     /**
      * @description Unstructured-only store payload. Closed shape; unknown top-level
