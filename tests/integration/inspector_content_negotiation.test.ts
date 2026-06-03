@@ -96,6 +96,15 @@ describe("isApiOnlyPath", () => {
     expect(isApiOnlyPath("/robots.txt")).toBe(true);
   });
 
+  it("matches the openapi spec routes (.yaml suffix, not a path-segment boundary)", () => {
+    // The bare `/openapi` prefix does NOT cover `.yaml` suffixes (isApiOnlyPath
+    // matches at segment boundaries), so the exact spec routes are listed
+    // explicitly. The early SPA-shell handler runs BEFORE these routes, so this
+    // exclusion is what keeps a browser GET /openapi.yaml from being shadowed.
+    expect(isApiOnlyPath("/openapi.yaml")).toBe(true);
+    expect(isApiOnlyPath("/openapi_actions.yaml")).toBe(true);
+  });
+
   it("matches the OAuth / MCP / sandbox-session families", () => {
     expect(isApiOnlyPath("/mcp/oauth/authorize")).toBe(true);
     expect(isApiOnlyPath("/oauth/callback")).toBe(true);
@@ -249,6 +258,19 @@ describe("installInspectorSpaShellEarly — end-to-end", () => {
     });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
+  });
+
+  it("does NOT shadow /openapi.yaml for Accept: text/html (spec route reaches its handler)", async () => {
+    const { baseUrl } = await startApp((app) => {
+      app.get("/openapi.yaml", (_req, res) => res.type("text/yaml").send("openapi: 3.1.0"));
+      app.get("/openapi_actions.yaml", (_req, res) => res.type("text/yaml").send("openapi: 3.1.0"));
+    });
+    for (const p of ["/openapi.yaml", "/openapi_actions.yaml"]) {
+      const res = await fetch(`${baseUrl}${p}`, { headers: { Accept: "text/html" } });
+      expect(res.status, p).toBe(200);
+      expect(res.headers.get("content-type"), p).toMatch(/yaml/);
+      expect(await res.text()).toContain("openapi: 3.1.0");
+    }
   });
 });
 

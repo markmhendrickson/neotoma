@@ -3154,9 +3154,13 @@ export interface components {
        */
       store_warnings?: {
         /**
-         * @description Schema-defined warning code (declared in the schema's
-         *     `store_warnings[].code`). Stable identifier callers can
-         *     switch on.
+         * @description Stable warning code callers can switch on. Two sources:
+         *     (1) schema-defined rules declared in the schema's
+         *     `store_warnings[].code`; (2) schema-declaration-driven
+         *     codes emitted by the store path itself — currently
+         *     `MISSING_CONTENT_FIELD` (fired when a schema declares
+         *     `content_field` and the stored observation omits or
+         *     empties that field).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */

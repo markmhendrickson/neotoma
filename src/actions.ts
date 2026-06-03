@@ -3038,9 +3038,12 @@ async function resolveGuestScopedEntityAccess(
 // so that a browser navigating to a SPA client route (Accept: text/html) gets
 // the SPA shell instead of a 401/JSON from the data route. API / agent / curl
 // clients (Accept: application/json | */* | absent) fall through to the real
-// data route. Excludes API-only paths and entity rendered-page surfaces
-// (/entities/:id/html|markdown). Registered after GET / (so the hosted_sandbox
-// funnel still wins), mountDocsRoutes, /me, and /server-info.
+// data route. Excludes API-only paths (isApiOnlyPath, incl. /openapi*.yaml and
+// /me) and entity rendered-page surfaces (/entities/:id/html|markdown).
+// Registered after GET / and mountDocsRoutes (so the hosted_sandbox funnel and
+// docs HTML still win). Routes that register LATER (e.g. /me at ~3306,
+// /openapi.yaml at ~9960) are NOT shadowed because their paths are in the
+// API-only deny-list, so this handler next()s them through.
 installInspectorSpaShellEarly(app, process.env, logger);
 
 // Public key-based authentication middleware

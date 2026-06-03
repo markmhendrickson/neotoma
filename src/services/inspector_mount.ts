@@ -478,6 +478,13 @@ const API_ONLY_PREFIXES: readonly string[] = [
   "/.well-known/",
   "/api/",
   "/openapi",
+  // Exact spec routes: `isApiOnlyPath` matches a prefix only at a path-segment
+  // boundary (`=== prefix` or `prefix + "/"`), so the bare `/openapi` entry
+  // above does NOT cover the `.yaml` suffixes. List them explicitly — the
+  // early SPA-shell handler runs BEFORE these routes, so without these a
+  // browser GET to /openapi.yaml would be shadowed by the SPA shell.
+  "/openapi.yaml",
+  "/openapi_actions.yaml",
   "/robots.txt",
   "/favicon.ico",
   "/server-info",
