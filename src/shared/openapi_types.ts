@@ -3131,6 +3131,19 @@ export interface components {
          *     `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
          */
         warnings?: components["schemas"]["ResolverWarning"][];
+        /**
+         * @description Existing entities surfaced as possible duplicates when the
+         *     stored name is a single token that prefixes a same-type
+         *     multi-token canonical name. Emitted by the single-token
+         *     prefix-match pass. The new entity is still created (no
+         *     auto-merge); callers SHOULD present these candidates to the
+         *     operator or agent for review. Present only when at least one
+         *     candidate was found. Deterministically ordered by
+         *     `candidate_entity_id` ascending. Callers that forward this
+         *     field to logs or metrics MUST drop or redact
+         *     `candidate_canonical_name` per docs/subsystems/privacy.md.
+         */
+        prefix_duplicate_candidates?: components["schemas"]["ResolverDuplicateCandidate"][];
       }[];
       /**
        * @description Batch-aggregated non-fatal resolver warnings (R3). Mirrors each
@@ -3227,6 +3240,45 @@ export interface components {
         | "heuristic_fallback"
         | "target_id";
       identity_rule: string;
+    };
+    /**
+     * @description An existing entity surfaced as a possible duplicate of the entity being
+     *     resolved. Emitted by the single-token prefix-match pass: when a
+     *     single-token input (e.g. a contact stored as "Simon") is a strict
+     *     prefix of an existing same-type multi-token canonical name (e.g.
+     *     "Simon Bergeron"), the resolver mints the new entity (no auto-merge)
+     *     but attaches the existing entity here for operator/agent review.
+     *     Callers that forward this to logs or metrics MUST drop or redact
+     *     `candidate_canonical_name` per docs/subsystems/privacy.md.
+     */
+    ResolverDuplicateCandidate: {
+      /**
+       * @description Stable machine code for the surfacing reason.
+       * @enum {string}
+       */
+      code: "PREFIX_DUPLICATE_CANDIDATE";
+      /** @description The entity_type shared by the resolving entity and the candidate. */
+      entity_type: string;
+      /** @description Deterministic id of the existing candidate entity. */
+      candidate_entity_id: string;
+      /**
+       * @description canonical_name of the existing candidate entity. Review-facing;
+       *     callers MUST NOT forward to logs or metrics without redaction.
+       */
+      candidate_canonical_name: string;
+      /**
+       * @description Present and true on every item in a truncated candidate set. When
+       *     the total number of prefix matches exceeded the server-side cap
+       *     (currently 25), only the first 25 (ordered by candidate_entity_id
+       *     ascending) are returned and this flag is set so callers can
+       *     distinguish "exactly 25 matches" from "25+ matches".
+       */
+      truncated?: boolean;
+      /**
+       * @description Total number of candidates found before the cap was applied.
+       *     Only present when truncated is true.
+       */
+      matched_count?: number;
     };
     /**
      * @description Unstructured-only store payload. Closed shape; unknown top-level
