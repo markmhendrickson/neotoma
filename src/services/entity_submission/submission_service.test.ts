@@ -95,3 +95,48 @@ describe("submitEntity write-integrity", () => {
     ).rejects.toThrow(/No active submission_config/);
   });
 });
+
+describe("submitEntity submission-path steering", () => {
+  const configWithGithubMirror = {
+    ...configWithoutThreading,
+    external_mirrors: [{ provider: "github" as const, config: {} }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("steers issue submissions to submit_issue and never reaches the store", async () => {
+    // A type whose submission_config declares a github mirror has a specialized
+    // path (submit_issue). submitEntity must refuse with an actionable error
+    // BEFORE attempting the generic store, so the caller gets redirected rather
+    // than a confusing downstream failure.
+    mockGetSubmissionConfigForTargetType.mockResolvedValue(configWithGithubMirror);
+
+    await expect(
+      submitEntity(ops, {
+        userId: "user-1",
+        entity_type: "issue",
+        fields: { title: "t", body: "b" },
+      })
+    ).rejects.toThrow(/submission_path_mismatch.*submit_issue.*redirect_to: submit_issue/s);
+
+    expect(mockStoreRootWithThread).not.toHaveBeenCalled();
+  });
+
+  it("does not steer types without a specialized mirror", async () => {
+    mockGetSubmissionConfigForTargetType.mockResolvedValue(configWithoutThreading);
+    mockStoreRootWithThread.mockResolvedValue({
+      structured: { entities: [{ entity_id: "ent_generic" }] },
+    });
+
+    const result = await submitEntity(ops, {
+      userId: "user-1",
+      entity_type: "feedback",
+      fields: { title: "t", body: "b" },
+    });
+
+    expect(result.entity_id).toBe("ent_generic");
+    expect(mockStoreRootWithThread).toHaveBeenCalledTimes(1);
+  });
+});
