@@ -12,8 +12,9 @@ This document does NOT cover:
 - Deployment procedures (see `docs/infrastructure/deployment.md`)
 ## Branch Strategy
 ### Main Branches
-- **`main`**: Production-ready code (protected, requires PR)
-- **`dev`**: Integration branch for MVP development (protected, requires PR)
+- **`main`**: Production-ready code and integration branch (protected, requires PR). All feature, bugfix, and hotfix branches are cut from `main` and merge back into `main` via PR.
+
+> Historical note: a separate `dev` integration branch was used during MVP development. The project now works directly off `main`; `dev` is no longer the integration target.
 ### Feature Branches
 **Naming Convention:**
 ```
@@ -24,7 +25,7 @@ Examples:
 - `feature/FU-400-timeline-view`
 - `feature/FU-702-billing-integration`
 **Rules:**
-- Branch from `dev` (not `main`)
+- Branch from `main`
 - One Feature Unit per branch (atomic changes)
 - Descriptive names matching Feature Unit ID
 ### Bugfix Branches
@@ -42,7 +43,7 @@ hotfix/critical-issue-description
 ```
 **Rules:**
 - Branch from `main` (for production fixes)
-- Merge to both `main` and `dev`
+- Merge back into `main` via PR
 - Use sparingly (only for critical production issues)
 ## Development Workflow
 ### Step 1: Create Feature Branch (Worktree Recommended)
@@ -51,17 +52,17 @@ Each Feature Unit should be developed in its own worktree for isolation and para
 ```bash
 # From main repo root
 cd /path/to/neotoma
-# Ensure dev is up to date
+# Ensure main is up to date
 git fetch origin
-git checkout dev
-git pull origin dev
-# Create worktree for this Feature Unit (creates branch from current branch, which should be dev)
+git checkout main
+git pull origin main
+# Create worktree for this Feature Unit (creates branch from current branch, which should be main)
 git worktree add ../neotoma-FU-XXX -b feature/FU-XXX-short-description
 # Navigate to worktree
 cd ../neotoma-FU-XXX
-# Verify branch is based on dev
+# Verify branch is based on main
 git branch --show-current  # Should show feature/FU-XXX-short-description
-git log --oneline -1       # Should show latest dev commit
+git log --oneline -1       # Should show latest main commit
 # Setup worktree environment (copies .env files)
 npm run copy:env || node scripts/copy-env-to-worktree.js
 # Install dependencies in worktree
@@ -76,9 +77,9 @@ git push -u origin feature/FU-XXX-short-description
 - **Environment Management:** Automatic `.env` copying via `scripts/copy-env-to-worktree.js`
 **Alternative: Traditional Branching (if not using worktrees)**
 ```bash
-# Ensure you're on dev and up to date
-git checkout dev
-git pull origin dev
+# Ensure you're on main and up to date
+git checkout main
+git pull origin main
 # Create feature branch
 git checkout -b feature/FU-XXX-short-description
 # Push to remote (sets upstream)
@@ -136,7 +137,7 @@ References: docs/feature_units/completed/FU-101/FU-101_spec.md
 # Push commits
 git push
 # Create PR via GitHub UI or CLI
-gh pr create --base dev --title "FU-XXX: Feature Description" --body "PR body"
+gh pr create --base main --title "FU-XXX: Feature Description" --body "PR body"
 ```
 **PR Title Format:**
 ```
@@ -215,14 +216,13 @@ FU-XXX: Feature Description
    - High-risk PRs require 2 approvals
 3. **Branch is up to date:**
    ```bash
-   git checkout dev
-   git pull origin dev
+   git checkout main
+   git pull origin main
    git checkout feature/FU-XXX-short-description
-   git rebase dev  # or merge dev into feature branch
+   git rebase main  # or merge main into feature branch
    ```
 ### Merge Strategy
-**For MVP Development:**
-- Use **"Squash and merge"** to keep `dev` history clean
+- Use **"Squash and merge"** to keep `main` history clean
 - PR title becomes commit message
 - Feature Unit ID preserved in commit message
 **After Merge:**
@@ -239,8 +239,8 @@ git branch -d feature/FU-XXX-short-description
 **If using traditional branching:**
 ```bash
 # Delete local branch
-git checkout dev
-git pull origin dev
+git checkout main
+git pull origin main
 git branch -d feature/FU-XXX-short-description
 ```
 ## Feature Unit Integration
@@ -258,11 +258,11 @@ git branch -d feature/FU-XXX-short-description
    - Check metrics/observability (if applicable)
 ## Conflict Resolution
 ### When Conflicts Occur
-1. **Rebase on latest dev:**
+1. **Rebase on latest main:**
    ```bash
    git checkout feature/FU-XXX-short-description
    git fetch origin
-   git rebase origin/dev
+   git rebase origin/main
    ```
 2. **Resolve conflicts:**
    - Edit conflicted files
@@ -277,7 +277,7 @@ git branch -d feature/FU-XXX-short-description
    ```bash
    git push --force-with-lease
    ```
-**Note:** Only force push to feature branches, never to `dev` or `main`.
+**Note:** Only force push to feature branches, never to `main`.
 ## Agent Instructions
 ### When to Load This Document
 Load when:
@@ -291,7 +291,7 @@ Load when:
 - `docs/feature_units/standards/feature_unit_spec.md`: Feature Unit structure
 - `docs/private/governance/risk_classification.md`: Risk assessment
 ### Constraints Agents Must Enforce
-1. **Always branch from `dev`**: Never from `main` (except hotfixes)
+1. **Always branch from `main`**: Cut feature, bugfix, and hotfix branches from `main`
 2. **One Feature Unit per branch**: Keep changes atomic
 3. **Use worktrees for isolation**: Each Feature Unit should have its own worktree when possible
 4. **Setup worktree environment**: Run `npm run copy:env` or `node scripts/copy-env-to-worktree.js` after creating worktree
@@ -300,9 +300,9 @@ Load when:
 7. **Verify tests pass**: Before creating PR
 8. **Update documentation**: If patterns or architecture change
 ### Forbidden Patterns
-- Committing directly to `dev` or `main`
+- Committing directly to `main`
 - Mixing multiple Feature Units in one branch
-- Force pushing to `dev` or `main`
+- Force pushing to `main`
 - Skipping code review
 - Merging without tests passing
 - Committing secrets or API keys

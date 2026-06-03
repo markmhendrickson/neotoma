@@ -19,7 +19,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   acceptPrefersHtml,
   isApiOnlyPath,
+  isEntityRenderedSurfacePath,
   installInspectorSpaFallback,
+  installInspectorSpaShellEarly,
 } from "../../src/services/inspector_mount.js";
 
 type Server = ReturnType<express.Application["listen"]>;
@@ -94,6 +96,15 @@ describe("isApiOnlyPath", () => {
     expect(isApiOnlyPath("/robots.txt")).toBe(true);
   });
 
+  it("matches the openapi spec routes (.yaml suffix, not a path-segment boundary)", () => {
+    // The bare `/openapi` prefix does NOT cover `.yaml` suffixes (isApiOnlyPath
+    // matches at segment boundaries), so the exact spec routes are listed
+    // explicitly. The early SPA-shell handler runs BEFORE these routes, so this
+    // exclusion is what keeps a browser GET /openapi.yaml from being shadowed.
+    expect(isApiOnlyPath("/openapi.yaml")).toBe(true);
+    expect(isApiOnlyPath("/openapi_actions.yaml")).toBe(true);
+  });
+
   it("matches the OAuth / MCP / sandbox-session families", () => {
     expect(isApiOnlyPath("/mcp/oauth/authorize")).toBe(true);
     expect(isApiOnlyPath("/oauth/callback")).toBe(true);
@@ -119,6 +130,147 @@ describe("isApiOnlyPath", () => {
     expect(isApiOnlyPath("/meow")).toBe(false);
     // /health-check should NOT match /health
     expect(isApiOnlyPath("/health-check")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unit-level: isEntityRenderedSurfacePath
+// ---------------------------------------------------------------------------
+
+describe("isEntityRenderedSurfacePath", () => {
+  it("matches the entity rendered-page surfaces", () => {
+    expect(isEntityRenderedSurfacePath("/entities/abc/html")).toBe(true);
+    expect(isEntityRenderedSurfacePath("/entities/abc/markdown")).toBe(true);
+    expect(isEntityRenderedSurfacePath("/entities/ent_123/html")).toBe(true);
+  });
+
+  it("does NOT match the SPA entity routes", () => {
+    expect(isEntityRenderedSurfacePath("/entities")).toBe(false);
+    expect(isEntityRenderedSurfacePath("/entities/abc")).toBe(false);
+    expect(isEntityRenderedSurfacePath("/entities/abc/timeline")).toBe(false);
+    expect(isEntityRenderedSurfacePath("/entities/abc/history")).toBe(false);
+    // Nested segment beyond :id/html is not the rendered surface.
+    expect(isEntityRenderedSurfacePath("/entities/abc/html/extra")).toBe(false);
+  });
+
+  it("is trailing-slash / double-slash safe", () => {
+    expect(isEntityRenderedSurfacePath("/entities//abc/html")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end: early SPA-shell handler (registered BEFORE data routes)
+// ---------------------------------------------------------------------------
+
+describe("installInspectorSpaShellEarly — end-to-end", () => {
+  let server: Server | null = null;
+
+  afterEach(() => {
+    if (server) {
+      server.close();
+      server = null;
+    }
+  });
+
+  function startApp(
+    registerDataRoutes: (app: express.Application) => void
+  ): Promise<{ baseUrl: string }> {
+    return new Promise((resolve) => {
+      const app = express();
+      // Early shell handler runs BEFORE the data routes — this is the
+      // inversion vs the late fallback: browser HTML requests to SPA client
+      // routes get the shell before the JSON data route can answer.
+      installInspectorSpaShellEarly(app, process.env, noopLogger());
+      registerDataRoutes(app);
+      app.use((_req, res) => {
+        res.status(404).json({ error: "not_found_fallthrough" });
+      });
+      server = app.listen(0, () => {
+        const addr = server!.address() as AddressInfo;
+        resolve({ baseUrl: `http://127.0.0.1:${addr.port}` });
+      });
+    });
+  }
+
+  // A data route that always returns JSON, like the real /sources, /schemas, etc.
+  function jsonDataRoutes(app: express.Application) {
+    app.get("/sources", (_req, res) => res.json({ sources: [], total: 0 }));
+    app.get("/entities/:id", (_req, res) => res.json({ entity_id: "stub" }));
+    app.get("/entities/:id/html", (_req, res) =>
+      res.type("text/html").send("<!DOCTYPE html><title>Published</title>PUBLISHED_PAGE")
+    );
+    app.get("/entities/:id/markdown", (_req, res) =>
+      res.type("text/markdown").send("# Published markdown")
+    );
+  }
+
+  it("serves the SPA shell to a browser navigating to /sources (before the JSON data route)", async () => {
+    const { baseUrl } = await startApp(jsonDataRoutes);
+    const res = await fetch(`${baseUrl}/sources`, {
+      headers: { Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    expect(res.headers.get("vary")).toBe("Accept");
+    expect(await res.text()).toMatch(/<html/i);
+  });
+
+  it("returns JSON from the data route for an API client (Accept: application/json)", async () => {
+    const { baseUrl } = await startApp(jsonDataRoutes);
+    const res = await fetch(`${baseUrl}/sources`, {
+      headers: { Accept: "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/application\/json/);
+    expect(await res.json()).toEqual({ sources: [], total: 0 });
+  });
+
+  it("returns JSON for wildcard-only Accept (agent / curl default)", async () => {
+    const { baseUrl } = await startApp(jsonDataRoutes);
+    const res = await fetch(`${baseUrl}/sources`, { headers: { Accept: "*/*" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/application\/json/);
+  });
+
+  it("does NOT shadow /entities/:id/html — published page reaches its handler even for Accept: text/html", async () => {
+    const { baseUrl } = await startApp(jsonDataRoutes);
+    const res = await fetch(`${baseUrl}/entities/abc/html`, {
+      headers: { Accept: "text/html" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("PUBLISHED_PAGE");
+  });
+
+  it("does NOT shadow /entities/:id/markdown for Accept: text/html", async () => {
+    const { baseUrl } = await startApp(jsonDataRoutes);
+    const res = await fetch(`${baseUrl}/entities/abc/markdown`, {
+      headers: { Accept: "text/html" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/markdown/);
+  });
+
+  it("serves the SPA shell for a browser GET to /entities/:id (the SPA detail route)", async () => {
+    const { baseUrl } = await startApp(jsonDataRoutes);
+    const res = await fetch(`${baseUrl}/entities/abc`, {
+      headers: { Accept: "text/html" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+  });
+
+  it("does NOT shadow /openapi.yaml for Accept: text/html (spec route reaches its handler)", async () => {
+    const { baseUrl } = await startApp((app) => {
+      app.get("/openapi.yaml", (_req, res) => res.type("text/yaml").send("openapi: 3.1.0"));
+      app.get("/openapi_actions.yaml", (_req, res) => res.type("text/yaml").send("openapi: 3.1.0"));
+    });
+    for (const p of ["/openapi.yaml", "/openapi_actions.yaml"]) {
+      const res = await fetch(`${baseUrl}${p}`, { headers: { Accept: "text/html" } });
+      expect(res.status, p).toBe(200);
+      expect(res.headers.get("content-type"), p).toMatch(/yaml/);
+      expect(await res.text()).toContain("openapi: 3.1.0");
+    }
   });
 });
 
@@ -152,7 +304,10 @@ describe("installInspectorSpaFallback — end-to-end", () => {
       installInspectorSpaFallback(
         app,
         opts.overrideBundledDir
-          ? ({ ...process.env, NEOTOMA_INSPECTOR_STATIC_DIR: opts.overrideBundledDir } as NodeJS.ProcessEnv)
+          ? ({
+              ...process.env,
+              NEOTOMA_INSPECTOR_STATIC_DIR: opts.overrideBundledDir,
+            } as NodeJS.ProcessEnv)
           : process.env,
         noopLogger()
       );

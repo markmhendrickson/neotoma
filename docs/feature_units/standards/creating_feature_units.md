@@ -152,17 +152,17 @@ Before creating a Feature Unit, verify:
    ```bash
    # Navigate to main repo root (if using worktrees)
    cd /path/to/neotoma
-   # Ensure dev is up to date
+   # Ensure main is up to date
    git fetch origin
-   git checkout dev
-   git pull origin dev
-   # Create worktree for this Feature Unit (creates branch from current branch, which should be dev)
+   git checkout main
+   git pull origin main
+   # Create worktree for this Feature Unit (creates branch from current branch, which should be main)
    git worktree add ../neotoma-FU-XXX -b feature/FU-XXX-short-description
    # Navigate to worktree
    cd ../neotoma-FU-XXX
-   # Verify branch is based on dev
+   # Verify branch is based on main
    git branch --show-current  # Should show feature/FU-XXX-short-description
-   git log --oneline -1       # Should show latest dev commit
+   git log --oneline -1       # Should show latest main commit
    # Setup worktree environment (copies .env files)
    npm run copy:env || node scripts/copy-env-to-worktree.js
    # Install dependencies in worktree
