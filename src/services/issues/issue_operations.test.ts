@@ -1385,6 +1385,73 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       );
     });
 
+    it("stores the issue entity under target_repo, not the configured repo", async () => {
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["r1", "rc1"],
+        issue_entity_id: "r1",
+        conversation_id: "rc1",
+      });
+      mockCreateIssue.mockResolvedValue({
+        number: 7,
+        html_url: "https://github.com/markmhendrickson/ateles/issues/7",
+        user: { login: "tester" },
+        created_at: "2026-05-26T00:00:00Z",
+      });
+
+      await submitIssue(ops, {
+        title: "Ateles bug",
+        body: "Something broke in ateles",
+        visibility: "public",
+        reporter_git_sha: "deadbeef",
+        target_repo: "markmhendrickson/ateles",
+      });
+
+      const storeInput = mockStore.mock.calls[0]?.[0] as {
+        entities: Array<Record<string, unknown>>;
+      };
+      const issueEntity = storeInput.entities.find((e) => e.entity_type === "issue");
+      // B1: canonical identity (github_number + repo) must point at the repo the
+      // issue actually lives in, otherwise a later sync forks a duplicate.
+      // (data_source intentionally references the Neotoma authoring home
+      // `target_url` on the submitted-to-Neotoma path, not the repo — see the
+      // GitHub-fallback-only branch for the repo-stamped data_source.)
+      expect(issueEntity?.repo).toBe("markmhendrickson/ateles");
+      expect(issueEntity?.github_url).toBe("https://github.com/markmhendrickson/ateles/issues/7");
+    });
+
+    it("namespaces the conversation thread to target_repo, not the configured repo", async () => {
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["r1", "rc1"],
+        issue_entity_id: "r1",
+        conversation_id: "rc1",
+      });
+      mockCreateIssue.mockResolvedValue({
+        number: 7,
+        html_url: "https://github.com/markmhendrickson/ateles/issues/7",
+        user: { login: "tester" },
+        created_at: "2026-05-26T00:00:00Z",
+      });
+
+      await submitIssue(ops, {
+        title: "Ateles bug",
+        body: "Something broke in ateles",
+        visibility: "public",
+        reporter_git_sha: "deadbeef",
+        target_repo: "markmhendrickson/ateles",
+      });
+
+      const storeInput = mockStore.mock.calls[0]?.[0] as {
+        entities: Array<Record<string, unknown>>;
+      };
+      const conversation = storeInput.entities.find((e) => e.entity_type === "conversation");
+      const message = storeInput.entities.find((e) => e.entity_type === "conversation_message");
+      // B2: thread id + body turn_key must be derived from target_repo so a later
+      // syncIssuesFromGitHub against the target repo reuses the same conversation
+      // instead of forking a second one.
+      expect(String(conversation?.conversation_id ?? "")).toContain("markmhendrickson/ateles");
+      expect(String(message?.turn_key ?? "")).toContain("markmhendrickson/ateles");
+    });
+
     it("persists reporter env on conversation_message for addIssueMessage", async () => {
       mockAddMessageToRemote.mockResolvedValue({ message_entity_id: "remote-msg-1" });
       mockAddIssueComment.mockResolvedValue({

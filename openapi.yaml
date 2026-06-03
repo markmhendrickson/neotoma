@@ -4933,6 +4933,8 @@ paths:
                   description: Guest submitter timestamp used for deterministic local thread identity.
                 target_repo:
                   type: string
+                  pattern: "^[^/\\s]+/[^/\\s]+$"
+                  example: markmhendrickson/ateles
                   description: >
                     Optional GitHub mirror destination in `owner/repo` format (e.g. `markmhendrickson/ateles`).
                     Overrides the globally-configured `NEOTOMA_ISSUES_REPO` / `issues.repo` for this call only.

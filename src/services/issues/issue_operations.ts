@@ -811,6 +811,16 @@ export async function submitIssue(
   const visibility = params.visibility ?? "public";
   const toolingLabels = github.mergeNeotomaToolingIssueLabels(params.labels);
 
+  // When `target_repo` overrides the GitHub mirror destination, the canonical
+  // issue identity (`github_number + repo`), the conversation thread id, the
+  // external-actor repository, and the `data_source` label must all reference
+  // the repo the issue actually lives in — not the operator's globally
+  // configured repo. Otherwise a later `syncIssuesFromGitHub` against the target
+  // repo forks a duplicate issue entity + conversation. `effectiveRepo` is the
+  // single source of truth for "which repo this issue belongs to". The Neotoma
+  // authoring home (`config.target_url`) is unaffected by the override.
+  const effectiveRepo = params.target_repo?.trim() || config.repo;
+
   // Public issues additionally pass through the redaction backstop. Even though
   // client agents are required to redact (see the REDACTION MUST clause in
   // docs/developer/mcp/instructions.md), we scan here so a submitter-side bug
@@ -841,7 +851,7 @@ export async function submitIssue(
 
   // localId is derived before remote submission so both the remote call and the
   // local shadow issue share the same thread identity.
-  const localId = localIssueId(config.repo, params.title, now);
+  const localId = localIssueId(effectiveRepo, params.title, now);
 
   if (issuesTargetUrl) {
     remoteSubmissionAttempted = true;
@@ -894,13 +904,15 @@ export async function submitIssue(
   // Step 3: Store local reference for tracking
   const threadConversationId =
     issueNumber > 0
-      ? githubIssueThreadConversationId(config.repo, issueNumber)
-      : localIssueThreadConversationId(config.repo, localId ?? "");
+      ? githubIssueThreadConversationId(effectiveRepo, issueNumber)
+      : localIssueThreadConversationId(effectiveRepo, localId ?? "");
   const bodyTurnKey =
     issueNumber > 0
-      ? githubIssueBodyTurnKey(config.repo, issueNumber)
-      : localIssueBodyTurnKey(config.repo, localId ?? "");
-  const externalActor = buildExternalActorFromGithubIssue(githubIssue, { repository: config.repo });
+      ? githubIssueBodyTurnKey(effectiveRepo, issueNumber)
+      : localIssueBodyTurnKey(effectiveRepo, localId ?? "");
+  const externalActor = buildExternalActorFromGithubIssue(githubIssue, {
+    repository: effectiveRepo,
+  });
 
   const entities: StoreInput["entities"] = [
     {
@@ -911,7 +923,7 @@ export async function submitIssue(
       labels: toolingLabels,
       github_number: issueNumber > 0 ? issueNumber : null,
       github_url: githubUrl,
-      repo: config.repo,
+      repo: effectiveRepo,
       ...(localId ? { local_issue_id: localId } : {}),
       visibility,
       author,
@@ -929,7 +941,7 @@ export async function submitIssue(
       data_source: submittedToNeotoma
         ? `neotoma-issue ${config.target_url} ${now.slice(0, 10)}`
         : pushedToGithub
-          ? `github issues api ${config.repo} #${issueNumber} ${now.slice(0, 10)}`
+          ? `github issues api ${effectiveRepo} #${issueNumber} ${now.slice(0, 10)}`
           : `local-create ${now.slice(0, 10)}`,
       ...reporterProvenanceFields(params),
     } as StoreEntityInput,

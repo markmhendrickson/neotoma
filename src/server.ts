@@ -982,7 +982,12 @@ export class NeotomaServer {
       reporter_app_version: z.string().optional(),
       reporter_ci_run_id: z.string().optional(),
       reporter_patch_source_id: z.string().optional(),
-      target_repo: z.string().optional(),
+      target_repo: z
+        .string()
+        .regex(/^[^/\s]+\/[^/\s]+$/, {
+          message: "target_repo must be in owner/repo format (e.g. markmhendrickson/ateles).",
+        })
+        .optional(),
       entity_ids_to_link: z.array(z.string().min(1)).optional(),
     });
     const parsed = schema.parse(args ?? {});
