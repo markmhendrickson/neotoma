@@ -194,6 +194,11 @@ Two writes at the **same** top priority still union with each other. Consequence
 `source_observation_id` / `provenance[field]` lists only the top-priority contributing
 observation IDs, not every observation that ever contributed an element.
 
+> The gate is currently implicit in the `merge_array` strategy. A planned follow-up adds
+> an explicit `merge_policy.priority_gate: "max" | "all"` knob (default `"max"`) so a
+> schema author can opt a field back into accumulate-everything behavior; tracked in
+> Neotoma issue `ent_a2ca479ed08abd2bb98a8708` (GitHub mirror pending).
+
 **Use Cases:**
 - `aliases` for entities (all known names)
 - `tags` for records (all tags from all sources)

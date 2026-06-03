@@ -64,3 +64,5 @@ No security-sensitive surface changed by either fix. The #1483 diff classifier r
 ## Breaking changes
 
 No breaking changes. Re-adding the `related_entities[].id` alias (#276) is additive; the field is now marked deprecated and will be removed in a future minor release after callers migrate to `entity_id`.
+
+The #1541 `merge_array` changes listed under "Behavior changes" are **not** classified as breaking: they correct `correct()` to its documented semantics (corrections "always win"). (a) The provenance-shape change only affects code that walks `provenance[<field>]` / `source_observation_id` for a `merge_array` field on a correction code path — non-correction paths are unaffected, and the documented contract was always "the contributing source(s)", not "every observation that ever touched the field"; callers should walk only the IDs listed and not assume every contributor appears. (b) The null-correction-clears-to-`[]` behavior is a new capability (previously there was no single-call way to clear such a field), not a narrowing of any previously-accepted input. No API contract is narrowed and no field is removed.
