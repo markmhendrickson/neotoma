@@ -4006,13 +4006,17 @@ export interface operations {
             total?: number;
             limit?: number;
             offset?: number;
-            /** @description Which retrieval strategy answered the query. `none` when no
+            /**
+             * @description Which retrieval strategy answered the query. `none` when no
              *     `search` text was supplied; `semantic` when embedding search
              *     answered; `lexical_typed` when an entity-type token was
              *     detected; `lexical_fallback` when semantic search was
              *     attempted but returned nothing usable and lexical substring
-             *     matching answered instead. See issue #1506.
-             *      */
+             *     matching answered instead. Lets callers detect a silent
+             *     semantic→lexical degradation (e.g. embedding provider
+             *     unavailable). See issue #1506.
+             * @enum {string}
+             */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
           };
         };
@@ -5546,15 +5550,18 @@ export interface operations {
         content: {
           "application/json": {
             relationships?: components["schemas"]["RelationshipSnapshot"][];
-            /** @description Total number of matching relationships before pagination.
+            /**
+             * @description Total number of matching relationships before pagination.
              *     Canonical pagination field, matching
              *     `/retrieve_graph_neighborhood`.
-             *      */
+             */
             total_count?: number;
-            /** @description Deprecated alias of `total_count`, retained for back-compat
+            /**
+             * @deprecated
+             * @description Deprecated alias of `total_count`, retained for back-compat
              *     with pre-existing clients. New clients SHOULD read
              *     `total_count`. See issue #369.
-             *      */
+             */
             total?: number;
             /** @description Echo of the requested `limit`. */
             limit?: number;

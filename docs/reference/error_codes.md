@@ -109,8 +109,8 @@ handlers can pattern-match the code uniformly.
 
 | Code                              | HTTP | Retry? | Description                                                                          |
 | --------------------------------- | ---- | ------ | ------------------------------------------------------------------------------------ |
-| `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`   | 400  | No     | No registered or code-defined schema exists for the given `entity_type`              |
-| `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 400 | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out`            |
+| `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`   | 200  | No     | No registered or code-defined schema exists for the given `entity_type`              |
+| `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 200 | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out`            |
 
 **`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`** — raised by `update_schema_incremental` when
 the target `entity_type` has no schema registered in `schema_registry` and no
