@@ -94,6 +94,7 @@ Plans can now be stored as first-class Neotoma entities. This is opt-in; regular
 
 ## Behavior changes
 
+- **Agent guidance — retrieval disambiguation.** Agents are now required to disambiguate multi-candidate identifier lookups (from both `retrieve_entity_by_identifier` and identifier-shaped `retrieve_entities` calls) rather than report not found; up to 10 candidates are surfaced ranked by recency or observation count, with an inline question prompt in the reply body.
 - **Timeline pagination is now deterministic.** `GET /timeline` previously sorted only by `event_timestamp` (or `created_at` when explicitly requested). When many events shared the same timestamp, page boundaries were unstable so events could repeat across pages or be skipped. A secondary `id ASC` sort key now applies. Aligns with `docs/architecture/determinism.md`.
 - **Schema-level agent instructions.** `SchemaDefinition.agent_instructions` is now a validated optional field. When set, it is returned alongside every entity of that type so agents in the loop see the relevant behavioral context.
 - **Per-entity agent instructions.** An entity's snapshot may carry its own `agent_instructions` field which extends or overrides the schema-level instructions for that specific entity.
