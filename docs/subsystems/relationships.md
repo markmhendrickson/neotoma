@@ -247,6 +247,25 @@ async function getRelatedEntities(
 }
 ```
 
+### 5.3 Pagination Ordering
+
+Relationship list and graph endpoints MUST order results by `last_observation_at DESC, relationship_key ASC`.
+
+- **Primary sort:** `last_observation_at DESC` (most recently observed relationships first) — the business-meaningful field.
+- **Tiebreaker:** `relationship_key ASC`. `relationship_key` is the `relationship_snapshots` PRIMARY KEY (stable and unique), so it is a deterministic tiebreaker. Two relationships sharing the same `last_observation_at` always paginate in the same order across executions.
+
+Without a unique tiebreaker, rows with equal `last_observation_at` order arbitrarily, which makes pagination nondeterministic (a row can repeat or be skipped across pages). This follows the tiebreaker rule in [`docs/architecture/determinism.md`](../architecture/determinism.md) (§3.2 Deterministic Sorting): primary sort on a business-meaningful field, secondary sort on a unique stable field.
+
+**Applies to:**
+- `/list_relationships` (MCP)
+- `/retrieve_graph_neighborhood` (MCP)
+- `GET /relationships` (HTTP)
+- `relationships.ts` service methods `getRelationshipsForEntity` and `getRelationshipsByType` (per PR #1500)
+
+Any new paginated relationship query MUST use this ordering rather than reintroducing an order that lacks a unique tiebreaker.
+
+**Origin:** issue #368 / PR #1491, which fixed nondeterministic relationship pagination.
+
 ## 6. Relationship Observations and Snapshots
 
 ### 6.1 Creating Relationship Observations
