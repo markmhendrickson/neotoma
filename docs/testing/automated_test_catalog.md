@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **416**
-- Backend and repo Vitest files: **383**
+- Total automated test files: **418**
+- Backend and repo Vitest files: **385**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -70,9 +70,9 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 103 |
-| Vitest service tests | 33 |
+| Vitest service tests | 34 |
 | Source-adjacent tests | 48 |
-| Vitest integration tests | 113 |
+| Vitest integration tests | 114 |
 | Vitest CLI tests | 60 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
@@ -218,12 +218,13 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (33):**
+**Files (34):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
 - `tests/services/encryption_service.test.ts`
+- `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
 - `tests/services/entity_submission_validation.test.ts`
@@ -313,7 +314,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (113):**
+**Files (114):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -416,6 +417,7 @@ flowchart TD
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
+- `tests/integration/store_prefix_duplicate_candidates.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`

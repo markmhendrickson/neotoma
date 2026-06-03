@@ -6388,6 +6388,17 @@ export async function storeStructuredForApi(params: {
         identity_basis: string;
         identity_rule: string;
       }>;
+      /**
+       * Existing entities surfaced as possible duplicates by the single-token
+       * prefix-match pass. See `ResolverDuplicateCandidate` in
+       * `src/services/entity_resolution.ts`.
+       */
+      duplicate_candidates?: Array<{
+        code: string;
+        entity_type: string;
+        candidate_entity_id: string;
+        candidate_canonical_name: string;
+      }>;
     };
     intent?: string;
     targetId?: string;
@@ -6515,6 +6526,16 @@ export async function storeStructuredForApi(params: {
                   entity_type: w.entityType,
                   identity_basis: w.identityBasis,
                   identity_rule: w.identityRule,
+                })),
+              }
+            : {}),
+          ...(result.trace.duplicateCandidates && result.trace.duplicateCandidates.length > 0
+            ? {
+                duplicate_candidates: result.trace.duplicateCandidates.map((c) => ({
+                  code: c.code,
+                  entity_type: c.entityType,
+                  candidate_entity_id: c.candidateEntityId,
+                  candidate_canonical_name: c.candidateCanonicalName,
                 })),
               }
             : {}),
@@ -6697,6 +6718,7 @@ export async function storeStructuredForApi(params: {
     identity_basis: string;
     identity_rule: string;
     warnings?: ResolvedEntity["trace"]["warnings"];
+    prefix_duplicate_candidates?: ResolvedEntity["trace"]["duplicate_candidates"];
     entity_snapshot_after: Record<string, unknown> | null;
   }> = [];
 
@@ -6816,6 +6838,9 @@ export async function storeStructuredForApi(params: {
       identity_basis: r.trace.identity_basis,
       identity_rule: r.trace.identity_rule,
       ...(r.trace.warnings && r.trace.warnings.length > 0 ? { warnings: r.trace.warnings } : {}),
+      ...(r.trace.duplicate_candidates && r.trace.duplicate_candidates.length > 0
+        ? { prefix_duplicate_candidates: r.trace.duplicate_candidates }
+        : {}),
       entity_snapshot_after: snapshotAfter,
     });
   }

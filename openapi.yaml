@@ -1755,6 +1755,21 @@ components:
                   `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
                 items:
                   $ref: "#/components/schemas/ResolverWarning"
+              prefix_duplicate_candidates:
+                type: array
+                description: |
+                  Existing entities surfaced as possible duplicates when the
+                  stored name is a single token that prefixes a same-type
+                  multi-token canonical name. Emitted by the single-token
+                  prefix-match pass. The new entity is still created (no
+                  auto-merge); callers SHOULD present these candidates to the
+                  operator or agent for review. Present only when at least one
+                  candidate was found. Deterministically ordered by
+                  `candidate_entity_id` ascending. Callers that forward this
+                  field to logs or metrics MUST drop or redact
+                  `candidate_canonical_name` per docs/subsystems/privacy.md.
+                items:
+                  $ref: "#/components/schemas/ResolverDuplicateCandidate"
         warnings:
           type: array
           description: |
@@ -1886,6 +1901,39 @@ components:
             - target_id
         identity_rule:
           type: string
+    ResolverDuplicateCandidate:
+      type: object
+      description: |
+        An existing entity surfaced as a possible duplicate of the entity being
+        resolved. Emitted by the single-token prefix-match pass: when a
+        single-token input (e.g. a contact stored as "Simon") is a strict
+        prefix of an existing same-type multi-token canonical name (e.g.
+        "Simon Bergeron"), the resolver mints the new entity (no auto-merge)
+        but attaches the existing entity here for operator/agent review.
+        Callers that forward this to logs or metrics MUST drop or redact
+        `candidate_canonical_name` per docs/subsystems/privacy.md.
+      required:
+        - code
+        - entity_type
+        - candidate_entity_id
+        - candidate_canonical_name
+      properties:
+        code:
+          type: string
+          enum:
+            - PREFIX_DUPLICATE_CANDIDATE
+          description: Stable machine code for the surfacing reason.
+        entity_type:
+          type: string
+          description: The entity_type shared by the resolving entity and the candidate.
+        candidate_entity_id:
+          type: string
+          description: Deterministic id of the existing candidate entity.
+        candidate_canonical_name:
+          type: string
+          description: |
+            canonical_name of the existing candidate entity. Review-facing;
+            callers MUST NOT forward to logs or metrics without redaction.
     StoreUnstructuredRequest:
       type: object
       additionalProperties: false

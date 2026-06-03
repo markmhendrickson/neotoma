@@ -4578,6 +4578,7 @@ export class NeotomaServer {
       identityBasis: string;
       identityRule: string;
       action: string;
+      duplicateCandidates?: import("./services/entity_resolution.js").ResolverDuplicateCandidate[];
     }> = [];
     // Track the resolved fields per observation index for schema-driven store_warnings.
     const resolvedFieldsByIndex = new Map<number, Record<string, unknown>>();
@@ -4809,6 +4810,7 @@ export class NeotomaServer {
         identityBasis: string;
         identityRule: string;
         action: string;
+        duplicateCandidates?: import("./services/entity_resolution.js").ResolverDuplicateCandidate[];
       };
       try {
         const result = await resolveEntityWithTrace({
@@ -4826,6 +4828,9 @@ export class NeotomaServer {
           identityBasis: result.trace.identityBasis,
           identityRule: result.trace.identityRule,
           action: result.trace.action,
+          ...(result.trace.duplicateCandidates && result.trace.duplicateCandidates.length > 0
+            ? { duplicateCandidates: result.trace.duplicateCandidates }
+            : {}),
         };
       } catch (err) {
         if (err instanceof CanonicalNameUnresolvedError) {
@@ -4950,6 +4955,9 @@ export class NeotomaServer {
         identityBasis: resolverTrace.identityBasis,
         identityRule: resolverTrace.identityRule,
         action: resolverTrace.action,
+        ...(resolverTrace.duplicateCandidates && resolverTrace.duplicateCandidates.length > 0
+          ? { duplicateCandidates: resolverTrace.duplicateCandidates }
+          : {}),
       });
     }
 
@@ -5242,6 +5250,16 @@ export class NeotomaServer {
         identity_basis: e.identityBasis,
         identity_rule: e.identityRule,
         entity_snapshot_after: snapshotByEntityId.get(e.entityId) ?? null,
+        ...(e.duplicateCandidates && e.duplicateCandidates.length > 0
+          ? {
+              prefix_duplicate_candidates: e.duplicateCandidates.map((c) => ({
+                code: c.code,
+                entity_type: c.entityType,
+                candidate_entity_id: c.candidateEntityId,
+                candidate_canonical_name: c.candidateCanonicalName,
+              })),
+            }
+          : {}),
       })),
       unknown_fields_count: unknownFieldsCount,
       unknown_fields: Array.from(unknownFieldNamesSet).sort(),
