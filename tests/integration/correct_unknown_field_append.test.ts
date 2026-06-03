@@ -27,6 +27,7 @@ type CorrectResponse = {
   unknown_field?: boolean;
   hint?: string;
   message?: string;
+  details?: { entity_type?: string; field?: string };
   error?: unknown;
 };
 
@@ -110,7 +111,13 @@ describe("correct() append path for undeclared fields (#1540)", () => {
     expect(body.observation_id).toBeDefined();
     expect(body.unknown_field).toBe(true);
     expect(body.hint).toBeDefined();
-    expect(body.hint).toContain("owner_handle_qqq");
+    // The interpolated entity_type/field live in structured `details`, NOT in
+    // the free-text hint (advisory: keep hint switchable-by-callers).
+    expect(body.hint).not.toContain("owner_handle_qqq");
+    expect(body.details?.field).toBe("owner_handle_qqq");
+    expect(body.details?.entity_type).toBe(TYPE);
+    // The human-readable message still names the field.
+    expect(body.message).toContain("owner_handle_qqq");
 
     // The correction observation must exist and carry the field.
     const { data: obs } = await db
@@ -147,5 +154,41 @@ describe("correct() append path for undeclared fields (#1540)", () => {
     expect(body.observation_id).toBeDefined();
     expect(body.unknown_field).toBeUndefined();
     expect(body.message).toContain("priority 1000");
+  });
+
+  // Regression: the OLD behavior threw "Unknown field for entity type <type>"
+  // for an undeclared correction field. The new contract replaces that throw
+  // with a successful `unknown_field: true` envelope. Guard against a revert.
+  it("does NOT throw the old 'Unknown field for entity type' error", async () => {
+    const result = await callCorrect(server, {
+      user_id: TEST_USER_ID,
+      entity_id: entityId,
+      entity_type: TYPE,
+      field: "regression_no_old_throw_field",
+      value: "v",
+      idempotency_key: `correct-no-old-throw-${Date.now()}`,
+    });
+    const text = result.content[0].text;
+    expect(text).not.toContain("Unknown field for entity type");
+    const body = JSON.parse(text) as CorrectResponse;
+    expect(body.error).toBeUndefined();
+    expect(body.unknown_field).toBe(true);
+  });
+
+  // BLOCKING 2 parity: a correct() against a type with no active schema must
+  // surface an error (MCP throws InvalidParams) rather than silently coercing
+  // the field to "declared". The HTTP path mirrors this with
+  // ERR_NO_SCHEMA_FOR_ENTITY_TYPE (asserted in the parity test).
+  it("rejects correct() for an entity_type with no active schema", async () => {
+    await expect(
+      callCorrect(server, {
+        user_id: TEST_USER_ID,
+        entity_id: entityId,
+        entity_type: "test_correct_no_such_schema_zzz",
+        field: "any",
+        value: "v",
+        idempotency_key: `correct-no-schema-${Date.now()}`,
+      })
+    ).rejects.toThrow(/No active entity schema for entity type/);
   });
 });

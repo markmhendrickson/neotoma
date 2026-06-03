@@ -180,6 +180,7 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { isNeotomaEntityId } from "./shared/neotoma_entity_id.js";
+import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
 import { buildSmitheryServerCard } from "./mcp_server_card.js";
 import {
@@ -6969,11 +6970,9 @@ export async function storeStructuredForApi(params: {
     field: string;
     observation_index: number;
   }> = [];
-  // Metadata keys that are never schema data fields and must not be flagged.
-  const NON_SCHEMA_META_KEYS = new Set(["canonical_name", "schema_version", "_deleted"]);
   // Track whether any flagged entity's schema declares identity config, so the
   // batch hint can prescribe the path that actually works (issue #1549).
-  let anyFlaggedSchemaHasIdentityConfig = false;
+  let anyUnknownFieldSchemaHasIdentityConfig = false;
   {
     const { schemaRegistry } = await import("./services/schema_registry.js");
     for (const r of resolved) {
@@ -7088,7 +7087,7 @@ export async function storeStructuredForApi(params: {
           Array.isArray(schemaDef?.canonical_name_fields) &&
           schemaDef.canonical_name_fields.length > 0
         ) {
-          anyFlaggedSchemaHasIdentityConfig = true;
+          anyUnknownFieldSchemaHasIdentityConfig = true;
         }
       }
     }
@@ -7102,7 +7101,7 @@ export async function storeStructuredForApi(params: {
   const unknownFieldsHint =
     unknownFieldNames.length === 0
       ? undefined
-      : anyFlaggedSchemaHasIdentityConfig
+      : anyUnknownFieldSchemaHasIdentityConfig
         ? "Undeclared fields are preserved on the observation but excluded from the entity " +
           "snapshot. To promote them, call update_schema_incremental to add the fields to the " +
           "schema, then set migrate_existing: true to backfill existing observations. If an " +
@@ -9516,28 +9515,18 @@ app.post("/correct", async (req, res) => {
       admission: getCurrentAAuthAdmission(),
     });
 
-    // Issue #1540: detect undeclared fields so the response carries the same
-    // `unknown_field` signal as the MCP correct() path. Best-effort schema load;
-    // when no schema is found we treat the field as undeclared (the reducer will
-    // not project it anyway).
-    let isUnknownField = false;
-    let correctionSchemaVersion = "1.0";
-    try {
-      const { schemaRegistry } = await import("./services/schema_registry.js");
-      const schemaEntry = await schemaRegistry.loadActiveSchema(entity_type, userId);
-      if (schemaEntry) {
-        correctionSchemaVersion = schemaEntry.schema_version;
-        isUnknownField = !schemaEntry.schema_definition.fields[field];
-      } else {
-        isUnknownField = true;
-      }
-    } catch {
-      // Best-effort; fall back to treating as declared (no signal) to avoid
-      // false positives on registry IO failure.
-      isUnknownField = false;
-    }
+    // Issue #1540 / BLOCKING 2+3: resolve the schema and the `unknown_field`
+    // determination through the SAME shared helper the MCP correct() tool uses,
+    // so the two transports cannot diverge. A schema-registry IO failure
+    // propagates (it is NOT coerced to "declared field" — product principle
+    // 10.2); a missing schema throws CorrectionSchemaNotFoundError, surfaced as
+    // ERR_NO_SCHEMA_FOR_ENTITY_TYPE. Both reach the catch below.
+    const { createCorrection, resolveCorrectionSchema, buildCorrectionResponse } =
+      await import("./services/correction.js");
 
-    const { createCorrection } = await import("./services/correction.js");
+    const { schemaVersion: correctionSchemaVersion, isUnknownField } =
+      await resolveCorrectionSchema(entity_type, field, userId);
+
     const result = await createCorrection({
       entity_id,
       entity_type,
@@ -9571,22 +9560,33 @@ app.post("/correct", async (req, res) => {
     }
 
     logDebug("Success:correct", req, { entity_id, field });
+    // Unified body shared with the MCP path (declared verbatim in
+    // openapi.yaml CorrectResponse). The transport-only `success` and `snapshot`
+    // fields are merged on top for HTTP callers.
     return res.json({
       success: true,
-      observation_id: result.observation_id,
       snapshot: result.snapshot,
-      ...(isUnknownField
-        ? {
-            unknown_field: true,
-            hint:
-              `Field "${field}" is not declared on the ${entity_type} schema. The value is ` +
-              "preserved on the observation and in raw_fragments but excluded from the entity " +
-              "snapshot until the field is added to the schema (register_schema or " +
-              "update_schema_incremental).",
-          }
-        : {}),
+      ...buildCorrectionResponse({
+        observation_id: result.observation_id,
+        entity_id,
+        entity_type,
+        field,
+        value,
+        isUnknownField,
+      }),
     });
   } catch (error) {
+    // Parity with the MCP correct() path: a missing schema is a client error
+    // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
+    // IO failure is NOT swallowed here — it falls through to the generic 500
+    // handler below instead of being coerced into a "declared field" outcome.
+    const { CorrectionSchemaNotFoundError } = await import("./services/correction.js");
+    if (error instanceof CorrectionSchemaNotFoundError) {
+      logWarn("ValidationError:correct", req, { code: error.code });
+      return res
+        .status(400)
+        .json(buildErrorEnvelope(error.code, error.message, { entity_type: error.entityType }));
+    }
     return handleApiError(
       req,
       res,

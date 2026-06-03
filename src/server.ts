@@ -20,6 +20,7 @@ import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
+import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
@@ -5258,7 +5259,6 @@ export class NeotomaServer {
     // schema(s) actually support update_schema_incremental (requires
     // canonical_name_fields). Track it so the batch hint names the working path.
     let anyUnknownFieldSchemaHasIdentityConfig = false;
-    const NON_SCHEMA_META_KEYS = new Set(["canonical_name", "schema_version", "_deleted"]);
     for (let i = 0; i < createdEntities.length; i++) {
       const e = createdEntities[i];
       const entityFields = resolvedFieldsByIndex.get(i) ?? {};
@@ -5435,9 +5435,6 @@ export class NeotomaServer {
   private async correct(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const { loadCodeDefinedSchemaEntry, schemaRegistry } =
-      await import("./services/schema_registry.js");
-
     const parsed = CorrectEntityRequestSchema.parse(args);
 
     // Use authenticated user_id, validate if provided
@@ -5498,27 +5495,41 @@ export class NeotomaServer {
       );
     }
 
-    // Load schema to validate field
-    const schemaEntry =
-      (await schemaRegistry.loadActiveSchema(parsed.entity_type)) ??
-      (await loadCodeDefinedSchemaEntry(parsed.entity_type));
-    if (!schemaEntry) {
+    const {
+      createCorrection,
+      resolveCorrectionSchema,
+      buildCorrectionResponse,
+      CorrectionSchemaNotFoundError,
+    } = await import("./services/correction.js");
+
+    // Issue #1540: resolve the schema and determine whether `field` is declared
+    // via the shared helper, so the HTTP /correct handler cannot diverge. A
+    // schema-registry IO failure propagates here (not coerced to "declared");
+    // a missing schema throws CorrectionSchemaNotFoundError. A field not
+    // declared on the schema is no longer rejected — store()'s append path is
+    // mirrored: the correction is accepted, the value is preserved on the
+    // observation and routed to raw_fragments, but the reducer projects only
+    // declared fields so the value does not surface in the snapshot until the
+    // field is added to the schema. The response carries `unknown_field: true`.
+    let schemaVersion: string;
+    let isUnknownField: boolean;
+    try {
+      ({ schemaVersion, isUnknownField } = await resolveCorrectionSchema(
+        parsed.entity_type,
+        parsed.field,
+        userId
+      ));
+    } catch (schemaErr) {
+      if (schemaErr instanceof CorrectionSchemaNotFoundError) {
+        throw new McpError(ErrorCode.InvalidParams, schemaErr.message);
+      }
       throw new McpError(
-        ErrorCode.InvalidParams,
-        `No active entity schema for entity type: ${parsed.entity_type}`
+        ErrorCode.InternalError,
+        `Failed to resolve schema for correction: ${
+          schemaErr instanceof Error ? schemaErr.message : String(schemaErr)
+        }`
       );
     }
-
-    // Issue #1540: a field not declared on the schema is no longer rejected.
-    // Mirror store()'s behavior — accept the correction (append path) and route
-    // the value to raw_fragments so it is recoverable and can be promoted to the
-    // schema later. The correction observation is still written so the value is
-    // immutable and auditable, but the reducer projects only declared fields, so
-    // the value will not surface in the entity snapshot until the field is added
-    // to the schema. The response carries `unknown_field: true` + a hint.
-    const isUnknownField = !schemaEntry.schema_definition.fields[parsed.field];
-
-    const { createCorrection } = await import("./services/correction.js");
 
     try {
       const result = await createCorrection({
@@ -5526,7 +5537,7 @@ export class NeotomaServer {
         entity_type: parsed.entity_type,
         field: parsed.field,
         value: parsed.value,
-        schema_version: schemaEntry.schema_version,
+        schema_version: schemaVersion,
         user_id: userId,
         idempotency_key: parsed.idempotency_key,
       });
@@ -5542,7 +5553,7 @@ export class NeotomaServer {
             userId,
             entityId: parsed.entity_id,
             entityType: parsed.entity_type,
-            schemaVersion: schemaEntry.schema_version,
+            schemaVersion: schemaVersion,
             key: parsed.field,
             value: parsed.value,
             reason: "unknown_field",
@@ -5554,33 +5565,18 @@ export class NeotomaServer {
             }`
           );
         }
-
-        return this.buildTextResponse({
-          observation_id: result.observation_id,
-          entity_id: parsed.entity_id,
-          field: parsed.field,
-          value: parsed.value,
-          unknown_field: true,
-          message:
-            `Correction recorded for undeclared field "${parsed.field}" on ` +
-            `${parsed.entity_type}. The value is preserved on the observation and in ` +
-            "raw_fragments, but is excluded from the entity snapshot until the field is " +
-            "added to the schema.",
-          hint:
-            `Field "${parsed.field}" is not declared on the ${parsed.entity_type} schema. ` +
-            "Use describe_entity_type to see declared fields. To surface this value in the " +
-            "snapshot, add the field via register_schema (or update_schema_incremental when " +
-            "the schema declares canonical_name_fields).",
-        });
       }
 
-      return this.buildTextResponse({
-        observation_id: result.observation_id,
-        entity_id: parsed.entity_id,
-        field: parsed.field,
-        value: parsed.value,
-        message: "Correction applied with priority 1000",
-      });
+      return this.buildTextResponse(
+        buildCorrectionResponse({
+          observation_id: result.observation_id,
+          entity_id: parsed.entity_id,
+          entity_type: parsed.entity_type,
+          field: parsed.field,
+          value: parsed.value,
+          isUnknownField,
+        })
+      );
     } catch (corrErr) {
       throw new McpError(
         ErrorCode.InternalError,

@@ -241,14 +241,16 @@ declares one of `canonical_name_fields` or `identity_opt_out`, then retry
 
 Non-fatal codes emitted in `store_warnings[]` on a successful `/store` response.
 These do not prevent the write from completing; they surface data-quality issues
-agents should address. Switch on the `code` field.
+agents should address. Switch on the `code` field. All ride on a successful
+`HTTP 200` store response (the write completed); `Retry?` is always `No` — the
+caller repairs in-turn via `correct` rather than re-submitting the same payload.
 
-| Code                      | Description                                                                                  |
-| ------------------------- | -------------------------------------------------------------------------------------------- |
-| `MISSING_CONTENT_FIELD`   | A schema declares `content_field` and the stored observation omits or empties that field.    |
-| `MISSING_IDENTITY_FIELDS` | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
-| `UNKNOWN_FIELD`           | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
-| `MISSING_REQUIRED_FIELD`  | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
+| Code                      | HTTP | Retry? | Description                                                                                  |
+| ------------------------- | ---- | ------ | -------------------------------------------------------------------------------------------- |
+| `MISSING_CONTENT_FIELD`   | 200  | No     | A schema declares `content_field` and the stored observation omits or empties that field.    |
+| `MISSING_IDENTITY_FIELDS` | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
+| `UNKNOWN_FIELD`           | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
+| `MISSING_REQUIRED_FIELD`  | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored

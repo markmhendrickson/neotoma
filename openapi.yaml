@@ -5579,7 +5579,13 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
+                additionalProperties: false
+                description: |
+                  Unified correction-response shape returned identically by the
+                  MCP `correct` tool and the HTTP `/correct` handler (the
+                  shared `buildCorrectionResponse`). `success` and `snapshot`
+                  are HTTP-transport-only fields the handler merges on top; the
+                  MCP tool returns the same body without them.
                 properties:
                   observation_id:
                     type: string
@@ -5590,6 +5596,18 @@ paths:
                   value: {}
                   message:
                     type: string
+                  success:
+                    type: boolean
+                    description: |
+                      HTTP-only. Always `true` on a 2xx correction. Absent on the
+                      MCP transport.
+                  snapshot:
+                    type: object
+                    nullable: true
+                    additionalProperties: true
+                    description: |
+                      HTTP-only. The recomputed entity snapshot after the
+                      correction, or `null`. Absent on the MCP transport.
                   unknown_field:
                     type: boolean
                     description: |
@@ -5605,7 +5623,21 @@ paths:
                       Actionable guidance, present only when `unknown_field` is
                       true. Directs the caller to add the field to the schema
                       (via `register_schema` / `update_schema_incremental`) to
-                      promote the value into the snapshot.
+                      promote the value into the snapshot. The interpolated
+                      `entity_type` and `field` are carried in `details` rather
+                      than the hint string.
+                  details:
+                    type: object
+                    description: |
+                      Present only when `unknown_field` is true. Structured
+                      identifiers for the undeclared field, kept out of the
+                      free-text `hint` so callers can switch on them.
+                    additionalProperties: false
+                    properties:
+                      entity_type:
+                        type: string
+                      field:
+                        type: string
 
   /get_authenticated_user:
     post:

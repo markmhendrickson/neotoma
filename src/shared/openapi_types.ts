@@ -6454,6 +6454,18 @@ export interface operations {
             value?: unknown;
             message?: string;
             /**
+             * @description HTTP-only. Always `true` on a 2xx correction. Absent on the
+             *     MCP transport.
+             */
+            success?: boolean;
+            /**
+             * @description HTTP-only. The recomputed entity snapshot after the
+             *     correction, or `null`. Absent on the MCP transport.
+             */
+            snapshot?: {
+              [key: string]: unknown;
+            } | null;
+            /**
              * @description Present and `true` when `field` is not declared on the
              *     entity's active schema. The correction observation is still
              *     written and the value is mirrored to `raw_fragments`, but it
@@ -6466,11 +6478,20 @@ export interface operations {
              * @description Actionable guidance, present only when `unknown_field` is
              *     true. Directs the caller to add the field to the schema
              *     (via `register_schema` / `update_schema_incremental`) to
-             *     promote the value into the snapshot.
+             *     promote the value into the snapshot. The interpolated
+             *     `entity_type` and `field` are carried in `details` rather
+             *     than the hint string.
              */
             hint?: string;
-          } & {
-            [key: string]: unknown;
+            /**
+             * @description Present only when `unknown_field` is true. Structured
+             *     identifiers for the undeclared field, kept out of the
+             *     free-text `hint` so callers can switch on them.
+             */
+            details?: {
+              entity_type?: string;
+              field?: string;
+            };
           };
         };
       };
