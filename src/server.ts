@@ -51,6 +51,7 @@ import {
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
+import type { RelationshipSnapshot } from "./reducers/relationship_reducer.js";
 import type { RelationshipType } from "./services/relationships.js";
 import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
@@ -2863,11 +2864,27 @@ export class NeotomaServer {
       return bTime - aTime;
     });
 
-    const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
+    // Exclude soft-deleted edges by default (#277), matching the HTTP
+    // /list_relationships handler and the service-layer read convention. The
+    // discovery-before-delete flow points callers here; surfacing a
+    // soft-deleted edge would make them re-delete it into a 404. Pass
+    // include_deleted=true for audit/history reads. Filtering precedes
+    // pagination so `total` reflects live edges only.
+    let liveRelationships = relationships;
+    if (!parsed.include_deleted && relationships.length > 0) {
+      const { relationshipsService } = await import("./services/relationships.js");
+      const live = await relationshipsService.filterDeletedRelationships(
+        relationships as unknown as RelationshipSnapshot[]
+      );
+      const liveKeys = new Set(live.map((r) => r.relationship_key));
+      liveRelationships = relationships.filter((r) => liveKeys.has(r.relationship_key));
+    }
+
+    const paginated = liveRelationships.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
       relationships: paginated,
-      total: relationships.length,
+      total: liveRelationships.length,
       limit: parsed.limit,
       offset: parsed.offset,
     });

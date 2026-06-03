@@ -8116,6 +8116,7 @@ app.post("/list_relationships", async (req, res) => {
     relationship_type,
     limit = 100,
     offset = 0,
+    include_deleted = false,
   } = parsed.data;
 
   try {
@@ -8172,7 +8173,19 @@ app.post("/list_relationships", async (req, res) => {
       throw new Error(error.message);
     }
 
-    const all = data || [];
+    let all = data || [];
+
+    // Exclude soft-deleted edges by default (#277). The discovery-before-delete
+    // flow steers callers here to find a relationship_type before
+    // delete_relationship; without this filter a successfully-deleted edge would
+    // keep appearing and a caller would re-delete it into the new 404. Pass
+    // include_deleted=true for audit/history reads. Filtering precedes pagination
+    // so `total` and the returned slice reflect live edges only.
+    if (!include_deleted && all.length > 0) {
+      const { relationshipsService } = await import("./services/relationships.js");
+      all = await relationshipsService.filterDeletedRelationships(all);
+    }
+
     const paginated = all.slice(offset, offset + limit);
 
     logDebug("Success:list_relationships", req, {
@@ -8180,6 +8193,7 @@ app.post("/list_relationships", async (req, res) => {
       source_entity_id,
       target_entity_id,
       relationship_type,
+      include_deleted,
       count: paginated.length,
       total: all.length,
     });

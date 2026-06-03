@@ -87,7 +87,7 @@ export function buildToolDefinitions(
       name: "list_relationships",
       description: desc(
         "list_relationships",
-        "List relationships for an entity, or discover the relationship type(s) between two specific entities. Filter by entity_id (with direction), or by source_entity_id and/or target_entity_id, and optionally relationship_type. To discover the type before delete_relationship, pass both source_entity_id and target_entity_id: each returned relationship carries its relationship_type. Paginated via limit/offset."
+        "List relationships for an entity, or discover the relationship type(s) between two specific entities. Filter by entity_id (with direction), or by source_entity_id and/or target_entity_id, and optionally relationship_type. To discover the type before delete_relationship, pass both source_entity_id and target_entity_id: each returned relationship carries its relationship_type. Soft-deleted relationships are excluded by default, so a deleted edge will not be re-offered for deletion; pass include_deleted: true to include them for audit. Paginated via limit/offset."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_relationships"),
     },

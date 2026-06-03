@@ -155,17 +155,31 @@ describe("delete_relationship discovery flow (#277)", () => {
     expect(json.success).toBe(true);
     expect(typeof json.observation_id).toBe("string");
 
-    // After deletion the edge no longer surfaces for discovery.
+    // After deletion the edge no longer surfaces for discovery (#277): the
+    // snapshot row persists in the table, but list_relationships filters
+    // soft-deleted edges by default, so the discovery call returns the edge no
+    // more and a caller following the discovery-then-delete flow will not
+    // re-offer (and re-delete into a 404) a now-deleted edge.
     const after = await post("/list_relationships", {
       source_entity_id: sourceId,
       target_entity_id: targetId,
       user_id: OWNER_USER_ID,
     });
     const remaining = after.json.relationships as Array<Record<string, unknown>>;
-    // The snapshot row persists but the relationship is soft-deleted; the
-    // discovery call should not re-offer a now-deleted edge for deletion.
-    // (list_relationships returns snapshot rows; the deletion is reflected by a
-    // subsequent delete_relationship returning 404.)
+    expect(remaining).toHaveLength(0);
+
+    // The soft-deleted edge is still recoverable for audit via include_deleted.
+    const auditView = await post("/list_relationships", {
+      source_entity_id: sourceId,
+      target_entity_id: targetId,
+      include_deleted: true,
+      user_id: OWNER_USER_ID,
+    });
+    const auditRows = auditView.json.relationships as Array<Record<string, unknown>>;
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].relationship_type).toBe(relationshipType);
+
+    // Re-deleting the now-removed edge returns the discovery 404.
     const reDelete = await post("/delete_relationship", {
       relationship_type: relationshipType,
       source_entity_id: sourceId,
@@ -173,7 +187,6 @@ describe("delete_relationship discovery flow (#277)", () => {
       user_id: OWNER_USER_ID,
     });
     expect(reDelete.status).toBe(404);
-    expect(remaining).toBeDefined();
   });
 
   it("does not let another user discover relationships between the owner's entities", async () => {

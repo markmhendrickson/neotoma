@@ -2,10 +2,12 @@
 
 ## Summary
 
-v0.15.1 is a patch release bundling two transport/contract fixes:
+v0.15.1 is a patch release bundling transport, contract, and reducer fixes:
 
 1. **MCP SSE keepalive (#1483)** — the MCP StreamableHTTP `/mcp` GET SSE stream now emits an application-level heartbeat so it survives reverse-proxy and client idle timeouts instead of silently dropping under load.
 2. **`retrieve_graph_neighborhood` `entity_id` (#276)** — `related_entities` items now expose the canonical `entity_id`, with the legacy `id` field restored as a deprecated alias.
+3. **`merge_array` correction replace (#1541)** — a higher-priority `correct()` on an array-typed `merge_array` field now replaces lower-priority array contributions instead of unioning with them.
+4. **`delete_relationship` discovery (#277)** — `delete_relationship` now verifies the supplied `(relationship_type, source_entity_id, target_entity_id)` triple matches a live edge, returning `404` with a discovery hint instead of a silent no-op deletion; `list_relationships` excludes soft-deleted edges by default and gains an `include_deleted` opt-in.
 
 ## What changed for npm package users
 
@@ -37,18 +39,21 @@ The SDK's `retryInterval` transport option was evaluated and deliberately not us
 
 - **#1483:** transport-level only — no `openapi.yaml` surface, no request/response/error fields added or changed.
 - **#276:** additive only. `openapi.yaml` declares both `entity_id` (canonical) and `id` (`deprecated: true`) on `related_entities` items; no request or response shape is narrowed and no field is removed.
+- **#277:** additive only. `openapi.yaml` declares the `404` `RESOURCE_NOT_FOUND` response on `/delete_relationship` (reusing the existing error envelope and `RESOURCE_NOT_FOUND` code — no new `ERR_*`), documents the discovery flow on `/delete_relationship` and `/list_relationships`, and adds an optional `include_deleted` boolean (default `false`) to the `/list_relationships` request. No request shape is narrowed and no field is removed.
 
 ## Behavior changes
 
 - **#1483:** the MCP GET SSE stream emits `: hb\n\n` comment frames (invisible to clients per the SSE spec) and carries `X-Accel-Buffering: no`.
 - **#276:** callers reading `related_entities[].entity_id` now receive a value instead of `undefined`; callers still reading `related_entities[].id` continue to receive the same value (now formally deprecated).
 - **#1541:** `merge_array` fields are now priority-gated. A `correct()` (or any strictly higher-priority write) on an array-typed `merge_array` field now fully **replaces** lower-priority array contributions instead of unioning with them, so corrections can cleanly reset an array. Two consequences for callers: (1) a top-priority `field: null` correction now clears such a field to `[]`; (2) `provenance[<field>]` / `source_observation_id` for a `merge_array` field now lists only the top-`source_priority` contributing observation IDs, not every observation that ever contributed an element. Same-priority observations still union as before.
+- **#277:** `delete_relationship` with a `(relationship_type, source_entity_id, target_entity_id)` triple that does not match a live (non-deleted) edge previously returned `200` after writing a no-op deletion observation; it now returns `404 RESOURCE_NOT_FOUND` with a `details.hint` pointing to `list_relationships` for type discovery. A correct triple that matches a live edge still deletes and returns success as before. Separately, `list_relationships` now excludes soft-deleted edges by default (both the HTTP handler and the MCP tool), so after a successful `delete_relationship` the deleted edge no longer appears and a caller following the discovery-then-delete flow will not re-delete it into the new `404`. Pass `include_deleted: true` to include soft-deleted edges for audit/history.
 
 ## Fixes
 
 - #1483 — Neotoma MCP SSE connection drops under load. Added an application-level heartbeat (`: hb\n\n` comment frames), `X-Accel-Buffering: no`, and a bounded TCP keepalive to the MCP StreamableHTTP transport's GET SSE stream so it survives proxy and client idle timeouts without manual reconnection. This is the application-level layer above the v0.13.0 `keepAliveTimeout` fix (#148), which addressed socket reuse but not SSE stream idle. The `NEOTOMA_MCP_SSE_KEEPALIVE_MS` disable knob parses defensively so a literal `0` (or negative) value disables the heartbeat rather than silently falling back to the default.
 - #276 — `retrieve_graph_neighborhood` `related_entities` exposed only the raw `id`; now exposes the canonical `entity_id`, with `id` retained as a deprecated alias.
 - #1541 — `correct()` on an array-typed (`merge_array`) field unioned the correction into the prior array instead of replacing it; the reducer now priority-gates the `merge_array` union so corrections replace lower-priority arrays.
+- #277 — `delete_relationship` required the exact `relationship_type` between two entities but offered no discovery path, and a wrong guess silently "succeeded" by writing a no-op deletion observation for an edge that never existed. The handler now verifies a live edge matches the supplied triple and returns `404 RESOURCE_NOT_FOUND` with a structured `details.hint` steering the caller to `list_relationships` for type discovery. To make that discovery flow self-consistent, `list_relationships` (HTTP and MCP) now filters soft-deleted edges by default with an `include_deleted` opt-in, so a deleted edge is not re-offered for deletion.
 
 ## Tests and validation
 
@@ -66,3 +71,5 @@ No security-sensitive surface changed by either fix. The #1483 diff classifier r
 No breaking changes. Re-adding the `related_entities[].id` alias (#276) is additive; the field is now marked deprecated and will be removed in a future minor release after callers migrate to `entity_id`.
 
 The #1541 `merge_array` changes listed under "Behavior changes" are **not** classified as breaking: they correct `correct()` to its documented semantics (corrections "always win"). (a) The provenance-shape change only affects code that walks `provenance[<field>]` / `source_observation_id` for a `merge_array` field on a correction code path — non-correction paths are unaffected, and the documented contract was always "the contributing source(s)", not "every observation that ever touched the field"; callers should walk only the IDs listed and not assume every contributor appears. (b) The null-correction-clears-to-`[]` behavior is a new capability (previously there was no single-call way to clear such a field), not a narrowing of any previously-accepted input. No API contract is narrowed and no field is removed.
+
+The #277 `delete_relationship` change listed under "Behavior changes" is **not** classified as breaking. The prior `200` response was a silent no-op: it wrote a deletion observation for an edge that never existed and deleted nothing, so no caller depended on a useful contract there. The new `404 RESOURCE_NOT_FOUND` makes the existing failure explicit; a correct triple that matches a live edge behaves exactly as before. The HTTP status code observably changed (`200` → `404`) only for the wrong-/unknown-type case, so it is called out here explicitly. The `list_relationships` soft-delete filtering is additive (it removes rows that were never useful deletion targets) and gated by the new opt-in `include_deleted` flag, which defaults to the prior-intent (live-only) view; no request shape is narrowed and no response field is removed.

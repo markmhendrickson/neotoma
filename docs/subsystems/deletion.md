@@ -200,6 +200,13 @@ graph TD
 - `restore_entity({ entity_id, entity_type, reason?, user_id? })`
 - `restore_relationship({ relationship_type, source_entity_id, target_entity_id, reason?, user_id? })`
 
+### Flow 1c: Relationship Deletion and Discovery (#277)
+
+Relationship deletion differs from entity deletion in its addressing: `delete_relationship` is keyed by the `(relationship_type, source_entity_id, target_entity_id)` triple, not an opaque ID. A caller that knows only the two entities cannot supply the type directly.
+
+- **Discovery-before-delete is required.** `delete_relationship` verifies a live (non-deleted) edge matches the supplied triple via `relationshipsService.getRelationshipSnapshot` before writing the deletion observation. A triple that matches no live edge returns `404 RESOURCE_NOT_FOUND` with a structured `details.hint` steering the caller to `list_relationships` (passing `source_entity_id` + `target_entity_id`) for `relationship_type` discovery. This replaces the prior silent no-op, which wrote a deletion observation for an edge that never existed and returned `200` — a violation of *Explicit Over Implicit* (`product_principles.md` § 10.2).
+- **`list_relationships` excludes soft-deleted edges by default.** Because the snapshot row persists after deletion (deletion is an observation, never an in-place mutation), `list_relationships` filters rows whose highest-priority observation is a deletion. Without this, a caller following the documented discovery-then-delete flow would re-encounter a just-deleted edge and re-delete it into the new `404`. Pass `include_deleted: true` to surface soft-deleted edges for audit. The filter is implemented once (`relationshipsService.filterDeletedRelationships`) and shared by every relationship read path. See `relationships.md` § 6.6.
+
 ### Flow 2: GDPR Hard Deletion Workflow
 
 ```mermaid

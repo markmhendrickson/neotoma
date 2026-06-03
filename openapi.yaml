@@ -4343,6 +4343,12 @@ paths:
         `target_entity_id`. Each returned `RelationshipSnapshot` carries its
         `relationship_type`, so the caller can read the type(s) directly without
         knowing them in advance.
+
+        Soft-deleted edges are excluded by default: after a successful
+        `/delete_relationship`, the deleted edge no longer appears here, so a caller
+        following the discovery-then-delete flow will not re-offer (and re-delete into
+        a 404) an edge that is already gone. Pass `include_deleted: true` to include
+        soft-deleted edges (for audit or history use).
       requestBody:
         required: true
         content:
@@ -4427,6 +4433,14 @@ paths:
                   minimum: 0
                   default: 0
                   description: Number of relationships to skip before returning results.
+                include_deleted:
+                  type: boolean
+                  default: false
+                  description: |
+                    When `false` (default), soft-deleted relationships are excluded from
+                    the result. When `true`, soft-deleted edges are included (audit/history
+                    use). A relationship is soft-deleted once its highest-priority
+                    deletion observation is recorded; the snapshot row itself persists.
                 user_id:
                   type: string
                   description: |
