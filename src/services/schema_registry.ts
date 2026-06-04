@@ -5,6 +5,7 @@
  */
 
 import { db } from "../db.js";
+import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
   checkPluralEntityType,
   enforceEntityTypeGuards,
@@ -522,22 +523,6 @@ export async function deriveRequiredIdentityFields(
 }
 
 /**
- * Normalize a concept phrase the same way lexical search normalizes query
- * tokens (lowercase, hyphen/underscore → space, strip non-word, collapse
- * whitespace). Kept here so `query_synonyms` declarations are compared on the
- * same footing as the incoming query without importing the search module
- * (which would create a cycle).
- */
-function normalizeConceptPhrase(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[-_]/g, " ")
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
  * Build the concept-phrase → entity_type map from `query_synonyms`
  * declarations across all active schemas (global + user-scoped). Replaces the
  * hardcoded CONCEPT_TYPE_SYNONYMS map per docs/foundation/
@@ -597,7 +582,7 @@ export async function loadConceptTypeSynonyms(
   const sorted = declarations.sort((a, b) => a.entity_type.localeCompare(b.entity_type));
   for (const { entity_type, query_synonyms } of sorted) {
     for (const raw of query_synonyms) {
-      const phrase = normalizeConceptPhrase(raw);
+      const phrase = normalizeSearchText(raw);
       if (!phrase) continue;
       if (synonyms.has(phrase)) {
         if (synonyms.get(phrase) !== entity_type) {

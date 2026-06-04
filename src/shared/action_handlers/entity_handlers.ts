@@ -7,6 +7,11 @@ import { semanticSearchEntities } from "../../services/entity_semantic_search.js
 import { loadConceptTypeSynonyms } from "../../services/schema_registry.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 
+// Shared, dependency-free normalizer (#1572). Imported (and re-exported below
+// for back-compat) so the schema registry can use the same function without an
+// import cycle. See src/shared/search_normalization.ts.
+import { normalizeSearchText } from "../search_normalization.js";
+
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
   value?: unknown;
@@ -50,9 +55,13 @@ const MAX_LEXICAL_CANDIDATES = 5000;
 export const ENTITY_TYPE_KEYWORD_BOOST = 280;
 
 /**
- * Tokens that carry no identity signal in a descriptive multi-term query.
- * Used only by the partial-token fallback (#1551) to avoid letting filler
- * words inflate overlap scores. Strict all-token matching is unaffected.
+ * Generic English stopwords that carry no identity signal in a descriptive
+ * multi-term query. Used only by the partial-token fallback (#1551) to avoid
+ * letting filler words inflate overlap scores; strict all-token matching is
+ * unaffected. Intentionally limited to domain-agnostic function words — no
+ * site- or fixture-specific noise tokens (#1573): precision on descriptive
+ * queries is the job of PARTIAL_MATCH_MIN_OVERLAP_RATIO, not an ad-hoc
+ * denylist that would accrete a new entry every time a query trips the gate.
  */
 const PARTIAL_MATCH_STOP_TOKENS = new Set([
   "a",
@@ -64,9 +73,6 @@ const PARTIAL_MATCH_STOP_TOKENS = new Set([
   "of",
   "for",
   "with",
-  "now",
-  "try",
-  "site",
 ]);
 
 /**
@@ -136,14 +142,9 @@ type LexicalMatch = {
   score: number;
 };
 
-export function normalizeSearchText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[-_]/g, " ")
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+// Re-export the shared normalizer (imported above) so existing references to
+// `normalizeSearchText` from this module keep resolving (#1572).
+export { normalizeSearchText };
 
 export function matchesSearchTokens(searchableText: string, searchTokens: string[]): boolean {
   if (searchTokens.length === 0) return false;
