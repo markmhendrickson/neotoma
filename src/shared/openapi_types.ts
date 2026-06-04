@@ -4074,6 +4074,23 @@ export interface operations {
             limit?: number;
             offset?: number;
             /**
+             * @description Which non-strict retrieval strategies contributed to this
+             *     result set, so callers can tell when a match came from a
+             *     relaxed pass rather than exact token matching. Present only
+             *     on `search` requests. Possible members: `strict` (exact
+             *     all-token lexical match), `semantic` (vector similarity),
+             *     `partial_overlap` (#1551 partial-token fallback),
+             *     `concept_bridge` (#1496 schema `query_synonyms` bridged a
+             *     concept phrase to an entity_type). Omitted for non-search
+             *     listings.
+             */
+            applied_search_strategies?: (
+              | "strict"
+              | "semantic"
+              | "partial_overlap"
+              | "concept_bridge"
+            )[];
+            /**
              * @description Which retrieval strategy answered the query. `none` when no
              *     `search` text was supplied; `semantic` when embedding search
              *     answered; `lexical_typed` when an entity-type token was
@@ -5659,9 +5676,11 @@ export interface operations {
           user_id?: string;
           /**
            * @description Restrict snapshot-field matching to a single field
-           *     (e.g. "email", "domain", "company"). When omitted, a
-           *     default identity-bearing set is checked
-           *     (name, full_name, title, email, domain, company).
+           *     (e.g. "email", "domain", "company"). When omitted, a generic
+           *     identity-bearing base set (name, full_name, title, email,
+           *     domain, company) is checked, extended per entity_type by any
+           *     `identity_search_fields` the schema declares (e.g.
+           *     institution, account_name for financial_account).
            */
           by?: string;
           /** @description Maximum number of matching entities to return (default 100). */
@@ -5702,6 +5721,18 @@ export interface operations {
               }[];
             })[];
             total?: number;
+            /**
+             * @description Which resolution pass produced these results, so callers
+             *     can tell when a match came from a relaxed fallback rather
+             *     than a direct identifier hit. `direct` — canonical_name or
+             *     alias match (or derived-id lookup). `snapshot_field` —
+             *     matched an identity-bearing snapshot field (generic base or
+             *     schema `identity_search_fields`, #1495). `semantic` —
+             *     vector-similarity fallback. `none` — no match. Omitted on
+             *     error responses.
+             * @enum {string}
+             */
+            match_mode?: "direct" | "snapshot_field" | "semantic" | "none";
           };
         };
       };

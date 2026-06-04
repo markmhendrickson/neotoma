@@ -1772,6 +1772,55 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  financial_account: {
+    entity_type: "financial_account",
+    schema_version: "1.0",
+    metadata: {
+      label: "Financial account",
+      description: "A bank, brokerage, savings, or checking account at an institution.",
+      category: "finance",
+      aliases: ["bank_account", "savings_account", "checking_account", "brokerage_account"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        institution: { type: "string", required: false },
+        account_name: { type: "string", required: false },
+        provider: { type: "string", required: false },
+        account_type: { type: "string", required: false },
+        currency: { type: "string", required: false },
+        balance: { type: "number", required: false },
+        number: { type: "string", required: false },
+        status: { type: "string", required: false },
+        notes: { type: "string", required: false },
+      },
+      // Identity composes from institution + account_name when both are
+      // present; institution alone is a weaker but usable single-field rule.
+      canonical_name_fields: [{ composite: ["institution", "account_name"] }, "institution"],
+      // #1496: natural-language queries name the concept ("bank account",
+      // "savings account"), not the literal entity_type. These bridge the
+      // concept to this type during lexical search. Declared here (not
+      // hardcoded in the search module) per
+      // docs/foundation/schema_agnostic_design_rules.md. Only compound phrases
+      // are declared: bare tokens like "account"/"bank" are overbroad ("github
+      // account", "delete my account", "river bank") and would bridge
+      // unrelated queries to financial_account.
+      query_synonyms: ["bank account", "savings account", "checking account", "brokerage account"],
+      // #1495: the institution name and account label are the identity-bearing
+      // text a caller types when resolving by identifier; neither reliably
+      // reaches canonical_name as a standalone token.
+      identity_search_fields: ["institution", "account_name"],
+    },
+    reducer_config: {
+      merge_policies: {
+        institution: { strategy: "last_write" },
+        account_name: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        balance: { strategy: "last_write" },
+      },
+    },
+  },
+
   belief: {
     entity_type: "belief",
     schema_version: "1.0",

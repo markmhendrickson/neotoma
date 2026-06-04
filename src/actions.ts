@@ -3730,31 +3730,33 @@ app.post("/entities/query", async (req, res) => {
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, search_mode } = await queryEntitiesWithCount({
-      userId,
-      entityType: entity_type,
-      includeMerged: include_merged,
-      includeSnapshots: include_snapshots,
-      sortBy: sort_by,
-      sortOrder: sort_order,
-      published,
-      publishedAfter: published_after,
-      publishedBefore: published_before,
-      search,
-      limit,
-      offset,
-      updatedSince: updated_since,
-      createdSince: created_since,
-      identityBasis: identity_basis,
-      snapshotFilters: snapshot_filters,
-      excludeBookkeeping: exclude_bookkeeping,
-    });
+    const { entities, total, applied_search_strategies, search_mode } =
+      await queryEntitiesWithCount({
+        userId,
+        entityType: entity_type,
+        includeMerged: include_merged,
+        includeSnapshots: include_snapshots,
+        sortBy: sort_by,
+        sortOrder: sort_order,
+        published,
+        publishedAfter: published_after,
+        publishedBefore: published_before,
+        search,
+        limit,
+        offset,
+        updatedSince: updated_since,
+        createdSince: created_since,
+        identityBasis: identity_basis,
+        snapshotFilters: snapshot_filters,
+        excludeBookkeeping: exclude_bookkeeping,
+      });
 
     return res.json({
       entities,
       total,
       limit,
       offset,
+      ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
     });
   } catch (error) {

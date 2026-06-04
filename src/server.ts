@@ -2937,28 +2937,30 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
-    const { entities, total, excluded_merged, search_mode } = await queryEntitiesWithCount({
-      userId,
-      entityType: parsed.entity_type,
-      includeMerged: parsed.include_merged,
-      includeSnapshots: parsed.include_snapshots,
-      sortBy: parsed.sort_by,
-      sortOrder: parsed.sort_order,
-      published: parsed.published,
-      publishedAfter: parsed.published_after,
-      publishedBefore: parsed.published_before,
-      search: parsed.search,
-      similarityThreshold: parsed.similarity_threshold,
-      limit: parsed.limit,
-      offset: parsed.offset,
-      updatedSince: parsed.updated_since,
-      createdSince: parsed.created_since,
-    });
+    const { entities, total, excluded_merged, applied_search_strategies, search_mode } =
+      await queryEntitiesWithCount({
+        userId,
+        entityType: parsed.entity_type,
+        includeMerged: parsed.include_merged,
+        includeSnapshots: parsed.include_snapshots,
+        sortBy: parsed.sort_by,
+        sortOrder: parsed.sort_order,
+        published: parsed.published,
+        publishedAfter: parsed.published_after,
+        publishedBefore: parsed.published_before,
+        search: parsed.search,
+        similarityThreshold: parsed.similarity_threshold,
+        limit: parsed.limit,
+        offset: parsed.offset,
+        updatedSince: parsed.updated_since,
+        createdSince: parsed.created_since,
+      });
 
     return this.buildTextResponse({
       entities,
       total,
       excluded_merged,
+      ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
     });
   }
@@ -3066,7 +3068,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-    const { entities, total } = await retrieveEntityByIdentifierWithFallback({
+    const { entities, total, match_mode } = await retrieveEntityByIdentifierWithFallback({
       identifier: parsed.identifier,
       entityType: parsed.entity_type,
       userId,
@@ -3079,6 +3081,7 @@ export class NeotomaServer {
     return this.buildTextResponse({
       entities,
       total,
+      match_mode,
     });
   }
 
