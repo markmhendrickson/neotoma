@@ -582,6 +582,11 @@ export const ListEntityTypesRequestSchema = z.object({
   summary: z.boolean().optional().default(false),
 });
 
+export const DescribeEntityTypeRequestSchema = z.object({
+  entity_type: z.string(),
+  user_id: z.string().optional(),
+});
+
 export const RetrieveEntityByIdentifierSchema = z.object({
   identifier: z.string(),
   entity_type: z.string().optional(),

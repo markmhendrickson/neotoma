@@ -181,6 +181,7 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { isNeotomaEntityId } from "./shared/neotoma_entity_id.js";
+import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
 import { buildSmitheryServerCard } from "./mcp_server_card.js";
 import {
@@ -6957,6 +6958,23 @@ export async function storeStructuredForApi(params: {
     entity_type: string;
     entity_id: string;
   }> = [];
+  // Issue #1552 / #1559: surface a non-fatal signal when a stored observation
+  // carries fields the schema does not declare (dropped from the snapshot
+  // projection by the reducer) or omits fields the schema marks `required`.
+  // Both mirror each other and the existing unknown_fields contract — the write
+  // is accepted; the caller repairs in-turn (correct() into a declared field,
+  // or register/extend the schema). No storage change here; the reducer already
+  // projects only declared fields, so undeclared values are preserved on the
+  // observation but invisible until the schema declares them.
+  const unknownFieldNamesSet = new Set<string>();
+  const requiredFieldsMissing: Array<{
+    entity_type: string;
+    field: string;
+    observation_index: number;
+  }> = [];
+  // Track whether any flagged entity's schema declares identity config, so the
+  // batch hint can prescribe the path that actually works (issue #1549).
+  let anyUnknownFieldSchemaHasIdentityConfig = false;
   {
     const { schemaRegistry } = await import("./services/schema_registry.js");
     for (const r of resolved) {
@@ -6966,7 +6984,8 @@ export async function storeStructuredForApi(params: {
       } catch {
         // Best-effort; never block store on registry IO failure.
       }
-      const storeWarningRules = schemaEntry?.schema_definition?.store_warnings;
+      const schemaDef = schemaEntry?.schema_definition;
+      const storeWarningRules = schemaDef?.store_warnings;
       if (storeWarningRules?.length) {
         for (const rule of storeWarningRules) {
           const hasIdentityField = rule.fields.some(
@@ -6987,7 +7006,7 @@ export async function storeStructuredForApi(params: {
       // Schema-driven content_field warning: when a schema declares
       // `content_field`, emit MISSING_CONTENT_FIELD if the stored payload
       // omits that field or leaves it empty. See issue #949.
-      const contentField = schemaEntry?.schema_definition?.content_field;
+      const contentField = schemaDef?.content_field;
       if (contentField) {
         const value = r.fields[contentField];
         const isMissing =
@@ -7005,8 +7024,95 @@ export async function storeStructuredForApi(params: {
           });
         }
       }
+
+      // Unknown-field (#1552) and missing-required (#1559) signals require a
+      // schema to compare against. When no schema is declared the no_schema /
+      // raw_fragments path (handled elsewhere) already covers the caller.
+      const schemaFieldDefs = schemaDef?.fields;
+      if (schemaFieldDefs) {
+        const declaredFieldNames = new Set(Object.keys(schemaFieldDefs));
+        let entityHadFlaggedField = false;
+
+        // Unknown fields: present on the payload but not declared by the schema.
+        for (const key of Object.keys(r.fields)) {
+          if (NON_SCHEMA_META_KEYS.has(key)) continue;
+          const value = r.fields[key];
+          if (value === undefined) continue;
+          if (!declaredFieldNames.has(key)) {
+            unknownFieldNamesSet.add(key);
+            entityHadFlaggedField = true;
+            schemaStoreWarnings.push({
+              code: "UNKNOWN_FIELD",
+              message:
+                `${r.entity_type} stored with field "${key}" that is not declared on its ` +
+                "active schema. The value is preserved on the observation but is dropped from " +
+                "the entity snapshot until the field is added to the schema. To surface it: " +
+                "re-store or correct() the data into an already-declared field, or add the " +
+                "field via register_schema (or update_schema_incremental when the schema " +
+                "declares canonical_name_fields).",
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+          }
+        }
+
+        // Missing required fields: declared `required: true` but absent/empty.
+        for (const [fieldName, fieldDef] of Object.entries(schemaFieldDefs)) {
+          if (fieldName === "schema_version") continue;
+          if (!fieldDef?.required) continue;
+          const value = r.fields[fieldName];
+          const isMissing =
+            value === undefined || value === null || (typeof value === "string" && value === "");
+          if (isMissing) {
+            entityHadFlaggedField = true;
+            requiredFieldsMissing.push({
+              entity_type: r.entity_type,
+              field: fieldName,
+              observation_index: r.observation_index,
+            });
+            schemaStoreWarnings.push({
+              code: "MISSING_REQUIRED_FIELD",
+              message:
+                `${r.entity_type} stored without required field "${fieldName}". The schema marks ` +
+                "this field required; the write was accepted but the entity is incomplete. " +
+                "Use correct() to supply the missing field.",
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+          }
+        }
+
+        if (
+          entityHadFlaggedField &&
+          Array.isArray(schemaDef?.canonical_name_fields) &&
+          schemaDef.canonical_name_fields.length > 0
+        ) {
+          anyUnknownFieldSchemaHasIdentityConfig = true;
+        }
+      }
     }
   }
+
+  const unknownFieldNames = Array.from(unknownFieldNamesSet).sort();
+  // Conditional hint (#1549): update_schema_incremental requires the schema to
+  // declare canonical_name_fields, else it dead-ends on
+  // ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Only prescribe it when at least one
+  // flagged schema has identity config; otherwise point at the path that works.
+  const unknownFieldsHint =
+    unknownFieldNames.length === 0
+      ? undefined
+      : anyUnknownFieldSchemaHasIdentityConfig
+        ? "Undeclared fields are preserved on the observation but excluded from the entity " +
+          "snapshot. To promote them, call update_schema_incremental to add the fields to the " +
+          "schema, then set migrate_existing: true to backfill existing observations. If an " +
+          "existing declared field already fits the data, prefer correct()-ing into that field."
+        : "Undeclared fields are preserved on the observation but excluded from the entity " +
+          "snapshot. This schema has no canonical_name_fields, so update_schema_incremental " +
+          "would fail with ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Instead: correct() the data into " +
+          "an already-declared field (use describe_entity_type to see declared fields), or call " +
+          "register_schema with a new version that adds the field.";
 
   if (commit && interpretationId) {
     await completeInterpretationRun({
@@ -7032,6 +7138,14 @@ export async function storeStructuredForApi(params: {
     relationships_created: relationshipsCreated,
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
     ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
+    ...(unknownFieldNames.length > 0
+      ? {
+          unknown_fields: unknownFieldNames,
+          unknown_fields_count: unknownFieldNames.length,
+          ...(unknownFieldsHint ? { hint: unknownFieldsHint } : {}),
+        }
+      : {}),
+    ...(requiredFieldsMissing.length > 0 ? { required_fields_missing: requiredFieldsMissing } : {}),
   };
 }
 
@@ -9419,24 +9533,78 @@ app.post("/correct", async (req, res) => {
       admission: getCurrentAAuthAdmission(),
     });
 
-    const { createCorrection } = await import("./services/correction.js");
+    // Issue #1540 / BLOCKING 2+3: resolve the schema and the `unknown_field`
+    // determination through the SAME shared helper the MCP correct() tool uses,
+    // so the two transports cannot diverge. A schema-registry IO failure
+    // propagates (it is NOT coerced to "declared field" — product principle
+    // 10.2); a missing schema throws CorrectionSchemaNotFoundError, surfaced as
+    // ERR_NO_SCHEMA_FOR_ENTITY_TYPE. Both reach the catch below.
+    const { createCorrection, resolveCorrectionSchema, buildCorrectionResponse } =
+      await import("./services/correction.js");
+
+    const { schemaVersion: correctionSchemaVersion, isUnknownField } =
+      await resolveCorrectionSchema(entity_type, field, userId);
+
     const result = await createCorrection({
       entity_id,
       entity_type,
       field,
       value,
-      schema_version: "1.0",
+      schema_version: correctionSchemaVersion,
       user_id: userId,
       idempotency_key,
     });
 
+    if (isUnknownField) {
+      try {
+        const { storeFragment } = await import("./services/raw_fragments.js");
+        await storeFragment({
+          sourceId: result.observation_id,
+          userId,
+          entityId: entity_id,
+          entityType: entity_type,
+          schemaVersion: correctionSchemaVersion,
+          key: field,
+          value,
+          reason: "unknown_field",
+        });
+      } catch (fragErr) {
+        logger.warn(
+          `[correct] raw_fragments mirror failed for ${entity_type}.${field}: ${
+            fragErr instanceof Error ? fragErr.message : String(fragErr)
+          }`
+        );
+      }
+    }
+
     logDebug("Success:correct", req, { entity_id, field });
+    // Unified body shared with the MCP path (declared verbatim in
+    // openapi.yaml CorrectResponse). The transport-only `success` and `snapshot`
+    // fields are merged on top for HTTP callers.
     return res.json({
       success: true,
-      observation_id: result.observation_id,
       snapshot: result.snapshot,
+      ...buildCorrectionResponse({
+        observation_id: result.observation_id,
+        entity_id,
+        entity_type,
+        field,
+        value,
+        isUnknownField,
+      }),
     });
   } catch (error) {
+    // Parity with the MCP correct() path: a missing schema is a client error
+    // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
+    // IO failure is NOT swallowed here — it falls through to the generic 500
+    // handler below instead of being coerced into a "declared field" outcome.
+    const { CorrectionSchemaNotFoundError } = await import("./services/correction.js");
+    if (error instanceof CorrectionSchemaNotFoundError) {
+      logWarn("ValidationError:correct", req, { code: error.code });
+      return res
+        .status(400)
+        .json(buildErrorEnvelope(error.code, error.message, { entity_type: error.entityType }));
+    }
     return handleApiError(
       req,
       res,

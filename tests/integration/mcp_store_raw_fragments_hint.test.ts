@@ -1,7 +1,14 @@
 /**
- * Regression tests for issue #187:
- * store response MUST surface a `hint` directing callers to the raw_fragments
- * recovery path when unknown fields are present.
+ * Regression tests for issue #187 (and #1549):
+ * store response MUST surface a `hint` directing callers to the recovery path
+ * when unknown fields are present.
+ *
+ * For a schema that declares `canonical_name_fields` (identity config present),
+ * the hint prescribes `update_schema_incremental` + `migrate_existing` — the
+ * path that works for that schema. (#1549 made the hint conditional: schemas
+ * without identity config get a different hint that avoids the
+ * `update_schema_incremental` dead-end; that branch is covered in
+ * store_required_unknown_field_signals.test.ts.)
  *
  * This test exercises:
  * - `hint` string present in response when `unknown_fields_count > 0`
@@ -97,11 +104,16 @@ describe("MCP store: raw_fragments recovery hint surfaced (issue #187)", () => {
     expect(body.error).toBeUndefined();
     expect(body.unknown_fields_count).toBe(3);
 
-    // Hint must be present and reference the recovery path.
+    // Hint must be present and reference the recovery path. This schema
+    // declares canonical_name_fields, so update_schema_incremental is the
+    // working path and is prescribed (issue #1549).
     expect(typeof body.hint).toBe("string");
-    expect(body.hint).toContain("raw_fragments");
     expect(body.hint).toContain("update_schema_incremental");
     expect(body.hint).toContain("migrate_existing");
+    // The undeclared fields are NOT routed to raw_fragments on the structured
+    // store path; they are preserved on the observation and excluded from the
+    // snapshot projection. The hint reflects that accurately.
+    expect(body.hint).toContain("snapshot");
   });
 
   it("omits the hint when all fields are schema-declared", async () => {

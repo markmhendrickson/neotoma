@@ -1071,7 +1071,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Get schema by entity type */
+    /**
+     * Get schema by entity type
+     * @description Return the full active schema definition for a single entity type:
+     *     field names, types, descriptions, `required` flags, and the schema
+     *     version. Exposed over MCP as the `describe_entity_type` tool. Use this
+     *     before storing structured data to learn the exact field names and which
+     *     fields are required, so the first `store` lands with no
+     *     `unknown_fields` and no `required_fields_missing` warnings.
+     */
     get: operations["getSchemaByEntityType"];
     put?: never;
     post?: never;
@@ -1646,7 +1654,16 @@ export interface paths {
     put?: never;
     /**
      * Create correction
-     * @description Create high-priority correction observation
+     * @description Create a high-priority correction observation. When `field` is declared
+     *     on the entity's active schema, the correction overrides that field at
+     *     priority 1000. When `field` is NOT declared on the schema, the
+     *     correction is still applied (append path): the field is preserved on the
+     *     correction observation and mirrored to `raw_fragments` so it is
+     *     recoverable and can be promoted to the schema later. This mirrors the
+     *     `store` path, which routes undeclared fields to `raw_fragments` instead
+     *     of rejecting them. The response sets `unknown_field: true` and includes a
+     *     `hint` so the caller knows the value will not surface in the entity
+     *     snapshot until the field is added to the schema.
      */
     post: operations["correct"];
     delete?: never;
@@ -2637,6 +2654,28 @@ export interface components {
       field_summary?: {
         [key: string]: unknown;
       };
+      /**
+       * @description Full schema definition. `schema_definition.fields` is a map of field
+       *     name to `{ type, required?, description?, ... }`. Returned by
+       *     `getSchemaByEntityType` / the `describe_entity_type` MCP tool so
+       *     agents can read field names, types, and required flags before
+       *     storing.
+       */
+      schema_definition?: {
+        fields?: {
+          [key: string]: {
+            type?: string;
+            required?: boolean;
+            description?: string;
+          } & {
+            [key: string]: unknown;
+          };
+        };
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
     };
     Interpretation: {
       id?: string;
@@ -3170,10 +3209,16 @@ export interface components {
          * @description Stable warning code callers can switch on. Two sources:
          *     (1) schema-defined rules declared in the schema's
          *     `store_warnings[].code`; (2) schema-declaration-driven
-         *     codes emitted by the store path itself — currently
+         *     codes emitted by the store path itself —
          *     `MISSING_CONTENT_FIELD` (fired when a schema declares
          *     `content_field` and the stored observation omits or
-         *     empties that field).
+         *     empties that field), `UNKNOWN_FIELD` (fired per field that
+         *     is not declared on the entity's active schema; the value is
+         *     preserved on the observation but dropped from the snapshot
+         *     projection until the field is added to the schema), and
+         *     `MISSING_REQUIRED_FIELD` (fired per schema field declared
+         *     `required: true` that the stored observation omits or leaves
+         *     empty).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */
@@ -3189,10 +3234,14 @@ export interface components {
       /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
       interpretation_id?: string | null;
       /**
-       * @description Names of fields that were dropped because they are not declared in
-       *     the entity's active schema. Present when `unknown_fields_count > 0`.
-       *     Use `update_schema_incremental` or `register_schema` to add these
-       *     fields before re-storing.
+       * @description Names of fields that are not declared in the entity's active schema.
+       *     Present when `unknown_fields_count > 0`. The values are preserved on
+       *     the written observation but are NOT projected into the entity
+       *     snapshot until the field is added to the schema. To surface them:
+       *     (a) when an existing declared field already fits the data, re-store
+       *     (or `correct`) into that field; (b) otherwise add the field to the
+       *     schema with `register_schema` or, when the schema declares
+       *     `canonical_name_fields`, `update_schema_incremental`. See `hint`.
        */
       unknown_fields?: string[];
       /**
@@ -3205,17 +3254,35 @@ export interface components {
        */
       no_schema_entity_types?: string[];
       /**
-       * @description Number of entity fields that were dropped because they are not
-       *     declared in the entity's active schema. These fields were stored in
-       *     `raw_fragments` and can be recovered.
+       * @description Number of entity fields across the batch that are not declared in
+       *     the entity's active schema. The values are preserved on the written
+       *     observations but are not projected into the snapshot until the
+       *     fields are added to the schema.
        */
       unknown_fields_count?: number;
       /**
-       * @description Actionable guidance when fields were dropped to `raw_fragments`.
-       *     Present only when `unknown_fields_count > 0`. Directs the caller
-       *     to use `update_schema_incremental` with `migrate_existing: true`
-       *     to promote the unknown fields into the schema and backfill existing
-       *     data.
+       * @description Schema fields declared `required: true` that the stored observation
+       *     omitted or left empty. Mirror of `unknown_fields` for the inverse
+       *     case: the write is non-fatally accepted, but the entity is missing a
+       *     field its schema marks required. Callers SHOULD repair in-turn by
+       *     `correct`-ing the missing field. Present only when at least one
+       *     required field was missing.
+       */
+      required_fields_missing?: {
+        entity_type: string;
+        field: string;
+        observation_index: number;
+      }[];
+      /**
+       * @description Actionable guidance, present only when `unknown_fields_count > 0`.
+       *     The wording is conditional on the schema's identity configuration:
+       *     when the schema declares `canonical_name_fields`, it directs the
+       *     caller to `update_schema_incremental` (with `migrate_existing: true`
+       *     to backfill); when the schema has no identity config (so
+       *     `update_schema_incremental` would fail with
+       *     `ERR_SCHEMA_MISSING_IDENTITY_CONFIG`), it instead directs the caller
+       *     to `correct` the data into an already-declared field or to
+       *     `register_schema` a new version with the field added.
        */
       hint?: string;
     };
@@ -5014,7 +5081,9 @@ export interface operations {
   };
   getSchemaByEntityType: {
     parameters: {
-      query?: never;
+      query?: {
+        user_id?: string;
+      };
       header?: never;
       path: {
         entity_type: string;
@@ -6402,7 +6471,50 @@ export interface operations {
         };
         content: {
           "application/json": {
-            [key: string]: unknown;
+            observation_id?: string;
+            entity_id?: string;
+            field?: string;
+            value?: unknown;
+            message?: string;
+            /**
+             * @description HTTP-only. Always `true` on a 2xx correction. Absent on the
+             *     MCP transport.
+             */
+            success?: boolean;
+            /**
+             * @description HTTP-only. The recomputed entity snapshot after the
+             *     correction, or `null`. Absent on the MCP transport.
+             */
+            snapshot?: {
+              [key: string]: unknown;
+            } | null;
+            /**
+             * @description Present and `true` when `field` is not declared on the
+             *     entity's active schema. The correction observation is still
+             *     written and the value is mirrored to `raw_fragments`, but it
+             *     will not appear in the entity snapshot until the field is
+             *     added to the schema. Absent (or `false`) for declared
+             *     fields, which behave as ordinary corrections.
+             */
+            unknown_field?: boolean;
+            /**
+             * @description Actionable guidance, present only when `unknown_field` is
+             *     true. Directs the caller to add the field to the schema
+             *     (via `register_schema` / `update_schema_incremental`) to
+             *     promote the value into the snapshot. The interpolated
+             *     `entity_type` and `field` are carried in `details` rather
+             *     than the hint string.
+             */
+            hint?: string;
+            /**
+             * @description Present only when `unknown_field` is true. Structured
+             *     identifiers for the undeclared field, kept out of the
+             *     free-text `hint` so callers can switch on them.
+             */
+            details?: {
+              entity_type?: string;
+              field?: string;
+            };
           };
         };
       };
