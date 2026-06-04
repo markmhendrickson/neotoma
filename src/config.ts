@@ -152,7 +152,9 @@ export const config = {
   projectRoot,
   storageBackend,
   dataDir,
-  sqlitePath: join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),
+  sqlitePath:
+    process.env.NEOTOMA_SQLITE_PATH ||
+    join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),
   rawStorageDir: process.env.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, rawStorageSubdir),
   eventLogPath,
   logsDir,

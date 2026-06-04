@@ -62,21 +62,24 @@ describe("update_schema_incremental: cold-start graceful fallback (issue #269)",
     );
 
     const body = JSON.parse(result.content[0].text) as {
-      success?: boolean;
-      error_code?: string;
-      no_schema_for_entity_type?: boolean;
-      hint?: string;
+      error?: {
+        error_code?: string;
+        message?: string;
+        hint?: string;
+        details?: { no_schema_for_entity_type?: boolean };
+      };
     };
 
-    // Must not throw — the response body carries the error.
-    expect(body.success).toBe(false);
-    expect(body.error_code).toBe("ERR_NO_SCHEMA_FOR_ENTITY_TYPE");
-    expect(body.no_schema_for_entity_type).toBe(true);
+    // Must not throw — the response body carries the canonical error envelope
+    // (issue #370): { error: { error_code, message, hint, details } }.
+    expect(body.error).toBeDefined();
+    expect(body.error?.error_code).toBe("ERR_NO_SCHEMA_FOR_ENTITY_TYPE");
+    expect(body.error?.details?.no_schema_for_entity_type).toBe(true);
 
     // Hint must point callers to register_schema and analyze_schema_candidates.
-    expect(typeof body.hint).toBe("string");
-    expect(body.hint).toContain("register_schema");
-    expect(body.hint).toContain("analyze_schema_candidates");
+    expect(typeof body.error?.hint).toBe("string");
+    expect(body.error?.hint).toContain("register_schema");
+    expect(body.error?.hint).toContain("analyze_schema_candidates");
   });
 
   it("returns a structured non-throwing response when existing schema lacks identity configuration", async () => {
@@ -113,18 +116,21 @@ describe("update_schema_incremental: cold-start graceful fallback (issue #269)",
     );
 
     const body = JSON.parse(result.content[0].text) as {
-      success?: boolean;
-      error_code?: string;
-      hint?: string;
+      error?: {
+        error_code?: string;
+        message?: string;
+        hint?: string;
+      };
     };
 
-    // Must not throw — the response body carries the error.
-    expect(body.success).toBe(false);
-    expect(body.error_code).toBe("ERR_SCHEMA_MISSING_IDENTITY_CONFIG");
+    // Must not throw — the response body carries the canonical error envelope
+    // (issue #370).
+    expect(body.error).toBeDefined();
+    expect(body.error?.error_code).toBe("ERR_SCHEMA_MISSING_IDENTITY_CONFIG");
 
     // Hint must point callers to register_schema with canonical_name_fields.
-    expect(typeof body.hint).toBe("string");
-    expect(body.hint).toContain("register_schema");
-    expect(body.hint).toContain("canonical_name_fields");
+    expect(typeof body.error?.hint).toBe("string");
+    expect(body.error?.hint).toContain("register_schema");
+    expect(body.error?.hint).toContain("canonical_name_fields");
   });
 });
