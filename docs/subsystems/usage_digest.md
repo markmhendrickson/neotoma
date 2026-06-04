@@ -25,29 +25,30 @@ The `usage_digest` entity type is registered in `src/services/schema_definitions
 
 ### Required fields
 
-| Field | Type | Notes |
-|---|---|---|
-| `schema_version` | string | Always `"1.0"` for digests built against this spec. |
-| `period_start` | string (ISO-8601) | Start of the digest window, inclusive. Use RFC 3339 format (`2026-06-01T00:00:00Z`). **Must be string, not date** — lexicographic sort must match temporal order for `sort_by: "snapshot.period_end"` to work correctly. |
-| `period_end` | string (ISO-8601) | End of the digest window, exclusive. Used as the time-series sort key. |
-| `reporter_channel` | string | Observer slug, e.g. `"lemonbrand-observer"`. Identifies the emitter instance. |
+| Field              | Type              | Notes                                                                                                                                                                                                                    |
+| ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `schema_version`   | string            | Always `"1.0"` for digests built against this spec.                                                                                                                                                                      |
+| `period_start`     | string (ISO-8601) | Start of the digest window, inclusive. Use RFC 3339 format (`2026-06-01T00:00:00Z`). **Must be string, not date** — lexicographic sort must match temporal order for `sort_by: "snapshot.period_end"` to work correctly. |
+| `period_end`       | string (ISO-8601) | End of the digest window, exclusive. Used as the time-series sort key.                                                                                                                                                   |
+| `reporter_channel` | string            | Observer slug, e.g. `"lemonbrand-observer"`. Identifies the emitter instance.                                                                                                                                            |
 
 ### Optional fields
 
-| Field | Type | Notes |
-|---|---|---|
-| `aauth_sub` | string | Agent attribution. Mirrors `daemon_report` convention. |
-| `reporter_app_version` | string | Semver of the observer app, e.g. `"1.4.2"`. |
-| `reporter_git_sha` | string | Short SHA of the deployed build. |
-| `operation_counts` | object | Opaque. See [Object field shapes](#object-field-shapes) below. |
-| `error_rate` | number | Fraction [0, 1] of operations that errored in the period. |
-| `error_counts` | object | Opaque. See [Object field shapes](#object-field-shapes) below. |
-| `entity_type_usage` | object | Opaque. See [Object field shapes](#object-field-shapes) below. |
-| `tool_usage` | object | Opaque. See [Object field shapes](#object-field-shapes) below. |
-| `friction_notes` | array | Array of strings. PII MUST be redacted before submission. See [Client-side redaction](#client-side-redaction). |
-| `effectiveness_signal` | string | Enum: `excellent` \| `good` \| `fair` \| `poor` \| `unknown`. Enforced by convention, not the registry. |
-| `notes` | string | Free-text operational notes. PII MUST be redacted. |
-| `redaction_salt` | string | Shared salt used for client-side PII redaction (see [Client-side redaction](#client-side-redaction)). |
+| Field                  | Type   | Notes                                                                                                                                                                                                    |
+| ---------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aauth_sub`            | string | Agent attribution. Mirrors `daemon_report` convention.                                                                                                                                                   |
+| `reporter_app_version` | string | Semver of the observer app, e.g. `"1.4.2"`.                                                                                                                                                              |
+| `reporter_git_sha`     | string | Short SHA of the deployed build.                                                                                                                                                                         |
+| `operation_counts`     | object | Opaque. See [Object field shapes](#object-field-shapes) below.                                                                                                                                           |
+| `error_rate`           | number | Fraction [0, 1] of operations that errored in the period.                                                                                                                                                |
+| `error_counts`         | object | Opaque. See [Object field shapes](#object-field-shapes) below.                                                                                                                                           |
+| `entity_type_usage`    | object | Opaque. See [Object field shapes](#object-field-shapes) below.                                                                                                                                           |
+| `tool_usage`           | object | Opaque. See [Object field shapes](#object-field-shapes) below.                                                                                                                                           |
+| `compliance_signals`   | object | Opaque. Agent-instruction adherence metrics ("is Neotoma used as intended"). See [Object field shapes](#object-field-shapes) and [Compliance signals](#compliance-signals-intended-use-adherence) below. |
+| `friction_notes`       | array  | Array of strings. PII MUST be redacted before submission. See [Client-side redaction](#client-side-redaction).                                                                                           |
+| `effectiveness_signal` | string | Enum: `excellent` \| `good` \| `fair` \| `poor` \| `unknown`. Enforced by convention, not the registry.                                                                                                  |
+| `notes`                | string | Free-text operational notes. PII MUST be redacted.                                                                                                                                                       |
+| `redaction_salt`       | string | Shared salt used for client-side PII redaction (see [Client-side redaction](#client-side-redaction)).                                                                                                    |
 
 ### Object field shapes
 
@@ -114,6 +115,72 @@ An array of redacted free-text strings. Each entry should be a brief description
   "store rejected with ERR_STORE_VALIDATION_FAILED on field <UUID:a1b2c3d4>"
 ]
 ```
+
+## Compliance signals (intended-use adherence)
+
+`operation_counts` / `error_*` answer **"is Neotoma working?"** They do **not** answer **"is the agent using Neotoma _as intended_ per the MCP/CLI instruction contract?"** — an agent can post low error rates while systematically skipping the closing assistant store or orphaning entities. `compliance_signals` carries that second signal: each metric maps to a specific behavioral mandate in the agent instruction contract (`docs/developer/mcp/compact_instructions.md`, `docs/specs/MCP_SPEC.md`).
+
+All rates are fractions in `[0, 1]` (1.0 = fully compliant); counts are non-negative integers (0 = no violations). Every field is optional — an emitter SHOULD only populate the metrics it can actually compute from the data it observes. **Do not emit a metric you cannot compute** (e.g. an observer that only sees CLI/MCP JSONL cannot reliably compute reply-text citation rates). Omission means "not measured," not "100%."
+
+### Confidence tiers
+
+The emitter computes most of these from the observer JSONL (the chronological log of MCP/CLI calls + their request/response payloads). Confidence reflects how reliably a client-side observer can compute each:
+
+- **high** — derivable directly from the JSONL call sequence + payloads (ordering, presence/absence of calls, field formats, response flags).
+- **medium** — needs turn/transcript alignment or message-type detection the observer may only partially see.
+- **low (aspirational)** — needs NLP over reply text or server-side graph data an external observer typically lacks. Document, but most emitters will omit these.
+
+### Shape
+
+```json
+{
+  "compliance_signals": {
+    "turn_lifecycle": {
+      "retrieval_completeness_rate": 0.97, // high — retrieve_* precedes user-phase store on implied-entity turns
+      "user_phase_store_rate": 0.99, // high — each user turn has a unified store call
+      "closing_store_completion_rate": 0.98, // medium — assistant-reply turns have a paired :assistant store
+      "step_ordering_violation_count": 2, // high — non-Neotoma tools called before retrieval/store
+      "closing_store_skip_count": 1 // medium — reply produced, no closing store
+    },
+    "relationships": {
+      "closing_relationship_completion_rate": 0.96, // medium — closing store has PART_OF to conversation
+      "relationship_batch_efficiency_rate": 0.9, // high — relationships sent in store vs separate calls
+      "per_turn_entity_linkage_rate": 0.94, // medium — touched entities have REFERS_TO from the turn
+      "reply_citation_completeness_rate": null // low/aspirational — needs NLP on reply text; omit if unmeasured
+    },
+    "schema_fidelity": {
+      "unknown_fields_repair_rate": 1.0, // high — unknown_fields_count>0 followed by repair in same turn
+      "schema_check_hit_rate": 0.92, // high — known entity_type stores preceded by describe/retrieve
+      "flat_entity_shape_violation_count": 0, // high — no nested-attributes payloads
+      "data_fidelity_violation_count": 0 // medium — proxy: unknown_fields_count>0 left unrepaired
+    },
+    "turn_identity": {
+      "turn_key_format_compliance_rate": 1.0, // high — turn_key carries conversation_id prefix
+      "conversation_id_stability_rate": 1.0, // high — one conversation_id per visible thread
+      "idempotency_key_uniqueness_rate": 1.0, // high — distinct idempotency_key per store in a turn
+      "closing_message_key_conflict_count": 0 // high — :assistant suffix present, no collision
+    },
+    "retrieval_behavior": {
+      "retrieval_before_fallback_rate": 0.95, // high — Neotoma retrieval before native-tool fallback
+      "category_retrieval_compliance_rate": 0.9 // medium — list-intent queries call retrieve_entities
+    },
+    "coverage": {
+      "session_coverage_rate": 1.0, // high — sessions with >=1 store call
+      "rapid_fire_store_frequency_rate": 0.97 // medium — stores at least every 3–5 turns in rapid sessions
+    },
+    "security": {
+      "pii_stripping_compliance_rate": 1.0, // high — submit_issue bodies free of detectable PII
+      "issue_linking_completion_rate": 0.93 // high — submit_issue followed by REFERS_TO links
+    },
+    "summary": {
+      "overall_mandate_compliance_rate": 0.96, // emitter-defined weighted aggregate of populated rates
+      "critical_violations_count": 3 // total FORBIDDEN-pattern occurrences (skip-session, only-user-msg, no-closing-store)
+    }
+  }
+}
+```
+
+The groups above are the families an emitter SHOULD aim to cover; the exact key set is a documented convention (the registry stores the object opaquely). Add families as the instruction contract evolves — additive, no schema migration. Each metric's mandate, violation signature, and confidence tier are tracked in the design analysis attached to issue #1569.
 
 ## Identity and idempotency
 
@@ -210,13 +277,13 @@ All free-text fields (`friction_notes`, `notes`) MUST have PII removed before th
 
 Inspect each string for patterns matching:
 
-| Pattern | Placeholder |
-|---|---|
-| Email address (`foo@bar.com`) | `<EMAIL:sha256[:8]>` |
-| Bearer / API token (long hex or base64 strings) | `<TOKEN:sha256[:8]>` |
-| Filesystem path (`/home/user/...`, `C:\Users\...`) | `<PATH:sha256[:8]>` |
-| UUID (`xxxxxxxx-xxxx-...`) | `<UUID:sha256[:8]>` |
-| Phone number | `<PHONE:sha256[:8]>` |
+| Pattern                                            | Placeholder          |
+| -------------------------------------------------- | -------------------- |
+| Email address (`foo@bar.com`)                      | `<EMAIL:sha256[:8]>` |
+| Bearer / API token (long hex or base64 strings)    | `<TOKEN:sha256[:8]>` |
+| Filesystem path (`/home/user/...`, `C:\Users\...`) | `<PATH:sha256[:8]>`  |
+| UUID (`xxxxxxxx-xxxx-...`)                         | `<UUID:sha256[:8]>`  |
+| Phone number                                       | `<PHONE:sha256[:8]>` |
 
 The hash uses `sha256(value + redaction_salt)`, truncated to 8 hex characters. This lets a single operator correlate the same redacted value across digests (using the same salt) without re-exposing PII.
 
@@ -255,15 +322,13 @@ export async function emitUsageDigest(
     reporterAppVersion?: string;
     reporterGitSha?: string;
     aauthSub?: string;
-  },
+  }
 ): Promise<void> {
   // Generate a per-digest redaction salt for PII correlation.
   const redactionSalt = crypto.randomBytes(16).toString("hex");
 
   // Redact PII from free-text fields before submission.
-  const redactedFrictionNotes = metrics.frictionNotes.map((note) =>
-    redactPii(note, redactionSalt),
-  );
+  const redactedFrictionNotes = metrics.frictionNotes.map((note) => redactPii(note, redactionSalt));
   const redactedNotes = metrics.notes ? redactPii(metrics.notes, redactionSalt) : undefined;
 
   const idempotencyKey = `usage-digest-${channel}-${periodEnd}`;
@@ -324,16 +389,22 @@ function redactPii(text: string, salt: string): string {
 ### Usage example
 
 ```typescript
-await emitUsageDigest(neotomaClient, "lemonbrand-observer", "2026-05-25T00:00:00Z", "2026-06-01T00:00:00Z", {
-  operationCounts: { total: 4821, by_operation: { store: 3100, retrieve_entities: 980 } },
-  errorRate: 0.0097,
-  errorCounts: { total: 47, by_error_code: { ERR_STORE_VALIDATION_FAILED: 28 } },
-  entityTypeUsage: { by_entity_type: { task: { store_count: 156, retrieve_count: 304 } } },
-  toolUsage: { by_tool: { store: { call_count: 3100, error_count: 18 } } },
-  frictionNotes: ["retrieve_entities returned empty for entity_type=task despite known data"],
-  effectivenessSignal: "good",
-  reporterAppVersion: "1.4.2",
-});
+await emitUsageDigest(
+  neotomaClient,
+  "lemonbrand-observer",
+  "2026-05-25T00:00:00Z",
+  "2026-06-01T00:00:00Z",
+  {
+    operationCounts: { total: 4821, by_operation: { store: 3100, retrieve_entities: 980 } },
+    errorRate: 0.0097,
+    errorCounts: { total: 47, by_error_code: { ERR_STORE_VALIDATION_FAILED: 28 } },
+    entityTypeUsage: { by_entity_type: { task: { store_count: 156, retrieve_count: 304 } } },
+    toolUsage: { by_tool: { store: { call_count: 3100, error_count: 18 } } },
+    frictionNotes: ["retrieve_entities returned empty for entity_type=task despite known data"],
+    effectivenessSignal: "good",
+    reporterAppVersion: "1.4.2",
+  }
+);
 ```
 
 ## Related

@@ -3297,6 +3297,11 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         entity_type_usage: { type: "object", required: false },
         // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
         tool_usage: { type: "object", required: false },
+        // Opaque JSONB — agent-instruction adherence metrics ("is Neotoma used AS INTENDED
+        // per the MCP/CLI contract"): turn-lifecycle, relationship, schema-fidelity,
+        // turn-identity, retrieval, coverage, and security signals. Shape (rates 0–1 and
+        // counts, grouped by mandate family) is documented in docs/subsystems/usage_digest.md.
+        compliance_signals: { type: "object", required: false },
         // Array of strings; PII must be redacted client-side before submission.
         // Shape is convention (not enforced by registry); see docs/subsystems/usage_digest.md.
         friction_notes: { type: "array", required: false },
@@ -3321,6 +3326,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         error_counts: { strategy: "last_write" },
         entity_type_usage: { strategy: "last_write" },
         tool_usage: { strategy: "last_write" },
+        compliance_signals: { strategy: "last_write" },
         effectiveness_signal: { strategy: "last_write" },
         // Supersede, not accumulate — keep latest friction_notes whole; can change later.
         friction_notes: { strategy: "last_write" },

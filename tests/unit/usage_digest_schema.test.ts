@@ -88,6 +88,14 @@ describe("usage_digest schema (#1569)", () => {
       expect(fields.error_counts?.type).toBe("object");
       expect(fields.entity_type_usage?.type).toBe("object");
       expect(fields.tool_usage?.type).toBe("object");
+      expect(fields.compliance_signals?.type).toBe("object");
+    });
+
+    it("compliance_signals is an optional opaque object with a last_write merge policy", () => {
+      const { fields } = schema.schema_definition;
+      expect(fields.compliance_signals?.type).toBe("object");
+      expect(fields.compliance_signals?.required).not.toBe(true);
+      expect(schema.reducer_config.merge_policies.compliance_signals?.strategy).toBe("last_write");
     });
 
     it("friction_notes is an array field", () => {
@@ -122,7 +130,9 @@ describe("usage_digest schema (#1569)", () => {
       const tf = schema.schema_definition.temporal_fields;
       expect(tf).toBeDefined();
       expect(Array.isArray(tf)).toBe(true);
-      const entry = tf?.find((t: { field: string; event_type: string }) => t.field === "period_end");
+      const entry = tf?.find(
+        (t: { field: string; event_type: string }) => t.field === "period_end"
+      );
       expect(entry).toBeDefined();
       expect(entry?.event_type).toBe("UsageDigestClosed");
     });
