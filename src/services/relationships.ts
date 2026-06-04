@@ -285,50 +285,69 @@ export class RelationshipsService {
     const relationships = (data || []) as RelationshipSnapshot[];
 
     // Filter deleted relationships unless explicitly requested
-    if (!includeDeleted && relationships.length > 0) {
-      const relationshipKeys = relationships.map((r) => r.relationship_key);
+    if (!includeDeleted) {
+      return this.filterDeletedRelationships(relationships);
+    }
 
-      // Check for deletion observations (highest priority with _deleted: true)
-      const { data: deletionObservations } = await db
-        .from("relationship_observations")
-        .select("relationship_key, source_priority, observed_at, metadata")
-        .in("relationship_key", relationshipKeys)
-        .order("source_priority", { ascending: false })
-        .order("observed_at", { ascending: false });
+    return relationships;
+  }
 
-      // Find relationships with deletion observations
-      const deletedRelationshipKeys = new Set<string>();
-      if (deletionObservations) {
-        // Group by relationship_key and get highest priority observation
-        const highestByKey = new Map<string, any>();
-        for (const obs of deletionObservations) {
-          if (!highestByKey.has(obs.relationship_key)) {
+  /**
+   * Remove soft-deleted relationships from a snapshot list.
+   *
+   * A relationship snapshot row persists after deletion; deletion is recorded
+   * as a `relationship_observations` row whose `metadata._deleted === true`.
+   * A relationship is considered deleted when the highest-priority (then most
+   * recent) observation for its `relationship_key` carries that flag. This
+   * mirrors the soft-delete semantics enforced by `getRelationshipSnapshot`
+   * and is the single source of truth for "is this edge live?" used by every
+   * read path (entity listing, type listing, and the `/list_relationships`
+   * handler). Returns the input list unchanged when it is empty.
+   */
+  async filterDeletedRelationships(
+    relationships: RelationshipSnapshot[]
+  ): Promise<RelationshipSnapshot[]> {
+    if (relationships.length === 0) {
+      return relationships;
+    }
+
+    const relationshipKeys = relationships.map((r) => r.relationship_key);
+
+    // Check for deletion observations (highest priority with _deleted: true)
+    const { data: deletionObservations } = await db
+      .from("relationship_observations")
+      .select("relationship_key, source_priority, observed_at, metadata")
+      .in("relationship_key", relationshipKeys)
+      .order("source_priority", { ascending: false })
+      .order("observed_at", { ascending: false });
+
+    // Find relationships whose highest-priority observation is a deletion
+    const deletedRelationshipKeys = new Set<string>();
+    if (deletionObservations) {
+      const highestByKey = new Map<string, any>();
+      for (const obs of deletionObservations) {
+        if (!highestByKey.has(obs.relationship_key)) {
+          highestByKey.set(obs.relationship_key, obs);
+        } else {
+          const existing = highestByKey.get(obs.relationship_key);
+          if (
+            obs.source_priority > existing.source_priority ||
+            (obs.source_priority === existing.source_priority &&
+              new Date(obs.observed_at).getTime() > new Date(existing.observed_at).getTime())
+          ) {
             highestByKey.set(obs.relationship_key, obs);
-          } else {
-            const existing = highestByKey.get(obs.relationship_key);
-            if (
-              obs.source_priority > existing.source_priority ||
-              (obs.source_priority === existing.source_priority &&
-                new Date(obs.observed_at).getTime() > new Date(existing.observed_at).getTime())
-            ) {
-              highestByKey.set(obs.relationship_key, obs);
-            }
-          }
-        }
-
-        // Check if highest priority observation is a deletion
-        for (const [key, obs] of highestByKey.entries()) {
-          if (obs.metadata?._deleted === true) {
-            deletedRelationshipKeys.add(key);
           }
         }
       }
 
-      // Filter out deleted relationships
-      return relationships.filter((r) => !deletedRelationshipKeys.has(r.relationship_key));
+      for (const [key, obs] of highestByKey.entries()) {
+        if (obs.metadata?._deleted === true) {
+          deletedRelationshipKeys.add(key);
+        }
+      }
     }
 
-    return relationships;
+    return relationships.filter((r) => !deletedRelationshipKeys.has(r.relationship_key));
   }
 
   /**
@@ -357,42 +376,8 @@ export class RelationshipsService {
     const relationships = (data || []) as RelationshipSnapshot[];
 
     // Filter deleted relationships unless explicitly requested
-    if (!includeDeleted && relationships.length > 0) {
-      const relationshipKeys = relationships.map((r) => r.relationship_key);
-
-      const { data: deletionObservations } = await db
-        .from("relationship_observations")
-        .select("relationship_key, source_priority, observed_at, metadata")
-        .in("relationship_key", relationshipKeys)
-        .order("source_priority", { ascending: false })
-        .order("observed_at", { ascending: false });
-
-      const deletedRelationshipKeys = new Set<string>();
-      if (deletionObservations) {
-        const highestByKey = new Map<string, any>();
-        for (const obs of deletionObservations) {
-          if (!highestByKey.has(obs.relationship_key)) {
-            highestByKey.set(obs.relationship_key, obs);
-          } else {
-            const existing = highestByKey.get(obs.relationship_key);
-            if (
-              obs.source_priority > existing.source_priority ||
-              (obs.source_priority === existing.source_priority &&
-                new Date(obs.observed_at).getTime() > new Date(existing.observed_at).getTime())
-            ) {
-              highestByKey.set(obs.relationship_key, obs);
-            }
-          }
-        }
-
-        for (const [key, obs] of highestByKey.entries()) {
-          if (obs.metadata?._deleted === true) {
-            deletedRelationshipKeys.add(key);
-          }
-        }
-      }
-
-      return relationships.filter((r) => !deletedRelationshipKeys.has(r.relationship_key));
+    if (!includeDeleted) {
+      return this.filterDeletedRelationships(relationships);
     }
 
     return relationships;

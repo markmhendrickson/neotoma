@@ -1,0 +1,20 @@
+endpoint: "POST /delete_relationship"
+outcome: rejected
+error_code: "RESOURCE_NOT_FOUND"
+hint_match: "/list_relationships/"
+notes: |
+  v0.15.1 tightening (#277). A (relationship_type, source_entity_id,
+  target_entity_id) triple that does not match a live (non-deleted) edge
+  previously returned 200 after writing a no-op deletion observation for an
+  edge that never existed — a silent no-op. The handler now verifies a live
+  edge matches the supplied triple and returns 404 RESOURCE_NOT_FOUND with a
+  structured details.hint steering the caller to list_relationships for
+  relationship_type discovery.
+
+  This is not a useful contract anyone depended on (the prior 200 deleted
+  nothing), but the response status observably flipped 200 -> 404 for the
+  wrong-/unknown-type case, so it is recorded here.
+
+  Fix on the caller side: call list_relationships with source_entity_id +
+  target_entity_id to discover the real relationship_type(s) between the two
+  entities, then retry delete_relationship with one of the returned types.

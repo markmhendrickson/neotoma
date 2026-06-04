@@ -8234,6 +8234,7 @@ app.post("/list_relationships", async (req, res) => {
     relationship_type,
     limit = 100,
     offset = 0,
+    include_deleted = false,
   } = parsed.data;
 
   try {
@@ -8244,9 +8245,18 @@ app.post("/list_relationships", async (req, res) => {
 
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
-    // Pagination is pushed to the DB (`.range()` + `count: "exact"`) so memory
-    // stays O(limit) rather than loading the full result set and slicing in
-    // process. See issue #367.
+    //
+    // Two pagination strategies compose here so both features remain correct
+    // (issues #277 + #367/#369):
+    //   - include_deleted=true (audit/history): no app-side filtering is needed,
+    //     so pagination + counting are pushed to the DB (`.range()` +
+    //     `count: "exact"`), keeping memory O(limit).
+    //   - include_deleted=false (default): soft-deleted edges are excluded by
+    //     `filterDeletedRelationships`, which resolves the highest-priority
+    //     observation per relationship_key in application code and cannot be
+    //     expressed as a single DB predicate. The filter MUST run before
+    //     pagination/counting so `total`/`total_count` reflect only live edges,
+    //     so the full matching set is loaded, filtered, then sliced in process.
     let query = db
       .from("relationship_snapshots")
       .select("*", { count: "exact" })
@@ -8289,22 +8299,49 @@ app.post("/list_relationships", async (req, res) => {
     // "Sorting MUST use deterministic tiebreakers"). See issue #368.
     query = query
       .order("last_observation_at", { ascending: false })
-      .order("relationship_key", { ascending: true })
-      .range(offset, offset + limit - 1);
+      .order("relationship_key", { ascending: true });
+
+    // On the audit path we can paginate at the DB; on the default path we must
+    // load the full matching set so the soft-delete filter precedes pagination.
+    if (include_deleted) {
+      query = query.range(offset, offset + limit - 1);
+    }
 
     const { data, error, count } = await query;
     if (error) {
       throw new Error(error.message);
     }
 
-    const paginated = data || [];
-    const total = count ?? paginated.length;
+    let paginated: typeof data;
+    let total: number;
+
+    if (include_deleted) {
+      // DB already applied `.range()`; `count` is the exact total of all
+      // matching rows (deleted included). See issues #367/#369.
+      paginated = data || [];
+      total = count ?? paginated.length;
+    } else {
+      // Exclude soft-deleted edges by default (#277). The discovery-before-delete
+      // flow steers callers here to find a relationship_type before
+      // delete_relationship; without this filter a successfully-deleted edge
+      // would keep appearing and a caller would re-delete it into the new 404.
+      // Filtering precedes pagination so `total` and the returned slice reflect
+      // live edges only.
+      let all = data || [];
+      if (all.length > 0) {
+        const { relationshipsService } = await import("./services/relationships.js");
+        all = await relationshipsService.filterDeletedRelationships(all);
+      }
+      total = all.length;
+      paginated = all.slice(offset, offset + limit);
+    }
 
     logDebug("Success:list_relationships", req, {
       entity_id,
       source_entity_id,
       target_entity_id,
       relationship_type,
+      include_deleted,
       count: paginated.length,
       total,
     });
@@ -9107,6 +9144,38 @@ app.post("/delete_relationship", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { relationship_type, source_entity_id, target_entity_id, reason } = parsed.data;
+
+    // Discovery guard (#277): deletion requires the exact relationship_type
+    // between two entities, but a caller who does not know the type can only
+    // guess. Without this check the soft-delete silently "succeeds" by writing
+    // a deletion observation for an edge that never existed, masking the gap.
+    // Verify a live (non-deleted) relationship matches the supplied triple
+    // first; if not, return 404 with a structured hint pointing to
+    // `list_relationships` for type discovery.
+    const { relationshipsService } = await import("./services/relationships.js");
+    const liveRelationship = await relationshipsService.getRelationshipSnapshot(
+      relationship_type,
+      source_entity_id,
+      target_entity_id,
+      userId
+    );
+    if (!liveRelationship) {
+      return sendError(
+        res,
+        404,
+        "RESOURCE_NOT_FOUND",
+        "No live relationship matches the supplied relationship_type, source_entity_id, and target_entity_id.",
+        {
+          relationship_type,
+          source_entity_id,
+          target_entity_id,
+          hint:
+            "Call list_relationships with source_entity_id and target_entity_id to discover the " +
+            "relationship_type(s) between these two entities, then retry delete_relationship with " +
+            "one of the returned types.",
+        }
+      );
+    }
 
     const { softDeleteRelationship } = await import("./services/deletion.js");
 

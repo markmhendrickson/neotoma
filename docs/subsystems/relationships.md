@@ -377,6 +377,31 @@ await createRelationshipObservations([rel], "source_A", null, userId);
 // Unique constraint: (source_id, interpretation_id, relationship_key, canonical_hash, user_id)
 ```
 
+### 6.6 Relationship-Type Discovery Before Deletion
+
+`delete_relationship` requires the exact `relationship_type` between two entities. A caller that knows only the two entity IDs discovers the type via `list_relationships` before deleting:
+
+```typescript
+// 1. Discover the relationship_type(s) between two entities.
+const { relationships } = await listRelationships({
+  source_entity_id: "payment_123",
+  target_entity_id: "invoice_456",
+});
+// Each row carries its relationship_type.
+const type = relationships[0]?.relationship_type; // e.g. "SETTLES"
+
+// 2. Delete with the discovered type.
+await deleteRelationship({
+  relationship_type: type,
+  source_entity_id: "payment_123",
+  target_entity_id: "invoice_456",
+});
+```
+
+**Discovery-before-delete is an invariant of `delete_relationship`.** The handler verifies that a live (non-deleted) edge matches the supplied `(relationship_type, source_entity_id, target_entity_id)` triple before writing the deletion observation. A triple that matches no live edge returns `404 RESOURCE_NOT_FOUND` with a structured `details.hint` pointing back to `list_relationships`, rather than silently writing a no-op deletion observation for an edge that never existed (see `deletion.md` § Relationship deletion).
+
+**`list_relationships` filters soft-deleted edges by default.** A deleted relationship's snapshot row persists (deletion is recorded as a deletion observation, never an in-place mutation), but `list_relationships` excludes rows whose highest-priority observation is a deletion. This keeps the discovery flow self-consistent: after a successful delete, the edge no longer appears, so a caller will not re-offer it and re-delete it into the `404`. The filter is implemented once in `relationshipsService.filterDeletedRelationships` and shared by every read path (`getRelationshipsForEntity`, `getRelationshipsByType`, and both the HTTP and MCP `list_relationships` surfaces). Pass `include_deleted: true` to include soft-deleted edges for audit or history.
+
 ### 7.1 Creating Relationships (Legacy Pattern)
 
 **Note:** This section describes the legacy direct relationship creation pattern. New code should use relationship observations (see section 6).

@@ -143,6 +143,7 @@ export const ListRelationshipsRequestSchema = z
     relationship_type: RelationshipTypeSchema.optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
+    include_deleted: z.boolean().optional().default(false),
     user_id: z.string().optional(),
   })
   .refine(

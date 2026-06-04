@@ -53,6 +53,7 @@ import {
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
+import type { RelationshipSnapshot } from "./reducers/relationship_reducer.js";
 import type { RelationshipType } from "./services/relationships.js";
 import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
@@ -2867,11 +2868,27 @@ export class NeotomaServer {
       return bTime - aTime;
     });
 
-    const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
+    // Exclude soft-deleted edges by default (#277), matching the HTTP
+    // /list_relationships handler and the service-layer read convention. The
+    // discovery-before-delete flow points callers here; surfacing a
+    // soft-deleted edge would make them re-delete it into a 404. Pass
+    // include_deleted=true for audit/history reads. Filtering precedes
+    // pagination so `total` reflects live edges only.
+    let liveRelationships = relationships;
+    if (!parsed.include_deleted && relationships.length > 0) {
+      const { relationshipsService } = await import("./services/relationships.js");
+      const live = await relationshipsService.filterDeletedRelationships(
+        relationships as unknown as RelationshipSnapshot[]
+      );
+      const liveKeys = new Set(live.map((r) => r.relationship_key));
+      liveRelationships = relationships.filter((r) => liveKeys.has(r.relationship_key));
+    }
+
+    const paginated = liveRelationships.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
       relationships: paginated,
-      total: relationships.length,
+      total: liveRelationships.length,
       limit: parsed.limit,
       offset: parsed.offset,
     });
@@ -5793,6 +5810,40 @@ export class NeotomaServer {
     const parsed = DeleteRelationshipRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
+
+    // Discovery guard (#277): mirrors the HTTP /delete_relationship handler.
+    // Deletion requires the exact relationship_type between two entities, but a
+    // caller who does not know the type can only guess. Without this check the
+    // soft-delete silently "succeeds" by writing a deletion observation for an
+    // edge that never existed, masking the gap. Verify a live (non-deleted)
+    // relationship matches the supplied triple first; if not, raise a not-found
+    // MCP error carrying the same structured discovery hint pointing to
+    // `list_relationships`. The guard lives here (and in the HTTP handler)
+    // rather than inside softDeleteRelationship because the GDPR bulk-deletion
+    // path intentionally writes deletion tombstones for every observed edge.
+    const { relationshipsService } = await import("./services/relationships.js");
+    const liveRelationship = await relationshipsService.getRelationshipSnapshot(
+      parsed.relationship_type,
+      parsed.source_entity_id,
+      parsed.target_entity_id,
+      userId
+    );
+    if (!liveRelationship) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "No live relationship matches the supplied relationship_type, source_entity_id, and target_entity_id.",
+        {
+          code: "RESOURCE_NOT_FOUND",
+          relationship_type: parsed.relationship_type,
+          source_entity_id: parsed.source_entity_id,
+          target_entity_id: parsed.target_entity_id,
+          hint:
+            "Call list_relationships with source_entity_id and target_entity_id to discover the " +
+            "relationship_type(s) between these two entities, then retry delete_relationship with " +
+            "one of the returned types.",
+        }
+      );
+    }
 
     const result = await softDeleteRelationshipService(
       relationshipKey,
