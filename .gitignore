@@ -43,6 +43,10 @@ public/
 !frontend/public/android-chrome-192x192.png
 !frontend/public/android-chrome-512x512.png
 !frontend/public/site.webmanifest
+# Inspector ships skin presets under public/skins/; Vite copies them to dist/.
+!inspector/public/
+!inspector/public/skins/
+!inspector/public/skins/*.json
 # Build output from build:site:pages (CI regenerates on deploy)
 site_pages/assets/
 site_pages/neotoma-hero.png

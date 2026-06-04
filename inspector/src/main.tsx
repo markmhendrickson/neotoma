@@ -8,7 +8,9 @@ import App from "./App";
 import "./index.css";
 import { consumeSandboxSessionHandoff, parseSessionHash } from "@/lib/sandbox_session";
 import { Theme_provider, initialize_theme_on_load } from "@/hooks/use_theme";
+import { initialize_inspector_skin_on_load } from "@/lib/inspector_skin";
 
+initialize_inspector_skin_on_load();
 initialize_theme_on_load();
 
 const LIVE_QUERY_INTERVAL_MS = 5_000;
