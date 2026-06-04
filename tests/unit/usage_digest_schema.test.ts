@@ -174,5 +174,11 @@ describe("usage_digest schema (#1569)", () => {
       expect(schema.metadata.label).toBe("Usage Digest");
       expect(schema.metadata.category).toBe("agent_runtime");
     });
+
+    it("declares guest_access_policy 'submit_only' (external observers write, cannot read back)", () => {
+      expect((schema.metadata as { guest_access_policy?: string }).guest_access_policy).toBe(
+        "submit_only"
+      );
+    });
   });
 });

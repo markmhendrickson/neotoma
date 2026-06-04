@@ -3274,6 +3274,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         "(rollup grain, distinct from per-event harness_event and per-incident daemon_report).",
       category: "agent_runtime",
       aliases: [],
+      // External observers submit digests as guests without an AAuth keypair: they may
+      // write (submit) but not read digests back. AAuth-signed agents with a store grant
+      // use the normal authenticated path. Mirrors conversation's guest posture.
+      guest_access_policy: "submit_only",
     },
     schema_definition: {
       fields: {

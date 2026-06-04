@@ -224,7 +224,7 @@ For example: `usage-digest-lemonbrand-observer-2026-06-01T00:00:00Z`.
 Two paths are supported:
 
 1. **AAuth grant** — issue a grant with `{ op: "store", entity_types: ["usage_digest"] }` to the reporting agent's `aauth_sub`. This is the recommended path for automated observers.
-2. **Keyless guest** — if the `usage_digest` type is configured with a permissive `guest_access_policy` (see [`guest_access_policy.md`](guest_access_policy.md)), unauthenticated `store` calls are accepted. This is appropriate for low-trust telemetry sinks where the data is not sensitive.
+2. **Keyless guest** — the `usage_digest` type ships with `guest_access_policy: "submit_only"` (see [`guest_access_policy.md`](guest_access_policy.md)), so an external observer can submit digests via an unauthenticated `store` call **without registering an AAuth keypair**. `submit_only` means guests may **write but not read** digests back — appropriate for a telemetry sink (the data is already PII-redacted client-side). An operator can override per deployment via the `NEOTOMA_ACCESS_POLICY_USAGE_DIGEST` env var or by changing the schema metadata.
 
 ## Retrieving digests (time-series)
 
