@@ -139,7 +139,8 @@ describe("classifyLine — predicate 3: heuristic_merge", () => {
     const line: ObserverLogLine = {
       exit_code: 0,
       command: "store entities",
-      stderr: "[warn] HEURISTIC_MERGE: merged entity ent_abc with ent_def based on title similarity",
+      stderr:
+        "[warn] HEURISTIC_MERGE: merged entity ent_abc with ent_def based on title similarity",
     };
     expect(classifyLine(line)).toBe("heuristic_merge");
   });
@@ -329,21 +330,61 @@ describe("anomalyDedupKey", () => {
 describe("extractAnomalies", () => {
   const fixture = [
     // Line 0: clean
-    JSON.stringify({ exit_code: 0, command: "store entities", duration_ms: 100, timestamp: "2024-01-01T00:00:00Z" }),
+    JSON.stringify({
+      exit_code: 0,
+      command: "store entities",
+      duration_ms: 100,
+      timestamp: "2024-01-01T00:00:00Z",
+    }),
     // Line 1: hard_error (predicate 1)
-    JSON.stringify({ exit_code: 1, command: "store entities", stderr: "ERR_TRANSPORT_FAIL", timestamp: "2024-01-01T01:00:00Z" }),
+    JSON.stringify({
+      exit_code: 1,
+      command: "store entities",
+      stderr: "ERR_TRANSPORT_FAIL",
+      timestamp: "2024-01-01T01:00:00Z",
+    }),
     // Line 2: schema_drift (predicate 2)
-    JSON.stringify({ exit_code: 0, command: "retrieve entities", unknown_fields_count: 2, timestamp: "2024-01-01T02:00:00Z" }),
+    JSON.stringify({
+      exit_code: 0,
+      command: "retrieve entities",
+      unknown_fields_count: 2,
+      timestamp: "2024-01-01T02:00:00Z",
+    }),
     // Line 3: heuristic_merge (predicate 3)
-    JSON.stringify({ exit_code: 0, command: "store", stderr: "HEURISTIC_MERGE: merged", timestamp: "2024-01-01T03:00:00Z" }),
+    JSON.stringify({
+      exit_code: 0,
+      command: "store",
+      stderr: "HEURISTIC_MERGE: merged",
+      timestamp: "2024-01-01T03:00:00Z",
+    }),
     // Line 4: perf_regression (predicate 4)
-    JSON.stringify({ exit_code: 0, command: "store entities", duration_ms: 6000, timestamp: "2024-01-01T04:00:00Z" }),
+    JSON.stringify({
+      exit_code: 0,
+      command: "store entities",
+      duration_ms: 6000,
+      timestamp: "2024-01-01T04:00:00Z",
+    }),
     // Line 5: resolver_bug (predicate 5)
-    JSON.stringify({ exit_code: 1, command: "store", stderr: "ERR_STORE_RESOLUTION_FAILED", timestamp: "2024-01-01T05:00:00Z" }),
+    JSON.stringify({
+      exit_code: 1,
+      command: "store",
+      stderr: "ERR_STORE_RESOLUTION_FAILED",
+      timestamp: "2024-01-01T05:00:00Z",
+    }),
     // Line 6: sqlite_corruption (predicate 6)
-    JSON.stringify({ exit_code: 1, command: "retrieve", stderr: "database disk image is malformed", timestamp: "2024-01-01T06:00:00Z" }),
+    JSON.stringify({
+      exit_code: 1,
+      command: "retrieve",
+      stderr: "database disk image is malformed",
+      timestamp: "2024-01-01T06:00:00Z",
+    }),
     // Line 7: reporter_env_required (predicate 7)
-    JSON.stringify({ exit_code: 1, command: "issues submit", stderr: "ERR_REPORTER_ENVIRONMENT_REQUIRED", timestamp: "2024-01-01T07:00:00Z" }),
+    JSON.stringify({
+      exit_code: 1,
+      command: "issues submit",
+      stderr: "ERR_REPORTER_ENVIRONMENT_REQUIRED",
+      timestamp: "2024-01-01T07:00:00Z",
+    }),
     // Line 8: stale_mcp_session (predicate 8)
     JSON.stringify({ status_code: 503, path: "/mcp", timestamp: "2024-01-01T08:00:00Z" }),
     // Line 9: empty line (skipped)
@@ -496,7 +537,11 @@ describe("extractAnomalies — integration: each predicate covered independently
   });
 
   it("predicate 7: reporter_env_required — code in stderr", () => {
-    const r = singleLine({ exit_code: 1, command: "issues submit", stderr: "ERR_REPORTER_ENVIRONMENT_REQUIRED" });
+    const r = singleLine({
+      exit_code: 1,
+      command: "issues submit",
+      stderr: "ERR_REPORTER_ENVIRONMENT_REQUIRED",
+    });
     expect(r.anomalies).toHaveLength(1);
     expect(r.anomalies[0].anomaly_class).toBe("reporter_env_required");
   });

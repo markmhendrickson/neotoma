@@ -173,7 +173,8 @@ function buildBody(anomalyClass: AnomalyClass, line: ObserverLogLine): string {
   if (line.path) parts.push(`**Path:** ${line.path}`);
   if (line.reporter_channel) parts.push(`**Reporter channel:** ${line.reporter_channel}`);
   if (line.reporter_git_sha) parts.push(`**Reporter git SHA:** ${line.reporter_git_sha}`);
-  if (line.reporter_app_version) parts.push(`**Reporter app version:** ${line.reporter_app_version}`);
+  if (line.reporter_app_version)
+    parts.push(`**Reporter app version:** ${line.reporter_app_version}`);
 
   if (line.stderr && line.stderr.trim()) {
     parts.push(`\n**stderr:**\n\`\`\`\n${line.stderr.trim()}\n\`\`\``);
@@ -298,5 +299,8 @@ export interface SweepReport {
   issues_filed: number;
   issues_folded: number;
   issues_skipped: number;
-  outcomes: Array<{ anomaly: Pick<ObserverAnomaly, "line_index" | "anomaly_class" | "title">; outcome: AnomalyOutcome }>;
+  outcomes: Array<{
+    anomaly: Pick<ObserverAnomaly, "line_index" | "anomaly_class" | "title">;
+    outcome: AnomalyOutcome;
+  }>;
 }
