@@ -151,8 +151,16 @@ jobs:
             summary + verdict) to a file, then submit it with `gh pr review` mapped from
             the verdict:
               - APPROVED            -> `gh pr review <PR> --approve --body-file <file>`
-              - APPROVED-WITH-NOTES -> `gh pr review <PR> --comment --body-file <file>`
+              - APPROVED-WITH-NOTES -> `gh pr review <PR> --approve --body-file <file>`
               - NEEDS-CHANGES       -> `gh pr review <PR> --request-changes --body-file <file>`
+            APPROVED-WITH-NOTES is an APPROVAL (Blocking: 0, only non-blocking notes), so it
+            submits with `--approve`. This is deliberate: `--approve` DISMISSES a prior
+            `--request-changes` from this reviewer, so `reviewDecision` self-heals to
+            APPROVED once a clean re-review runs against the new head. Using `--comment`
+            here would leave a stale `CHANGES_REQUESTED` decision on the PR forever even
+            after the blocking findings were fixed. The non-blocking notes still ship in the
+            review body. (Only a true NEEDS-CHANGES verdict — i.e. at least one BLOCKING
+            finding — may request changes.)
             Resolve `<PR>` as `${{ github.event.pull_request.number || github.event.issue.number }}`.
             Include the line `Reviewed commit: <full head SHA>` (from `gh pr view --json headRefOid`)
             at the top of the body, so a later force-push makes it plainly visible that the
