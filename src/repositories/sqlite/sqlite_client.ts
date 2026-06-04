@@ -554,9 +554,9 @@ function backfillRelationshipLiveness(db: SqliteDatabase): void {
     "UPDATE relationship_snapshots SET is_live = 1 WHERE relationship_key = ? AND is_live <> 1"
   );
 
-  const allKeys = db
-    .prepare("SELECT relationship_key FROM relationship_snapshots")
-    .all() as { relationship_key: string }[];
+  const allKeys = db.prepare("SELECT relationship_key FROM relationship_snapshots").all() as {
+    relationship_key: string;
+  }[];
   for (const { relationship_key } of allKeys) {
     if (deadKeys.has(relationship_key)) {
       setDead.run(relationship_key);
