@@ -9136,6 +9136,14 @@ issuesCommand
   .option("--until <iso8601>", "Only process lines with timestamp <= this ISO 8601 date")
   .option("--reporter-channel <label>", "Override the reporter channel for all filed issues")
   .option(
+    "--reporter-git-sha <sha>",
+    "Override reporter git SHA when JSONL lines lack per-line values"
+  )
+  .option(
+    "--reporter-app-version <version>",
+    "Override reporter app version when JSONL lines lack per-line values"
+  )
+  .option(
     "--mode <mode>",
     "Submission mode: proactive (file immediately) or consent (prompt before each issue)",
     "consent"
@@ -9162,9 +9170,12 @@ issuesCommand
         since: opts.since,
         until: opts.until,
         reporterChannel: opts.reporterChannel,
+        reporterGitSha: opts.reporterGitSha,
+        reporterAppVersion: opts.reporterAppVersion,
         mode: mode as "proactive" | "consent",
         dryRun: Boolean(opts.dryRun),
-        limit: typeof opts.limit === "number" && Number.isFinite(opts.limit) ? opts.limit : undefined,
+        limit:
+          typeof opts.limit === "number" && Number.isFinite(opts.limit) ? opts.limit : undefined,
         json: Boolean((program.opts() as { json?: boolean }).json),
       },
       api
