@@ -11,6 +11,7 @@ import type { NeotomaApiClient } from "../shared/api_client.js";
  *   sync    -- Mirror ingest (POST /issues/sync; same as MCP sync_issues)
  *   config  -- View/set issues configuration
  *   auth    -- Trigger gh CLI auth flow
+ *   import  -- Ingest observer JSONL logs and file/fold issues
  */
 
 export interface IssuesCreateOpts {
@@ -473,4 +474,272 @@ export async function issuesAuth(opts: { json?: boolean }): Promise<void> {
     process.stdout.write(`Authenticated as ${user.login} via gh CLI.\n`);
     process.stdout.write(`Issues auth method set to: gh_cli\n`);
   }
+}
+
+export interface IssuesImportOpts {
+  fromJsonl: string;
+  since?: string;
+  until?: string;
+  reporterChannel?: string;
+  mode?: "proactive" | "consent";
+  dryRun?: boolean;
+  limit?: number;
+  json?: boolean;
+}
+
+/**
+ * `neotoma issues import --from-jsonl <path>`
+ *
+ * Reads an observer JSONL log, extracts anomaly lines, deduplicates against
+ * existing open issues, redacts PII, and files or folds each surviving line.
+ */
+export async function issuesImport(opts: IssuesImportOpts, api: NeotomaApiClient): Promise<void> {
+  const fs = await import("node:fs/promises");
+  const { extractAnomalies, anomalyDedupKey } = await import("../services/issues/observer_import.js");
+  const { runRedactionGuard } = await import("../services/issues/redaction_guard.js");
+  const { listIssues } = await import("../services/issues/github_client.js");
+
+  // Read the JSONL file.
+  let content: string;
+  try {
+    content = await fs.readFile(opts.fromJsonl, "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `issues import: cannot read file ${opts.fromJsonl}: ${(err as Error).message}\n`
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const reporterAppVersion = await getCliVersion();
+
+  const extraction = extractAnomalies(content, {
+    since: opts.since,
+    until: opts.until,
+    reporterChannel: opts.reporterChannel,
+    limit: opts.limit,
+  });
+
+  const { anomalies } = extraction;
+
+  // Load existing open issues for dedup (best-effort; if GitHub is unavailable we still proceed).
+  let existingIssues: Array<{ number: number; title: string; state: string; labels: Array<{ name: string }> }> = [];
+  try {
+    existingIssues = await listIssues({ state: "open", per_page: 100 });
+  } catch {
+    // Dedup is best-effort; skip if GitHub unavailable.
+  }
+
+  const report = {
+    lines_scanned: extraction.lines_scanned,
+    lines_unparseable: extraction.lines_unparseable,
+    lines_skipped_by_filter: extraction.lines_skipped_by_filter,
+    anomalies_extracted: anomalies.length,
+    issues_filed: 0,
+    issues_folded: 0,
+    issues_skipped: 0,
+    outcomes: [] as Array<{
+      anomaly: { line_index: number; anomaly_class: string; title: string };
+      outcome: { status: string; [key: string]: unknown };
+    }>,
+  };
+
+  // Process each anomaly.
+  for (const anomaly of anomalies) {
+    const dedupKey = anomalyDedupKey(anomaly);
+
+    // Redact PII from title+body.
+    let redactedTitle: string;
+    let redactedBody: string;
+    try {
+      const guarded = runRedactionGuard({ title: anomaly.title, body: anomaly.body, mode: "scan" });
+      redactedTitle = guarded.title;
+      redactedBody = guarded.body;
+    } catch (err) {
+      // Fail-closed: skip this line if redaction fails unexpectedly.
+      const reason = `redaction failed: ${(err as Error).message}`;
+      const outcome = { status: "skipped" as const, reason };
+      report.issues_skipped++;
+      report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+      if (!opts.json) {
+        process.stderr.write(`[import] Skipping line ${anomaly.line_index}: ${reason}\n`);
+      }
+      continue;
+    }
+
+    // Dry-run: emit structured report and commit nothing.
+    if (opts.dryRun) {
+      const outcome = { status: "dry_run" as const, title: redactedTitle, body: redactedBody };
+      report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+      continue;
+    }
+
+    // Dedup: look for an existing open issue that matches our dedup key.
+    // We embed the dedup key in the issue title (format: [observer] ...) and labels.
+    // Match by anomaly class prefix + command prefix from title, using existing open issues.
+    const existingMatch = findExistingIssue(existingIssues, anomaly);
+
+    if (existingMatch) {
+      // Fold: append a message to the existing issue.
+      if ((opts.mode ?? "consent") === "consent") {
+        process.stdout.write(
+          `\n[fold] Line ${anomaly.line_index} matches existing issue #${existingMatch.number}:\n` +
+          `  Title: ${redactedTitle}\n` +
+          `  Body preview: ${redactedBody.slice(0, 200)}\n`
+        );
+        const confirm = await promptConfirm(`Append message to #${existingMatch.number}? [y/N] `);
+        if (!confirm) {
+          const outcome = { status: "skipped" as const, reason: "user declined" };
+          report.issues_skipped++;
+          report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+          continue;
+        }
+      }
+
+      try {
+        const { data, error } = await api.POST("/issues/add_message", {
+          body: {
+            issue_number: existingMatch.number,
+            body: `**Duplicate observation from observer JSONL import (dedup key: \`${dedupKey}\`)**\n\n${redactedBody}`,
+            reporter_channel: anomaly.reporter_channel,
+            reporter_git_sha: anomaly.reporter_git_sha?.trim() || undefined,
+            reporter_app_version: (anomaly.reporter_app_version?.trim() || reporterAppVersion) || undefined,
+          },
+        });
+        if (error) {
+          const reason = `add_message failed: ${JSON.stringify(error)}`;
+          const outcome = { status: "skipped" as const, reason };
+          report.issues_skipped++;
+          report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+          continue;
+        }
+        void data;
+        const outcome = { status: "folded" as const, existing_entity_id: String(existingMatch.number) };
+        report.issues_folded++;
+        report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+      } catch (err) {
+        const reason = `add_message error: ${(err as Error).message}`;
+        const outcome = { status: "skipped" as const, reason };
+        report.issues_skipped++;
+        report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+      }
+      continue;
+    }
+
+    // New issue: file it.
+    if ((opts.mode ?? "consent") === "consent") {
+      process.stdout.write(
+        `\n[new issue] Line ${anomaly.line_index}:\n` +
+        `  Title: ${redactedTitle}\n` +
+        `  Body preview: ${redactedBody.slice(0, 200)}\n`
+      );
+      const confirm = await promptConfirm(`File this issue? [y/N] `);
+      if (!confirm) {
+        const outcome = { status: "skipped" as const, reason: "user declined" };
+        report.issues_skipped++;
+        report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+        continue;
+      }
+    }
+
+    try {
+      const { data, error } = await api.POST("/issues/submit", {
+        body: {
+          title: redactedTitle,
+          body: redactedBody,
+          labels: ["neotoma", "observer-import"],
+          visibility: "public",
+          reporter_channel: anomaly.reporter_channel,
+          reporter_git_sha: anomaly.reporter_git_sha?.trim() || undefined,
+          reporter_app_version: (anomaly.reporter_app_version?.trim() || reporterAppVersion) || undefined,
+        },
+      });
+
+      if (error) {
+        const reason = `submit failed: ${JSON.stringify(error)}`;
+        const outcome = { status: "skipped" as const, reason };
+        report.issues_skipped++;
+        report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+        continue;
+      }
+
+      const row = data as { entity_id?: string; issue_number?: number } | undefined;
+      const outcome = {
+        status: "filed" as const,
+        entity_id: row?.entity_id ?? "",
+        issue_number: row?.issue_number,
+      };
+      report.issues_filed++;
+      report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+    } catch (err) {
+      const reason = `submit error: ${(err as Error).message}`;
+      const outcome = { status: "skipped" as const, reason };
+      report.issues_skipped++;
+      report.outcomes.push({ anomaly: { line_index: anomaly.line_index, anomaly_class: anomaly.anomaly_class, title: anomaly.title }, outcome });
+    }
+  }
+
+  // Emit sweep report.
+  if (opts.json || opts.dryRun) {
+    output(report, true);
+  } else {
+    process.stdout.write(`\n=== Observer JSONL import sweep report ===\n`);
+    process.stdout.write(`  Lines scanned:       ${report.lines_scanned}\n`);
+    process.stdout.write(`  Lines unparseable:   ${report.lines_unparseable}\n`);
+    process.stdout.write(`  Lines filtered:      ${report.lines_skipped_by_filter}\n`);
+    process.stdout.write(`  Anomalies extracted: ${report.anomalies_extracted}\n`);
+    if (opts.dryRun) {
+      process.stdout.write(`  (dry-run: no issues filed)\n`);
+    } else {
+      process.stdout.write(`  Issues filed:        ${report.issues_filed}\n`);
+      process.stdout.write(`  Issues folded:       ${report.issues_folded}\n`);
+      process.stdout.write(`  Issues skipped:      ${report.issues_skipped}\n`);
+    }
+  }
+
+}
+
+async function getCliVersion(): Promise<string> {
+  try {
+    const { createRequire } = await import("node:module");
+    const req = createRequire(import.meta.url);
+    const pkg = req("../../package.json") as { version?: string };
+    return pkg.version ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function promptConfirm(prompt: string): Promise<boolean> {
+  // Non-interactive: auto-decline in non-TTY contexts.
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+
+  const readline = await import("node:readline");
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === "y");
+    });
+  });
+}
+
+function findExistingIssue(
+  issues: Array<{ number: number; title: string; state: string; labels: Array<{ name: string }> }>,
+  anomaly: import("../services/issues/observer_import.js").ObserverAnomaly
+): { number: number; title: string } | null {
+  // Match by: title contains the same anomaly class token and command prefix.
+  const classToken = `[observer]`;
+  const anomalyClassLabel = anomaly.anomaly_class;
+  for (const issue of issues) {
+    if (!issue.title.includes(classToken)) continue;
+    // Check the labels for observer-import tag and anomaly class match.
+    const hasObserverLabel = issue.labels.some((l) => l.name === "observer-import");
+    if (!hasObserverLabel) continue;
+    // Coarse match: title contains the command prefix.
+    if (issue.title.includes(anomaly.command_prefix) || issue.title.includes(anomalyClassLabel)) {
+      return issue;
+    }
+  }
+  return null;
 }
