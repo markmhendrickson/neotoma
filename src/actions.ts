@@ -8278,21 +8278,24 @@ app.post("/list_relationships", async (req, res) => {
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
     //
-    // Two pagination strategies compose here so both features remain correct
-    // (issues #277 + #367/#369):
-    //   - include_deleted=true (audit/history): no app-side filtering is needed,
-    //     so pagination + counting are pushed to the DB (`.range()` +
-    //     `count: "exact"`), keeping memory O(limit).
-    //   - include_deleted=false (default): soft-deleted edges are excluded by
-    //     `filterDeletedRelationships`, which resolves the highest-priority
-    //     observation per relationship_key in application code and cannot be
-    //     expressed as a single DB predicate. The filter MUST run before
-    //     pagination/counting so `total`/`total_count` reflect only live edges,
-    //     so the full matching set is loaded, filtered, then sliced in process.
+    // Both the default and audit paths now paginate at the DB, keeping memory
+    // O(limit) (issues #277 + #367/#369 + #1570):
+    //   - include_deleted=false (default): soft-deleted edges are excluded via
+    //     the materialized `is_live` column (#1570), so the live-edge filter is
+    //     a DB predicate (`is_live = 1`). The DB applies the filter, exact
+    //     count, and `.range()` pagination together — no load-then-filter in
+    //     process. `is_live` is kept in sync with the highest-priority deletion
+    //     observation by computeRelationshipSnapshot / softDeleteRelationship.
+    //   - include_deleted=true (audit/history): no liveness filter; all rows
+    //     (deleted included) are counted and paginated at the DB.
     let query = db
       .from("relationship_snapshots")
       .select("*", { count: "exact" })
       .eq("user_id", userId);
+
+    if (!include_deleted) {
+      query = query.eq("is_live", 1);
+    }
 
     if (source_entity_id && target_entity_id) {
       query = query
@@ -8333,40 +8336,23 @@ app.post("/list_relationships", async (req, res) => {
       .order("last_observation_at", { ascending: false })
       .order("relationship_key", { ascending: true });
 
-    // On the audit path we can paginate at the DB; on the default path we must
-    // load the full matching set so the soft-delete filter precedes pagination.
-    if (include_deleted) {
-      query = query.range(offset, offset + limit - 1);
-    }
+    // Both paths paginate at the DB now that liveness is a column (#1570): the
+    // `is_live` predicate above already excludes soft-deleted edges on the
+    // default path, so the exact count and the page slice both reflect the
+    // correct (live, or all-when-include_deleted) set without loading the full
+    // match into memory.
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
     if (error) {
       throw new Error(error.message);
     }
 
-    let paginated: typeof data;
-    let total: number;
-
-    if (include_deleted) {
-      // DB already applied `.range()`; `count` is the exact total of all
-      // matching rows (deleted included). See issues #367/#369.
-      paginated = data || [];
-      total = count ?? paginated.length;
-    } else {
-      // Exclude soft-deleted edges by default (#277). The discovery-before-delete
-      // flow steers callers here to find a relationship_type before
-      // delete_relationship; without this filter a successfully-deleted edge
-      // would keep appearing and a caller would re-delete it into the new 404.
-      // Filtering precedes pagination so `total` and the returned slice reflect
-      // live edges only.
-      let all = data || [];
-      if (all.length > 0) {
-        const { relationshipsService } = await import("./services/relationships.js");
-        all = await relationshipsService.filterDeletedRelationships(all);
-      }
-      total = all.length;
-      paginated = all.slice(offset, offset + limit);
-    }
+    // `count` is the exact total of rows matching the (filtered) query — live
+    // edges only on the default path (#277/#1570), all rows on the audit path
+    // (#367/#369).
+    const paginated = data || [];
+    const total = count ?? paginated.length;
 
     logDebug("Success:list_relationships", req, {
       entity_id,
