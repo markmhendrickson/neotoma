@@ -103,6 +103,9 @@ interface ErrorEnvelope {
 Errors raised by `update_schema_incremental` and related schema-registry tools.
 These are structured (non-throwing) responses with an actionable `hint` field
 directing the caller to the right next tool, rather than opaque internal errors.
+They use the canonical standard error envelope (`{ error: { error_code,
+message, hint, details } }`, see `docs/subsystems/errors.md`) so CLI/MCP error
+handlers can pattern-match the code uniformly.
 
 | Code                              | HTTP | Retry? | Description                                                                          |
 | --------------------------------- | ---- | ------ | ------------------------------------------------------------------------------------ |
@@ -114,15 +117,19 @@ the target `entity_type` has no schema registered in `schema_registry` and no
 code-defined fallback in `schema_definitions.ts`. Incremental update needs a
 baseline to extend, so the call cannot proceed.
 
-Response shape:
+Response shape (canonical envelope):
 
 ```json
 {
-  "success": false,
-  "entity_type": "<type>",
-  "error_code": "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
-  "no_schema_for_entity_type": true,
-  "hint": "Call register_schema first ... Use analyze_schema_candidates to get field suggestions before registering."
+  "error": {
+    "error_code": "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
+    "message": "No schema is registered for entity_type \"<type>\".",
+    "hint": "Call register_schema first ... Use analyze_schema_candidates to get field suggestions before registering.",
+    "details": {
+      "entity_type": "<type>",
+      "no_schema_for_entity_type": true
+    }
+  }
 }
 ```
 
@@ -136,14 +143,16 @@ the target `entity_type` lacks both `canonical_name_fields` and
 `identity_opt_out`. The baseline schema is present but cannot be safely
 extended without an identity rule in place.
 
-Response shape:
+Response shape (canonical envelope):
 
 ```json
 {
-  "success": false,
-  "entity_type": "<type>",
-  "error_code": "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
-  "hint": "Call register_schema with a full schema_definition that includes canonical_name_fields (or identity_opt_out: \"heuristic_canonical_name\") to establish a baseline, then retry update_schema_incremental."
+  "error": {
+    "error_code": "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
+    "message": "The SchemaDefinition for entity_type \"<type>\" is missing identity configuration.",
+    "hint": "Call register_schema with a full schema_definition that includes canonical_name_fields (or identity_opt_out: \"heuristic_canonical_name\") to establish a baseline, then retry update_schema_incremental.",
+    "details": { "entity_type": "<type>" }
+  }
 }
 ```
 

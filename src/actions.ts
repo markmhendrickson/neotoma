@@ -87,6 +87,7 @@ import {
   SANDBOX_PUBLIC_USER_ID,
 } from "./services/local_auth.js";
 import {
+  buildSandboxBootBannerLines,
   isSandboxMode,
   resolveForceMode,
   resolveRefusePolicy,
@@ -3728,7 +3729,7 @@ app.post("/entities/query", async (req, res) => {
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total } = await queryEntitiesWithCount({
+    const { entities, total, search_mode } = await queryEntitiesWithCount({
       userId,
       entityType: entity_type,
       includeMerged: include_merged,
@@ -3753,6 +3754,7 @@ app.post("/entities/query", async (req, res) => {
       total,
       limit,
       offset,
+      search_mode,
     });
   } catch (error) {
     return handleApiError(
@@ -8127,7 +8129,22 @@ app.post("/list_relationships", async (req, res) => {
 
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
-    let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
+    //
+    // Two pagination strategies compose here so both features remain correct
+    // (issues #277 + #367/#369):
+    //   - include_deleted=true (audit/history): no app-side filtering is needed,
+    //     so pagination + counting are pushed to the DB (`.range()` +
+    //     `count: "exact"`), keeping memory O(limit).
+    //   - include_deleted=false (default): soft-deleted edges are excluded by
+    //     `filterDeletedRelationships`, which resolves the highest-priority
+    //     observation per relationship_key in application code and cannot be
+    //     expressed as a single DB predicate. The filter MUST run before
+    //     pagination/counting so `total`/`total_count` reflect only live edges,
+    //     so the full matching set is loaded, filtered, then sliced in process.
+    let query = db
+      .from("relationship_snapshots")
+      .select("*", { count: "exact" })
+      .eq("user_id", userId);
 
     if (source_entity_id && target_entity_id) {
       query = query
@@ -8168,25 +8185,40 @@ app.post("/list_relationships", async (req, res) => {
       .order("last_observation_at", { ascending: false })
       .order("relationship_key", { ascending: true });
 
-    const { data, error } = await query;
+    // On the audit path we can paginate at the DB; on the default path we must
+    // load the full matching set so the soft-delete filter precedes pagination.
+    if (include_deleted) {
+      query = query.range(offset, offset + limit - 1);
+    }
+
+    const { data, error, count } = await query;
     if (error) {
       throw new Error(error.message);
     }
 
-    let all = data || [];
+    let paginated: typeof data;
+    let total: number;
 
-    // Exclude soft-deleted edges by default (#277). The discovery-before-delete
-    // flow steers callers here to find a relationship_type before
-    // delete_relationship; without this filter a successfully-deleted edge would
-    // keep appearing and a caller would re-delete it into the new 404. Pass
-    // include_deleted=true for audit/history reads. Filtering precedes pagination
-    // so `total` and the returned slice reflect live edges only.
-    if (!include_deleted && all.length > 0) {
-      const { relationshipsService } = await import("./services/relationships.js");
-      all = await relationshipsService.filterDeletedRelationships(all);
+    if (include_deleted) {
+      // DB already applied `.range()`; `count` is the exact total of all
+      // matching rows (deleted included). See issues #367/#369.
+      paginated = data || [];
+      total = count ?? paginated.length;
+    } else {
+      // Exclude soft-deleted edges by default (#277). The discovery-before-delete
+      // flow steers callers here to find a relationship_type before
+      // delete_relationship; without this filter a successfully-deleted edge
+      // would keep appearing and a caller would re-delete it into the new 404.
+      // Filtering precedes pagination so `total` and the returned slice reflect
+      // live edges only.
+      let all = data || [];
+      if (all.length > 0) {
+        const { relationshipsService } = await import("./services/relationships.js");
+        all = await relationshipsService.filterDeletedRelationships(all);
+      }
+      total = all.length;
+      paginated = all.slice(offset, offset + limit);
     }
-
-    const paginated = all.slice(offset, offset + limit);
 
     logDebug("Success:list_relationships", req, {
       entity_id,
@@ -8195,9 +8227,18 @@ app.post("/list_relationships", async (req, res) => {
       relationship_type,
       include_deleted,
       count: paginated.length,
-      total: all.length,
+      total,
     });
-    return res.json({ relationships: paginated, total: all.length, limit, offset });
+    // `total_count` is the canonical field name (matches
+    // /retrieve_graph_neighborhood). `total` is retained as a deprecated alias
+    // for back-compat with pre-existing clients. See issue #369.
+    return res.json({
+      relationships: paginated,
+      total,
+      total_count: total,
+      limit,
+      offset,
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -10283,34 +10324,17 @@ function emitSandboxBootBanner(
   mode: NeotomaSandboxModeName,
   reason: string,
   shouldRefuseBoot: boolean,
-  refusePolicy: "warn" | "enforce"
+  refusePolicy: "warn" | "enforce",
+  productionEnv: boolean
 ): void {
-  const lines: string[] = [];
-  lines.push("");
-  lines.push("─────────────────────────────────────────────────────────────");
-  lines.push(`[neotoma] Sandbox mode resolved: ${mode}`);
-  lines.push(`[neotoma] Reason: ${reason}`);
-  if (mode === "refuse") {
-    lines.push(
-      `[neotoma] WARNING: this server topology matches the v0.11.1 inspector ` +
-        `auth-bypass advisory class.`
-    );
-    lines.push(
-      `[neotoma] Set NEOTOMA_REQUIRE_AUTH=1 + provision auth, OR bind to ` +
-        `loopback (NEOTOMA_HTTP_HOST=127.0.0.1), OR opt into ` +
-        `NEOTOMA_SANDBOX_MODE=1 for the hosted-sandbox profile.`
-    );
-    if (shouldRefuseBoot) {
-      lines.push(`[neotoma] NEOTOMA_REFUSE_MODE=enforce — refusing to start. ` + `Exit code 1.`);
-    } else {
-      lines.push(
-        `[neotoma] NEOTOMA_REFUSE_MODE=${refusePolicy} — boot continues; set ` +
-          `NEOTOMA_REFUSE_MODE=enforce to make this fatal.`
-      );
-    }
-  }
-  lines.push("─────────────────────────────────────────────────────────────");
-  lines.push("");
+  // Line construction lives in sandbox_mode.ts (pure, unit-tested). See #1505.
+  const lines = buildSandboxBootBannerLines({
+    mode,
+    reason,
+    shouldRefuseBoot,
+    refusePolicy,
+    productionEnv,
+  });
   process.stderr.write(lines.join("\n"));
 }
 
@@ -10506,7 +10530,13 @@ export async function startHTTPServer() {
       forceMode,
     });
     _resolvedServerMode = verdict.mode;
-    emitSandboxBootBanner(verdict.mode, verdict.reason, verdict.shouldRefuseBoot, refusePolicy);
+    emitSandboxBootBanner(
+      verdict.mode,
+      verdict.reason,
+      verdict.shouldRefuseBoot,
+      refusePolicy,
+      productionEnv
+    );
     if (verdict.shouldRefuseBoot) {
       // Refuse mode + enforce policy: hard exit. The banner above already
       // explains the why; do not start the listener.
