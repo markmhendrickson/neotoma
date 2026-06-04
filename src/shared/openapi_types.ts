@@ -4018,16 +4018,15 @@ export interface operations {
           limit?: number;
           offset?: number;
           /**
-           * @description Non-default values cannot be combined with `search`.
-           *     `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
-           * @enum {string}
+           * @description Sort field. Non-default values cannot be combined with `search`.
+           *     Predefined values: `entity_id`, `canonical_name`, `observation_count`,
+           *     `last_observation_at`, `submitted_at` (orders by `snapshot.created_at`).
+           *     In addition, `snapshot.<field>` is supported for any snapshot field
+           *     (e.g. `snapshot.period_end` for time-series types such as `usage_digest`).
+           *     Snapshot field values are compared as strings, so ISO-8601 dates sort
+           *     correctly with lexicographic ordering.
            */
-          sort_by?:
-            | "entity_id"
-            | "canonical_name"
-            | "observation_count"
-            | "last_observation_at"
-            | "submitted_at";
+          sort_by?: string;
           /**
            * @description `desc` cannot be combined with `search`.
            * @enum {string}

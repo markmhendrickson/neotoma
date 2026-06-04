@@ -18,6 +18,7 @@ import {
   getRegisteredEntityTypes,
   getSchemaDefinition,
 } from "../../src/services/schema_definitions.js";
+import { deriveTimelineEventsFromSnapshot } from "../../src/services/timeline_events.js";
 
 describe("usage_digest schema (#1569)", () => {
   const schema = ENTITY_SCHEMAS["usage_digest"];
@@ -135,6 +136,33 @@ describe("usage_digest schema (#1569)", () => {
       );
       expect(entry).toBeDefined();
       expect(entry?.event_type).toBe("UsageDigestClosed");
+    });
+
+    it("deriveTimelineEventsFromSnapshot emits UsageDigestClosed for period_end when schema temporal_fields is passed", () => {
+      // Verifies that the schema-declared temporal_fields wiring is correct end-to-end:
+      // the deriveTimelineEventsFromSnapshot machinery respects the explicit temporal_fields
+      // declaration and emits exactly one event with event_type "UsageDigestClosed".
+      // Runtime temporal emission is handled by the generic temporal-fields machinery —
+      // this test confirms the schema declaration is wired correctly, not a per-entity fork.
+      const tf = schema.schema_definition.temporal_fields as Array<{
+        field: string;
+        event_type: string;
+      }>;
+      const rows = deriveTimelineEventsFromSnapshot(
+        "usage_digest",
+        "ent_test_ud",
+        "src_test",
+        "user_test",
+        {
+          period_end: "2026-06-01T00:00:00Z",
+          period_start: "2026-05-01T00:00:00Z",
+          reporter_channel: "test-observer",
+        },
+        { temporal_fields: tf }
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source_field).toBe("period_end");
+      expect(rows[0].event_type).toBe("UsageDigestClosed");
     });
   });
 

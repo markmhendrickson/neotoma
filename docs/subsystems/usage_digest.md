@@ -145,8 +145,8 @@ The emitter computes most of these from the observer JSONL (the chronological lo
     "relationships": {
       "closing_relationship_completion_rate": 0.96, // medium — closing store has PART_OF to conversation
       "relationship_batch_efficiency_rate": 0.9, // high — relationships sent in store vs separate calls
-      "per_turn_entity_linkage_rate": 0.94, // medium — touched entities have REFERS_TO from the turn
-      "reply_citation_completeness_rate": null // low/aspirational — needs NLP on reply text; omit if unmeasured
+      "per_turn_entity_linkage_rate": 0.94 // medium — touched entities have REFERS_TO from the turn
+      // "reply_citation_completeness_rate" omitted — low/aspirational; needs NLP on reply text
     },
     "schema_fidelity": {
       "unknown_fields_repair_rate": 1.0, // high — unknown_fields_count>0 followed by repair in same turn
