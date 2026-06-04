@@ -160,11 +160,12 @@ export function buildToolDefinitions(
           },
           sort_by: {
             type: "string",
-            enum: ["entity_id", "canonical_name", "observation_count", "last_observation_at"],
             description:
               "Sort field. Non-default values cannot be combined with `search`. " +
-              "In addition to the predefined keys above, `snapshot.<field>` is also supported " +
-              "(e.g. `snapshot.period_end` for time-series entity types such as usage_digest). " +
+              "Predefined values: `entity_id`, `canonical_name`, `observation_count`, " +
+              "`last_observation_at`, `submitted_at` (orders by `snapshot.created_at`). " +
+              "In addition, `snapshot.<field>` is supported for any snapshot field " +
+              "(e.g. `snapshot.period_end` for time-series entity types such as `usage_digest`). " +
               "The field value is sorted lexicographically as a string, so ISO-8601 date strings " +
               "must use a consistent format so that lexicographic order matches temporal order.",
           },

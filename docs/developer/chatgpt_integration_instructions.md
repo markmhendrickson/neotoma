@@ -107,7 +107,7 @@ When `retrieve_entities` returns `{"entities":[],"total":0}` (and possibly `excl
 2. **Published filter**  
    Using `published: true` filters on the merged snapshot field `snapshot.published`. Only entities whose merged snapshot has `published === true` are returned. If “post” (or other) entities were stored without a `published` field, or with `published: false`, they are excluded when you pass `published: true`.
 
-**Sorting note (recently published):** The API supports `sort_by` values `entity_id`, `canonical_name`, `observation_count`, and `last_observation_at`, as well as `snapshot.<field>` (e.g. `sort_by: “snapshot.published_date”`). For “recently published” ordering, use `sort_by: “snapshot.published_date”` with `sort_order: “desc”`. The field value is compared as a string, so ISO-8601 dates work correctly with lexicographic ordering. If `published_date` is not stored on your entities, fall back to `last_observation_at` desc. Empty results are explained by the two causes above, not by the sort field.
+**Sorting note (recently published):** The API supports `sort_by` values `entity_id`, `canonical_name`, `observation_count`, `last_observation_at`, and `submitted_at` (orders by `snapshot.created_at`), as well as `snapshot.<field>` (e.g. `sort_by: “snapshot.published_date”`). For “recently published” ordering, use `sort_by: “snapshot.published_date”` with `sort_order: “desc”`. The field value is compared as a string, so ISO-8601 dates work correctly with lexicographic ordering. If `published_date` is not stored on your entities, fall back to `last_observation_at` desc. Empty results are explained by the two causes above, not by the sort field.
 
 **Debugging steps:**
 

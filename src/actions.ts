@@ -6219,53 +6219,30 @@ export async function storeStructuredForApi(params: {
   // usage_digest store-seam redaction guard (server-side backstop).
   // Scope: strictly usage_digest entities only — no impact on any other entity type.
   // For each incoming usage_digest entity, scan free-text fields `notes` and
-  // `friction_notes` with the same `scanAndRedact` used by the issues path, and
-  // write the redacted copies back onto the entity object so the raw input is
-  // never persisted. This is a redact-and-store (scan) approach, not hard-reject,
-  // so a digest is never silently dropped on a client-side redaction miss.
+  // `friction_notes` via the pure redactUsageDigestEntity helper, and write the
+  // redacted copies back onto the entity object so the raw input is never persisted.
+  // This is a redact-and-store (scan) approach, not hard-reject, so a digest is
+  // never silently dropped on a client-side redaction miss.
+  //
+  // NOTE: Single telemetry sink today — entity_type === "usage_digest" is the only
+  // branch. If a second redacted-free-text entity_type appears, lift these field
+  // names into schema metadata (redact_free_text_fields) rather than adding another
+  // branch here.
   {
     const hasUsageDigest = entities.some(
       (e) => (e as Record<string, unknown>)?.entity_type === "usage_digest"
     );
     if (hasUsageDigest) {
-      const { scanAndRedact, generateRedactionSalt } =
-        await import("./services/feedback/redaction.js");
+      const { redactUsageDigestEntity } =
+        await import("./services/feedback/usage_digest_redaction.js");
       for (const entityData of entities) {
         const ed = entityData as Record<string, unknown>;
         if (ed.entity_type !== "usage_digest") continue;
-        const salt =
-          typeof ed.redaction_salt === "string" && ed.redaction_salt.length > 0
-            ? ed.redaction_salt
-            : generateRedactionSalt();
-        // Scan `notes` (string).
-        const notesRaw = typeof ed.notes === "string" ? ed.notes : "";
-        // Scan `friction_notes` (array of strings): join for scanning, then split back.
-        const frictionRaw = Array.isArray(ed.friction_notes)
-          ? (ed.friction_notes as unknown[]).map((s) => (typeof s === "string" ? s : "")).join("\n")
-          : "";
-        const {
-          body: notesRedacted,
-          title: frictionRedacted,
-          hits,
-        } = scanAndRedact({
-          title: frictionRaw,
-          body: notesRaw,
-          salt,
-        });
-        if (hits.length > 0) {
+        const result = redactUsageDigestEntity(ed as Parameters<typeof redactUsageDigestEntity>[0]);
+        if (result.applied) {
           logger.warn(
-            `[STORE] usage_digest server-side redaction applied: ${hits.length} hit(s) in free-text fields (${hits.join(", ")}).`
+            `[STORE] usage_digest server-side redaction applied: ${result.hits} hit(s) in free-text fields.`
           );
-          if (typeof ed.notes === "string") {
-            ed.notes = notesRedacted;
-          }
-          if (Array.isArray(ed.friction_notes)) {
-            ed.friction_notes = frictionRedacted.split("\n") as unknown[];
-          }
-          // Persist the salt that was used so the stored record is self-describing.
-          if (!ed.redaction_salt) {
-            ed.redaction_salt = salt;
-          }
         }
       }
     }
