@@ -155,6 +155,44 @@ export interface SchemaDefinition {
   aliases?: string[];
 
   /**
+   * Natural-language concept phrases that bridge a free-text query to this
+   * entity_type during lexical search (#1496). Queries name a concept ("bank
+   * account", "savings account") rather than the stored `entity_type`
+   * ("financial_account"). When a normalized query token or adjacent token
+   * pair matches one of these phrases, the entity_type is treated as a
+   * type-match hint so its rows survive the partial-token fallback even when
+   * the literal type name is absent from the query.
+   *
+   * Declared on the schema (not hardcoded in the search module) per
+   * docs/foundation/schema_agnostic_design_rules.md: adding a new finance /
+   * domain type with its own concept words requires only a registry edit, no
+   * change to `src/`. Entries are normalized (lowercased, punctuation/hyphen
+   * stripped) at read time; declare them in plain lowercase. Prefer compound
+   * phrases over bare single tokens to keep precision high ("bank account",
+   * not "account").
+   *
+   * This is deterministic and additive: it only widens which entity types a
+   * query *can* match, never narrows results.
+   */
+  query_synonyms?: string[];
+
+  /**
+   * Snapshot fields that carry the identity-bearing text a caller is most
+   * likely to type when resolving an entity of this type by identifier
+   * (#1495). For `financial_account` the institution name ("Ibercaja") and
+   * the account label live in `institution` / `account_name`, never in
+   * `canonical_name` as a standalone token. Declaring these lets the
+   * identifier-resolution fallback scan the right snapshot fields per type
+   * instead of hardcoding finance-specific field names in a generic handler.
+   *
+   * Merged with the generic base set (name, full_name, title, email, domain,
+   * company) at read time. When a type declares nothing, the generic base is
+   * used and a structured warning is logged keyed by entity_type so drift is
+   * auditable. See docs/foundation/schema_agnostic_design_rules.md.
+   */
+  identity_search_fields?: string[];
+
+  /**
    * Explicit opt-out from `canonical_name_fields` (R2). When set, the schema
    * declares that it has no strong identifiers and intentionally resolves
    * via the heuristic canonical-name derivation. This is loud by design:
@@ -481,6 +519,136 @@ export async function deriveRequiredIdentityFields(
     anyOfFields,
     compositeFields,
   };
+}
+
+/**
+ * Normalize a concept phrase the same way lexical search normalizes query
+ * tokens (lowercase, hyphen/underscore → space, strip non-word, collapse
+ * whitespace). Kept here so `query_synonyms` declarations are compared on the
+ * same footing as the incoming query without importing the search module
+ * (which would create a cycle).
+ */
+function normalizeConceptPhrase(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[-_]/g, " ")
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Build the concept-phrase → entity_type map from `query_synonyms`
+ * declarations across all active schemas (global + user-scoped). Replaces the
+ * hardcoded CONCEPT_TYPE_SYNONYMS map per docs/foundation/
+ * schema_agnostic_design_rules.md. Phrases are normalized so they compare on
+ * the same footing as normalized query tokens. When two schemas declare the
+ * same phrase the first-seen wins (deterministic via sorted entity_type
+ * iteration) and a warning is logged.
+ *
+ * Returns an empty map when no schema declares synonyms — the safe generic
+ * fallback (no bridge, strict matching only).
+ */
+export async function loadConceptTypeSynonyms(
+  userId?: string | null
+): Promise<Map<string, string>> {
+  const synonyms = new Map<string, string>();
+
+  // Collect (entity_type, query_synonyms) pairs from both the registry
+  // (user-registered types) and the code-defined ENTITY_SCHEMAS baseline
+  // (seeded built-ins like financial_account that may not yet be written to
+  // the registry — e.g. fresh DB or test fixture). Registry declarations win
+  // on collision since they reflect explicit user intent.
+  const declarations: Array<{ entity_type: string; query_synonyms: string[] }> = [];
+
+  try {
+    const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+    for (const schema of Object.values(ENTITY_SCHEMAS)) {
+      const declared = schema.schema_definition?.query_synonyms;
+      if (Array.isArray(declared) && declared.length > 0) {
+        declarations.push({ entity_type: schema.entity_type, query_synonyms: declared });
+      }
+    }
+  } catch (error) {
+    logSchemaRegistryInfo(
+      `[SCHEMA_REGISTRY] loadConceptTypeSynonyms: failed to load code-defined schemas: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+
+  try {
+    const schemas = await schemaRegistry.listActiveSchemas(userId ?? undefined);
+    for (const schema of schemas) {
+      const declared = schema.schema_definition?.query_synonyms;
+      if (Array.isArray(declared) && declared.length > 0) {
+        declarations.push({ entity_type: schema.entity_type, query_synonyms: declared });
+      }
+    }
+  } catch (error) {
+    logSchemaRegistryInfo(
+      `[SCHEMA_REGISTRY] loadConceptTypeSynonyms: failed to list active schemas: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+
+  // Deterministic iteration so a phrase collision resolves to a stable winner.
+  const sorted = declarations.sort((a, b) => a.entity_type.localeCompare(b.entity_type));
+  for (const { entity_type, query_synonyms } of sorted) {
+    for (const raw of query_synonyms) {
+      const phrase = normalizeConceptPhrase(raw);
+      if (!phrase) continue;
+      if (synonyms.has(phrase)) {
+        if (synonyms.get(phrase) !== entity_type) {
+          logSchemaRegistryInfo(
+            `[SCHEMA_REGISTRY] query_synonyms collision: phrase "${phrase}" declared by ` +
+              `${synonyms.get(phrase)} and ${entity_type}; keeping ${synonyms.get(phrase)}.`
+          );
+        }
+        continue;
+      }
+      synonyms.set(phrase, entity_type);
+    }
+  }
+  return synonyms;
+}
+
+/**
+ * Resolve the snapshot fields the identifier-resolution fallback should scan
+ * for a given entity_type (#1495). Merges the generic identity-bearing base
+ * set with any `identity_search_fields` the schema declares. When the type has
+ * no schema or declares nothing, returns the base set and reports
+ * `usedFallback: true` so the caller can log a structured, entity-type-keyed
+ * warning (schema_agnostic_design_rules.md: warn on heuristic fallback).
+ */
+export async function resolveIdentitySearchFields(
+  entityType: string,
+  baseFields: readonly string[],
+  userId?: string | null
+): Promise<{ fields: string[]; usedFallback: boolean }> {
+  const normalized = normalizeEntityTypeForSchema(entityType);
+  let declared: string[] | undefined;
+  try {
+    const entry = await schemaRegistry.loadActiveSchema(normalized, userId ?? undefined);
+    declared = entry?.schema_definition?.identity_search_fields;
+    if (!declared) {
+      const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+      const codeSchema = ENTITY_SCHEMAS[normalized] ?? ENTITY_SCHEMAS[entityType];
+      declared = codeSchema?.schema_definition?.identity_search_fields;
+    }
+  } catch (error) {
+    logSchemaRegistryInfo(
+      `[SCHEMA_REGISTRY] resolveIdentitySearchFields: failed to load schema for ` +
+        `${normalized}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  if (declared && declared.length > 0) {
+    const merged = new Set<string>(baseFields);
+    for (const field of declared) merged.add(field);
+    return { fields: [...merged], usedFallback: false };
+  }
+  return { fields: [...baseFields], usedFallback: true };
 }
 
 /** Normalize entity type for schema registry: snake_case, safe characters, max length */
@@ -1963,6 +2131,31 @@ export class SchemaRegistryService {
       for (const alias of definition.aliases) {
         if (typeof alias !== "string" || !alias.trim()) {
           throw new Error("aliases entries must be non-empty strings");
+        }
+      }
+    }
+
+    if (definition.query_synonyms !== undefined) {
+      if (!Array.isArray(definition.query_synonyms)) {
+        throw new Error("query_synonyms must be an array of strings");
+      }
+      for (const synonym of definition.query_synonyms) {
+        if (typeof synonym !== "string" || !synonym.trim()) {
+          throw new Error("query_synonyms entries must be non-empty strings");
+        }
+      }
+    }
+
+    if (definition.identity_search_fields !== undefined) {
+      if (!Array.isArray(definition.identity_search_fields)) {
+        throw new Error("identity_search_fields must be an array of field names");
+      }
+      for (const field of definition.identity_search_fields) {
+        if (typeof field !== "string" || !field.trim()) {
+          throw new Error("identity_search_fields entries must be non-empty strings");
+        }
+        if (!definition.fields[field]) {
+          throw new Error(`identity_search_fields references unknown field: ${field}`);
         }
       }
     }

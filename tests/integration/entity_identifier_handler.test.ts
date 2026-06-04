@@ -53,6 +53,89 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     expect(result.entities[0]?.id).toBe(entityAId);
   });
 
+  it("#1495 resolves a financial_account by institution name in snapshot", async () => {
+    const userId = "identifier-user-institution";
+    const entityId = `ent_fa_institution_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      // Canonical name does not lead with the institution token verbatim in a
+      // way the caller would type; institution lives in the snapshot field.
+      canonical_name: "ibercaja regular (spain domestic)",
+    });
+
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      schema_version: "1.0",
+      canonical_name: "ibercaja regular (spain domestic)",
+      snapshot: { institution: "Ibercaja", account_name: "Ibercaja Regular" },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: "Ibercaja",
+      entityType: "financial_account",
+      userId,
+      limit: 100,
+    });
+
+    expect(result.total).toBeGreaterThanOrEqual(1);
+    expect(result.entities.some((entity) => entity.id === entityId)).toBe(true);
+  });
+
+  it("#1495 resolves a financial_account by account_name in snapshot", async () => {
+    const userId = "identifier-user-account-name";
+    const entityId = `ent_fa_account_name_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      canonical_name: "schwab brokerage 0001",
+    });
+
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      schema_version: "1.0",
+      canonical_name: "schwab brokerage 0001",
+      snapshot: { institution: "Charles Schwab", account_name: "My Savings" },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    const byAccountName = await retrieveEntityByIdentifierWithFallback({
+      identifier: "My Savings",
+      entityType: "financial_account",
+      userId,
+      limit: 100,
+    });
+    expect(byAccountName.entities.some((entity) => entity.id === entityId)).toBe(true);
+
+    // Multi-word institution partial: "Charles Schwab" must also resolve.
+    const byInstitution = await retrieveEntityByIdentifierWithFallback({
+      identifier: "Charles Schwab",
+      entityType: "financial_account",
+      userId,
+      limit: 100,
+    });
+    expect(byInstitution.entities.some((entity) => entity.id === entityId)).toBe(true);
+  });
+
   it("includes snapshot data for direct lexical matches", async () => {
     const userId = "identifier-user-snapshot";
     const entityId = `ent_ident_snapshot_${Date.now()}`;
@@ -89,6 +172,88 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     expect(result.total).toBe(1);
     expect(result.entities[0]?.id).toBe(entityId);
     expect(result.entities[0]?.snapshot).toBeTruthy();
+  });
+
+  it("#1495 resolves via the snapshot-field pass when canonical_name omits the institution token", async () => {
+    // Hardest #1495 case: the canonical_name carries no institution/account
+    // token at all (an opaque id), so the only path to the row is the
+    // snapshot-field pass keyed by the schema-declared identity_search_fields
+    // (institution/account_name) for financial_account. A direct
+    // canonical_name/alias match is impossible here.
+    const userId = "identifier-user-opaque-canonical";
+    const entityId = `ent_fa_opaque_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      canonical_name: "account_xyz_001",
+    });
+
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      schema_version: "1.0",
+      canonical_name: "account_xyz_001",
+      snapshot: { institution: "Ibercaja", account_name: "Ibercaja Regular" },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: "Ibercaja",
+      entityType: "financial_account",
+      userId,
+      limit: 100,
+    });
+
+    expect(result.total).toBeGreaterThanOrEqual(1);
+    expect(result.entities.some((entity) => entity.id === entityId)).toBe(true);
+    // The match could only have come from the snapshot-field pass, not a direct
+    // canonical_name/alias hit — assert the surfaced signal reflects that.
+    expect(result.match_mode).toBe("snapshot_field");
+  });
+
+  it("reports match_mode 'direct' for a canonical_name hit", async () => {
+    const userId = "identifier-user-match-mode-direct";
+    const entityId = `ent_ident_mode_direct_${Date.now()}`;
+    testEntityIds.push(entityId);
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      canonical_name: "direct-mode@example.com",
+    });
+
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: "direct-mode@example.com",
+      entityType: "contact",
+      userId,
+      limit: 100,
+    });
+
+    expect(result.entities.some((entity) => entity.id === entityId)).toBe(true);
+    expect(result.match_mode).toBe("direct");
+  });
+
+  it("reports match_mode 'none' when nothing resolves", async () => {
+    const userId = "identifier-user-match-mode-none";
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: "no-such-identifier-zzz-0001",
+      entityType: "contact",
+      userId,
+      limit: 100,
+    });
+
+    expect(result.total).toBe(0);
+    expect(result.entities).toHaveLength(0);
+    expect(result.match_mode).toBe("none");
   });
 
   // Regression: issue #1550 — a raw `ent_<hash>` id passed as the identifier

@@ -671,6 +671,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
     {
+      name: "describe_entity_type",
+      description: desc(
+        "describe_entity_type",
+        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. Read-only."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("describe_entity_type"),
+    },
+    {
       name: "analyze_schema_candidates",
       description: desc(
         "analyze_schema_candidates",
@@ -1332,6 +1340,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "restore_relationship",
   "get_entity_type_counts",
   "list_entity_types",
+  "describe_entity_type",
   "analyze_schema_candidates",
   "get_schema_recommendations",
   "update_schema_incremental",
