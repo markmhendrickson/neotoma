@@ -17,7 +17,7 @@ Usage digests serve baseline observability goals:
 - Quality feedback: are there recurring friction notes that signal UX gaps?
 - Attribution: which agent (`aauth_sub`) is driving the most operations?
 
-The entity is designed to be safe to store in shared or multi-tenant Neotoma instances because all free-text fields (e.g. `friction_notes`) MUST be redacted client-side before submission. See [Client-side redaction](#client-side-redaction) below.
+The entity is designed to be safe to store in shared or multi-tenant Neotoma instances. Free-text fields (`friction_notes`, `notes`) are protected by **defense in depth**: emitters SHOULD redact client-side before submission, and the Neotoma store seam ALSO scans and redacts these fields on ingest for `usage_digest` entities as a server-side backstop (so a misconfigured guest emitter cannot silently store raw PII). See [Redaction](#redaction) below.
 
 ## Schema
 
@@ -45,10 +45,10 @@ The `usage_digest` entity type is registered in `src/services/schema_definitions
 | `entity_type_usage`    | object | Opaque. See [Object field shapes](#object-field-shapes) below.                                                                                                                                           |
 | `tool_usage`           | object | Opaque. See [Object field shapes](#object-field-shapes) below.                                                                                                                                           |
 | `compliance_signals`   | object | Opaque. Agent-instruction adherence metrics ("is Neotoma used as intended"). See [Object field shapes](#object-field-shapes) and [Compliance signals](#compliance-signals-intended-use-adherence) below. |
-| `friction_notes`       | array  | Array of strings. PII MUST be redacted before submission. See [Client-side redaction](#client-side-redaction).                                                                                           |
+| `friction_notes`       | array  | Array of strings. PII SHOULD be redacted client-side; the store seam also redacts on ingest. See [Redaction](#redaction).                                                                                |
 | `effectiveness_signal` | string | Enum: `excellent` \| `good` \| `fair` \| `poor` \| `unknown`. Enforced by convention, not the registry.                                                                                                  |
-| `notes`                | string | Free-text operational notes. PII MUST be redacted.                                                                                                                                                       |
-| `redaction_salt`       | string | Shared salt used for client-side PII redaction (see [Client-side redaction](#client-side-redaction)).                                                                                                    |
+| `notes`                | string | Free-text operational notes. PII SHOULD be redacted client-side; the store seam also redacts on ingest.                                                                                                  |
+| `redaction_salt`       | string | Shared salt used for client-side PII redaction (see [Redaction](#redaction)).                                                                                                                            |
 
 ### Object field shapes
 
@@ -224,7 +224,7 @@ For example: `usage-digest-lemonbrand-observer-2026-06-01T00:00:00Z`.
 Two paths are supported:
 
 1. **AAuth grant** — issue a grant with `{ op: "store", entity_types: ["usage_digest"] }` to the reporting agent's `aauth_sub`. This is the recommended path for automated observers.
-2. **Keyless guest** — the `usage_digest` type ships with `guest_access_policy: "submit_only"` (see [`guest_access_policy.md`](guest_access_policy.md)), so an external observer can submit digests via an unauthenticated `store` call **without registering an AAuth keypair**. `submit_only` means guests may **write but not read** digests back — appropriate for a telemetry sink (the data is already PII-redacted client-side). An operator can override per deployment via the `NEOTOMA_ACCESS_POLICY_USAGE_DIGEST` env var or by changing the schema metadata.
+2. **Keyless guest** — the `usage_digest` type ships with `guest_access_policy: "submit_only"` (see [`guest_access_policy.md`](guest_access_policy.md)), so an external observer can submit digests via an unauthenticated `store` call **without registering an AAuth keypair**. `submit_only` means guests may **write but not read** digests back — appropriate for a telemetry sink (free-text fields are redacted server-side on ingest as a backstop; see [Redaction](#redaction)). An operator can override per deployment via the `NEOTOMA_ACCESS_POLICY_USAGE_DIGEST` env var or by changing the schema metadata.
 
 ## Retrieving digests (time-series)
 
@@ -269,9 +269,14 @@ The relationship from a digest to its daemon_report rows is expressed as:
 
 This is an optional but recommended convention. Omitting it does not break anything; it only removes the drill-down link in the Inspector graph view.
 
-## Client-side redaction
+## Redaction
 
-All free-text fields (`friction_notes`, `notes`) MUST have PII removed before the digest is submitted. The recommended approach is a shared redaction salt per digest.
+Free-text fields (`friction_notes`, `notes`) are redacted with **defense in depth**:
+
+- **Client-side (SHOULD):** emitters redact PII before submitting, using a shared redaction salt per digest. This keeps raw PII off the wire entirely and lets the emitter control placeholder correlation.
+- **Server-side (enforced):** the Neotoma store seam scans `notes` and each `friction_notes` element on ingest for any `usage_digest` entity and writes back the redacted form (reusing the same `scanAndRedact` guard as the issues path, in redact-and-store mode — a digest is never dropped, only cleaned). This is a backstop so a guest emitter that forgets client-side redaction cannot silently persist raw PII. The guard is strictly scoped to `usage_digest`; no other entity type is affected.
+
+Both layers use the same patterns and the per-digest `redaction_salt` (reused if the client set one, generated otherwise).
 
 ### Scan mode
 
