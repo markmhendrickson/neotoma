@@ -3263,6 +3263,70 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  usage_digest: {
+    entity_type: "usage_digest",
+    schema_version: "1.0",
+    metadata: {
+      label: "Usage Digest",
+      description:
+        "Periodic PII-safe aggregate telemetry of a Neotoma deployment's health and usage " +
+        "(rollup grain, distinct from per-event harness_event and per-incident daemon_report).",
+      category: "agent_runtime",
+      aliases: [],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // ISO-8601 string — lexicographic sort must match temporal order; do NOT use date type.
+        period_start: { type: "string", required: true },
+        // ISO-8601 string — used as the time-series sort key (sort_by: "snapshot.period_end").
+        period_end: { type: "string", required: true },
+        // Originating observer slug (e.g. "lemonbrand-observer").
+        reporter_channel: { type: "string", required: true },
+        // Agent attribution; mirrors daemon_report convention.
+        aauth_sub: { type: "string", required: false },
+        reporter_app_version: { type: "string", required: false },
+        reporter_git_sha: { type: "string", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        operation_counts: { type: "object", required: false },
+        error_rate: { type: "number", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        error_counts: { type: "object", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        entity_type_usage: { type: "object", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        tool_usage: { type: "object", required: false },
+        // Array of strings; PII must be redacted client-side before submission.
+        // Shape is convention (not enforced by registry); see docs/subsystems/usage_digest.md.
+        friction_notes: { type: "array", required: false },
+        // Enum excellent|good|fair|poor|unknown — enforced by convention, not registry.
+        effectiveness_signal: { type: "string", required: false },
+        notes: { type: "string", required: false, preserveCase: true },
+        // Shared salt used for client-side PII redaction of free-text fields.
+        redaction_salt: { type: "string", required: false },
+      },
+      // Composite canonical identity prevents silent merge/duplicate of replayed digests.
+      // Idempotency key convention: usage-digest-<reporter_channel>-<period_end>
+      canonical_name_fields: ["reporter_channel", "period_start", "period_end"],
+      name_collision_policy: "reject",
+      temporal_fields: [{ field: "period_end", event_type: "UsageDigestClosed" }],
+    },
+    reducer_config: {
+      merge_policies: {
+        period_start: { strategy: "last_write" },
+        period_end: { strategy: "last_write" },
+        error_rate: { strategy: "last_write" },
+        operation_counts: { strategy: "last_write" },
+        error_counts: { strategy: "last_write" },
+        entity_type_usage: { strategy: "last_write" },
+        tool_usage: { strategy: "last_write" },
+        effectiveness_signal: { strategy: "last_write" },
+        // Supersede, not accumulate — keep latest friction_notes whole; can change later.
+        friction_notes: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
