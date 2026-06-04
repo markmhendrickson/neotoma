@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **419**
-- Backend and repo Vitest files: **386**
+- Total automated test files: **425**
+- Backend and repo Vitest files: **392**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 104 |
+| Vitest unit tests | 107 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 48 |
-| Vitest integration tests | 114 |
+| Vitest integration tests | 117 |
 | Vitest CLI tests | 60 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
@@ -108,7 +108,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (104):**
+**Files (107):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -141,6 +141,7 @@ flowchart TD
 - `tests/unit/client_turn_report.test.ts`
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
+- `tests/unit/config_sqlite_path.test.ts`
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/conversation_session_uuid_bridge.test.ts`
@@ -176,6 +177,7 @@ flowchart TD
 - `tests/unit/mcp_server_card.test.ts`
 - `tests/unit/mcp_sse_keepalive.test.ts`
 - `tests/unit/mirror_profiles.test.ts`
+- `tests/unit/mirror_rebuild_auth.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_merge_array_correction.test.ts`
@@ -195,6 +197,7 @@ flowchart TD
 - `tests/unit/root_landing_harness_snippets.test.ts`
 - `tests/unit/root_landing_site_nav_drift.test.ts`
 - `tests/unit/safe_request_log_format.test.ts`
+- `tests/unit/sandbox_boot_banner.test.ts`
 - `tests/unit/sandbox_pack_registry.test.ts`
 - `tests/unit/sandbox_reset.test.ts`
 - `tests/unit/schema_agent_instructions.test.ts`
@@ -315,7 +318,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (114):**
+**Files (117):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -343,6 +346,7 @@ flowchart TD
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
 - `tests/integration/entity_queries.test.ts`
+- `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`
 - `tests/integration/fixture_mcp_store_replay.test.ts`
@@ -364,6 +368,7 @@ flowchart TD
 - `tests/integration/issue_207_list_timeline_events_unknown_type.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
 - `tests/integration/lexical_search.test.ts`
+- `tests/integration/list_relationships_pagination.test.ts`
 - `tests/integration/live_issues_tooling.test.ts`
 - `tests/integration/mcp_actions_matrix.test.ts`
 - `tests/integration/mcp_auto_enhancement.test.ts`
@@ -429,6 +434,7 @@ flowchart TD
 - `tests/integration/tunnel_auth.test.ts`
 - `tests/integration/tunnel_discovery.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
+- `tests/integration/update_schema_incremental_envelope.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 
 ### Vitest CLI tests

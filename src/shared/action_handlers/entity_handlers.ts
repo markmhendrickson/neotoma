@@ -792,6 +792,18 @@ async function queryEntitiesFromLexicalSearch(params: {
   return { entities, total: lexicalTotal, strategies };
 }
 
+/**
+ * Which retrieval strategy actually answered a query. Exposed to callers so a
+ * silent semantic→lexical degradation (e.g. when the embedding provider is
+ * unavailable) is observable rather than invisible. See issue #1506.
+ *   - "none"            — no search text; plain listing/filter path.
+ *   - "semantic"        — semantic (embedding) search answered the query.
+ *   - "lexical_typed"   — entity-type token detected; typed lexical search.
+ *   - "lexical_fallback"— semantic was attempted but returned nothing usable,
+ *                          so lexical substring matching answered instead.
+ */
+export type EntitySearchMode = "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+
 export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promise<{
   entities: EntityWithProvenance[];
   total: number;
@@ -802,6 +814,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
    * listings; an empty array when a search matched nothing.
    */
   applied_search_strategies?: SearchStrategy[];
+  search_mode: EntitySearchMode;
 }> {
   const {
     userId,
@@ -829,6 +842,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   // Collected only on the search path; left undefined for plain listings so
   // the response omits `applied_search_strategies` entirely.
   let appliedStrategies: Set<SearchStrategy> | undefined;
+  let searchMode: EntitySearchMode = "none";
 
   if (search && search.trim()) {
     appliedStrategies = new Set<SearchStrategy>();
@@ -872,6 +886,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       entities = lexicalResult.entities;
       total = lexicalResult.total;
       for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
+      searchMode = "lexical_typed";
     } else {
       logger.info(
         `[queryEntitiesWithCount] semantic search path: userId=${userId} search=${trimmedSearch.slice(0, 50)} entityType=${entityType ?? "(any)"}`
@@ -922,17 +937,20 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           );
           total = semanticTotal;
           appliedStrategies.add("semantic");
+          searchMode = "semantic";
         } else {
           const lexicalResult = await queryEntitiesFromLexicalSearch(lexicalParams);
           entities = lexicalResult.entities;
           total = lexicalResult.total;
           for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
+          searchMode = "lexical_fallback";
         }
       } else {
         const lexicalResult = await queryEntitiesFromLexicalSearch(lexicalParams);
         entities = lexicalResult.entities;
         total = lexicalResult.total;
         for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
+        searchMode = "lexical_fallback";
       }
     }
   } else {
@@ -995,6 +1013,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     total,
     excluded_merged: !includeMerged,
     applied_search_strategies: appliedStrategies ? [...appliedStrategies].sort() : undefined,
+    search_mode: searchMode,
   };
 }
 

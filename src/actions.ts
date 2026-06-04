@@ -87,6 +87,7 @@ import {
   SANDBOX_PUBLIC_USER_ID,
 } from "./services/local_auth.js";
 import {
+  buildSandboxBootBannerLines,
   isSandboxMode,
   resolveForceMode,
   resolveRefusePolicy,
@@ -3728,25 +3729,26 @@ app.post("/entities/query", async (req, res) => {
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, applied_search_strategies } = await queryEntitiesWithCount({
-      userId,
-      entityType: entity_type,
-      includeMerged: include_merged,
-      includeSnapshots: include_snapshots,
-      sortBy: sort_by,
-      sortOrder: sort_order,
-      published,
-      publishedAfter: published_after,
-      publishedBefore: published_before,
-      search,
-      limit,
-      offset,
-      updatedSince: updated_since,
-      createdSince: created_since,
-      identityBasis: identity_basis,
-      snapshotFilters: snapshot_filters,
-      excludeBookkeeping: exclude_bookkeeping,
-    });
+    const { entities, total, applied_search_strategies, search_mode } =
+      await queryEntitiesWithCount({
+        userId,
+        entityType: entity_type,
+        includeMerged: include_merged,
+        includeSnapshots: include_snapshots,
+        sortBy: sort_by,
+        sortOrder: sort_order,
+        published,
+        publishedAfter: published_after,
+        publishedBefore: published_before,
+        search,
+        limit,
+        offset,
+        updatedSince: updated_since,
+        createdSince: created_since,
+        identityBasis: identity_basis,
+        snapshotFilters: snapshot_filters,
+        excludeBookkeeping: exclude_bookkeeping,
+      });
 
     return res.json({
       entities,
@@ -3754,6 +3756,7 @@ app.post("/entities/query", async (req, res) => {
       limit,
       offset,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
+      search_mode,
     });
   } catch (error) {
     return handleApiError(
@@ -8127,7 +8130,13 @@ app.post("/list_relationships", async (req, res) => {
 
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
-    let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
+    // Pagination is pushed to the DB (`.range()` + `count: "exact"`) so memory
+    // stays O(limit) rather than loading the full result set and slicing in
+    // process. See issue #367.
+    let query = db
+      .from("relationship_snapshots")
+      .select("*", { count: "exact" })
+      .eq("user_id", userId);
 
     if (source_entity_id && target_entity_id) {
       query = query
@@ -8166,15 +8175,16 @@ app.post("/list_relationships", async (req, res) => {
     // "Sorting MUST use deterministic tiebreakers"). See issue #368.
     query = query
       .order("last_observation_at", { ascending: false })
-      .order("relationship_key", { ascending: true });
+      .order("relationship_key", { ascending: true })
+      .range(offset, offset + limit - 1);
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     if (error) {
       throw new Error(error.message);
     }
 
-    const all = data || [];
-    const paginated = all.slice(offset, offset + limit);
+    const paginated = data || [];
+    const total = count ?? paginated.length;
 
     logDebug("Success:list_relationships", req, {
       entity_id,
@@ -8182,9 +8192,18 @@ app.post("/list_relationships", async (req, res) => {
       target_entity_id,
       relationship_type,
       count: paginated.length,
-      total: all.length,
+      total,
     });
-    return res.json({ relationships: paginated, total: all.length, limit, offset });
+    // `total_count` is the canonical field name (matches
+    // /retrieve_graph_neighborhood). `total` is retained as a deprecated alias
+    // for back-compat with pre-existing clients. See issue #369.
+    return res.json({
+      relationships: paginated,
+      total,
+      total_count: total,
+      limit,
+      offset,
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -10238,34 +10257,17 @@ function emitSandboxBootBanner(
   mode: NeotomaSandboxModeName,
   reason: string,
   shouldRefuseBoot: boolean,
-  refusePolicy: "warn" | "enforce"
+  refusePolicy: "warn" | "enforce",
+  productionEnv: boolean
 ): void {
-  const lines: string[] = [];
-  lines.push("");
-  lines.push("─────────────────────────────────────────────────────────────");
-  lines.push(`[neotoma] Sandbox mode resolved: ${mode}`);
-  lines.push(`[neotoma] Reason: ${reason}`);
-  if (mode === "refuse") {
-    lines.push(
-      `[neotoma] WARNING: this server topology matches the v0.11.1 inspector ` +
-        `auth-bypass advisory class.`
-    );
-    lines.push(
-      `[neotoma] Set NEOTOMA_REQUIRE_AUTH=1 + provision auth, OR bind to ` +
-        `loopback (NEOTOMA_HTTP_HOST=127.0.0.1), OR opt into ` +
-        `NEOTOMA_SANDBOX_MODE=1 for the hosted-sandbox profile.`
-    );
-    if (shouldRefuseBoot) {
-      lines.push(`[neotoma] NEOTOMA_REFUSE_MODE=enforce — refusing to start. ` + `Exit code 1.`);
-    } else {
-      lines.push(
-        `[neotoma] NEOTOMA_REFUSE_MODE=${refusePolicy} — boot continues; set ` +
-          `NEOTOMA_REFUSE_MODE=enforce to make this fatal.`
-      );
-    }
-  }
-  lines.push("─────────────────────────────────────────────────────────────");
-  lines.push("");
+  // Line construction lives in sandbox_mode.ts (pure, unit-tested). See #1505.
+  const lines = buildSandboxBootBannerLines({
+    mode,
+    reason,
+    shouldRefuseBoot,
+    refusePolicy,
+    productionEnv,
+  });
   process.stderr.write(lines.join("\n"));
 }
 
@@ -10461,7 +10463,13 @@ export async function startHTTPServer() {
       forceMode,
     });
     _resolvedServerMode = verdict.mode;
-    emitSandboxBootBanner(verdict.mode, verdict.reason, verdict.shouldRefuseBoot, refusePolicy);
+    emitSandboxBootBanner(
+      verdict.mode,
+      verdict.reason,
+      verdict.shouldRefuseBoot,
+      refusePolicy,
+      productionEnv
+    );
     if (verdict.shouldRefuseBoot) {
       // Refuse mode + enforce policy: hard exit. The banner above already
       // explains the why; do not start the listener.

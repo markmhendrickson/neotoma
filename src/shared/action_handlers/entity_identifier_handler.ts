@@ -149,6 +149,47 @@ export async function retrieveEntityByIdentifierWithFallback(
     includeObservations = false,
     observationsLimit = 20,
   } = params;
+  // Raw entity_id fast path. Identifiers shaped like `ent_<24 hex>` are entity
+  // ids, not natural-language values; canonical_name/snapshot/semantic matching
+  // never resolves them, so without this they returned empty. retrieve_entity_
+  // snapshot already accepts raw ids; this aligns retrieve_entity_by_identifier.
+  const rawId = identifier.trim();
+  if (/^ent_[0-9a-f]{24}$/i.test(rawId)) {
+    const { data: byId, error: byIdError } = await db
+      .from("entities")
+      .select("*")
+      .eq("id", rawId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (byIdError) {
+      throw new Error(`Failed to look up entity by id: ${byIdError.message}`);
+    }
+    if (byId) {
+      const { data: snap } = await db
+        .from("entity_snapshots")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("entity_id", (byId as { id: string }).id)
+        .maybeSingle();
+      const mapped: RetrievedEntity = {
+        id: (byId as { id: string }).id,
+        entity_type: (byId as { entity_type: string }).entity_type,
+        canonical_name: (byId as { canonical_name: string }).canonical_name,
+        snapshot: snap ?? null,
+      };
+      const withObs = includeObservations
+        ? await attachObservations([mapped], userId, observationsLimit)
+        : [mapped];
+      // A raw `ent_<hash>` id lookup is a derived-id direct hit (see
+      // IdentifierMatchMode docs: `direct` covers derived-id lookups).
+      return { entities: withObs, total: withObs.length, match_mode: "direct" };
+    }
+    // A well-formed but unknown entity id is an explicit not-found, not a
+    // degraded natural-language search. Return an empty result with total 0;
+    // callers distinguish "no such id" from a name miss by the id-shaped input.
+    return { entities: [], total: 0, match_mode: "none" };
+  }
+
   const normalizedRaw = entityType
     ? normalizeEntityValue(entityType, identifier)
     : identifier.trim().toLowerCase();
