@@ -104,11 +104,10 @@ describe("entity submission GitHub handler coverage", () => {
       reporter_app_version: "0.12.0-test",
     });
 
-    expect(mockCreateIssue).toHaveBeenCalledWith({
-      title: "Public Bug",
-      body: "Something broke",
-      labels: ["neotoma", "bug"],
-    });
+    expect(mockCreateIssue).toHaveBeenCalledWith(
+      { title: "Public Bug", body: "Something broke", labels: ["neotoma", "bug"] },
+      undefined
+    );
   });
 
   it("stores github_number and github_url after a successful GitHub create", async () => {

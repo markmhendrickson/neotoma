@@ -32,6 +32,12 @@ export interface IssueCreateParams {
   reporter_ci_run_id?: string;
   reporter_patch_source_id?: string;
   /**
+   * Optional GitHub mirror destination override in `owner/repo` format.
+   * When set, the GitHub mirror is created in this repo instead of the globally-configured
+   * `NEOTOMA_ISSUES_REPO` / `issues.repo`. The Neotoma authoring home is unaffected.
+   */
+  target_repo?: string;
+  /**
    * Optional entity IDs to link to the created issue entity via REFERS_TO relationships.
    * Created server-side in the same operation as issue creation.
    */

@@ -8974,6 +8974,7 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           reporter_app_version: parsed.data.reporter_app_version,
           reporter_ci_run_id: parsed.data.reporter_ci_run_id,
           reporter_patch_source_id: parsed.data.reporter_patch_source_id,
+          ...(parsed.data.target_repo ? { target_repo: parsed.data.target_repo } : {}),
           ...(parsed.data.entity_ids_to_link
             ? { entity_ids_to_link: parsed.data.entity_ids_to_link }
             : {}),

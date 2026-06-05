@@ -729,6 +729,12 @@ export const IssuesSubmitRequestSchema = z.object({
   author: z.string().optional(),
   local_issue_id: z.string().optional(),
   submission_timestamp: z.string().optional(),
+  target_repo: z
+    .string()
+    .regex(/^[^/\s]+\/[^/\s]+$/, {
+      message: "target_repo must be in owner/repo format (e.g. markmhendrickson/ateles).",
+    })
+    .optional(),
   entity_ids_to_link: z.array(z.string().min(1)).optional(),
   user_id: z.string().optional(),
 });

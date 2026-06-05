@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CorrectEntityRequestSchema,
+  IssuesSubmitRequestSchema,
   RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
   RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
   StoreRequestSchema,
@@ -117,5 +118,50 @@ describe("CorrectEntityRequestSchema", () => {
         idempotency_key: "idemp_test_key",
       })
     ).not.toThrow();
+  });
+});
+
+describe("IssuesSubmitRequestSchema target_repo validation", () => {
+  const base = { title: "T", body: "B" };
+
+  it("accepts a well-formed owner/repo", () => {
+    expect(() =>
+      IssuesSubmitRequestSchema.parse({ ...base, target_repo: "markmhendrickson/ateles" })
+    ).not.toThrow();
+  });
+
+  it("omits target_repo entirely (optional)", () => {
+    expect(() => IssuesSubmitRequestSchema.parse(base)).not.toThrow();
+  });
+
+  it("rejects a bare repo with no owner", () => {
+    // B3: a malformed value must fail validation at the boundary rather than
+    // silently degrading to "stored locally, no mirror" inside submitIssue.
+    const result = IssuesSubmitRequestSchema.safeParse({ ...base, target_repo: "ateles" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toContain("owner/repo");
+    }
+  });
+
+  it("rejects a full GitHub URL", () => {
+    expect(
+      IssuesSubmitRequestSchema.safeParse({
+        ...base,
+        target_repo: "https://github.com/markmhendrickson/ateles",
+      }).success
+    ).toBe(false);
+  });
+
+  it("rejects an owner/repo containing whitespace", () => {
+    expect(
+      IssuesSubmitRequestSchema.safeParse({ ...base, target_repo: "owner /repo" }).success
+    ).toBe(false);
+  });
+
+  it("rejects extra path segments", () => {
+    expect(
+      IssuesSubmitRequestSchema.safeParse({ ...base, target_repo: "owner/repo/extra" }).success
+    ).toBe(false);
   });
 });
