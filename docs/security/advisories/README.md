@@ -59,5 +59,7 @@ The seed entry `2026-05-11-inspector-auth-bypass.md` is a worked example.
 ## Related
 
 - `SECURITY.md` — disclosure flow + supported versions
+- `docs/security/practices.md` — security hardening journal (the gates behind these advisories)
+- `.claude/skills/advisory/SKILL.md` — `/advisory` skill that files and closes these entries atomically
 - `docs/security/threat_model.md` — channels the gates cover
 - `.cursor/skills/release/SKILL.md` § Step 3.5 — Track 1 security gates (pre-release review lane)
