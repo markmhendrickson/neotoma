@@ -167,7 +167,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(callOrder).toEqual(["neotoma", "github"]);
       expect(mockCreateIssue).toHaveBeenCalledWith(
         { title: "Public Bug", body: "Something broke", labels: ["neotoma", "bug"] },
-        undefined
+        { repo: "test/repo" }
       );
       // Neotoma call has no githubUrl/githubNumber yet — those are set by the GitHub step
       expect(mockSubmitIssueToRemote).toHaveBeenCalledWith(
@@ -1333,7 +1333,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         expect.objectContaining({
           title: "Public test via unsigned-dev 2026-05-12T07-10 flow3",
         }),
-        undefined
+        { repo: "test/repo" }
       );
       const remoteCall = mockSubmitIssueToRemote.mock.calls[0]?.[0] as { title: string };
       expect(remoteCall.title).toBe("Public test via unsigned-dev 2026-05-12T07-10 flow3");
@@ -1450,6 +1450,67 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       // instead of forking a second one.
       expect(String(conversation?.conversation_id ?? "")).toContain("markmhendrickson/ateles");
       expect(String(message?.turn_key ?? "")).toContain("markmhendrickson/ateles");
+    });
+
+    it("names target_repo in the mirror-failure guidance", async () => {
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["r1", "rc1"],
+        issue_entity_id: "r1",
+        conversation_id: "rc1",
+      });
+      // GitHub mirror to the target repo fails (e.g. token lacks write access
+      // there); the guidance must name the actual target, not the configured repo.
+      mockCreateIssue.mockRejectedValue(new Error("403 Forbidden"));
+
+      const result = await submitIssue(ops, {
+        title: "Ateles bug",
+        body: "Something broke in ateles",
+        visibility: "public",
+        reporter_git_sha: "deadbeef",
+        target_repo: "markmhendrickson/ateles",
+      });
+
+      expect(result.pushed_to_github).toBe(false);
+      expect(result.github_mirror_guidance).toBeTruthy();
+      expect(result.github_mirror_guidance).toContain("markmhendrickson/ateles");
+      // and must NOT misdirect the user to the operator's configured repo
+      expect(result.github_mirror_guidance).not.toContain("test/repo");
+    });
+
+    it("treats an empty-string target_repo as no override (falls back to configured repo)", async () => {
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["r1", "rc1"],
+        issue_entity_id: "r1",
+        conversation_id: "rc1",
+      });
+      mockCreateIssue.mockResolvedValue({
+        number: 11,
+        html_url: "https://github.com/test/repo/issues/11",
+        user: { login: "tester" },
+        created_at: "2026-05-26T00:00:00Z",
+      });
+
+      await submitIssue(ops, {
+        title: "Configured-repo issue",
+        body: "No real override",
+        visibility: "public",
+        reporter_git_sha: "deadbeef",
+        target_repo: "",
+      });
+
+      // effectiveRepo falls back to config.repo ("test/repo"); the GitHub mirror
+      // and stored identity must use the configured repo, not "".
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Configured-repo issue" }),
+        {
+          repo: "test/repo",
+        }
+      );
+      const storeInput = mockStore.mock.calls[0]?.[0] as {
+        entities: Array<Record<string, unknown>>;
+      };
+      const issueEntity = storeInput.entities.find((e) => e.entity_type === "issue");
+      expect(issueEntity?.repo).toBe("test/repo");
     });
 
     it("persists reporter env on conversation_message for addIssueMessage", async () => {

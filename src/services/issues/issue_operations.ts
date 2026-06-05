@@ -235,14 +235,25 @@ function remoteIssueEntityIdForTarget(
  * Human-facing guidance when a public issue did not get a GitHub mirror.
  * Safe for MCP tool JSON (truncated cause; no raw response bodies beyond error.message).
  */
-export function buildGithubMirrorGuidance(cause: unknown): string {
+export function buildGithubMirrorGuidance(cause: unknown, effectiveRepo?: string): string {
   let msg = "";
   if (cause instanceof Error) msg = cause.message;
   else if (cause !== undefined && cause !== null) msg = String(cause);
   const causeLine = msg ? truncateGuidanceCause(msg) : "unknown error";
+  // Name the repo the mirror was actually targeting so the manual-creation step
+  // points at the right place. When `target_repo` overrode the destination this
+  // is the override, not the operator's configured repo.
+  const repoRef =
+    typeof effectiveRepo === "string" && effectiveRepo.trim().length > 0
+      ? `\`${effectiveRepo.trim()}\``
+      : "the configured repo";
+  const createStep =
+    typeof effectiveRepo === "string" && effectiveRepo.trim().length > 0
+      ? `(2) Create the GitHub issue on ${repoRef} (web UI or \`gh issue create --repo ${effectiveRepo.trim()}\`). `
+      : `(2) Create the GitHub issue on ${repoRef} (web UI or \`gh issue create\`). `;
   return (
     "Public issue was stored in Neotoma without a GitHub mirror. Next steps: (1) Authenticate — set NEOTOMA_ISSUES_GITHUB_TOKEN or run `gh auth login` (CLI: `neotoma issues auth`). " +
-    "(2) Create the GitHub issue on the configured repo (web UI or `gh issue create`). " +
+    createStep +
     "(3) Update the Neotoma `issue` entity's `github_number` and `github_url` (e.g. `correct` or Inspector) so `get_issue_status` and sync stay aligned. " +
     `Cause: ${causeLine}`
   );
@@ -886,9 +897,13 @@ export async function submitIssue(
   const githubMirrorAllowed = !remoteSubmissionAttempted || submittedToNeotoma;
   if (visibility === "public" && githubMirrorAllowed) {
     try {
+      // Pass effectiveRepo unconditionally; when no override is set it equals
+      // config.repo and resolveOptions treats `{ repo: config.repo }` identically
+      // to undefined (opts?.repo ?? cfg.repo). Keeps the mirror destination in
+      // lockstep with the repo stamped on the entity/conversation identity.
       githubIssue = await github.createIssue(
         { title: params.title, body: params.body, labels: toolingLabels },
-        params.target_repo ? { repo: params.target_repo } : undefined
+        { repo: effectiveRepo }
       );
       pushedToGithub = true;
       githubUrl = githubIssue.html_url;
@@ -1010,7 +1025,7 @@ export async function submitIssue(
 
   const githubMirrorGuidance =
     visibility === "public" && !pushedToGithub
-      ? buildGithubMirrorGuidance(githubMirrorFailure)
+      ? buildGithubMirrorGuidance(githubMirrorFailure, effectiveRepo)
       : null;
 
   return {
