@@ -164,4 +164,11 @@ describe("IssuesSubmitRequestSchema target_repo validation", () => {
       IssuesSubmitRequestSchema.safeParse({ ...base, target_repo: "owner/repo/extra" }).success
     ).toBe(false);
   });
+
+  it("rejects an empty string at the boundary", () => {
+    // Confirms the empty-string case is rejected by the schema before it can
+    // reach submitIssue's defensive fallback (the service-layer fallback test in
+    // issue_operations.test.ts is for direct, non-transport callers only).
+    expect(IssuesSubmitRequestSchema.safeParse({ ...base, target_repo: "" }).success).toBe(false);
+  });
 });

@@ -234,6 +234,14 @@ function remoteIssueEntityIdForTarget(
 /**
  * Human-facing guidance when a public issue did not get a GitHub mirror.
  * Safe for MCP tool JSON (truncated cause; no raw response bodies beyond error.message).
+ *
+ * @param cause The mirror failure (Error or arbitrary thrown value).
+ * @param effectiveRepo Optional `owner/repo` the mirror was targeting (the
+ *   `target_repo` override when set, else the configured repo). When provided it
+ *   is named in the manual-creation step so the user is pointed at the right
+ *   repo. Callers are responsible for validating the `owner/repo` shape upstream
+ *   (the HTTP/MCP Zod schemas enforce it); this function only string-interpolates
+ *   the value and does not re-validate.
  */
 export function buildGithubMirrorGuidance(cause: unknown, effectiveRepo?: string): string {
   let msg = "";
@@ -990,7 +998,10 @@ export async function submitIssue(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-create-${config.repo}-${issueNumber || Date.now()}`,
+      // Key on effectiveRepo (not config.repo) so two submissions with the same
+      // GitHub issue number but different target_repo overrides do not collide on
+      // the idempotency key — each repo's issue is a distinct create.
+      idempotency_key: `issue-create-${effectiveRepo}-${issueNumber || Date.now()}`,
     })
   )) as StoreResult;
 

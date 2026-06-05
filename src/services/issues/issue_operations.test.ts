@@ -1477,7 +1477,42 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(result.github_mirror_guidance).not.toContain("test/repo");
     });
 
-    it("treats an empty-string target_repo as no override (falls back to configured repo)", async () => {
+    it("namespaces the store idempotency_key to target_repo (no cross-repo collision)", async () => {
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["r1", "rc1"],
+        issue_entity_id: "r1",
+        conversation_id: "rc1",
+      });
+      mockCreateIssue.mockResolvedValue({
+        number: 7,
+        html_url: "https://github.com/markmhendrickson/ateles/issues/7",
+        user: { login: "tester" },
+        created_at: "2026-05-26T00:00:00Z",
+      });
+
+      await submitIssue(ops, {
+        title: "Ateles bug",
+        body: "Something broke in ateles",
+        visibility: "public",
+        reporter_git_sha: "deadbeef",
+        target_repo: "markmhendrickson/ateles",
+      });
+
+      // The idempotency key must include the effective repo, so the same issue
+      // number under a different target_repo cannot collide with a configured-repo
+      // create (determinism / identity).
+      const storeArg = mockStore.mock.calls[0]?.[0] as { idempotency_key?: string };
+      expect(storeArg.idempotency_key).toContain("markmhendrickson/ateles");
+      expect(storeArg.idempotency_key).not.toContain("test/repo");
+    });
+
+    // Defensive service-layer test: an empty-string target_repo is REJECTED at
+    // the MCP/HTTP boundary by the owner/repo Zod regex (see
+    // action_schemas.test.ts), so this input is unreachable in production.
+    // submitIssue still guards against it directly (`params.target_repo?.trim() ||
+    // config.repo`) so the service is correct even if called outside the
+    // validated transports; this test pins that fallback.
+    it("treats an empty-string target_repo as no override (defensive fallback to configured repo)", async () => {
       mockSubmitIssueToRemote.mockResolvedValue({
         entity_ids: ["r1", "rc1"],
         issue_entity_id: "r1",
