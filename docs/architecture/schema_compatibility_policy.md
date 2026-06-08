@@ -11,7 +11,7 @@ without an explicit version bump and a migration path.
 It is the policy half of schema stability. The _mechanism_ it relies on —
 `schema_version`, additive expansion, the registry, deterministic reducers —
 is documented in [`schema_expansion.md`](schema_expansion.md),
-[`schema_registry.md`](schema_registry.md), and
+[`schema_registry.md`](../subsystems/schema_registry.md), and
 [`schema_handling.md`](schema_handling.md). This document states the guarantee
 those mechanisms back; it does not restate the mechanism.
 
@@ -111,7 +111,7 @@ reshaped, and the support window guarantees how long it stays first-class.
 ## Related documents
 
 - [`schema_expansion.md`](schema_expansion.md) — the additive auto-expansion mechanism.
-- [`schema_registry.md`](schema_registry.md) — how schemas and versions are stored.
+- [`schema_registry.md`](../subsystems/schema_registry.md) — how schemas and versions are stored.
 - [`schema_handling.md`](schema_handling.md) — runtime schema resolution.
 - [`../subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — immutability; reinterpretation creates new observations.
 - [`determinism.md`](determinism.md) — deterministic extraction across versions (commitment #4).
