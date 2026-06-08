@@ -205,6 +205,23 @@ Acquirer money where the explicit or implicit plan is to translate Neotoma into
 something its current architecture refuses to be is not on the table, regardless
 of multiple.
 
+### R17. No competition with the applications built on the substrate
+
+Neotoma is the State Layer. The applications built on it — CRMs, vertical
+relationship products, domain tools — own the layer above: their domain schemas,
+ranking and merge policies, behavioral data, and distribution. The redline is
+Neotoma moving up into those verticals to compete with the adopters depending on
+it: shipping a first-party application that competes with an adopter's product,
+or absorbing an adopter's differentiating logic (its ranking methodology, its
+behavioral-signal models, its domain-specific workflows) into the substrate and
+re-exposing it to that adopter's competitors. Substrate hardening every adopter
+needs belongs upstream; an individual adopter's vertical moat is theirs and stays
+theirs. An adopter must be able to depend on Neotoma without the substrate
+becoming their competitor — that safety is what makes building on an open core
+rational rather than reckless. (This is the structural commitment behind the
+boundary in [`substrate_and_applications.md`](substrate_and_applications.md); R13
+governs the separate, narrower question of marketing-positioning drift.)
+
 ## The meta-redline
 
 Underneath all of the above is the same test, applied at the project level:
