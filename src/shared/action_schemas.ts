@@ -732,7 +732,7 @@ export const IssuesSubmitRequestSchema = z.object({
   target_repo: z
     .string()
     .regex(/^[^/\s]+\/[^/\s]+$/, {
-      message: "target_repo must be in owner/repo format (e.g. markmhendrickson/ateles).",
+      message: "target_repo must be in owner/repo format.",
     })
     .optional(),
   entity_ids_to_link: z.array(z.string().min(1)).optional(),
