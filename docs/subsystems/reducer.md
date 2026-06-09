@@ -199,6 +199,17 @@ observation IDs, not every observation that ever contributed an element.
 > schema author can opt a field back into accumulate-everything behavior; tracked in
 > Neotoma issue `ent_a2ca479ed08abd2bb98a8708` (GitHub mirror pending).
 
+**JSON-array-string recovery (issue #1595):** if an observation carries a JSON-array-shaped
+*string* for a `merge_array` field (e.g. `'["a","b"]'`) — which a transport/client can
+produce by stringifying an array argument — the reducer parses it back into real elements
+before the union, rather than adding the whole blob as one literal-string element. The same
+recovery applies in `canonicalizeArray` (it parses such a string instead of dropping it to
+`[]`). The shared heuristic lives in `src/services/recover_json_array_string.ts`. A genuine
+non-JSON string (and any string that does not `JSON.parse` to an array) is left untouched as
+a single literal element; real arrays are unaffected. The Neotoma server write path itself
+preserves arrays — this is defensive tolerance of an upstream (client/transport)
+serialization bug, not a server-side cause.
+
 **Use Cases:**
 - `aliases` for entities (all known names)
 - `tags` for records (all tags from all sources)

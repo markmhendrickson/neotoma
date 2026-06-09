@@ -14,6 +14,7 @@ import {
 } from "../services/schema_registry.js";
 import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
+import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
 
 export interface Observation {
   id: string;
@@ -437,7 +438,13 @@ export class ObservationReducer {
     );
 
     for (const obs of topPriorityObservations) {
-      const rawValue = obs.fields[field];
+      // #1595: a transport/client may deliver a JSON-array-shaped *string*
+      // (e.g. `'["a","b"]'`) to a merge_array field instead of a real array.
+      // Recover it deterministically so it does not get added as a single
+      // literal-string element. Shared heuristic in recover_json_array_string.ts
+      // so this and canonicalizeArray cannot drift. A non-JSON string (and any
+      // string that does not parse to an array) is left untouched.
+      const rawValue = recoverJsonArrayString(obs.fields[field]) ?? obs.fields[field];
       if (rawValue !== undefined && rawValue !== null) {
         // Handle array values
         if (Array.isArray(rawValue)) {
