@@ -106,12 +106,7 @@ describe("sync_issues push leg write-back (#1610)", () => {
 
     // One correct() call per write-back field — never a `corrections` map.
     const fields = correct.mock.calls.map((c) => (c[0] as { field: string }).field);
-    expect(fields).toEqual([
-      "github_number",
-      "github_url",
-      "sync_pending",
-      "last_synced_at",
-    ]);
+    expect(fields).toEqual(["github_number", "github_url", "sync_pending", "last_synced_at"]);
 
     for (const call of correct.mock.calls) {
       const arg = call[0] as Record<string, unknown>;
@@ -138,7 +133,9 @@ describe("sync_issues push leg write-back (#1610)", () => {
     expect(lastSyncedCall.value).toBe("2026-06-09T00:00:00Z");
 
     // Idempotency keys are unique across the four fields.
-    const keys = correct.mock.calls.map((c) => (c[0] as { idempotency_key: string }).idempotency_key);
+    const keys = correct.mock.calls.map(
+      (c) => (c[0] as { idempotency_key: string }).idempotency_key
+    );
     expect(new Set(keys).size).toBe(keys.length);
   });
 
