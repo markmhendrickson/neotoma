@@ -116,7 +116,11 @@ describe("syncIssuesFromGitHub", () => {
       .mockResolvedValueOnce([comment(101), comment(102)])
       .mockResolvedValueOnce([comment(201)]);
 
-    const result = await syncIssuesFromGitHub(ops, { state: "all", labels: ["bug"], since: "2026-05-01T00:00:00Z" });
+    const result = await syncIssuesFromGitHub(ops, {
+      state: "all",
+      labels: ["bug"],
+      since: "2026-05-01T00:00:00Z",
+    });
 
     expect(mockListIssues).toHaveBeenCalledWith({
       state: "all",
@@ -164,16 +168,13 @@ describe("syncIssuesFromGitHub", () => {
 
     expect(store).toHaveBeenCalledTimes(4);
     expect(seenIdempotencyKeys).toEqual(
-      new Set([
-        "issue-sync-test/repo-1",
-        "issue-comment-sync-test/repo-1-101",
-      ]),
+      new Set(["issue-sync-test/repo-1", "issue-comment-sync-test/repo-1-101"])
     );
   });
 
   describe("push leg — local public issues without github_number", () => {
     function makeEntityList(
-      entities: Array<{ entity_id: string; snapshot: Record<string, unknown> }>,
+      entities: Array<{ entity_id: string; snapshot: Record<string, unknown> }>
     ) {
       return { entities };
     }
@@ -183,6 +184,7 @@ describe("syncIssuesFromGitHub", () => {
       mockCreateIssue.mockResolvedValue({
         number: 42,
         html_url: "https://github.com/test/repo/issues/42",
+        created_at: "2026-06-09T00:00:00Z",
       });
     });
 
@@ -200,7 +202,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: ["bug"],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -209,18 +211,28 @@ describe("syncIssuesFromGitHub", () => {
         expect.objectContaining({
           title: "[redacted] Public bug",
           body: "[redacted] Details here",
-        }),
+        })
       );
-      expect(ops.correct).toHaveBeenCalledWith(
-        expect.objectContaining({
-          entity_id: "ent-public-1",
-          corrections: expect.objectContaining({
-            github_number: 42,
-            github_url: "https://github.com/test/repo/issues/42",
-            sync_pending: false,
-          }),
-        }),
+      // #1610: write-back uses per-field correct() calls (field + value +
+      // idempotency_key), NOT a `corrections` map (which fails Zod validation
+      // and caused duplicate GitHub issues on every sync).
+      const correctCalls = (ops.correct as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c) => c[0] as Record<string, unknown>
       );
+      for (const arg of correctCalls) {
+        expect(arg).not.toHaveProperty("corrections");
+        expect(arg.entity_id).toBe("ent-public-1");
+        expect(arg.entity_type).toBe("issue");
+        expect(typeof arg.field).toBe("string");
+        expect(typeof arg.idempotency_key).toBe("string");
+        expect((arg.idempotency_key as string).length).toBeGreaterThan(0);
+      }
+      const byField = Object.fromEntries(correctCalls.map((a) => [a.field, a.value]));
+      expect(byField.github_number).toBe(42);
+      expect(byField.github_url).toBe("https://github.com/test/repo/issues/42");
+      expect(byField.sync_pending).toBe(false);
+      expect(byField.last_synced_at).toBe("2026-06-09T00:00:00Z");
+
       expect(result.issues_pushed).toBe(1);
       expect(result.push_errors).toEqual([]);
     });
@@ -239,7 +251,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -262,7 +274,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -285,7 +297,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -308,7 +320,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
       mockCreateIssue.mockRejectedValue(new Error("GitHub 422 Unprocessable"));
 
@@ -335,7 +347,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops, { push: false });
@@ -359,7 +371,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       await syncIssuesFromGitHub(ops);
@@ -369,7 +381,7 @@ describe("syncIssuesFromGitHub", () => {
         expect.objectContaining({
           title: "[redacted] Issue with PII name",
           body: "[redacted] Contact me at private@example.com",
-        }),
+        })
       );
     });
   });
