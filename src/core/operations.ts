@@ -144,8 +144,21 @@ export interface Operations {
   /** Create multiple relationships between existing entities. */
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
 
-  /** Correct an observation (creates a new observation that supersedes the prior). */
-  correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
+  /**
+   * Correct a single field on an entity (creates a high-priority observation that
+   * supersedes the prior value). The underlying `correct` tool applies ONE field
+   * per call and requires `field`, `value`, and a unique `idempotency_key`
+   * (see CorrectEntityRequestSchema). It does NOT accept a `corrections` map —
+   * passing one fails Zod validation silently at the tool boundary (#1610).
+   */
+  correct(input: {
+    entity_id: string;
+    entity_type?: string;
+    field: string;
+    value: unknown;
+    idempotency_key: string;
+    user_id?: string;
+  }): Promise<unknown>;
 
   /** List registered entity types (schema-level discovery). */
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
