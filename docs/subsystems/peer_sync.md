@@ -177,3 +177,4 @@ The default batch is 200; the cap is 500. The function is safe to re-run; observ
 - Substrate event source: [`substrate_events.md`](substrate_events.md)
 - Subscription routing: [`subscriptions.md`](subscriptions.md) (`sync_peer_id` loop prevention)
 - Semver gate: [`release_notes.md`](release_notes.md)
+- Repo-side peer discovery: [`repo_discovery_manifest.md`](repo_discovery_manifest.md) — `.well-known/neotoma.json` advertises a repo's peer URL + pinned key so a trust relationship can be established automatically, rather than operator-configured.
