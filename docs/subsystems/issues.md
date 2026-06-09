@@ -156,7 +156,7 @@ When `visibility: "public"` or when read/append paths touch the mirror, Neotoma 
 3. Configured machine agent — `IssuesConfig.github_auth = "bot"` (literal enum) plus a server-side credential resolver registered out-of-band.
 4. Otherwise, throw — public issue actions that require the mirror cannot proceed.
 
-`isGhInstalled`, `isGhAuthenticated`, `verifyGhAuth` are exposed for `neotoma doctor` so operators can diagnose mirror setup quickly.
+`isGhInstalled`, `isGhAuthenticated`, `verifyGhAuth` are exposed for `neotoma status` so operators can diagnose mirror setup quickly.
 
 ## Transports (CLI, MCP, HTTP)
 

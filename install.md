@@ -98,7 +98,7 @@ If the user is not already installed:
 
 **Step 2.3 — Inspect state with a single call**
 
-Run `neotoma doctor --json`. This returns a consolidated snapshot covering:
+Run `neotoma status --json` (on versions before this command was renamed, the same diagnostics are available as `neotoma doctor --json`; `doctor` is retained as a deprecated alias). This returns a consolidated snapshot covering:
 
 - install state (installed, version, `path_fix_hint` when PATH is wrong)
 - data/init state (config_dir, data_dir, db_exists, initialized)
@@ -109,7 +109,7 @@ Run `neotoma doctor --json`. This returns a consolidated snapshot covering:
 - `current_tool_hint` and `suggested_next_step`
 
 Do NOT run shell introspection commands to recover any of this state. Every
-field above is available from `doctor --json`.
+field above is available from `status --json`.
 
 **Step 2.4 — Apply the full setup in one call**
 
@@ -151,18 +151,18 @@ After `neotoma setup` completes, two plain-text lines appear on stdout:
 1. `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)` — grep for `Neotoma installed at` to confirm success.
 2. `Transport: local stdio MCP (no network egress). ...` — answers the privacy/transport question.
 
-If the first line is absent (for example, after a standalone `npm install -g neotoma` without running setup), run `neotoma setup --tool <current_tool> --yes` to produce it. If the binary is not on PATH, check `neotoma doctor --json` → `.neotoma.path_fix_hint` and surface that hint to the user before retrying.
+If the first line is absent (for example, after a standalone `npm install -g neotoma` without running setup), run `neotoma setup --tool <current_tool> --yes` to produce it. If the binary is not on PATH, check `neotoma status --json` → `.neotoma.path_fix_hint` and surface that hint to the user before retrying.
 
 **If the user is already installed**
 
-Run `neotoma doctor --json` to verify, then `neotoma setup --tool <tool> --yes`
+Run `neotoma status --json` to verify, then `neotoma setup --tool <tool> --yes`
 (idempotent) to bring any missing pieces into compliance. Do not improvise
 shell introspection to confirm state.
 
 **Forbidden during installation**
 
 - Do NOT run `python3 -c`, `grep -r`, `ls`, `cat`, `jq`, `find`, `which`, `node -e`
-  to introspect Neotoma state. Use `neotoma doctor --json`.
+  to introspect Neotoma state. Use `neotoma status --json`.
 - Do NOT run arbitrary `npm run <script>` from the user's repositories during
   install-first onboarding. The only approved npm command is `npm install -g neotoma`.
 - Do NOT `open` URLs, documentation, or application packages on the user's
@@ -413,7 +413,7 @@ See [`docs/integrations/hooks/README.md`](docs/integrations/hooks/README.md) for
 
 - Do NOT run `neotoma hooks install` without an explicit "yes" from the user in the same session. Silent installs, "I'll set this up while you review the timeline" phrasing, or bundling hook installs into the Installation-aha step are all forbidden.
 - Do NOT proceed with `neotoma hooks install --tool <tool>` when `doctor.hooks.installed[<tool>].other_hook_plugins` is non-empty unless the user has explicitly acknowledged those plugins by name. `--force` is reserved for that acknowledgment path.
-- Do NOT skip `neotoma doctor --json` before offering hooks. Eligibility, installed-state, and other-plugin detection all come from that single snapshot; improvised detection is forbidden.
+- Do NOT skip `neotoma status --json` before offering hooks. Eligibility, installed-state, and other-plugin detection all come from that single snapshot; improvised detection is forbidden.
 - Do NOT offer hooks when `doctor.hooks.eligible_for_offer === false`. That value already encodes "supported harness, not installed yet, MCP configured" -- do not second-guess it.
 
 #### Activation step 6.6: Offer markdown mirror (opt-in)
@@ -466,7 +466,7 @@ See [`docs/subsystems/markdown_mirror.md`](docs/subsystems/markdown_mirror.md) f
 
 - Do NOT run `neotoma mirror enable` without an explicit "yes" from the user in the same session. Silent enables or bundling the mirror into the Installation-aha step are both forbidden.
 - Do NOT run `neotoma mirror gitignore` without the explicit sub-prompt "yes". The helper only writes to the enclosing git repo of the resolved mirror path; it never prompts for a path, and the agent MUST not pass one.
-- Do NOT skip `neotoma doctor --json` before offering the mirror. Eligibility, `inside_git_repo`, and `gitignored` all come from that single snapshot.
+- Do NOT skip `neotoma status --json` before offering the mirror. Eligibility, `inside_git_repo`, and `gitignored` all come from that single snapshot.
 - Do NOT offer the mirror when `doctor.mirror.eligible_for_offer === false`.
 
 #### Activation step 7: Correction
@@ -534,7 +534,7 @@ End the activation flow after delivering the plan. Do not ingest as a "natural n
 After activation, confirm the current tool is configured for robust ongoing
 usage. If `neotoma setup` was run in Phase 2, most of this is already in place.
 
-1. Run `neotoma doctor --json` once more. If `suggested_next_step` is `ready`,
+1. Run `neotoma status --json` once more. If `suggested_next_step` is `ready`,
    stop. If it is `configure-mcp`, `configure-cli-instructions`, or
    `configure-permissions`, re-run `neotoma setup --tool <tool> --yes` to
    close the gap. Do NOT grep, `ls`, or `cat` config files to verify state.
@@ -662,7 +662,7 @@ Run `neotoma preflight --tool <harness> --apply` at the start of the install
 flow to write the allowlist entry directly, or `neotoma preflight --tool <harness>`
 (no `--apply`) to print a copy-paste block for manual application. Either path
 ensures the agent never needs individual approvals for `neotoma init`,
-`neotoma doctor`, `neotoma setup`, `neotoma mcp …`, or any other `neotoma`
+`neotoma status`, `neotoma setup`, `neotoma mcp …`, or any other `neotoma`
 subcommand.
 
 If a permission prompt appears for anything other than those two items, stop
@@ -684,7 +684,7 @@ command. Do NOT fall back to shell introspection (`python3 -c`, `grep -r`,
 - Do not skip Activation step 0 (context detection). Always check whether the install directory is developer-oriented before defaulting to personal-file ingestion.
 - The developer / repo-integration branch must not ingest files or store entities. Its output is a written integration plan only. Any ingest requires a separate, explicit user request that re-enters the personal or mixed branch.
 - The preview contract (Activation step 4) is mandatory even for single-file or single-transcript ingests. Count-only summaries are forbidden as the first post-action output.
-- Do not improvise shell introspection in place of `neotoma doctor --json`,
+- Do not improvise shell introspection in place of `neotoma status --json`,
   `neotoma mcp guide --json`, or `neotoma cli guide --json`.
   Every fact these commands surface is authoritative; searching for "where X is
   defined" in the codebase is a permission-prompt anti-pattern.
@@ -701,7 +701,7 @@ installs). Only offer the local install path when the user explicitly asks:
 
 ```
 npm install neotoma       # local to the current directory
-npx neotoma doctor        # then prefix all commands with npx
+npx neotoma status        # then prefix all commands with npx
 ```
 
 Local installs often require additional allowlist entries (`npx:*`) and
@@ -889,7 +889,7 @@ neotoma mcp config --mcp-transport e --user-level --rewrite-neotoma-mcp --yes
 
 ### Tooling principle
 
-Use `neotoma mcp config`, `neotoma auth keygen`, `neotoma doctor --json`, and `neotoma launchagent` (when available) for all configuration. Avoid direct edits to MCP JSON files, plists, or `.env` files unless the CLI does not cover the specific change. CLI commands are idempotent; manual edits risk drift between `.cursor/mcp.json`, `.mcp.json`, and `claude_desktop_config.json`.
+Use `neotoma mcp config`, `neotoma auth keygen`, `neotoma status --json`, and `neotoma launchagent` (when available) for all configuration. Avoid direct edits to MCP JSON files, plists, or `.env` files unless the CLI does not cover the specific change. CLI commands are idempotent; manual edits risk drift between `.cursor/mcp.json`, `.mcp.json`, and `claude_desktop_config.json`.
 
 ---
 

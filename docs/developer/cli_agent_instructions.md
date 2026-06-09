@@ -120,7 +120,7 @@ After running `neotoma setup --tool <harness> --yes`, two plain-text lines alway
 1. **Install-verification line** — grep for `Neotoma installed at` to confirm install succeeded. Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`.
 2. **Privacy/transport summary** — `Transport: local stdio MCP (no network egress). ...` Answers the first question from privacy-conscious users about where data goes.
 
-If the install-verification line is absent, check `neotoma doctor --json` for `neotoma.path_fix_hint` and surface it to the user.
+If the install-verification line is absent, check `neotoma status --json` (the `doctor` alias still works) for `neotoma.path_fix_hint` and surface it to the user.
 
 ## When to load
 

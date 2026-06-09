@@ -9345,9 +9345,10 @@ program
   });
 
 program
-  .command("doctor")
+  .command("status")
+  .alias("doctor")
   .description(
-    "Consolidated diagnostics for agent-led onboarding (install/runtime/api/mcp/cli-instructions/permissions)"
+    "Check Neotoma configuration and connectivity (CLI path, data directory, local API, MCP entries, permissions)"
   )
   .action(async () => {
     const outputMode = resolveOutputMode();
@@ -9559,7 +9560,7 @@ const hooksCommand = program
 
 hooksCommand
   .command("status")
-  .description("Print per-harness hook installation state (uses `neotoma doctor`).")
+  .description("Print per-harness hook installation state (uses `neotoma status`).")
   .action(async () => {
     const outputMode = resolveOutputMode();
     const { runHooksStatus } = await import("./hooks.js");

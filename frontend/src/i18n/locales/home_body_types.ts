@@ -180,7 +180,7 @@ export interface HomeBodyPack {
     title: string;
     subtitle: string;
     promptHint: string;
-    /** Snippet copied from the homepage / integration evaluate cards (keep `neotoma doctor` token). */
+    /** Snippet copied from the homepage / integration evaluate cards: one sentence + the /evaluate link. */
     homeEvaluatePrompt: string;
     evaluatePromptPill: string;
     evaluatePromptCardSubtitle: string;

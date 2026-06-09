@@ -15,7 +15,7 @@ describe("CLI command coverage guard", () => {
       "cli-instructions",
       "corrections",
       "dev",
-      "doctor",
+      "status", // formerly `doctor`; `doctor` retained as a deprecated alias
       "edit",
       "entities",
       "init",

@@ -228,6 +228,42 @@ test.describe("sitePage coverage", () => {
     ).toBeVisible();
   });
 
+  test("evaluate page leads with declarative facts and a one-sentence prompt", async ({
+    page,
+  }) => {
+    await page.goto("/evaluate");
+    await page.waitForLoadState("networkidle");
+
+    // Issue #362: the page must open with a declarative statement of what
+    // Neotoma is, so a cold LLM can answer "what is this?" from the top.
+    const declarative = page
+      .getByText(/Neotoma is a deterministic state layer for AI agents/i)
+      .first();
+    await expect(declarative).toBeVisible();
+
+    // Issue #361: the assessment prompt is one sentence + the evaluate link,
+    // with no embedded onboarding guidance (no doctor/status command, no
+    // non-destructive funnel language, no "highest value to persist").
+    const promptText =
+      "Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.";
+    await expect(page.getByText(promptText, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/neotoma (doctor|status) --json/i)).toHaveCount(0);
+    await expect(page.getByText(/non-destructive test at https:/i)).toHaveCount(0);
+    await expect(page.getByText(/highest value to persist first/i)).toHaveCount(0);
+
+    // Calls to action follow the facts: the declarative intro appears above
+    // the emerald prompt card in document order.
+    const promptCard = page
+      .getByText("Evaluation prompt", { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'border-emerald')][1]");
+    await expect(promptCard).toBeVisible();
+    const declarativeBox = await declarative.boundingBox();
+    const promptCardBox = await promptCard.boundingBox();
+    expect(declarativeBox).not.toBeNull();
+    expect(promptCardBox).not.toBeNull();
+    expect(declarativeBox!.y).toBeLessThan(promptCardBox!.y);
+  });
+
   test("install and integration pages funnel users to evaluation first", async ({ page }) => {
     const routes = [
       "/install",

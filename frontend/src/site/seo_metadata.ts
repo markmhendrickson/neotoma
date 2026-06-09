@@ -1861,9 +1861,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/evaluate": {
-    title: "Ask Your Agent to Evaluate Neotoma for You | Neotoma",
+    title: "Evaluate Neotoma: Deterministic State Layer for AI Agents | Neotoma",
     description:
-      "Ask your AI agent to read this page, assess whether Neotoma fits your workflow, and offer a non-destructive test before any full implementation rollout.",
+      "Neotoma is a deterministic state layer for AI agents: versioned, schema-bound, replayable memory that persists across sessions and tools. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",

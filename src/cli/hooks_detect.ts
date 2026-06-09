@@ -1,5 +1,5 @@
 /**
- * Detection helpers for `neotoma doctor` and `neotoma hooks`.
+ * Detection helpers for `neotoma status` and `neotoma hooks`.
  *
  * Returns a consolidated `HooksReport` describing, per hook-capable harness,
  * whether Neotoma's lifecycle hooks are already installed and whether any
