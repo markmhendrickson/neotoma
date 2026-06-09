@@ -289,6 +289,24 @@ function canonicalizeDate(value: unknown, options: CanonicalizationOptions): str
  * Canonicalize array value
  */
 function canonicalizeArray(value: unknown, options: CanonicalizationOptions): unknown[] {
+  // #1595: some transports/clients deliver a JSON-array-shaped *string* to an
+  // array-typed field (e.g. `'["a","b"]'`) instead of a real array. Recover the
+  // intended array deterministically rather than dropping it to [] (which would
+  // silently lose the data) or treating the whole blob as one element.
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          value = parsed;
+        }
+      } catch {
+        // Not valid JSON — fall through to the non-array handling below.
+      }
+    }
+  }
+
   if (!Array.isArray(value)) {
     return [];
   }

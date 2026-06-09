@@ -437,7 +437,24 @@ export class ObservationReducer {
     );
 
     for (const obs of topPriorityObservations) {
-      const rawValue = obs.fields[field];
+      let rawValue = obs.fields[field];
+      // #1595: a transport/client may deliver a JSON-array-shaped *string*
+      // (e.g. `'["a","b"]'`) to a merge_array field instead of a real array.
+      // Recover it deterministically so it does not get added as a single
+      // literal-string element. Only applies to strings that parse to an array.
+      if (typeof rawValue === "string") {
+        const trimmed = rawValue.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+          try {
+            const parsed: unknown = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+              rawValue = parsed;
+            }
+          } catch {
+            // Not valid JSON — leave as the original string value.
+          }
+        }
+      }
       if (rawValue !== undefined && rawValue !== null) {
         // Handle array values
         if (Array.isArray(rawValue)) {
