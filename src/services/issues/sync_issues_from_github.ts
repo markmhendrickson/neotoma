@@ -163,22 +163,42 @@ async function pushUnsyncedIssues(
     }
 
     // Write github_number/url back and clear sync_pending.
-    try {
-      await ops.correct({
-        entity_id: entityId,
-        corrections: {
-          github_number: created.number,
-          github_url: created.html_url,
-          sync_pending: false,
-          last_synced_at: new Date().toISOString(),
-        },
-      });
-    } catch (err) {
-      // Push succeeded but local update failed — not fatal, but notable.
-      result.push_errors.push(
-        `GitHub issue #${created.number} created but local update failed for ${entityId}: ${(err as Error).message}`
-      );
-      // Still count as pushed since the GitHub issue exists.
+    //
+    // The `correct` tool applies ONE field per call and requires an explicit
+    // `field` + `value` + unique `idempotency_key` (see CorrectEntityRequestSchema).
+    // Passing a `corrections` map silently failed Zod validation, so the
+    // github_number was never persisted and the next sync re-pushed the same
+    // entity — creating duplicate GitHub issues on every run (#1610).
+    //
+    // Idempotency keys are deterministic per (entity, field, github number) so a
+    // replayed sync re-applies the identical correction instead of erroring.
+    const writeBacks: Array<{ field: string; value: unknown }> = [
+      { field: "github_number", value: created.number },
+      { field: "github_url", value: created.html_url },
+      { field: "sync_pending", value: false },
+      // Derive from the GitHub issue's creation timestamp (not wall-clock) so a
+      // replayed sync re-applies the identical value under the same idempotency
+      // key rather than tripping ERR_IDEMPOTENCY_MISMATCH.
+      { field: "last_synced_at", value: created.created_at },
+    ];
+
+    for (const { field, value } of writeBacks) {
+      try {
+        await ops.correct({
+          entity_id: entityId,
+          entity_type: "issue",
+          field,
+          value,
+          idempotency_key: `issue-push-writeback-${entityId}-${field}-gh${created.number}`,
+        });
+      } catch (err) {
+        // Push succeeded but local update failed — not fatal, but notable.
+        // Record once per failing field so the cause is visible.
+        result.push_errors.push(
+          `GitHub issue #${created.number} created but local ${field} write-back failed for ${entityId}: ${(err as Error).message}`
+        );
+        // Still count as pushed since the GitHub issue exists.
+      }
     }
 
     result.issues_pushed++;
