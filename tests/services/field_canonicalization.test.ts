@@ -6,8 +6,10 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  canonicalizeFields,
   hashCanonicalFields,
 } from "../../src/services/field_canonicalization.js";
+import type { SchemaDefinition } from "../../src/services/schema_registry.js";
 
 describe("Field Canonicalization", () => {
   describe("hashCanonicalFields", () => {
@@ -211,5 +213,26 @@ describe("Field Canonicalization", () => {
       const uniqueHashes = new Set(hashes);
       expect(uniqueHashes.size).toBe(1);
     });
+  });
+});
+
+describe("canonicalizeArray — JSON-array-string recovery (#1595)", () => {
+  const schema: SchemaDefinition = {
+    fields: { items: { type: "array", required: false } },
+  } as unknown as SchemaDefinition;
+
+  it("recovers a JSON-array-shaped string into a real array", () => {
+    const out = canonicalizeFields({ items: '["a","b"]' }, schema);
+    expect(out.items).toEqual(["a", "b"]);
+  });
+
+  it("falls through to [] for a non-JSON string", () => {
+    const out = canonicalizeFields({ items: "not an array" }, schema);
+    expect(out.items).toEqual([]);
+  });
+
+  it("leaves a real array unchanged (no regression)", () => {
+    const out = canonicalizeFields({ items: ["a", "b"] }, schema);
+    expect(out.items).toEqual(["a", "b"]);
   });
 });

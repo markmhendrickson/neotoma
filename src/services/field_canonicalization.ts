@@ -7,6 +7,7 @@
 
 import { createHash } from "node:crypto";
 import type { SchemaDefinition } from "./schema_registry.js";
+import { recoverJsonArrayString } from "./recover_json_array_string.js";
 
 export interface CanonicalizationOptions {
   preserveCase?: boolean; // Don't lowercase strings (default: false)
@@ -292,27 +293,18 @@ function canonicalizeArray(value: unknown, options: CanonicalizationOptions): un
   // #1595: some transports/clients deliver a JSON-array-shaped *string* to an
   // array-typed field (e.g. `'["a","b"]'`) instead of a real array. Recover the
   // intended array deterministically rather than dropping it to [] (which would
-  // silently lose the data) or treating the whole blob as one element.
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      try {
-        const parsed: unknown = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          value = parsed;
-        }
-      } catch {
-        // Not valid JSON — fall through to the non-array handling below.
-      }
-    }
-  }
+  // silently lose the data) or treating the whole blob as one element. Shared
+  // heuristic lives in recover_json_array_string.ts so this and the merge_array
+  // reducer cannot drift.
+  const recovered = recoverJsonArrayString(value);
+  const arrayValue: unknown = recovered ?? value;
 
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(arrayValue)) {
     return [];
   }
 
   // Canonicalize each item recursively
-  const canonicalized = value.map((item) => {
+  const canonicalized = arrayValue.map((item) => {
     if (typeof item === "string") {
       return canonicalizeString(item, options);
     } else if (typeof item === "number") {
