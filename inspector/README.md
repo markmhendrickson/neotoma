@@ -71,8 +71,9 @@ Two environment variables drive resolution; precedence is highest first:
   rebuilding the package.
 - **`NEOTOMA_INSPECTOR_SKIN=<name>`** — load a bundled preset shipped under
   `dist/inspector/skins/<name>.json` (built from `inspector/public/skins/`).
-  The repository ships with `lemonbrand` as the initial preset; add more by
-  dropping additional JSON files under `inspector/public/skins/`.
+  The repository ships with `sample` — a deliberately garish magenta/cyan
+  palette for verifying that skinning took effect — as the initial preset; add
+  more by dropping additional JSON files under `inspector/public/skins/`.
 
 When neither variable is set (or the configured file is missing/invalid), the
 Inspector renders the default Neotoma palette unchanged.
@@ -81,26 +82,26 @@ Inspector renders the default Neotoma palette unchanged.
 
 ```jsonc
 {
-  "name": "lemonbrand",            // stable slug; required
-  "label": "Lemonbrand",           // optional human-readable label
+  "name": "sample",               // stable slug; required
+  "label": "Sample Skin",         // optional human-readable label
 
   "brand": {
-    "sidebar_title": "Lemonbrand",         // replaces the sidebar wordmark
-    "header_title": "Lemonbrand memory",   // sets document.title
-    "home_aria_label": "Lemonbrand memory home"
+    "sidebar_title": "Sample Skin",         // replaces the sidebar wordmark
+    "header_title": "Sample Skin (test)",   // sets document.title
+    "home_aria_label": "Sample Skin home"
   },
 
   "light": {                       // CSS variables for light mode
-    "background": "48 100% 97%",
-    "foreground": "28 22% 13%",
-    "primary":    "49 96% 52%",
-    "sidebar":    "48 78% 92%"
-    // ... see inspector/public/skins/lemonbrand.json for the full token list
+    "background": "300 100% 98%",
+    "foreground": "300 80% 10%",
+    "primary":    "315 90% 50%",
+    "sidebar":    "315 70% 90%"
+    // ... see inspector/public/skins/sample.json for the full token list
   },
 
   "dark": {                        // optional dark-mode overrides
-    "background": "30 18% 8%",
-    "foreground": "48 100% 94%"
+    "background": "290 50% 8%",
+    "foreground": "300 100% 95%"
     // ...
   }
 }

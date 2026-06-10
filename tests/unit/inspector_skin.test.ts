@@ -66,7 +66,7 @@ describe("resolveInspectorSkin", () => {
 
     const skin = resolveInspectorSkin(
       cleanEnv({
-        NEOTOMA_INSPECTOR_SKIN: "lemonbrand",
+        NEOTOMA_INSPECTOR_SKIN: "sample",
         NEOTOMA_INSPECTOR_SKIN_CONFIG: file,
       })
     );
@@ -105,15 +105,15 @@ describe("resolveInspectorSkin", () => {
     ).toBeNull();
   });
 
-  it("loads the bundled lemonbrand preset by name (source-checkout fallback)", () => {
+  it("loads the bundled sample preset by name (source-checkout fallback)", () => {
     // This test exercises the inspector/public/skins source-checkout fallback
     // that resolveInspectorSkin walks when neither dist/inspector/skins nor
-    // inspector/dist/skins exists yet. The lemonbrand preset ships in this
+    // inspector/dist/skins exists yet. The sample preset ships in this
     // repo's tree so the lookup must always succeed.
-    const skin = resolveInspectorSkin(cleanEnv({ NEOTOMA_INSPECTOR_SKIN: "lemonbrand" }));
-    expect(skin?.name).toBe("lemonbrand");
-    expect(skin?.brand?.sidebar_title).toBe("Lemonbrand");
-    expect(skin?.light?.primary).toBe("49 96% 52%");
+    const skin = resolveInspectorSkin(cleanEnv({ NEOTOMA_INSPECTOR_SKIN: "sample" }));
+    expect(skin?.name).toBe("sample");
+    expect(skin?.brand?.sidebar_title).toBe("Sample Skin");
+    expect(skin?.light?.primary).toBe("315 90% 50%");
   });
 });
 

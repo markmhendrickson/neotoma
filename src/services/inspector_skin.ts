@@ -21,7 +21,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface ResolvedInspectorSkin {
-  /** Stable skin slug, e.g. `lemonbrand`. */
+  /** Stable skin slug, e.g. `sample`. */
   name: string;
   /** Optional display label. */
   label?: string;

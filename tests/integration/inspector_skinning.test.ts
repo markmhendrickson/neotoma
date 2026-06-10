@@ -68,13 +68,13 @@ describe("installInspectorMount — skin injection", () => {
 
   it("injects the skin script into the served SPA shell when NEOTOMA_INSPECTOR_SKIN_CONFIG is set", async () => {
     const dir = setupFixture("inspector-skin-explicit");
-    const skinPath = path.join(dir, "lemonbrand.json");
+    const skinPath = path.join(dir, "sample.json");
     writeFileSync(
       skinPath,
       JSON.stringify({
-        name: "lemonbrand",
-        brand: { sidebar_title: "Lemonbrand" },
-        light: { primary: "49 96% 52%" },
+        name: "sample",
+        brand: { sidebar_title: "Sample Skin" },
+        light: { primary: "315 90% 50%" },
       })
     );
 
@@ -90,21 +90,21 @@ describe("installInspectorMount — skin injection", () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain("__NEOTOMA_INSPECTOR_SKIN__");
-    expect(body).toContain('"name":"lemonbrand"');
-    expect(body).toContain('"sidebar_title":"Lemonbrand"');
+    expect(body).toContain('"name":"sample"');
+    expect(body).toContain('"sidebar_title":"Sample Skin"');
     // Skin script must appear inside <head>, before </head>, alongside the
     // existing API base meta tag.
     expect(body.indexOf("__NEOTOMA_INSPECTOR_SKIN__")).toBeLessThan(body.indexOf("</head>"));
     expect(body).toContain("neotoma-api-base");
   });
 
-  it("loads the lemonbrand preset from inspector/public/skins when NEOTOMA_INSPECTOR_SKIN is set", async () => {
+  it("loads the sample preset from inspector/public/skins when NEOTOMA_INSPECTOR_SKIN is set", async () => {
     const dir = setupFixture("inspector-skin-preset");
 
     const app = express();
     installInspectorMount(
       app,
-      cleanEnv({ NEOTOMA_INSPECTOR_STATIC_DIR: dir, NEOTOMA_INSPECTOR_SKIN: "lemonbrand" }),
+      cleanEnv({ NEOTOMA_INSPECTOR_STATIC_DIR: dir, NEOTOMA_INSPECTOR_SKIN: "sample" }),
       noopLogger()
     );
 
@@ -112,8 +112,8 @@ describe("installInspectorMount — skin injection", () => {
     const res = await fetch(`${base}/inspector/`);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain('"name":"lemonbrand"');
-    expect(body).toContain('"primary":"49 96% 52%"');
+    expect(body).toContain('"name":"sample"');
+    expect(body).toContain('"primary":"315 90% 50%"');
   });
 
   it("omits the skin script when neither skin env var is set", async () => {
