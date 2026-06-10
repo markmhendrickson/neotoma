@@ -25,7 +25,16 @@
 
 import { isHostedMode, isPrivateOrLoopbackHostname } from "../net/private_host_guard.js";
 
-/** Manifest schema version this resolver understands. */
+/**
+ * Major manifest schema version this resolver understands. Per the spec
+ * (`docs/subsystems/repo_discovery_manifest.md` § Field stability), `version` is
+ * the MAJOR version: new optional fields may be added under a minor revision
+ * WITHOUT bumping it. This resolver enforces only the major version — an exact
+ * `version === SUPPORTED_MANIFEST_VERSION` match — and tolerates minor revisions
+ * by ignoring unrecognized fields during validation (it reads only known keys),
+ * so a forward-compatible minor manifest still resolves. A different major
+ * version is rejected (`unsupported_version`) rather than guessed.
+ */
 export const SUPPORTED_MANIFEST_VERSION = 1;
 
 export interface RepoDiscoveryManifest {
@@ -72,24 +81,56 @@ export function githubRawManifestUrl(owner: string, repo: string, ref = "HEAD"):
   return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/.well-known/neotoma.json`;
 }
 
+/** Wall-clock timeout for the manifest fetch (matches the peer-sync outbound convention). */
+const MANIFEST_FETCH_TIMEOUT_MS = 10_000;
+/** Hard cap on manifest body size; a well-formed manifest is well under this. Guards against a hostile large body. */
+const MANIFEST_MAX_BYTES = 64 * 1024;
+
 /**
  * Default fetcher: GET the GitHub-served raw manifest. A 404 → `null`
  * (no manifest). Any other non-2xx → throw. Binds the manifest to the repo's
  * GitHub identity by construction — it is only ever read from that repo's URL.
+ *
+ * Hardened like the peer-sync outbound fetches: a wall-clock timeout, a
+ * response-size cap, and `redirect: "error"` so a manifest URL cannot redirect
+ * the fetch to an attacker-chosen host (the SSRF guard on `peer.url` only covers
+ * the declared peer, not a redirect target of the manifest fetch itself).
  */
 export const defaultManifestFetcher: ManifestFetcher = async (owner, repo) => {
   const res = await fetch(githubRawManifestUrl(owner, repo), {
     headers: { Accept: "application/json" },
+    redirect: "error",
+    signal: AbortSignal.timeout(MANIFEST_FETCH_TIMEOUT_MS),
   });
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`manifest fetch failed: HTTP ${res.status}`);
   }
-  return await res.text();
+  const declaredLength = Number.parseInt(res.headers.get("content-length") ?? "", 10);
+  if (Number.isFinite(declaredLength) && declaredLength > MANIFEST_MAX_BYTES) {
+    throw new Error(`manifest too large: ${declaredLength} bytes`);
+  }
+  const body = await res.text();
+  if (body.length > MANIFEST_MAX_BYTES) {
+    throw new Error(`manifest too large: ${body.length} bytes`);
+  }
+  return body;
 };
 
+/**
+ * True when `value` is a well-formed `owner/repo`. Rejects `.` / `..` segments so
+ * a manifest cannot smuggle a path-traversal-looking owner or repo, and rejects
+ * the URL-reserved characters that have no place in a GitHub owner/repo.
+ */
 function isOwnerRepo(value: unknown): value is string {
-  return typeof value === "string" && /^[^/\s]+\/[^/\s]+$/.test(value);
+  if (typeof value !== "string") return false;
+  if (!/^[^/\s]+\/[^/\s]+$/.test(value)) return false;
+  const [owner, repo] = value.split("/");
+  for (const segment of [owner, repo]) {
+    if (segment === "." || segment === "..") return false;
+    if (/[?#@:\\]/.test(segment)) return false;
+  }
+  return true;
 }
 
 /** Validate the parsed object against the v1 schema. Returns an error reason or null. */
@@ -252,5 +293,10 @@ export async function resolveRepoDiscovery(
     return { route: null, reason: "peer_url_private_host", detail: peerHostname };
   }
 
-  return { route: manifest, effective_repo: targetRepo };
+  // effective_repo is the manifest's declared `repo` (the maintainer's
+  // authoritative casing), NOT the caller's `targetRepo`, so identity is
+  // deterministic regardless of how the reporter typed the repo (the match above
+  // is case-insensitive). Downstream identity (issue `repo`, conversation thread)
+  // therefore always namespaces to the canonical form.
+  return { route: manifest, effective_repo: manifest.repo };
 }

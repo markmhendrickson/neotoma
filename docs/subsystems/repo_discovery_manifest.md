@@ -4,11 +4,11 @@
 
 ## Why this exists
 
-`submit_issue` routing is coupled to the reporter's install identity. `NEOTOMA_ISSUES_REPO` / `issues.target_url` are per-install singletons, so an issue *about* a maintainer's repo, filed by an agent on a partner's install, lands in the **partner's** GitHub repo and Neotoma instance — never reaching the maintainer. Layer 1 (`target_repo`, shipped in #946) lets the reporter override the GitHub mirror per call, but the reporter still has to *know* the right destination out of band.
+`submit_issue` routing is coupled to the reporter's install identity. `NEOTOMA_ISSUES_REPO` / `issues.target_url` are per-install singletons, so an issue _about_ a maintainer's repo, filed by an agent on a partner's install, lands in the **partner's** GitHub repo and Neotoma instance — never reaching the maintainer. Layer 1 (`target_repo`, shipped in #946) lets the reporter override the GitHub mirror per call, but the reporter still has to _know_ the right destination out of band.
 
 The discovery manifest moves the source of truth for "where do issues about this repo go" out of each consumer's install config and **into the target repo itself**, consistent with Neotoma's State Layer philosophy: the truth about a repo lives with the repo. A reporter's agent reads the manifest from the repo it is filing about and routes the canonical record to the declared peer, with no operator-supplied configuration.
 
-This is the publication/discovery layer above the existing `peer_config` infrastructure ([`peer_sync.md`](peer_sync.md)): where peers are operator-configured manually today, the manifest lets a target repo *advertise* the trust relationship so it can be established automatically.
+This is the publication/discovery layer above the existing `peer_config` infrastructure ([`peer_sync.md`](peer_sync.md)): where peers are operator-configured manually today, the manifest lets a target repo _advertise_ the trust relationship so it can be established automatically.
 
 ## Location and format
 
@@ -47,7 +47,7 @@ This is the publication/discovery layer above the existing `peer_config` infrast
     // Optional. Stable peer identifier the maintainer uses for this advertised
     // relationship. When present, the resolver MAY seed a peer_config row with
     // it. Mirrors peer_config.peer_id.
-    "peer_id": "acme-neotoma"
+    "peer_id": "acme-neotoma",
   },
 
   // Required. The acceptance policy the receiving peer declares for guest
@@ -73,11 +73,11 @@ This is the publication/discovery layer above the existing `peer_config` infrast
     // approval gate before they become visible / forward upstream (M5 — org
     // aggregator pattern). The reporter still gets an accepted-pending result;
     // see "Approval gate" below. Defaults to false.
-    "requires_approval": false
+    "requires_approval": false,
   },
 
   // Optional. Free-form contact / docs pointer for humans debugging routing.
-  "contact": "https://github.com/owner/repo/issues"
+  "contact": "https://github.com/owner/repo/issues",
 }
 ```
 
@@ -97,7 +97,7 @@ The manifest is a **declaration, not a security boundary.** `policy` lets the re
 
 ## Endpoint discovery
 
-The manifest is also the canonical **endpoint advertisement**, not only an issue-routing target. Today a fresh consumer install has no default remote endpoint — client base-URL resolution falls back to `http://localhost:3080` (`src/cli/config.ts`), so every partner hand-sets `NEOTOMA_BASE_URL` out of band and silently breaks when a tunnel URL rotates. `peer.url` *is* the answer to "where is the maintainer's instance," so a consumer that has resolved a repo's manifest also knows its endpoint without separate configuration. M2 SHOULD expose the resolved `peer.url` to the client base-URL resolver as a discovered (lowest-precedence) default, below any explicit `NEOTOMA_BASE_URL`.
+The manifest is also the canonical **endpoint advertisement**, not only an issue-routing target. Today a fresh consumer install has no default remote endpoint — client base-URL resolution falls back to `http://localhost:3080` (`src/cli/config.ts`), so every partner hand-sets `NEOTOMA_BASE_URL` out of band and silently breaks when a tunnel URL rotates. `peer.url` _is_ the answer to "where is the maintainer's instance," so a consumer that has resolved a repo's manifest also knows its endpoint without separate configuration. M2 SHOULD expose the resolved `peer.url` to the client base-URL resolver as a discovered (lowest-precedence) default, below any explicit `NEOTOMA_BASE_URL`.
 
 ## Approval gate (M5 — designed-in, not shipped here)
 
@@ -113,6 +113,21 @@ This is intentionally a separate milestone (M5) so it does not block M2/M3, but 
 ## Rejection fallback (M4)
 
 When the resolver cannot route — no manifest published, trust check fails, visibility refused, or rate-limited — the reporter's agent stores the issue locally as a draft (`sync_pending=true`) and surfaces the rejection for retry. It does NOT fall back to the reporter's own configured repo (that reintroduces the misrouting this layer removes) and does NOT hard-fail and discard the captured context. The issue exists as truth in the reporter's instance regardless of target acceptance, consistent with the immutable-observation model. See the [#1492](https://github.com/markmhendrickson/neotoma/issues/1492) design issue.
+
+### Resolver outcome → caller behavior
+
+`resolveRepoDiscovery` (`src/services/issues/repo_discovery_resolver.ts`) returns either a `route` or a `{ route: null, reason }`. The M2 consumer (PR 3, the `submitIssue` wiring) maps each outcome as follows. The distinction that matters: **`no_manifest` is the only "the repo opted out of discovery" signal** — every other no-route reason is a _failure to establish trust or shape_, which MUST NOT silently fall through to a different destination.
+
+| Outcome / `reason`                                                             | Meaning                                                          | Caller behavior                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `route` returned                                                               | Manifest published, trust check passed                           | Route the canonical record to `route.peer.url`, pinning `route.peer.public_key_thumbprint`; namespace identity to `effective_repo`.                                                                                   |
+| `no_manifest`                                                                  | Repo published no manifest (404)                                 | Fall through to the operator's configured default (existing pre-M2 behavior). The repo simply has not opted in.                                                                                                       |
+| `repo_mismatch`                                                                | Manifest claims a different repo than it was served from (spoof) | Treat as untrusted: **do not route to the declared peer.** Store-local-as-draft (M4) and surface; do NOT fall through to the operator default (a forged manifest must not silently downgrade to "send it somewhere"). |
+| `peer_url_private_host`                                                        | Declared peer URL is private/loopback under hosted mode (SSRF)   | Same as `repo_mismatch` — untrusted, store-local-as-draft, surface.                                                                                                                                                   |
+| `peer_url_invalid` / `schema_invalid` / `invalid_json` / `unsupported_version` | Manifest is published but malformed or unintelligible            | Store-local-as-draft and surface a "target repo published an unreadable manifest" message; do NOT fall through (the maintainer intended to declare routing — failing open hides their misconfiguration).              |
+| `fetch_error`                                                                  | Transient network / non-404 HTTP error reaching GitHub           | Retryable: store-local-as-draft with `sync_pending=true` and surface for retry; do NOT fall through (a transient fetch failure is not "no manifest").                                                                 |
+
+The receiving peer re-enforces `policy` (visibility, attestations, rate limit, approval) server-side, so a `route` returned by the resolver is a _candidate_ — a peer-side policy rejection is a distinct, later signal that also lands in the M4 fallback.
 
 ## Milestone sequence
 

@@ -126,6 +126,31 @@ describe("resolveRepoDiscovery — no route / fallback reasons", () => {
     expect(result.route).toBeNull();
     if (!result.route) expect(result.reason).toBe("schema_invalid");
   });
+
+  it.each(["./widgets", "acme/..", "../widgets", "acme/.", "ow@ner/widgets", "acme/wid#gets"])(
+    "rejects a path-traversal / reserved-char targetRepo %s before fetching",
+    async (bad) => {
+      const result = await resolveRepoDiscovery(bad, fetcherReturning(validManifest()));
+      expect(result.route).toBeNull();
+      if (!result.route) expect(result.reason).toBe("schema_invalid");
+    }
+  );
+
+  it("returns invalid_json for an empty body", async () => {
+    const result = await resolveRepoDiscovery("acme/widgets", fetcherReturning(""));
+    expect(result.route).toBeNull();
+    // An empty string is not 404 (no_manifest); it is a published-but-unparseable body.
+    if (!result.route) expect(result.reason).toBe("invalid_json");
+  });
+
+  it("rejects a string version as schema_invalid (not unsupported_version)", async () => {
+    const result = await resolveRepoDiscovery(
+      "acme/widgets",
+      fetcherReturning(validManifest({ version: "1" }))
+    );
+    expect(result.route).toBeNull();
+    if (!result.route) expect(result.reason).toBe("schema_invalid");
+  });
 });
 
 describe("resolveRepoDiscovery — schema validation", () => {
@@ -180,6 +205,28 @@ describe("resolveRepoDiscovery — trust checks", () => {
       fetcherReturning(validManifest({ repo: "acme/widgets" }))
     );
     expect(result.route).not.toBeNull();
+  });
+
+  it("returns the manifest's canonical repo casing as effective_repo (determinism)", async () => {
+    // Caller typed Acme/Widgets; the manifest authoritatively declares acme/widgets.
+    const result = await resolveRepoDiscovery(
+      "Acme/Widgets",
+      fetcherReturning(validManifest({ repo: "acme/widgets" }))
+    );
+    expect(result.route).not.toBeNull();
+    if (result.route) expect(result.effective_repo).toBe("acme/widgets");
+  });
+
+  it("rejects an IPv6 loopback peer host under hosted mode (SSRF)", async () => {
+    process.env.NEOTOMA_HOSTED_MODE = "1";
+    const result = await resolveRepoDiscovery(
+      "acme/widgets",
+      fetcherReturning(
+        validManifest({ peer: { url: "http://[::1]:3080", public_key_thumbprint: "t" } })
+      )
+    );
+    expect(result.route).toBeNull();
+    if (!result.route) expect(result.reason).toBe("peer_url_private_host");
   });
 
   it("rejects an unparseable peer.url", async () => {
