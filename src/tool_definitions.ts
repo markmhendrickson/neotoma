@@ -217,6 +217,27 @@ export function buildToolDefinitions(
               "When true, omit chat bookkeeping types (`conversation`, `conversation_message`, etc.) from results. Default false. Has no effect when `entity_type` already filters to a bookkeeping type.",
             default: false,
           },
+          snapshot_filters: {
+            type: "object",
+            description:
+              "Filter entities by snapshot field values. Each key is a snake_case snapshot field name " +
+              "(e.g. `status`, `priority`); the value specifies operator and comparison value. Filters " +
+              "are applied server-side via `snapshot->>{field}` JSONB extraction, so only entities whose " +
+              "snapshot contains a matching value are returned. Example: " +
+              '`{ "status": { "op": "eq", "value": "active" } }` returns only entities with ' +
+              '`snapshot.status === "active"`. Supported ops: `eq`, `in`, `gt`, `lt`, `gte`, `lte`, `contains`.',
+            additionalProperties: {
+              type: "object",
+              required: ["op"],
+              properties: {
+                op: {
+                  type: "string",
+                  enum: ["eq", "in", "gt", "lt", "gte", "lte", "contains"],
+                },
+                value: {},
+              },
+            },
+          },
         },
         required: [],
       },

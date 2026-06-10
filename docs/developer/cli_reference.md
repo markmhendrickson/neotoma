@@ -107,36 +107,36 @@ All `npm run <script>` commands in one place. Scripts follow the taxonomy docume
 
 ### Build and start
 
-| Script           | Description                                                                                                                                     |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `build:server`   | Compile server TypeScript (`tsc`) → MCP, API, CLI, services                                                                                     |
-| `build:ui`       | Build frontend (Vite)                                                                                                                           |
-| `start:mcp`      | Run built MCP server (stdio)                                                                                                                    |
-| `start:server`      | Run built HTTP Actions API                                                                                                                      |
-| `start:api`         | Deprecated alias for `start:server`                                                                                                             |
+| Script              | Description                                                                                                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `build:server`      | Compile server TypeScript (`tsc`) → MCP, API, CLI, services                                                                                                                        |
+| `build:ui`          | Build frontend (Vite)                                                                                                                                                              |
+| `start:mcp`         | Run built MCP server (stdio)                                                                                                                                                       |
+| `start:server`      | Run built HTTP Actions API                                                                                                                                                         |
+| `start:api`         | Deprecated alias for `start:server`                                                                                                                                                |
 | `start:server:prod` | Run `build:server`, pick HTTP port from 3180, set `NEOTOMA_ENV=production`, then run `start:server` (same `node dist/actions.js` as `start:server`). Does not build UI or run MCP. |
-| `start:api:prod`    | Deprecated alias for `start:server:prod`                                                                                                        |
-| `start:ws`       | Run MCP WebSocket bridge                                                                                                                        |
+| `start:api:prod`    | Deprecated alias for `start:server:prod`                                                                                                                                           |
+| `start:ws`          | Run MCP WebSocket bridge                                                                                                                                                           |
 
 ### Development (watch mode)
 
-| Script                                       | Port           | Description                           |
-| -------------------------------------------- | -------------- | ------------------------------------- |
-| `dev:mcp`, `watch`                           | —              | MCP stdio watch                       |
-| `dev:server`, `watch:server`                 | 3080           | HTTP Actions API + watch              |
-| `dev:ui`, `watch:ui`                         | Vite           | Frontend dev server                   |
-| `dev:server:tunnel`                          | 3080           | API + HTTPS tunnel (Cloudflare/ngrok) |
-| `dev:server:tunnel:types`                    | 3080           | API + tunnel + `tsc --watch`          |
-| `dev`, `dev:full`                            | 3080, Vite, WS | API + UI + build + resource banner + Inspector live build into `dist/inspector` (`NEOTOMA_INSPECTOR_LIVE_BUILD=1`: no long cache + **full page reload** when build output mtimes change — `index.html` plus `assets/*`, so lazy chunks trigger reload). With out-of-package `dist/inspector`, Vite watch uses **chokidar polling** by default so LaunchAgents pick up saves (`NEOTOMA_INSPECTOR_BUILD_WATCH_POLL=0` disables). |
-| `dev:full:prod`                              | 3180, Vite, WS | Same as `dev` with `NEOTOMA_ENV=production` and prod-scoped Inspector watch (`dev:inspector:prod`) |
-| `dev:inspector`, `dev:inspector:prod`        | —              | Inspector only: `vite build --watch` → repo `dist/inspector` (use with API already running, or rely on `dev` / `dev:full:prod`; polling applies when output is `../dist/inspector` per `inspector/vite.config.ts`) |
-| `watch:mcp:dev-shim`, `dev:mcp:dev-shim`     | —              | Stable stdio dev shim that restarts its MCP worker behind the client connection |
-| `dev:mcp`                                    | —              | MCP stdio watch                       |
-| `dev:mcp:prod`                               | —              | MCP stdio, production env             |
-| `dev:server:mcp`                             | 3080, 8280     | API + MCP HTTP + build                |
-| `dev:ws`                                     | 3080, 8280     | API + WebSocket bridge watch          |
-| `dev:server:prod`                            | 3180           | API + build, production env           |
-| `dev:server:prod:tunnel`                     | 3180           | API + tunnel + build, production env  |
+| Script                                   | Port           | Description                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dev:mcp`, `watch`                       | —              | MCP stdio watch                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `dev:server`, `watch:server`             | 3080           | HTTP Actions API + watch                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `dev:ui`, `watch:ui`                     | Vite           | Frontend dev server                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `dev:server:tunnel`                      | 3080           | API + HTTPS tunnel (Cloudflare/ngrok)                                                                                                                                                                                                                                                                                                                                                                                          |
+| `dev:server:tunnel:types`                | 3080           | API + tunnel + `tsc --watch`                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `dev`, `dev:full`                        | 3080, Vite, WS | API + UI + build + resource banner + Inspector live build into `dist/inspector` (`NEOTOMA_INSPECTOR_LIVE_BUILD=1`: no long cache + **full page reload** when build output mtimes change — `index.html` plus `assets/*`, so lazy chunks trigger reload). With out-of-package `dist/inspector`, Vite watch uses **chokidar polling** by default so LaunchAgents pick up saves (`NEOTOMA_INSPECTOR_BUILD_WATCH_POLL=0` disables). |
+| `dev:full:prod`                          | 3180, Vite, WS | Same as `dev` with `NEOTOMA_ENV=production` and prod-scoped Inspector watch (`dev:inspector:prod`)                                                                                                                                                                                                                                                                                                                             |
+| `dev:inspector`, `dev:inspector:prod`    | —              | Inspector only: `vite build --watch` → repo `dist/inspector` (use with API already running, or rely on `dev` / `dev:full:prod`; polling applies when output is `../dist/inspector` per `inspector/vite.config.ts`)                                                                                                                                                                                                             |
+| `watch:mcp:dev-shim`, `dev:mcp:dev-shim` | —              | Stable stdio dev shim that restarts its MCP worker behind the client connection                                                                                                                                                                                                                                                                                                                                                |
+| `dev:mcp`                                | —              | MCP stdio watch                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `dev:mcp:prod`                           | —              | MCP stdio, production env                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `dev:server:mcp`                         | 3080, 8280     | API + MCP HTTP + build                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `dev:ws`                                 | 3080, 8280     | API + WebSocket bridge watch                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `dev:server:prod`                        | 3180           | API + build, production env                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `dev:server:prod:tunnel`                 | 3180           | API + tunnel + build, production env                                                                                                                                                                                                                                                                                                                                                                                           |
 
 Scripts that start servers use the port(s) above when free; if a port is in use, they bind to the next available port (no process killing). See `scripts/pick-port.js`.
 
@@ -155,57 +155,57 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 
 ### Test and quality
 
-| Script                   | Description                                      |
-| ------------------------ | ------------------------------------------------ |
-| `test`                   | Run Vitest                                       |
-| `test:unit`              | Vitest, unit/services/agent/contract/security/cli only (no integration dir) |
-| `test:remote`            | Vitest with remote DB tests (RUN_REMOTE_TESTS=1) |
-| `test:frontend`          | Vitest for frontend                              |
-| `test:integration`       | Integration tests                                |
-| `test:agent-mcp`         | Agent MCP tests                                  |
-| `test:coverage`          | Vitest with coverage                             |
-| `test:coverage:critical` | Coverage for critical paths                      |
-| `test:e2e`               | Playwright E2E                                   |
-| `test:e2e:headed`        | Playwright E2E, headed browser                   |
-| `lint`                   | ESLint (src)                                     |
-| `type-check`             | `tsc --noEmit`                                   |
-| `validate:coverage`      | Validate coverage map                            |
-| `validate:doc-deps`      | Validate doc dependencies                        |
+| Script                   | Description                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `test`                   | Run Vitest                                                                         |
+| `test:unit`              | Vitest, unit/services/agent/contract/security/cli only (no integration dir)        |
+| `test:remote`            | Vitest with remote DB tests (RUN_REMOTE_TESTS=1)                                   |
+| `test:frontend`          | Vitest for frontend                                                                |
+| `test:integration`       | Integration tests                                                                  |
+| `test:agent-mcp`         | Agent MCP tests                                                                    |
+| `test:coverage`          | Vitest with coverage                                                               |
+| `test:coverage:critical` | Coverage for critical paths                                                        |
+| `test:e2e`               | Playwright E2E                                                                     |
+| `test:e2e:headed`        | Playwright E2E, headed browser                                                     |
+| `lint`                   | ESLint (src)                                                                       |
+| `type-check`             | `tsc --noEmit`                                                                     |
+| `validate:coverage`      | Validate coverage map                                                              |
+| `validate:doc-deps`      | Validate doc dependencies                                                          |
 | `validate:mdx-site`      | Validate `docs/site/pages/**/*.meta.json` + MDX siblings and `ROUTE_METADATA` keys |
-| `validate:routes`        | Site route parity vs `seo_metadata` / `MainApp`  |
-| `doctor`                 | Project health check (env, local SQLite hints)   |
+| `validate:routes`        | Site route parity vs `seo_metadata` / `MainApp`                                    |
+| `doctor`                 | Project health check (env, local SQLite hints)                                     |
 
 ### Database and schema
 
-| Script                  | Description                               |
-| ----------------------- | ----------------------------------------- |
-| `migrate`               | Run migrations                            |
-| `migrate:dry-run`       | Migrations dry run                        |
-| `migrate:plans`         | Migrate plans                             |
-| `migrate:plans:dry-run` | Migrate plans dry run                     |
-| `schema:export`         | Export schema snapshots                   |
-| `schema:init`           | Initialize schemas                        |
-| `schema:init:dry-run`   | Schema init dry run                       |
-| `schema:icons:generate` | Generate schema icons                     |
-| `schema:cleanup:test`   | Cleanup test schemas                      |
-| `recover:db`            | Check dev SQLite integrity / recover copy |
+| Script                  | Description                                |
+| ----------------------- | ------------------------------------------ |
+| `migrate`               | Run migrations                             |
+| `migrate:dry-run`       | Migrations dry run                         |
+| `migrate:plans`         | Migrate plans                              |
+| `migrate:plans:dry-run` | Migrate plans dry run                      |
+| `schema:export`         | Export schema snapshots                    |
+| `schema:init`           | Initialize schemas                         |
+| `schema:init:dry-run`   | Schema init dry run                        |
+| `schema:icons:generate` | Generate schema icons                      |
+| `schema:cleanup:test`   | Cleanup test schemas                       |
+| `recover:db`            | Check dev SQLite integrity / recover copy  |
 | `recover:db:prod`       | Check prod SQLite integrity / recover copy |
-| `wipe:dev`              | Wipe dev database                         |
-| `wipe:prod`             | Wipe prod database                        |
-| `wipe:local`            | Wipe local database                       |
-| `wipe:*:storage`        | Wipe + storage (e.g. `wipe:prod:storage`) |
+| `wipe:dev`              | Wipe dev database                          |
+| `wipe:prod`             | Wipe prod database                         |
+| `wipe:local`            | Wipe local database                        |
+| `wipe:*:storage`        | Wipe + storage (e.g. `wipe:prod:storage`)  |
 
 ### Docs and other
 
-| Script                                 | Description                   |
-| -------------------------------------- | ----------------------------- |
-| `cli`, `cli:dev`                       | Run Neotoma CLI (built / dev) |
-| `docs:generate`                        | Generate docs                 |
+| Script                                     | Description                   |
+| ------------------------------------------ | ----------------------------- |
+| `cli`, `cli:dev`                           | Run Neotoma CLI (built / dev) |
+| `docs:generate`                            | Generate docs                 |
 | `build:docs`, `dev:docs`, `dev:docs:serve` | Docs site build/dev/serve     |
-| `openapi:generate`                     | Generate OpenAPI types        |
-| `branches:prune`                       | Prune merged branches         |
-| `parquet:samples`                      | Create sample parquet files   |
-| `sync:env`                             | Sync env from 1Password       |
+| `openapi:generate`                         | Generate OpenAPI types        |
+| `branches:prune`                           | Prune merged branches         |
+| `parquet:samples`                          | Create sample parquet files   |
+| `sync:env`                                 | Sync env from 1Password       |
 
 For environment and ports, see [Getting started](getting_started.md#start-development-server).
 
@@ -237,6 +237,7 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
   8. `status_code == 503` on `/mcp` path → `stale_mcp_session`
 
   Clean lines (`exit_code == 0`, no warnings matching any predicate) are skipped silently. PII redaction runs in scan mode: UUIDs, email addresses, auth tokens, and home-directory paths are replaced with `<LABEL:hash>` placeholders before the title and body are filed; lines are never dropped for containing PII. Redaction can only fail if an unexpected exception is thrown by the guard itself (which would indicate a programming error); in that case the line is skipped with a `skipped` outcome and an error reason in the sweep report. Deduplication stamps a deterministic `observer-dedup:<hash>` label (derived from `(anomaly_class, command_prefix, reporter_channel)`) on every filed issue, loads the existing open GitHub issues (best-effort; proceeds without dedup if GitHub is unavailable), and folds via `issues add_message` when an existing issue carrying the exact same dedup label is found.
+
 - `neotoma plans capture <file> | --all`: persist a harness `.plan.md` file (raw markdown source + structured `plan` row + EMBEDS) into Neotoma via the canonical combined `store` path. `--all` walks `.cursor/plans/`, `.claude/plans/`, `.codex/plans/`, `.openclaw/plans/` under the current repo (or `--repository-root <path>`). Optional `--source-message-entity-id`, `--source-entity-id`, `--source-entity-type` link the plan to the prompting message and a source entity (e.g. an `issue`). See [`docs/subsystems/plans.md`](../subsystems/plans.md).
 - `neotoma plans list [--source-entity-id <id>] [--status <s>] [--harness <h>] [--limit <n>]`: list `plan` entities filtered by source / status / harness. Wraps `POST /retrieve_entities`.
 - `--pretty`: Output formatted JSON.
@@ -258,13 +259,13 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 
 CLI behavior can be pinned per invocation via flags or across invocations via environment variables. Every runtime override follows the same precedence: explicit flag > environment variable > default.
 
-| Flag | Environment variable | Purpose |
-|------|----------------------|---------|
-| `--api-only` | `NEOTOMA_API_ONLY` | Force API-only transport; fail if API is unreachable. |
-| `--offline` | `NEOTOMA_OFFLINE` | Force in-process local transport; do not contact a remote API. |
-| `--env <env>` | `NEOTOMA_ENV` (`development` / `production`) | Environment selector for server lifecycle commands. |
-| `--root <path>` | `NEOTOMA_REPO_ROOT` | Source-checkout root when `neotoma` is run with no args. |
-| `--user-id <id>` | `NEOTOMA_USER_ID` | Pin the user scope for read-verb requests (`entities`, `observations`, `relationships`, `timeline`, `schemas`, `sources`, `stats`, `list-recent-changes` (alias `recent`), `memory-export`). The flag wins per call; the env var acts as a session-wide pin; the server falls back to the authenticated user when both are unset. |
+| Flag             | Environment variable                         | Purpose                                                                                                                                                                                                                                                                                                                           |
+| ---------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--api-only`     | `NEOTOMA_API_ONLY`                           | Force API-only transport; fail if API is unreachable.                                                                                                                                                                                                                                                                             |
+| `--offline`      | `NEOTOMA_OFFLINE`                            | Force in-process local transport; do not contact a remote API.                                                                                                                                                                                                                                                                    |
+| `--env <env>`    | `NEOTOMA_ENV` (`development` / `production`) | Environment selector for server lifecycle commands.                                                                                                                                                                                                                                                                               |
+| `--root <path>`  | `NEOTOMA_REPO_ROOT`                          | Source-checkout root when `neotoma` is run with no args.                                                                                                                                                                                                                                                                          |
+| `--user-id <id>` | `NEOTOMA_USER_ID`                            | Pin the user scope for read-verb requests (`entities`, `observations`, `relationships`, `timeline`, `schemas`, `sources`, `stats`, `list-recent-changes` (alias `recent`), `memory-export`). The flag wins per call; the env var acts as a session-wide pin; the server falls back to the authenticated user when both are unset. |
 
 `--offline` and `--api-only` are mutually exclusive; setting both (via flag or env) raises an error at startup.
 
@@ -276,11 +277,11 @@ Any new runtime override must follow this precedence model: add the env var read
 
 These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for outbound peer sync and optional release-note enrichment:
 
-| Environment variable | Purpose |
-|----------------------|---------|
+| Environment variable      | Purpose                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `NEOTOMA_PUBLIC_BASE_URL` | Public base URL of this API (no trailing slash). Required for `POST /peers/{id}/sync` outbound `/sync/webhook` as `sender_peer_url`. |
-| `NEOTOMA_LOCAL_PEER_ID` | Stable id this instance sends as `sender_peer_id`; must match the `peer_id` your counterparty stored for you. |
-| `GITHUB_TOKEN` | Optional bearer for GitHub API when `npm_check_update` runs with `include_release_notes: true`. |
+| `NEOTOMA_LOCAL_PEER_ID`   | Stable id this instance sends as `sender_peer_id`; must match the `peer_id` your counterparty stored for you.                        |
+| `GITHUB_TOKEN`            | Optional bearer for GitHub API when `npm_check_update` runs with `include_release_notes: true`.                                      |
 
 `GET /peers/{peer_id}` returns `remote_health` from probing `{peer_url}/health` and semver compat vs the local package version (same rules as `neotoma compat`). See `docs/subsystems/peer_sync.md`.
 
@@ -288,11 +289,11 @@ These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for out
 
 These are read by the Neotoma HTTP server when it serves the MCP StreamableHTTP transport at `/mcp`. They keep the long-lived SSE stream alive behind reverse proxies (Cloudflare Tunnel, nginx, ngrok) and clients with idle timeouts. This is a reliability/transport concern; see issue #1483 and the [v0.15.1 release supplement](../releases/in_progress/v0.15.1/github_release_supplement.md).
 
-| Environment variable | Default | Purpose |
-|----------------------|---------|---------|
-| `NEOTOMA_MCP_SSE_KEEPALIVE_MS` | `25000` | Interval (ms) between SSE comment heartbeat frames (`: hb\n\n`) on the MCP GET SSE stream. The frames keep proxies and clients from treating the stream as idle and silently closing it. Set to `0` (or any value `<= 0`) to disable the heartbeat (restores prior behavior); an unset, empty, or non-numeric value uses the default. TCP keepalive on the socket stays enabled regardless. |
-| `NEOTOMA_KEEPALIVE_TIMEOUT_MS` | `120000` | Node HTTP `server.keepAliveTimeout` (ms). Extended from Node's 5 s default so idle keep-alive sockets are not closed before typical proxy idle windows (60–300 s), which otherwise surfaces as a mid-stream RST / 502 reconnect cycle. |
-| `NEOTOMA_HEADERS_TIMEOUT_MS` | `125000` | Node HTTP `server.headersTimeout` (ms). Must exceed `NEOTOMA_KEEPALIVE_TIMEOUT_MS` to avoid a Node bug where the socket is closed before the headers timeout fires. |
+| Environment variable           | Default  | Purpose                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEOTOMA_MCP_SSE_KEEPALIVE_MS` | `25000`  | Interval (ms) between SSE comment heartbeat frames (`: hb\n\n`) on the MCP GET SSE stream. The frames keep proxies and clients from treating the stream as idle and silently closing it. Set to `0` (or any value `<= 0`) to disable the heartbeat (restores prior behavior); an unset, empty, or non-numeric value uses the default. TCP keepalive on the socket stays enabled regardless. |
+| `NEOTOMA_KEEPALIVE_TIMEOUT_MS` | `120000` | Node HTTP `server.keepAliveTimeout` (ms). Extended from Node's 5 s default so idle keep-alive sockets are not closed before typical proxy idle windows (60–300 s), which otherwise surfaces as a mid-stream RST / 502 reconnect cycle.                                                                                                                                                      |
+| `NEOTOMA_HEADERS_TIMEOUT_MS`   | `125000` | Node HTTP `server.headersTimeout` (ms). Must exceed `NEOTOMA_KEEPALIVE_TIMEOUT_MS` to avoid a Node bug where the socket is closed before the headers timeout fires.                                                                                                                                                                                                                         |
 
 The MCP transport tuning vars are server-process knobs read in `src/actions.ts`, not CLI `preAction` overrides; they have no paired flag.
 
@@ -300,12 +301,12 @@ The MCP transport tuning vars are server-process knobs read in `src/actions.ts`,
 
 Cursor reads these from the **`env`** block for **`run_neotoma_mcp_signed_stdio_dev_shim.sh`** (they are **not** parsed by `neotoma` CLI `preAction`; document them here for discoverability).
 
-| Environment variable | Values | Purpose |
-|----------------------|--------|---------|
-| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` | `1` / `true` | **Shim:** read `<repo>/.dev-serve/local_http_port_<dev|prod>` (and legacy `local_http_port` for dev) after HTTP bind, then set `MCP_PROXY_DOWNSTREAM_URL` after a successful TCP probe. **CLI:** `resolveBaseUrl()` uses the same rules and probe (after session port env, before `config.json` `base_url`). Repo root order: `NEOTOMA_PROJECT_ROOT`, then `project_root` / `repo_root` in `~/.config/neotoma/config.json`, then `cwd`. |
-| `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE` | `dev` / `prod` | Which port file the shim and CLI prefer when `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` is on; preset A sets this per MCP slot for parallel dev + prod APIs. If unset, CLI infers from `NEOTOMA_ENV`; shim reads legacy `local_http_port` only. |
-| `NEOTOMA_MCP_PORT_PROBE_MS` | integer ms (200–5000, default 1200) | TCP probe timeout for the port file in both the shim and the CLI. |
-| `MCP_PROXY_DOWNSTREAM_URL` | URL | Explicit downstream `/mcp`; used when port-file mode is off, or as fallback when the file is missing / probe fails. |
+| Environment variable                  | Values                              | Purpose                                                                                                                                                                                                                                |
+| ------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE`     | `1` / `true`                        | **Shim:** read `<repo>/.dev-serve/local*http_port*<dev                                                                                                                                                                                 | prod>`(and legacy`local_http_port`for dev) after HTTP bind, then set`MCP_PROXY_DOWNSTREAM_URL`after a successful TCP probe. **CLI:**`resolveBaseUrl()`uses the same rules and probe (after session port env, before`config.json` `base_url`). Repo root order: `NEOTOMA_PROJECT_ROOT`, then `project_root`/`repo_root`in`~/.config/neotoma/config.json`, then `cwd`. |
+| `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE` | `dev` / `prod`                      | Which port file the shim and CLI prefer when `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` is on; preset A sets this per MCP slot for parallel dev + prod APIs. If unset, CLI infers from `NEOTOMA_ENV`; shim reads legacy `local_http_port` only. |
+| `NEOTOMA_MCP_PORT_PROBE_MS`           | integer ms (200–5000, default 1200) | TCP probe timeout for the port file in both the shim and the CLI.                                                                                                                                                                      |
+| `MCP_PROXY_DOWNSTREAM_URL`            | URL                                 | Explicit downstream `/mcp`; used when port-file mode is off, or as fallback when the file is missing / probe fails.                                                                                                                    |
 
 Details, defaults, and verification steps: **`docs/developer/mcp/proxy.md`**.
 
@@ -470,32 +471,33 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
 
 **MCP transport presets:**
 
-| Preset | Use when | Notes |
-| --- | --- | --- |
-| `a` | You want signed HTTP `/mcp` proxy entries with AAuth attribution. | Requires a reachable Neotoma API for each configured slot (`neotoma-dev` → dev, `neotoma` → prod). |
-| `b` | You want the lowest-friction local MCP setup. | Default. Packaged npm installs launch Neotoma directly over stdio; source checkouts use the unsigned dev shim. |
-| `c` | You explicitly want direct stdio entries. | Best for simple local clients that do not need HTTP proxy parity. |
-| `d` | You want both MCP slots to point at prod HTTP `/mcp`. | Signed proxy path; requires prod API reachability. |
-| `e` | You want both MCP slots to point at prod HTTP `/mcp` using the local port file. | Signed proxy using `NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1` + `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod`. Requires prod API reachable on the port recorded by the local port file. |
-  - Scans for known config file patterns:
-    - **Cursor:** `.cursor/mcp.json`, `.mcp.json` (project), `~/.cursor/mcp.json` (user-level with `--user-level`)
-    - **Claude Code:** `claude_desktop_config.json` (project or user-level with `--user-level`):
-      - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-      - Linux: `~/.config/Claude/claude_desktop_config.json`
-      - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-    - **Windsurf:** `mcp_config.json` (project or user-level with `--user-level`):
-      - macOS/Linux: `~/.codeium/windsurf/mcp_config.json`
-      - Windows: `%APPDATA%\Codeium\Windsurf\mcp_config.json`
-    - **Continue:** `config.json` (user-level with `--user-level`):
-      - All platforms: `~/.continue/config.json`
-    - **VS Code (Copilot Chat MCP):** `.vscode/mcp.json` (project-level, picked up by directory scan)
-  - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns). In Claude Desktop's `claude_desktop_config.json`, new entries use `mcpsrv_neotoma_dev` and `mcpsrv_neotoma`, and legacy `neotoma-dev` / `neotoma` keys are reported for repair because Claude Desktop validates server IDs as UUIDs or `mcpsrv_*` tags.
-  - If any config is missing dev or prod servers, prompts to add them with absolute script paths.
-  - If no config files found, offers to create `.cursor/mcp.json` in current directory.
-  - Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for the selected transport. Preset `a` emits signed shim / `mcp proxy --aauth` with dev+prod downstreams as above; `b` emits unsigned dev shim; `c` emits direct stdio scripts; `d` emits signed shim with prod downstream for both MCP server entries.
-  - After install, verifies or installs lifecycle hooks for hook-capable harnesses inferred from the configured MCP paths (for example `.cursor/mcp.json` → Cursor hooks, `.codex/config.toml` → Codex hooks). Harnesses without an auto-installer print the matching manual instruction.
-  - After install, shows a reminder to run `neotoma cli config`; when MCP servers are installed interactively, it can also prompt to add CLI instructions if missing.
-  - `neotoma mcp check` is retained as a deprecated alias for `neotoma mcp config` during the migration window.
+| Preset | Use when                                                                        | Notes                                                                                                                                                                         |
+| ------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `a`    | You want signed HTTP `/mcp` proxy entries with AAuth attribution.               | Requires a reachable Neotoma API for each configured slot (`neotoma-dev` → dev, `neotoma` → prod).                                                                            |
+| `b`    | You want the lowest-friction local MCP setup.                                   | Default. Packaged npm installs launch Neotoma directly over stdio; source checkouts use the unsigned dev shim.                                                                |
+| `c`    | You explicitly want direct stdio entries.                                       | Best for simple local clients that do not need HTTP proxy parity.                                                                                                             |
+| `d`    | You want both MCP slots to point at prod HTTP `/mcp`.                           | Signed proxy path; requires prod API reachability.                                                                                                                            |
+| `e`    | You want both MCP slots to point at prod HTTP `/mcp` using the local port file. | Signed proxy using `NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1` + `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod`. Requires prod API reachable on the port recorded by the local port file. |
+
+- Scans for known config file patterns:
+  - **Cursor:** `.cursor/mcp.json`, `.mcp.json` (project), `~/.cursor/mcp.json` (user-level with `--user-level`)
+  - **Claude Code:** `claude_desktop_config.json` (project or user-level with `--user-level`):
+    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+    - Linux: `~/.config/Claude/claude_desktop_config.json`
+    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+  - **Windsurf:** `mcp_config.json` (project or user-level with `--user-level`):
+    - macOS/Linux: `~/.codeium/windsurf/mcp_config.json`
+    - Windows: `%APPDATA%\Codeium\Windsurf\mcp_config.json`
+  - **Continue:** `config.json` (user-level with `--user-level`):
+    - All platforms: `~/.continue/config.json`
+  - **VS Code (Copilot Chat MCP):** `.vscode/mcp.json` (project-level, picked up by directory scan)
+- For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns). In Claude Desktop's `claude_desktop_config.json`, new entries use `mcpsrv_neotoma_dev` and `mcpsrv_neotoma`, and legacy `neotoma-dev` / `neotoma` keys are reported for repair because Claude Desktop validates server IDs as UUIDs or `mcpsrv_*` tags.
+- If any config is missing dev or prod servers, prompts to add them with absolute script paths.
+- If no config files found, offers to create `.cursor/mcp.json` in current directory.
+- Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for the selected transport. Preset `a` emits signed shim / `mcp proxy --aauth` with dev+prod downstreams as above; `b` emits unsigned dev shim; `c` emits direct stdio scripts; `d` emits signed shim with prod downstream for both MCP server entries.
+- After install, verifies or installs lifecycle hooks for hook-capable harnesses inferred from the configured MCP paths (for example `.cursor/mcp.json` → Cursor hooks, `.codex/config.toml` → Codex hooks). Harnesses without an auto-installer print the matching manual instruction.
+- After install, shows a reminder to run `neotoma cli config`; when MCP servers are installed interactively, it can also prompt to add CLI instructions if missing.
+- `neotoma mcp check` is retained as a deprecated alias for `neotoma mcp config` during the migration window.
 
 **MCP transport presets:**
 
@@ -553,6 +555,9 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--limit <n>`
   - `--offset <n>`
   - `--include-merged`
+  - `--status <value>`: Server-side exact-match filter on the snapshot `status` field. Returns only entities whose `snapshot.status` equals the given value (e.g. `--status active`). Applied before pagination. Each returned entity includes `status` in its snapshot projection even without `--include-snapshots`. Passing `--status ""` is not meaningful; omit the flag to return all statuses.
+  - `--updated-since <iso>` / `--since <iso>`: Return only entities whose `updated_at` is >= this ISO 8601 timestamp.
+  - `--created-since <iso>`: Return only entities whose `created_at` is >= this ISO 8601 timestamp.
 - `neotoma entities get <id>`
 - `neotoma entities search [identifier]`:
   - Preferred: positional `identifier` or `--identifier <id>`
@@ -664,6 +669,7 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
 ### MCP/CLI parity note
 
 For chat persistence recipes, MCP and CLI use the same underlying store contract. In CLI examples:
+
 - entity lookup supports positional identifier, `--identifier`, and compatibility alias `--query`
 - structured store supports preferred `--entities`/`--file` and compatibility alias `--json=<json>`
 
@@ -857,7 +863,6 @@ The CLI and the Inspector share one `applyBatchCorrection` backend (`src/service
   ```
 
   The risk detector (`detectDataDirRisks` in `src/cli/doctor.ts`) covers three classes:
-
   - **`icloud_drive`** — `NEOTOMA_DATA_DIR` resolves inside `~/Library/Mobile Documents/`. iCloud Drive can re-upload `neotoma.db`, `neotoma.db-wal`, and `neotoma.db-shm` while Neotoma is writing, which is the corruption shape behind the SQLite `recover-db` flow. `suggested_action` points at the suggested local-only path returned by `suggested_safe_data_dir`.
   - **`macos_synced_desktop_or_documents`** — data dir sits under `~/Documents` or `~/Desktop`, both of which macOS enables for iCloud Drive sync by default. `suggested_action` is the matching `neotoma storage set-data-dir "<safe path>" --move-db-files` invocation.
   - **`prior_sqlite_repair_artifacts`** — the data directory contains marker files (`repair_backups/`, `repair_swaps/`, `recover-errors.log`, or `db_corrupt_before_swap_*`) left behind by a previous `neotoma storage recover-db` run. A recurrence is a signal to move the data dir to local-only storage.

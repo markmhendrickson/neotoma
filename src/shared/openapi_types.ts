@@ -4077,6 +4077,22 @@ export interface operations {
            * @default false
            */
           exclude_bookkeeping?: boolean;
+          /**
+           * @description Filter entities by snapshot field values. Each key is a
+           *     snake_case snapshot field name (e.g. `status`, `priority`);
+           *     the value specifies operator and comparison value. Filters
+           *     are applied server-side via `snapshot->>{field}` JSONB
+           *     extraction, so only entities whose snapshot contains a
+           *     matching value are returned. Example:
+           *     `{"status": {"op": "eq", "value": "active"}}`.
+           */
+          snapshot_filters?: {
+            [key: string]: {
+              /** @enum {string} */
+              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+              value?: unknown;
+            };
+          };
         };
       };
     };
