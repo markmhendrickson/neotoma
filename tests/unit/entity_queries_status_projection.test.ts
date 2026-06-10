@@ -69,8 +69,10 @@ describe("entity_queries — status projection (#1586)", () => {
       observation_count: 1,
       last_observation_at: "2025-01-01T00:00:00Z",
       computed_at: "2025-01-01T00:00:00Z",
-      // PostgREST returns the extracted text value under the key "status"
-      status: "active",
+      // The lightweight projection selects the `snapshot` JSON column and the
+      // query layer derives `status` from it in JS (the `snapshot->>status`
+      // PostgREST operator is not translated inside the SQLite SELECT list).
+      snapshot: { status: "active" },
     };
 
     // deletionObservations (getDeletedEntityIds) — observations query
@@ -118,7 +120,7 @@ describe("entity_queries — status projection (#1586)", () => {
       observation_count: 1,
       last_observation_at: "2025-01-01T00:00:00Z",
       computed_at: "2025-01-01T00:00:00Z",
-      status: null, // no status
+      snapshot: {}, // no status field
     };
 
     const deletionQuery = buildQuery([]);
@@ -171,7 +173,7 @@ describe("entity_queries — status projection (#1586)", () => {
       observation_count: 1,
       last_observation_at: "2025-01-01T00:00:00Z",
       computed_at: "2025-01-01T00:00:00Z",
-      status: "active",
+      snapshot: { status: "active" },
     };
     const snapshotInactive = {
       entity_id: "ent_inactive",
@@ -179,7 +181,7 @@ describe("entity_queries — status projection (#1586)", () => {
       observation_count: 1,
       last_observation_at: "2025-01-02T00:00:00Z",
       computed_at: "2025-01-02T00:00:00Z",
-      status: "inactive",
+      snapshot: { status: "inactive" },
     };
 
     const deletionQuery = buildQuery([]);
@@ -233,7 +235,7 @@ describe("entity_queries — status projection (#1586)", () => {
       observation_count: 1,
       last_observation_at: "2025-01-01T00:00:00Z",
       computed_at: "2025-01-01T00:00:00Z",
-      status: "active",
+      snapshot: { status: "active" },
     };
 
     // snapshot-driven scan: entity_snapshots for id candidates
