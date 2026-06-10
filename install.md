@@ -98,7 +98,7 @@ If the user is not already installed:
 
 **Step 2.3 — Inspect state with a single call**
 
-Run `neotoma status --json` (on versions before this command was renamed, the same diagnostics are available as `neotoma doctor --json`; `doctor` is retained as a deprecated alias). This returns a consolidated snapshot covering:
+Run `neotoma status --json`. (If that command is not found on an older install, fall back to `neotoma doctor --json` — `doctor` is the deprecated former name of this command and still works as an alias.) This returns a consolidated snapshot covering:
 
 - install state (installed, version, `path_fix_hint` when PATH is wrong)
 - data/init state (config_dir, data_dir, db_exists, initialized)

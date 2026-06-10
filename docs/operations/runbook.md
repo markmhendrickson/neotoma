@@ -54,6 +54,8 @@ see [install.md § Production deployment (headless / systemd)](../../install.md#
 
 ## Health Checks
 
+> Two distinct tools share the word "doctor": `npm run doctor` (the dev/ops health-check script, `scripts/doctor.ts` — environment, database, RLS, storage, migrations, security) and `neotoma status` (the CLI command formerly named `neotoma doctor` — CLI path, data directory, local API, MCP entries, permissions). This runbook uses `npm run doctor` for operator health checks and `neotoma status --json` only where CLI/data-dir state is needed.
+
 - **Primary:** Run `npm run doctor` for environment, database, RLS, storage, migrations, and security checks. See [Health check](health_check.md).
 - **Manual:** Run tests (`npm test`, `npm run test:integration`), type-check (`npm run type-check`), and lint (`npm run lint`).
 - **Runtime:** Hit API health/readiness endpoints if configured; confirm MCP server starts (e.g. stdio mode).

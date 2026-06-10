@@ -252,16 +252,18 @@ test.describe("sitePage coverage", () => {
     await expect(page.getByText(/highest value to persist first/i)).toHaveCount(0);
 
     // Calls to action follow the facts: the declarative intro appears above
-    // the emerald prompt card in document order.
-    const promptCard = page
-      .getByText("Evaluation prompt", { exact: true })
-      .locator("xpath=ancestor::div[contains(@class,'border-emerald')][1]");
-    await expect(promptCard).toBeVisible();
+    // the assessment section (which holds the prompt card) in document order.
+    // Anchor on the section's heading rather than a styling class so the test
+    // is not coupled to the prompt card's emerald chrome.
+    const assessSection = page
+      .getByRole("heading", { name: /assess fit with your agent/i })
+      .locator("xpath=ancestor::section[1]");
+    await expect(assessSection).toBeVisible();
     const declarativeBox = await declarative.boundingBox();
-    const promptCardBox = await promptCard.boundingBox();
+    const assessSectionBox = await assessSection.boundingBox();
     expect(declarativeBox).not.toBeNull();
-    expect(promptCardBox).not.toBeNull();
-    expect(declarativeBox!.y).toBeLessThan(promptCardBox!.y);
+    expect(assessSectionBox).not.toBeNull();
+    expect(declarativeBox!.y).toBeLessThan(assessSectionBox!.y);
   });
 
   test("install and integration pages funnel users to evaluation first", async ({ page }) => {
