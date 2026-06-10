@@ -2978,6 +2978,9 @@ export class NeotomaServer {
         offset: parsed.offset,
         updatedSince: parsed.updated_since,
         createdSince: parsed.created_since,
+        identityBasis: parsed.identity_basis,
+        snapshotFilters: parsed.snapshot_filters,
+        excludeBookkeeping: parsed.exclude_bookkeeping,
       });
 
     return this.buildTextResponse({

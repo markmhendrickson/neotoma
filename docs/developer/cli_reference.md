@@ -555,7 +555,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--limit <n>`
   - `--offset <n>`
   - `--include-merged`
-  - `--status <value>`: Server-side exact-match filter on the snapshot `status` field. Returns only entities whose `snapshot.status` equals the given value (e.g. `--status active`). Applied before pagination. Each returned entity includes `status` in its snapshot projection even without `--include-snapshots`. Use `--status ""` is not meaningful; omit the flag to return all statuses.
+  - `--status <value>`: Server-side exact-match filter on the snapshot `status` field. Returns only entities whose `snapshot.status` equals the given value (e.g. `--status active`). Applied before pagination. Each returned entity includes `status` in its snapshot projection even without `--include-snapshots`. Passing `--status ""` is not meaningful; omit the flag to return all statuses.
   - `--updated-since <iso>` / `--since <iso>`: Return only entities whose `updated_at` is >= this ISO 8601 timestamp.
   - `--created-since <iso>`: Return only entities whose `created_at` is >= this ISO 8601 timestamp.
 - `neotoma entities get <id>`

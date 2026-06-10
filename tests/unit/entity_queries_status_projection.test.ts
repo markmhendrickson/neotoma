@@ -7,6 +7,8 @@
  * 2. snapshotFilters with a `status` eq filter is wired through (server-side)
  *    and returns only matching rows — no silent-zero.
  * 3. A status filter that matches nothing returns an empty array (not an error).
+ * 4. The MCP retrieve_entities tool schema declares snapshot_filters (parity
+ *    with the CLI --status flag and the openapi.yaml definition).
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -300,5 +302,25 @@ describe("entity_queries — status projection (#1586)", () => {
     });
 
     expect(results).toEqual([]);
+  });
+});
+
+describe("MCP retrieve_entities tool schema — snapshot_filters parity (#1618)", () => {
+  it("retrieve_entities inputSchema declares snapshot_filters (MCP/CLI parity)", async () => {
+    // Verify the MCP tool definition exposes snapshot_filters so MCP agents can
+    // filter by snapshot status just as the CLI --status flag does.
+    const { buildToolDefinitions } = await import("../../src/tool_definitions.js");
+    const tools = buildToolDefinitions();
+    const retrieveEntities = tools.find((t) => t.name === "retrieve_entities");
+    expect(retrieveEntities).toBeDefined();
+
+    const props = (retrieveEntities!.inputSchema as any).properties as Record<string, unknown>;
+    expect(props).toHaveProperty("snapshot_filters");
+
+    const sf = props["snapshot_filters"] as any;
+    expect(sf.type).toBe("object");
+    // additionalProperties describes the per-field filter shape
+    expect(sf.additionalProperties).toBeDefined();
+    expect(sf.additionalProperties.properties.op.enum).toContain("eq");
   });
 });
