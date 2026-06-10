@@ -3095,7 +3095,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-    const { entities, total, match_mode } = await retrieveEntityByIdentifierWithFallback({
+    const { entities, total, match_mode, hint } = await retrieveEntityByIdentifierWithFallback({
       identifier: parsed.identifier,
       entityType: parsed.entity_type,
       userId,
@@ -3105,11 +3105,13 @@ export class NeotomaServer {
       observationsLimit: parsed.observations_limit,
     });
 
-    return this.buildTextResponse({
-      entities,
-      total,
-      match_mode,
-    });
+    const response: Record<string, unknown> = { entities, total, match_mode };
+    // Only surface `hint` when the handler populated it (id-shaped identifier
+    // that resolved to nothing); omit it from every other result (#1597).
+    if (hint) {
+      response.hint = hint;
+    }
+    return this.buildTextResponse(response);
   }
 
   private async retrieveRelatedEntities(

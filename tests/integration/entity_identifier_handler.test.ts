@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { db, getServiceRoleClient } from "../../src/db.js";
-import { retrieveEntityByIdentifierWithFallback } from "../../src/shared/action_handlers/entity_identifier_handler.js";
+import {
+  ENTITY_ID_NOT_FOUND_HINT,
+  retrieveEntityByIdentifierWithFallback,
+} from "../../src/shared/action_handlers/entity_identifier_handler.js";
 
 const serviceRoleClient = getServiceRoleClient();
 
@@ -310,7 +313,8 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     });
 
     // A different user must not resolve the id, and must get an explicit empty
-    // result (not a degraded natural-language search).
+    // result (not a degraded natural-language search) plus a hint pointing at
+    // the direct-fetch path (#1597).
     const result = await retrieveEntityByIdentifierWithFallback({
       identifier: entityId,
       userId: otherId,
@@ -319,9 +323,15 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
 
     expect(result.total).toBe(0);
     expect(result.entities).toHaveLength(0);
+    expect(result.match_mode).toBe("none");
+    expect(result.hint).toBe(ENTITY_ID_NOT_FOUND_HINT);
   });
 
-  it("returns explicit empty for a well-formed but unknown ent_ id (issue #1550)", async () => {
+  // Regression: issue #1597 — a well-formed but unknown ent_ id returned a
+  // silent empty result, giving the caller no signal that the input was an
+  // entity_id and that retrieve_entity_snapshot is the direct-fetch path. The
+  // not-found path now returns a structured hint instead.
+  it("returns a structured not-found hint for an unknown ent_ id (issue #1597)", async () => {
     const result = await retrieveEntityByIdentifierWithFallback({
       identifier: "ent_00000000000000000000dead",
       userId: "identifier-user-unknown-rawid",
@@ -330,5 +340,105 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
 
     expect(result.total).toBe(0);
     expect(result.entities).toHaveLength(0);
+    expect(result.match_mode).toBe("none");
+    expect(result.hint).toBe(ENTITY_ID_NOT_FOUND_HINT);
+    expect(result.hint).toContain("retrieve_entity_snapshot");
+  });
+
+  // Regression: issue #1561 — an exact ent_ id whose string also appears in the
+  // text/snapshot of other entities (here a conversation_message) returned the
+  // tangential text-matching rows instead of the target entity. The primary-key
+  // fast path must return the target exclusively, never the rows that merely
+  // mention the id.
+  it("resolves an exact ent_ id to the target entity, not text-matching rows (issue #1561)", async () => {
+    const userId = "identifier-user-1561";
+    const targetId = "ent_1561abcdef0123456789abcd";
+    const mentioningId = "ent_1561000011112222333344ab";
+    testEntityIds.push(targetId, mentioningId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert([
+      {
+        id: targetId,
+        user_id: userId,
+        entity_type: "plan",
+        canonical_name: "schema packs strategy",
+      },
+      {
+        id: mentioningId,
+        user_id: userId,
+        entity_type: "conversation_message",
+        // The message text mentions the target id verbatim — the exact shape
+        // that previously won the (wrong) text match.
+        canonical_name: `discussion referencing ${targetId}`,
+      },
+    ]);
+
+    await serviceRoleClient.from("entity_snapshots").upsert([
+      {
+        entity_id: targetId,
+        user_id: userId,
+        entity_type: "plan",
+        schema_version: "1.0",
+        canonical_name: "schema packs strategy",
+        snapshot: { title: "Schema Packs Strategy" },
+        provenance: {},
+        observation_count: 1,
+        last_observation_at: now,
+        computed_at: now,
+      },
+      {
+        entity_id: mentioningId,
+        user_id: userId,
+        entity_type: "conversation_message",
+        schema_version: "1.0",
+        canonical_name: `discussion referencing ${targetId}`,
+        snapshot: { content: `Let's revisit ${targetId} next week.` },
+        provenance: {},
+        observation_count: 1,
+        last_observation_at: now,
+        computed_at: now,
+      },
+    ]);
+
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: targetId,
+      userId,
+      limit: 100,
+    });
+
+    expect(result.match_mode).toBe("direct");
+    expect(result.total).toBe(1);
+    expect(result.entities).toHaveLength(1);
+    expect(result.entities[0]?.id).toBe(targetId);
+    expect(result.entities.some((entity) => entity.id === mentioningId)).toBe(false);
+  });
+
+  // Regression: issue #1597 — an exact ent_ id resolves even when entity_type is
+  // supplied (previously returned {entities: [], total: 0} for entity_type:
+  // "plan"). The id is unambiguous, so the type filter does not suppress it.
+  it("resolves an exact ent_ id even when entity_type is supplied (issue #1597)", async () => {
+    const userId = "identifier-user-1597-typed";
+    const entityId = "ent_1597abcdef0123456789abcd";
+    testEntityIds.push(entityId);
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "plan",
+      canonical_name: "typed-id plan",
+    });
+
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: entityId,
+      entityType: "plan",
+      userId,
+      limit: 100,
+    });
+
+    expect(result.match_mode).toBe("direct");
+    expect(result.total).toBe(1);
+    expect(result.entities[0]?.id).toBe(entityId);
+    expect(result.hint).toBeUndefined();
   });
 });
