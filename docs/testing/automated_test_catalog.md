@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **452**
-- Backend and repo Vitest files: **419**
+- Total automated test files: **453**
+- Backend and repo Vitest files: **420**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -71,7 +71,7 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 116 |
 | Vitest service tests | 34 |
-| Source-adjacent tests | 51 |
+| Source-adjacent tests | 52 |
 | Vitest integration tests | 129 |
 | Vitest CLI tests | 62 |
 | Vitest contract tests | 13 |
@@ -273,7 +273,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (51):**
+**Files (52):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -288,6 +288,7 @@ flowchart TD
 - `src/services/__tests__/mcp_oauth.test.ts`
 - `src/services/__tests__/oauth_key_gate.test.ts`
 - `src/services/__tests__/oauth_state.test.ts`
+- `src/services/__tests__/override_validation.test.ts`
 - `src/services/__tests__/schema_icon_service.test.ts`
 - `src/services/__tests__/tunnel_oauth.test.ts`
 - `src/services/access_policy.test.ts`
@@ -415,7 +416,6 @@ flowchart TD
 - `tests/integration/mcp_store_unstructured.test.ts`
 - `tests/integration/mcp_store_variations.test.ts`
 - `tests/integration/mcp_target_id_identity_conflict.test.ts`
-- `tests/integration/merge_repoint_relationship_edges.test.ts`
 - `tests/integration/nonjson_csv_store_behavior.test.ts`
 - `tests/integration/nonjson_fixtures_mcp_replay.test.ts`
 - `tests/integration/observation_ingestion.test.ts`
@@ -435,6 +435,7 @@ flowchart TD
 - `tests/integration/relationship_query_determinism.test.ts`
 - `tests/integration/relationship_snapshots.test.ts`
 - `tests/integration/retrieval_transport_reliability.test.ts`
+- `tests/integration/retrieve_graph_neighborhood_tenant_isolation.test.ts`
 - `tests/integration/root_landing.test.ts`
 - `tests/integration/sandbox_mode.test.ts`
 - `tests/integration/sandbox_report.test.ts`
