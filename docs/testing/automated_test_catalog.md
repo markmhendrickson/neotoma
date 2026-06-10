@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **434**
-- Backend and repo Vitest files: **401**
+- Total automated test files: **436**
+- Backend and repo Vitest files: **403**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -71,9 +71,9 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 109 |
 | Vitest service tests | 34 |
-| Source-adjacent tests | 49 |
+| Source-adjacent tests | 50 |
 | Vitest integration tests | 123 |
-| Vitest CLI tests | 60 |
+| Vitest CLI tests | 61 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
 | Vitest subscription tests | 5 |
@@ -265,7 +265,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (49):**
+**Files (50):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -298,6 +298,7 @@ flowchart TD
 - `src/services/issues/body_newline_decode.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
+- `src/services/issues/observer_import.test.ts`
 - `src/services/issues/redaction_guard.test.ts`
 - `src/services/issues/seed_schema.test.ts`
 - `src/services/issues/sync_issues_push_writeback.test.ts`
@@ -451,7 +452,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (60):**
+**Files (61):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -501,6 +502,7 @@ flowchart TD
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
+- `tests/cli/issues_import.test.ts`
 - `tests/cli/issues_message.test.ts`
 - `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`
