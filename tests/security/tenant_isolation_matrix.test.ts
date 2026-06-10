@@ -114,6 +114,19 @@ async function callEndpoint(
   return { status: res.status, json };
 }
 
+async function callGet(
+  path: string,
+  query: Record<string, string>
+): Promise<{ status: number; json: any }> {
+  const qs = new URLSearchParams(query).toString();
+  const res = await fetch(`${BASE_URL}${path}${qs ? `?${qs}` : ""}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  const json = await res.json().catch(() => ({}));
+  return { status: res.status, json };
+}
+
 describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
   let userA: FixtureUserData;
   let userB: FixtureUserData;
@@ -211,6 +224,33 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
       expect(json.entity).toBeDefined();
       const obsIds = (json.observations ?? []).map((o: any) => o.id);
       expect(obsIds).toContain(userA.observationId);
+    });
+  });
+
+  describe("GET /entities (#1499 list alias)", () => {
+    it("user A listing entities sees their own entity, not user B's", async () => {
+      const { status, json } = await callGet("/entities", {
+        entity_type: "test",
+        user_id: userA.userId,
+        limit: "200",
+      });
+      expect(status).toBe(200);
+      const ids = (json.entities ?? []).map((e: any) => e.entity_id ?? e.id);
+      expect(ids).toContain(userA.entityId);
+      // Cross-user read MUST be blocked: user B's entity must not appear.
+      expect(ids).not.toContain(userB.entityId);
+    });
+
+    it("user B listing entities sees their own entity, not user A's", async () => {
+      const { status, json } = await callGet("/entities", {
+        entity_type: "test",
+        user_id: userB.userId,
+        limit: "200",
+      });
+      expect(status).toBe(200);
+      const ids = (json.entities ?? []).map((e: any) => e.entity_id ?? e.id);
+      expect(ids).toContain(userB.entityId);
+      expect(ids).not.toContain(userA.entityId);
     });
   });
 
