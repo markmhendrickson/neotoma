@@ -6216,6 +6216,38 @@ export async function storeStructuredForApi(params: {
     await assertGuestWriteAllowed(entityTypes, guestId);
   }
 
+  // usage_digest store-seam redaction guard (server-side backstop).
+  // Scope: strictly usage_digest entities only — no impact on any other entity type.
+  // For each incoming usage_digest entity, scan free-text fields `notes` and
+  // `friction_notes` via the pure redactUsageDigestEntity helper, and write the
+  // redacted copies back onto the entity object so the raw input is never persisted.
+  // This is a redact-and-store (scan) approach, not hard-reject, so a digest is
+  // never silently dropped on a client-side redaction miss.
+  //
+  // NOTE: Single telemetry sink today — entity_type === "usage_digest" is the only
+  // branch. If a second redacted-free-text entity_type appears, lift these field
+  // names into schema metadata (redact_free_text_fields) rather than adding another
+  // branch here.
+  {
+    const hasUsageDigest = entities.some(
+      (e) => (e as Record<string, unknown>)?.entity_type === "usage_digest"
+    );
+    if (hasUsageDigest) {
+      const { redactUsageDigestEntity } =
+        await import("./services/feedback/usage_digest_redaction.js");
+      for (const entityData of entities) {
+        const ed = entityData as Record<string, unknown>;
+        if (ed.entity_type !== "usage_digest") continue;
+        const result = redactUsageDigestEntity(ed as Parameters<typeof redactUsageDigestEntity>[0]);
+        if (result.applied) {
+          logger.warn(
+            `[STORE] usage_digest server-side redaction applied: ${result.hits} hit(s) in free-text fields.`
+          );
+        }
+      }
+    }
+  }
+
   // Capability scoping: when the caller is an AAuth-verified agent covered
   // by the capability registry, gate store_structured by entity_type here
   // before any writes touch the DB. Guests who passed access policy above
