@@ -169,6 +169,8 @@ function PinnedNavItem({
   );
 }
 
+const SIDEBAR_PIN_LIMIT = 8;
+
 export function PinnedPrimitivesSidebar({ collapsed }: { collapsed: boolean }) {
   const location = useLocation();
   const { pins, replacePins } = usePinnedPrimitives();
@@ -177,6 +179,8 @@ export function PinnedPrimitivesSidebar({ collapsed }: { collapsed: boolean }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
+  const visiblePins = pins.slice(0, SIDEBAR_PIN_LIMIT);
+  const hiddenCount = Math.max(0, pins.length - SIDEBAR_PIN_LIMIT);
   const reorderable = !collapsed && pins.length > 1;
 
   const handleDragEnd = useCallback(() => {
@@ -235,7 +239,7 @@ export function PinnedPrimitivesSidebar({ collapsed }: { collapsed: boolean }) {
           }
         }}
       >
-        {pins.map((pin, index) => (
+        {visiblePins.map((pin, index) => (
           <PinnedNavItem
             key={pin.href}
             pin={pin}
@@ -254,6 +258,18 @@ export function PinnedPrimitivesSidebar({ collapsed }: { collapsed: boolean }) {
             onDrop={handleDrop}
           />
         ))}
+        {hiddenCount > 0 && (
+          <Link
+            to="/"
+            className={cn(
+              "flex items-center gap-3 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground",
+              collapsed ? "justify-center px-0" : "px-3"
+            )}
+          >
+            {!collapsed && <span>Show all ({pins.length})</span>}
+            {collapsed && <span className="text-[10px]">+{hiddenCount}</span>}
+          </Link>
+        )}
       </div>
     </>
   );
