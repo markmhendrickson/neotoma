@@ -852,7 +852,9 @@ const mcpServerInstances = new Map<string, NeotomaServer>();
 // solely when an `eventStore` is configured (resumability opt-in). We do not
 // configure an event store, and the stream that drops is the standalone GET
 // SSE stream, which never emits a priming event. Setting `retryInterval` would
-// therefore be an inert knob with no runtime effect, so it is omitted.
+// therefore be an inert knob with no runtime effect, so it is omitted. Instead
+// we write the SSE `retry:` field ourselves as the first frame on the GET SSE
+// stream (issue #1503); see MCP_SSE_RETRY_MS / parseMcpSseRetryMs below.
 
 /** Default MCP SSE heartbeat interval in ms when the env var is unset/invalid. */
 export const MCP_SSE_KEEPALIVE_DEFAULT_MS = 25_000;
@@ -877,6 +879,43 @@ export function parseMcpSseKeepaliveMs(raw: string | undefined): number {
 
 const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS);
 
+// ----------------------------------------------------------------------------
+// MCP SSE reconnect hint (issue #1503)
+//
+// The SSE spec defines a `retry:` field that tells the client how many
+// milliseconds to wait before reconnecting after the stream drops. Without it,
+// a client that sees an unexpected close (proxy idle reap, NAT timeout) has no
+// server-provided guidance and may not reconnect promptly — the exact silent
+// failure mode in #1503 where Claude.ai loses the Neotoma tool registry until a
+// manual disconnect/reconnect. We write the `retry:` field as the very first
+// frame on the standalone GET SSE stream (right after the SDK flushes headers),
+// so the client records it on open and honors it on the *next* disconnect.
+//
+// This is independent of the keepalive heartbeat (#1483): the retry hint is
+// emitted even when the heartbeat is disabled, because reconnect guidance is
+// useful regardless of whether we are also sending warm-keeping pings.
+
+/** Default MCP SSE `retry:` reconnect hint in ms when the env var is unset/invalid. */
+export const MCP_SSE_RETRY_DEFAULT_MS = 3_000;
+
+/**
+ * Parse the `NEOTOMA_MCP_SSE_RETRY_MS` env value into a reconnect-hint interval.
+ *
+ * Mirrors {@link parseMcpSseKeepaliveMs}: only an unset / empty / non-numeric
+ * value falls back to the default. A literal `0` (or any negative number) is a
+ * VALID "do not emit a retry frame" sentinel and MUST flow through unchanged to
+ * the `retryMs <= 0` guard in `attachMcpSseKeepalive`.
+ */
+export function parseMcpSseRetryMs(raw: string | undefined): number {
+  if (raw === undefined) return MCP_SSE_RETRY_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return MCP_SSE_RETRY_DEFAULT_MS;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : MCP_SSE_RETRY_DEFAULT_MS;
+}
+
+const MCP_SSE_RETRY_MS = parseMcpSseRetryMs(process.env.NEOTOMA_MCP_SSE_RETRY_MS);
+
 /**
  * Attach SSE keepalive behavior to a `/mcp` GET request before the transport
  * takes over the response. Safe to call on every GET `/mcp`; it is a no-op
@@ -887,9 +926,10 @@ const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_
 export function attachMcpSseKeepalive(
   req: express.Request,
   res: express.Response,
-  options?: { keepaliveMs?: number; logger?: { warn: (msg: string) => void } }
+  options?: { keepaliveMs?: number; retryMs?: number; logger?: { warn: (msg: string) => void } }
 ): void {
   const keepaliveMs = options?.keepaliveMs ?? MCP_SSE_KEEPALIVE_MS;
+  const retryMs = options?.retryMs ?? MCP_SSE_RETRY_MS;
   const log = options?.logger ?? logger;
 
   // Inject X-Accel-Buffering only when the SDK actually opens an SSE stream.
@@ -900,23 +940,35 @@ export function attachMcpSseKeepalive(
   // so plain JSON-RPC POST replies are unaffected.
   const originalWriteHead = res.writeHead as typeof res.writeHead;
   let writeHeadPatched = true;
+  let retryFrameWritten = false;
   (res as express.Response).writeHead = function patchedWriteHead(
     this: express.Response,
     ...args: Parameters<typeof res.writeHead>
   ): express.Response {
+    let isSseStream = false;
     try {
       const contentType = String(res.getHeader("content-type") || "").toLowerCase();
-      if (
-        writeHeadPatched &&
-        contentType.includes("text/event-stream") &&
-        !res.getHeader("x-accel-buffering")
-      ) {
+      isSseStream = contentType.includes("text/event-stream");
+      if (writeHeadPatched && isSseStream && !res.getHeader("x-accel-buffering")) {
         res.setHeader("X-Accel-Buffering", "no");
       }
     } catch {
       // Header inspection is best-effort; never block the response.
     }
-    return originalWriteHead.apply(this, args) as express.Response;
+    const result = originalWriteHead.apply(this, args) as express.Response;
+    // Once headers are flushed for an SSE stream, write the SSE `retry:` field
+    // as the first frame so the client records the reconnect delay on open and
+    // honors it on the next unexpected close (#1503). SSE comment/field frames
+    // interleave safely before the SDK's own events. Carries no PII.
+    if (writeHeadPatched && isSseStream && !retryFrameWritten && retryMs > 0) {
+      retryFrameWritten = true;
+      try {
+        res.write(`retry: ${retryMs}\n\n`);
+      } catch {
+        // Non-fatal: the heartbeat below remains the primary keepalive.
+      }
+    }
+    return result;
   } as typeof res.writeHead;
 
   // Enable OS-level TCP keepalive so the kernel probes the peer and the
