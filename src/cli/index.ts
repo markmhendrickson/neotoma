@@ -11826,6 +11826,10 @@ entitiesCommand
     "--created-since <iso>",
     "Return only entities whose created_at is >= this ISO 8601 timestamp"
   )
+  .option(
+    "--status <value>",
+    "Filter by snapshot status field (server-side, exact match). Example: --status active"
+  )
   .action(async (...args: any[]) => {
     // Commander passes different arguments depending on whether optional argument is provided:
     // Without entityId: (command)
@@ -11844,6 +11848,7 @@ entitiesCommand
       since?: string;
       updatedSince?: string;
       createdSince?: string;
+      status?: string;
     };
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -11909,6 +11914,9 @@ entitiesCommand
         include_merged: Boolean(opts.includeMerged),
         ...(updatedSince ? { updated_since: updatedSince } : {}),
         ...(opts.createdSince ? { created_since: opts.createdSince } : {}),
+        ...(opts.status
+          ? { snapshot_filters: { status: { op: "eq" as const, value: opts.status } } }
+          : {}),
       },
     });
     const status = response?.status;
