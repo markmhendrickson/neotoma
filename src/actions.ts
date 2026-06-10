@@ -3714,6 +3714,7 @@ app.post("/entities/query", async (req, res) => {
 
     const {
       entity_type,
+      entity_types,
       search,
       limit,
       offset,
@@ -3734,6 +3735,7 @@ app.post("/entities/query", async (req, res) => {
       await queryEntitiesWithCount({
         userId,
         entityType: entity_type,
+        entityTypes: entity_types,
         includeMerged: include_merged,
         includeSnapshots: include_snapshots,
         sortBy: sort_by,

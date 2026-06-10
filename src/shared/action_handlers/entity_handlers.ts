@@ -1,5 +1,5 @@
 import { db } from "../../db.js";
-import { queryEntities } from "../../services/entity_queries.js";
+import { queryEntities, normalizeEntityTypeFilter } from "../../services/entity_queries.js";
 import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
@@ -15,6 +15,13 @@ export interface SnapshotFilter {
 interface QueryEntitiesParams {
   userId: string;
   entityType?: string;
+  /**
+   * Multi-type filter. When non-empty, results are restricted to entities whose
+   * `entity_type` is in this list (an IN filter), OR-combined with the singular
+   * `entityType`. Honored on the plain-listing, lexical, and semantic search
+   * paths so a non-empty value is never silently ignored (#1562).
+   */
+  entityTypes?: string[];
   includeMerged?: boolean;
   includeSnapshots?: boolean;
   sortBy?: string;
@@ -112,6 +119,8 @@ export function conceptEntityTypeHints(
 interface LexicalSearchEntityIdsParams {
   userId: string;
   entityType?: string;
+  /** Multi-type filter, OR-combined with `entityType` (#1562). */
+  entityTypes?: string[];
   includeMerged?: boolean;
   search: string;
   /** Omit chat bookkeeping rows from product search (Inspector header, /search). */
@@ -398,7 +407,15 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   total: number;
   strategies: Set<SearchStrategy>;
 }> {
-  const { userId, entityType, includeMerged = false, search, excludeBookkeeping = false } = params;
+  const {
+    userId,
+    entityType,
+    entityTypes,
+    includeMerged = false,
+    search,
+    excludeBookkeeping = false,
+  } = params;
+  const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
   const strategies = new Set<SearchStrategy>();
   const normalizedSearch = normalizeSearchText(search);
   const searchTokens = normalizedSearch.split(" ").filter(Boolean);
@@ -425,8 +442,10 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     .eq("user_id", userId)
     .order("id", { ascending: true });
 
-  if (entityType) {
-    entityQuery = entityQuery.eq("entity_type", entityType);
+  if (typeFilter.length === 1) {
+    entityQuery = entityQuery.eq("entity_type", typeFilter[0]);
+  } else if (typeFilter.length > 1) {
+    entityQuery = entityQuery.in("entity_type", typeFilter);
   } else if (typeFilterTokens.size > 0) {
     const matchingTypes = await resolveEntityTypesForTypeFilters(typeFilterTokens);
     if (matchingTypes.length > 0) {
@@ -623,6 +642,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 async function countVisibleEntities(params: {
   userId: string;
   entityType?: string;
+  entityTypes?: string[];
   includeMerged?: boolean;
   published?: boolean;
   publishedAfter?: string;
@@ -633,6 +653,7 @@ async function countVisibleEntities(params: {
   const {
     userId,
     entityType,
+    entityTypes,
     includeMerged = false,
     published,
     publishedAfter,
@@ -641,10 +662,24 @@ async function countVisibleEntities(params: {
     createdSince,
   } = params;
 
+  const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
+  const applyTypeFilter = <
+    T extends { eq: (c: string, v: string) => T; in: (c: string, v: string[]) => T },
+  >(
+    query: T,
+    column: string
+  ): T => {
+    if (typeFilter.length === 1) {
+      return query.eq(column, typeFilter[0]);
+    }
+    if (typeFilter.length > 1) {
+      return query.in(column, typeFilter);
+    }
+    return query;
+  };
+
   let entityIdQuery = db.from("entities").select("id").eq("user_id", userId);
-  if (entityType) {
-    entityIdQuery = entityIdQuery.eq("entity_type", entityType);
-  }
+  entityIdQuery = applyTypeFilter(entityIdQuery, "entity_type");
   if (!includeMerged) {
     entityIdQuery = entityIdQuery.is("merged_to_entity_id", null);
   }
@@ -656,9 +691,7 @@ async function countVisibleEntities(params: {
   }
   if (published !== undefined || publishedAfter || publishedBefore) {
     let snapshotQuery = db.from("entity_snapshots").select("entity_id").eq("user_id", userId);
-    if (entityType) {
-      snapshotQuery = snapshotQuery.eq("entity_type", entityType);
-    }
+    snapshotQuery = applyTypeFilter(snapshotQuery, "entity_type");
     if (published !== undefined) {
       snapshotQuery = snapshotQuery.eq("snapshot->>published", published ? "true" : "false");
     }
@@ -728,6 +761,7 @@ async function countVisibleEntities(params: {
 async function queryEntitiesFromLexicalSearch(params: {
   userId: string;
   entityType?: string;
+  entityTypes?: string[];
   includeMerged?: boolean;
   includeSnapshots?: boolean;
   sortBy?: QueryEntitiesParams["sortBy"];
@@ -754,6 +788,7 @@ async function queryEntitiesFromLexicalSearch(params: {
   } = await lexicalSearchEntityIds({
     userId: params.userId,
     entityType: params.entityType,
+    entityTypes: params.entityTypes,
     includeMerged: params.includeMerged,
     search: params.search,
     excludeBookkeeping: params.excludeBookkeeping,
@@ -767,6 +802,7 @@ async function queryEntitiesFromLexicalSearch(params: {
   const entities = await queryEntities({
     userId: params.userId,
     entityType: params.entityType,
+    entityTypes: params.entityTypes,
     includeMerged: params.includeMerged,
     includeSnapshots: params.includeSnapshots,
     sortBy: params.sortBy,
@@ -819,6 +855,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   const {
     userId,
     entityType,
+    entityTypes,
     includeMerged = false,
     includeSnapshots = true,
     sortBy = "entity_id",
@@ -836,6 +873,10 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     snapshotFilters,
     excludeBookkeeping = false,
   } = params;
+
+  // Union of singular + plural type filters, honored across all retrieval
+  // paths (#1562). Empty when no type filter is requested.
+  const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
 
   let entities: EntityWithProvenance[];
   let total: number;
@@ -857,11 +898,13 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     // §10.2 Explicit Over Implicit). If the caller explicitly filters to a bookkeeping
     // entity_type, the explicit type filter wins and excludeBookkeeping is ignored.
     const effectiveExcludeBookkeeping =
-      excludeBookkeeping && !(entityType && BOOKKEEPING_ENTITY_TYPES.has(entityType));
+      excludeBookkeeping &&
+      !(typeFilter.length > 0 && typeFilter.some((t) => BOOKKEEPING_ENTITY_TYPES.has(t)));
 
     const lexicalParams = {
       userId,
       entityType,
+      entityTypes,
       includeMerged,
       includeSnapshots,
       sortBy,
@@ -895,6 +938,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         searchText: trimmedSearch,
         userId,
         entityType,
+        entityTypes,
         includeMerged,
         similarityThreshold,
         limit,
@@ -905,6 +949,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         entities = await queryEntities({
           userId,
           entityType,
+          entityTypes,
           includeMerged,
           includeSnapshots,
           sortBy,
@@ -957,6 +1002,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     entities = await queryEntities({
       userId,
       entityType,
+      entityTypes,
       includeMerged,
       includeSnapshots,
       sortBy,
@@ -979,6 +1025,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       const allMatches = await queryEntities({
         userId,
         entityType,
+        entityTypes,
         includeMerged,
         includeSnapshots: false,
         sortBy,
@@ -998,6 +1045,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       total = await countVisibleEntities({
         userId,
         entityType,
+        entityTypes,
         includeMerged,
         published,
         publishedAfter,

@@ -11,6 +11,13 @@ export interface SnapshotFilter {
 export interface EntityQueryOptions {
   userId?: string;
   entityType?: string;
+  /**
+   * Multi-type filter. When non-empty, restricts results to entities whose
+   * `entity_type` is in this list (an IN filter), OR-combined with the singular
+   * `entityType` when both are provided. An empty/omitted list applies no
+   * multi-type filter. See {@link normalizeEntityTypeFilter}.
+   */
+  entityTypes?: string[];
   includeMerged?: boolean;
   includeDeleted?: boolean;
   includeSnapshots?: boolean;
@@ -94,6 +101,27 @@ interface EntitySnapshotRow {
 const ENTITY_BASE_SELECT =
   "id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at, created_at";
 
+/**
+ * Combine the singular `entityType` and plural `entityTypes` filters into a
+ * single deduplicated, deterministically-ordered list of entity types to
+ * filter on. Returns an empty array when neither is provided (no type filter).
+ * Blank/whitespace-only entries are dropped so an `entity_types: [""]` payload
+ * does not silently match nothing.
+ */
+export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: string[]): string[] {
+  const types = new Set<string>();
+  if (typeof entityType === "string" && entityType.trim().length > 0) {
+    types.add(entityType);
+  }
+  for (const candidate of entityTypes ?? []) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      types.add(candidate);
+    }
+  }
+  // Stable ordering keeps the generated SQL/IN clause deterministic.
+  return [...types].sort();
+}
+
 async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
   const deletedEntityIds = new Set<string>();
   if (entityIds.length === 0) {
@@ -137,6 +165,7 @@ export async function queryEntities(
   const {
     userId,
     entityType,
+    entityTypes,
     includeMerged = false,
     includeDeleted = false,
     includeSnapshots = true,
@@ -153,6 +182,23 @@ export async function queryEntities(
     identityBasis,
     snapshotFilters,
   } = options;
+
+  // Union of singular + plural type filters. Empty → no type filter.
+  const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
+  const applyTypeFilter = <
+    T extends { eq: (c: string, v: string) => T; in: (c: string, v: string[]) => T },
+  >(
+    query: T,
+    column: string
+  ): T => {
+    if (typeFilter.length === 1) {
+      return query.eq(column, typeFilter[0]);
+    }
+    if (typeFilter.length > 1) {
+      return query.in(column, typeFilter);
+    }
+    return query;
+  };
 
   // R3: when an `identity_basis` filter is set, resolve candidate entity_ids
   // from the observations table first. Distinct per entity; we only need the
@@ -199,10 +245,8 @@ export async function queryEntities(
     entityQuery = entityQuery.eq("user_id", userId);
   }
 
-  // Filter by entity type if provided
-  if (entityType) {
-    entityQuery = entityQuery.eq("entity_type", entityType);
-  }
+  // Filter by entity type(s) if provided (singular + plural union)
+  entityQuery = applyTypeFilter(entityQuery, "entity_type");
 
   // Exclude merged entities unless explicitly requested
   if (!includeMerged) {
@@ -248,9 +292,7 @@ export async function queryEntities(
     if (userId) {
       query = query.eq("user_id", userId);
     }
-    if (entityType) {
-      query = query.eq("entity_type", entityType);
-    }
+    query = applyTypeFilter(query, "entity_type");
     if (!includeMerged) {
       query = query.is("merged_to_entity_id", null);
     }
@@ -279,9 +321,7 @@ export async function queryEntities(
       if (userId) {
         snapshotQuery = snapshotQuery.eq("user_id", userId);
       }
-      if (entityType) {
-        snapshotQuery = snapshotQuery.eq("entity_type", entityType);
-      }
+      snapshotQuery = applyTypeFilter(snapshotQuery, "entity_type");
       if (effectiveEntityIds && effectiveEntityIds.length > 0) {
         snapshotQuery = snapshotQuery.in("entity_id", effectiveEntityIds);
       }
