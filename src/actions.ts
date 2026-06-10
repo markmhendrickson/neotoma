@@ -3705,10 +3705,16 @@ function handleApiError(
 // v0.2.15 Entity-Based HTTP API Endpoints
 // ============================================================================
 
-// POST /api/entities/query - Query entities with filters
-// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
-app.post("/entities/query", async (req, res) => {
-  const parsed = EntitiesQueryRequestSchema.safeParse(req.body);
+// Shared entity-query executor backing both POST /entities/query and the
+// GET /entities REST alias. `rawInput` is the already-shaped request payload
+// (POST body, or query-string params coerced by coerceEntitiesQueryParams).
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id.
+async function runEntitiesQuery(
+  req: express.Request,
+  res: express.Response,
+  rawInput: unknown
+): Promise<express.Response> {
+  const parsed = EntitiesQueryRequestSchema.safeParse(rawInput);
   if (!parsed.success) {
     logWarn("ValidationError:entities_query", req, {
       issues: parsed.error.issues,
@@ -3717,7 +3723,9 @@ app.post("/entities/query", async (req, res) => {
   }
 
   try {
-    // Get authenticated user_id (REQUIRED)
+    // Get authenticated user_id (REQUIRED). user_id is used for SECURITY
+    // scoping only via getAuthenticatedUserId; it is never read directly off
+    // the request for access control.
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
     const {
@@ -3777,6 +3785,94 @@ app.post("/entities/query", async (req, res) => {
       "APIError:entities_query"
     );
   }
+}
+
+// Coerce GET /entities query-string parameters into the shape
+// EntitiesQueryRequestSchema expects. Query strings are always strings, so
+// numeric, boolean, and JSON-object fields are converted here; values that
+// fail conversion are passed through unchanged so Zod surfaces a 400.
+function coerceEntitiesQueryParams(query: express.Request["query"]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const readString = (key: string): string | undefined => {
+    const value = query[key];
+    if (typeof value === "string") return value;
+    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+    return undefined;
+  };
+  const parseBool = (value: string): boolean | string => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+  };
+
+  for (const key of [
+    "entity_type",
+    "search",
+    "query",
+    "search_query",
+    "sort_by",
+    "sort_order",
+    "published_after",
+    "published_before",
+    "user_id",
+    "updated_since",
+    "created_since",
+    "identity_basis",
+  ]) {
+    const value = readString(key);
+    if (value !== undefined) out[key] = value;
+  }
+
+  for (const key of ["limit", "offset"]) {
+    const value = readString(key);
+    if (value !== undefined && value !== "") {
+      const num = Number(value);
+      out[key] = Number.isNaN(num) ? value : num;
+    }
+  }
+
+  for (const key of ["published", "include_snapshots", "include_merged", "exclude_bookkeeping"]) {
+    const value = readString(key);
+    if (value !== undefined) out[key] = parseBool(value);
+  }
+
+  const snapshotFilters = readString("snapshot_filters");
+  if (snapshotFilters !== undefined && snapshotFilters !== "") {
+    try {
+      out.snapshot_filters = JSON.parse(snapshotFilters);
+    } catch {
+      out.snapshot_filters = snapshotFilters;
+    }
+  }
+
+  return out;
+}
+
+// GET /entities - REST/GET alias of POST /entities/query (issue #1499).
+// Maps query-string params to the same handler so consumers that issue
+// `GET /entities?entity_type=...&search=...` no longer hit a 404 and silently
+// degrade. REQUIRES AUTHENTICATION - identical user scoping to the POST path.
+app.get("/entities", async (req, res) => {
+  return runEntitiesQuery(req, res, coerceEntitiesQueryParams(req.query));
+});
+
+// POST /api/entities/query - Query entities with filters
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
+app.post("/entities/query", async (req, res) => {
+  return runEntitiesQuery(req, res, req.body);
+});
+
+// Hinted 404 fallback for the /entities collection path. GET is handled above
+// and POST/PUT/DELETE/PATCH on the bare collection are misuse; respond with a
+// structured hint (in `details`, never concatenated into `message`) that
+// points callers at the canonical list and query endpoints so the mistake is
+// self-correcting. See issue #1499.
+app.all("/entities", (req, res) => {
+  return sendError(res, 404, "RESOURCE_NOT_FOUND", `No ${req.method} route on /entities.`, {
+    hint: "List entities with GET /entities?entity_type=...&search=..., or query with POST /entities/query.",
+    method: req.method,
+    supported: ["GET /entities", "POST /entities/query"],
+  });
 });
 
 // GET /api/entities/:id - Get entity detail with snapshot and provenance (FU-601)

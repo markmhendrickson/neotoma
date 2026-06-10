@@ -303,6 +303,19 @@
       ]
     },
     {
+      "path": "/entities",
+      "method": "GET",
+      "operation_id": "listEntities",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/entities/duplicates",
       "method": "GET",
       "operation_id": "listPotentialDuplicates",

@@ -331,6 +331,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/entities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List entities
+     * @description REST/GET alias of `POST /entities/query`. Maps query-string parameters to the same handler so consumers that issue `GET /entities?entity_type=...&search=...` reach the canonical list behavior instead of a 404. Scoped to the authenticated user. The request body of `POST /entities/query` and the query string here accept the same field names; complex object fields (`snapshot_filters`) are passed as a JSON-encoded string. Unmatched verbs on `/entities` return a 404 whose `details.hint` points back at this endpoint and `POST /entities/query`.
+     */
+    get: operations["listEntities"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/entities/query": {
     parameters: {
       query?: never;
@@ -4272,6 +4292,96 @@ export interface operations {
         };
         content: {
           "application/json": Record<string, never>;
+        };
+      };
+    };
+  };
+  listEntities: {
+    parameters: {
+      query?: {
+        entity_type?: string;
+        /** @description Canonical free-text query parameter for retrieval relevance. */
+        search?: string;
+        /** @description Compatibility alias for `search`. */
+        query?: string;
+        /** @description Compatibility alias for `search`. */
+        search_query?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * @description Sort field. Non-default values cannot be combined with `search`.
+         *     Mirrors the `sort_by` body field of `POST /entities/query`.
+         */
+        sort_by?: string;
+        /** @description `desc` cannot be combined with `search`. */
+        sort_order?: "asc" | "desc";
+        /** @description Cannot be combined with `search`. */
+        published?: boolean;
+        /** @description Inclusive lower bound for snapshot.published_date. Cannot be combined with `search`. */
+        published_after?: string;
+        /** @description Inclusive upper bound for snapshot.published_date. Cannot be combined with `search`. */
+        published_before?: string;
+        /** @description When false, omit snapshot/provenance/raw_fragments payloads for lighter responses. */
+        include_snapshots?: boolean;
+        include_merged?: boolean;
+        /** @description Optional user scope. When omitted the authenticated user is used. */
+        user_id?: string;
+        /** @description ISO 8601 timestamp; return only entities updated at or after this value. */
+        updated_since?: string;
+        /** @description ISO 8601 timestamp; return only entities created at or after this value. */
+        created_since?: string;
+        /** @description Return only entities with at least one observation resolved with the given identity_basis. */
+        identity_basis?:
+          | "schema_rule"
+          | "schema_lookup"
+          | "heuristic_name"
+          | "heuristic_fallback"
+          | "target_id";
+        /** @description When true, omit chat bookkeeping types from results. */
+        exclude_bookkeeping?: boolean;
+        /**
+         * @description JSON-encoded object filtering entities by snapshot field values,
+         *     equivalent to the `snapshot_filters` body field of
+         *     `POST /entities/query`. Example:
+         *     `{"status":{"op":"eq","value":"active"}}`.
+         */
+        snapshot_filters?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Entity list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            entities?: components["schemas"]["EntitySnapshot"][];
+            total?: number;
+            limit?: number;
+            offset?: number;
+            applied_search_strategies?: (
+              | "strict"
+              | "semantic"
+              | "partial_overlap"
+              | "concept_bridge"
+            )[];
+            /** @enum {string} */
+            search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+          };
+        };
+      };
+      /** @description Invalid query parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
