@@ -120,6 +120,19 @@ than assume away:
 - **Idempotency across a full dataset.** Confirm the per-chunk idempotency holds
   for the entire realistic dataset on the "rebuild again" pass, not just a small
   sample.
+- **Idempotency prefix across a teardown.** The "rebuild again" step (7) reuses
+  the same `--idempotency-prefix` as the first build, but against a _fresh_
+  instance whose idempotency ledger was destroyed at teardown (step 6). Confirm
+  whether the prefix's no-op safety is per-instance (so a post-teardown rebuild
+  re-writes from scratch as intended) or whether any cross-instance state would
+  cause the second build to skip writes it should perform. Record which.
+- **Snapshot-equivalence semantics.** "Equivalent to the source" (steps 5, 8)
+  needs a stated definition before the run, not after. Decide what equivalence
+  means: exact `snapshots export` byte-equality, equality modulo timestamps and
+  instance-local ids, or equality of the reduced field values per entity. Record
+  the chosen definition and the comparison method, since a too-strict definition
+  fails on benign id/timestamp differences and a too-loose one misses real
+  rebuild gaps.
 
 ## Running it as a joint exercise
 

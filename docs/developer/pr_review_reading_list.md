@@ -41,6 +41,7 @@ Load only when the diff touches the listed files or directories.
 | `openapi.yaml`, `src/shared/contract*`, `src/shared/openapi*` | `docs/architecture/openapi_contract_flow.md` |
 | `src/tool_definitions.ts`, `src/server.ts`, `docs/developer/mcp/` | `docs/developer/mcp/instructions.md`, `docs/developer/agent_instructions_sync_rules.mdc` |
 | `src/cli/` | `docs/developer/cli_reference.md` |
+| `src/cli/entities*` (import/export), bulk-import or export-path changes | `docs/developer/exit_rebuild_test.md` |
 | Error response shapes | `docs/reference/error_codes.md` |
 
 ### Auth and security
