@@ -14,6 +14,40 @@ import { getCurrentAgentIdentity } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 
+/** Minimal shape of a `relationship_observations` row needed for liveness. */
+interface RelationshipObservationRow {
+  source_priority: number;
+  observed_at: string;
+  metadata?: { _deleted?: boolean } | null;
+}
+
+/**
+ * Single source of truth for "is this edge live?" (#1570). An edge is dead when
+ * its highest-priority (then most recent) observation carries
+ * `metadata._deleted === true`. Used at write time to materialize
+ * `relationship_snapshots.is_live`, and mirrored by the read-path filter and
+ * the SQLite backfill so the column never drifts from the observation log.
+ * Returns true (live) when the observation set is empty.
+ */
+export function isRelationshipLive(observations: RelationshipObservationRow[]): boolean {
+  if (!observations || observations.length === 0) return true;
+  let winner: RelationshipObservationRow | null = null;
+  for (const obs of observations) {
+    if (winner === null) {
+      winner = obs;
+      continue;
+    }
+    if (
+      obs.source_priority > winner.source_priority ||
+      (obs.source_priority === winner.source_priority &&
+        new Date(obs.observed_at).getTime() > new Date(winner.observed_at).getTime())
+    ) {
+      winner = obs;
+    }
+  }
+  return winner?.metadata?._deleted !== true;
+}
+
 export type RelationshipType =
   | "PART_OF"
   | "CORRECTS"
@@ -468,6 +502,14 @@ export class RelationshipsService {
       observations as any
     );
 
+    // Materialize liveness (#1570). The edge is dead when its highest-priority
+    // (then most recent) observation is a deletion — the same rule
+    // `filterDeletedRelationships` applies on the read path. Derived here from
+    // the observations already fetched above, so the default list_relationships
+    // read can exclude soft-deleted edges via a DB predicate (`is_live = 1`)
+    // and paginate at the DB instead of loading + filtering in process.
+    const isLive = isRelationshipLive(observations as RelationshipObservationRow[]);
+
     // Save snapshot
     const { error: saveError } = await db.from("relationship_snapshots").upsert(
       {
@@ -482,6 +524,7 @@ export class RelationshipsService {
         last_observation_at: snapshot.last_observation_at,
         provenance: snapshot.provenance,
         user_id: snapshot.user_id,
+        is_live: isLive ? 1 : 0,
       },
       {
         onConflict: "relationship_key",
