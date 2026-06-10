@@ -166,6 +166,7 @@
     "setup:launchd-dev": "node scripts/install_launchd_dev_server.js",
     "setup:launchd-dev-server": "npm run setup:launchd-dev",
     "setup:launchd-prod-server": "node scripts/install_launchd_prod_server.js",
+    "setup:launchd-rc-autodeploy": "node scripts/install_launchd_rc_autodeploy.js",
     "setup:launchd-cli-sync": "node scripts/install_launchd_watch_build.js",
     "setup:launchd-watch-build": "npm run setup:launchd-cli-sync",
     "setup:launchd-issues-sync": "node scripts/install_launchd_issues_sync.js",

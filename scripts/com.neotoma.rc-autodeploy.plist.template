@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.neotoma.rc-autodeploy — "rolling main = RC" auto-deploy LaunchAgent.
+
+  Polls origin/main and, when the RC checkout is behind, fast-forwards it
+  (preserving the uncommitted RC version bump), rebuilds dist, and HARD-restarts
+  the prod-server LaunchAgent so merged-to-main changes reach the running server
+  unattended within one poll interval. Mechanical only (no release judgment) —
+  Struthio still owns cutting tagged releases.
+
+  Install via: node scripts/install_launchd_rc_autodeploy.js
+  Placeholders (REPO_ROOT_PLACEHOLDER etc.) are substituted by the installer.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.neotoma.rc-autodeploy</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>REPO_ROOT_PLACEHOLDER/scripts/redeploy_rc_from_main.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>REPO_ROOT_PLACEHOLDER</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>120</integer>
+  <key>StandardOutPath</key>
+  <string>REPO_ROOT_PLACEHOLDER/data/logs/launchd-rc-autodeploy.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPO_ROOT_PLACEHOLDER/data/logs/launchd-rc-autodeploy.error.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/sbin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:NODE_BIN_DIR_PLACEHOLDER</string>
+    <key>RC_DIR</key>
+    <string>REPO_ROOT_PLACEHOLDER</string>
+    <key>PROD_LABEL</key>
+    <string>com.neotoma.prod-server</string>
+    <key>HEALTH_URL</key>
+    <string>HEALTH_URL_PLACEHOLDER</string>
+    <key>BRANCH</key>
+    <string>main</string>
+  </dict>
+</dict>
+</plist>
