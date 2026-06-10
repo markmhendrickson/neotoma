@@ -20,6 +20,31 @@ gh pr list --state open --json number,title,headRefName,baseRefName,isDraft,revi
 
 Exclude draft PRs from automated merge actions. Include them in the summary report.
 
+### Step 1a: Partition the queue and fan out the audit to subagents
+
+The per-PR audit (Steps 1b, 1c, 2, 3-discovery) is read-only `gh`/`git` work with no cross-PR dependencies. It is the right shape for parallel subagent delegation: each subagent audits a disjoint batch, returns a structured verdict, and the main thread synthesizes and takes all merge/comment/review actions itself. This keeps mutation single-threaded (no two agents racing to merge) while collapsing the wall-clock cost of a large queue.
+
+**Partition first — do not audit every PR at full depth.** From the Step 1 JSON, bucket PRs before spending audit budget:
+
+- **`mergeable: CONFLICTING`** → blocked-needs-rebase. These cannot merge regardless of any other signal. Do not deep-audit; list them in the report's rebase bucket. (Verify the bucket isn't masking a base-branch issue, but a conflicting PR is never merge-eligible this run.)
+- **Stacked PRs** (`baseRefName` is not `main`/`dev` but another open PR's head) → blocked on parent. Note the parent; do not deep-audit until the parent lands.
+- **`mergeable: MERGEABLE`** → the real audit candidates. These get the full Step 1b/1c/2/3 fan-out.
+
+**When to fan out vs. inline:** if the MERGEABLE candidate set is **> 6 PRs**, fan out. At or below that, audit inline on the main thread (subagent spin-up overhead isn't worth it). Scale the subagent count so each handles **3–5 PRs**: `ceil(candidates / 4)` subagents, capped at 8.
+
+**Dispatch (single message, multiple `Agent` calls so they run concurrently):**
+
+- `subagent_type: "Explore"` for the audit batches — it is read-only by construction (cannot merge, comment, or push), which is exactly the guarantee you want for a discovery agent. Give each one a disjoint list of PR numbers and the full per-PR audit checklist (CI status + mechanical-vs-substantive failure classification, base-branch/stacked detection, security-adjacency with triggering files, diff size + contract-surface flag, Step 1c review-blocker verdict with quoted blocking findings, linked-issue detection including the auto-close gap, and `reviewDecision`/`mergeable`). Require a terminal one-line verdict per PR: `MERGE-ELIGIBLE | BLOCKED(<reason>) | STACKED(base=<branch>) | REVIEW-BLOCKED | SECURITY-GATE-NEEDED`.
+- For a deep correctness read of a specific high-risk PR (security-adjacent + large contract diff), additionally spawn the `code-reviewer` subagent on that single PR. Use this sparingly — it is for the PRs where a holistic human-grade review matters, not routine triage.
+
+**Synthesis is mandatory and adversarial — never act on a subagent verdict alone.** Subagents read excerpts, not whole files, and will miss things. Before any merge, the main thread MUST independently re-confirm the load-bearing facts for that specific PR:
+
+- **CI freshness** — re-run `gh pr checks <n>` and confirm the green run is against the **current head SHA**, not a months-old run. A subagent reporting "CI passed" may be quoting a stale run; main moving (or the baseline gate's openapi-drift check) can invalidate it. This is the single most common synthesis correction.
+- **Actual diff surface** — re-run `gh pr diff <n> --name-only`. Subagents have under-counted security-adjacency and contract-surface by trusting a PR's self-description or a stale rebase view. Verify `src/actions.ts`, `openapi.yaml`, and the security-adjacency file set directly.
+- **`mergeStateStatus`** — `CLEAN` is required to merge; `UNKNOWN` means GitHub is still computing mergeability (wait/re-poll), `BEHIND`/`DIRTY` means rebase needed.
+
+Treat the subagent report as a **prioritized worklist with evidence**, not a decision. The main thread owns every `gh pr merge`, `gh pr comment`, `gh issue comment/close`, and `@claude review` call.
+
 ### Step 1b: Gate Substantial PRs for Opus Review
 
 Before classifying for merge, check whether each PR needs (or needs another) automated Opus review. The `claude_pr_review.yml` workflow runs on `synchronize` events but deliberately skips `claude/*` branches to avoid runaway agent loops. This step compensates by explicitly posting `@claude review` on PRs that are worth a holistic look.
@@ -298,6 +323,7 @@ Produce a comprehensive summary covering:
 - Release PRs identified, with a clear "run `/release` to ship these" callout
 - Outstanding blockers that require author or user action
 - A "What I need from you" section if any PR requires a decision
+- When the queue was fanned out (Step 1a): how many subagents ran, the batch partition, and any verdict the main-thread synthesis **overrode** (e.g. a "CI passed" that was a stale run, an under-counted security surface). Surfacing overrides keeps the fan-out honest and flags subagent blind spots for the next run.
 
 ## Security Gate Reference
 
@@ -335,6 +361,9 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Never post `@claude review` more than once per batch run on the same PR.
 - Do not post `@claude review` on trivially small PRs (≤5 files, ≤150 lines, no contract surface changes, not security-adjacent).
 - Treat placeholder review bodies (`I'll analyze this and get back to you.` with 0 tokens) as "review not delivered," not "review approved." Re-trigger once per batch.
+- Fan out the audit to read-only subagents (Step 1a) when the MERGEABLE candidate set exceeds 6 PRs; keep it inline below that threshold.
+- Use `Explore` (read-only) for audit-batch subagents so they structurally cannot merge, comment, or push. Keep every mutating action (`gh pr merge`, `gh pr comment`, `gh issue comment/close`, `@claude review`) on the main thread.
+- Always re-confirm CI freshness against the current head SHA, the actual diff surface, and `mergeStateStatus` on the main thread before merging — never merge on a subagent's verdict alone.
 
 ## Forbidden Patterns
 
@@ -350,3 +379,5 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - **Treating placeholder review comments (`I'll analyze this and get back to you.` with 0 output tokens) as completed reviews.** Re-trigger and wait for a substantive review.
 - **Merging a PR that closes issues without first posting a closure-narrative comment on each linked issue (Step 4).** The GitHub auto-close link is not a resolution trail.
 - **Leaving issues open that the merged PR resolved.** When detection in Step 4 surfaces an auto-close gap (closure verb in body/commit but issue not in `closingIssuesReferences`), close the issue manually after merge with `gh issue close <iss> --reason completed` and a comment linking the resolving PR.
+- **Acting on a subagent verdict without main-thread re-verification.** A subagent reporting "MERGE-ELIGIBLE / CI passed" is a worklist entry with evidence, not a merge authorization. Stale CI runs and under-counted security/contract surfaces are the recurring failure modes; re-confirm before merging.
+- **Letting a subagent perform a mutating action.** Audit subagents are read-only by design. If an audit needs a follow-up that mutates state, the main thread does it.
