@@ -69,7 +69,7 @@ flowchart TD
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 112 |
+| Vitest unit tests | 113 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 50 |
 | Vitest integration tests | 124 |
@@ -108,7 +108,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (112):**
+**Files (113):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -206,6 +206,7 @@ flowchart TD
 - `tests/unit/schema_agent_instructions.test.ts`
 - `tests/unit/schema_inference.test.ts`
 - `tests/unit/schema_projection_lag.test.ts`
+- `tests/unit/search_normalization.test.ts`
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
