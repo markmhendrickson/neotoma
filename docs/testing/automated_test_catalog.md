@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **434**
-- Backend and repo Vitest files: **401**
+- Total automated test files: **440**
+- Backend and repo Vitest files: **407**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 109 |
+| Vitest unit tests | 113 |
 | Vitest service tests | 34 |
-| Source-adjacent tests | 48 |
-| Vitest integration tests | 123 |
+| Source-adjacent tests | 50 |
+| Vitest integration tests | 124 |
 | Vitest CLI tests | 61 |
 | Vitest contract tests | 12 |
 | Vitest security tests | 3 |
@@ -108,7 +108,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (109):**
+**Files (113):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -153,6 +153,7 @@ flowchart TD
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
+- `tests/unit/entity_queries_status_projection.test.ts`
 - `tests/unit/external_actor_badge.test.ts`
 - `tests/unit/external_actor_builder.test.ts`
 - `tests/unit/external_actor_promoter.test.ts`
@@ -205,6 +206,7 @@ flowchart TD
 - `tests/unit/schema_agent_instructions.test.ts`
 - `tests/unit/schema_inference.test.ts`
 - `tests/unit/schema_projection_lag.test.ts`
+- `tests/unit/search_normalization.test.ts`
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
@@ -217,6 +219,8 @@ flowchart TD
 - `tests/unit/substrate_event_bus.test.ts`
 - `tests/unit/timeline_events.test.ts`
 - `tests/unit/unknown_fields_guard.test.ts`
+- `tests/unit/usage_digest_redaction.test.ts`
+- `tests/unit/usage_digest_schema.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
@@ -265,7 +269,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (48):**
+**Files (50):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -298,8 +302,10 @@ flowchart TD
 - `src/services/issues/body_newline_decode.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
+- `src/services/issues/observer_import.test.ts`
 - `src/services/issues/redaction_guard.test.ts`
 - `src/services/issues/seed_schema.test.ts`
+- `src/services/issues/sync_issues_push_writeback.test.ts`
 - `src/services/memory_export.test.ts`
 - `src/services/plans/capture_harness_plan.test.ts`
 - `src/services/plans/seed_schema.test.ts`
@@ -320,7 +326,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (123):**
+**Files (124):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -416,6 +422,7 @@ flowchart TD
 - `tests/integration/relationship_agent_attribution_api.test.ts`
 - `tests/integration/relationship_delete_discovery_mcp.test.ts`
 - `tests/integration/relationship_delete_discovery.test.ts`
+- `tests/integration/relationship_liveness_pagination.test.ts`
 - `tests/integration/relationship_pagination_determinism.test.ts`
 - `tests/integration/relationship_query_determinism.test.ts`
 - `tests/integration/relationship_snapshots.test.ts`
@@ -487,7 +494,6 @@ flowchart TD
 - `tests/cli/cli_smoke.test.ts`
 - `tests/cli/cli_source_commands.test.ts`
 - `tests/cli/cli_stats_commands.test.ts`
-- `tests/cli/cli_status_doctor_alias.test.ts`
 - `tests/cli/cli_store_commands.test.ts`
 - `tests/cli/cli_store_file_vs_entities_parity.test.ts`
 - `tests/cli/cli_timeline_commands.test.ts`
@@ -501,6 +507,7 @@ flowchart TD
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
+- `tests/cli/issues_import.test.ts`
 - `tests/cli/issues_message.test.ts`
 - `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`

@@ -344,6 +344,20 @@ const RetrieveEntitiesRequestBaseSchema = z
      * type (the explicit type filter wins).
      */
     exclude_bookkeeping: z.boolean().optional().default(false),
+    /**
+     * R3: filter entities whose observations were resolved with the given
+     * `identity_basis`. Satisfied when ANY observation for the entity carries
+     * this basis.
+     */
+    identity_basis: z
+      .enum(["schema_rule", "schema_lookup", "heuristic_name", "heuristic_fallback", "target_id"])
+      .optional(),
+    /**
+     * Filter entities by snapshot field values. Keys are field names (e.g. "status"),
+     * values specify operator and comparison value.
+     * Example: `{ "status": { "op": "eq", "value": "active" } }`
+     */
+    snapshot_filters: z.record(SnapshotFieldNameSchema, SnapshotFilterSchema).optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 

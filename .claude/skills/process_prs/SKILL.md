@@ -26,6 +26,31 @@ gh pr list --state open --json number,title,headRefName,baseRefName,isDraft,revi
 
 Exclude draft PRs from automated merge actions. Include them in the summary report.
 
+### Step 1a: Partition the queue and fan out the audit to subagents
+
+The per-PR audit (Steps 1b, 1c, 2, 3-discovery) is read-only `gh`/`git` work with no cross-PR dependencies. It is the right shape for parallel subagent delegation: each subagent audits a disjoint batch, returns a structured verdict, and the main thread synthesizes and takes all merge/comment/review actions itself. This keeps mutation single-threaded (no two agents racing to merge) while collapsing the wall-clock cost of a large queue.
+
+**Partition first — do not audit every PR at full depth.** From the Step 1 JSON, bucket PRs before spending audit budget:
+
+- **`mergeable: CONFLICTING`** → blocked-needs-rebase. These cannot merge regardless of any other signal. Do not deep-audit; list them in the report's rebase bucket. (Verify the bucket isn't masking a base-branch issue, but a conflicting PR is never merge-eligible this run.)
+- **Stacked PRs** (`baseRefName` is not `main`/`dev` but another open PR's head) → blocked on parent. Note the parent; do not deep-audit until the parent lands.
+- **`mergeable: MERGEABLE`** → the real audit candidates. These get the full Step 1b/1c/2/3 fan-out.
+
+**When to fan out vs. inline:** if the MERGEABLE candidate set is **> 6 PRs**, fan out. At or below that, audit inline on the main thread (subagent spin-up overhead isn't worth it). Scale the subagent count so each handles **3–5 PRs**: `ceil(candidates / 4)` subagents, capped at 8.
+
+**Dispatch (single message, multiple `Agent` calls so they run concurrently):**
+
+- `subagent_type: "Explore"` for the audit batches — it is read-only by construction (cannot merge, comment, or push), which is exactly the guarantee you want for a discovery agent. Give each one a disjoint list of PR numbers and the full per-PR audit checklist (CI status + mechanical-vs-substantive failure classification, base-branch/stacked detection, security-adjacency with triggering files, diff size + contract-surface flag, Step 1c review-blocker verdict with quoted blocking findings, linked-issue detection including the auto-close gap, and `reviewDecision`/`mergeable`). Require a terminal one-line verdict per PR: `MERGE-ELIGIBLE | BLOCKED(<reason>) | STACKED(base=<branch>) | REVIEW-BLOCKED | SECURITY-GATE-NEEDED`.
+- For a deep correctness read of a specific high-risk PR (security-adjacent + large contract diff), additionally spawn the `code-reviewer` subagent on that single PR. Use this sparingly — it is for the PRs where a holistic human-grade review matters, not routine triage.
+
+**Synthesis is mandatory and adversarial — never act on a subagent verdict alone.** Subagents read excerpts, not whole files, and will miss things. Before any merge, the main thread MUST independently re-confirm the load-bearing facts for that specific PR:
+
+- **CI freshness** — re-run `gh pr checks <n>` and confirm the green run is against the **current head SHA**, not a months-old run. A subagent reporting "CI passed" may be quoting a stale run; main moving (or the baseline gate's openapi-drift check) can invalidate it. This is the single most common synthesis correction.
+- **Actual diff surface** — re-run `gh pr diff <n> --name-only`. Subagents have under-counted security-adjacency and contract-surface by trusting a PR's self-description or a stale rebase view. Verify `src/actions.ts`, `openapi.yaml`, and the security-adjacency file set directly.
+- **`mergeStateStatus`** — `CLEAN` is required to merge; `UNKNOWN` means GitHub is still computing mergeability (wait/re-poll), `BEHIND`/`DIRTY` means rebase needed.
+
+Treat the subagent report as a **prioritized worklist with evidence**, not a decision. The main thread owns every `gh pr merge`, `gh pr comment`, `gh issue comment/close`, and `@claude review` call.
+
 ### Step 1b: Gate Substantial PRs for Opus Review
 
 Before classifying for merge, check whether each PR needs (or needs another) automated Opus review. The `claude_pr_review.yml` workflow runs on `synchronize` events but deliberately skips `claude/*` branches to avoid runaway agent loops. This step compensates by explicitly posting `@claude review` on PRs that are worth a holistic look.
@@ -285,95 +310,13 @@ gh issue close <iss> --reason completed
 
 For each PR that cannot be merged, take the appropriate action:
 
-- **CI failing**: Before posting a failure comment, check whether the failure is purely mechanical (prettier formatting or eslint auto-fixable lint errors). If so, apply the mechanical fix in-place:
-
-  **Mechanical CI auto-fix (prettier / eslint only):**
-
-  ```bash
-  # Determine what failed
-  gh pr checks <number> --json name,conclusion,detailsUrl \
-    | jq '[.[] | select(.conclusion == "failure") | .name]'
-  ```
-
-  If and only if **all** failed checks are formatting or lint checks (names containing `prettier`, `format`, `lint`, or `eslint` — and no type-check, test, build, or security failures), apply the fix:
-
-  ```bash
-  BRANCH=$(gh pr view <number> --json headRefName --jq '.headRefName')
-  git fetch origin "$BRANCH"
-  git worktree add ".claude/worktrees/fmt-pr-<number>" "origin/$BRANCH"
-  cd ".claude/worktrees/fmt-pr-<number>"
-
-  # Check what scripts are available
-  cat package.json | jq '.scripts | keys'
-
-  # Apply formatting and lint fixes
-  npm run format 2>/dev/null || npx prettier --write "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}"
-  npm run lint:fix 2>/dev/null || npx eslint --fix "src/**/*.ts" "tests/**/*.ts"
-
-  # Verify no type errors were introduced
-  npm run type-check
-
-  # If type-check passes, commit and push
-  git add -A
-  git commit -m "chore: apply prettier formatting
-
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-  git push origin "$BRANCH"
-
-  cd /Users/markmhendrickson/repos/neotoma
-  git worktree remove ".claude/worktrees/fmt-pr-<number>" --force
-  ```
-
-  After pushing, post a comment on the PR:
-
-  ```bash
-  gh pr comment <number> --body "Applied automatic prettier/eslint formatting fix. Re-running CI."
-  ```
-
-  Do **not** apply the mechanical fix if:
-  - Any non-formatting check also failed (type errors, test failures, build failures, security gates)
-  - `npm run type-check` fails after applying formatting
-  - The diff produced by formatting exceeds 50 lines (indicates something unexpected; surface to user instead)
-
-  If the mechanical fix is not applicable, fall through to the normal CI-failing path:
-  Post a comment summarizing which checks failed. Do not merge.
-
+- **CI failing**: Post a comment summarizing which checks failed. Do not merge.
 - **Security gate errors (G2/G3)**: Post a comment with the specific `security:lint` errors or manifest/auth-matrix failures. Do not merge.
 - **Review-blocked (Step 1c)**: Post a comment listing the unaddressed Blocking findings from the most recent review, quoting the relevant lines and naming the file paths. Request that the author either land substantive fix commits, post `Waiver: <reason>` comments per finding, or re-request `@claude review` after the fixes. Do not merge.
 - **Awaiting review**: Note in the summary report. Do not post a comment unless explicitly requested.
 - **Merge conflicts**: Post a comment asking the author to rebase.
 - **Draft**: Skip. Report in summary.
 - **Release PR**: Report in summary, instruct user to run `/release`.
-
-### Step 5b: Suggest `/fix_pr` for Suitable Blocked PRs
-
-After handling each blocked PR, determine whether it is a good candidate for `/fix_pr` and include the suggestion in the report. A PR is a good candidate if it has at least one auto-fixable blocking reason and no hard stops.
-
-**Suggest `/fix_pr <number>` when ALL of the following are true:**
-
-- PR is not a draft
-- PR is not a release PR
-- At least one blocking reason is in the auto-fixable category:
-  - CI failures that are TypeScript type errors, failing unit/integration tests, or non-formatting lint errors
-  - Review findings that are rename/style/naming issues (not logic, architecture, or security)
-  - Merge conflicts in non-sensitive files (not `openapi.yaml`, lock files, or migration files)
-
-**Do NOT suggest `/fix_pr` when:**
-
-- All CI failures were already handled by the mechanical auto-fix in Step 5 (fix already applied)
-- The only blockers are security-adjacent findings (`src/actions.ts`, `src/services/local_auth.ts`, `protected_routes_manifest.json`, `docs/security/`)
-- The only blockers are architectural or design-discussion review findings
-- Merge conflicts are only in `openapi.yaml`, lock files, or migration files
-- The PR is awaiting review with no other blockers (nothing for `/fix_pr` to act on)
-
-Include the suggestion inline in the blocked PR's report entry, e.g.:
-
-```
-PR #217 — Add user preference caching [BLOCKED]
-  CI: type-check failing (3 errors in src/services/preferences.ts)
-  Review: 1 Blocking finding (rename `prefMap` → `preferenceMap`)
-  → Run `/fix_pr 217` to address these automatically.
-```
 
 ### Step 6: Report
 
@@ -386,6 +329,7 @@ Produce a comprehensive summary covering:
 - Release PRs identified, with a clear "run `/release` to ship these" callout
 - Outstanding blockers that require author or user action
 - A "What I need from you" section if any PR requires a decision
+- When the queue was fanned out (Step 1a): how many subagents ran, the batch partition, and any verdict the main-thread synthesis **overrode** (e.g. a "CI passed" that was a stale run, an under-counted security surface). Surfacing overrides keeps the fan-out honest and flags subagent blind spots for the next run.
 
 ## Security Gate Reference
 
@@ -407,7 +351,6 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 
 ## Constraints
 
-- The mechanical CI auto-fix in Step 5 is scoped strictly to prettier formatting and eslint `--fix`-able lint errors. Never apply it when other check types also failed, and never skip `npm run type-check` before pushing the fix commit.
 - Never push to `main` directly. Merges to `main` only happen via `/release`.
 - Never merge a release PR (dev→main with version bump). Hand off to `/release`.
 - Never use `--no-verify`.
@@ -424,6 +367,9 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Never post `@claude review` more than once per batch run on the same PR.
 - Do not post `@claude review` on trivially small PRs (≤5 files, ≤150 lines, no contract surface changes, not security-adjacent).
 - Treat placeholder review bodies (`I'll analyze this and get back to you.` with 0 tokens) as "review not delivered," not "review approved." Re-trigger once per batch.
+- Fan out the audit to read-only subagents (Step 1a) when the MERGEABLE candidate set exceeds 6 PRs; keep it inline below that threshold.
+- Use `Explore` (read-only) for audit-batch subagents so they structurally cannot merge, comment, or push. Keep every mutating action (`gh pr merge`, `gh pr comment`, `gh issue comment/close`, `@claude review`) on the main thread.
+- Always re-confirm CI freshness against the current head SHA, the actual diff surface, and `mergeStateStatus` on the main thread before merging — never merge on a subagent's verdict alone.
 
 ## Forbidden Patterns
 
@@ -438,6 +384,6 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - **Counting `chore: regenerate test catalog` / `prettier` / rebase-merge commits as "post-review fixes."** They are housekeeping and do not clear review blockers.
 - **Treating placeholder review comments (`I'll analyze this and get back to you.` with 0 output tokens) as completed reviews.** Re-trigger and wait for a substantive review.
 - **Merging a PR that closes issues without first posting a closure-narrative comment on each linked issue (Step 4).** The GitHub auto-close link is not a resolution trail.
-- **Applying the mechanical CI auto-fix when non-formatting checks also failed.** The fix is scoped to prettier/eslint-only failures. Mixed failures go to the user.
-- **Skipping `npm run type-check` after applying prettier/eslint fixes.** A formatting pass that produces type errors must not be pushed.
 - **Leaving issues open that the merged PR resolved.** When detection in Step 4 surfaces an auto-close gap (closure verb in body/commit but issue not in `closingIssuesReferences`), close the issue manually after merge with `gh issue close <iss> --reason completed` and a comment linking the resolving PR.
+- **Acting on a subagent verdict without main-thread re-verification.** A subagent reporting "MERGE-ELIGIBLE / CI passed" is a worklist entry with evidence, not a merge authorization. Stale CI runs and under-counted security/contract surfaces are the recurring failure modes; re-confirm before merging.
+- **Letting a subagent perform a mutating action.** Audit subagents are read-only by design. If an audit needs a follow-up that mutates state, the main thread does it.

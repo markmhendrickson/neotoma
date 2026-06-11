@@ -86,12 +86,12 @@ work behind each move is open and itemized.
 
 | #   | Commitment                                 | Status   | What exists / what's missing                                                                                                                         | Tracking                                                         |
 | --- | ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1   | Schema stability + versioned evolution     | Partial  | `schema_version` and additive expansion exist (`docs/architecture/schema_expansion.md`); a single stated compatibility policy is not yet written.    | [#1520](https://github.com/markmhendrickson/neotoma/issues/1520) |
+| 1   | Schema stability + versioned evolution     | In place | `schema_version` and additive expansion exist (`docs/architecture/schema_expansion.md`); the stated compatibility policy is now written (`docs/architecture/schema_compatibility_policy.md`).  | —                                                                |
 | 2   | Contract stability                         | Partial  | OpenAPI-first flow, legacy-payload corpus, and BC-diff gate exist; a stated **deprecation window** does not.                                         | [#1521](https://github.com/markmhendrickson/neotoma/issues/1521) |
 | 3   | Backward compatibility + replay            | Partial  | Immutability of observations/source is enforced (`docs/subsystems/observation_architecture.md`); a stated **support window** is not yet set.         | [#1522](https://github.com/markmhendrickson/neotoma/issues/1522) |
 | 4   | Deterministic extraction across versions   | In place | Content-derived IDs, stable ordering, deterministic reducers are enforced invariants (`docs/architecture/determinism.md`).                           | —                                                                |
 | 5   | Redlines demonstrated, not just stated     | Partial  | `redlines.md` is in force; MIT + open core are real and verifiable; a recurring demonstration record is still being built.                           | [#1523](https://github.com/markmhendrickson/neotoma/issues/1523) |
-| 6   | Portability + exit proven                  | Partial  | Export (`memory-export`, `snapshots export`), bulk import, and deletion commands exist; a tested end-to-end leave-and-rebuild is not yet documented. | [#1524](https://github.com/markmhendrickson/neotoma/issues/1524) |
+| 6   | Portability + exit proven                  | Partial  | Export (`memory-export`, `snapshots export`), bulk import, and deletion commands exist; the leave-and-rebuild protocol is now written (`docs/developer/exit_rebuild_test.md`), but a recorded run against a realistic dataset is still pending. | [#1524](https://github.com/markmhendrickson/neotoma/issues/1524) |
 | 7   | Change governance published                | Partial  | Breaking-change discipline (release supplements, BC gate) exists; the deprecation window and decision process are not yet written down.              | [#1525](https://github.com/markmhendrickson/neotoma/issues/1525) |
 | 8   | Supported multi-tenant deployment topology | Partial  | The topology decision aid exists (`docs/infrastructure/multi_tenant_deployment_topology.md`); a _tested_ production topology is not yet established. | [#1526](https://github.com/markmhendrickson/neotoma/issues/1526) |
 | 9   | Security review cadence                    | In place | Pre-release security gates (diff classifier, protected-routes manifest, security review) run on sensitive releases.                                  | —                                                                |
@@ -102,11 +102,14 @@ The detail for each follows.
 
 ### Stability
 
-1. **Schema stability and versioned evolution.** _(Partial)_ Registered entity-type schemas
+1. **Schema stability and versioned evolution.** _(In place)_ Registered entity-type schemas
    evolve under a documented compatibility policy: additive changes are safe,
    breaking changes are versioned and migrated, and a schema in use does not
    change shape under a consumer without an explicit version bump and migration
-   path.
+   path. The policy is stated in
+   [`../architecture/schema_compatibility_policy.md`](../architecture/schema_compatibility_policy.md);
+   the additive-expansion mechanism it relies on is in
+   [`../architecture/schema_expansion.md`](../architecture/schema_expansion.md).
 2. **Contract stability.** _(Partial)_ The HTTP/MCP/CLI contract surface is governed by the
    OpenAPI-first flow and the breaking-change discipline already in place
    (breaking changes named in release supplements, legacy-payload corpus, BC
@@ -130,9 +133,13 @@ The detail for each follows.
    capture or quiet license/policy drift (R12), no category drift into the
    vertical applications built on the substrate (R13).
 6. **Portability and exit are proven.** _(Partial)_ Export, deletion, and rebuild-from-source-
-   of-record are documented and tested end-to-end, so an adopter can leave with
+   of-record are documented end-to-end, so an adopter can leave with
    their data at any time. Dependence on Neotoma is reversible by construction,
-   not by promise.
+   not by promise. The repeatable leave-and-rebuild **protocol** is now written
+   ([`../developer/exit_rebuild_test.md`](../developer/exit_rebuild_test.md)); the
+   row flips to In place once that protocol has been **executed against a
+   realistic dataset and the timed result recorded** (the recorded run is the
+   evidence, not the protocol's existence).
 7. **Change governance is published.** _(Partial)_ How breaking changes are decided,
    announced, and supported — including the deprecation window above — is written
    down, so an adopter can predict the cost of staying current.

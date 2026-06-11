@@ -160,8 +160,14 @@ export function buildToolDefinitions(
           },
           sort_by: {
             type: "string",
-            enum: ["entity_id", "canonical_name", "observation_count", "last_observation_at"],
-            description: "Sort field. Non-default values cannot be combined with `search`.",
+            description:
+              "Sort field. Non-default values cannot be combined with `search`. " +
+              "Predefined values: `entity_id`, `canonical_name`, `observation_count`, " +
+              "`last_observation_at`, `submitted_at` (orders by `snapshot.created_at`). " +
+              "In addition, `snapshot.<field>` is supported for any snapshot field " +
+              "(e.g. `snapshot.period_end` for time-series entity types such as `usage_digest`). " +
+              "The field value is sorted lexicographically as a string, so ISO-8601 date strings " +
+              "must use a consistent format so that lexicographic order matches temporal order.",
           },
           sort_order: {
             type: "string",
@@ -210,6 +216,27 @@ export function buildToolDefinitions(
             description:
               "When true, omit chat bookkeeping types (`conversation`, `conversation_message`, etc.) from results. Default false. Has no effect when `entity_type` already filters to a bookkeeping type.",
             default: false,
+          },
+          snapshot_filters: {
+            type: "object",
+            description:
+              "Filter entities by snapshot field values. Each key is a snake_case snapshot field name " +
+              "(e.g. `status`, `priority`); the value specifies operator and comparison value. Filters " +
+              "are applied server-side via `snapshot->>{field}` JSONB extraction, so only entities whose " +
+              "snapshot contains a matching value are returned. Example: " +
+              '`{ "status": { "op": "eq", "value": "active" } }` returns only entities with ' +
+              '`snapshot.status === "active"`. Supported ops: `eq`, `in`, `gt`, `lt`, `gte`, `lte`, `contains`.',
+            additionalProperties: {
+              type: "object",
+              required: ["op"],
+              properties: {
+                op: {
+                  type: "string",
+                  enum: ["eq", "in", "gt", "lt", "gte", "lte", "contains"],
+                },
+                value: {},
+              },
+            },
           },
         },
         required: [],

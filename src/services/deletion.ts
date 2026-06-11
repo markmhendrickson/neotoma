@@ -223,6 +223,20 @@ export async function softDeleteRelationship(
       };
     }
 
+    // Materialize liveness on the snapshot (#1570). The deletion observation we
+    // just wrote is at source_priority 1000 — by definition now the
+    // highest-priority observation for this key — so the edge is dead. Flip the
+    // snapshot's `is_live` to 0 so the default list_relationships read (which
+    // filters `is_live = 1` at the DB) stops surfacing it without re-deriving
+    // liveness from the observation log on every read. The observation log
+    // remains the source of truth; this is a derived cache that
+    // computeRelationshipSnapshot also re-stamps on any later recompute.
+    await db
+      .from("relationship_snapshots")
+      .update({ is_live: 0 })
+      .eq("relationship_key", relationshipKey)
+      .eq("user_id", userId);
+
     emitRelationshipLifecycle({
       user_id: userId,
       relationship_key: relationshipKey,

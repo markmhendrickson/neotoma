@@ -76,7 +76,28 @@ jobs:
             -e "s|/android-chrome-512x512\.png|/pr-${PR_NUMBER}/android-chrome-512x512.png|g" \
             -e "s|/site\.webmanifest|/pr-${PR_NUMBER}/site.webmanifest|g"
 
+      # The preview deploy pushes to the external markmhendrickson/neotoma-dev-site
+      # repo using DEV_PAGES_DEPLOY_TOKEN. When that token is missing or expired the
+      # deploy cannot succeed — but a docs preview is a convenience, not a gate, so a
+      # bad/absent token must NOT paint every docs PR's checks red. We therefore gate
+      # the deploy on token presence and mark it continue-on-error; the build/validation
+      # steps above still run and still fail the check on real content problems.
+      - name: Check deploy token presence
+        id: deploy_token
+        env:
+          DEV_PAGES_DEPLOY_TOKEN: ${{ secrets.DEV_PAGES_DEPLOY_TOKEN }}
+        run: |
+          if [ -n "$DEV_PAGES_DEPLOY_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Docs preview not deployed::DEV_PAGES_DEPLOY_TOKEN is not set; skipping the preview deploy. The static site still built and validated above. See the preview-deploy rotation runbook to restore deploys."
+          fi
+
       - name: Deploy PR preview
+        id: deploy
+        if: steps.deploy_token.outputs.present == 'true'
+        continue-on-error: true
         uses: peaceiris/actions-gh-pages@v4
         with:
           personal_token: ${{ secrets.DEV_PAGES_DEPLOY_TOKEN }}
@@ -87,7 +108,13 @@ jobs:
           keep_files: true
           commit_message: "PR #${{ github.event.pull_request.number }} preview from ${{ github.sha }}"
 
+      - name: Warn if preview deploy failed
+        if: steps.deploy.outcome == 'failure'
+        run: |
+          echo "::warning title=Docs preview deploy failed::The static site built and validated, but pushing the preview to neotoma-dev-site failed (likely an expired DEV_PAGES_DEPLOY_TOKEN). This does not block the PR. See the preview-deploy rotation runbook to restore deploys."
+
       - name: Post preview URL as PR comment
+        if: steps.deploy.outcome == 'success'
         uses: actions/github-script@v7
         with:
           script: |

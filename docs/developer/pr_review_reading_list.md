@@ -27,7 +27,7 @@ Load only when the diff touches the listed files or directories.
 | `src/services/observation*`, `src/services/sources*` | `docs/subsystems/sources.md`, `docs/subsystems/observation_architecture.md` |
 | `src/services/interpretation*` | `docs/subsystems/interpretations.md` |
 | `src/services/relationships*` | `docs/subsystems/relationships.md` |
-| `src/services/entity*`, `src/services/schema_registry*` | `docs/foundation/entity_resolution.md`, `docs/subsystems/schema_registry.md`, `docs/subsystems/schema.md` |
+| `src/services/entity*`, `src/services/schema_registry*` | `docs/foundation/entity_resolution.md`, `docs/subsystems/schema_registry.md`, `docs/subsystems/schema.md`, `docs/architecture/schema_compatibility_policy.md` |
 | `src/services/entity_merge*` | `docs/subsystems/entity_merge.md` |
 | `src/services/timeline*`, `src/services/events*` | `docs/foundation/timeline_events.md`, `docs/subsystems/timeline_events.md`, `docs/subsystems/events.md` |
 | `src/services/deletion*` | `docs/subsystems/deletion.md` |
@@ -41,6 +41,7 @@ Load only when the diff touches the listed files or directories.
 | `openapi.yaml`, `src/shared/contract*`, `src/shared/openapi*` | `docs/architecture/openapi_contract_flow.md` |
 | `src/tool_definitions.ts`, `src/server.ts`, `docs/developer/mcp/` | `docs/developer/mcp/instructions.md`, `docs/developer/agent_instructions_sync_rules.mdc` |
 | `src/cli/` | `docs/developer/cli_reference.md` |
+| `src/cli/entities*` (import/export), bulk-import or export-path changes | `docs/developer/exit_rebuild_test.md` |
 | Error response shapes | `docs/reference/error_codes.md` |
 
 ### Auth and security

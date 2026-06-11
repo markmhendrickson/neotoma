@@ -447,7 +447,7 @@ export async function queryEntities(
   const filteredEntityIds = entityIds;
   const snapshotSelect = includeSnapshots
     ? "*"
-    : "entity_id, schema_version, observation_count, last_observation_at, computed_at";
+    : "entity_id, schema_version, observation_count, last_observation_at, computed_at, snapshot->>status";
   const { data: snapshots, error: snapshotsError } = await db
     .from("entity_snapshots")
     .select(snapshotSelect)
@@ -628,7 +628,11 @@ export async function queryEntities(
       entity_type: entity.entity_type,
       canonical_name: entity.canonical_name,
       schema_version: snapshot?.schema_version,
-      snapshot: includeSnapshots ? snapshot?.snapshot || {} : {},
+      snapshot: includeSnapshots
+        ? snapshot?.snapshot || {}
+        : snapshot?.["status"] != null
+          ? { status: snapshot["status"] }
+          : {},
       raw_fragments:
         includeSnapshots && rawFragments && Object.keys(rawFragments).length > 0
           ? rawFragments

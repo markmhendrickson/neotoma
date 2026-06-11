@@ -40,12 +40,10 @@ async function loadCli(): Promise<CliModule> {
 
 function captureStdout(): { output: string[]; restore: () => void } {
   const output: string[] = [];
-  const writeSpy = vi
-    .spyOn(process.stdout, "write")
-    .mockImplementation((chunk: unknown) => {
-      output.push(typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString());
-      return true;
-    });
+  const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+    output.push(typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString());
+    return true;
+  });
   return { output, restore: () => writeSpy.mockRestore() };
 }
 
@@ -62,11 +60,15 @@ describe("CLI entity commands", () => {
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(
           path.join(configDir, "config.json"),
-          JSON.stringify({
-            base_url: "http://localhost:9999",
-            access_token: "token-test",
-            expires_at: "2099-01-01T00:00:00Z",
-          }, null, 2)
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
         );
 
         const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
@@ -105,21 +107,37 @@ describe("CLI entity commands", () => {
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(
           path.join(configDir, "config.json"),
-          JSON.stringify({
-            base_url: "http://localhost:9999",
-            access_token: "token-test",
-            expires_at: "2099-01-01T00:00:00Z",
-          }, null, 2)
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
         );
 
         let capturedBody: Record<string, unknown> = {};
         const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
           const url = typeof input === "string" ? input : (input as Request).url;
           if (url.includes("/entities/query")) {
-            const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
-            if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
+            const bodyRaw =
+              init?.body ??
+              (typeof input !== "string" && (input as Request).body
+                ? await (input as Request).clone().text()
+                : undefined);
+            if (bodyRaw)
+              capturedBody = JSON.parse(
+                typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()
+              ) as Record<string, unknown>;
             return new Response(
-              JSON.stringify({ entities: [{ id: testEntityId, entity_type: "company" }], limit: 5, offset: 0, total: 1 }),
+              JSON.stringify({
+                entities: [{ id: testEntityId, entity_type: "company" }],
+                limit: 5,
+                offset: 0,
+                total: 1,
+              }),
               { status: 200, headers: { "Content-Type": "application/json" } }
             );
           }
@@ -150,21 +168,37 @@ describe("CLI entity commands", () => {
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(
           path.join(configDir, "config.json"),
-          JSON.stringify({
-            base_url: "http://localhost:9999",
-            access_token: "token-test",
-            expires_at: "2099-01-01T00:00:00Z",
-          }, null, 2)
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
         );
 
         let capturedBody: Record<string, unknown> = {};
         const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
           const url = typeof input === "string" ? input : (input as Request).url;
           if (url.includes("/entities/query")) {
-            const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
-            if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
+            const bodyRaw =
+              init?.body ??
+              (typeof input !== "string" && (input as Request).body
+                ? await (input as Request).clone().text()
+                : undefined);
+            if (bodyRaw)
+              capturedBody = JSON.parse(
+                typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()
+              ) as Record<string, unknown>;
             return new Response(
-              JSON.stringify({ entities: [{ id: testEntityId, entity_type: "company" }], limit: 2, offset: 2, total: 5 }),
+              JSON.stringify({
+                entities: [{ id: testEntityId, entity_type: "company" }],
+                limit: 2,
+                offset: 2,
+                total: 5,
+              }),
               { status: 200, headers: { "Content-Type": "application/json" } }
             );
           }
@@ -178,7 +212,17 @@ describe("CLI entity commands", () => {
         const { runCli } = await loadCli();
         const stdout = captureStdout();
         try {
-          await runCli(["node", "cli", "entities", "list", "--limit", "2", "--offset", "2", "--json"]);
+          await runCli([
+            "node",
+            "cli",
+            "entities",
+            "list",
+            "--limit",
+            "2",
+            "--offset",
+            "2",
+            "--json",
+          ]);
         } finally {
           stdout.restore();
         }
@@ -193,21 +237,37 @@ describe("CLI entity commands", () => {
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(
           path.join(configDir, "config.json"),
-          JSON.stringify({
-            base_url: "http://localhost:9999",
-            access_token: "token-test",
-            expires_at: "2099-01-01T00:00:00Z",
-          }, null, 2)
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
         );
 
         let capturedBody: Record<string, unknown> = {};
         const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
           const url = typeof input === "string" ? input : (input as Request).url;
           if (url.includes("/entities/query")) {
-            const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
-            if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
+            const bodyRaw =
+              init?.body ??
+              (typeof input !== "string" && (input as Request).body
+                ? await (input as Request).clone().text()
+                : undefined);
+            if (bodyRaw)
+              capturedBody = JSON.parse(
+                typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()
+              ) as Record<string, unknown>;
             return new Response(
-              JSON.stringify({ entities: [{ id: testEntityId, entity_type: "person" }], limit: 100, offset: 0, total: 1 }),
+              JSON.stringify({
+                entities: [{ id: testEntityId, entity_type: "person" }],
+                limit: 100,
+                offset: 0,
+                total: 1,
+              }),
               { status: 200, headers: { "Content-Type": "application/json" } }
             );
           }
@@ -232,6 +292,149 @@ describe("CLI entity commands", () => {
       });
     });
 
+    // Regression: #1586 — --status filter must be threaded server-side via snapshot_filters
+    it("should send snapshot_filters when --status is provided", async () => {
+      await withTempHome(async (homeDir) => {
+        const configDir = path.join(homeDir, ".config", "neotoma");
+        await fs.mkdir(configDir, { recursive: true });
+        await fs.writeFile(
+          path.join(configDir, "config.json"),
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
+        );
+
+        let capturedBody: Record<string, unknown> = {};
+        const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          if (url.includes("/entities/query")) {
+            const bodyRaw =
+              init?.body ??
+              (typeof input !== "string" && (input as Request).body
+                ? await (input as Request).clone().text()
+                : undefined);
+            if (bodyRaw)
+              capturedBody = JSON.parse(
+                typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()
+              ) as Record<string, unknown>;
+            // Return only the "active" entity — simulates server filtering
+            return new Response(
+              JSON.stringify({
+                entities: [
+                  {
+                    id: testEntityId,
+                    entity_type: "client",
+                    canonical_name: "Active Client",
+                    snapshot: { status: "active" },
+                  },
+                ],
+                limit: 100,
+                offset: 0,
+                total: 1,
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { runCli } = await loadCli();
+        const stdout = captureStdout();
+        try {
+          await runCli([
+            "node",
+            "cli",
+            "entities",
+            "list",
+            "--type",
+            "client",
+            "--status",
+            "active",
+            "--json",
+          ]);
+        } finally {
+          stdout.restore();
+        }
+
+        // Verify the filter was sent server-side (not client-side)
+        expect(capturedBody).toMatchObject({
+          entity_type: "client",
+          snapshot_filters: { status: { op: "eq", value: "active" } },
+        });
+
+        // Verify non-empty result — the core silent-zero regression
+        const parsed = JSON.parse(stdout.output.join(""));
+        expect(parsed.entities).toBeDefined();
+        expect(parsed.entities.length).toBeGreaterThan(0);
+        expect(parsed.entities[0].snapshot.status).toBe("active");
+      });
+    });
+
+    // Regression: #1586 — status must be absent from snapshot_filters when --status is not provided
+    it("should not send snapshot_filters when --status is omitted", async () => {
+      await withTempHome(async (homeDir) => {
+        const configDir = path.join(homeDir, ".config", "neotoma");
+        await fs.mkdir(configDir, { recursive: true });
+        await fs.writeFile(
+          path.join(configDir, "config.json"),
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
+        );
+
+        let capturedBody: Record<string, unknown> = {};
+        const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          if (url.includes("/entities/query")) {
+            const bodyRaw =
+              init?.body ??
+              (typeof input !== "string" && (input as Request).body
+                ? await (input as Request).clone().text()
+                : undefined);
+            if (bodyRaw)
+              capturedBody = JSON.parse(
+                typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()
+              ) as Record<string, unknown>;
+            return new Response(JSON.stringify({ entities: [], limit: 100, offset: 0, total: 0 }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { runCli } = await loadCli();
+        const stdout = captureStdout();
+        try {
+          await runCli(["node", "cli", "entities", "list", "--type", "client", "--json"]);
+        } finally {
+          stdout.restore();
+        }
+
+        // snapshot_filters should not be present when --status is not provided
+        expect(capturedBody).not.toHaveProperty("snapshot_filters");
+      });
+    });
   });
 
   describe("entities get", () => {
@@ -241,11 +444,15 @@ describe("CLI entity commands", () => {
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(
           path.join(configDir, "config.json"),
-          JSON.stringify({
-            base_url: "http://localhost:9999",
-            access_token: "token-test",
-            expires_at: "2099-01-01T00:00:00Z",
-          }, null, 2)
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
         );
 
         const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
@@ -288,18 +495,24 @@ describe("CLI entity commands", () => {
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(
           path.join(configDir, "config.json"),
-          JSON.stringify({
-            base_url: "http://localhost:9999",
-            access_token: "token-test",
-            expires_at: "2099-01-01T00:00:00Z",
-          }, null, 2)
+          JSON.stringify(
+            {
+              base_url: "http://localhost:9999",
+              access_token: "token-test",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+            null,
+            2
+          )
         );
 
         const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
           const url = typeof input === "string" ? input : (input as Request).url;
           if (url.includes("/entities/ent_invalid")) {
             return new Response(
-              JSON.stringify({ error: { error_code: "ENTITY_NOT_FOUND", message: "Entity not found" } }),
+              JSON.stringify({
+                error: { error_code: "ENTITY_NOT_FOUND", message: "Entity not found" },
+              }),
               { status: 404, headers: { "Content-Type": "application/json" } }
             );
           }

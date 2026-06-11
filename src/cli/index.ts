@@ -9128,6 +9128,60 @@ issuesCommand
     await issuesAuth({ json: Boolean((program.opts() as { json?: boolean }).json) });
   });
 
+issuesCommand
+  .command("import")
+  .description("Import observer JSONL logs and file/fold issues for detected anomalies")
+  .requiredOption("--from-jsonl <path>", "Path to the observer JSONL file to import")
+  .option("--since <iso8601>", "Only process lines with timestamp >= this ISO 8601 date")
+  .option("--until <iso8601>", "Only process lines with timestamp <= this ISO 8601 date")
+  .option("--reporter-channel <label>", "Override the reporter channel for all filed issues")
+  .option(
+    "--reporter-git-sha <sha>",
+    "Override reporter git SHA when JSONL lines lack per-line values"
+  )
+  .option(
+    "--reporter-app-version <version>",
+    "Override reporter app version when JSONL lines lack per-line values"
+  )
+  .option(
+    "--mode <mode>",
+    "Submission mode: proactive (file immediately) or consent (prompt before each issue)",
+    "consent"
+  )
+  .option("--dry-run", "Emit a structured JSON report without filing any issues")
+  .option("--limit <n>", "Stop after extracting this many anomalies", parseInt)
+  .action(async (opts) => {
+    const mode = String(opts.mode ?? "consent").toLowerCase();
+    if (mode !== "proactive" && mode !== "consent") {
+      process.stderr.write("Error: --mode must be proactive or consent\n");
+      process.exitCode = 1;
+      return;
+    }
+    const { issuesImport } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    await issuesImport(
+      {
+        fromJsonl: opts.fromJsonl,
+        since: opts.since,
+        until: opts.until,
+        reporterChannel: opts.reporterChannel,
+        reporterGitSha: opts.reporterGitSha,
+        reporterAppVersion: opts.reporterAppVersion,
+        mode: mode as "proactive" | "consent",
+        dryRun: Boolean(opts.dryRun),
+        limit:
+          typeof opts.limit === "number" && Number.isFinite(opts.limit) ? opts.limit : undefined,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api
+    );
+  });
+
 // ─── Plans commands ────────────────────────────────────────────────────────
 const plansCommand = program
   .command("plans")
@@ -11786,6 +11840,10 @@ entitiesCommand
     "--created-since <iso>",
     "Return only entities whose created_at is >= this ISO 8601 timestamp"
   )
+  .option(
+    "--status <value>",
+    "Filter by snapshot status field (server-side, exact match). Example: --status active"
+  )
   .action(async (...args: any[]) => {
     // Commander passes different arguments depending on whether optional argument is provided:
     // Without entityId: (command)
@@ -11804,6 +11862,7 @@ entitiesCommand
       since?: string;
       updatedSince?: string;
       createdSince?: string;
+      status?: string;
     };
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -11869,6 +11928,9 @@ entitiesCommand
         include_merged: Boolean(opts.includeMerged),
         ...(updatedSince ? { updated_since: updatedSince } : {}),
         ...(opts.createdSince ? { created_since: opts.createdSince } : {}),
+        ...(opts.status
+          ? { snapshot_filters: { status: { op: "eq" as const, value: opts.status } } }
+          : {}),
       },
     });
     const status = response?.status;
