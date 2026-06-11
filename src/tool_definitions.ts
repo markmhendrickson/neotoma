@@ -1359,6 +1359,47 @@ export function buildToolDefinitions(
         required: ["packageName", "currentVersion"],
       },
     },
+    {
+      name: "publish_rendered_page",
+      description: desc(
+        "publish_rendered_page",
+        "Turn a rendered_page into a ready-to-share guest URL in one call. Pass an existing rendered_page entity_id, OR inline { title, html_body, custom_css } to create one first. Mints a guest_access_token scoped to that page and returns the absolute `…/entities/<id>/html?access_token=<token>` URL plus ttl_seconds — the link works for non-authenticated viewers. html_body is injected verbatim into a server template; do NOT include <html>/<head>/<body> wrappers. Note: each call mints a fresh token (raw tokens are not stored, only hashed), so repeated calls return new working URLs rather than a single stable one."
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_id: {
+            type: "string",
+            description:
+              "Existing rendered_page entity id to publish. Omit to create a new page from the inline fields below.",
+          },
+          title: {
+            type: "string",
+            description:
+              "Page title (used when creating a new rendered_page). Rendered into <title> and the <h1> if no html_body header overrides.",
+          },
+          html_body: {
+            type: "string",
+            description:
+              "Page body HTML, injected verbatim into the server template. Do NOT include <html>/<head>/<body> wrappers. Used when creating a new rendered_page.",
+          },
+          custom_css: {
+            type: "string",
+            description:
+              "Optional CSS injected as an inline <style> in <head> (used when creating a new rendered_page).",
+          },
+          meta_description: {
+            type: "string",
+            description:
+              "Optional <meta name=description> value, escaped on render (used when creating a new rendered_page).",
+          },
+          user_id: {
+            type: "string",
+            description: "Optional. Inferred from authentication if omitted.",
+          },
+        },
+      },
+    },
   ];
 
   return tools;
@@ -1424,6 +1465,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "resolve_sync_conflict",
   "npm_check_update",
   "neotoma_turn_summary",
+  "publish_rendered_page",
 ] as const;
 
 export type NeotomaToolName = (typeof NEOTOMA_TOOL_NAMES)[number];
