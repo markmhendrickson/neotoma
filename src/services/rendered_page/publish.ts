@@ -17,8 +17,8 @@
  */
 
 import { config } from "../../config.js";
+import { db } from "../../db.js";
 import { generateGuestAccessToken } from "../guest_access_token.js";
-import { getEntityWithProvenance } from "../entity_queries.js";
 
 export interface PublishRenderedPageParams {
   /** Existing rendered_page entity id to publish. Mutually exclusive with inline fields. */
@@ -29,6 +29,12 @@ export interface PublishRenderedPageParams {
   customCss?: string;
   metaDescription?: string;
   userId: string;
+  /**
+   * Idempotency key for the inline-create path (MUST #11). Same key + same
+   * payload ⇒ the same `rendered_page` entity is reused instead of duplicated.
+   * Ignored when publishing an existing `entityId`.
+   */
+  idempotencyKey?: string;
 }
 
 export interface PublishRenderedPageResult {
@@ -37,6 +43,22 @@ export interface PublishRenderedPageResult {
   access_token: string;
   ttl_seconds: number;
   created: boolean;
+}
+
+/**
+ * Carries a stable `code` (+ optional `hint`/`details`) so the MCP/HTTP layer
+ * can build a structured error envelope instead of concatenating prose into
+ * `message` (errors.md § structured hints).
+ */
+export class PublishRenderedPageError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly envelope: { hint?: string; details?: Record<string, unknown> } = {}
+  ) {
+    super(message);
+    this.name = "PublishRenderedPageError";
+  }
 }
 
 /** Resolve the absolute base URL the share link should be built against. */
@@ -60,6 +82,7 @@ export async function publishRenderedPage(
     custom_css?: string;
     meta_description?: string;
     userId: string;
+    idempotencyKey?: string;
   }) => Promise<string>
 ): Promise<PublishRenderedPageResult> {
   let entityId = params.entityId;
@@ -67,8 +90,10 @@ export async function publishRenderedPage(
 
   if (!entityId) {
     if (!params.title && !params.htmlBody) {
-      throw new Error(
-        "publish_rendered_page requires either an existing entity_id or inline content (title and/or html_body)."
+      throw new PublishRenderedPageError(
+        "ERR_PUBLISH_INPUT_MISSING",
+        "publish_rendered_page requires either an existing entity_id or inline content.",
+        { hint: "Pass entity_id to publish an existing rendered_page, or title/html_body to create one." }
       );
     }
     entityId = await create({
@@ -77,19 +102,41 @@ export async function publishRenderedPage(
       custom_css: params.customCss,
       meta_description: params.metaDescription,
       userId: params.userId,
+      idempotencyKey: params.idempotencyKey,
     });
     created = true;
   } else {
-    // Validate the target exists and is actually a rendered_page before minting
-    // a token — mirrors the GET /entities/:id/html 404 contract so the publish
-    // surface stays explicit.
-    const current = await getEntityWithProvenance(entityId);
-    if (!current) {
-      throw new Error(`rendered_page not found: ${entityId}`);
+    // Validate the target exists, is owned by the caller, and is a rendered_page
+    // before minting a token. Owner-scoping is REQUIRED (tenant isolation,
+    // GHSA-wrr4-782v-jhwh): without `.eq("user_id", userId)` a caller could mint
+    // a guest token for another user's rendered_page. Mirrors the owner-scoped
+    // lookup in GET /entities/:id/html (actions.ts).
+    const { data: entity, error: entityError } = await db
+      .from("entities")
+      .select("id, user_id, entity_type")
+      .eq("id", entityId)
+      .eq("user_id", params.userId)
+      .maybeSingle();
+    if (entityError) {
+      throw new PublishRenderedPageError(
+        "ERR_PUBLISH_LOOKUP_FAILED",
+        "Failed to load the target entity.",
+        { details: { message: entityError.message } }
+      );
     }
-    if (current.entity_type !== "rendered_page") {
-      throw new Error(
-        `Entity ${entityId} is not a rendered_page (got ${current.entity_type}); only rendered_page entities can be published.`
+    if (!entity) {
+      // Not found OR not owned by caller — same response, no existence leak.
+      throw new PublishRenderedPageError(
+        "ERR_PUBLISH_NOT_FOUND",
+        `rendered_page not found: ${entityId}`,
+        { hint: "The entity does not exist or is not owned by the authenticated user." }
+      );
+    }
+    if (entity.entity_type !== "rendered_page") {
+      throw new PublishRenderedPageError(
+        "ERR_PUBLISH_WRONG_TYPE",
+        `Entity ${entityId} is not a rendered_page (got ${entity.entity_type}).`,
+        { hint: "Only rendered_page entities can be published." }
       );
     }
   }

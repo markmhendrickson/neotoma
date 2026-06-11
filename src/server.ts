@@ -5785,7 +5785,9 @@ export class NeotomaServer {
       typeof a.user_id === "string" ? a.user_id : undefined
     );
 
-    const { publishRenderedPage } = await import("./services/rendered_page/publish.js");
+    const { publishRenderedPage, PublishRenderedPageError } = await import(
+      "./services/rendered_page/publish.js"
+    );
 
     try {
       const result = await publishRenderedPage(
@@ -5796,6 +5798,8 @@ export class NeotomaServer {
           customCss: typeof a.custom_css === "string" ? a.custom_css : undefined,
           metaDescription:
             typeof a.meta_description === "string" ? a.meta_description : undefined,
+          idempotencyKey:
+            typeof a.idempotency_key === "string" ? a.idempotency_key : undefined,
           userId,
         },
         // create callback: reuse the structured-store append path so the new
@@ -5810,7 +5814,12 @@ export class NeotomaServer {
           if (fields.meta_description !== undefined)
             entity.meta_description = fields.meta_description;
 
-          const response = await this.storeStructuredInternal(fields.userId, [entity], 100);
+          const response = await this.storeStructuredInternal(
+            fields.userId,
+            [entity],
+            100,
+            fields.idempotencyKey
+          );
           const text = response.content?.[0]?.text ?? "{}";
           const parsed = JSON.parse(text) as {
             entities?: Array<{ entity_id?: string }>;
@@ -5825,8 +5834,15 @@ export class NeotomaServer {
 
       return this.buildTextResponse(result);
     } catch (err) {
+      if (err instanceof PublishRenderedPageError) {
+        // Structured envelope: stable code + optional hint/details, not prose in message.
+        throw new McpError(ErrorCode.InvalidParams, err.message, {
+          code: err.code,
+          ...err.envelope,
+        });
+      }
       throw new McpError(
-        ErrorCode.InvalidParams,
+        ErrorCode.InternalError,
         err instanceof Error ? err.message : String(err)
       );
     }

@@ -1393,6 +1393,11 @@ export function buildToolDefinitions(
             description:
               "Optional <meta name=description> value, escaped on render (used when creating a new rendered_page).",
           },
+          idempotency_key: {
+            type: "string",
+            description:
+              "Optional idempotency key for the inline-create path (mutating op). Same key + same content reuses the same rendered_page instead of creating a duplicate. Ignored when entity_id is supplied.",
+          },
           user_id: {
             type: "string",
             description: "Optional. Inferred from authentication if omitted.",
