@@ -169,6 +169,76 @@ The default batch is 200; the cap is 500. The function is safe to re-run; observ
 
 `last_write_wins` and `source_priority` are handled implicitly by the reducer at observation time; they do not require a separate resolver call.
 
+## Cloud availability peer (operator runbook)
+
+This runbook configures a second always-on Neotoma instance as a full bidirectional peer of a local instance, for guaranteed cloud availability of truth while the local instance stays authoritative. It replicates observations and entity snapshots, not raw source blobs, and it does not propagate deletions or merges. Keep a separate `neotoma backup` schedule for point-in-time recovery.
+
+### Topology
+
+- Cloud instance: a standalone Neotoma (SQLite) process on an always-on host (Fly matches the existing `*.neotoma.io` deployments). It runs `NEOTOMA_HOSTED_MODE=1` and is exposed over HTTPS.
+- Local instance: the authoritative writer. Reachable by the cloud peer over a stable private network (Tailscale recommended) or a tunnel, so the cloud side can `GET /entities/{entity_id}` for snapshot fetch.
+- Conflict policy: `last_write_wins`. Local-sourced observations outrank `observation_source: "sync"` rows in reducer tie-breaking, so the local instance wins genuine ties without operator action.
+
+### Environment
+
+Cloud host:
+
+```
+NEOTOMA_HOSTED_MODE=1
+NEOTOMA_PUBLIC_BASE_URL=https://<cloud-host>   # no trailing slash
+NEOTOMA_LOCAL_PEER_ID=neotoma-cloud
+```
+
+Local instance:
+
+```
+NEOTOMA_PUBLIC_BASE_URL=https://<local-reachable-url>   # e.g. Tailscale MagicDNS name
+NEOTOMA_LOCAL_PEER_ID=neotoma-local
+```
+
+### Pairing
+
+Register each side as a peer of the other with a shared secret. `--target-user-id` is the receiver's `user_id` on the counterparty instance.
+
+```bash
+# on LOCAL: register the cloud peer
+neotoma peers add \
+  --peer-id neotoma-cloud --name "Cloud" --url https://<cloud-host> \
+  --types <full entity-type set> \
+  --direction bidirectional --sync-scope all \
+  --auth-method shared_secret --shared-secret "<SECRET>" \
+  --conflict-strategy last_write_wins \
+  --target-user-id <user_id on cloud>
+
+# on CLOUD: register the local peer symmetrically (same secret)
+neotoma peers add \
+  --peer-id neotoma-local --name "Local" --url https://<local-reachable-url> \
+  --types <full entity-type set> \
+  --direction bidirectional --sync-scope all \
+  --auth-method shared_secret --shared-secret "<SECRET>" \
+  --conflict-strategy last_write_wins \
+  --target-user-id <user_id on local>
+```
+
+Upgrade path: switch `--auth-method aauth` and pin `--peer-public-key-thumbprint` once both sides have AAuth keypairs.
+
+### Guaranteed convergence
+
+Steady-state webhook delivery is best-effort (retries `[1s, 5s, 30s, 300s]`, no persistence, circuit breaker after repeated failures). To make availability a guarantee rather than best-effort, schedule the bounded catch-up on both instances:
+
+```bash
+# cron, every 15 minutes, on each instance
+neotoma peers sync neotoma-cloud   # run on local
+neotoma peers sync neotoma-local   # run on cloud
+```
+
+`syncPeerFull` is idempotent (deterministic idempotency keys, `last_sync_at` watermark, 200 per batch, 500 max), so overlapping runs are safe.
+
+### Known gaps
+
+- Raw source file blobs (`$DATA_DIR/sources/{user_id}/{content_hash}`) do not replicate. For full-fidelity original-file recall on the cloud side, add a side-channel: periodic `rclone`/`rsync` of the content-addressed `sources/` directory to the cloud host or object storage. Content addressing makes this safe and deduplicating.
+- Deletions and merges (`merged_to_entity_id`) do not propagate. A peer mirrors live truth, not a point-in-time backup. Run `neotoma backup` separately for disaster recovery.
+
 ## Related
 
 - Inbound apply path: [`src/services/sync/sync_webhook_inbound.ts`](../../src/services/sync/sync_webhook_inbound.ts)
