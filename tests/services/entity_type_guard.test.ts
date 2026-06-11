@@ -11,6 +11,7 @@ import {
   checkForbiddenTestArtifactType,
   checkPluralEntityType,
   enforceEntityTypeGuards,
+  lintEntityTypeName,
   suggestSingular,
 } from "../../src/services/entity_type_guard.js";
 
@@ -206,6 +207,104 @@ describe("entity_type_guard", () => {
       } catch (err) {
         expect((err as { code?: string }).code).toBe("ERR_PLURAL_ENTITY_TYPE");
       }
+    });
+  });
+
+  describe("lintEntityTypeName", () => {
+    it("returns empty array for clean snake_case names", () => {
+      expect(lintEntityTypeName("contact")).toEqual([]);
+      expect(lintEntityTypeName("invoice")).toEqual([]);
+      expect(lintEntityTypeName("bank_transaction")).toEqual([]);
+      expect(lintEntityTypeName("meeting_note")).toEqual([]);
+    });
+
+    it("warns on names containing uppercase letters", () => {
+      const warnings = lintEntityTypeName("UserProfile");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/uppercase/i);
+      expect(warnings[0]).toMatch(/snake_case/i);
+    });
+
+    it("warns on names containing hyphens", () => {
+      const warnings = lintEntityTypeName("bank-transaction");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/hyphen/i);
+      expect(warnings[0]).toMatch(/bank_transaction/);
+    });
+
+    it("warns on _entity suffix", () => {
+      const warnings = lintEntityTypeName("user_entity");
+      expect(warnings.length).toBeGreaterThanOrEqual(1);
+      const text = warnings.join(" ");
+      expect(text).toMatch(/_entity/);
+      expect(text).toMatch(/redundant/i);
+    });
+
+    it("warns on _record suffix", () => {
+      const warnings = lintEntityTypeName("payment_record");
+      expect(warnings.length).toBeGreaterThanOrEqual(1);
+      expect(warnings.join(" ")).toMatch(/_record/);
+    });
+
+    it("warns on _data suffix", () => {
+      const warnings = lintEntityTypeName("user_data");
+      expect(warnings.length).toBeGreaterThanOrEqual(1);
+      expect(warnings.join(" ")).toMatch(/_data/);
+    });
+
+    it("warns on _object suffix", () => {
+      const warnings = lintEntityTypeName("task_object");
+      expect(warnings.length).toBeGreaterThanOrEqual(1);
+      expect(warnings.join(" ")).toMatch(/_object/);
+    });
+
+    it("warns on _item suffix", () => {
+      const warnings = lintEntityTypeName("line_item");
+      expect(warnings.length).toBeGreaterThanOrEqual(1);
+      expect(warnings.join(" ")).toMatch(/_item/);
+    });
+
+    it("warns on _entry suffix", () => {
+      const warnings = lintEntityTypeName("journal_entry");
+      expect(warnings.length).toBeGreaterThanOrEqual(1);
+      expect(warnings.join(" ")).toMatch(/_entry/);
+    });
+
+    it("warns on generic names", () => {
+      for (const name of ["item", "thing", "object", "record", "data", "entry", "entity"]) {
+        const warnings = lintEntityTypeName(name);
+        expect(warnings.length).toBeGreaterThanOrEqual(1);
+        expect(warnings.join(" ")).toMatch(/generic/i);
+      }
+    });
+
+    it("warns on names shorter than 3 characters", () => {
+      expect(lintEntityTypeName("ab").join(" ")).toMatch(/too short/i);
+      expect(lintEntityTypeName("x").join(" ")).toMatch(/too short/i);
+    });
+
+    it("does not warn on 3+ character clean names", () => {
+      const warnings = lintEntityTypeName("abc");
+      expect(warnings.every((w) => !/too short/i.test(w))).toBe(true);
+    });
+
+    it("returns multiple warnings when multiple issues exist", () => {
+      // "UserRecord" — uppercase + redundant _record suffix (after lowercasing)
+      const warnings = lintEntityTypeName("UserRecord");
+      const text = warnings.join(" ");
+      expect(text).toMatch(/uppercase/i);
+      expect(text).toMatch(/_record/);
+    });
+
+    it("returns empty array for empty string", () => {
+      expect(lintEntityTypeName("")).toEqual([]);
+    });
+
+    it("does not emit redundant-suffix warning when suffix is the whole name", () => {
+      // "entity" itself is a generic name — flagged as generic, not as a suffix
+      const warnings = lintEntityTypeName("entity");
+      expect(warnings.join(" ")).toMatch(/generic/i);
+      expect(warnings.every((w) => !/redundant/i.test(w))).toBe(true);
     });
   });
 });

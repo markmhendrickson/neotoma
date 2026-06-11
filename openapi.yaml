@@ -1270,6 +1270,41 @@ components:
           items:
             type: object
             additionalProperties: true
+    UsageStats:
+      type: object
+      description: Aggregate usage statistics computed from local data only.
+      properties:
+        entities_by_type:
+          type: object
+          description: Count of active (non-merged) entities per entity_type, sorted by count desc.
+          additionalProperties:
+            type: integer
+        total_entities:
+          type: integer
+          description: Total active entities.
+        observations_by_source:
+          type: object
+          description: Count of observations grouped by observation_source.
+          additionalProperties:
+            type: integer
+        total_observations:
+          type: integer
+          description: Total observations.
+        entities_created_last_7_days:
+          type: integer
+          description: Number of entities created in the last 7 days.
+        entities_created_last_30_days:
+          type: integer
+          description: Number of entities created in the last 30 days.
+        entity_types_with_schema:
+          type: integer
+          description: Number of distinct entity_types that have a registered schema.
+        entity_types_total:
+          type: integer
+          description: Total distinct entity_types present in the entities table.
+        last_updated:
+          type: string
+          description: ISO timestamp when stats were computed.
     Stats:
       type: object
       properties:
@@ -4111,6 +4146,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Stats" }
 
+  /usage:
+    get:
+      summary: Get local aggregate usage statistics
+      operationId: getUsage
+      description: |
+        Returns aggregate usage statistics computed entirely from local data —
+        no external calls are made. Covers entities by type, observations by
+        source, recent ingestion counts (7-day and 30-day windows), and
+        schema coverage. All figures are scoped to the authenticated user.
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Usage statistics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsageStats" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
   /access_policies:
     get:
       summary: List effective guest access policies for all entity types
@@ -5662,7 +5723,34 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
+                required:
+                  - success
+                  - entity_type
+                  - schema_version
+                  - schema_id
+                  - name_lint_warnings
+                properties:
+                  success:
+                    type: boolean
+                  entity_type:
+                    type: string
+                  schema_version:
+                    type: string
+                  activated:
+                    type: boolean
+                  scope:
+                    type: string
+                  schema_id:
+                    type: string
+                  name_lint_warnings:
+                    type: array
+                    description: >-
+                      Non-blocking warnings about entity type naming anti-patterns
+                      (redundant suffixes, non-snake_case, overly generic names, etc.).
+                      Registration succeeds even when warnings are present.
+                    items:
+                      type: string
+                additionalProperties: false
 
   /correct:
     post:

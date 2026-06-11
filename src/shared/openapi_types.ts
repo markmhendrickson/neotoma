@@ -1140,6 +1140,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/usage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get local aggregate usage statistics
+     * @description Returns aggregate usage statistics computed entirely from local data —
+     *     no external calls are made. Covers entities by type, observations by
+     *     source, recent ingestion counts (7-day and 30-day windows), and
+     *     schema coverage. All figures are scoped to the authenticated user.
+     */
+    get: operations["getUsage"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/access_policies": {
     parameters: {
       query?: never;
@@ -2784,6 +2807,31 @@ export interface components {
       relationships_created?: {
         [key: string]: unknown;
       }[];
+    };
+    /** @description Aggregate usage statistics computed from local data only. */
+    UsageStats: {
+      /** @description Count of active (non-merged) entities per entity_type, sorted by count desc. */
+      entities_by_type?: {
+        [key: string]: number;
+      };
+      /** @description Total active entities. */
+      total_entities?: number;
+      /** @description Count of observations grouped by observation_source. */
+      observations_by_source?: {
+        [key: string]: number;
+      };
+      /** @description Total observations. */
+      total_observations?: number;
+      /** @description Number of entities created in the last 7 days. */
+      entities_created_last_7_days?: number;
+      /** @description Number of entities created in the last 30 days. */
+      entities_created_last_30_days?: number;
+      /** @description Number of distinct entity_types that have a registered schema. */
+      entity_types_with_schema?: number;
+      /** @description Total distinct entity_types present in the entities table. */
+      entity_types_total?: number;
+      /** @description ISO timestamp when stats were computed. */
+      last_updated?: string;
     };
     Stats: {
       entities?: number;
@@ -5228,6 +5276,37 @@ export interface operations {
       };
     };
   };
+  getUsage: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Usage statistics */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UsageStats"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
   getAccessPolicies: {
     parameters: {
       query?: never;
@@ -6531,7 +6610,14 @@ export interface operations {
         };
         content: {
           "application/json": {
-            [key: string]: unknown;
+            success: boolean;
+            entity_type: string;
+            schema_version: string;
+            activated?: boolean;
+            scope?: string;
+            schema_id: string;
+            /** @description Non-blocking warnings about entity type naming anti-patterns (redundant suffixes, non-snake_case, overly generic names, etc.). Registration succeeds even when warnings are present. */
+            name_lint_warnings: string[];
           };
         };
       };

@@ -188,6 +188,94 @@ export function checkPluralEntityType(entityType: string): EntityTypeGuardResult
   };
 }
 
+/**
+ * Redundant suffixes that add no semantic value to entity type names.
+ * e.g. "user_entity" should just be "user".
+ */
+const REDUNDANT_SUFFIXES: string[] = ["_entity", "_record", "_data", "_object", "_item", "_entry"];
+
+/**
+ * Generic names that are too broad to be useful entity type identifiers.
+ */
+const GENERIC_NAMES: Set<string> = new Set([
+  "item",
+  "thing",
+  "object",
+  "record",
+  "data",
+  "entry",
+  "entity",
+]);
+
+/**
+ * Lint an entity type name for anti-patterns that indicate poor naming choices.
+ * Unlike the enforcement guards, this function never throws — it returns
+ * human-readable warning strings that callers can surface to the user.
+ *
+ * Checks performed:
+ * 1. Non-snake_case (uppercase letters or hyphens).
+ * 2. Redundant suffixes (_entity, _record, _data, _object, _item, _entry).
+ * 3. Generic / meaningless names (item, thing, object, record, data, entry, entity).
+ * 4. Very short names (under 3 characters).
+ *
+ * Note: plural names are intentionally omitted here; `enforceEntityTypeGuards`
+ * already covers that check and callers should not double-report it.
+ */
+export function lintEntityTypeName(entityType: string): string[] {
+  if (!entityType || typeof entityType !== "string") return [];
+
+  const warnings: string[] = [];
+  const lower = entityType.toLowerCase();
+
+  // Non-snake_case: contains uppercase letters
+  if (/[A-Z]/.test(entityType)) {
+    const snaked = entityType.replace(/([A-Z])/g, (m) => `_${m.toLowerCase()}`).replace(/^_/, "");
+    warnings.push(
+      `Entity type "${entityType}" contains uppercase letters. ` +
+        `Entity types must use snake_case. Consider "${snaked}".`
+    );
+  }
+
+  // Non-snake_case: contains hyphens
+  if (/-/.test(entityType)) {
+    const snaked = entityType.replace(/-/g, "_");
+    warnings.push(
+      `Entity type "${entityType}" contains hyphens. ` +
+        `Entity types must use snake_case. Consider "${snaked}".`
+    );
+  }
+
+  // Redundant suffixes
+  for (const suffix of REDUNDANT_SUFFIXES) {
+    if (lower.endsWith(suffix) && lower.length > suffix.length) {
+      const trimmed = lower.slice(0, -suffix.length);
+      warnings.push(
+        `Entity type "${entityType}" has a redundant suffix "${suffix}". ` +
+          `Consider using "${trimmed}" instead.`
+      );
+      break; // Only report the first matching suffix
+    }
+  }
+
+  // Generic names
+  if (GENERIC_NAMES.has(lower)) {
+    warnings.push(
+      `Entity type "${entityType}" is too generic. ` +
+        `Use a specific domain name (e.g. "contact", "invoice", "transaction") instead.`
+    );
+  }
+
+  // Very short names
+  if (lower.length < 3) {
+    warnings.push(
+      `Entity type "${entityType}" is too short (${lower.length} character(s)). ` +
+        `Use a descriptive name of at least 3 characters.`
+    );
+  }
+
+  return warnings;
+}
+
 export interface EntityTypeGuardOptions {
   force?: boolean;
   context?: string;
