@@ -57,7 +57,30 @@ export interface RetrieveEntityByIdentifierResult {
   entities: RetrievedEntity[];
   total: number;
   match_mode: IdentifierMatchMode;
+  /**
+   * Present only when `identifier` is shaped like an entity_id (`ent_<hex>`)
+   * but no entity with that id exists for the caller. Points the caller at the
+   * direct-fetch path instead of leaving a silent empty result (#1597).
+   */
+  hint?: string;
 }
+
+/**
+ * An entity_id is `ent_` followed by lowercase hex (see
+ * {@link generateEntityId}, which emits `ent_<24 hex>`). Matching the full hex
+ * tail rather than a fixed width keeps the fast path resilient to any future
+ * id width while never colliding with a natural-language identifier.
+ */
+const ENTITY_ID_PATTERN = /^ent_[0-9a-f]+$/i;
+
+/**
+ * Returned (as `hint`) when the caller passes an entity_id-shaped identifier
+ * that resolves to nothing. `retrieve_entity_by_identifier` matches names /
+ * aliases / snapshot fields, not primary keys; the direct fetch for a known id
+ * is `retrieve_entity_snapshot` (#1597).
+ */
+export const ENTITY_ID_NOT_FOUND_HINT =
+  "identifier looks like an entity_id; use retrieve_entity_snapshot(entity_id=…) for direct fetch";
 
 /**
  * Generic identity-bearing snapshot fields scanned for ALL entity types when
@@ -149,12 +172,14 @@ export async function retrieveEntityByIdentifierWithFallback(
     includeObservations = false,
     observationsLimit = 20,
   } = params;
-  // Raw entity_id fast path. Identifiers shaped like `ent_<24 hex>` are entity
+  // Raw entity_id fast path. Identifiers shaped like `ent_<hex>` are entity
   // ids, not natural-language values; canonical_name/snapshot/semantic matching
-  // never resolves them, so without this they returned empty. retrieve_entity_
-  // snapshot already accepts raw ids; this aligns retrieve_entity_by_identifier.
+  // never resolves them (it instead surfaces tangential rows whose text mentions
+  // the id, #1561, or nothing at all, #1550). Short-circuit to a primary-key
+  // lookup so the target entity is the exclusive, top-ranked result. retrieve_
+  // entity_snapshot already accepts raw ids; this aligns the two surfaces.
   const rawId = identifier.trim();
-  if (/^ent_[0-9a-f]{24}$/i.test(rawId)) {
+  if (ENTITY_ID_PATTERN.test(rawId)) {
     const { data: byId, error: byIdError } = await db
       .from("entities")
       .select("*")
@@ -185,9 +210,16 @@ export async function retrieveEntityByIdentifierWithFallback(
       return { entities: withObs, total: withObs.length, match_mode: "direct" };
     }
     // A well-formed but unknown entity id is an explicit not-found, not a
-    // degraded natural-language search. Return an empty result with total 0;
-    // callers distinguish "no such id" from a name miss by the id-shaped input.
-    return { entities: [], total: 0, match_mode: "none" };
+    // degraded natural-language search. Return an empty result with total 0 and
+    // a structured hint pointing at the direct-fetch path, so the empty result
+    // is not silently misread as "no such entity" (#1550, #1597). Fuzzy / text /
+    // name matching is reserved for non-id identifiers below.
+    return {
+      entities: [],
+      total: 0,
+      match_mode: "none",
+      hint: ENTITY_ID_NOT_FOUND_HINT,
+    };
   }
 
   const normalizedRaw = entityType
