@@ -9357,8 +9357,7 @@ program
     // is removed in a future minor. Commander resolves the alias to the
     // canonical name (`command.name()` === "status"), so detect the alias
     // from the raw argv Commander parsed rather than the resolved name.
-    const rawArgs: string[] =
-      (command?.parent?.rawArgs as string[] | undefined) ?? [];
+    const rawArgs: string[] = (command?.parent?.rawArgs as string[] | undefined) ?? [];
     const invokedAsAlias = rawArgs.includes("doctor");
     if (invokedAsAlias) {
       process.stderr.write(
