@@ -43,6 +43,7 @@ tools:
   register_schema: "Register a new schema or schema version. Supports both global and user-specific schemas."
   get_authenticated_user: "Get the authenticated user ID for the current MCP session. Returns the user_id that is automatically used for all authenticated actions."
   health_check_snapshots: "Check for stale entity snapshots (snapshots with observation_count=0 but observations exist). Returns health status and count of stale snapshots."
+  publish_rendered_page: "Turn a rendered_page into a ready-to-share guest URL in one call. Pass an existing rendered_page entity_id, or inline {title, html_body, custom_css} to create one. Mints a guest_access_token scoped to that page and returns the absolute …/entities/<id>/html?access_token=<token> URL plus ttl_seconds. html_body is injected verbatim into a server template — no html/head/body wrappers. Each call mints a fresh token (tokens are hash-only at rest)."
   subscribe: "Create a substrate event subscription (webhook with HMAC delivery, or SSE via GET /events/stream). Requires at least one filter among entity_types, entity_ids, or event_types. Optional sync_peer_id skips webhook delivery when the substrate event carries the same source_peer_id (cross-instance loop prevention)."
   unsubscribe: "Deactivate a subscription by subscription_id."
   add_peer: "Register a Neotoma peer (peer_config) for bidirectional sync: peer_url, entity_types allowlist, shared_secret for POST /sync/webhook verification."

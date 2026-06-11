@@ -638,6 +638,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "snapshots check",
   },
   {
+    operationId: "publishRenderedPage",
+    method: "post",
+    path: "/rendered-pages/publish",
+    adapter: "mcp",
+    mcpTool: "publish_rendered_page",
+  },
+  {
     operationId: "listAgentGrants",
     method: "get",
     path: "/agents/grants",
@@ -833,6 +840,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   get_authenticated_user: "getAuthenticatedUser",
   get_session_identity: "getSessionInfo",
   health_check_snapshots: "healthCheckSnapshots",
+  publish_rendered_page: "publishRenderedPage",
   list_recent_changes: "getRecordActivity",
   subscribe: "subscribe",
   unsubscribe: "unsubscribe",

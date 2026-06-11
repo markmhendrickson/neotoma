@@ -5785,9 +5785,8 @@ export class NeotomaServer {
       typeof a.user_id === "string" ? a.user_id : undefined
     );
 
-    const { publishRenderedPage, PublishRenderedPageError } = await import(
-      "./services/rendered_page/publish.js"
-    );
+    const { publishRenderedPage, PublishRenderedPageError } =
+      await import("./services/rendered_page/publish.js");
 
     try {
       const result = await publishRenderedPage(
@@ -5796,10 +5795,8 @@ export class NeotomaServer {
           title: typeof a.title === "string" ? a.title : undefined,
           htmlBody: typeof a.html_body === "string" ? a.html_body : undefined,
           customCss: typeof a.custom_css === "string" ? a.custom_css : undefined,
-          metaDescription:
-            typeof a.meta_description === "string" ? a.meta_description : undefined,
-          idempotencyKey:
-            typeof a.idempotency_key === "string" ? a.idempotency_key : undefined,
+          metaDescription: typeof a.meta_description === "string" ? a.meta_description : undefined,
+          idempotencyKey: typeof a.idempotency_key === "string" ? a.idempotency_key : undefined,
           userId,
         },
         // create callback: reuse the structured-store append path so the new
@@ -5841,10 +5838,7 @@ export class NeotomaServer {
           ...err.envelope,
         });
       }
-      throw new McpError(
-        ErrorCode.InternalError,
-        err instanceof Error ? err.message : String(err)
-      );
+      throw new McpError(ErrorCode.InternalError, err instanceof Error ? err.message : String(err));
     }
   }
 

@@ -93,7 +93,9 @@ export async function publishRenderedPage(
       throw new PublishRenderedPageError(
         "ERR_PUBLISH_INPUT_MISSING",
         "publish_rendered_page requires either an existing entity_id or inline content.",
-        { hint: "Pass entity_id to publish an existing rendered_page, or title/html_body to create one." }
+        {
+          hint: "Pass entity_id to publish an existing rendered_page, or title/html_body to create one.",
+        }
       );
     }
     entityId = await create({
@@ -147,10 +149,7 @@ export async function publishRenderedPage(
   });
 
   const ttlSeconds = (() => {
-    const configured = Number.parseInt(
-      process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS ?? "",
-      10
-    );
+    const configured = Number.parseInt(process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS ?? "", 10);
     return Number.isFinite(configured) && configured > 0 ? configured : 30 * 24 * 60 * 60;
   })();
 

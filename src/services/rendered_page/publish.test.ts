@@ -29,7 +29,10 @@ vi.mock("../../db.js", () => ({
               const e = mockState.entities.get(idVal);
               // Only return the row when the owner matches (tenant isolation).
               if (e && e.user_id === userVal) {
-                return { data: { id: idVal, user_id: userVal, entity_type: e.entity_type }, error: null };
+                return {
+                  data: { id: idVal, user_id: userVal, entity_type: e.entity_type },
+                  error: null,
+                };
               }
               return { data: null, error: null };
             },
@@ -56,10 +59,7 @@ describe("publishRenderedPage", () => {
   it("publishes an existing rendered_page and returns a guest URL", async () => {
     mockState.entities.set("ent_page1", { entity_type: "rendered_page", user_id: "u1" });
 
-    const result = await publishRenderedPage(
-      { entityId: "ent_page1", userId: "u1" },
-      noopCreate
-    );
+    const result = await publishRenderedPage({ entityId: "ent_page1", userId: "u1" }, noopCreate);
 
     expect(result.entity_id).toBe("ent_page1");
     expect(result.created).toBe(false);
@@ -124,9 +124,7 @@ describe("publishRenderedPage", () => {
       { title: "t", htmlBody: "<p>x</p>", userId: "u1", idempotencyKey: "key-123" },
       create
     );
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: "key-123" })
-    );
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: "key-123" }));
   });
 
   it("requires either entity_id or inline content", async () => {

@@ -6168,6 +6168,70 @@ paths:
               schema:
                 $ref: "#/components/schemas/SessionInfo"
 
+  /rendered-pages/publish:
+    post:
+      summary: Publish a rendered_page as a shareable guest URL
+      description: >
+        Mints a guest_access_token scoped to a rendered_page and returns an
+        absolute /entities/:id/html?access_token=<token> URL plus its TTL.
+        Pass an existing rendered_page entity_id, or inline {title, html_body,
+        custom_css, meta_description} to create one first. html_body is injected
+        verbatim into a server template; do not include html/head/body wrappers.
+      operationId: publishRenderedPage
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                entity_id:
+                  type: string
+                  description: Existing rendered_page entity id to publish.
+                title:
+                  type: string
+                html_body:
+                  type: string
+                custom_css:
+                  type: string
+                meta_description:
+                  type: string
+                idempotency_key:
+                  type: string
+                  description: >
+                    Idempotency key for the inline-create path. Same key + same
+                    content reuses the same rendered_page. Ignored when entity_id
+                    is supplied.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Share URL minted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - entity_id
+                  - share_url
+                  - access_token
+                  - ttl_seconds
+                  - created
+                properties:
+                  entity_id:
+                    type: string
+                  share_url:
+                    type: string
+                  access_token:
+                    type: string
+                  ttl_seconds:
+                    type: integer
+                  created:
+                    type: boolean
+                    description: True if a new rendered_page was created from inline content.
+
   /health_check_snapshots:
     post:
       summary: Health check snapshots
