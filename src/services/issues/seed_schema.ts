@@ -131,6 +131,43 @@ const ISSUE_FIELDS: FieldSpec = [
     type: "string",
     description: "Source id for reporter patch artifact when applicable",
   },
+  // Swarm-workflow fields. Used by the Ateles gate pipeline (Lanius routes
+  // issues, Gryllus reads gate_status). Object/array-typed fields here MUST be
+  // declared so the reducer projects them into the snapshot; an object-valued
+  // correct() on an undeclared field is routed to raw_fragments and never
+  // surfaces. See regression test correct_object_field_roundtrip.test.ts.
+  {
+    name: "workflow_type",
+    type: "string",
+    description: "Swarm workflow kind driving this issue (e.g. gate_review)",
+  },
+  {
+    name: "current_owner",
+    type: "string",
+    description: "Agent currently responsible for this issue in the swarm",
+  },
+  {
+    name: "owner_history",
+    type: "array",
+    reducer: "merge_array",
+    description: "Ordered history of agents that have owned this issue",
+  },
+  {
+    name: "gate_status",
+    type: "object",
+    description:
+      "Per-gate status map, e.g. { pm: 'pending', qa: 'approved' }. Set via correct() or store() with target_id.",
+  },
+  {
+    name: "sign_offs",
+    type: "array",
+    reducer: "merge_array",
+    description: "Recorded gate sign-offs (agent + gate + timestamp)",
+  },
+  { name: "blocked_on", type: "string", description: "What this issue is currently blocked on" },
+  { name: "issue_number", type: "number", description: "Workflow-local issue number" },
+  { name: "summary", type: "string", description: "Short workflow summary of the issue" },
+  { name: "category", type: "string", description: "Workflow category/bucket for the issue" },
 ];
 
 function buildSchemaDefinition(): SchemaDefinition {
