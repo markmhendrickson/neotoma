@@ -73,6 +73,16 @@ rm ~/Library/LaunchAgents/com.neotoma.dev-server.plist
 
 For a separate always-on **built** API in production mode (build + default prod port + `start:server`), see [`docs/developer/launchd_prod_server.md`](launchd_prod_server.md) and `npm run setup:launchd-prod-server`.
 
+## RC auto-deploy ("rolling main = RC")
+
+`npm run setup:launchd-rc-autodeploy` installs `com.neotoma.rc-autodeploy`, which keeps the running prod server current with `origin/main` unattended. Every 120s it runs `scripts/redeploy_rc_from_main.sh`, which:
+
+1. `git fetch` + **fast-forward-only** pull of `origin/main` into the RC checkout, preserving the uncommitted RC version bump (e.g. `0.16.0-rc.1`) via stash/pop; it refuses to proceed on a non-fast-forward divergence.
+2. Rebuilds `dist` (`npm run build:server`).
+3. **Hard**-restarts `com.neotoma.prod-server` (`launchctl kickstart -k`) so the process re-imports fresh modules — a soft reload was observed to miss reducer changes.
+
+It is idempotent (no-op when the RC already equals `origin/main`) and single-flight (atomic `mkdir` lock). This is **mechanical deploy only** — it makes no release judgment. Cutting tagged releases remains a separate, gated step (e.g. the Ateles `Struthio` release agent). Override `HEALTH_URL` / poll interval via the plist if needed.
+
 ## Scope
 
 - **macOS only.** LaunchAgents are a macOS feature. On Linux, use a systemd user service or similar.
