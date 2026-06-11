@@ -128,7 +128,14 @@ export function buildToolDefinitions(
         properties: {
           entity_type: {
             type: "string",
-            description: "Optional entity type filter (for example: post, task, contact).",
+            description:
+              "Optional single entity type filter (for example: post, task, contact). Combined as a union with `entity_types` when both are supplied.",
+          },
+          entity_types: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional multi-type filter. When non-empty, results are restricted to entities whose type is in this list (IN filter), OR-combined with `entity_type`. An empty array is treated as no filter.",
           },
           search: {
             type: "string",

@@ -10,6 +10,8 @@ export interface SemanticSearchEntitiesOptions {
   searchText: string;
   userId: string;
   entityType?: string;
+  /** Multi-type filter, OR-combined with `entityType` (#1562). */
+  entityTypes?: string[];
   includeMerged?: boolean;
   /** Distance threshold (0–2). Results with distance >= threshold are dropped. Only applied in local mode. */
   similarityThreshold?: number;
@@ -35,6 +37,7 @@ export async function semanticSearchEntities(
     searchText,
     userId,
     entityType,
+    entityTypes,
     includeMerged = false,
     similarityThreshold,
     limit,
@@ -51,6 +54,7 @@ export async function semanticSearchEntities(
     queryEmbedding,
     userId,
     entityType: entityType ?? null,
+    entityTypes,
     includeMerged,
     distanceThreshold: similarityThreshold,
     limit,
