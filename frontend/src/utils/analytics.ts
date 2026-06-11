@@ -200,6 +200,7 @@ export type CtaName =
   | "personal_data_case_study_install"
   | "header_evaluate"
   | "header_install"
+  | "header_docs"
   | "footer_install"
   | "docs_evaluate_getting_started"
   | "docs_install_getting_started"

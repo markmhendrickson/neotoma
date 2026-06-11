@@ -314,6 +314,7 @@ function useMobileNavFabVisibility(
   }, [pathname, forceVisible]);
 
   if (forceVisible) return true;
+  if (marketingHomeChrome) return true;
 
   const blockedByHomeSection = introInView || evaluateInView;
   return fabShownByScroll && !blockedByHomeSection;
@@ -649,7 +650,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   const homeEvaluateScrollBannerVisible = useSiteHomeEvaluateScrollBannerVisible();
   const mobileNavFabVisible =
     mobileMenuOpen ||
-    (mobileNavFabBaseVisible && !homeEvaluateScrollBannerVisible);
+    (mobileNavFabBaseVisible && (isMarketingHomeChrome || !homeEvaluateScrollBannerVisible));
   const setAppNavBarVisible = useSiteAppNavBarVisibleSetter();
   useEffect(() => {
     setAppNavBarVisible(headerScrollVisible);
@@ -771,6 +772,13 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           onClick={() => sendCtaClick("view_architecture")}
         >
           {dict.architecture}
+        </Link>
+        <Link
+          to={localizePath("/docs", locale)}
+          className="inline-flex rounded-md px-1.5 py-1.5 text-ui text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => sendCtaClick("header_docs")}
+        >
+          {dict.docs}
         </Link>
       </nav>
 
