@@ -53,7 +53,6 @@ import {
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
-import type { RelationshipSnapshot } from "./reducers/relationship_reducer.js";
 import type { RelationshipType } from "./services/relationships.js";
 import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
@@ -2807,6 +2806,13 @@ export class NeotomaServer {
         .eq("source_entity_id", parsed.entity_id)
         .eq("user_id", userId);
 
+      // Exclude soft-deleted edges at the DB via the materialized `is_live`
+      // column (#1570), so dead edges are never loaded into memory. Audit
+      // reads pass include_deleted=true to skip this filter.
+      if (!parsed.include_deleted) {
+        outboundQuery = outboundQuery.eq("is_live", 1);
+      }
+
       if (parsed.relationship_type) {
         outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
       }
@@ -2841,6 +2847,11 @@ export class NeotomaServer {
         .eq("target_entity_id", parsed.entity_id)
         .eq("user_id", userId);
 
+      // Exclude soft-deleted edges at the DB via `is_live` (#1570).
+      if (!parsed.include_deleted) {
+        inboundQuery = inboundQuery.eq("is_live", 1);
+      }
+
       if (parsed.relationship_type) {
         inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
       }
@@ -2868,34 +2879,32 @@ export class NeotomaServer {
       }
     }
 
-    // Sort by last_observation_at DESC and apply pagination
+    // Sort by last_observation_at DESC, tiebroken by relationship_key ASC
+    // (#1571). last_observation_at is mutable and ties for rows upserted in the
+    // same millisecond (batch ingestion); without a stable tiebreaker, tied
+    // rows can move between pages across successive calls, so pagination over
+    // this order can drop or duplicate rows. relationship_key is the snapshot
+    // primary key — a stable, unique tiebreaker that fully determines order.
+    // This matches the HTTP /list_relationships ordering (actions.ts) and the
+    // determinism invariant (docs/architecture/determinism.md). See issue #368.
     relationships.sort((a, b) => {
       const aTime = new Date(a.last_observation_at || a.computed_at || 0).getTime();
       const bTime = new Date(b.last_observation_at || b.computed_at || 0).getTime();
-      return bTime - aTime;
+      if (bTime !== aTime) return bTime - aTime;
+      const aKey = String(a.relationship_key ?? "");
+      const bKey = String(b.relationship_key ?? "");
+      return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
     });
 
-    // Exclude soft-deleted edges by default (#277), matching the HTTP
-    // /list_relationships handler and the service-layer read convention. The
-    // discovery-before-delete flow points callers here; surfacing a
-    // soft-deleted edge would make them re-delete it into a 404. Pass
-    // include_deleted=true for audit/history reads. Filtering precedes
-    // pagination so `total` reflects live edges only.
-    let liveRelationships = relationships;
-    if (!parsed.include_deleted && relationships.length > 0) {
-      const { relationshipsService } = await import("./services/relationships.js");
-      const live = await relationshipsService.filterDeletedRelationships(
-        relationships as unknown as RelationshipSnapshot[]
-      );
-      const liveKeys = new Set(live.map((r) => r.relationship_key));
-      liveRelationships = relationships.filter((r) => liveKeys.has(r.relationship_key));
-    }
-
-    const paginated = liveRelationships.slice(parsed.offset, parsed.offset + parsed.limit);
+    // Soft-deleted edges were already excluded at the DB via the `is_live`
+    // predicate on each direction's query (#1570), so `relationships` holds
+    // only live edges on the default path (all edges when include_deleted).
+    // `total` therefore reflects the correct post-filter count.
+    const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
       relationships: paginated,
-      total: liveRelationships.length,
+      total: relationships.length,
       limit: parsed.limit,
       offset: parsed.offset,
     });
