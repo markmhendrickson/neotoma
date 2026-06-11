@@ -90,6 +90,7 @@ Perform a structured code review of a GitHub PR, a branch, or the current workin
 | `tests/` | `docs/testing/testing_standard.md` |
 | `docs/releases/` | `docs/developer/github_release_process.md` |
 | `package.json` scripts | `docs/developer/package_scripts.md` |
+| `.claude/settings.json`, `*.sh`, `.github/workflows/` | *(no doc to load)* — apply Phase 5 portability check |
 
 ### Phase 3 — Read the diff
 
@@ -174,6 +175,12 @@ Beyond the checklist, evaluate the diff against the loaded architectural docs fo
 - Any new error path that throws an opaque internal error instead of a structured envelope?
 - Any tightened validation (closed `additionalProperties`, added required field, narrowed type, removed enum value) without: (a) a structured `hint` in the same change, (b) a legacy-payload fixture in `tests/contract/legacy_payloads/` flipped to `rejected` with a `hint_match` assertion, and (c) a line in `CHANGES.md`? All three are required together — this is the Tightening-change hint obligation (`docs/subsystems/errors.md` § Tightening-change hint obligation).
 - Any structured `hint` text that interpolates user-supplied input (e.g. entity types, field names from the request)? Hints MUST be stable text agents can pattern-match on; avoid `"Unknown entity type: ${type}"` — the type value makes the hint fragile.
+
+**Portability (for diffs touching `.claude/settings.json`, `*.sh` scripts, `.github/workflows/`, or any file containing hook commands):**
+- Any hardcoded user home path (`/Users/<name>/`, `/home/<specific-name>/` where the segment is a real username rather than a generic placeholder)? Flag ADVISORY.
+- Any hook command that `cd`s to a hardcoded absolute path instead of `$(git rev-parse --show-toplevel)` or a `$REPO_ROOT`-style variable? Flag ADVISORY.
+- Any shell script that embeds a machine-specific path (e.g. a developer's home directory, a specific macOS or Linux path that would break on the other OS)? Flag ADVISORY.
+- Any CI workflow that hardcodes a runner path that diverges from the repo checkout path? Flag NIT.
 
 **Search/ranking changes (for diffs touching `entity_handlers.ts`):**
 - Does type-filter logic correctly fall back for unseeded/unregistered types?
@@ -296,7 +303,7 @@ Finding: <one or two sentences describing what's wrong>
 Fix: <concrete action — what to change, what to add>
 ```
 
-Categories: `arch-boundary` | `schema-agnostic` | `determinism` | `immutability` | `auth` | `contract` | `error-handling` | `test-coverage` | `pii` | `security` | `docs` | `doc-completeness` | `style` | `product-principles` | `silent-behavior` | `agent-instructions` | `hint-quality` | `naming` | `discoverability` | `supplement-accuracy`
+Categories: `arch-boundary` | `schema-agnostic` | `determinism` | `immutability` | `auth` | `contract` | `error-handling` | `test-coverage` | `pii` | `security` | `docs` | `doc-completeness` | `style` | `product-principles` | `silent-behavior` | `agent-instructions` | `hint-quality` | `naming` | `discoverability` | `supplement-accuracy` | `portability`
 
 After all findings, emit a summary block:
 
@@ -338,6 +345,7 @@ When invoked from `/release` Step 3.6, append the verdict to `docs/releases/in_p
 - MUST surface schema-agnostic design violations even when the code "works" — per-type branches accumulate silently
 - MUST check `excludeBookkeeping` defaults whenever `entity_handlers.ts` is in the diff
 - MUST run Phase 5c (documentation completeness) for every functional surface change — code that works but has no discoverable docs is an incomplete change
+- MUST apply the portability check whenever `.claude/settings.json`, shell scripts, or CI workflow files are in the diff
 
 ## Integration points
 

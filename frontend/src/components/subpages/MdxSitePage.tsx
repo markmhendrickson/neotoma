@@ -25,17 +25,8 @@ export function MdxSitePage({
   }
 
   try {
-    const { bundle, usedFallbackFromLocale } = resolveMdxSitePage(canonicalPath, locale);
+    const { bundle } = resolveMdxSitePage(canonicalPath, locale);
     const { meta, Component } = bundle;
-
-    const fallbackBanner =
-      usedFallbackFromLocale ? (
-        <p className="text-[13px] leading-5 text-muted-foreground border border-border rounded-md px-3 py-2 mb-6">
-          Translation for <span className="font-mono">{String(usedFallbackFromLocale)}</span> is not
-          available yet; showing English source (
-          <span className="font-mono">translated_from_revision={meta.translated_from_revision}</span>).
-        </p>
-      ) : null;
 
     if (shell === "bare") {
       return (
@@ -44,9 +35,6 @@ export function MdxSitePage({
           {/* Do not apply `.mdx-site-page-content` here: bare routes render full-bleed landings
               (e.g. `<SitePage />`) and doc typography utilities would cascade into marketing layout. */}
           <div className="min-h-0 bg-background text-foreground">
-            {fallbackBanner ? (
-              <div className="max-w-[52em] mx-auto px-4 pt-4">{fallbackBanner}</div>
-            ) : null}
             <Component />
           </div>
         </>
@@ -55,7 +43,6 @@ export function MdxSitePage({
 
     return (
       <DetailPage title={detailTitle ?? meta.page_title}>
-        {fallbackBanner}
         <div className="mdx-site-page-content post-prose">
           <Component />
         </div>
