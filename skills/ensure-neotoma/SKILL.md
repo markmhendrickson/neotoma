@@ -26,10 +26,10 @@ Meta skill that installs and configures Neotoma so other memory skills can run. 
 ### Phase 1: Check if Neotoma CLI is available
 
 ```bash
-npx neotoma doctor --output json
+npx neotoma status --output json
 ```
 
-If `neotoma` is not found or `doctor` reports `installed: false`:
+If `neotoma` is not found or `status` reports `installed: false`:
 
 1. Guide installation:
    ```bash

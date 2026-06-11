@@ -9399,11 +9399,25 @@ program
   });
 
 program
-  .command("doctor")
+  .command("status")
+  .alias("doctor")
   .description(
-    "Consolidated diagnostics for agent-led onboarding (install/runtime/api/mcp/cli-instructions/permissions)"
+    "Check Neotoma configuration and connectivity (CLI path, data directory, local API, MCP entries, permissions)"
   )
-  .action(async () => {
+  .action(async (_opts, command) => {
+    // Emit a one-shot deprecation notice to stderr (never stdout, so `--json`
+    // output stays machine-parseable) when invoked via the legacy `doctor`
+    // alias. The alias still works; this nudges callers to migrate before it
+    // is removed in a future minor. Commander resolves the alias to the
+    // canonical name (`command.name()` === "status"), so detect the alias
+    // from the raw argv Commander parsed rather than the resolved name.
+    const rawArgs: string[] = (command?.parent?.rawArgs as string[] | undefined) ?? [];
+    const invokedAsAlias = rawArgs.includes("doctor");
+    if (invokedAsAlias) {
+      process.stderr.write(
+        "[neotoma] `neotoma doctor` is deprecated and will be removed in a future minor; use `neotoma status` instead (identical output).\n"
+      );
+    }
     const outputMode = resolveOutputMode();
     const { runDoctor } = await import("./doctor.js");
     const report = await runDoctor({ cwd: process.cwd() });
@@ -9613,7 +9627,7 @@ const hooksCommand = program
 
 hooksCommand
   .command("status")
-  .description("Print per-harness hook installation state (uses `neotoma doctor`).")
+  .description("Print per-harness hook installation state (uses `neotoma status`).")
   .action(async () => {
     const outputMode = resolveOutputMode();
     const { runHooksStatus } = await import("./hooks.js");

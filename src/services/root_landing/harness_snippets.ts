@@ -175,7 +175,7 @@ It is a public, shared sandbox — treat everything as publicly visible and expe
         ? `Connect Neotoma MCP (local stdio) for this harness. Neotoma runs on this machine; use the stdio transport, not an HTTP URL.`
         : `Connect this Neotoma MCP server for me: ${mcpUrl}`;
 
-  const installNote = `If Neotoma is already installed, confirm with \`neotoma doctor --json\`. Apply MCP + agent instruction defaults with \`neotoma setup\`, or update one layer with \`neotoma mcp config\` or \`neotoma cli config\`. For read-only paths and flags, use \`neotoma mcp guide\` or \`neotoma cli guide\`. Otherwise follow ${publicDocsUrl}/install.`;
+  const installNote = `If Neotoma is already installed, confirm with \`neotoma status --json\`. Apply MCP + agent instruction defaults with \`neotoma setup\`, or update one layer with \`neotoma mcp config\` or \`neotoma cli config\`. For read-only paths and flags, use \`neotoma mcp guide\` or \`neotoma cli guide\`. Otherwise follow ${publicDocsUrl}/install.`;
 
   const harnessHint: Record<HarnessId, string> = {
     "claude-code":

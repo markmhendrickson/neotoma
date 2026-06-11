@@ -255,12 +255,12 @@ export function EvaluateAgentInstructionsPage() {
             For other local tools, run{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>,
             then collapse setup into two calls:{" "}
-            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
-            to inspect state and{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma status --json</code>{" "}
+            to check configuration and connectivity and{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma setup --tool &lt;tool&gt; --yes</code>{" "}
             to apply init + MCP + CLI instructions + permissions idempotently.
             If it is already installed, skip straight to activation. Run{" "}
-            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma status --json</code>{" "}
             to verify the setup first.
           </li>
           <li>
@@ -282,7 +282,7 @@ export function EvaluateAgentInstructionsPage() {
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">find</code>,{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">which</code>,{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">node -e</code>) during install or activation. Every field you
-            need is in <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>.
+            need is in <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma status --json</code>.
             Do not run arbitrary <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm run</code>{" "}
             scripts from the user's repositories. If a permission prompt
             appears for anything other than <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma *</code> or{" "}

@@ -320,7 +320,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
       "Tu agente puede leer la documentación, revisar los criterios de evaluación y decirte si Neotoma encaja en tu flujo real antes de instalar nada.",
     promptHint:
       "Copia este prompt en cualquier agente de IA. Lee la página de evaluación, inspecciona tu contexto y juzga si Neotoma encaja.",
-    homeEvaluatePrompt: `Lee https://neotoma.io/evaluate. Usa cualquier herramienta, espacio de trabajo y contexto de chat ya disponibles en esta sesión para evaluar mi flujo real. Evita introspección ad hoc en la shell solo para perfilarme; si Neotoma ya está instalado, usa \`neotoma doctor --json\` para el estado. Luego dime si Neotoma encaja en mi flujo, qué datos conviene persistir primero por valor y si recomiendas una prueba no destructiva en https://neotoma.io/non-destructive-testing antes de cualquier despliegue completo.`,
+    homeEvaluatePrompt: `Lee https://neotoma.io/evaluate y dime si Neotoma encaja en mi flujo de trabajo.`,
     evaluatePromptPill: "Prompt de evaluación",
     evaluatePromptCardSubtitle:
       "Lee la página y evalúa el encaje frente a tu flujo real.",

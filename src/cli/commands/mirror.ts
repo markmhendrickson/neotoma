@@ -364,7 +364,7 @@ export function ensureMirrorGitignored(
 
 /**
  * Detect whether the mirror path is already ignored by the enclosing git
- * repo. Read-only; does not mutate `.gitignore`. Used by `neotoma doctor`.
+ * repo. Read-only; does not mutate `.gitignore`. Used by `neotoma status`.
  */
 export function checkMirrorGitignoreStatus(cfg: MirrorConfig = getMirrorConfig()): {
   inside_git_repo: boolean;

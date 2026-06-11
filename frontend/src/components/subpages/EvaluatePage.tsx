@@ -13,7 +13,7 @@ export function EvaluatePage() {
   return (
     <DetailPage title={ev.title}>
       <p className="text-[15px] leading-7 mb-4">{ev.introP1}</p>
-      <p className="text-[15px] leading-7 mb-4 text-muted-foreground">
+      <p className="text-[15px] leading-7 mb-8 text-muted-foreground">
         {ev.introP2BeforeLink}
         <TrackedProductLink
           to={localizePath("/install", locale)}
@@ -25,32 +25,12 @@ export function EvaluatePage() {
         </TrackedProductLink>
         {ev.introP2After}
       </p>
-      <div className="mb-8">
-        <p className="text-[15px] leading-7 mb-2 text-muted-foreground">
-          <strong>{ev.promptToUseLabel}</strong>
-        </p>
-        <CopyableCodeBlock
-          code={ev.agentEvaluationPrompt}
-          className="mb-0"
-          variant="emerald"
-          onAfterCopy={() => sendFunnelEvaluatePromptCopy("evaluate_page")}
-        />
-      </div>
 
       <section>
         <h2 className="text-xl font-medium mb-4">{ev.whatNeotomaHeading}</h2>
         <p className="text-[15px] leading-7 mb-4">{ev.whatNeotomaP1}</p>
         <p className="text-[15px] leading-7 mb-4">{ev.whatNeotomaP2}</p>
       </section>
-
-      <div className="mb-8 rounded-lg border border-border bg-card p-4">
-        <Link to={localizePath("/evaluate/agent-instructions", locale)} className="group no-underline">
-          <span className="text-[15px] font-medium text-foreground group-hover:underline block mb-1">
-            {ev.agentInstructionsCardTitle}
-          </span>
-          <p className="text-[13px] leading-5 text-muted-foreground">{ev.agentInstructionsCardDesc}</p>
-        </Link>
-      </div>
 
       <section>
         <h2 className="text-xl font-medium mb-4">{ev.whoForHeading}</h2>
@@ -120,6 +100,25 @@ export function EvaluatePage() {
             <li key={item}>{item}</li>
           ))}
         </ul>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-medium mb-4">{ev.assessHeading}</h2>
+        <p className="text-[15px] leading-7 mb-4">{ev.assessIntro}</p>
+        <CopyableCodeBlock
+          code={ev.agentEvaluationPrompt}
+          className="mb-6"
+          variant="emerald"
+          onAfterCopy={() => sendFunnelEvaluatePromptCopy("evaluate_page")}
+        />
+        <div className="rounded-lg border border-border bg-card p-4">
+          <Link to={localizePath("/evaluate/agent-instructions", locale)} className="group no-underline">
+            <span className="text-[15px] font-medium text-foreground group-hover:underline block mb-1">
+              {ev.agentInstructionsCardTitle}
+            </span>
+            <p className="text-[13px] leading-5 text-muted-foreground">{ev.agentInstructionsCardDesc}</p>
+          </Link>
+        </div>
       </section>
 
       <section>

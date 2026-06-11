@@ -375,13 +375,13 @@ neotoma init --data-dir /path/to/data
 ### Harness setup
 
 - `neotoma setup`: One-shot, idempotent harness setup. It runs init when needed, configures MCP entries, applies agent CLI instruction files, installs lifecycle hooks or the Claude Code plugin for the selected harness, then patches permission allowlists where the harness supports them.
-  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode>`: Target harness. If omitted, `doctor` supplies the current tool hint when available. `windsurf`, `continue`, and `vscode` are MCP-only targets (no skills or hook installation; setup writes the MCP config entry only).
+  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode>`: Target harness. If omitted, `neotoma status` supplies the current tool hint when available. `windsurf`, `continue`, and `vscode` are MCP-only targets (no skills or hook installation; setup writes the MCP config entry only).
   - `--install-scope <project|user|both>`: Scope for MCP entries and agent CLI instruction files.
   - `--scope <project|user|both>`: Permission-file scope only. This is intentionally separate from `--install-scope`.
   - `--mcp-transport <a|b|c|d|e>`: Same transport presets as `neotoma mcp config`.
   - `--rewrite-neotoma-mcp`: Rewrite existing Neotoma MCP entries in the selected install scope.
   - `--skip-hooks`: Skip lifecycle hook/plugin installation.
-  - `--all-harnesses`: Infer hook-capable harnesses from MCP configs and install hooks for all of them. The default remains one harness via `--tool` or the `doctor` hint.
+  - `--all-harnesses`: Infer hook-capable harnesses from MCP configs and install hooks for all of them. The default remains one harness via `--tool` or the `neotoma status` hint.
   - `--dry-run`: Plan the setup without writing files.
   - `--yes`: Suppress prompts in init, MCP config, CLI instruction config, and hook install paths.
   - `--skip-permissions`: Skip permission-file writes.
@@ -790,13 +790,14 @@ The CLI and the Inspector share one `applyBatchCorrection` backend (`src/service
     - Does not replace the live DB automatically.
     - Stop Neotoma (MCP/API) before running `--recover`.
     - After a successful recover, manually archive the live `.db` / `-wal` / `-shm` and then copy the recovered file into place.
-    - If corruption recurs, run `neotoma doctor --json`; the `data.risks` block flags cloud-synced data directories and prior repair artifacts.
+    - If corruption recurs, run `neotoma status --json`; the `data.risks` block flags cloud-synced data directories and prior repair artifacts.
 
-### Doctor
+### Status
 
-- `neotoma doctor`: Project health check. Verifies that the global CLI is on `PATH`, that `NEOTOMA_DATA_DIR` and the SQLite db are usable, whether a local API process is running, which MCP server entries the configured harnesses expose, and whether the data directory is on a high-risk filesystem.
+- `neotoma status` (alias: `neotoma doctor`): Check Neotoma configuration and connectivity. Verifies that the global CLI is on `PATH`, that `NEOTOMA_DATA_DIR` and the SQLite db are usable, whether a local API process is running, which MCP server entries the configured harnesses expose, and whether the data directory is on a high-risk filesystem.
+  - The `doctor` name is a deprecated alias retained for backward compatibility; prefer `neotoma status`. The `--json` payload shape is unchanged.
   - `--json`: Emit a structured report instead of the human summary. Designed for agent-led installs (`neotoma setup --output json` consumes it) and for CI/operator scripts.
-  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode>`: Override the current-tool hint that `doctor` ships in the report and that `neotoma setup` reads.
+  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode>`: Override the current-tool hint that `status` ships in the report and that `neotoma setup` reads.
 
   **`--json` shape (v0.12+):**
 
