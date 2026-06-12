@@ -49,6 +49,13 @@ import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
  * Bumping this token gives every issue a brand-new key, sidestepping the stale
  * rows without any destructive DB repair. The old rows simply go inert. Bump it
  * again only if a future payload-shape change strands keys the same way.
+ *
+ * Applies to BOTH the issue pull leg and the comment pull leg. The comment key
+ * additionally carries `comment.updated_at` so an edited comment (whose parent
+ * issue updated_at may not bump) still gets a fresh key; without it the static
+ * `...-<comment.id>` key strands edited-comment rows exactly as the issue key
+ * did pre-m2 (observed live: ~78 comment rows frozen on ERR_IDEMPOTENCY_MISMATCH
+ * after the issue leg was already cleared by m2).
  */
 const SYNC_KEY_MIGRATION = "m2";
 
@@ -378,7 +385,7 @@ async function syncSingleComment(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}`,
+      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}-${comment.updated_at}-${SYNC_KEY_MIGRATION}`,
     })
   ) as Promise<StoreResult>;
 }

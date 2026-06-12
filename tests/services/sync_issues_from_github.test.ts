@@ -172,9 +172,28 @@ describe("syncIssuesFromGitHub", () => {
     expect(seenIdempotencyKeys).toEqual(
       new Set([
         "issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2",
-        "issue-comment-sync-test/repo-1-101",
+        "issue-comment-sync-test/repo-1-101-2026-05-01T01:00:00Z-m2",
       ])
     );
+  });
+
+  it("gives an edited comment a fresh idempotency key (clears poisoned comment rows)", async () => {
+    const { ops, seenIdempotencyKeys } = createOps();
+    mockListIssues.mockResolvedValue([issue(1)]);
+
+    // Same comment id, edited body + later updated_at. The static
+    // `...-<comment.id>` key (pre-fix) reused the same key with different content
+    // → ERR_IDEMPOTENCY_MISMATCH; including comment.updated_at gives a fresh key.
+    const c1 = { ...comment(101), body: "original", updated_at: "2026-05-01T01:00:00Z" };
+    const c2 = { ...comment(101), body: "edited", updated_at: "2026-05-02T09:00:00Z" };
+
+    mockListIssueComments.mockResolvedValueOnce([c1]);
+    await syncIssuesFromGitHub(ops);
+    mockListIssueComments.mockResolvedValueOnce([c2]);
+    await syncIssuesFromGitHub(ops);
+
+    expect(seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-01T01:00:00Z-m2")).toBe(true);
+    expect(seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-02T09:00:00Z-m2")).toBe(true);
   });
 
   it("gives a changed issue a fresh idempotency key (avoids ERR_IDEMPOTENCY_MISMATCH)", async () => {
