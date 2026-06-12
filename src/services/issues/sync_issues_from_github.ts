@@ -224,7 +224,13 @@ async function syncSingleIssue(
   issue: GitHubIssue,
   repo: string
 ): Promise<StoreResult> {
-  const now = new Date().toISOString();
+  // Derive sync-provenance fields from the issue's own updated_at, NOT wall-clock
+  // `now`. The idempotency check hashes the full entity payload; a wall-clock
+  // last_synced_at/data_source changes every run, so an unchanged issue re-synced
+  // under the same (updated_at-keyed) idempotency_key tripped
+  // ERR_IDEMPOTENCY_MISMATCH and never synced. Deterministic provenance keeps the
+  // payload byte-stable across runs so the idempotent no-op actually holds.
+  const syncedAt = issue.updated_at;
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
   const actor = buildExternalActorFromGithubIssue(issue, { repository: repo });
 
@@ -243,9 +249,9 @@ async function syncSingleIssue(
       github_actor: actor ? { login: actor.login, id: actor.id, type: actor.type } : undefined,
       created_at: issue.created_at,
       closed_at: issue.closed_at,
-      last_synced_at: now,
+      last_synced_at: syncedAt,
       sync_pending: false,
-      data_source: `github issues api ${repo} #${issue.number} ${now.slice(0, 10)}`,
+      data_source: `github issues api ${repo} #${issue.number} ${syncedAt.slice(0, 10)}`,
     } as StoreEntityInput,
     {
       entity_type: "conversation",
@@ -297,7 +303,10 @@ async function syncSingleComment(
   issue: GitHubIssue,
   repo: string
 ): Promise<StoreResult> {
-  const now = new Date().toISOString();
+  // Deterministic provenance from the issue's updated_at (see syncSingleIssue) —
+  // keeps the re-stored issue entity payload byte-stable across runs so the
+  // idempotency content-hash holds.
+  const syncedAt = issue.updated_at;
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
   const commentActor = buildExternalActorFromGithubComment(comment, issue, { repository: repo });
   const issueActor = buildExternalActorFromGithubIssue(issue, { repository: repo });
@@ -319,9 +328,9 @@ async function syncSingleComment(
         : undefined,
       created_at: issue.created_at,
       closed_at: issue.closed_at,
-      last_synced_at: now,
+      last_synced_at: syncedAt,
       sync_pending: false,
-      data_source: `github issues api ${repo} #${issue.number} ${now.slice(0, 10)}`,
+      data_source: `github issues api ${repo} #${issue.number} ${syncedAt.slice(0, 10)}`,
     } as StoreEntityInput,
     {
       entity_type: "conversation",
