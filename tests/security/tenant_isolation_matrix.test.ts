@@ -35,6 +35,8 @@ interface FixtureUserData {
   sourceId: string;
   relationshipKey: string;
   observationId: string;
+  fragmentKey: string;
+  fragmentEntityType: string;
 }
 
 async function seedUserData(label: string): Promise<FixtureUserData> {
@@ -91,7 +93,28 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
     user_id: userId,
   });
 
-  return { userId, entityId, sourceId, relationshipKey, observationId };
+  // Per-user undeclared raw_fragment, used by the /audit_undeclared_fragments
+  // tenant-isolation row. The fragment_key is unique per user so a cross-user
+  // leak is detectable by key presence alone.
+  const fragmentEntityType = `${TEST_PREFIX}_type_${label}_${suffix}`;
+  const fragmentKey = `${TEST_PREFIX}_frag_${label}_${suffix}`;
+  await db.from("raw_fragments").insert({
+    entity_type: fragmentEntityType,
+    fragment_key: fragmentKey,
+    fragment_value: `${label}-only`,
+    user_id: userId,
+    frequency_count: 1,
+  });
+
+  return {
+    userId,
+    entityId,
+    sourceId,
+    relationshipKey,
+    observationId,
+    fragmentKey,
+    fragmentEntityType,
+  };
 }
 
 async function cleanupUserData(data: FixtureUserData): Promise<void> {
@@ -99,6 +122,7 @@ async function cleanupUserData(data: FixtureUserData): Promise<void> {
   await db.from("relationship_snapshots").delete().eq("relationship_key", data.relationshipKey);
   await db.from("entities").delete().eq("user_id", data.userId);
   await db.from("sources").delete().eq("id", data.sourceId);
+  await db.from("raw_fragments").delete().eq("fragment_key", data.fragmentKey);
 }
 
 async function callEndpoint(
@@ -301,6 +325,44 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
       } finally {
         await db.from("relationship_snapshots").delete().eq("relationship_key", plantedKey);
       }
+    });
+  });
+
+  describe("/audit_undeclared_fragments", () => {
+    it("user A sees their own undeclared fragment", async () => {
+      const { status, json } = await callEndpoint("/audit_undeclared_fragments", {
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      const keys = (json.audit ?? []).flatMap((t: any) =>
+        (t.undeclared_fields ?? []).map((f: any) => f.fragment_key)
+      );
+      expect(keys).toContain(userA.fragmentKey);
+    });
+
+    it("user A does NOT see user B's undeclared fragment", async () => {
+      const { status, json } = await callEndpoint("/audit_undeclared_fragments", {
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      const keys = (json.audit ?? []).flatMap((t: any) =>
+        (t.undeclared_fields ?? []).map((f: any) => f.fragment_key)
+      );
+      expect(keys).not.toContain(userB.fragmentKey);
+      // User B's whole entity_type must be absent from user A's audit too.
+      const types = (json.audit ?? []).map((t: any) => t.entity_type);
+      expect(types).not.toContain(userB.fragmentEntityType);
+    });
+
+    it("scoping to user B's entity_type as user A returns no leak", async () => {
+      const { status, json } = await callEndpoint("/audit_undeclared_fragments", {
+        user_id: userA.userId,
+        entity_type: userB.fragmentEntityType,
+      });
+      expect(status).toBe(200);
+      // Querying user B's type while authenticated as user A yields nothing —
+      // user A owns no fragments under that type.
+      expect(json.audit ?? []).toEqual([]);
     });
   });
 

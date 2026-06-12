@@ -612,6 +612,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
 - `neotoma schemas list`
 - `neotoma schemas get <entityType>`
+- `neotoma schemas audit-fragments [entityType]`: Report undeclared `raw_fragments` awaiting schema declaration (fields stored on observations but excluded from the entity snapshot because no active schema declares them). Read-only. Outputs, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag, plus `total_entity_types` / `total_undeclared_fields` rollups. Optional positional `entityType` (or `--entity-type <type>`) scopes the audit to one type; `--user-id <id>` overrides the resolved user. Maps to `POST /audit_undeclared_fragments` / MCP `audit_undeclared_fragments`.
 
 ### Peers
 

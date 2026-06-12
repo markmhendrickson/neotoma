@@ -40,9 +40,10 @@ Treat the diff as if you were an attacker. For every concern below, propose at l
 
 **6. Tenant isolation** — `SchemaRecommendationService.auditUndeclaredFragments` scopes its `raw_fragments` query to the resolved `user_id`, mirroring the existing `analyzeRawFragments` user-scoping (a provided default UUID OR null matches legacy null-owned rows; a real user id matches only that user via `.eq("user_id", userId)`). A caller cannot read another user's stranded fragments. The audit is read-only and has no write or deletion path. **No finding.**
 
-## Suggested negative tests
+## Negative tests
 
-- The new integration tests (`tests/integration/schema_recommendation_integration.test.ts` § `auditUndeclaredFragments`) cover the default-UUID and null-`user_id` scoping paths. A cross-user read assertion (user A cannot see user B's fragments) is a reasonable future addition to `tests/security/tenant_isolation_matrix.test.ts` — noted as a hardening opportunity, not a blocker, since the scoping reuses the audited `analyzeRawFragments` pattern.
+- The new integration tests (`tests/integration/schema_recommendation_integration.test.ts` § `auditUndeclaredFragments`) cover the default-UUID and null-`user_id` scoping paths.
+- **Cross-user isolation is now asserted** in `tests/security/tenant_isolation_matrix.test.ts` § `/audit_undeclared_fragments` (3 rows): user A sees their own undeclared fragment, user A does NOT see user B's fragment or B's entity_type, and scoping to user B's entity_type while authenticated as user A returns an empty audit. This closes the gap the review flagged against change_guardrails MUST 5.
 
 ## Residual risks
 

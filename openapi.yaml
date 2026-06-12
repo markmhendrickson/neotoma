@@ -5623,11 +5623,21 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                  - audit
+                  - total_entity_types
+                  - total_undeclared_fields
                 properties:
                   audit:
                     type: array
                     items:
                       type: object
+                      required:
+                        - entity_type
+                        - undeclared_fields
+                        - affected_entities
+                        - total_occurrences
+                        - schema_missing
                       properties:
                         entity_type:
                           type: string
@@ -5635,6 +5645,10 @@ paths:
                           type: array
                           items:
                             type: object
+                            required:
+                              - fragment_key
+                              - affected_entities
+                              - occurrences
                             properties:
                               fragment_key:
                                 type: string

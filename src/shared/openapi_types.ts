@@ -6541,19 +6541,19 @@ export interface operations {
         };
         content: {
           "application/json": {
-            audit?: {
-              entity_type?: string;
-              undeclared_fields?: {
-                fragment_key?: string;
-                affected_entities?: number;
-                occurrences?: number;
+            audit: {
+              entity_type: string;
+              undeclared_fields: {
+                fragment_key: string;
+                affected_entities: number;
+                occurrences: number;
               }[];
-              affected_entities?: number;
-              total_occurrences?: number;
-              schema_missing?: boolean;
+              affected_entities: number;
+              total_occurrences: number;
+              schema_missing: boolean;
             }[];
-            total_entity_types?: number;
-            total_undeclared_fields?: number;
+            total_entity_types: number;
+            total_undeclared_fields: number;
           };
         };
       };
