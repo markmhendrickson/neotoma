@@ -138,7 +138,9 @@ The store path preserves an undeclared field on the observation and routes it to
 
 ## Security hardening
 
-No security-sensitive surface changed by either fix. The #1483 diff classifier returned `sensitive=false`; the change adds keepalive framing on an already-authenticated stream and does not touch auth, proxy-trust, local-dev, public-route, or guest-access surfaces. No advisories opened or referenced.
+The #1483 change adds keepalive framing on an already-authenticated stream and does not touch auth, proxy-trust, local-dev, public-route, or guest-access surfaces (`sensitive=false`).
+
+The #1576 `audit_undeclared_fragments` change registers one new Express route, so `classify_diff.js` returned **`sensitive=true`** (the `src/actions.ts`-in-diff / v0.11.1 bypass-surface heuristic). A manual security review was completed — see [`security_review.md`](./security_review.md) — walking all six adversarial axes. The new route is **auth-required and read-only**: it resolves identity through the canonical `getAuthenticatedUserId`, scopes its `raw_fragments` read to the caller's own data (mirroring `analyzeRawFragments`), and writes nothing. It is registered in `scripts/security/protected_routes_manifest.json` with `requires_auth: true` / `sandbox_allowed: "none"` (manifest regenerated via `npm run security:manifest:write`; `security:manifest:check` green at 110 routes). Verdict: **with-caveats** — the caveat is classifier sensitivity, not a real finding. No advisories opened or referenced.
 
 ## Breaking changes
 
