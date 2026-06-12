@@ -37,18 +37,21 @@ import { runRedactionGuard } from "./redaction_guard.js";
 import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
 
 /**
- * One-time migration token folded into the pull-leg sync idempotency_key.
+ * One-time migration token folded into BOTH pull-leg sync idempotency keys
+ * (`issue-sync-*` and `issue-comment-sync-*`).
  *
  * Before the deterministic-provenance fix, the issue store payload contained a
  * wall-clock `last_synced_at`/`data_source`, so existing `sources` rows under
- * `issue-sync-<repo>-<number>-<updated_at>` carry a content_hash that no longer
- * matches the (now deterministic) payload. Those rows can't be overwritten —
- * the idempotency check rejects the mismatched content — so ~98 already-synced
- * issues were frozen with ERR_IDEMPOTENCY_MISMATCH and never updated.
+ * the sync keys carry a content_hash that no longer matches the (now
+ * deterministic) payload. Those rows can't be overwritten — the idempotency
+ * check rejects the mismatched content — so already-synced issues were frozen
+ * with ERR_IDEMPOTENCY_MISMATCH and never updated. The comment path re-stores
+ * the issue entity too, so it strands the same way under its own key.
  *
- * Bumping this token gives every issue a brand-new key, sidestepping the stale
- * rows without any destructive DB repair. The old rows simply go inert. Bump it
- * again only if a future payload-shape change strands keys the same way.
+ * Bumping this token gives every issue/comment a brand-new key, sidestepping
+ * the stale rows without any destructive DB repair. The old rows simply go
+ * inert. Bump it again only if a future payload-shape change strands keys the
+ * same way.
  */
 const SYNC_KEY_MIGRATION = "m2";
 
@@ -378,7 +381,7 @@ async function syncSingleComment(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}`,
+      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}-${SYNC_KEY_MIGRATION}`,
     })
   ) as Promise<StoreResult>;
 }

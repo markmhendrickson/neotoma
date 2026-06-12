@@ -172,7 +172,7 @@ describe("syncIssuesFromGitHub", () => {
     expect(seenIdempotencyKeys).toEqual(
       new Set([
         "issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2",
-        "issue-comment-sync-test/repo-1-101",
+        "issue-comment-sync-test/repo-1-101-m2",
       ])
     );
   });
