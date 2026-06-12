@@ -58,6 +58,66 @@ VITE_NEOTOMA_API_URL=http://localhost:3080
 
 Saved API URLs and auth tokens are scoped per environment (`dev` / `prod`), so switching preserves separate connection settings.
 
+## Skinning
+
+The Inspector ships with a default Neotoma palette, but embedders can override
+the colour palette and brand text (sidebar title, document title, home-link
+aria-label) at server start via JSON config files. No fork required.
+
+Two environment variables drive resolution; precedence is highest first:
+
+- **`NEOTOMA_INSPECTOR_SKIN_CONFIG=/abs/path/custom.json`** — load an arbitrary
+  skin JSON from disk. Useful for one-off embedder customizations without
+  rebuilding the package.
+- **`NEOTOMA_INSPECTOR_SKIN=<name>`** — load a bundled preset shipped under
+  `dist/inspector/skins/<name>.json` (built from `inspector/public/skins/`).
+  The repository ships with `sample` — a deliberately garish magenta/cyan
+  palette for verifying that skinning took effect — as the initial preset; add
+  more by dropping additional JSON files under `inspector/public/skins/`.
+
+When neither variable is set (or the configured file is missing/invalid), the
+Inspector renders the default Neotoma palette unchanged.
+
+### Skin JSON shape
+
+```jsonc
+{
+  "name": "sample",               // stable slug; required
+  "label": "Sample Skin",         // optional human-readable label
+
+  "brand": {
+    "sidebar_title": "Sample Skin",         // replaces the sidebar wordmark
+    "header_title": "Sample Skin (test)",   // sets document.title
+    "home_aria_label": "Sample Skin home"
+  },
+
+  "light": {                       // CSS variables for light mode
+    "background": "300 100% 98%",
+    "foreground": "300 80% 10%",
+    "primary":    "315 90% 50%",
+    "sidebar":    "315 70% 90%"
+    // ... see inspector/public/skins/sample.json for the full token list
+  },
+
+  "dark": {                        // optional dark-mode overrides
+    "background": "290 50% 8%",
+    "foreground": "300 100% 95%"
+    // ...
+  }
+}
+```
+
+Token values use the shadcn / Tailwind HSL triplet format
+(`"<hue> <saturation>% <lightness>%"`, optionally followed by `/ <alpha>`).
+The frontend sanitizer in `inspector/src/lib/inspector_skin.ts` rejects any
+value that doesn't match this shape, so a malformed skin can never break out of
+the CSS variable context.
+
+The server-side loader injects the sanitized skin into the SPA shell at runtime
+as `<script>window.__NEOTOMA_INSPECTOR_SKIN__ = {...};</script>`, and
+`initialize_inspector_skin_on_load()` applies it before the React tree mounts
+so first paint matches the configured palette.
+
 ## Sandbox mode & session handoff
 
 On the hosted sandbox (`sandbox.neotoma.io`), the Inspector is served at `/` on

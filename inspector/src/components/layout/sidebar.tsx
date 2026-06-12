@@ -40,6 +40,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import neotomaWordmarkUrl from "@/assets/neotoma_wordmark.svg?url";
+import { get_runtime_inspector_skin } from "@/lib/inspector_skin";
 import { SidebarExternalLinks } from "@/components/layout/sidebar_external_links";
 import { SidebarUserFooter } from "@/components/layout/sidebar_user_footer";
 import { PinnedPrimitivesSidebar } from "@/components/layout/pinned_primitives_sidebar";
@@ -137,6 +138,9 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
   const navigate = useNavigate();
   const activeFetchCount = useIsFetching();
   const show_design_system_nav = isInspectorSourceBuild();
+  const inspector_skin = get_runtime_inspector_skin();
+  const sidebar_brand_title = inspector_skin?.brand?.sidebar_title;
+  const sidebar_home_aria = inspector_skin?.brand?.home_aria_label ?? "Neotoma home";
   const [sidebar_collapsed, set_sidebar_collapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
@@ -282,16 +286,23 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
               to="/"
               aria-hidden={sidebar_collapsed}
               tabIndex={sidebar_collapsed ? -1 : undefined}
+              aria-label={sidebar_home_aria}
               className={cn(
                 "flex min-w-0 items-center overflow-hidden",
                 sidebar_collapsed && "pointer-events-none"
               )}
             >
-              <img
-                src={neotomaWordmarkUrl}
-                alt="Neotoma"
-                className="h-5 w-auto max-w-none shrink-0 object-contain object-left dark:invert"
-              />
+              {sidebar_brand_title ? (
+                <span className="truncate text-base font-semibold tracking-tight text-sidebar-foreground">
+                  {sidebar_brand_title}
+                </span>
+              ) : (
+                <img
+                  src={neotomaWordmarkUrl}
+                  alt="Neotoma"
+                  className="h-5 w-auto max-w-none shrink-0 object-contain object-left dark:invert"
+                />
+              )}
             </Link>
           </div>
         </div>
