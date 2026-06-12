@@ -45,7 +45,7 @@ const RENDERED_PAGE_FIELDS: FieldSpec = [
     type: "string",
     required: true,
     description:
-      "Body HTML injected verbatim into <body>. Do not include <html>/<head>/<body> wrappers — the server wraps this in a minimal template. Not escaped on render.",
+      "Body HTML injected verbatim into <body>. Do not include <html>/<head>/<body> wrappers — the server wraps this in a minimal template. Not escaped on render. Served at GET /entities/:id/html; to share with a non-user, call publish_rendered_page for a guest URL (the bare URL requires ?access_token under the submitter_scoped policy).",
   },
   {
     name: "meta_description",
@@ -117,7 +117,10 @@ export async function seedRenderedPageSchema(options?: {
       metadata: {
         label: "Rendered page",
         description:
-          "A bespoke HTML expression of something — proposal pages, public memos, shareable narratives. Distinct from the data entities it describes; uses REFERS_TO to link them. Served via GET /entities/:id/html.",
+          "A bespoke HTML expression of something — proposal pages, public memos, shareable narratives. Distinct from the data entities it describes; uses REFERS_TO to link them. " +
+          "Served as standalone HTML at GET /entities/:id/html: html_body is injected verbatim into a minimal server template (do NOT include <html>/<head>/<body> wrappers) and custom_css is injected as an inline <style> in <head>. " +
+          "Guest viewing requires ?access_token=<guest_token> because guest_access_policy is submitter_scoped (a bare URL 401s for non-authenticated viewers). " +
+          "To get a working share link in one step, call the publish_rendered_page MCP tool — it mints the guest token and returns the ready …/entities/<id>/html?access_token=<token> URL plus its TTL. See docs/rendered_page.md.",
         category: "knowledge",
         // submitter_scoped lets a guest read a specific rendered_page when they
         // present a guest_access_token bound to that page's entity_id. This is
