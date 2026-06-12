@@ -78,10 +78,8 @@ function coerceStringRecord(value: unknown): Record<string, string> | undefined 
 
 function coerceBrand(value: unknown): ResolvedInspectorSkin["brand"] {
   if (!isRecord(value)) return undefined;
-  const sidebar_title =
-    typeof value.sidebar_title === "string" ? value.sidebar_title : undefined;
-  const header_title =
-    typeof value.header_title === "string" ? value.header_title : undefined;
+  const sidebar_title = typeof value.sidebar_title === "string" ? value.sidebar_title : undefined;
+  const header_title = typeof value.header_title === "string" ? value.header_title : undefined;
   const home_aria_label =
     typeof value.home_aria_label === "string" ? value.home_aria_label : undefined;
   if (!sidebar_title && !header_title && !home_aria_label) return undefined;
@@ -131,7 +129,7 @@ function loadSkinFromPath(filePath: string): ResolvedInspectorSkin | null {
  * unusable (so the Inspector renders the default Neotoma theme).
  */
 export function resolveInspectorSkin(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): ResolvedInspectorSkin | null {
   const explicitPath = (env.NEOTOMA_INSPECTOR_SKIN_CONFIG || "").trim();
   if (explicitPath) {
