@@ -9814,6 +9814,37 @@ app.post("/correct", async (req, res) => {
 });
 
 // POST /get_authenticated_user - Get authenticated user ID
+// FU-2026-05-002: neotoma_turn_summary — computes per-turn status line.
+app.post("/turn_summary", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, undefined);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const conversationId =
+      typeof body.conversation_id === "string" ? body.conversation_id : undefined;
+    const turnKey = typeof body.turn_key === "string" ? body.turn_key : undefined;
+    if (!conversationId || !turnKey) {
+      return sendError(
+        res,
+        400,
+        "ERR_TURN_SUMMARY_BAD_REQUEST",
+        "conversation_id and turn_key are required"
+      );
+    }
+    const { computeTurnSummary, TurnSummaryError } = await import("./services/turn_summary.js");
+    try {
+      const result = await computeTurnSummary({ userId, conversationId, turnKey });
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof TurnSummaryError) {
+        return sendError(res, err.status, err.code, err.message);
+      }
+      throw err;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to compute turn summary");
+  }
+});
+
 app.post("/get_authenticated_user", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, undefined);

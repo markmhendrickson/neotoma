@@ -1320,6 +1320,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
     {
+      name: "neotoma_turn_summary",
+      description: desc(
+        "neotoma_turn_summary",
+        "Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("neotoma_turn_summary"),
+    },
+    {
       name: "npm_check_update",
       description: desc(
         "npm_check_update",
@@ -1415,6 +1423,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "sync_peer",
   "resolve_sync_conflict",
   "npm_check_update",
+  "neotoma_turn_summary",
 ] as const;
 
 export type NeotomaToolName = (typeof NEOTOMA_TOOL_NAMES)[number];
