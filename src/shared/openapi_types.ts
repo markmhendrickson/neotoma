@@ -5520,6 +5520,20 @@ export interface operations {
         };
       };
       /**
+       * @description Write rejected by policy. `OVERRIDE_POLICY_VIOLATION` is returned
+       *     when an `agent_definition` entity's `override_policy` denies the
+       *     calling agent role a field being written; the envelope details
+       *     carry `field_name`, `agent_role`, and `entity_id`.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
        * @description Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
        *     idempotency_key was already used for a store call with different
        *     content. Use a new idempotency_key to write the updated payload.
@@ -6877,6 +6891,20 @@ export interface operations {
               field?: string;
             };
           };
+        };
+      };
+      /**
+       * @description Correction rejected by policy. `OVERRIDE_POLICY_VIOLATION` is
+       *     returned when an `agent_definition` entity's `override_policy`
+       *     denies the calling agent role the corrected field; the envelope
+       *     details carry `field_name`, `agent_role`, and `entity_id`.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

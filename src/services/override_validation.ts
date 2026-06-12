@@ -275,6 +275,13 @@ export interface EnforceOverridePolicyParams {
   entityId: string | null;
   /** Fields being written by this observation. */
   fields: Record<string, unknown>;
+  /**
+   * Owning user id for the write. The snapshot lookup is scoped to this user
+   * so a colliding entity_id in another tenant can never supply the policy
+   * (same failure class as the 2026-05-21 relationship tenant-isolation
+   * advisory).
+   */
+  userId: string;
   /** Calling agent identity from the active request context. */
   identity: AgentIdentity | null;
   /** AAuth admission context, if available (used for role derivation). */
@@ -295,23 +302,24 @@ export interface EnforceOverridePolicyParams {
  *   {@link OverridePolicyViolationError} on the first violation.
  */
 export async function enforceOverridePolicy(params: EnforceOverridePolicyParams): Promise<void> {
-  const { entityType, entityId, fields, identity, admission, db: dbClient } = params;
+  const { entityType, entityId, fields, identity, admission, userId, db: dbClient } = params;
 
-  // Phase 1: only agent_definition entities carry a policy.
+  // Phase 1: only agent_definition entities carry a policy. No agent_definition
+  // schema is seeded yet, so this guard is inert until that schema lands;
+  // shipping the enforcement hook first keeps the write path ready.
   if (entityType !== "agent_definition") return;
 
   // New entities have no snapshot, so no policy to enforce yet.
   if (entityId === null) return;
 
-  // Fetch the current snapshot for this entity.
-  const queryResult = await (dbClient
+  // Fetch the current snapshot for this entity, scoped to the owning user so a
+  // cross-tenant entity_id collision can never supply the policy.
+  const { data: snapshotData, error: snapshotError } = await dbClient
     .from("entity_snapshots")
     .select("snapshot")
-    .eq("entity_id", entityId) as unknown as Promise<{
-    data: { snapshot: Record<string, unknown> | null } | null;
-    error: { message: string } | null;
-  }>);
-  const { data: snapshotData, error: snapshotError } = queryResult;
+    .eq("entity_id", entityId)
+    .eq("user_id", userId)
+    .maybeSingle();
 
   if (snapshotError) {
     // Fail-open: if we can't read the snapshot, don't block the write.
@@ -327,8 +335,19 @@ export async function enforceOverridePolicy(params: EnforceOverridePolicyParams)
 
   if (!snapshotData) return;
 
-  const snapshot =
-    (snapshotData as { snapshot?: Record<string, unknown> | null } | null)?.snapshot ?? null;
+  // The `snapshot` column is JSON TEXT; the local adapter may surface it as a
+  // parsed object or a raw string depending on the read path. Accept both.
+  const rawSnapshot = (snapshotData as { snapshot?: unknown }).snapshot ?? null;
+  let snapshot: Record<string, unknown> | null = null;
+  if (typeof rawSnapshot === "string") {
+    try {
+      snapshot = JSON.parse(rawSnapshot) as Record<string, unknown>;
+    } catch {
+      snapshot = null;
+    }
+  } else if (rawSnapshot && typeof rawSnapshot === "object") {
+    snapshot = rawSnapshot as Record<string, unknown>;
+  }
   if (!snapshot) return;
 
   const rawPolicy = snapshot["override_policy"];

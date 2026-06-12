@@ -95,6 +95,7 @@ export async function createObservation(
     fields: params.fields,
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
+    userId: params.user_id,
     db,
   });
   const observationId = generateObservationId(

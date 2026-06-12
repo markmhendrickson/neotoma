@@ -56,6 +56,7 @@ interface ErrorEnvelope {
 | `AUTH_EXPIRED`   | 401  | No     | Bearer token has expired                        |
 | `AUTH_MALFORMED` | 401  | No     | Bearer token format is invalid                  |
 | `FORBIDDEN`      | 403  | No     | Insufficient permissions (RLS policy violation) |
+| `OVERRIDE_POLICY_VIOLATION` | 403 | No | Write to a policy-protected field on an `agent_definition` entity denied for the calling agent role (see `src/services/override_validation.ts`; details carry `field_name`, `agent_role`, `entity_id`) |
 
 **Common Causes:**
 
