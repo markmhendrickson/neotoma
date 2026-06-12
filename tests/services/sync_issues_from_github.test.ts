@@ -172,8 +172,31 @@ describe("syncIssuesFromGitHub", () => {
     expect(seenIdempotencyKeys).toEqual(
       new Set([
         "issue-sync-test/repo-1-2026-05-01T00:00:00Z",
-        "issue-comment-sync-test/repo-1-101",
+        "issue-comment-sync-test/repo-1-101-2026-05-01T01:00:00Z",
       ])
+    );
+  });
+
+  it("produces byte-identical stored content across repeated syncs of an unchanged issue", async () => {
+    // Regression: last_synced_at/data_source were derived from new Date(), so an
+    // unchanged issue re-synced under the same (updated_at-keyed) idempotency_key
+    // produced DIFFERENT content each run → ERR_IDEMPOTENCY_MISMATCH, and every
+    // open issue failed to sync. Content must be a pure function of issue state.
+    const { ops, store } = createOps();
+    mockListIssues.mockResolvedValue([issue(1)]);
+    mockListIssueComments.mockResolvedValue([]);
+
+    await syncIssuesFromGitHub(ops);
+    await syncIssuesFromGitHub(ops);
+
+    const issueStoreCalls = store.mock.calls.filter((c) =>
+      String(c[0]?.idempotency_key ?? "").startsWith("issue-sync-")
+    );
+    expect(issueStoreCalls.length).toBe(2);
+    // Same key AND same content on both runs.
+    expect(issueStoreCalls[0][0].idempotency_key).toBe(issueStoreCalls[1][0].idempotency_key);
+    expect(JSON.stringify(issueStoreCalls[0][0].entities)).toBe(
+      JSON.stringify(issueStoreCalls[1][0].entities)
     );
   });
 

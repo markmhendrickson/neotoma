@@ -224,7 +224,15 @@ async function syncSingleIssue(
   issue: GitHubIssue,
   repo: string
 ): Promise<StoreResult> {
-  const now = new Date().toISOString();
+  // Derive the sync timestamp from the issue's own updated_at rather than
+  // wall-clock. The stored entity must be a deterministic function of the
+  // GitHub issue state: the store's idempotency_key is keyed on updated_at, so
+  // if any content field (last_synced_at, data_source) varied per run, an
+  // unchanged issue re-synced under the same key would fail
+  // ERR_IDEMPOTENCY_MISMATCH ("same key, different content"). Keying both the
+  // content and the idempotency_key off updated_at keeps a no-op re-sync truly
+  // idempotent while a genuine edit (new updated_at) flows through cleanly.
+  const now = issue.updated_at;
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
   const actor = buildExternalActorFromGithubIssue(issue, { repository: repo });
 
@@ -297,7 +305,10 @@ async function syncSingleComment(
   issue: GitHubIssue,
   repo: string
 ): Promise<StoreResult> {
-  const now = new Date().toISOString();
+  // Deterministic content (see syncSingleIssue): derive the embedded issue
+  // snapshot's last_synced_at/data_source from issue.updated_at so a no-op
+  // re-sync is byte-identical under the same idempotency_key.
+  const now = issue.updated_at;
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
   const commentActor = buildExternalActorFromGithubComment(comment, issue, { repository: repo });
   const issueActor = buildExternalActorFromGithubIssue(issue, { repository: repo });
@@ -353,7 +364,7 @@ async function syncSingleComment(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}`,
+      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}-${comment.updated_at}`,
     })
   ) as Promise<StoreResult>;
 }
