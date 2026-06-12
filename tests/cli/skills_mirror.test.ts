@@ -141,7 +141,9 @@ describe("mirrorSkillsToAllHarnesses", () => {
     fs.rmSync(path.join(sourceDir, "new-skill"), { recursive: true });
     mirrorSkillsToAllHarnesses({ cwd: root, scope: "project", sourceDir });
     expect(fs.existsSync(path.join(root, ".codex", "skills", "new-skill"))).toBe(false); // pruned
-    expect(fs.existsSync(path.join(root, ".codex", "skills", "vendor-skill", "SKILL.md"))).toBe(true); // foreign kept
+    expect(fs.existsSync(path.join(root, ".codex", "skills", "vendor-skill", "SKILL.md"))).toBe(
+      true
+    ); // foreign kept
   });
 
   it("reports source_present=false when the source is missing", () => {

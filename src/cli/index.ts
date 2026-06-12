@@ -8834,7 +8834,9 @@ program
 
 const skillsCommand = program
   .command("skills")
-  .description("Skills mirroring: keep harness skills directories in sync with the canonical source.");
+  .description(
+    "Skills mirroring: keep harness skills directories in sync with the canonical source."
+  );
 
 skillsCommand
   .command("sync")
@@ -8864,7 +8866,8 @@ skillsCommand
         continue;
       }
       const verb = r.changed ? "synced" : "up-to-date";
-      const detail = r.mode === "whole-dir-symlink" ? "dir-symlink" : `${r.linked.length} skill link(s)`;
+      const detail =
+        r.mode === "whole-dir-symlink" ? "dir-symlink" : `${r.linked.length} skill link(s)`;
       console.log(`  ${r.tool}: ${verb} (${r.mode}, ${detail}) → ${r.target}`);
     }
     console.log(report.changed ? "Skills mirror updated." : "All harnesses already up-to-date.");
