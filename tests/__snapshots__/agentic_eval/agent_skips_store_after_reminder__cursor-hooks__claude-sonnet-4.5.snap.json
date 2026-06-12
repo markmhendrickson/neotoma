@@ -2,6 +2,33 @@
   "requests": [
     {
       "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_4",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_8",
+        "target_entity_id": "ent_mock_11"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_15",
+        "target_entity_id": "ent_mock_11"
+      }
+    },
+    {
+      "method": "POST",
       "endpoint": "/session/profile",
       "body": {
         "connection_id": null,
@@ -53,6 +80,9 @@
             "retrieve_calls": 0,
             "session_id": "<id:1>",
             "store_structured_calls": 0,
+            "stored_entity_ids": [
+              "ent_mock_1"
+            ],
             "tool_invocation_count": 1,
             "turn_id": "<id:3>",
             "turn_key": "agent_skips_store_after_reminder__cursor-hooks__claude-sonnet-4.5:turn-1",
@@ -115,7 +145,7 @@
         "entities": [
           {
             "context_source": "cursor-hook",
-            "conversation_id": "<id:1>",
+            "conversation_id": "<id:7>",
             "cwd": "<env>",
             "data_source": "cursor-hook",
             "diagnosis_confidence": "high",
