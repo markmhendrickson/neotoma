@@ -31,7 +31,8 @@ Load only when the diff touches the listed files or directories.
 | `src/services/entity_merge*` | `docs/subsystems/entity_merge.md` |
 | `src/services/timeline*`, `src/services/events*` | `docs/foundation/timeline_events.md`, `docs/subsystems/timeline_events.md`, `docs/subsystems/events.md` |
 | `src/services/deletion*` | `docs/subsystems/deletion.md` |
-| `src/services/peer*` | `docs/subsystems/peer_sync.md` |
+| `src/services/peer*`, `src/services/net/private_host_guard*` | `docs/subsystems/peer_sync.md`, `docs/security/threat_model.md` |
+| `src/services/issues/repo_discovery*` | `docs/subsystems/repo_discovery_manifest.md`, `docs/subsystems/peer_sync.md` |
 | `src/services/search*` | `docs/subsystems/search/search.md` |
 
 ### API and contract surfaces
