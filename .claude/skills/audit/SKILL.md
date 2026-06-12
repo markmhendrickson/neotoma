@@ -41,7 +41,7 @@ Neotoma has strong write-path discipline (idempotency, schema-first, immutabilit
 
 1. Parse mode flags.
 2. Resolve user scope (`get_session_identity` if no `--user` flag).
-3. Print a one-line summary of what will be checked: "Running 14 deterministic checks against user X (≈N entities)". Add "+8 LLM-assisted checks" if `--deep`.
+3. Print a one-line summary of what will be checked: "Running 15 deterministic checks against user X (≈N entities)". Add "+8 LLM-assisted checks" if `--deep`.
 
 ### Phase 2 — Deterministic checks
 
@@ -85,6 +85,7 @@ Run all of the following. Each check produces zero or more `Finding` records. Ea
 | `RELATIONSHIP_DANGLING`     | relationship  | Relationship references entity_id that does not exist or is soft-deleted (`merged_to_entity_id` set).             | `delete_relationship` or update to canonical target | high     |
 | `SCHEMA_NO_CANONICAL_FIELDS`| schema        | Registered schema has empty `canonical_name_fields` — every store of that type creates a new row.                 | `register_schema` to declare canonical fields | high     |
 | `INTERPRETATION_HEARTBEAT_STALE` | observation | Interpretation rows with `started_at` set, `completed_at` null, and `heartbeat_at` older than threshold.   | Investigate — possibly stuck interpretation  | medium   |
+| `ENV_CONTAMINATION`             | entity        | Entity snapshot fields contain values matching known dev/test/staging environment markers (e.g. `localhost`, `127.0.0.1`, `dev.`, `.local`, `test-`, `-dev`, `-staging`, Kubernetes cluster DNS). Signals records imported from a non-production environment into a production database, or vice versa. | `correct` (update field value) or `delete_entity` | varies   |
 
 #### Implementation notes for each check
 
@@ -104,6 +105,7 @@ Run all of the following. Each check produces zero or more `Finding` records. Ea
 - **`RELATIONSHIP_DANGLING`** — `list_relationships`; for each row, verify `source_entity_id` and `target_entity_id` resolve via `retrieve_entity_snapshot` and are not soft-deleted.
 - **`SCHEMA_NO_CANONICAL_FIELDS`** — `list_entity_types`; flag any with empty `canonical_name_fields`.
 - **`INTERPRETATION_HEARTBEAT_STALE`** — Query interpretation rows; threshold defaults to 15 minutes.
+- **`ENV_CONTAMINATION`** — For each entity, call `retrieve_entity_snapshot` and pass the resulting field map to `scanSnapshotForContamination()` (implemented in `src/services/env_contamination_audit.ts`). The function tests every string-valued field against `ENV_CONTAMINATION_INDICATORS` (loopback IPs, `localhost`, Kubernetes cluster-internal DNS, `.local` mDNS, `dev.`/`staging.` sub-domains, `test_user`/`test-user` patterns, `test-` prefixes, `-dev`/`-staging` suffixes, nil UUID, Docker private IP ranges). Structural metadata fields (`entity_id`, `created_at`, `updated_at`, `observation_count`, `user_id`, `_migration_run_id`) are skipped to avoid false positives. The severity of each finding is the highest severity among matched indicators (`high` > `medium` > `low`). For efficiency, sample up to the 500 most recently updated entities per audit run unless `--scope=entity` is active. Populate `entity_ids` with the IDs of flagged entities and `detail` with per-entity summaries of the matched fields and indicators. `args_hint` for the remediation: `{ entity_id, fields_to_correct: ["<field>", ...] }`.
 
 ### Phase 3 — LLM-assisted checks (only when `--deep`)
 
@@ -166,7 +168,7 @@ For each remediation the user authorizes:
 
 ```
 Auditing Neotoma database for user mark (≈8,420 entities)
-Running 14 deterministic checks…
+Running 15 deterministic checks…
 
 Summary: 47 findings (3 high, 12 medium, 32 low/info)
 
