@@ -36,6 +36,14 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/sdk/agent",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/sdk/python",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/aauth",
     "classification": "other"
   },

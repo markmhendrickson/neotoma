@@ -31,6 +31,7 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
+    NEOTOMA_BASE_URL,
     format_failure_hint,
     get_client,
     harness_provenance,
