@@ -18,6 +18,7 @@
  * schema `turn_key` (see `github_thread_keys.ts` — not `github_comment_id` alone).
  */
 
+import { createHash } from "node:crypto";
 import type {
   Operations,
   StoreEntityInput,
@@ -217,6 +218,28 @@ function extractEntitiesArray(raw: unknown): Array<Record<string, unknown>> {
 }
 
 /**
+ * Short, stable digest of an issue's mutable content (title, body, state,
+ * labels, closed_at). Folded into the sync idempotency_key so that:
+ *   - a re-sync of an UNCHANGED issue keeps the same key → idempotent no-op,
+ *   - a re-sync after the issue was edited on GitHub (new title/body/labels/
+ *     state) yields a NEW key → the update lands as a fresh observation.
+ *
+ * Without this, the key was constant per issue (`issue-sync-<repo>-<number>`)
+ * while the entity content drifted, so every post-edit sync tripped
+ * ERR_IDEMPOTENCY_MISMATCH and the whole run reported "Synced 0 issues".
+ */
+function issueContentDigest(issue: GitHubIssue): string {
+  const material = JSON.stringify({
+    title: issue.title,
+    body: issue.body ?? "",
+    state: issue.state,
+    labels: issue.labels.map((l) => l.name).sort(),
+    closed_at: issue.closed_at ?? null,
+  });
+  return createHash("sha256").update(material).digest("hex").slice(0, 16);
+}
+
+/**
  * Sync a single issue and its first message (the issue body).
  */
 async function syncSingleIssue(
@@ -275,7 +298,7 @@ async function syncSingleIssue(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-sync-${repo}-${issue.number}`,
+      idempotency_key: `issue-sync-${repo}-${issue.number}-${issueContentDigest(issue)}`,
     })
   ) as Promise<StoreResult>;
 }
