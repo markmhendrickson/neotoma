@@ -445,9 +445,17 @@ export async function queryEntities(
 
   const entityIds = entities.map((e: any) => e.id);
   const filteredEntityIds = entityIds;
+  // For the lightweight (no-snapshot) projection we still need the `status`
+  // field that callers expect on the returned row. We cannot project it with a
+  // PostgREST `snapshot->>status` JSON operator here: that syntax is only
+  // translated by the SQLite adapter inside filter clauses (normalizeColumnName),
+  // not inside the raw SELECT list, so SQLite resolves `status` as a literal
+  // column and throws `no such column: status`. Instead, select the `snapshot`
+  // JSON column itself and derive `status` from it in JS below. This keeps the
+  // returned row shape identical across the Postgres and SQLite backends.
   const snapshotSelect = includeSnapshots
     ? "*"
-    : "entity_id, schema_version, observation_count, last_observation_at, computed_at, snapshot->>status";
+    : "entity_id, schema_version, observation_count, last_observation_at, computed_at, snapshot";
   const { data: snapshots, error: snapshotsError } = await db
     .from("entity_snapshots")
     .select(snapshotSelect)
@@ -623,6 +631,8 @@ export async function queryEntities(
   return entities.map((entity: any) => {
     const snapshot = snapshotMap.get(entity.id);
     const rawFragments = rawFragmentsByEntity.get(entity.id);
+    const snapshotData = (snapshot?.snapshot ?? {}) as Record<string, unknown>;
+    const lightweightStatus = snapshotData["status"];
     return {
       entity_id: entity.id,
       entity_type: entity.entity_type,
@@ -630,8 +640,8 @@ export async function queryEntities(
       schema_version: snapshot?.schema_version,
       snapshot: includeSnapshots
         ? snapshot?.snapshot || {}
-        : snapshot?.["status"] != null
-          ? { status: snapshot["status"] }
+        : lightweightStatus != null
+          ? { status: lightweightStatus }
           : {},
       raw_fragments:
         includeSnapshots && rawFragments && Object.keys(rawFragments).length > 0
