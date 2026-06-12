@@ -172,7 +172,7 @@ describe("syncIssuesFromGitHub", () => {
     expect(seenIdempotencyKeys).toEqual(
       new Set([
         "issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2",
-        "issue-comment-sync-test/repo-1-101-m2",
+        "issue-comment-sync-test/repo-1-101-2026-05-01T00:00:00Z-m2",
       ])
     );
   });
@@ -219,6 +219,32 @@ describe("syncIssuesFromGitHub", () => {
     const issueEntity = store.mock.calls[0]?.[0]?.entities?.[0] as Record<string, unknown>;
     expect(issueEntity.last_synced_at).toBe("2026-05-01T00:00:00Z");
     expect(issueEntity.data_source).toContain("2026-05-01");
+  });
+
+  it("gives a comment a fresh key when its issue's updated_at changes", async () => {
+    // The comment store re-stores the issue entity (deterministic, tracks
+    // issue.updated_at). When the issue changes, the comment payload changes
+    // too, so its key must include issue.updated_at — otherwise the new content
+    // collides with the stale row under a comment.id-only key. This accumulated
+    // in production once the swarm started bumping issue.updated_at.
+    const { ops, seenIdempotencyKeys } = createOps();
+    mockListIssueComments.mockResolvedValue([comment(101)]);
+
+    mockListIssues.mockResolvedValueOnce([
+      { ...issue(1), updated_at: "2026-05-01T00:00:00Z" },
+    ]);
+    await syncIssuesFromGitHub(ops);
+    mockListIssues.mockResolvedValueOnce([
+      { ...issue(1, "Edited"), updated_at: "2026-05-02T12:00:00Z" },
+    ]);
+    await syncIssuesFromGitHub(ops);
+
+    expect(
+      seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-01T00:00:00Z-m2")
+    ).toBe(true);
+    expect(
+      seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-02T12:00:00Z-m2")
+    ).toBe(true);
   });
 
   describe("push leg — local public issues without github_number", () => {
