@@ -1,0 +1,66 @@
+{
+  "name": "@neotoma/agent",
+  "version": "0.1.0",
+  "description": "Protocol-enforcing agent harness SDK for Neotoma. Wraps @neotoma/client with the canonical store-first turn protocol (bounded retrieval, PART_OF/REFERS_TO wiring, deterministic idempotency keys) so any agent loop gets correct Neotoma memory behavior. Provider-agnostic.",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./memory": {
+      "types": "./dist/memory.d.ts",
+      "import": "./dist/memory.js"
+    },
+    "./with-memory": {
+      "types": "./dist/with_memory.d.ts",
+      "import": "./dist/with_memory.js"
+    },
+    "./diagnose": {
+      "types": "./dist/diagnose.d.ts",
+      "import": "./dist/diagnose.js"
+    },
+    "./SKILL.md": "./SKILL.md"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "neotoma",
+    "memory",
+    "agent",
+    "sdk",
+    "llm",
+    "state-layer",
+    "protocol"
+  ],
+  "author": "Mark Hendrickson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmhendrickson/neotoma.git",
+    "directory": "packages/agent"
+  },
+  "homepage": "https://neotoma.io",
+  "bugs": {
+    "url": "https://github.com/markmhendrickson/neotoma/issues"
+  },
+  "dependencies": {
+    "@neotoma/client": "file:../client"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3"
+  }
+}

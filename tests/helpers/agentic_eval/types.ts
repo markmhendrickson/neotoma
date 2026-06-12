@@ -61,6 +61,17 @@ export type AssertionPredicate =
       local_build?: boolean;
       reminder_injected?: boolean;
       recommends_includes?: string;
+    }
+  | {
+      /**
+       * Assert that at least one stored entity of `entity_type` has a
+       * non-null, non-empty value at `field`. Use `where` to narrow to a
+       * specific entity when multiple of the same type may be stored.
+       */
+      type: "field_present";
+      entity_type: string;
+      field: string;
+      where?: Record<string, unknown>;
     };
 
 export interface FixtureAssertions {

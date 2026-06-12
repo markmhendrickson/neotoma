@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **443**
-- Backend and repo Vitest files: **410**
+- Total automated test files: **447**
+- Backend and repo Vitest files: **414**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 113 |
+| Vitest unit tests | 114 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 51 |
-| Vitest integration tests | 124 |
+| Vitest integration tests | 126 |
 | Vitest CLI tests | 62 |
-| Vitest contract tests | 12 |
+| Vitest contract tests | 13 |
 | Vitest security tests | 3 |
 | Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
@@ -108,7 +108,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (113):**
+**Files (114):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -126,6 +126,7 @@ flowchart TD
 - `tests/unit/agent_capabilities.test.ts`
 - `tests/unit/agent_grants_service.test.ts`
 - `tests/unit/agent_identity.test.ts`
+- `tests/unit/agent_memory.test.ts`
 - `tests/unit/agents_grants_import.test.ts`
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
@@ -327,7 +328,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (124):**
+**Files (126):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -337,6 +338,7 @@ flowchart TD
 - `tests/integration/aauth_tpm2_e2e.test.ts`
 - `tests/integration/aauth_webauthn_packed_e2e.test.ts`
 - `tests/integration/agent_capabilities_store.test.ts`
+- `tests/integration/agent_memory_turn_lifecycle.test.ts`
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`
 - `tests/integration/anonymous_write_policy.test.ts`
@@ -434,6 +436,7 @@ flowchart TD
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
+- `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
@@ -527,7 +530,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (12):**
+**Files (13):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -539,6 +542,7 @@ flowchart TD
 - `tests/contract/openclaw_plugin.test.ts`
 - `tests/contract/package_contents.test.ts`
 - `tests/contract/package_scripts.test.ts`
+- `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/vite_config.test.ts`
 
 ### Vitest security tests

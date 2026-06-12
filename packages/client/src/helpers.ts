@@ -177,16 +177,32 @@ export async function storeChatTurn(
   });
 
   const stored = extractStoredEntities(storeResult);
-  const conversationEntityId = stored[0]?.entity_id ?? "";
+
+  // Result entities may be reordered or fewer than sent (when an existing
+  // entity matches). Prefer `observation_index` to align back to input.
+  const byInputIndex = new Map<number, StoredEntityRef>();
+  for (const e of stored) {
+    const idx = (e as StoredEntityRef & { observation_index?: number }).observation_index;
+    if (typeof idx === "number") byInputIndex.set(idx, e);
+  }
+  const lookupByIndex = (i: number): string | undefined => {
+    const direct = byInputIndex.get(i);
+    if (direct?.entity_id) return direct.entity_id;
+    if (stored.length === entities.length) return stored[i]?.entity_id;
+    return undefined;
+  };
+
+  const conversationEntityId =
+    lookupByIndex(0) ??
+    stored.find((e) => e.entity_type === "conversation")?.entity_id ??
+    "";
 
   return {
     conversationEntityId,
     userMessageEntityId:
-      indexByRole.user !== undefined ? stored[indexByRole.user]?.entity_id : undefined,
+      indexByRole.user !== undefined ? lookupByIndex(indexByRole.user) : undefined,
     assistantMessageEntityId:
-      indexByRole.assistant !== undefined
-        ? stored[indexByRole.assistant]?.entity_id
-        : undefined,
+      indexByRole.assistant !== undefined ? lookupByIndex(indexByRole.assistant) : undefined,
     storeResult,
   };
 }

@@ -13,15 +13,6 @@
       "method": "POST",
       "endpoint": "/create_relationship",
       "body": {
-        "relationship_type": "REFERS_TO",
-        "source_entity_id": "ent_mock_19",
-        "target_entity_id": "ent_mock_16"
-      }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/create_relationship",
-      "body": {
         "relationship_type": "PART_OF",
         "source_entity_id": "ent_mock_3",
         "target_entity_id": "ent_mock_1"
@@ -32,7 +23,7 @@
       "endpoint": "/create_relationship",
       "body": {
         "relationship_type": "PART_OF",
-        "source_entity_id": "ent_mock_23",
+        "source_entity_id": "ent_mock_16",
         "target_entity_id": "ent_mock_1"
       }
     },
@@ -41,7 +32,7 @@
       "endpoint": "/create_relationship",
       "body": {
         "relationship_type": "PART_OF",
-        "source_entity_id": "ent_mock_28",
+        "source_entity_id": "ent_mock_21",
         "target_entity_id": "ent_mock_1"
       }
     },
@@ -67,7 +58,7 @@
             "workspace_kind": "<env>"
           },
           {
-            "content": "Find the auth flow in this repo.",
+            "content": "Create a plan to add rate limiting to the API. Save it as a .plan.md file.",
             "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_message",
@@ -75,7 +66,7 @@
             "hook_event": "beforeSubmitPrompt",
             "role": "user",
             "sender_kind": "user",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1"
+            "turn_key": "plan_creation_stores_to_neotoma__cursor-hooks__composer-2:turn-1"
           }
         ],
         "idempotency_key": "<id:2>",
@@ -112,7 +103,7 @@
               "ent_mock_3"
             ],
             "turn_id": "<id:4>",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
+            "turn_key": "plan_creation_stores_to_neotoma__cursor-hooks__composer-2:turn-1",
             "working_directory": "<env>"
           }
         ],
@@ -131,12 +122,12 @@
             "harness": "cursor",
             "has_error": false,
             "hook_event": "postToolUse",
-            "input_summary": "{\"path\":\"src/auth/index.ts\"}",
+            "input_summary": "{\"path\":\"/repo/.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md\",\"content\":\"---\\nname: Add Rate Limiting\\noverview: Implement per-user rate limiting on all API endpoints.\\ntodos:\\n  - id: schema\\n    content: Add rate_limit field to schema.\\n    status: pending\\n  - id: middleware\\n    content: Write rate limiting middleware.\\n    status: pending\\nisProject: false\\n---\\n\\n# Add Rate Limiting\\n\\...",
             "invoked_at": "<ts>",
-            "output_summary": "{\"ok\":true,\"bytes_read\":1024}",
+            "output_summary": "{\"success\":true}",
             "status": null,
-            "tool_name": "Read",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1"
+            "tool_name": "Write",
+            "turn_key": "plan_creation_stores_to_neotoma__cursor-hooks__composer-2:turn-1"
           }
         ],
         "idempotency_key": "<id:6>"
@@ -168,7 +159,7 @@
             ],
             "tool_invocation_count": 1,
             "turn_id": "<id:4>",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
+            "turn_key": "plan_creation_stores_to_neotoma__cursor-hooks__composer-2:turn-1",
             "working_directory": "<env>"
           }
         ],
@@ -181,63 +172,7 @@
       "body": {
         "entities": [
           {
-            "cwd": "<env>",
-            "data_source": "cursor-hook",
-            "entity_type": "tool_invocation",
-            "harness": "cursor",
-            "has_error": false,
-            "hook_event": "postToolUse",
-            "input_summary": "{\"pattern\":\"createSession\"}",
-            "invoked_at": "<ts>",
-            "output_summary": "{\"ok\":true,\"matches\":3}",
-            "status": null,
-            "tool_name": "Grep",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1"
-          }
-        ],
-        "idempotency_key": "<id:7>"
-      }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/store",
-      "body": {
-        "entities": [
-          {
-            "context_source": "cursor-hook",
-            "cwd": "<env>",
-            "data_source": "cursor-hook",
-            "entity_type": "conversation_turn",
-            "git_branch": "<env>",
-            "harness": "cursor",
-            "hook_event": "post_tool_use",
-            "hook_events": [
-              "post_tool_use"
-            ],
-            "model": "composer-2",
-            "neotoma_tool_failures": 0,
-            "retrieve_calls": 0,
-            "session_id": "<id:1>",
-            "store_structured_calls": 0,
-            "stored_entity_ids": [
-              "ent_mock_16"
-            ],
-            "tool_invocation_count": 2,
-            "turn_id": "<id:4>",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
-            "working_directory": "<env>"
-          }
-        ],
-        "idempotency_key": "<id:5>"
-      }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/store",
-      "body": {
-        "entities": [
-          {
-            "content": "Found 3 references to createSession across src/auth/.",
+            "content": "I have created the plan file at `.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md`. It outlines adding rate limiting with two todos: schema field and middleware implementation.",
             "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_message",
@@ -246,10 +181,10 @@
             "observed_at": "<ts>",
             "role": "assistant",
             "sender_kind": "assistant",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1:assistant"
+            "turn_key": "plan_creation_stores_to_neotoma__cursor-hooks__composer-2:turn-1:assistant"
           }
         ],
-        "idempotency_key": "<id:8>"
+        "idempotency_key": "<id:7>"
       }
     },
     {
@@ -286,7 +221,7 @@
                   "post_tool_use"
                 ],
                 "reminder_injected": true,
-                "tool_invocation_count": 2,
+                "tool_invocation_count": 1,
                 "user_message_stored": true
               }
             },
@@ -306,9 +241,9 @@
             "session_id": "<id:1>",
             "status": "backfilled_by_hook",
             "store_structured_calls": 0,
-            "tool_invocation_count": 2,
+            "tool_invocation_count": 1,
             "turn_id": "<id:4>",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
+            "turn_key": "plan_creation_stores_to_neotoma__cursor-hooks__composer-2:turn-1",
             "working_directory": "<env>"
           }
         ],
@@ -321,13 +256,6 @@
       "hook": "beforeSubmitPrompt",
       "exitCode": 0,
       "output": {}
-    },
-    {
-      "hook": "postToolUse",
-      "exitCode": 0,
-      "output": {
-        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
-      }
     },
     {
       "hook": "postToolUse",
