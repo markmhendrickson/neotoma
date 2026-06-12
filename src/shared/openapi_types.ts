@@ -1806,6 +1806,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/rendered-pages/publish": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Publish a rendered_page as a shareable guest URL
+     * @description Mints a guest_access_token scoped to a rendered_page and returns an absolute /entities/:id/html?access_token=<token> URL plus its TTL. Pass an existing rendered_page entity_id, or inline {title, html_body, custom_css, meta_description} to create one first. html_body is injected verbatim into a server template; do not include html/head/body wrappers.
+     */
+    post: operations["publishRenderedPage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/health_check_snapshots": {
     parameters: {
       query?: never;
@@ -6990,6 +7010,47 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SessionInfo"];
+        };
+      };
+    };
+  };
+  publishRenderedPage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Existing rendered_page entity id to publish. */
+          entity_id?: string;
+          title?: string;
+          html_body?: string;
+          custom_css?: string;
+          meta_description?: string;
+          /** @description Idempotency key for the inline-create path. Same key + same content reuses the same rendered_page. Ignored when entity_id is supplied. */
+          idempotency_key?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Share URL minted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            entity_id: string;
+            share_url: string;
+            access_token: string;
+            ttl_seconds: number;
+            /** @description True if a new rendered_page was created from inline content. */
+            created: boolean;
+          };
         };
       };
     };

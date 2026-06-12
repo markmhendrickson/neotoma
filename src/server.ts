@@ -1864,6 +1864,8 @@ export class NeotomaServer {
         return await this.handleSyncPeer(args, this.getAuthenticatedUserId());
       case "resolve_sync_conflict":
         return await this.handleResolveSyncConflict(args, this.getAuthenticatedUserId());
+      case "publish_rendered_page":
+        return await this.handlePublishRenderedPage(args);
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
@@ -5770,6 +5772,73 @@ export class NeotomaServer {
         ErrorCode.InternalError,
         `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
       );
+    }
+  }
+
+  // neotoma#1619: publish_rendered_page — one call from rendered_page to a
+  // guest-accessible share URL.
+  private async handlePublishRenderedPage(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const a = (args ?? {}) as Record<string, unknown>;
+    const userId = this.getAuthenticatedUserId(
+      typeof a.user_id === "string" ? a.user_id : undefined
+    );
+
+    const { publishRenderedPage, PublishRenderedPageError } =
+      await import("./services/rendered_page/publish.js");
+
+    try {
+      const result = await publishRenderedPage(
+        {
+          entityId: typeof a.entity_id === "string" ? a.entity_id : undefined,
+          title: typeof a.title === "string" ? a.title : undefined,
+          htmlBody: typeof a.html_body === "string" ? a.html_body : undefined,
+          customCss: typeof a.custom_css === "string" ? a.custom_css : undefined,
+          metaDescription: typeof a.meta_description === "string" ? a.meta_description : undefined,
+          idempotencyKey: typeof a.idempotency_key === "string" ? a.idempotency_key : undefined,
+          userId,
+        },
+        // create callback: reuse the structured-store append path so the new
+        // rendered_page lands with full provenance and object-safe fields.
+        async (fields) => {
+          const entity: Record<string, unknown> = {
+            entity_type: "rendered_page",
+            title: fields.title,
+            html_body: fields.html_body,
+          };
+          if (fields.custom_css !== undefined) entity.custom_css = fields.custom_css;
+          if (fields.meta_description !== undefined)
+            entity.meta_description = fields.meta_description;
+
+          const response = await this.storeStructuredInternal(
+            fields.userId,
+            [entity],
+            100,
+            fields.idempotencyKey
+          );
+          const text = response.content?.[0]?.text ?? "{}";
+          const parsed = JSON.parse(text) as {
+            entities?: Array<{ entity_id?: string }>;
+          };
+          const newId = parsed.entities?.[0]?.entity_id;
+          if (!newId) {
+            throw new Error("Failed to create rendered_page: no entity_id returned from store.");
+          }
+          return newId;
+        }
+      );
+
+      return this.buildTextResponse(result);
+    } catch (err) {
+      if (err instanceof PublishRenderedPageError) {
+        // Structured envelope: stable code + optional hint/details, not prose in message.
+        throw new McpError(ErrorCode.InvalidParams, err.message, {
+          code: err.code,
+          ...err.envelope,
+        });
+      }
+      throw new McpError(ErrorCode.InternalError, err instanceof Error ? err.message : String(err));
     }
   }
 
