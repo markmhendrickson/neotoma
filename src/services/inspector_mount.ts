@@ -13,6 +13,11 @@ import { fileURLToPath } from "node:url";
 import type express from "express";
 import type { RequestHandler, Response } from "express";
 import expressStatic from "express";
+import {
+  injectInspectorSkin,
+  resolveInspectorSkin,
+  type ResolvedInspectorSkin,
+} from "./inspector_skin.js";
 
 const DEFAULT_BASE_PATH = "/inspector";
 
@@ -234,6 +239,11 @@ export function installInspectorMount(
   let { staticDir } = cfg;
   if (!staticDir) return;
 
+  const activeSkin: ResolvedInspectorSkin | null = resolveInspectorSkin(env);
+  if (activeSkin) {
+    logger.info(`[Inspector] Skin active: ${activeSkin.name} (from ${activeSkin.source_path})`);
+  }
+
   // NOTE: This legacy `/inspector/*` mount is retained only as an asset/shell
   // surface for back-compat. The SPA is now served at `/` via content
   // negotiation: `installInspectorRootStaticAssets` serves `/assets/*`, and
@@ -365,7 +375,7 @@ export function installInspectorMount(
           const latest = readInspectorIndexHtml(activeStaticDir);
           if (!latest) return next();
           const html = appendInspectorLiveReloadScript(
-            injectInspectorApiBaseMeta(latest, origin),
+            injectInspectorSkin(injectInspectorApiBaseMeta(latest, origin), activeSkin),
             buildStampPath
           );
           res.set("Content-Type", "text/html; charset=utf-8");
@@ -376,7 +386,10 @@ export function installInspectorMount(
 
         const latestShell = readInspectorIndexHtml(staticDir);
         if (!latestShell) return next();
-        const html = injectInspectorApiBaseMeta(latestShell, origin);
+        const html = injectInspectorSkin(
+          injectInspectorApiBaseMeta(latestShell, origin),
+          activeSkin
+        );
 
         res.set("Content-Type", "text/html; charset=utf-8");
         res.set("Cache-Control", "no-store");
@@ -605,7 +618,10 @@ export function acceptPrefersHtml(accept: string | undefined): boolean {
  * only when ALL hold: GET/HEAD, Accept prefers HTML (q-aware), the path is not
  * API-only, and the path is not an entity rendered-page surface.
  */
-function makeInspectorSpaShellMiddleware(bundledDir: string): express.RequestHandler {
+function makeInspectorSpaShellMiddleware(
+  bundledDir: string,
+  skin: ResolvedInspectorSkin | null = null
+): express.RequestHandler {
   return (req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
     if (!acceptPrefersHtml(req.headers.accept)) return next();
@@ -616,7 +632,7 @@ function makeInspectorSpaShellMiddleware(bundledDir: string): express.RequestHan
     const proto = req.protocol;
     const host = req.get("host") || "localhost";
     const origin = `${proto}://${host}`;
-    const html = injectInspectorApiBaseMeta(shell, origin);
+    const html = injectInspectorSkin(injectInspectorApiBaseMeta(shell, origin), skin);
     res.setHeader("Vary", "Accept");
     res.setHeader("Cache-Control", "no-store");
     res.type("text/html; charset=utf-8").send(html);
@@ -638,7 +654,7 @@ function makeInspectorSpaShellMiddleware(bundledDir: string): express.RequestHan
  */
 export function installInspectorSpaShellEarly(
   app: express.Application,
-  _env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env,
   logger: { info: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   const bundledDir = resolveBundledInspectorDir();
@@ -646,7 +662,8 @@ export function installInspectorSpaShellEarly(
     logger.info("[Inspector] No bundled SPA found; early SPA-shell handler NOT installed.");
     return;
   }
-  app.use(makeInspectorSpaShellMiddleware(bundledDir));
+  const activeSkin = resolveInspectorSkin(env);
+  app.use(makeInspectorSpaShellMiddleware(bundledDir, activeSkin));
   logger.info(
     "[Inspector] Early SPA-shell handler installed (browser HTML requests to SPA client routes serve shell before data routes)."
   );
@@ -654,7 +671,7 @@ export function installInspectorSpaShellEarly(
 
 export function installInspectorSpaFallback(
   app: express.Application,
-  _env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env,
   logger: { info: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   const bundledDir = resolveBundledInspectorDir();
@@ -664,7 +681,8 @@ export function installInspectorSpaFallback(
     );
     return;
   }
-  app.use(makeInspectorSpaShellMiddleware(bundledDir));
+  const activeSkin = resolveInspectorSkin(env);
+  app.use(makeInspectorSpaShellMiddleware(bundledDir, activeSkin));
   logger.info(`[Inspector] SPA fallback installed (HTML requests to non-API paths serve shell).`);
 }
 

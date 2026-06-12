@@ -1,0 +1,71 @@
+{
+  "meta": {
+    "id": "plan_creation_stores_to_neotoma",
+    "description": "Agent writes a .plan.md file (Write tool) then emits a stop. Validates that the cursor-hooks lifecycle fires correctly when a plan is authored: tool_invocation is recorded, the turn lifecycle entities are stored, and the stop hook closes the turn. Full plan entity schema field coverage (title, harness, plan_kind, body, todos) is exercised separately in src/services/plans/capture_harness_plan.test.ts.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["plan", "turn-lifecycle", "store-first"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Create a plan to add rate limiting to the API. Save it as a .plan.md file."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Write",
+        "tool_input": {
+          "path": "/repo/.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md",
+          "content": "---\nname: Add Rate Limiting\noverview: Implement per-user rate limiting on all API endpoints.\ntodos:\n  - id: schema\n    content: Add rate_limit field to schema.\n    status: pending\n  - id: middleware\n    content: Write rate limiting middleware.\n    status: pending\nisProject: false\n---\n\n# Add Rate Limiting\n\nImplement per-user rate limiting across all public API endpoints using a sliding window algorithm.\n"
+        },
+        "tool_output": {
+          "success": true
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "I have created the plan file at `.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md`. It outlines adding rate limiting with two todos: schema field and middleware implementation."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "Write" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "input_summary",
+        "where": { "tool_name": "Write" }
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 4
+      }
+    ]
+  }
+}

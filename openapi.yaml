@@ -1949,6 +1949,19 @@ components:
             field its schema marks required. Callers SHOULD repair in-turn by
             `correct`-ing the missing field. Present only when at least one
             required field was missing.
+        conversation_message_count:
+          type: integer
+          nullable: true
+          description: |
+            Total number of `conversation_message` entities `PART_OF` the
+            conversation referenced by this store call, computed after commit.
+            Populated only when at least one `conversation_message` entity was
+            created or updated in this request and its `PART_OF` target
+            conversation can be resolved. Omitted (null) for store calls with
+            no conversation context. Reflects the current snapshot at the time
+            of the response. Consumed by `neotoma_turn_summary` to populate
+            the `msg N/M` component of the turn status line without an extra
+            retrieval round-trip.
         hint:
           type: string
           description: |
@@ -2083,6 +2096,103 @@ components:
           type: array
           items:
             type: string
+    TurnSummaryRequest:
+      type: object
+      additionalProperties: false
+      required: [conversation_id, turn_key]
+      description: |
+        FU-2026-05-002. Identifies the conversation and the assistant message
+        whose turn just completed. The server resolves stored/retrieved/issue
+        entity IDs from the REFERS_TO edges of the assistant `conversation_message`
+        and computes total message count for the conversation.
+      properties:
+        conversation_id:
+          type: string
+          description: |
+            Stable conversation identifier (the `conversation_id` field on the
+            `conversation` entity, host-provided or agent-derived per the turn
+            identity rules). Used to disambiguate when the same `turn_key`
+            string could in principle belong to multiple conversations.
+        turn_key:
+          type: string
+          description: |
+            `turn_key` of the assistant `conversation_message` whose turn just
+            completed. Format `{conversation_id}:{turn_id}:assistant` per the
+            closing-store recipe. The server resolves the entity via
+            `canonical_name_fields: ["turn_key"]`.
+        user_id:
+          type: string
+          format: uuid
+    TurnSummaryResponse:
+      type: object
+      description: |
+        FU-2026-05-002. Plain-text status line (always present) plus an
+        optional `ui://` widget URI for ext-apps clients. Agents emit
+        `status_line` in the user-visible reply; ext-apps clients additionally
+        render the widget inline when `widget_uri` is present.
+      required: [status_line, turn_number, conversation_message_count, stored, retrieved, issues]
+      properties:
+        status_line:
+          type: string
+          description: |
+            Single-line plain-text status of the form
+            `msg N/M, stored K, retrieved L` (with optional `, issues J`
+            suffix when J > 0). Always present, including bookkeeping-only
+            turns where K, L, and J are zero.
+        widget_uri:
+          type: string
+          nullable: true
+          description: |
+            MCP resource URI (`ui://neotoma/turn-summary?...`) resolvable by
+            the ext-apps widget host. Omitted when no host context is
+            available. Clients without ext-apps support fall back to
+            `status_line` plain text.
+        turn_number:
+          type: integer
+          description: |
+            1-based ordinal of this turn within the conversation. Read from
+            the resolved assistant message's `turn_number` field; falls back
+            to total message count when the field is absent on legacy rows.
+        conversation_message_count:
+          type: integer
+          description: |
+            Total `conversation_message` entities `PART_OF` the conversation
+            at the time of the call. Matches the `conversation_message_count`
+            field returned by the closing assistant store (FU-2026-05-001).
+        stored:
+          type: array
+          description: |
+            Non-bookkeeping entities the assistant message REFERS_TO that were
+            created or updated this turn. `conversation` and
+            `conversation_message` are excluded.
+          items:
+            $ref: "#/components/schemas/TurnSummaryEntityRef"
+        retrieved:
+          type: array
+          description: |
+            Entities cited in the reply that already existed before this turn
+            (no new observation was written by this turn). Excludes chat
+            bookkeeping.
+          items:
+            $ref: "#/components/schemas/TurnSummaryEntityRef"
+        issues:
+          type: array
+          description: |
+            Issue entities surfaced this turn that need user consent to file
+            externally. Empty unless the auto-file flow flagged something.
+          items:
+            $ref: "#/components/schemas/TurnSummaryEntityRef"
+    TurnSummaryEntityRef:
+      type: object
+      required: [entity_id, entity_type]
+      properties:
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        canonical_name:
+          type: string
+          nullable: true
     GetRelationshipSnapshotRequest:
       type: object
       additionalProperties: false
@@ -2966,6 +3076,13 @@ paths:
                 properties:
                   observations_moved:
                     type: integer
+                  relationships_repointed:
+                    type: integer
+                    description: >
+                      Number of relationship_observations rows repointed from
+                      the merged-away entity to the survivor. Self-loops and
+                      duplicates already present on the survivor are deleted
+                      and not counted here.
                   merged_at:
                     type: string
                     format: date-time
@@ -5590,6 +5707,83 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /audit_undeclared_fragments:
+    post:
+      summary: Audit undeclared raw_fragments
+      description: >-
+        Report accumulated undeclared raw_fragments awaiting schema declaration.
+        Stored data routed to raw_fragments (fields not on the active schema) is
+        preserved on the observation but excluded from the entity snapshot until
+        the field is declared. This read-only audit lists, per entity_type, the
+        fragment_keys not declared on the active schema, how many distinct
+        entities carry each, and total occurrences — so the stored-but-invisible
+        backlog is auditable and can be triaged into analyze_schema_candidates /
+        register_schema / update_schema_incremental work.
+      operationId: auditUndeclaredFragments
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                entity_type:
+                  type: string
+                  description: Restrict the audit to a single entity_type.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Undeclared-fragment audit grouped by entity_type
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - audit
+                  - total_entity_types
+                  - total_undeclared_fields
+                properties:
+                  audit:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - entity_type
+                        - undeclared_fields
+                        - affected_entities
+                        - total_occurrences
+                        - schema_missing
+                      properties:
+                        entity_type:
+                          type: string
+                        undeclared_fields:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                              - fragment_key
+                              - affected_entities
+                              - occurrences
+                            properties:
+                              fragment_key:
+                                type: string
+                              affected_entities:
+                                type: integer
+                              occurrences:
+                                type: integer
+                        affected_entities:
+                          type: integer
+                        total_occurrences:
+                          type: integer
+                        schema_missing:
+                          type: boolean
+                  total_entity_types:
+                    type: integer
+                  total_undeclared_fields:
+                    type: integer
+
   /get_schema_recommendations:
     post:
       summary: Get schema recommendations
@@ -5858,6 +6052,32 @@ paths:
                         type: string
                       field:
                         type: string
+
+  /turn_summary:
+    post:
+      summary: Compute per-turn Neotoma activity summary
+      description: |
+        FU-2026-05-002. Computes the single-line per-turn status (`msg N/M,
+        stored K, retrieved L`) and an optional `ui://` widget URI for the
+        ext-apps widget host. Inputs identify the conversation and the turn;
+        the server resolves all other state (turn number, total message count,
+        stored entities REFERS_TO from the assistant message, retrieved
+        entities, pending issues). Agents call this at end of every turn after
+        the closing assistant store completes.
+      operationId: turnSummary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TurnSummaryRequest"
+      responses:
+        "200":
+          description: Turn summary computed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TurnSummaryResponse"
 
   /get_authenticated_user:
     post:

@@ -2,6 +2,33 @@
   "requests": [
     {
       "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_3",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_9",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_14",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
       "endpoint": "/store",
       "body": {
         "entities": [
@@ -50,7 +77,7 @@
         "entities": [
           {
             "context_source": "cursor-hook",
-            "conversation_id": "<id:1>",
+            "conversation_id": "<id:3>",
             "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_turn",
@@ -63,12 +90,15 @@
             "model": "gpt-5.5-medium",
             "session_id": "<id:1>",
             "started_at": "<ts>",
-            "turn_id": "<id:3>",
+            "stored_entity_ids": [
+              "ent_mock_3"
+            ],
+            "turn_id": "<id:4>",
             "turn_key": "tool_failure_recovery__cursor-hooks__gpt-5.5-medium:turn-1",
             "working_directory": "<env>"
           }
         ],
-        "idempotency_key": "<id:4>"
+        "idempotency_key": "<id:5>"
       }
     },
     {
@@ -89,31 +119,6 @@
             "turn_key": "tool_failure_recovery__cursor-hooks__gpt-5.5-medium:turn-1:assistant"
           }
         ],
-        "idempotency_key": "<id:5>"
-      }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/store",
-      "body": {
-        "entities": [
-          {
-            "client_name": "Cursor",
-            "conversation_id": "<id:1>",
-            "cwd": "<env>",
-            "data_source": "cursor-hook",
-            "entity_type": "conversation",
-            "harness": "cursor-hook",
-            "hook_event": "stop_backfill",
-            "repository_name": "<env>",
-            "repository_remote": "<env>",
-            "repository_root": "<env>",
-            "scope_summary": "<env>",
-            "thread_kind": "human_agent",
-            "title": "<env>",
-            "workspace_kind": "<env>"
-          }
-        ],
         "idempotency_key": "<id:6>"
       }
     },
@@ -124,10 +129,10 @@
         "entities": [
           {
             "context_source": "cursor-hook",
-            "conversation_id": "<id:1>",
+            "conversation_id": "<id:3>",
             "cwd": "<env>",
             "data_source": "cursor-hook",
-            "diagnosis_confidence": "high",
+            "diagnosis_confidence": "medium",
             "ended_at": "<ts>",
             "entity_type": "conversation_turn",
             "git_branch": "<env>",
@@ -150,11 +155,10 @@
                 "reminder_hooks": [],
                 "reminder_injected": false,
                 "tool_invocation_count": 0,
-                "user_message_stored": false
+                "user_message_stored": true
               }
             },
             "missed_steps": [
-              "user_message_store",
               "user_phase_store"
             ],
             "model": "gpt-5.5-medium",
@@ -171,12 +175,12 @@
             "status": "backfilled_by_hook",
             "store_structured_calls": 0,
             "tool_invocation_count": 0,
-            "turn_id": "<id:3>",
+            "turn_id": "<id:4>",
             "turn_key": "tool_failure_recovery__cursor-hooks__gpt-5.5-medium:turn-1",
             "working_directory": "<env>"
           }
         ],
-        "idempotency_key": "<id:4>"
+        "idempotency_key": "<id:5>"
       }
     }
   ],

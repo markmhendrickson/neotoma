@@ -166,10 +166,85 @@ describe("syncIssuesFromGitHub", () => {
     await syncIssuesFromGitHub(ops);
     await syncIssuesFromGitHub(ops);
 
+    // The issue key includes updated_at so a changed issue gets a fresh key,
+    // but an unchanged issue re-synced twice keeps the same key (dedup).
     expect(store).toHaveBeenCalledTimes(4);
     expect(seenIdempotencyKeys).toEqual(
-      new Set(["issue-sync-test/repo-1", "issue-comment-sync-test/repo-1-101"])
+      new Set([
+        "issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2",
+        "issue-comment-sync-test/repo-1-101-2026-05-01T00:00:00Z-m2",
+      ])
     );
+  });
+
+  it("gives a changed issue a fresh idempotency key (avoids ERR_IDEMPOTENCY_MISMATCH)", async () => {
+    const { ops, seenIdempotencyKeys } = createOps();
+    mockListIssueComments.mockResolvedValue([]);
+
+    // Same issue number, different content + later updated_at (as GitHub returns
+    // after an edit). The store must use a distinct key, or Neotoma rejects the
+    // write as a mismatch and the issue never updates locally.
+    const v1 = { ...issue(1, "Original title"), updated_at: "2026-05-01T00:00:00Z" };
+    const v2 = { ...issue(1, "Edited title"), updated_at: "2026-05-02T12:00:00Z" };
+
+    mockListIssues.mockResolvedValueOnce([v1]);
+    await syncIssuesFromGitHub(ops);
+    mockListIssues.mockResolvedValueOnce([v2]);
+    await syncIssuesFromGitHub(ops);
+
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2")).toBe(true);
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-02T12:00:00Z-m2")).toBe(true);
+  });
+
+  it("re-stores an unchanged issue with a byte-identical payload (no wall-clock drift)", async () => {
+    // The idempotency check hashes the FULL entity payload. A wall-clock
+    // last_synced_at/data_source made the payload differ every run, so an
+    // unchanged issue under its stable updated_at key tripped
+    // ERR_IDEMPOTENCY_MISMATCH. Provenance is now derived from updated_at, so
+    // two runs over identical GitHub data must produce identical store payloads.
+    const { ops, store } = createOps();
+    mockListIssues.mockResolvedValue([issue(1)]);
+    mockListIssueComments.mockResolvedValue([]);
+
+    await syncIssuesFromGitHub(ops);
+    const firstPayload = JSON.stringify(store.mock.calls[0]?.[0]?.entities);
+
+    store.mockClear();
+    mockListIssues.mockResolvedValue([issue(1)]);
+    await syncIssuesFromGitHub(ops);
+    const secondPayload = JSON.stringify(store.mock.calls[0]?.[0]?.entities);
+
+    expect(secondPayload).toBe(firstPayload);
+    // And provenance reflects the issue's updated_at, not wall-clock.
+    const issueEntity = store.mock.calls[0]?.[0]?.entities?.[0] as Record<string, unknown>;
+    expect(issueEntity.last_synced_at).toBe("2026-05-01T00:00:00Z");
+    expect(issueEntity.data_source).toContain("2026-05-01");
+  });
+
+  it("gives a comment a fresh key when its issue's updated_at changes", async () => {
+    // The comment store re-stores the issue entity (deterministic, tracks
+    // issue.updated_at). When the issue changes, the comment payload changes
+    // too, so its key must include issue.updated_at — otherwise the new content
+    // collides with the stale row under a comment.id-only key. This accumulated
+    // in production once the swarm started bumping issue.updated_at.
+    const { ops, seenIdempotencyKeys } = createOps();
+    mockListIssueComments.mockResolvedValue([comment(101)]);
+
+    mockListIssues.mockResolvedValueOnce([
+      { ...issue(1), updated_at: "2026-05-01T00:00:00Z" },
+    ]);
+    await syncIssuesFromGitHub(ops);
+    mockListIssues.mockResolvedValueOnce([
+      { ...issue(1, "Edited"), updated_at: "2026-05-02T12:00:00Z" },
+    ]);
+    await syncIssuesFromGitHub(ops);
+
+    expect(
+      seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-01T00:00:00Z-m2")
+    ).toBe(true);
+    expect(
+      seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-02T12:00:00Z-m2")
+    ).toBe(true);
   });
 
   describe("push leg — local public issues without github_number", () => {

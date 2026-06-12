@@ -49,6 +49,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./frontend/src"),
       "@shared": path.resolve(__dirname, "./src/shared"),
       "@neotoma/client": path.resolve(__dirname, "./packages/client/src/index.ts"),
+      "@neotoma/agent": path.resolve(__dirname, "./packages/agent/src/index.ts"),
     },
   },
   test: {

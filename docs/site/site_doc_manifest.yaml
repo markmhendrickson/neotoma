@@ -35,6 +35,26 @@ entries:
     status: canonical_site_page
     canonical_site_path: /cli
 
+  - repo_path: docs/site/pages/en/sdk-agent.mdx
+    status: canonical_site_page
+    canonical_site_path: /sdk/agent
+    supporting_source: docs/developer/sdk_agent.md
+
+  - repo_path: docs/developer/sdk_agent.md
+    status: supporting_source
+    canonical_site_path: /sdk/agent
+    notes: "Canonical long-form source for the @neotoma/agent SDK page. Site MDX mirrors prose; package README mirrors the same content for npm consumers."
+
+  - repo_path: docs/site/pages/en/sdk-python.mdx
+    status: canonical_site_page
+    canonical_site_path: /sdk/python
+    supporting_source: docs/developer/sdk_python.md
+
+  - repo_path: docs/developer/sdk_python.md
+    status: supporting_source
+    canonical_site_path: /sdk/python
+    notes: "Canonical long-form source for the neotoma-client Python SDK page. Site MDX mirrors prose; package README mirrors the same content for PyPI consumers."
+
   - repo_path: docs/site/pages/en/api.mdx
     status: canonical_site_page
     canonical_site_path: /api

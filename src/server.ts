@@ -24,6 +24,7 @@ import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
+  AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
@@ -965,6 +966,34 @@ export class NeotomaServer {
     });
   }
 
+  // FU-2026-05-002: neotoma_turn_summary MCP tool.
+  private async handleTurnSummary(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      conversation_id: z.string().min(1),
+      turn_key: z.string().min(1),
+    });
+    const parsed = schema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId();
+    const { computeTurnSummary, TurnSummaryError } = await import("./services/turn_summary.js");
+    try {
+      const result = await computeTurnSummary({
+        userId,
+        conversationId: parsed.conversation_id,
+        turnKey: parsed.turn_key,
+      });
+      return this.buildTextResponse(result);
+    } catch (err) {
+      if (err instanceof TurnSummaryError) {
+        return this.buildTextResponse({
+          error: { code: err.code, message: err.message },
+        });
+      }
+      throw err;
+    }
+  }
+
   private async handleSubmitIssue(
     args: unknown,
     userId: string
@@ -1744,6 +1773,8 @@ export class NeotomaServer {
         return await this.describeEntityType(args);
       case "analyze_schema_candidates":
         return await this.analyzeSchemaCandidates(args);
+      case "audit_undeclared_fragments":
+        return await this.auditUndeclaredFragments(args);
       case "get_schema_recommendations":
         return await this.getSchemaRecommendations(args);
       case "update_schema_incremental":
@@ -1786,6 +1817,8 @@ export class NeotomaServer {
         return await this.listRecentChanges(args);
       case "npm_check_update":
         return await this.npmCheckUpdate(args);
+      case "neotoma_turn_summary":
+        return await this.handleTurnSummary(args);
       case "submit_issue":
         return await this.handleSubmitIssue(args, this.getAuthenticatedUserId());
       case "add_issue_message":
@@ -3622,6 +3655,36 @@ export class NeotomaServer {
   }
 
   /**
+   * Audit accumulated undeclared raw_fragments awaiting schema declaration (#1576).
+   */
+  private async auditUndeclaredFragments(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = AuditUndeclaredFragmentsRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+
+    try {
+      const audit = await schemaRecommendationService.auditUndeclaredFragments({
+        entity_type: parsed.entity_type,
+        user_id: userId,
+      });
+
+      return this.buildTextResponse({
+        audit,
+        total_entity_types: audit.length,
+        total_undeclared_fields: audit.reduce((sum, t) => sum + t.undeclared_fields.length, 0),
+      });
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to audit undeclared fragments: ${error.message}`
+      );
+    }
+  }
+
+  /**
    * Get schema recommendations
    */
   private async getSchemaRecommendations(
@@ -5450,6 +5513,64 @@ export class NeotomaServer {
             "would fail with ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Instead: correct() the data into " +
             "an already-declared field (use describe_entity_type to see declared fields), or call " +
             "register_schema with a new version that adds the field.";
+    // FU-2026-05-001: conversation_message_count.
+    // When a conversation_message entity was created/updated in this request,
+    // resolve its PART_OF target conversation and count sibling
+    // conversation_messages so neotoma_turn_summary (FU-2026-05-002) can
+    // populate `msg N/M` without an extra retrieval round-trip.
+    let conversationMessageCount: number | null = null;
+    try {
+      const conversationMessageEntityIds = createdEntities
+        .filter((e) => e.entityType === "conversation_message")
+        .map((e) => e.entityId);
+      if (conversationMessageEntityIds.length > 0) {
+        const { data: partOfRows } = await db
+          .from("relationship_snapshots")
+          .select("target_entity_id")
+          .eq("user_id", userId)
+          .eq("relationship_type", "PART_OF")
+          .in("source_entity_id", conversationMessageEntityIds);
+        const conversationIds: string[] = [];
+        for (const row of (partOfRows ?? []) as Array<{ target_entity_id?: string | null }>) {
+          if (typeof row.target_entity_id === "string" && row.target_entity_id.length > 0) {
+            conversationIds.push(row.target_entity_id);
+          }
+        }
+        const uniqueConversationIds = Array.from(new Set(conversationIds));
+        if (uniqueConversationIds.length > 0) {
+          const { data: siblingRows } = await db
+            .from("relationship_snapshots")
+            .select("source_entity_id")
+            .eq("user_id", userId)
+            .eq("relationship_type", "PART_OF")
+            .in("target_entity_id", uniqueConversationIds);
+          const siblingIds: string[] = [];
+          for (const row of (siblingRows ?? []) as Array<{
+            source_entity_id?: string | null;
+          }>) {
+            if (typeof row.source_entity_id === "string" && row.source_entity_id.length > 0) {
+              siblingIds.push(row.source_entity_id);
+            }
+          }
+          const uniqueSiblingIds = Array.from(new Set(siblingIds));
+          if (uniqueSiblingIds.length > 0) {
+            const { count } = await db
+              .from("entity_snapshots")
+              .select("entity_id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("entity_type", "conversation_message")
+              .in("entity_id", uniqueSiblingIds);
+            if (typeof count === "number") conversationMessageCount = count;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(
+        `store: conversation_message_count computation failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
 
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
@@ -5481,6 +5602,9 @@ export class NeotomaServer {
       ...(unknownFieldsHint ? { hint: unknownFieldsHint } : {}),
       ...(requiredFieldsMissing.length > 0
         ? { required_fields_missing: requiredFieldsMissing }
+        : {}),
+      ...(conversationMessageCount !== null
+        ? { conversation_message_count: conversationMessageCount }
         : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
@@ -5668,6 +5792,7 @@ export class NeotomaServer {
         from_entity_id: parsed.from_entity_id,
         to_entity_id: parsed.to_entity_id,
         observations_moved: result.observations_moved,
+        relationships_repointed: result.relationships_repointed,
         merged_at: result.merged_at,
         merge_reason: parsed.merge_reason,
       });

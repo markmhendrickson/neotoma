@@ -89,6 +89,8 @@
 | `/schemas/registry` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/storage-layers` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/versioning` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/sdk/agent` | en | 2026-05-20 | canonical |
+| `/sdk/python` | en | 2026-05-20 | canonical |
 | `/security-hardening` | en | 2026-05-12 | canonical |
 | `/semantic-similarity-search` | en | 2026-05-07 | canonical |
 | `/silent-mutation-risk` | en | 2026-05-07 | canonical |

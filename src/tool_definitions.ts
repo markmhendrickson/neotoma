@@ -737,6 +737,14 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "audit_undeclared_fragments",
+      description: desc(
+        "audit_undeclared_fragments",
+        "Audit accumulated undeclared raw_fragments awaiting schema declaration. Values stored for fields not on an entity type's active schema are preserved on observations but excluded from the snapshot until the field is declared. This read-only report lists, per entity_type, the fragment_keys not declared on the active schema, how many distinct entities carry each, and total occurrences — surfacing the stored-but-invisible backlog so it can be triaged into analyze_schema_candidates / register_schema / update_schema_incremental. Pair with the unknown_fields / required_fields_missing repair workflow described in the MCP instructions."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("audit_undeclared_fragments"),
+    },
+    {
       name: "get_schema_recommendations",
       description:
         "Get schema update recommendations for an entity type from raw_fragments analysis, agent suggestions, or inference.",
@@ -1312,6 +1320,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
     {
+      name: "neotoma_turn_summary",
+      description: desc(
+        "neotoma_turn_summary",
+        "Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("neotoma_turn_summary"),
+    },
+    {
       name: "npm_check_update",
       description: desc(
         "npm_check_update",
@@ -1377,6 +1393,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "list_entity_types",
   "describe_entity_type",
   "analyze_schema_candidates",
+  "audit_undeclared_fragments",
   "get_schema_recommendations",
   "update_schema_incremental",
   "register_schema",
@@ -1406,6 +1423,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "sync_peer",
   "resolve_sync_conflict",
   "npm_check_update",
+  "neotoma_turn_summary",
 ] as const;
 
 export type NeotomaToolName = (typeof NEOTOMA_TOOL_NAMES)[number];

@@ -1,7 +1,7 @@
 {
   "meta": {
     "id": "agent_skips_store",
-    "description": "Agent finishes a turn without ever calling store_structured. The stop hook must (a) emit a turn_compliance observation with status=backfilled_by_hook, (b) attach an instruction_diagnostics block classifying the skipped store, and (c) with NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=auto/on, return a follow-up message that includes a likely-cause sentence for every model.",
+    "description": "Agent finishes a turn without ever calling store_structured. The stop hook must (a) emit a turn_compliance observation with status=backfilled_by_hook, (b) attach an instruction_diagnostics block classifying the skipped store, and (c) with NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=auto/on, return a follow-up message that includes a likely-cause sentence for every model. Confidence is medium (not high) because beforeSubmitPrompt successfully stored the user message (user_message_stored=true), so only the reminder/postToolUse path is missing — diagnoseSkippedStore deliberately downgrades hook_state_incomplete to medium when the user message was stored (see packages/cursor-hooks/hooks/_common.ts and tests/unit/cursor_hooks_small_model.test.ts).",
     "harnesses": ["cursor-hooks"],
     "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
     "tags": ["compliance", "stop-hook", "diagnosis"]
@@ -36,7 +36,7 @@
       {
         "type": "turn_diagnosis",
         "classification": "hook_state_incomplete",
-        "confidence": "high",
+        "confidence": "medium",
         "reminder_injected": false,
         "recommends_includes": "install.mjs"
       },

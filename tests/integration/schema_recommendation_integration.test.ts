@@ -415,4 +415,117 @@ describe("Schema Recommendation Service - Integration", () => {
       expect(typeof confidence.confidence).toBe("number");
     });
   });
+
+  describe("auditUndeclaredFragments - Real Database Queries (#1576)", () => {
+    it("reports undeclared fragment keys grouped by entity type", async () => {
+      // Seed a schema declaring only `title`; `color` and `size` stay undeclared.
+      await seedTestSchema(server, testEntityType, {
+        title: { type: "string", required: false },
+      });
+
+      const undeclared = [
+        { key: "color", value: "red" },
+        { key: "color", value: "blue" },
+        { key: "size", value: "large" },
+        { key: "title", value: "declared-should-be-excluded" },
+      ];
+      for (const frag of undeclared) {
+        const { data: fragment } = await db
+          .from("raw_fragments")
+          .insert({
+            entity_type: testEntityType,
+            fragment_key: frag.key,
+            fragment_value: frag.value,
+            user_id: testUserId,
+            frequency_count: 1,
+          })
+          .select()
+          .single();
+        if (fragment) createdFragmentIds.push(fragment.id);
+      }
+
+      const audit = await schemaRecommendationService.auditUndeclaredFragments({
+        entity_type: testEntityType,
+        user_id: testUserId,
+      });
+
+      expect(Array.isArray(audit)).toBe(true);
+      const typeAudit = audit.find((t) => t.entity_type === testEntityType);
+      expect(typeAudit).toBeDefined();
+      expect(typeAudit!.schema_missing).toBe(false);
+
+      const reportedKeys = typeAudit!.undeclared_fields.map((f) => f.fragment_key);
+      // Declared field excluded; undeclared fields reported.
+      expect(reportedKeys).not.toContain("title");
+      expect(reportedKeys).toContain("color");
+      expect(reportedKeys).toContain("size");
+
+      // Deterministic ordering: occurrences desc — `color` (2) before `size` (1).
+      expect(reportedKeys.indexOf("color")).toBeLessThan(reportedKeys.indexOf("size"));
+
+      const colorField = typeAudit!.undeclared_fields.find((f) => f.fragment_key === "color");
+      expect(colorField!.occurrences).toBe(2);
+    });
+
+    it("flags schema_missing when no active schema is registered", async () => {
+      const orphanType = `${testEntityType}_orphan`;
+      await cleanupTestEntityType(orphanType, testUserId);
+
+      const { data: fragment } = await db
+        .from("raw_fragments")
+        .insert({
+          entity_type: orphanType,
+          fragment_key: "anything",
+          fragment_value: "v",
+          user_id: testUserId,
+          frequency_count: 1,
+        })
+        .select()
+        .single();
+      if (fragment) createdFragmentIds.push(fragment.id);
+
+      const audit = await schemaRecommendationService.auditUndeclaredFragments({
+        entity_type: orphanType,
+        user_id: testUserId,
+      });
+
+      const typeAudit = audit.find((t) => t.entity_type === orphanType);
+      expect(typeAudit).toBeDefined();
+      expect(typeAudit!.schema_missing).toBe(true);
+      // With no schema, every fragment key is undeclared.
+      expect(typeAudit!.undeclared_fields.map((f) => f.fragment_key)).toContain("anything");
+
+      await cleanupTestEntityType(orphanType, testUserId);
+    });
+
+    it("handles fragments with null user_id", async () => {
+      await seedTestSchema(server, testEntityType, {
+        title: { type: "string", required: false },
+      });
+
+      const { data: fragment } = await db
+        .from("raw_fragments")
+        .insert({
+          entity_type: testEntityType,
+          fragment_key: "null_user_undeclared",
+          fragment_value: "v",
+          user_id: null,
+          frequency_count: 1,
+        })
+        .select()
+        .single();
+      if (fragment) createdFragmentIds.push(fragment.id);
+
+      const audit = await schemaRecommendationService.auditUndeclaredFragments({
+        entity_type: testEntityType,
+        user_id: null,
+      });
+
+      const typeAudit = audit.find((t) => t.entity_type === testEntityType);
+      expect(typeAudit).toBeDefined();
+      expect(typeAudit!.undeclared_fields.map((f) => f.fragment_key)).toContain(
+        "null_user_undeclared"
+      );
+    });
+  });
 });

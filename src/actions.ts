@@ -140,6 +140,7 @@ import {
 } from "./services/oauth_key_gate.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
+  AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
@@ -7156,6 +7157,72 @@ export async function storeStructuredForApi(params: {
     });
   }
 
+  // FU-2026-05-001: conversation_message_count.
+  // When this request created/updated a conversation_message linked to a
+  // conversation via PART_OF, return the post-commit count of all sibling
+  // conversation_messages so neotoma_turn_summary (FU-2026-05-002) can populate
+  // `msg N/M` without an extra retrieval round-trip.
+  let conversationMessageCount: number | null = null;
+  if (commit) {
+    try {
+      const conversationMessageEntityIds = createdEntities
+        .filter(
+          (e: { entity_type?: string; entity_id?: string }) =>
+            e.entity_type === "conversation_message" &&
+            typeof e.entity_id === "string" &&
+            e.entity_id.length > 0
+        )
+        .map((e: { entity_id?: string }) => e.entity_id as string);
+      if (conversationMessageEntityIds.length > 0) {
+        const { data: partOfRows } = await db
+          .from("relationship_snapshots")
+          .select("target_entity_id")
+          .eq("user_id", userId)
+          .eq("relationship_type", "PART_OF")
+          .in("source_entity_id", conversationMessageEntityIds);
+        const conversationIds: string[] = [];
+        for (const row of (partOfRows ?? []) as Array<{ target_entity_id?: string | null }>) {
+          if (typeof row.target_entity_id === "string" && row.target_entity_id.length > 0) {
+            conversationIds.push(row.target_entity_id);
+          }
+        }
+        const uniqueConversationIds = Array.from(new Set(conversationIds));
+        if (uniqueConversationIds.length > 0) {
+          const { data: siblingRows } = await db
+            .from("relationship_snapshots")
+            .select("source_entity_id")
+            .eq("user_id", userId)
+            .eq("relationship_type", "PART_OF")
+            .in("target_entity_id", uniqueConversationIds);
+          const siblingIds: string[] = [];
+          for (const row of (siblingRows ?? []) as Array<{
+            source_entity_id?: string | null;
+          }>) {
+            if (typeof row.source_entity_id === "string" && row.source_entity_id.length > 0) {
+              siblingIds.push(row.source_entity_id);
+            }
+          }
+          const uniqueSiblingIds = Array.from(new Set(siblingIds));
+          if (uniqueSiblingIds.length > 0) {
+            const { count } = await db
+              .from("entity_snapshots")
+              .select("entity_id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("entity_type", "conversation_message")
+              .in("entity_id", uniqueSiblingIds);
+            if (typeof count === "number") conversationMessageCount = count;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(
+        `store: conversation_message_count computation failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  }
+
   return {
     success: true,
     replayed: false,
@@ -7180,6 +7247,9 @@ export async function storeStructuredForApi(params: {
         }
       : {}),
     ...(requiredFieldsMissing.length > 0 ? { required_fields_missing: requiredFieldsMissing } : {}),
+    ...(conversationMessageCount !== null
+      ? { conversation_message_count: conversationMessageCount }
+      : {}),
   };
 }
 
@@ -9366,6 +9436,43 @@ app.post("/analyze_schema_candidates", async (req, res) => {
   }
 });
 
+// POST /audit_undeclared_fragments - Report undeclared raw_fragments awaiting
+// schema declaration (#1576). Delegates to the shared service so the HTTP and
+// MCP surfaces return the same audit.
+app.post("/audit_undeclared_fragments", async (req, res) => {
+  const parsed = AuditUndeclaredFragmentsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:audit_undeclared_fragments", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+    const audit = await schemaRecommendationService.auditUndeclaredFragments({
+      entity_type: parsed.data.entity_type,
+      user_id: userId,
+    });
+
+    return res.json({
+      audit,
+      total_entity_types: audit.length,
+      total_undeclared_fields: audit.reduce((sum, t) => sum + t.undeclared_fields.length, 0),
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to audit undeclared fragments",
+      "DB_QUERY_FAILED",
+      "APIError:audit_undeclared_fragments"
+    );
+  }
+});
+
 // POST /get_schema_recommendations - Get schema update recommendations
 app.post("/get_schema_recommendations", async (req, res) => {
   const parsed = GetSchemaRecommendationsRequestSchema.safeParse(req.body);
@@ -9707,6 +9814,37 @@ app.post("/correct", async (req, res) => {
 });
 
 // POST /get_authenticated_user - Get authenticated user ID
+// FU-2026-05-002: neotoma_turn_summary — computes per-turn status line.
+app.post("/turn_summary", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, undefined);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const conversationId =
+      typeof body.conversation_id === "string" ? body.conversation_id : undefined;
+    const turnKey = typeof body.turn_key === "string" ? body.turn_key : undefined;
+    if (!conversationId || !turnKey) {
+      return sendError(
+        res,
+        400,
+        "ERR_TURN_SUMMARY_BAD_REQUEST",
+        "conversation_id and turn_key are required"
+      );
+    }
+    const { computeTurnSummary, TurnSummaryError } = await import("./services/turn_summary.js");
+    try {
+      const result = await computeTurnSummary({ userId, conversationId, turnKey });
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof TurnSummaryError) {
+        return sendError(res, err.status, err.code, err.message);
+      }
+      throw err;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to compute turn summary");
+  }
+});
+
 app.post("/get_authenticated_user", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, undefined);

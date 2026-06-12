@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
+import { isHostedMode, isPrivateOrLoopbackHostname } from "../net/private_host_guard.js";
 import { signWebhookBody } from "../subscriptions/webhook_delivery.js";
 import {
   getPeerForAAuthVerification,
@@ -39,37 +40,6 @@ function normalizeUrlBase(rawUrl: string): string {
   parsed.search = "";
   parsed.pathname = parsed.pathname.replace(/\/+$/, "");
   return parsed.toString().replace(/\/$/, "");
-}
-
-function isHostedMode(): boolean {
-  return /^(1|true|yes)$/i.test(process.env.NEOTOMA_HOSTED_MODE ?? "");
-}
-
-function isPrivateOrLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
-  if (normalized === "localhost" || normalized.endsWith(".localhost")) return true;
-
-  const ipv4 = normalized.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = ipv4.slice(1).map((part) => Number.parseInt(part, 10));
-    return (
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a === 0
-    );
-  }
-
-  return (
-    normalized === "::1" ||
-    normalized === "[::1]" ||
-    normalized === "0:0:0:0:0:0:0:1" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("fe80:")
-  );
 }
 
 function validateSenderPeerUrl(senderPeerUrl: string, peer: PeerConfigRecord): string {

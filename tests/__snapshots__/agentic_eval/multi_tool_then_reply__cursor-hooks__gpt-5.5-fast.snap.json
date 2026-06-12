@@ -2,6 +2,51 @@
   "requests": [
     {
       "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_12",
+        "target_entity_id": "ent_mock_9"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_19",
+        "target_entity_id": "ent_mock_16"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_3",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_23",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_28",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
       "endpoint": "/store",
       "body": {
         "entities": [
@@ -50,7 +95,7 @@
         "entities": [
           {
             "context_source": "cursor-hook",
-            "conversation_id": "<id:1>",
+            "conversation_id": "<id:3>",
             "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_turn",
@@ -63,12 +108,15 @@
             "model": "gpt-5.5-fast",
             "session_id": "<id:1>",
             "started_at": "<ts>",
-            "turn_id": "<id:3>",
+            "stored_entity_ids": [
+              "ent_mock_3"
+            ],
+            "turn_id": "<id:4>",
             "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1",
             "working_directory": "<env>"
           }
         ],
-        "idempotency_key": "<id:4>"
+        "idempotency_key": "<id:5>"
       }
     },
     {
@@ -88,59 +136,6 @@
             "output_summary": "{\"ok\":true,\"bytes_read\":1024}",
             "status": null,
             "tool_name": "Read",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1"
-          }
-        ],
-        "idempotency_key": "<id:5>"
-      }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/store",
-      "body": {
-        "entities": [
-          {
-            "context_source": "cursor-hook",
-            "cwd": "<env>",
-            "data_source": "cursor-hook",
-            "entity_type": "conversation_turn",
-            "git_branch": "<env>",
-            "harness": "cursor",
-            "hook_event": "post_tool_use",
-            "hook_events": [
-              "post_tool_use"
-            ],
-            "model": "gpt-5.5-fast",
-            "neotoma_tool_failures": 0,
-            "retrieve_calls": 0,
-            "session_id": "<id:1>",
-            "store_structured_calls": 0,
-            "tool_invocation_count": 1,
-            "turn_id": "<id:3>",
-            "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1",
-            "working_directory": "<env>"
-          }
-        ],
-        "idempotency_key": "<id:4>"
-      }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/store",
-      "body": {
-        "entities": [
-          {
-            "cwd": "<env>",
-            "data_source": "cursor-hook",
-            "entity_type": "tool_invocation",
-            "harness": "cursor",
-            "has_error": false,
-            "hook_event": "postToolUse",
-            "input_summary": "{\"pattern\":\"createSession\"}",
-            "invoked_at": "<ts>",
-            "output_summary": "{\"ok\":true,\"matches\":3}",
-            "status": null,
-            "tool_name": "Grep",
             "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1"
           }
         ],
@@ -168,13 +163,72 @@
             "retrieve_calls": 0,
             "session_id": "<id:1>",
             "store_structured_calls": 0,
-            "tool_invocation_count": 2,
-            "turn_id": "<id:3>",
+            "stored_entity_ids": [
+              "ent_mock_9"
+            ],
+            "tool_invocation_count": 1,
+            "turn_id": "<id:4>",
             "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1",
             "working_directory": "<env>"
           }
         ],
-        "idempotency_key": "<id:4>"
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"pattern\":\"createSession\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"ok\":true,\"matches\":3}",
+            "status": null,
+            "tool_name": "Grep",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "gpt-5.5-fast",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 0,
+            "stored_entity_ids": [
+              "ent_mock_16"
+            ],
+            "tool_invocation_count": 2,
+            "turn_id": "<id:4>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
       }
     },
     {
@@ -195,31 +249,6 @@
             "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1:assistant"
           }
         ],
-        "idempotency_key": "<id:7>"
-      }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/store",
-      "body": {
-        "entities": [
-          {
-            "client_name": "Cursor",
-            "conversation_id": "<id:1>",
-            "cwd": "<env>",
-            "data_source": "cursor-hook",
-            "entity_type": "conversation",
-            "harness": "cursor-hook",
-            "hook_event": "stop_backfill",
-            "repository_name": "<env>",
-            "repository_remote": "<env>",
-            "repository_root": "<env>",
-            "scope_summary": "<env>",
-            "thread_kind": "human_agent",
-            "title": "<env>",
-            "workspace_kind": "<env>"
-          }
-        ],
         "idempotency_key": "<id:8>"
       }
     },
@@ -230,7 +259,7 @@
         "entities": [
           {
             "context_source": "cursor-hook",
-            "conversation_id": "<id:1>",
+            "conversation_id": "<id:3>",
             "cwd": "<env>",
             "data_source": "cursor-hook",
             "diagnosis_confidence": "high",
@@ -258,11 +287,10 @@
                 ],
                 "reminder_injected": true,
                 "tool_invocation_count": 2,
-                "user_message_stored": false
+                "user_message_stored": true
               }
             },
             "missed_steps": [
-              "user_message_store",
               "user_phase_store"
             ],
             "model": "gpt-5.5-fast",
@@ -279,12 +307,12 @@
             "status": "backfilled_by_hook",
             "store_structured_calls": 0,
             "tool_invocation_count": 2,
-            "turn_id": "<id:3>",
+            "turn_id": "<id:4>",
             "turn_key": "multi_tool_then_reply__cursor-hooks__gpt-5.5-fast:turn-1",
             "working_directory": "<env>"
           }
         ],
-        "idempotency_key": "<id:4>"
+        "idempotency_key": "<id:5>"
       }
     }
   ],
