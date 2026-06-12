@@ -196,6 +196,31 @@ describe("syncIssuesFromGitHub", () => {
     expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-02T12:00:00Z")).toBe(true);
   });
 
+  it("re-stores an unchanged issue with a byte-identical payload (no wall-clock drift)", async () => {
+    // The idempotency check hashes the FULL entity payload. A wall-clock
+    // last_synced_at/data_source made the payload differ every run, so an
+    // unchanged issue under its stable updated_at key tripped
+    // ERR_IDEMPOTENCY_MISMATCH. Provenance is now derived from updated_at, so
+    // two runs over identical GitHub data must produce identical store payloads.
+    const { ops, store } = createOps();
+    mockListIssues.mockResolvedValue([issue(1)]);
+    mockListIssueComments.mockResolvedValue([]);
+
+    await syncIssuesFromGitHub(ops);
+    const firstPayload = JSON.stringify(store.mock.calls[0]?.[0]?.entities);
+
+    store.mockClear();
+    mockListIssues.mockResolvedValue([issue(1)]);
+    await syncIssuesFromGitHub(ops);
+    const secondPayload = JSON.stringify(store.mock.calls[0]?.[0]?.entities);
+
+    expect(secondPayload).toBe(firstPayload);
+    // And provenance reflects the issue's updated_at, not wall-clock.
+    const issueEntity = store.mock.calls[0]?.[0]?.entities?.[0] as Record<string, unknown>;
+    expect(issueEntity.last_synced_at).toBe("2026-05-01T00:00:00Z");
+    expect(issueEntity.data_source).toContain("2026-05-01");
+  });
+
   describe("push leg — local public issues without github_number", () => {
     function makeEntityList(
       entities: Array<{ entity_id: string; snapshot: Record<string, unknown> }>
