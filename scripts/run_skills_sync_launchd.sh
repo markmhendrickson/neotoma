@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Continuous skills mirror for LaunchAgent com.neotoma.skills-sync.
 #
+# macOS-only: the polling fallback uses BSD `stat -f` and this is invoked solely
+# by the macOS LaunchAgent (install_launchd_skills_sync.js exits on non-Darwin).
+# Linux operators should drive `neotoma skills sync` from a systemd path unit or
+# cron instead of reusing this script.
+#
 # Watches the canonical skills/ directory and re-runs `neotoma skills sync`
 # whenever a skill is added, removed, renamed, or edited — so every installed
 # harness (claude-code, cursor, codex, openclaw) stays in sync automatically.
 # Also runs once at load (RunAtLoad) to pick up newly-installed harnesses.
 #
 # Watch mechanism: prefers fswatch (event-driven, low latency); falls back to a
-# polling loop when fswatch is unavailable so the daemon works on any machine.
+# polling loop when fswatch is unavailable.
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"

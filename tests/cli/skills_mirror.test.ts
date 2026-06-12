@@ -154,6 +154,33 @@ describe("mirrorSkillsToAllHarnesses", () => {
     });
     expect(report.source_present).toBe(false);
     expect(report.results).toHaveLength(0);
+    expect(report.has_errors).toBe(false);
+  });
+
+  it("reports has_errors=false on a clean run", () => {
+    fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+    const report = mirrorSkillsToAllHarnesses({ cwd: root, scope: "project", sourceDir });
+    expect(report.has_errors).toBe(false);
+    for (const r of report.results) expect(r.errors).toBeUndefined();
+  });
+
+  it("invokes onLog when converting per-skill links to a whole-dir symlink", () => {
+    // First sync into a foreign dir produces per-skill links...
+    const skillsDir = path.join(root, ".claude", "skills", "vendor");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, "SKILL.md"), "foreign");
+    mirrorSkillsToAllHarnesses({ cwd: root, scope: "project", sourceDir });
+    // ...then remove the foreign entry so the next sync can convert to whole-dir.
+    fs.rmSync(path.join(root, ".claude", "skills", "vendor"), { recursive: true });
+    const logs: string[] = [];
+    mirrorSkillsToAllHarnesses({
+      cwd: root,
+      scope: "project",
+      sourceDir,
+      onLog: (m) => logs.push(m),
+    });
+    expect(logs.some((l) => /Converted .* whole-dir symlink/.test(l))).toBe(true);
+    expect(fs.lstatSync(path.join(root, ".claude", "skills")).isSymbolicLink()).toBe(true);
   });
 });
 

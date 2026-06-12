@@ -8845,13 +8845,18 @@ skillsCommand
       "Creates and populates the skills directory for any harness whose base directory exists."
   )
   .option("--scope <scope>", "Mirror at user or project level", "user")
+  .option("--json", "Output machine-readable JSON")
   .action(async (opts) => {
     const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
     const scope = opts.scope === "project" ? "project" : "user";
-    const report = mirrorSkillsToAllHarnesses({ scope });
-    const json = Boolean((program.opts() as { json?: boolean }).json);
+    const json = Boolean(opts.json);
+    const report = mirrorSkillsToAllHarnesses({
+      scope,
+      onLog: json ? undefined : (msg) => console.log(`  ${msg}`),
+    });
     if (json) {
       process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+      if (!report.source_present || report.has_errors) process.exitCode = 1;
       return;
     }
     if (!report.source_present) {
@@ -8869,8 +8874,15 @@ skillsCommand
       const detail =
         r.mode === "whole-dir-symlink" ? "dir-symlink" : `${r.linked.length} skill link(s)`;
       console.log(`  ${r.tool}: ${verb} (${r.mode}, ${detail}) → ${r.target}`);
+      for (const e of r.errors ?? []) {
+        console.error(`    ⚠ ${e.skill}: ${e.reason}`);
+      }
     }
     console.log(report.changed ? "Skills mirror updated." : "All harnesses already up-to-date.");
+    if (report.has_errors) {
+      console.error("Some skills failed to link; see warnings above.");
+      process.exitCode = 1;
+    }
   });
 
 const agentsCommand = program

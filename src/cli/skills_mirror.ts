@@ -30,7 +30,7 @@ import {
   mkdirSync,
   readdirSync,
   readlinkSync,
-  rmSync,
+  rmdirSync,
   symlinkSync,
   unlinkSync,
 } from "node:fs";
@@ -74,6 +74,8 @@ export interface HarnessMirrorResult {
   changed: boolean;
   /** Skills linked in this run (per-skill mode) or "*" for whole-dir. */
   linked: string[];
+  /** Per-skill operations that were attempted but failed (e.g. symlink EPERM). */
+  errors?: Array<{ skill: string; reason: string }>;
   skipped?: boolean;
   reason?: string;
 }
@@ -84,6 +86,8 @@ export interface SkillsMirrorReport {
   scope: "user" | "project";
   results: HarnessMirrorResult[];
   changed: boolean;
+  /** True when any harness reported one or more per-skill errors. */
+  has_errors: boolean;
 }
 
 /**
@@ -96,12 +100,16 @@ export function getPublishedSkillsSource(): string {
   return join(packageRoot, "skills");
 }
 
-/** List skill subdirectory names in the source, or [] when unreadable. */
+/**
+ * List skill subdirectory names in the source, sorted for deterministic
+ * output across filesystems, or [] when unreadable.
+ */
 function listSkillNames(sourceDir: string): string[] {
   try {
     return readdirSync(sourceDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
-      .map((d) => d.name);
+      .map((d) => d.name)
+      .sort();
   } catch {
     return [];
   }
@@ -168,11 +176,11 @@ function hasForeignContent(targetDir: string, sourceDir: string, skillNames: Set
  */
 function mirrorWholeDir(
   targetDir: string,
-  sourceDir: string,
-  skillNames: string[]
-): { changed: boolean; bailToPerSkill?: boolean } {
+  sourceDir: string
+): { changed: boolean; converted?: boolean; bailToPerSkill?: boolean } {
   if (isSymlinkTo(targetDir, sourceDir)) return { changed: false };
 
+  let converted = false;
   if (isSymlink(targetDir)) {
     // Wrong-target symlink (whole dir): replace the link itself.
     unlinkSync(targetDir);
@@ -192,15 +200,16 @@ function mirrorWholeDir(
       }
       unlinkSync(entry);
     }
-    rmSync(targetDir, { recursive: false, force: true });
+    // Directory is now empty (only our symlinks were present). rmdir — never a
+    // recursive delete — so a real file could never be removed here.
+    rmdirSync(targetDir);
+    // We replaced an existing per-skill directory with a whole-dir symlink.
+    converted = true;
   }
 
   mkdirSync(dirname(targetDir), { recursive: true });
   symlinkSync(sourceDir, targetDir, "junction");
-  // skillNames intentionally accepted for symmetry with mirrorPerSkill; the
-  // whole-dir symlink exposes every source skill without enumerating them.
-  void skillNames;
-  return { changed: true };
+  return { changed: true, converted };
 }
 
 /**
@@ -212,11 +221,12 @@ function mirrorPerSkill(
   targetDir: string,
   sourceDir: string,
   skillNames: string[]
-): { changed: boolean; linked: string[] } {
+): { changed: boolean; linked: string[]; errors: Array<{ skill: string; reason: string }> } {
   mkdirSync(targetDir, { recursive: true });
   const names = new Set(skillNames);
   let changed = false;
   const linked: string[] = [];
+  const errors: Array<{ skill: string; reason: string }> = [];
 
   // Prune stale links pointing into our source for skills that were removed.
   for (const name of (() => {
@@ -254,18 +264,25 @@ function mirrorPerSkill(
       symlinkSync(src, dst, "junction");
       changed = true;
       linked.push(name);
-    } catch {
-      /* non-fatal per-skill failure */
+    } catch (err) {
+      // Non-fatal for the other skills, but surfaced so callers (and the
+      // `--json` consumer) can distinguish success from tried-and-failed.
+      errors.push({ skill: name, reason: err instanceof Error ? err.message : String(err) });
     }
   }
 
-  return { changed, linked };
+  return { changed, linked, errors };
 }
 
 /** Reconcile a single harness target directory against the source. */
 export function mirrorToHarness(
   tool: ToolId,
-  opts: { cwd?: string; scope?: "user" | "project"; sourceDir?: string } = {}
+  opts: {
+    cwd?: string;
+    scope?: "user" | "project";
+    sourceDir?: string;
+    onLog?: (message: string) => void;
+  } = {}
 ): HarnessMirrorResult {
   const scope = opts.scope ?? "user";
   const cwd = opts.cwd ?? process.cwd();
@@ -326,8 +343,13 @@ export function mirrorToHarness(
     hasForeignContent(targetDir, sourceDir, new Set(skillNames));
 
   if (!foreign) {
-    const whole = mirrorWholeDir(targetDir, sourceDir, skillNames);
+    const whole = mirrorWholeDir(targetDir, sourceDir);
     if (!whole.bailToPerSkill) {
+      if (whole.converted) {
+        // Make the per-skill → whole-dir upgrade observable (esp. for the
+        // LaunchAgent path, whose only trace is the log file).
+        opts.onLog?.(`Converted ${targetDir} from per-skill links to a whole-dir symlink.`);
+      }
       return {
         tool,
         target: targetDir,
@@ -340,7 +362,7 @@ export function mirrorToHarness(
     // Unexpected non-symlink entry encountered: preserve it via per-skill mode.
   }
 
-  const { changed, linked } = mirrorPerSkill(targetDir, sourceDir, skillNames);
+  const { changed, linked, errors } = mirrorPerSkill(targetDir, sourceDir, skillNames);
   return {
     tool,
     target: targetDir,
@@ -348,6 +370,7 @@ export function mirrorToHarness(
     mode: "per-skill-symlink",
     changed,
     linked,
+    ...(errors.length > 0 ? { errors } : {}),
   };
 }
 
@@ -356,7 +379,12 @@ export function mirrorToHarness(
  * This is the entry point used by `neotoma skills sync` and the watcher.
  */
 export function mirrorSkillsToAllHarnesses(
-  opts: { cwd?: string; scope?: "user" | "project"; sourceDir?: string } = {}
+  opts: {
+    cwd?: string;
+    scope?: "user" | "project";
+    sourceDir?: string;
+    onLog?: (message: string) => void;
+  } = {}
 ): SkillsMirrorReport {
   const scope = opts.scope ?? "user";
   const sourceDir = opts.sourceDir ?? getPublishedSkillsSource();
@@ -364,7 +392,8 @@ export function mirrorSkillsToAllHarnesses(
 
   const results: HarnessMirrorResult[] = [];
   if (sourcePresent) {
-    for (const tool of Object.keys(SKILL_HARNESSES) as ToolId[]) {
+    // Deterministic harness order for stable output across runs.
+    for (const tool of (Object.keys(SKILL_HARNESSES) as ToolId[]).sort()) {
       results.push(mirrorToHarness(tool, { ...opts, scope, sourceDir }));
     }
   }
@@ -375,5 +404,6 @@ export function mirrorSkillsToAllHarnesses(
     scope,
     results,
     changed: results.some((r) => r.changed),
+    has_errors: results.some((r) => (r.errors?.length ?? 0) > 0),
   };
 }
