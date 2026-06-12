@@ -36,6 +36,7 @@ describe("CLI command coverage guard", () => {
       "schemas",
       "servers",
       "setup",
+      "skills", // `skills sync` reconciler covered by tests/cli/skills_mirror.test.ts
       "snapshots",
       "sources",
       "stats",
