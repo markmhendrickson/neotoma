@@ -381,7 +381,13 @@ async function syncSingleComment(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}-${SYNC_KEY_MIGRATION}`,
+      // Include the issue's updated_at: this store re-stores the issue entity
+      // (whose deterministic payload tracks issue.updated_at), so when the issue
+      // changes the comment store must re-key too — otherwise the new issue
+      // content collides with the stale row under a comment.id-only key and
+      // trips ERR_IDEMPOTENCY_MISMATCH. (Observed accumulating once the swarm
+      // began bumping issue.updated_at on synced issues.)
+      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}-${issue.updated_at}-${SYNC_KEY_MIGRATION}`,
     })
   ) as Promise<StoreResult>;
 }
