@@ -271,11 +271,18 @@ async function syncSingleIssue(
     { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
   ];
 
+  // Include updated_at so each distinct version of an issue gets a unique
+  // idempotency_key. A static `issue-sync-${repo}-${number}` key is reused
+  // verbatim on every sync, so once an issue's title/body/labels change on
+  // GitHub the store fails with ERR_IDEMPOTENCY_MISMATCH (same key, different
+  // content) and the issue never updates locally. Keying on updated_at keeps a
+  // genuine no-op re-sync idempotent (same key → dedup) while letting changed
+  // content through under a fresh key.
   return runWithExternalActor(actor, () =>
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-sync-${repo}-${issue.number}`,
+      idempotency_key: `issue-sync-${repo}-${issue.number}-${issue.updated_at}`,
     })
   ) as Promise<StoreResult>;
 }

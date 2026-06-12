@@ -166,10 +166,34 @@ describe("syncIssuesFromGitHub", () => {
     await syncIssuesFromGitHub(ops);
     await syncIssuesFromGitHub(ops);
 
+    // The issue key includes updated_at so a changed issue gets a fresh key,
+    // but an unchanged issue re-synced twice keeps the same key (dedup).
     expect(store).toHaveBeenCalledTimes(4);
     expect(seenIdempotencyKeys).toEqual(
-      new Set(["issue-sync-test/repo-1", "issue-comment-sync-test/repo-1-101"])
+      new Set([
+        "issue-sync-test/repo-1-2026-05-01T00:00:00Z",
+        "issue-comment-sync-test/repo-1-101",
+      ])
     );
+  });
+
+  it("gives a changed issue a fresh idempotency key (avoids ERR_IDEMPOTENCY_MISMATCH)", async () => {
+    const { ops, seenIdempotencyKeys } = createOps();
+    mockListIssueComments.mockResolvedValue([]);
+
+    // Same issue number, different content + later updated_at (as GitHub returns
+    // after an edit). The store must use a distinct key, or Neotoma rejects the
+    // write as a mismatch and the issue never updates locally.
+    const v1 = { ...issue(1, "Original title"), updated_at: "2026-05-01T00:00:00Z" };
+    const v2 = { ...issue(1, "Edited title"), updated_at: "2026-05-02T12:00:00Z" };
+
+    mockListIssues.mockResolvedValueOnce([v1]);
+    await syncIssuesFromGitHub(ops);
+    mockListIssues.mockResolvedValueOnce([v2]);
+    await syncIssuesFromGitHub(ops);
+
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-01T00:00:00Z")).toBe(true);
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-02T12:00:00Z")).toBe(true);
   });
 
   describe("push leg — local public issues without github_number", () => {
