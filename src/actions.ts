@@ -9814,6 +9814,39 @@ app.post("/correct", async (req, res) => {
 });
 
 // POST /get_authenticated_user - Get authenticated user ID
+// FU-2026-05-003: GET /conversations/:conversation_id/turn-index — Inspector
+// per-turn anchor sections and turn timeline sidebar.
+app.get("/conversations/:conversation_id/turn-index", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const identifier = String(req.params.conversation_id ?? "").trim();
+    if (!identifier) {
+      return sendError(
+        res,
+        400,
+        "ERR_TURN_INDEX_BAD_REQUEST",
+        "conversation_id path parameter is required"
+      );
+    }
+    const { computeConversationTurnIndex, ConversationTurnIndexError } =
+      await import("./services/conversation_turn_index.js");
+    try {
+      const result = await computeConversationTurnIndex({
+        userId,
+        conversationIdentifier: identifier,
+      });
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof ConversationTurnIndexError) {
+        return sendError(res, err.status, err.code, err.message);
+      }
+      throw err;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to compute conversation turn index");
+  }
+});
+
 // FU-2026-05-002: neotoma_turn_summary — computes per-turn status line.
 app.post("/turn_summary", async (req, res) => {
   try {
