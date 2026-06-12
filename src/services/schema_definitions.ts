@@ -3186,10 +3186,17 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
-        // Stable identifier for the preference (e.g. "issue_filing_consent"). Acts as the key.
-        title: { type: "string", required: true, preserveCase: false },
-        // Current value of the preference (e.g. "always" | "ask" | "never"). Type is freeform
-        // string because preference shape varies; agents and UIs interpret per-title.
+        // Stable machine identifier for the preference (e.g. "auto_file_issues",
+        // "issue_filing_consent"). Preferred key field for new preferences. Either `key`
+        // or `title` may carry the identifier; both are declared so neither routes to
+        // raw_fragments, and both participate in identity resolution.
+        key: { type: "string", required: false, preserveCase: false },
+        // Stable identifier for the preference (e.g. "issue_filing_consent"). Legacy/alias
+        // of `key`; retained for back-compat with preferences keyed by title.
+        title: { type: "string", required: false, preserveCase: false },
+        // Current value of the preference (e.g. "always" | "ask" | "never", or a boolean
+        // such as auto_file_issues: false). Type is freeform because preference shape
+        // varies; agents and UIs interpret per-key. Stored as written (string or boolean).
         value: { type: "string", required: true, preserveCase: true },
         // Optional scope qualifier — e.g. "global", "project:neotoma". Default behavior treats
         // a preference as global when scope is omitted.
@@ -3199,9 +3206,15 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         created_date: { type: "date", required: false },
         updated_date: { type: "date", required: false },
       },
-      // A preference is uniquely identified by its title (plus optional scope when present).
-      // Two stores with the same title collapse to one entity; the latest write wins on value.
-      canonical_name_fields: ["title", { composite: ["scope", "title"] }],
+      // A preference is uniquely identified by its key (or legacy title), plus optional
+      // scope when present. Two stores with the same key/title collapse to one entity;
+      // the latest write wins on value.
+      canonical_name_fields: [
+        "key",
+        "title",
+        { composite: ["scope", "key"] },
+        { composite: ["scope", "title"] },
+      ],
     },
     reducer_config: {
       merge_policies: {
