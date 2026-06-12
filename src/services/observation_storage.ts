@@ -273,12 +273,12 @@ export async function repointRelationshipObservations(
     );
   }
 
-  // Build a dedup set: "relationship_key::canonical_hash" already on the survivor
+  // Collapse by relationship_key (type:source:target) — the unique edge identity.
+  // The metadata-derived canonical_hash is intentionally excluded so that
+  // duplicate edges differing only in observation metadata still collapse to a
+  // single edge on the survivor after a merge.
   const survivorKeys = new Set<string>(
-    (survivorRows ?? []).map(
-      (r: { relationship_key: string; canonical_hash: string | null }) =>
-        `${r.relationship_key}::${r.canonical_hash ?? ""}`
-    )
+    (survivorRows ?? []).map((r: { relationship_key: string }) => r.relationship_key)
   );
 
   const idsToDelete: string[] = [];
@@ -302,7 +302,7 @@ export async function repointRelationshipObservations(
     }
 
     const newRelationshipKey = `${row.relationship_type}:${newSourceEntityId}:${newTargetEntityId}`;
-    const dedupKey = `${newRelationshipKey}::${row.canonical_hash ?? ""}`;
+    const dedupKey = newRelationshipKey;
 
     // Rule: drop duplicates where the survivor already has this edge
     if (survivorKeys.has(dedupKey)) {

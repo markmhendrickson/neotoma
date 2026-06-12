@@ -242,6 +242,7 @@ async function seedEntity(id: string, entityType = "test_entity"): Promise<void>
     id,
     user_id: E2E_USER,
     entity_type: entityType,
+    canonical_name: id,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });

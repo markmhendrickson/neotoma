@@ -107,20 +107,22 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
         )
         .all(userId, fromEntityId, fromEntityId) as RelRow[];
 
-      // 3. Build dedup set from rows already owned by the survivor
-      type SurvivorRow = { relationship_key: string; canonical_hash: string | null };
+      // 3. Build dedup set from rows already owned by the survivor.
+      // Collapse by relationship_key (type:source:target) — the unique edge
+      // identity. The metadata-derived canonical_hash is intentionally excluded
+      // so that duplicate edges differing only in observation metadata still
+      // collapse to a single edge on the survivor after a merge.
+      type SurvivorRow = { relationship_key: string };
       const survivorRows = sqliteDb
         .prepare(
-          `SELECT relationship_key, canonical_hash
+          `SELECT relationship_key
            FROM relationship_observations
            WHERE user_id = ?
              AND (source_entity_id = ? OR target_entity_id = ?)`
         )
         .all(userId, toEntityId, toEntityId) as SurvivorRow[];
 
-      const survivorKeys = new Set<string>(
-        survivorRows.map((r) => `${r.relationship_key}::${r.canonical_hash ?? ""}`)
-      );
+      const survivorKeys = new Set<string>(survivorRows.map((r) => r.relationship_key));
 
       const idsToDelete: string[] = [];
       const repointed: Array<{
@@ -143,7 +145,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
         }
 
         const newRelationshipKey = `${row.relationship_type}:${newSourceEntityId}:${newTargetEntityId}`;
-        const dedupKey = `${newRelationshipKey}::${row.canonical_hash ?? ""}`;
+        const dedupKey = newRelationshipKey;
 
         // Drop duplicates already present on the survivor
         if (survivorKeys.has(dedupKey)) {
