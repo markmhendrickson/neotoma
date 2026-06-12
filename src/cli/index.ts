@@ -8832,6 +8832,44 @@ program
     }
   );
 
+const skillsCommand = program
+  .command("skills")
+  .description("Skills mirroring: keep harness skills directories in sync with the canonical source.");
+
+skillsCommand
+  .command("sync")
+  .description(
+    "Mirror published skills into every detected harness (claude-code, cursor, codex, openclaw). " +
+      "Creates and populates the skills directory for any harness whose base directory exists."
+  )
+  .option("--scope <scope>", "Mirror at user or project level", "user")
+  .action(async (opts) => {
+    const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
+    const scope = opts.scope === "project" ? "project" : "user";
+    const report = mirrorSkillsToAllHarnesses({ scope });
+    const json = Boolean((program.opts() as { json?: boolean }).json);
+    if (json) {
+      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+      return;
+    }
+    if (!report.source_present) {
+      console.error(`No published skills source found at ${report.source}`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`Skills source: ${report.source} (scope=${report.scope})`);
+    for (const r of report.results) {
+      if (r.skipped) {
+        console.log(`  ${r.tool}: skipped — ${r.reason}`);
+        continue;
+      }
+      const verb = r.changed ? "synced" : "up-to-date";
+      const detail = r.mode === "whole-dir-symlink" ? "dir-symlink" : `${r.linked.length} skill link(s)`;
+      console.log(`  ${r.tool}: ${verb} (${r.mode}, ${detail}) → ${r.target}`);
+    }
+    console.log(report.changed ? "Skills mirror updated." : "All harnesses already up-to-date.");
+  });
+
 const agentsCommand = program
   .command("agents")
   .description("Agent attribution / admission management commands");

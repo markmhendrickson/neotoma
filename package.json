@@ -170,6 +170,7 @@
     "setup:launchd-cli-sync": "node scripts/install_launchd_watch_build.js",
     "setup:launchd-watch-build": "npm run setup:launchd-cli-sync",
     "setup:launchd-issues-sync": "node scripts/install_launchd_issues_sync.js",
+    "setup:launchd-skills-sync": "node scripts/install_launchd_skills_sync.js",
     "reload:launchd-neotoma": "bash scripts/reload_neotoma_launchagents.sh",
     "shutdown:launchd-neotoma": "bash scripts/shutdown_neotoma_launchagents.sh",
     "copy:env": "node scripts/copy-env-to-worktree.js",
