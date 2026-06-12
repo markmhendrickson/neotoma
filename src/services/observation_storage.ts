@@ -15,6 +15,7 @@ import {
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
+import { enforceOverridePolicy } from "./override_validation.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
 
 /**
@@ -87,6 +88,15 @@ export async function createObservation(
     op: "store",
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
+  });
+  await enforceOverridePolicy({
+    entityType: params.entity_type,
+    entityId: params.entity_id,
+    fields: params.fields,
+    identity: getCurrentAgentIdentity(),
+    admission: getCurrentAAuthAdmission(),
+    userId: params.user_id,
+    db,
   });
   const observationId = generateObservationId(
     params.source_id,

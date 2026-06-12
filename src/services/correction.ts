@@ -16,6 +16,7 @@ import {
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
+import { enforceOverridePolicy } from "./override_validation.js";
 import {
   emitEntitySnapshotChange,
   emitObservationCreated,
@@ -47,6 +48,15 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     op: "correct",
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
+  });
+  await enforceOverridePolicy({
+    entityType: params.entity_type,
+    entityId: params.entity_id,
+    fields: { [params.field]: params.value },
+    identity: getCurrentAgentIdentity(),
+    admission: getCurrentAAuthAdmission(),
+    userId: params.user_id,
+    db,
   });
   const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } = params;
 

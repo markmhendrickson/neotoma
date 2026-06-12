@@ -4351,6 +4351,15 @@ paths:
                 oneOf:
                   - { $ref: "#/components/schemas/StoreResolutionErrorEnvelope" }
                   - { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: |
+            Write rejected by policy. `OVERRIDE_POLICY_VIOLATION` is returned
+            when an `agent_definition` entity's `override_policy` denies the
+            calling agent role a field being written; the envelope details
+            carry `field_name`, `agent_role`, and `entity_id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "409":
           description: |
             Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
@@ -6052,6 +6061,15 @@ paths:
                         type: string
                       field:
                         type: string
+        "403":
+          description: |
+            Correction rejected by policy. `OVERRIDE_POLICY_VIOLATION` is
+            returned when an `agent_definition` entity's `override_policy`
+            denies the calling agent role the corrected field; the envelope
+            details carry `field_name`, `agent_role`, and `entity_id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /turn_summary:
     post:
