@@ -167,9 +167,14 @@ describe("syncIssuesFromGitHub", () => {
     await syncIssuesFromGitHub(ops);
 
     expect(store).toHaveBeenCalledTimes(4);
-    expect(seenIdempotencyKeys).toEqual(
-      new Set(["issue-sync-test/repo-1", "issue-comment-sync-test/repo-1-101"])
-    );
+    // Two runs over identical content collapse to exactly two distinct keys:
+    // one for the issue, one for its comment. The issue key carries a content
+    // digest suffix (issue-sync-<repo>-<number>-<digest>) so an EDITED issue
+    // gets a fresh key, while unchanged re-syncs keep the same digest → stable.
+    expect(seenIdempotencyKeys.size).toBe(2);
+    const issueKey = [...seenIdempotencyKeys].find((k) => k.startsWith("issue-sync-"));
+    expect(issueKey).toMatch(/^issue-sync-test\/repo-1-[0-9a-f]{16}$/);
+    expect(seenIdempotencyKeys).toContain("issue-comment-sync-test/repo-1-101");
   });
 
   describe("push leg — local public issues without github_number", () => {
