@@ -16,10 +16,10 @@ When a Neotoma CLI session starts (dev or prod), applied rule files (e.g. `.curs
 
 ## Canonical behavioral instructions (read these for semantics)
 
-| Situation                        | Action                                                                                                                                                |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MCP tools visible in the session | Follow MCP `instructions` / tool surface only for Neotoma behavior.                                                                                   |
-| MCP not available                | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout. |
+| Situation                           | Action                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP tools visible in the session    | Follow MCP `instructions` / tool surface only for Neotoma behavior.                                                                                                                                                                                                                                                        |
+| MCP not available                   | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout.                                                                                                                                                                      |
 | Install / MCP / configuration tasks | Read `install.md` (repo root) **first**. It is the canonical CLI-driven setup sequence covering `neotoma auth keygen`, `neotoma mcp config`, LaunchAgent install, transport presets, and data-directory configuration. Do not substitute shell introspection or manual JSON/plist edits for the CLI commands it documents. |
 
 Index and dual-host notes: `docs/developer/agent_instructions.md`.
@@ -86,6 +86,17 @@ neotoma entities list --type contact
 ```
 
 If a matching entity exists, use its `entity_id` for relationship creation instead of creating a duplicate. Only store if no match is found.
+
+## Schema audit (CLI backup)
+
+The per-store `unknown_fields` signal (see the canonical "Full data fidelity" rule in `docs/developer/mcp/instructions.md`) repairs one write. To triage the _accumulated_ stranded backlog — fields stored to `raw_fragments` but excluded from the snapshot until a schema declares them — run the aggregate audit:
+
+```bash
+neotoma schemas audit-fragments                 # all entity types
+neotoma schemas audit-fragments contact         # one entity type
+```
+
+It is read-only (declares nothing) and reports, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag. Use it before drafting `neotoma schemas update` (`update_schema_incremental`) / `register_schema` work to pick the high-occurrence fields to promote first.
 
 ## Retrieval command quick reference (CLI backup)
 

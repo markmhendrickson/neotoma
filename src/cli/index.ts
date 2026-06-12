@@ -13071,6 +13071,33 @@ schemasCommand
   );
 
 schemasCommand
+  .command("audit-fragments")
+  .description("Report undeclared raw_fragments awaiting schema declaration")
+  .argument("[entityType]", "Entity type to audit (or use --entity-type; omit for all types)")
+  .option("--entity-type <type>", "Entity type to audit (alternative to positional argument)")
+  .option("--user-id <userId>", "User ID")
+  .action(
+    async (entityTypeArg: string | undefined, opts: { entityType?: string; userId?: string }) => {
+      const outputMode = resolveOutputMode();
+      const entityTypeResolved = opts.entityType ?? entityTypeArg;
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const { data, error } = await api.POST("/audit_undeclared_fragments", {
+        body: {
+          entity_type: entityTypeResolved,
+          user_id: opts.userId,
+        },
+      });
+      if (error) throw new Error("Failed to audit undeclared fragments");
+      writeOutput(data, outputMode);
+    }
+  );
+
+schemasCommand
   .command("recommend")
   .description("Get schema update recommendations for an entity type")
   .argument("[entityType]", "Entity type (or use --entity-type)")

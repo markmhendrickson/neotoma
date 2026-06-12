@@ -5603,6 +5603,83 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /audit_undeclared_fragments:
+    post:
+      summary: Audit undeclared raw_fragments
+      description: >-
+        Report accumulated undeclared raw_fragments awaiting schema declaration.
+        Stored data routed to raw_fragments (fields not on the active schema) is
+        preserved on the observation but excluded from the entity snapshot until
+        the field is declared. This read-only audit lists, per entity_type, the
+        fragment_keys not declared on the active schema, how many distinct
+        entities carry each, and total occurrences — so the stored-but-invisible
+        backlog is auditable and can be triaged into analyze_schema_candidates /
+        register_schema / update_schema_incremental work.
+      operationId: auditUndeclaredFragments
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                entity_type:
+                  type: string
+                  description: Restrict the audit to a single entity_type.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Undeclared-fragment audit grouped by entity_type
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - audit
+                  - total_entity_types
+                  - total_undeclared_fields
+                properties:
+                  audit:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - entity_type
+                        - undeclared_fields
+                        - affected_entities
+                        - total_occurrences
+                        - schema_missing
+                      properties:
+                        entity_type:
+                          type: string
+                        undeclared_fields:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                              - fragment_key
+                              - affected_entities
+                              - occurrences
+                            properties:
+                              fragment_key:
+                                type: string
+                              affected_entities:
+                                type: integer
+                              occurrences:
+                                type: integer
+                        affected_entities:
+                          type: integer
+                        total_occurrences:
+                          type: integer
+                        schema_missing:
+                          type: boolean
+                  total_entity_types:
+                    type: integer
+                  total_undeclared_fields:
+                    type: integer
+
   /get_schema_recommendations:
     post:
       summary: Get schema recommendations

@@ -140,6 +140,7 @@ import {
 } from "./services/oauth_key_gate.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
+  AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
@@ -9431,6 +9432,43 @@ app.post("/analyze_schema_candidates", async (req, res) => {
       "Failed to analyze schema candidates",
       "DB_QUERY_FAILED",
       "APIError:analyze_schema_candidates"
+    );
+  }
+});
+
+// POST /audit_undeclared_fragments - Report undeclared raw_fragments awaiting
+// schema declaration (#1576). Delegates to the shared service so the HTTP and
+// MCP surfaces return the same audit.
+app.post("/audit_undeclared_fragments", async (req, res) => {
+  const parsed = AuditUndeclaredFragmentsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:audit_undeclared_fragments", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+    const audit = await schemaRecommendationService.auditUndeclaredFragments({
+      entity_type: parsed.data.entity_type,
+      user_id: userId,
+    });
+
+    return res.json({
+      audit,
+      total_entity_types: audit.length,
+      total_undeclared_fields: audit.reduce((sum, t) => sum + t.undeclared_fields.length, 0),
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to audit undeclared fragments",
+      "DB_QUERY_FAILED",
+      "APIError:audit_undeclared_fragments"
     );
   }
 });
