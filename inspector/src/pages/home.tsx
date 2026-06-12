@@ -9,6 +9,7 @@ import { DifferentiatorStrip } from "@/components/home/differentiator_strip";
 import { OutcomesCarousel } from "@/components/home/outcomes_carousel";
 import { FaqPreviewSection } from "@/components/home/faq_preview_section";
 import { QuotesStrip } from "@/components/home/quotes_strip";
+import { PinnedDashboardPanel } from "@/components/home/pinned_dashboard_panel";
 
 /**
  * Marketing home — six stacked sections in order:
@@ -32,11 +33,13 @@ export default function HomePage() {
   // already on their own install and the install CTA is noise; flip to docs.
   const sandboxAvailable = mode === "hosted_sandbox" || mode === "local_sandbox";
   const showOperatorStats = isApiUrlConfigured() && mode === "local";
+  const showPinnedPanel = isApiUrlConfigured();
 
   return (
     <div className="flex min-h-full flex-col">
       <PageShell>
         <div className="space-y-12">
+          {showPinnedPanel ? <PinnedDashboardPanel /> : null}
           <HeroSection sandboxAvailable={sandboxAvailable} />
           {showOperatorStats ? <StatTotalsGrid /> : null}
           <StateFlowDiagram />
