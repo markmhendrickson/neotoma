@@ -36,7 +36,7 @@
       {
         "type": "turn_diagnosis",
         "classification": "hook_state_incomplete",
-        "confidence": "high",
+        "confidence": "medium",
         "reminder_injected": false,
         "recommends_includes": "install.mjs"
       },
