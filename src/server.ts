@@ -75,6 +75,7 @@ import {
 import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
+import { OverridePolicyViolationError } from "./services/override_validation.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
@@ -1689,6 +1690,12 @@ export class NeotomaServer {
           // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
           // envelope carries `min_tier` / `current_tier` / `hint` in the MCP
           // `data` field (see src/services/attribution_policy.ts).
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof OverridePolicyViolationError) {
+          // Same structured-envelope contract for override-policy rejections:
+          // clients branch on `OVERRIDE_POLICY_VIOLATION` via the MCP `data`
+          // field (see src/services/override_validation.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
         // Safely extract error message, handling BigInt values

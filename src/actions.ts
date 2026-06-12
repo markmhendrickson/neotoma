@@ -30,6 +30,7 @@ import { attributionContext } from "./middleware/attribution_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
+import { OverridePolicyViolationError } from "./services/override_validation.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
@@ -3657,6 +3658,12 @@ function handleApiError(
   }
   if (error instanceof AccessPolicyError) {
     logWarn(logContext || "AccessPolicyRejection", req, error.toErrorEnvelope());
+    return res
+      .status(403)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (error instanceof OverridePolicyViolationError) {
+    logWarn(logContext || "OverridePolicyRejection", req, error.toErrorEnvelope());
     return res
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
