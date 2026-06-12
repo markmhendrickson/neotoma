@@ -279,6 +279,39 @@ function evaluatePredicate(
         actual: { stores, relationships: rels },
       };
     }
+    case "field_present": {
+      const entities = getStoredEntities(cell);
+      const candidates = entities.filter(
+        (e) =>
+          e.entity_type === predicate.entity_type &&
+          whereMatches(e, predicate.where)
+      );
+      if (candidates.length === 0) {
+        return {
+          predicate,
+          message: `Expected at least one stored entity of type "${predicate.entity_type}"${
+            predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
+          } but found none.`,
+          expected: predicate,
+          actual: entities
+            .map((e) => e.entity_type)
+            .filter((t, i, a) => a.indexOf(t) === i),
+        };
+      }
+      const hasValue = candidates.some((e) => {
+        const v = e[predicate.field];
+        if (v === null || v === undefined || v === "") return false;
+        if (Array.isArray(v) && v.length === 0) return false;
+        return true;
+      });
+      if (hasValue) return null;
+      return {
+        predicate,
+        message: `Expected stored "${predicate.entity_type}" to have a non-empty value at field "${predicate.field}", but all matching entities had null/empty.`,
+        expected: { field: predicate.field, presence: "non-empty" },
+        actual: candidates.map((e) => ({ [predicate.field]: e[predicate.field] })),
+      };
+    }
     case "turn_diagnosis": {
       const turnEntity = getStoredEntities(cell).find(
         (e) => e.entity_type === "conversation_turn" && e.instruction_diagnostics

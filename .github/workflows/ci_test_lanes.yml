@@ -135,6 +135,36 @@ jobs:
       - name: Validate site export
         run: npm run validate:site-export
 
+  agentic_evals:
+    # Tier 1 agentic-eval matrix. Runs all fixtures against the cursor-hooks
+    # adapter using an in-process mock Neotoma server — no API key required.
+    # Live-model cells (claude-code-plugin, codex-hooks, etc.) are Phase 1
+    # stubs and skip automatically. Add ANTHROPIC_API_KEY to repo secrets and
+    # remove this comment when live harnesses graduate from stub status.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build @neotoma/client and cursor-hooks
+        run: |
+          npm ci --prefix packages/client
+          npm run build --prefix packages/client
+          npm ci --prefix packages/cursor-hooks
+          npm run build --prefix packages/cursor-hooks
+
+      - name: Run Tier 1 agentic evals
+        run: npm run eval:tier1
+
   security_gates:
     # Gate G1–G3 + manifest sync (Track 1 of the pre-release security gates).
     # Always runs the manifest sync check + auth matrix; runs the static
