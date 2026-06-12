@@ -78,11 +78,31 @@ describe("mirrorToHarness", () => {
     expect(fs.lstatSync(path.join(skillsDir, "end")).isSymbolicLink()).toBe(true); // ours linked
   });
 
-  it("is idempotent on repeat runs", () => {
+  it("never recursive-deletes real files: a stray real entry forces per-skill mode", () => {
+    // Simulate a target dir that passed the foreign check as empty but gains a
+    // real (non-symlink) entry — the whole-dir path must bail, not rm -rf it.
+    const skillsDir = path.join(root, ".claude", "skills");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    const realFile = path.join(skillsDir, "IMPORTANT.txt");
+    fs.writeFileSync(realFile, "do not delete me");
+
+    const r = mirrorToHarness("claude-code", { cwd: root, scope: "project", sourceDir });
+    // foreign content detected → per-skill mode, real file preserved.
+    expect(r.mode).toBe("per-skill-symlink");
+    expect(fs.existsSync(realFile)).toBe(true);
+    expect(fs.lstatSync(path.join(skillsDir, "end")).isSymbolicLink()).toBe(true);
+  });
+
+  it("is idempotent on repeat runs and keeps whole-dir mode (no foreign misread)", () => {
     fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
-    mirrorToHarness("claude-code", { cwd: root, scope: "project", sourceDir });
+    const first = mirrorToHarness("claude-code", { cwd: root, scope: "project", sourceDir });
+    expect(first.mode).toBe("whole-dir-symlink");
     const again = mirrorToHarness("claude-code", { cwd: root, scope: "project", sourceDir });
     expect(again.changed).toBe(false);
+    // Re-running over our own whole-dir symlink must NOT misclassify the linked
+    // source skills as foreign and flip to per-skill mode.
+    expect(again.mode).toBe("whole-dir-symlink");
+    expect(fs.lstatSync(path.join(root, ".claude", "skills")).isSymbolicLink()).toBe(true);
   });
 });
 

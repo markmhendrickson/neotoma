@@ -156,15 +156,50 @@ function hasForeignContent(targetDir: string, sourceDir: string, skillNames: Set
   return false;
 }
 
-/** Mirror the whole source dir as a single symlink at `targetDir`. */
-function mirrorWholeDir(targetDir: string, sourceDir: string): { changed: boolean } {
+/**
+ * Mirror the whole source dir as a single symlink at `targetDir`.
+ *
+ * Only ever called when `hasForeignContent` is false, i.e. the target is
+ * absent, a symlink, or a real directory containing exclusively our own skill
+ * symlinks. To make a destructive delete of real content impossible even under
+ * a logic error, this never recursive-deletes: it unlinks a symlink target, or
+ * removes our individual skill symlinks and rmdir's the (now empty) directory —
+ * bailing out to per-skill mode if any non-symlink entry is encountered.
+ */
+function mirrorWholeDir(
+  targetDir: string,
+  sourceDir: string,
+  skillNames: string[]
+): { changed: boolean; bailToPerSkill?: boolean } {
   if (isSymlinkTo(targetDir, sourceDir)) return { changed: false };
-  // Replace an empty real dir or a wrong symlink; never called when foreign.
-  if (existsSync(targetDir) || isSymlink(targetDir)) {
-    rmSync(targetDir, { recursive: true, force: true });
+
+  if (isSymlink(targetDir)) {
+    // Wrong-target symlink (whole dir): replace the link itself.
+    unlinkSync(targetDir);
+  } else if (existsSync(targetDir)) {
+    // Real directory of our own skill links — remove each link, then rmdir.
+    for (const name of (() => {
+      try {
+        return readdirSync(targetDir);
+      } catch {
+        return [];
+      }
+    })()) {
+      const entry = join(targetDir, name);
+      if (!isSymlink(entry)) {
+        // Unexpected real entry: do not delete it. Fall back to per-skill mode.
+        return { changed: false, bailToPerSkill: true };
+      }
+      unlinkSync(entry);
+    }
+    rmSync(targetDir, { recursive: false, force: true });
   }
+
   mkdirSync(dirname(targetDir), { recursive: true });
   symlinkSync(sourceDir, targetDir, "junction");
+  // skillNames intentionally accepted for symmetry with mirrorPerSkill; the
+  // whole-dir symlink exposes every source skill without enumerating them.
+  void skillNames;
   return { changed: true };
 }
 
@@ -282,28 +317,37 @@ export function mirrorToHarness(
     };
   }
 
-  const foreign = existsSync(targetDir) && hasForeignContent(targetDir, sourceDir, new Set(skillNames));
+  // An existing whole-dir symlink to our source is definitively ours — checking
+  // its contents through the link would misread the source skills as foreign.
+  const alreadyWholeDir = isSymlinkTo(targetDir, sourceDir);
+  const foreign =
+    !alreadyWholeDir &&
+    existsSync(targetDir) &&
+    hasForeignContent(targetDir, sourceDir, new Set(skillNames));
 
-  if (foreign) {
-    const { changed, linked } = mirrorPerSkill(targetDir, sourceDir, skillNames);
-    return {
-      tool,
-      target: targetDir,
-      base_present: true,
-      mode: "per-skill-symlink",
-      changed,
-      linked,
-    };
+  if (!foreign) {
+    const whole = mirrorWholeDir(targetDir, sourceDir, skillNames);
+    if (!whole.bailToPerSkill) {
+      return {
+        tool,
+        target: targetDir,
+        base_present: true,
+        mode: "whole-dir-symlink",
+        changed: whole.changed,
+        linked: whole.changed ? ["*"] : [],
+      };
+    }
+    // Unexpected non-symlink entry encountered: preserve it via per-skill mode.
   }
 
-  const { changed } = mirrorWholeDir(targetDir, sourceDir);
+  const { changed, linked } = mirrorPerSkill(targetDir, sourceDir, skillNames);
   return {
     tool,
     target: targetDir,
     base_present: true,
-    mode: "whole-dir-symlink",
+    mode: "per-skill-symlink",
     changed,
-    linked: changed ? ["*"] : [],
+    linked,
   };
 }
 
