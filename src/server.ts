@@ -5792,6 +5792,7 @@ export class NeotomaServer {
         from_entity_id: parsed.from_entity_id,
         to_entity_id: parsed.to_entity_id,
         observations_moved: result.observations_moved,
+        relationships_repointed: result.relationships_repointed,
         merged_at: result.merged_at,
         merge_reason: parsed.merge_reason,
       });

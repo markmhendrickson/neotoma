@@ -220,3 +220,150 @@ export async function hasObservationsForEntity(entityId: string, userId: string)
   if (error) throw new Error(`Failed to check observations: ${error.message}`);
   return (data?.length ?? 0) > 0;
 }
+
+/**
+ * Repoint all relationship_observations rows that reference `fromEntityId`
+ * (as either source or target) to reference `toEntityId` instead.
+ *
+ * Handles three edge cases:
+ *   1. Self-loop: if repointing makes source_entity_id == target_entity_id,
+ *      that row is deleted rather than kept.
+ *   2. Dedup: if repointing produces a relationship_key that already exists
+ *      for the survivor (same relationship_key + canonical_hash + user_id),
+ *      the now-redundant row is deleted instead of creating a duplicate.
+ *   3. Snapshot cleanup: all relationship_snapshots that still reference
+ *      fromEntityId are also deleted so stale snapshots do not survive.
+ *
+ * Returns the count of rows successfully repointed (excludes deleted
+ * self-loops and deduplicated rows).
+ */
+export async function repointRelationshipObservations(
+  fromEntityId: string,
+  toEntityId: string,
+  userId: string
+): Promise<number> {
+  // Fetch all relationship_observations rows that reference fromEntityId
+  const { data: rows, error: fetchError } = await db
+    .from("relationship_observations")
+    .select(
+      "id, relationship_key, relationship_type, source_entity_id, target_entity_id, canonical_hash"
+    )
+    .eq("user_id", userId)
+    .or(`source_entity_id.eq.${fromEntityId},target_entity_id.eq.${fromEntityId}`);
+
+  if (fetchError) {
+    throw new Error(`Failed to fetch relationship observations for repoint: ${fetchError.message}`);
+  }
+
+  if (!rows || rows.length === 0) {
+    return 0;
+  }
+
+  // Fetch all relationship_keys already owned by toEntityId so we can detect
+  // duplicates before attempting an upsert.
+  const { data: survivorRows, error: survivorFetchError } = await db
+    .from("relationship_observations")
+    .select("relationship_key, canonical_hash")
+    .eq("user_id", userId)
+    .or(`source_entity_id.eq.${toEntityId},target_entity_id.eq.${toEntityId}`);
+
+  if (survivorFetchError) {
+    throw new Error(
+      `Failed to fetch survivor relationship observations: ${survivorFetchError.message}`
+    );
+  }
+
+  // Collapse by relationship_key (type:source:target) — the unique edge identity.
+  // The metadata-derived canonical_hash is intentionally excluded so that
+  // duplicate edges differing only in observation metadata still collapse to a
+  // single edge on the survivor after a merge.
+  const survivorKeys = new Set<string>(
+    (survivorRows ?? []).map((r: { relationship_key: string }) => r.relationship_key)
+  );
+
+  const idsToDelete: string[] = [];
+  const repointed: Array<{
+    id: string;
+    newRelationshipKey: string;
+    newSourceEntityId: string;
+    newTargetEntityId: string;
+  }> = [];
+
+  for (const row of rows) {
+    const newSourceEntityId =
+      row.source_entity_id === fromEntityId ? toEntityId : row.source_entity_id;
+    const newTargetEntityId =
+      row.target_entity_id === fromEntityId ? toEntityId : row.target_entity_id;
+
+    // Rule: drop self-loops produced by the repoint
+    if (newSourceEntityId === newTargetEntityId) {
+      idsToDelete.push(row.id);
+      continue;
+    }
+
+    const newRelationshipKey = `${row.relationship_type}:${newSourceEntityId}:${newTargetEntityId}`;
+    const dedupKey = newRelationshipKey;
+
+    // Rule: drop duplicates where the survivor already has this edge
+    if (survivorKeys.has(dedupKey)) {
+      idsToDelete.push(row.id);
+      continue;
+    }
+
+    // Mark this key as now present on the survivor so later iterations in the
+    // same batch don't create a second copy.
+    survivorKeys.add(dedupKey);
+
+    repointed.push({ id: row.id, newRelationshipKey, newSourceEntityId, newTargetEntityId });
+  }
+
+  // Delete self-loops and duplicates
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await db
+      .from("relationship_observations")
+      .delete()
+      .in("id", idsToDelete)
+      .eq("user_id", userId);
+
+    if (deleteError) {
+      throw new Error(
+        `Failed to delete self-loop/duplicate relationship observations: ${deleteError.message}`
+      );
+    }
+  }
+
+  // Update each surviving row one at a time (Supabase JS client does not
+  // support per-row conditional updates in a single batch call).
+  for (const { id, newRelationshipKey, newSourceEntityId, newTargetEntityId } of repointed) {
+    const { error: updateError } = await db
+      .from("relationship_observations")
+      .update({
+        source_entity_id: newSourceEntityId,
+        target_entity_id: newTargetEntityId,
+        relationship_key: newRelationshipKey,
+      })
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (updateError) {
+      throw new Error(`Failed to repoint relationship observation ${id}: ${updateError.message}`);
+    }
+  }
+
+  // Clean up any stale relationship_snapshots that still reference fromEntityId.
+  // Snapshot recomputation for the survivor is left to the caller / next read
+  // (the snapshot reducer will rebuild from the now-repointed observations).
+  const { error: snapshotDeleteError } = await db
+    .from("relationship_snapshots")
+    .delete()
+    .eq("user_id", userId)
+    .or(`source_entity_id.eq.${fromEntityId},target_entity_id.eq.${fromEntityId}`);
+
+  if (snapshotDeleteError) {
+    throw new Error(
+      `Failed to clean up stale relationship snapshots: ${snapshotDeleteError.message}`
+    );
+  }
+
+  return repointed.length;
+}
