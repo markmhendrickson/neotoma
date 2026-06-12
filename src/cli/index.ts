@@ -8845,11 +8845,13 @@ skillsCommand
       "Creates and populates the skills directory for any harness whose base directory exists."
   )
   .option("--scope <scope>", "Mirror at user or project level", "user")
-  .option("--json", "Output machine-readable JSON")
   .action(async (opts) => {
     const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
     const scope = opts.scope === "project" ? "project" : "user";
-    const json = Boolean(opts.json);
+    // `--json` is the global program option; Commander binds it to program.opts(),
+    // not the subcommand's local opts (a locally-declared --json stays undefined
+    // when a global one exists). Read the global flag, like other commands here.
+    const json = Boolean((program.opts() as { json?: boolean }).json);
     const report = mirrorSkillsToAllHarnesses({
       scope,
       onLog: json ? undefined : (msg) => console.log(`  ${msg}`),
