@@ -3342,6 +3342,18 @@ export interface components {
         observation_index: number;
       }[];
       /**
+       * @description Total number of `conversation_message` entities `PART_OF` the
+       *     conversation referenced by this store call, computed after commit.
+       *     Populated only when at least one `conversation_message` entity was
+       *     created or updated in this request and its `PART_OF` target
+       *     conversation can be resolved. Omitted (null) for store calls with
+       *     no conversation context. Reflects the current snapshot at the time
+       *     of the response. Consumed by `neotoma_turn_summary` to populate
+       *     the `msg N/M` component of the turn status line without an extra
+       *     retrieval round-trip.
+       */
+      conversation_message_count?: number | null;
+      /**
        * @description Actionable guidance, present only when `unknown_fields_count > 0`.
        *     The wording is conditional on the schema's identity configuration:
        *     when the schema declares `canonical_name_fields`, it directs the
