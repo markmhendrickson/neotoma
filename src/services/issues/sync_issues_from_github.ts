@@ -36,6 +36,22 @@ import { githubIssueBodyTurnKey, githubIssueCommentTurnKey } from "./github_thre
 import { runRedactionGuard } from "./redaction_guard.js";
 import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
 
+/**
+ * One-time migration token folded into the pull-leg sync idempotency_key.
+ *
+ * Before the deterministic-provenance fix, the issue store payload contained a
+ * wall-clock `last_synced_at`/`data_source`, so existing `sources` rows under
+ * `issue-sync-<repo>-<number>-<updated_at>` carry a content_hash that no longer
+ * matches the (now deterministic) payload. Those rows can't be overwritten —
+ * the idempotency check rejects the mismatched content — so ~98 already-synced
+ * issues were frozen with ERR_IDEMPOTENCY_MISMATCH and never updated.
+ *
+ * Bumping this token gives every issue a brand-new key, sidestepping the stale
+ * rows without any destructive DB repair. The old rows simply go inert. Bump it
+ * again only if a future payload-shape change strands keys the same way.
+ */
+const SYNC_KEY_MIGRATION = "m2";
+
 export interface SyncResult {
   issues_synced: number;
   messages_synced: number;
@@ -288,7 +304,7 @@ async function syncSingleIssue(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-sync-${repo}-${issue.number}-${issue.updated_at}`,
+      idempotency_key: `issue-sync-${repo}-${issue.number}-${issue.updated_at}-${SYNC_KEY_MIGRATION}`,
     })
   ) as Promise<StoreResult>;
 }

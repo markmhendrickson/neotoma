@@ -171,7 +171,7 @@ describe("syncIssuesFromGitHub", () => {
     expect(store).toHaveBeenCalledTimes(4);
     expect(seenIdempotencyKeys).toEqual(
       new Set([
-        "issue-sync-test/repo-1-2026-05-01T00:00:00Z",
+        "issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2",
         "issue-comment-sync-test/repo-1-101",
       ])
     );
@@ -192,8 +192,8 @@ describe("syncIssuesFromGitHub", () => {
     mockListIssues.mockResolvedValueOnce([v2]);
     await syncIssuesFromGitHub(ops);
 
-    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-01T00:00:00Z")).toBe(true);
-    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-02T12:00:00Z")).toBe(true);
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2")).toBe(true);
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-02T12:00:00Z-m2")).toBe(true);
   });
 
   it("re-stores an unchanged issue with a byte-identical payload (no wall-clock drift)", async () => {
