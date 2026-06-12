@@ -34,10 +34,12 @@ jobs:
       - name: Init inspector submodule (Vitest imports inspector sources)
         run: git submodule update --init --depth 1 inspector
 
-      - name: Build @neotoma/client and cursor-hooks (Vitest hook tests)
+      - name: Build @neotoma/client, @neotoma/agent, and cursor-hooks (Vitest hook tests)
         run: |
           npm ci --prefix packages/client
           npm run build --prefix packages/client
+          npm ci --prefix packages/agent
+          npm run build --prefix packages/agent
           npm ci --prefix packages/cursor-hooks
           npm run build --prefix packages/cursor-hooks
           # opencode-plugin imports @neotoma/client via "file:../client" — its
