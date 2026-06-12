@@ -137,8 +137,11 @@ export async function publishRenderedPage(
     if (entity.entity_type !== "rendered_page") {
       throw new PublishRenderedPageError(
         "ERR_PUBLISH_WRONG_TYPE",
-        `Entity ${entityId} is not a rendered_page (got ${entity.entity_type}).`,
-        { hint: "Only rendered_page entities can be published." }
+        "Target entity is not a rendered_page.",
+        {
+          hint: "Only rendered_page entities can be published.",
+          details: { entity_id: entityId, entity_type: entity.entity_type },
+        }
       );
     }
   }

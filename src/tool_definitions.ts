@@ -1403,6 +1403,7 @@ export function buildToolDefinitions(
             description: "Optional. Inferred from authentication if omitted.",
           },
         },
+        additionalProperties: false,
       },
     },
   ];
