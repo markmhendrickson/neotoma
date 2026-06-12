@@ -127,7 +127,7 @@
             "conversation_id": "<id:1>",
             "cwd": "<env>",
             "data_source": "cursor-hook",
-            "diagnosis_confidence": "high",
+            "diagnosis_confidence": "medium",
             "ended_at": "<ts>",
             "entity_type": "conversation_turn",
             "git_branch": "<env>",
