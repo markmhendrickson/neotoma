@@ -723,6 +723,17 @@ For chat persistence recipes, MCP and CLI use the same underlying store contract
 
 The mirror is a derived artifact: SQLite is the only source of truth. Mirror files carry a header warning that manual edits will be overwritten on the next write. To edit an entity, use `neotoma edit <id>` or the Inspector (see below). The mirror defaults to disabled; activation offers it as an opt-in (see [`install.md`](../../install.md#activation-step-66-offer-markdown-mirror-opt-in)). See `docs/subsystems/markdown_mirror.md` for layout, determinism, and git semantics.
 
+### Skills
+
+- `neotoma skills sync`: Mirror the published skills (`skills/` shipped with the package) into every installed harness's skills directory. This is the same reconciler `neotoma setup` uses for skill installation, run across all harnesses at once.
+  - `--scope <user|project>` (default `user`): Mirror into the home-directory harness dirs (`~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.openclaw/skills`) or into the project's `.<harness>/skills`.
+  - `--json`: Emit the machine-readable report (`source`, `source_present`, `scope`, per-harness `results`, `changed`, `has_errors`) instead of the human summary.
+  - Targets a harness only when its **base** directory exists (e.g. `~/.cursor`), and creates the `skills` subdirectory if missing — so a harness installed later is picked up on the next sync. Cursor uses `.cursor/skills` (not Cursor's separate built-in `.cursor/skills-cursor` root).
+  - Reconciliation: a single whole-directory symlink when the target is absent or already ours; a per-skill symlink fallback that preserves any foreign content when the target holds non-Neotoma skills. Foreign content is never overwritten or deleted.
+  - Exit code `1` when the source is missing or any per-skill link fails (errors are surfaced per harness in both pretty and `--json` output); otherwise `0`.
+
+For continuous mirroring, install the `com.neotoma.skills-sync` LaunchAgent with `npm run setup:launchd-skills-sync` (macOS; watches `skills/` and re-runs `neotoma skills sync` on change). See [`npm_scripts.md`](npm_scripts.md#macos-launchagents).
+
 ### Edit
 
 - `neotoma edit <id>`: Open the entity snapshot as YAML in `$EDITOR`, diff on save, and submit changed fields as one batch correction (one `correct()` observation per changed field, applied atomically).

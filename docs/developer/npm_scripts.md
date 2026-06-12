@@ -95,7 +95,8 @@ Keep these aliases for one minor release, update docs and automation to the cano
 | `setup:launchd-watch-build` | Alias → `setup:launchd-cli-sync` |
 | `setup:launchd-watch-stacks` | Dev server agent + `setup:launchd-cli-sync` (compatibility wrapper) |
 | `setup:launchd-issues-sync` | `com.neotoma.issues-sync` |
-| `reload:launchd-neotoma` | Unloads then loads each installed Neotoma plist (dev-server, prod-server, watch-build, issues-sync); macOS only |
+| `setup:launchd-skills-sync` | `com.neotoma.skills-sync` → watches `skills/` and re-runs `neotoma skills sync` on change (plus once at load), mirroring skills into every installed harness; prefers `fswatch`, falls back to a 30s poll. macOS only. |
+| `reload:launchd-neotoma` | Unloads then loads each installed Neotoma plist (dev-server, prod-server, watch-build, issues-sync, skills-sync); macOS only |
 | `shutdown:launchd-neotoma` | Unloads Neotoma launchagents, stops dev/prod APIs, and reaps leftover launchd-owned repo processes; macOS only |
 
 ## Validation

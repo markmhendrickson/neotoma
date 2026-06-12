@@ -7,6 +7,7 @@
 #   com.neotoma.prod-server  — `npm run start:server:prod`  (binds 3180; tunnel target)
 #   com.neotoma.watch-build  — `tsc --watch`
 #   com.neotoma.issues-sync  — periodic GitHub issue sync (optional)
+#   com.neotoma.skills-sync  — watch skills/ and mirror into harnesses (optional)
 #
 # The older overlapping agents (com.neotoma.watch-dev, com.neotoma.watch-full-prod,
 # com.neotoma.dev-servers) are unloaded and warned about — they should be removed
@@ -165,7 +166,7 @@ if [[ "$KILL_ZOMBIES" == "1" ]]; then
 fi
 
 # Canonical agents.
-for label in com.neotoma.dev-server com.neotoma.prod-server com.neotoma.watch-build com.neotoma.issues-sync; do
+for label in com.neotoma.dev-server com.neotoma.prod-server com.neotoma.watch-build com.neotoma.issues-sync com.neotoma.skills-sync; do
   reload_one "$label"
 done
 
