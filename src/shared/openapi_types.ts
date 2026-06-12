@@ -1626,6 +1626,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/audit_undeclared_fragments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Audit undeclared raw_fragments
+     * @description Report accumulated undeclared raw_fragments awaiting schema declaration. Stored data routed to raw_fragments (fields not on the active schema) is preserved on the observation but excluded from the entity snapshot until the field is declared. This read-only audit lists, per entity_type, the fragment_keys not declared on the active schema, how many distinct entities carry each, and total occurrences — so the stored-but-invisible backlog is auditable and can be triaged into analyze_schema_candidates / register_schema / update_schema_incremental work.
+     */
+    post: operations["auditUndeclaredFragments"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/get_schema_recommendations": {
     parameters: {
       query?: never;
@@ -6492,6 +6512,48 @@ export interface operations {
         content: {
           "application/json": {
             [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  auditUndeclaredFragments: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Restrict the audit to a single entity_type. */
+          entity_type?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Undeclared-fragment audit grouped by entity_type */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            audit?: {
+              entity_type?: string;
+              undeclared_fields?: {
+                fragment_key?: string;
+                affected_entities?: number;
+                occurrences?: number;
+              }[];
+              affected_entities?: number;
+              total_occurrences?: number;
+              schema_missing?: boolean;
+            }[];
+            total_entity_types?: number;
+            total_undeclared_fields?: number;
           };
         };
       };

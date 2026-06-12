@@ -565,6 +565,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "schemas analyze-candidates",
   },
   {
+    operationId: "auditUndeclaredFragments",
+    method: "post",
+    path: "/audit_undeclared_fragments",
+    adapter: "both",
+    mcpTool: "audit_undeclared_fragments",
+    cliCommand: "schemas audit-fragments",
+  },
+  {
     operationId: "getSchemaRecommendations",
     method: "post",
     path: "/get_schema_recommendations",
@@ -808,6 +816,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   restore_relationship: "restoreRelationship",
   get_relationship_snapshot: "getRelationshipSnapshot",
   analyze_schema_candidates: "analyzeSchemaCandidates",
+  audit_undeclared_fragments: "auditUndeclaredFragments",
   get_schema_recommendations: "getSchemaRecommendations",
   update_schema_incremental: "updateSchemaIncremental",
   register_schema: "registerSchema",
@@ -845,6 +854,7 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   get_relationship_snapshot:
     "relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>",
   analyze_schema_candidates: "schemas analyze",
+  audit_undeclared_fragments: "schemas audit-fragments",
   get_schema_recommendations: "schemas recommend <entityType>",
   update_schema_incremental: "schemas update <entityType>",
   register_schema: "schemas register <entityType>",

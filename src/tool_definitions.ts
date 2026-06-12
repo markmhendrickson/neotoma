@@ -737,6 +737,14 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "audit_undeclared_fragments",
+      description: desc(
+        "audit_undeclared_fragments",
+        "Audit accumulated undeclared raw_fragments awaiting schema declaration. Values stored for fields not on an entity type's active schema are preserved on observations but excluded from the snapshot until the field is declared. This read-only report lists, per entity_type, the fragment_keys not declared on the active schema, how many distinct entities carry each, and total occurrences — surfacing the stored-but-invisible backlog so it can be triaged into analyze_schema_candidates / register_schema / update_schema_incremental. Pair with the unknown_fields / required_fields_missing repair workflow described in the MCP instructions."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("audit_undeclared_fragments"),
+    },
+    {
       name: "get_schema_recommendations",
       description:
         "Get schema update recommendations for an entity type from raw_fragments analysis, agent suggestions, or inference.",
@@ -1377,6 +1385,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "list_entity_types",
   "describe_entity_type",
   "analyze_schema_candidates",
+  "audit_undeclared_fragments",
   "get_schema_recommendations",
   "update_schema_incremental",
   "register_schema",

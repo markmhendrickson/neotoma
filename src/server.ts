@@ -24,6 +24,7 @@ import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
+  AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
@@ -1744,6 +1745,8 @@ export class NeotomaServer {
         return await this.describeEntityType(args);
       case "analyze_schema_candidates":
         return await this.analyzeSchemaCandidates(args);
+      case "audit_undeclared_fragments":
+        return await this.auditUndeclaredFragments(args);
       case "get_schema_recommendations":
         return await this.getSchemaRecommendations(args);
       case "update_schema_incremental":
@@ -3617,6 +3620,36 @@ export class NeotomaServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to analyze schema candidates: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Audit accumulated undeclared raw_fragments awaiting schema declaration (#1576).
+   */
+  private async auditUndeclaredFragments(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = AuditUndeclaredFragmentsRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+
+    try {
+      const audit = await schemaRecommendationService.auditUndeclaredFragments({
+        entity_type: parsed.entity_type,
+        user_id: userId,
+      });
+
+      return this.buildTextResponse({
+        audit,
+        total_entity_types: audit.length,
+        total_undeclared_fields: audit.reduce((sum, t) => sum + t.undeclared_fields.length, 0),
+      });
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to audit undeclared fragments: ${error.message}`
       );
     }
   }

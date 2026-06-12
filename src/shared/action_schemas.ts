@@ -646,6 +646,11 @@ export const AnalyzeSchemaCandidatesRequestSchema = z.object({
   min_confidence: z.number().min(0).max(1).optional().default(0.8),
 });
 
+export const AuditUndeclaredFragmentsRequestSchema = z.object({
+  entity_type: z.string().optional(),
+  user_id: z.string().optional(),
+});
+
 export const GetSchemaRecommendationsRequestSchema = z.object({
   entity_type: z.string(),
   user_id: z.string().optional(),
