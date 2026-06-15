@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { SiGithub, SiNpm } from "react-icons/si";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useServerInfo } from "@/hooks/use_infra";
 import { cn } from "@/lib/utils";
 
 const GITHUB_URL = "https://github.com/markmhendrickson/neotoma";
@@ -15,12 +16,43 @@ type SidebarExternalLinksProps = {
   collapsed: boolean;
 };
 
+function formatBuildVersionLabel(version?: string, gitSha?: string | null): string | null {
+  const trimmedVersion = version?.trim();
+  const trimmedSha = gitSha?.trim();
+  if (!trimmedVersion && !trimmedSha) return null;
+  if (trimmedVersion && trimmedSha) {
+    return `v${trimmedVersion} · ${trimmedSha.slice(0, 7)}`;
+  }
+  if (trimmedVersion) return `v${trimmedVersion}`;
+  return trimmedSha!.slice(0, 7);
+}
+
 export function SidebarExternalLinks({ collapsed }: SidebarExternalLinksProps) {
+  const serverInfo = useServerInfo();
+  const buildVersionLabel = formatBuildVersionLabel(
+    serverInfo.data?.version,
+    serverInfo.data?.git_sha,
+  );
+
+  const buildVersion = buildVersionLabel ? (
+    <span
+      className={cn(
+        "font-mono text-sidebar-foreground/60",
+        collapsed ? "max-w-full truncate text-[10px] leading-none" : "ml-auto truncate text-xs",
+      )}
+      title={buildVersionLabel}
+    >
+      {buildVersionLabel}
+    </span>
+  ) : null;
+
   return (
     <div
       className={cn(
         "shrink-0 border-t border-sidebar-border",
-        collapsed ? "flex flex-col items-center gap-0.5 px-2 py-2" : "flex items-center gap-0.5 px-3 py-2",
+        collapsed
+          ? "flex flex-col items-center gap-0.5 px-2 py-2"
+          : "flex min-w-0 items-center gap-0.5 px-3 py-2",
       )}
     >
       {externalLinks.map(({ href, label, Icon }) => {
@@ -50,6 +82,15 @@ export function SidebarExternalLinks({ collapsed }: SidebarExternalLinksProps) {
 
         return <Fragment key={href}>{link}</Fragment>;
       })}
+      {buildVersion && !collapsed ? buildVersion : null}
+      {buildVersion && collapsed ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex max-w-full">{buildVersion}</span>
+          </TooltipTrigger>
+          <TooltipContent side="right">Build {buildVersionLabel}</TooltipContent>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }

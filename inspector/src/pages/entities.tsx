@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useEntitiesQuery } from "@/hooks/use_entities";
+import { useDuplicateCandidateIds, useEntitiesQuery } from "@/hooks/use_entities";
 import { useAgentGrants } from "@/hooks/use_agents";
 import { PageShell } from "@/components/layout/page_shell";
 import type { HeaderSearchContextValue } from "@/components/layout/page_title_context";
@@ -16,6 +16,7 @@ import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicat
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import type { EntitySnapshot, SnapshotFilter } from "@/types/api";
 import { EntityListAdmissionCell } from "@/components/shared/entity_list_admission_cell";
+import { DuplicateBadge } from "@/components/shared/duplicate_badge";
 import { EntityTypeSelect } from "@/components/shared/entity_type_select";
 import { EntityTableColumnToggle } from "@/components/shared/entity_table_column_toggle";
 import { InlineEditCell } from "@/components/shared/inline_edit_cell";
@@ -72,6 +73,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
   const schemasQ = useSchemas();
   const schemaQ = useSchemaByType(entityType || undefined);
   const admissionGrants = grantsQ.data?.grants ?? [];
+  const { ids: duplicateIds } = useDuplicateCandidateIds(entityType || undefined);
 
   const listColumnConfig = useMemo(
     () => buildEntitiesListColumnConfig(entityType ? schemaQ.data : null),
@@ -264,14 +266,17 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
         cell: ({ row }) => {
           const eid = entityRowId(row.original);
           return (
-            <Link to={`/entities/${encodeURIComponent(eid)}`} className="font-medium text-primary hover:underline">
-              {String(
-                row.original.canonical_name ||
-                  row.original.snapshot?.name ||
-                  row.original.snapshot?.title ||
-                  truncateId(eid),
-              )}
-            </Link>
+            <span className="inline-flex min-w-0 items-center">
+              <Link to={`/entities/${encodeURIComponent(eid)}`} className="font-medium text-primary hover:underline">
+                {String(
+                  row.original.canonical_name ||
+                    row.original.snapshot?.name ||
+                    row.original.snapshot?.title ||
+                    truncateId(eid),
+                )}
+              </Link>
+              {duplicateIds.has(eid) ? <DuplicateBadge entityId={eid} /> : null}
+            </span>
           );
         },
       },
@@ -315,7 +320,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
     );
 
     return [...fixed, ...snapshotColumns];
-  }, [admissionGrants, entityType, schemaQ.data]);
+  }, [admissionGrants, duplicateIds, entityType, schemaQ.data]);
 
   function handleSaveView() {
     if (!entityType) return;
