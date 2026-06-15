@@ -130,3 +130,31 @@ export function restoreEntity(
     fetch,
   );
 }
+
+export type DuplicateCandidate = {
+  entity_a: { id: string; canonical_name?: string; snapshot_fields?: Record<string, unknown> };
+  entity_b: { id: string; canonical_name?: string; snapshot_fields?: Record<string, unknown> };
+  score: number;
+  matched_fields?: string[];
+  entity_type: string;
+};
+
+export type PotentialDuplicatesResponse = {
+  candidates: DuplicateCandidate[];
+  entity_type: string;
+  threshold: number;
+};
+
+export function listPotentialDuplicates(
+  entityType: string,
+  options?: { threshold?: number; limit?: number; signal?: AbortSignal },
+) {
+  const params = new URLSearchParams({ entity_type: entityType });
+  if (options?.threshold != null) params.set("threshold", String(options.threshold));
+  if (options?.limit != null) params.set("limit", String(options.limit));
+  return get<PotentialDuplicatesResponse>(
+    `/entities/duplicates?${params.toString()}`,
+    undefined,
+    { signal: options?.signal },
+  );
+}
