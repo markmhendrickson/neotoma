@@ -12389,6 +12389,192 @@ entitiesCommand
   );
 
 entitiesCommand
+  .command("export")
+  .description(
+    "Export entities as import-compatible JSONL (one object per line, schema fields at the " +
+      "top level) — the inverse of `entities import`, so an instance can be torn down and " +
+      "rebuilt from the export. Pages through all entities. With --with-relationships, also " +
+      "writes a companion JSON file of typed edges that `relationships create --file` re-imports."
+  )
+  .option("--type <entityType>", "Only export this entity type")
+  .option("--out <path>", "Write entity JSONL here (default: stdout)")
+  .option(
+    "--with-relationships",
+    "Also export relationships to a companion file (<out>.relationships.json) for a full round-trip"
+  )
+  .option("--page-size <n>", "Entities fetched per page (default 500)", (v) => Number(v), 500)
+  .option("--include-merged", "Include merged entities (default: exclude)")
+  .option("--user-id <userId>", "Export under this user scope")
+  .action(
+    async (opts: {
+      type?: string;
+      out?: string;
+      withRelationships?: boolean;
+      pageSize: number;
+      includeMerged?: boolean;
+      userId?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+
+      const pageSize =
+        Number.isFinite(opts.pageSize) && opts.pageSize > 0 ? Math.floor(opts.pageSize) : 500;
+      const effectiveUserId = resolveEffectiveUserId(opts.userId);
+
+      // The relationships companion file is written next to --out. Without
+      // --out (stdout mode) there is nowhere to put it, so refuse rather than
+      // page the edges and silently discard them.
+      if (opts.withRelationships && !opts.out) {
+        throw new Error(
+          "--with-relationships requires --out: relationships are written to a companion " +
+            "<out>.relationships.json file, which has no destination in stdout mode. " +
+            "Re-run with --out <path>."
+        );
+      }
+
+      // Page through /entities/query, flattening each EntitySnapshot to the
+      // shape `entities import` consumes: entity_type at top level plus the
+      // snapshot's fields spread to the top level. entity_id/provenance and
+      // other reducer metadata are intentionally dropped — identity is
+      // re-derived deterministically on import from canonical_name_fields, so
+      // a rebuilt instance reproduces the same entity_id without us pinning it.
+      const lines: string[] = [];
+      let offset = 0;
+      let total = Infinity;
+      while (offset < total) {
+        const { data, error, response } = await api.POST("/entities/query", {
+          body: {
+            entity_type: opts.type,
+            user_id: effectiveUserId,
+            limit: pageSize,
+            offset,
+            include_merged: Boolean(opts.includeMerged),
+            // Pin paging order so the export contract owns it rather than
+            // relying on the endpoint's evolving default sort. This is what
+            // makes a teardown→rebuild round-trip reproducible: the same
+            // instance exports the same byte stream regardless of any future
+            // change to the query endpoint's default ordering.
+            sort_by: "entity_id",
+            sort_order: "asc",
+          },
+        });
+        if (error) {
+          const status = (response as { status?: number } | undefined)?.status;
+          let msg = `Failed to page entities (offset ${offset}): ${formatApiError(error)}`;
+          if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+          throw new Error(msg);
+        }
+        const page = (data ?? {}) as {
+          entities?: Array<{
+            entity_type?: string;
+            snapshot?: Record<string, unknown>;
+          }>;
+          total?: number;
+        };
+        const batch = page.entities ?? [];
+        if (typeof page.total === "number") total = page.total;
+        for (const e of batch) {
+          if (!e.entity_type) continue;
+          const snapshot = (e.snapshot ?? {}) as Record<string, unknown>;
+          // entity_type first, then the snapshot fields at the top level.
+          lines.push(JSON.stringify({ entity_type: e.entity_type, ...snapshot }));
+        }
+        if (batch.length === 0) break;
+        offset += batch.length;
+      }
+
+      const entityCount = lines.length;
+      const jsonl = lines.join("\n") + (lines.length > 0 ? "\n" : "");
+
+      let relationshipFile: string | undefined;
+      let relationshipCount = 0;
+      if (opts.withRelationships) {
+        // Page through /relationships and capture the import shape that
+        // `relationships create --file` accepts.
+        const rels: Array<Record<string, unknown>> = [];
+        let relOffset = 0;
+        // No total from this endpoint; page until a short page.
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { data, error } = await api.GET("/relationships", {
+            params: {
+              query: {
+                limit: pageSize,
+                offset: relOffset,
+                ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
+              } as any,
+            } as any,
+          });
+          if (error) {
+            throw new Error(
+              `Failed to page relationships (offset ${relOffset}): ${formatApiError(error)}`
+            );
+          }
+          const arr = ((data as { relationships?: Array<Record<string, unknown>> } | undefined)
+            ?.relationships ??
+            (Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [])) as Array<
+            Record<string, unknown>
+          >;
+          for (const r of arr) {
+            if (r.source_entity_id && r.target_entity_id && r.relationship_type) {
+              rels.push({
+                relationship_type: r.relationship_type,
+                source_entity_id: r.source_entity_id,
+                target_entity_id: r.target_entity_id,
+                ...(r.metadata ? { metadata: r.metadata } : {}),
+              });
+            }
+          }
+          if (arr.length < pageSize) break;
+          relOffset += arr.length;
+        }
+        relationshipCount = rels.length;
+        if (opts.out) {
+          const base = path.isAbsolute(opts.out) ? opts.out : path.resolve(process.cwd(), opts.out);
+          relationshipFile = `${base}.relationships.json`;
+          await fs.writeFile(
+            relationshipFile,
+            JSON.stringify({ relationships: rels }, null, 2),
+            "utf-8"
+          );
+        }
+      }
+
+      if (opts.out) {
+        const resolved = path.isAbsolute(opts.out)
+          ? opts.out
+          : path.resolve(process.cwd(), opts.out);
+        await fs.writeFile(resolved, jsonl, "utf-8");
+        writeOutput(
+          {
+            wrote: resolved,
+            total_entities: entityCount,
+            ...(opts.withRelationships
+              ? { relationships_file: relationshipFile, total_relationships: relationshipCount }
+              : {}),
+            rebuild_hint:
+              "Rebuild: neotoma entities import " +
+              resolved +
+              " --commit" +
+              (relationshipFile
+                ? "  &&  neotoma relationships create --file " + relationshipFile
+                : ""),
+          },
+          outputMode
+        );
+        return;
+      }
+      // stdout: emit the JSONL directly so it can be piped into a file.
+      process.stdout.write(jsonl);
+    }
+  );
+
+entitiesCommand
   .command("related")
   .description("Get entities related to a given entity via relationships")
   .argument("<entityId>", "Entity ID")
