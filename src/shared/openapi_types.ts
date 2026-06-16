@@ -4396,7 +4396,18 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
+          /**
+           * @description Single entity-type filter. Combined as a union with
+           *     `entity_types` when both are supplied.
+           */
           entity_type?: string;
+          /**
+           * @description Multi-type filter. When non-empty, results are restricted
+           *     to entities whose `entity_type` is in this list (an IN
+           *     filter), OR-combined with the singular `entity_type` when
+           *     both are provided. An empty array is treated as no filter.
+           */
+          entity_types?: string[];
           /** @description Canonical free-text query parameter for retrieval relevance. */
           search?: string;
           /** @description Compatibility alias for `search`. */

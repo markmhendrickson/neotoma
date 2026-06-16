@@ -3202,6 +3202,7 @@ export class NeotomaServer {
       await queryEntitiesWithCount({
         userId,
         entityType: parsed.entity_type,
+        entityTypes: parsed.entity_types,
         includeMerged: parsed.include_merged,
         includeSnapshots: parsed.include_snapshots,
         sortBy: parsed.sort_by,

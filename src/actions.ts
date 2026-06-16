@@ -3782,6 +3782,7 @@ async function runEntitiesQuery(
 
     const {
       entity_type,
+      entity_types,
       search,
       limit,
       offset,
@@ -3802,6 +3803,7 @@ async function runEntitiesQuery(
       await queryEntitiesWithCount({
         userId,
         entityType: entity_type,
+        entityTypes: entity_types,
         includeMerged: include_merged,
         includeSnapshots: include_snapshots,
         sortBy: sort_by,

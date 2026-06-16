@@ -259,6 +259,12 @@ const SnapshotFieldNameSchema = z
 const EntitiesQueryRequestBaseSchema = z
   .object({
     entity_type: z.string().optional(),
+    /**
+     * Multi-type filter. When non-empty, results are restricted to entities
+     * whose `entity_type` is in this list (an IN filter), OR-combined with the
+     * singular `entity_type`. An empty array is treated as no filter (#1562).
+     */
+    entity_types: z.array(z.string()).optional(),
     search: z.string().optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
@@ -316,6 +322,15 @@ const RetrieveEntitiesRequestBaseSchema = z
   .object({
     user_id: z.string().optional(),
     entity_type: z.string().optional(),
+    /**
+     * Multi-type filter. When non-empty, results are restricted to entities
+     * whose `entity_type` is in this list (an IN filter), OR-combined with the
+     * singular `entity_type` when both are provided. An empty array is treated
+     * as no filter. Honored on both the plain listing and search paths so a
+     * caller passing `entity_types` is never silently given an unfiltered
+     * result set (#1562).
+     */
+    entity_types: z.array(z.string()).optional(),
     search: z.string().optional(),
     /**
      * Distance threshold for semantic search (L2, range ~0.9–1.5 in practice).
