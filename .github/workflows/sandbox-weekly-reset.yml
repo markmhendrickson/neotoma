@@ -45,9 +45,13 @@ jobs:
       - name: Sync protected routes manifest (drift check)
         run: npm run security:manifest:check
 
-      - name: Run deployed protected-route probes (sandbox)
+      - name: Run deployed protected-route probes (sandbox + prod)
         env:
-          NEOTOMA_PROBE_HOSTS: "https://sandbox.neotoma.io"
+          # Read the NEOTOMA_PROBE_HOSTS repo secret (newline-separated hosts —
+          # sandbox + prod) so the weekly G5 auth-probe also verifies production's
+          # protected routes reject unauthenticated requests. Falls back to
+          # sandbox-only when the secret is unset (e.g. on forks).
+          NEOTOMA_PROBE_HOSTS: ${{ secrets.NEOTOMA_PROBE_HOSTS || 'https://sandbox.neotoma.io' }}
         run: |
           mkdir -p docs/security/probes
           bash scripts/security/deployed_probes.sh \
