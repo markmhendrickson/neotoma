@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **462**
-- Backend and repo Vitest files: **429**
+- Total automated test files: **464**
+- Backend and repo Vitest files: **431**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,9 +72,9 @@ flowchart TD
 | Vitest unit tests | 119 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 53 |
-| Vitest integration tests | 133 |
+| Vitest integration tests | 134 |
 | Vitest CLI tests | 63 |
-| Vitest contract tests | 13 |
+| Vitest contract tests | 14 |
 | Vitest security tests | 3 |
 | Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
@@ -336,7 +336,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (133):**
+**Files (134):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -368,6 +368,7 @@ flowchart TD
 - `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
+- `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
@@ -546,10 +547,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (13):**
+**Files (14):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
+- `tests/contract/get_entities_alias.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
 - `tests/contract/legacy_payloads/replay.test.ts`
 - `tests/contract/mcp_stdio_output_safety.test.ts`
