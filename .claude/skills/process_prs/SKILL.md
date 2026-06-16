@@ -160,7 +160,6 @@ fi
 
 If the review had Blocking items and zero substantive (non-housekeeping) commits landed after it, **the PR is review-blocked**. Post a summary comment listing the unaddressed findings and request fixes; do not merge.
 
-
 ### Step 1d: Check Agentic Behavior Eval Coverage (Merge Blocker)
 
 A PR that changes agentic behavior — the instructions agents receive, the tools they can call, or the flows they execute — must demonstrate eval coverage before it can be merged.
@@ -219,6 +218,63 @@ See [docs/developer/eval_requirements.md](../docs/developer/eval_requirements.md
 
 _Note: a commit message referencing evals (e.g. `test: add eval fixture for …`) is not by itself eval evidence unless the commit also adds/modifies a fixture file under `tests/fixtures/agentic_eval/`._
 
+### Step 1e: Docs-Coverage Gate
+
+For each PR that adds or modifies user-facing surfaces (CLI commands, flags, API endpoints, MCP tools, config knobs), verify that documentation was updated in the same PR.
+
+**Surfaces that require documentation updates:**
+
+- New or modified CLI commands/flags → `docs/developer/cli_reference.md` and `docs/developer/cli_agent_instructions.md`
+- New or modified MCP tools → `docs/developer/mcp/tool_descriptions.yaml` and `docs/developer/mcp/instructions.md`
+- New or modified API endpoints or request/response fields → `openapi.yaml`
+- New config options or environment variables → `docs/developer/cli_reference.md` Runtime overrides table
+- New behavioral rules affecting agents → mirrored in both MCP and CLI instruction files
+
+**Check for missing docs coverage:**
+
+```bash
+gh pr diff <number> --name-only
+```
+
+If the diff contains files under `src/cli/` (new CLI surface), `src/services/` (new tool behavior), or `openapi.yaml` — cross-check that the PR also modifies the corresponding doc files listed above.
+
+If a documented surface was added or modified but the corresponding doc file was **not** changed:
+
+- Flag the PR as **docs-blocked**
+- Post a comment naming the missing doc update(s)
+- Do not merge until the doc gap is filled or the author posts `Waiver: <reason>` explaining why no doc update is needed
+
+A `Waiver:` comment on the PR is sufficient to clear a docs-blocked status.
+
+### Step 1f: Test-Coverage Gate
+
+For each PR that adds or modifies user-facing surfaces, verify that tests covering the new behavior were added or updated in the same PR.
+
+**Surfaces that require test coverage per `change_guardrails_rules.md` rules 19–21:**
+
+- New CLI commands → integration test in `tests/cli/` exercising the command end-to-end
+- New destructive or data-mutating operations (migrations, repair commands, bulk rewrites) → round-trip integration test covering identity, dry-run non-mutation, idempotency, and NULL preservation
+- New external-file-shape parsers (harness transcripts, SQLite imports, third-party configs) → fixture-based test exercising the actual parser path (not just `detectSource`)
+- New HTTP runtime-config knobs (timeouts, headers, keep-alive) → runtime behavior test asserting observable output, not just source constants
+- New store/ingestion paths → test asserting the POST body fields sent to the store API
+
+**Check for missing test coverage:**
+
+```bash
+gh pr diff <number> --name-only
+```
+
+If the diff adds files in `src/cli/` (new CLI command), `src/services/` (new service behavior), or touches migration scripts — cross-check that the PR also adds or modifies test files in `tests/` or co-located `*.test.ts` files.
+
+For transcript/file-import surfaces specifically: verify that tests assert **POST body structure** (field names and values), not just the count of POST calls. A test that only counts calls will not catch a broken parser that sends `{}` instead of `{ file_path, observation_source }`.
+
+If a testable surface was added but no test covers it:
+
+- Flag the PR as **test-blocked**
+- Post a comment naming the missing test coverage
+- Do not merge until tests are added or the author posts `Test-waiver: <reason>` explaining why coverage is not feasible
+
+A `Test-waiver:` comment (distinct from `Waiver:` used for docs and review findings) is sufficient to clear a test-blocked status.
 
 ### Step 2: Classify Each PR
 
@@ -244,6 +300,8 @@ For each open PR, determine:
    - Security gates pass (see Step 3)
    - **No unaddressed review blockers from Step 1c.** A PR with Blocking findings from the most recent substantive `github-actions[bot]` review and no substantive (non-housekeeping) commits or `Waiver:` comments since is **review-blocked** and must not be merged.
    - **Eval coverage present for agentic-behavior-adjacent PRs (Step 1d).** A PR that touches agent instructions, MCP tool definitions, skill files, or related agentic flows is **eval-blocked** until eval evidence is provided.
+   - **No docs-coverage gaps from Step 1e.** A PR that adds a user-facing surface without updating the corresponding doc files is **docs-blocked** until the gap is filled or a `Waiver:` comment explains the omission.
+   - **No test-coverage gaps from Step 1f.** A PR that adds a testable surface without adding tests is **test-blocked** until tests are added or a `Test-waiver:` comment explains why coverage is not feasible.
    - **Closure comments drafted for every linked issue (Step 4).** A merge that closes issues without a closure narrative loses the resolution trail. The closure comment must be posted before `gh pr merge`.
 
 ### Step 3: Run Security Gates
@@ -375,6 +433,8 @@ For each PR that cannot be merged, take the appropriate action:
 - **Security gate errors (G2/G3)**: Post a comment with the specific `security:lint` errors or manifest/auth-matrix failures. Do not merge.
 - **Review-blocked (Step 1c)**: Post a comment listing the unaddressed Blocking findings from the most recent review, quoting the relevant lines and naming the file paths. Request that the author either land substantive fix commits, post `Waiver: <reason>` comments per finding, or re-request `@claude review` after the fixes. Do not merge.
 - **Eval-blocked (Step 1d)**: Post the standard eval-coverage-required comment (see Step 1d comment template). Do not merge until at least one of the four eval-evidence criteria is satisfied.
+- **Docs-blocked (Step 1e)**: Post a comment naming the missing documentation files. Request the author add the doc updates or post `Waiver: <reason>` explaining why no doc change is needed. Do not merge.
+- **Test-blocked (Step 1f)**: Post a comment naming the missing test coverage and the specific surface (CLI command, parser, migration, etc.) that lacks tests. Request the author add tests or post `Test-waiver: <reason>` explaining why coverage is not feasible. Do not merge.
 - **Awaiting review**: Note in the summary report. Do not post a comment unless explicitly requested.
 - **Merge conflicts**: Post a comment asking the author to rebase.
 - **Draft**: Skip. Report in summary.
@@ -388,6 +448,8 @@ Produce a comprehensive summary covering:
 - For each PR: title, number, classification (release / security-adjacent / standard), CI status, security gate results, and action taken (merged / blocked / handed off / skipped / review requested)
 - PRs where `@claude review` was posted and why (new substantial PR, or N new commits since last review)
 - Any security gate errors found, with PR numbers
+- Any docs-blocked PRs (Step 1d), with the specific missing doc files named
+- Any test-blocked PRs (Step 1e), with the specific missing test coverage named
 - Release PRs identified, with a clear "run `/release` to ship these" callout
 - Outstanding blockers that require author or user action
 - A "What I need from you" section if any PR requires a decision
@@ -421,10 +483,14 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Never merge if G2 or G3 produce errors on a security-adjacent PR.
 - **Never merge a PR that is review-blocked per Step 1c.** A substantive `github-actions[bot]` review with Blocking findings followed only by housekeeping commits is **not** a green light. The author must either (a) land non-housekeeping fix commits, (b) post `Waiver: <reason>` comments per deferred finding, or (c) trigger a re-review whose verdict is `approve`.
 - **Never merge a PR that is eval-blocked per Step 1d.** A PR touching agentic behavior (agent instructions, MCP tool definitions, skill files, or store/correction flows) without eval evidence is not merge-eligible. The author must satisfy at least one eval-evidence criterion before merge.
+- **Never merge a PR that is docs-blocked per Step 1e** until the missing doc files are added or a `Waiver:` comment explains the omission.
+- **Never merge a PR that is test-blocked per Step 1f** until tests are added or a `Test-waiver:` comment explains why coverage is not feasible.
 - Always run G2 and G3 before merging a security-adjacent PR.
 - Always report security gate results in the summary, even when advisory.
 - Always run Step 1c (Audit Existing Review Findings) for every non-draft PR before classification in Step 2.
 - Always run Step 1d (Check Agentic Behavior Eval Coverage) for every non-draft PR before classification in Step 2.
+- Always run Step 1e (Docs-Coverage Gate) for every non-draft PR before classification in Step 2.
+- Always run Step 1f (Test-Coverage Gate) for every non-draft PR before classification in Step 2.
 - Always run Step 4 (Post issue-closure comments) before `gh pr merge` for every PR that closes a linked issue. Auto-close alone does not produce a resolution trail.
 - After merge, manually close any issue that the PR resolved but GitHub did not auto-close (the auto-close-gap case: closure verb in body/commit but issue not in `closingIssuesReferences`).
 - Never post `@claude review` on a `claude/*` branch PR — the workflow already runs on `opened` for those.
@@ -452,3 +518,5 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - **Leaving issues open that the merged PR resolved.** When detection in Step 4 surfaces an auto-close gap (closure verb in body/commit but issue not in `closingIssuesReferences`), close the issue manually after merge with `gh issue close <iss> --reason completed` and a comment linking the resolving PR.
 - **Acting on a subagent verdict without main-thread re-verification.** A subagent reporting "MERGE-ELIGIBLE / CI passed" is a worklist entry with evidence, not a merge authorization. Stale CI runs and under-counted security/contract surfaces are the recurring failure modes; re-confirm before merging.
 - **Letting a subagent perform a mutating action.** Audit subagents are read-only by design. If an audit needs a follow-up that mutates state, the main thread does it.
+- **Merging a PR that added a user-facing CLI command, parser, migration, or store path without test coverage.** Counting POST calls is not coverage of POST body structure; tests must assert the fields sent.
+- **Treating a `Waiver:` comment as clearing a test-blocked status.** Docs waivers and test waivers are distinct; only `Test-waiver:` clears a test-blocked status.
