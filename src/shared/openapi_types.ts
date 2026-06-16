@@ -6527,6 +6527,8 @@ export interface operations {
           target_repo?: string;
           /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
           entity_ids_to_link?: string[];
+          /** @description Entity ID of the conversation turn (conversation_message entity) where this issue was observed. When provided, a REFERS_TO relationship is created from the filed issue entity to this conversation turn entity, making the origin of the issue traceable. */
+          conversation_turn_id?: string;
           user_id?: string;
         };
       };
