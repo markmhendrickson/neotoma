@@ -73,7 +73,7 @@ flowchart TD
 | Vitest service tests | 34 |
 | Source-adjacent tests | 53 |
 | Vitest integration tests | 134 |
-| Vitest CLI tests | 63 |
+| Vitest CLI tests | 64 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 3 |
 | Vitest subscription tests | 5 |
@@ -478,7 +478,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (63):**
+**Files (64):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -499,6 +499,7 @@ flowchart TD
 - `tests/cli/cli_ingest_remote_upload.test.ts`
 - `tests/cli/cli_init_commands.test.ts`
 - `tests/cli/cli_init_env_targeting.test.ts`
+- `tests/cli/cli_init_flags.test.ts`
 - `tests/cli/cli_init_interactive.test.ts`
 - `tests/cli/cli_issues_commands.test.ts`
 - `tests/cli/cli_mcp_commands.test.ts`

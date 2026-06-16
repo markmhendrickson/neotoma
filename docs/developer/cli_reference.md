@@ -354,8 +354,10 @@ neotoma session --servers
   - `--force`: Overwrite existing configuration.
   - `--skip-db`: Skip database initialization.
   - `--skip-env`: Skip interactive `.env` creation and variable prompts (e.g. for CI or non-interactive use).
+  - `--project-local`: Store the Neotoma config in `.neotoma/config.json` in the current directory (project-scoped) instead of the user-level `~/.config/neotoma/config.json`. The CLI reads this project-local config automatically for all subsequent commands run from that directory via `readEffectiveConfig`, which checks for `.neotoma/config.json` before falling back to the user-level config. Trust boundary: project-local config is only loaded when the containing directory is owned by the current user (prevents untrusted directories from silently overriding user settings). Use this when you want per-project Neotoma configuration independent of the user-level setup.
+  - `--safe`: Dry-run mode. Reports what `init` would do (create directories, write config, run migrations) without writing any files or making any changes. Output lists each planned action with a check mark or blocker reason. Exit code is 0 if all planned actions would succeed; exit code 1 if any blocker is detected (e.g. config already exists without `--force`, parent directory not writable). Combine with `--json` to get machine-readable output. Note: `--safe` checks the filesystem layout planned by `init`; it does not simulate authentication or preflight steps.
 
-**Example:**
+**Examples:**
 
 ```bash
 # Basic initialization
@@ -363,6 +365,18 @@ neotoma init
 
 # Initialize with custom data directory
 neotoma init --data-dir /path/to/data
+
+# Store config in current project directory instead of user home
+neotoma init --project-local
+
+# Preview what init would do without making any changes
+neotoma init --safe
+
+# Dry-run with machine-readable output
+neotoma init --safe --json
+
+# Combine: dry-run scoped to current project
+neotoma init --safe --project-local
 ```
 
 **What it creates:**
@@ -371,6 +385,17 @@ neotoma init --data-dir /path/to/data
 - SQLite database: `<data-dir>/neotoma.db` (with WAL mode enabled)
 - Encryption key (if user chooses key-derived auth when prompted): `~/.config/neotoma/keys/neotoma.key` (mode 0600).
 - Environment file target: project `<checkout>/.env` when checkout is detected, otherwise `~/.config/neotoma/.env`
+- Config file: `~/.config/neotoma/config.json` (default) or `.neotoma/config.json` in the current directory when `--project-local` is given.
+
+**Runtime overrides** for `neotoma init`:
+
+| Precedence | Source | Description |
+|------------|--------|-------------|
+| 1 (highest) | `--data-dir` flag | Explicit data directory path |
+| 2 | `NEOTOMA_DATA_DIR` env var | Environment variable override |
+| 3 (default) | Auto-detected or `~/neotoma/data` | Resolved at startup |
+
+Config scope for `neotoma init` is a binary switch: `--project-local` writes to `.neotoma/config.json` in cwd; without the flag, init writes to `~/.config/neotoma/config.json`. All subsequent commands that call `readEffectiveConfig` will read the project-local file when present (and owned by the current user).
 
 ### Harness setup
 
