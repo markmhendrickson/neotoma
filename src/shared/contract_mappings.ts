@@ -162,6 +162,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "entities list",
   },
   {
+    operationId: "listEntities",
+    method: "get",
+    path: "/entities",
+    adapter: "cli",
+    cliCommand: "entities list",
+    notes: "REST/GET alias of queryEntities (#1499); query-string params map to the POST body.",
+  },
+  {
     operationId: "bulkCloseIssues",
     method: "post",
     path: "/issues/bulk_close",

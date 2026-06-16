@@ -2759,6 +2759,163 @@ paths:
               schema:
                 type: object
 
+  /entities:
+    get:
+      summary: List entities
+      description: >
+        REST/GET alias of `POST /entities/query`. Maps query-string parameters
+        to the same handler so consumers that issue
+        `GET /entities?entity_type=...&search=...` reach the canonical list
+        behavior instead of a 404. Scoped to the authenticated user. The
+        request body of `POST /entities/query` and the query string here accept
+        the same field names; complex object fields (`snapshot_filters`) are
+        passed as a JSON-encoded string. Unmatched verbs on `/entities` return
+        a 404 whose `details.hint` points back at this endpoint and
+        `POST /entities/query`.
+      operationId: listEntities
+      parameters:
+        - in: query
+          name: entity_type
+          required: false
+          schema: { type: string }
+        - in: query
+          name: search
+          required: false
+          description: Canonical free-text query parameter for retrieval relevance.
+          schema: { type: string }
+        - in: query
+          name: query
+          required: false
+          description: Compatibility alias for `search`.
+          schema: { type: string }
+        - in: query
+          name: search_query
+          required: false
+          description: Compatibility alias for `search`.
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: sort_by
+          required: false
+          description: |
+            Sort field. Non-default values cannot be combined with `search`.
+            Mirrors the `sort_by` body field of `POST /entities/query`.
+          schema: { type: string }
+        - in: query
+          name: sort_order
+          required: false
+          description: "`desc` cannot be combined with `search`."
+          schema:
+            type: string
+            enum: [asc, desc]
+        - in: query
+          name: published
+          required: false
+          description: "Cannot be combined with `search`."
+          schema: { type: boolean }
+        - in: query
+          name: published_after
+          required: false
+          description: "Inclusive lower bound for snapshot.published_date. Cannot be combined with `search`."
+          schema: { type: string }
+        - in: query
+          name: published_before
+          required: false
+          description: "Inclusive upper bound for snapshot.published_date. Cannot be combined with `search`."
+          schema: { type: string }
+        - in: query
+          name: include_snapshots
+          required: false
+          description: When false, omit snapshot/provenance/raw_fragments payloads for lighter responses.
+          schema: { type: boolean }
+        - in: query
+          name: include_merged
+          required: false
+          schema: { type: boolean }
+        - in: query
+          name: user_id
+          required: false
+          description: Optional user scope. When omitted the authenticated user is used.
+          schema: { type: string }
+        - in: query
+          name: updated_since
+          required: false
+          description: ISO 8601 timestamp; return only entities updated at or after this value.
+          schema: { type: string }
+        - in: query
+          name: created_since
+          required: false
+          description: ISO 8601 timestamp; return only entities created at or after this value.
+          schema: { type: string }
+        - in: query
+          name: identity_basis
+          required: false
+          description: Return only entities with at least one observation resolved with the given identity_basis.
+          schema:
+            type: string
+            enum:
+              - schema_rule
+              - schema_lookup
+              - heuristic_name
+              - heuristic_fallback
+              - target_id
+        - in: query
+          name: exclude_bookkeeping
+          required: false
+          description: When true, omit chat bookkeeping types from results.
+          schema: { type: boolean }
+        - in: query
+          name: snapshot_filters
+          required: false
+          description: |
+            JSON-encoded object filtering entities by snapshot field values,
+            equivalent to the `snapshot_filters` body field of
+            `POST /entities/query`. Example:
+            `{"status":{"op":"eq","value":"active"}}`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Entity list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EntitySnapshot"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+                  applied_search_strategies:
+                    type: array
+                    items:
+                      type: string
+                      enum:
+                        - strict
+                        - semantic
+                        - partial_overlap
+                        - concept_bridge
+                  search_mode:
+                    type: string
+                    enum: [none, semantic, lexical_typed, lexical_fallback]
+        "400":
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
   /entities/query:
     post:
       summary: Query entities
