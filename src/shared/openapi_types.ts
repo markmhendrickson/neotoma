@@ -1735,6 +1735,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/conversations/{conversation_id}/turn-index": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Conversation turn index
+     * @description FU-2026-05-003. Returns one row per `conversation_message` linked
+     *     `PART_OF` the conversation, with the entities the message stored or
+     *     retrieved this turn (via REFERS_TO edges) and the issue entities
+     *     surfaced. Used by the Inspector conversation page to render per-turn
+     *     anchor sections (`#msg-N`, `#stored-N`, `#retrieved-N`, `#issues-N`)
+     *     and the turn timeline sidebar.
+     */
+    get: operations["getConversationTurnIndex"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/turn_summary": {
     parameters: {
       query?: never;
@@ -3592,6 +3617,53 @@ export interface components {
        * @description Issue entities surfaced this turn that need user consent to file
        *     externally. Empty unless the auto-file flow flagged something.
        */
+      issues: components["schemas"]["TurnSummaryEntityRef"][];
+    };
+    /**
+     * @description FU-2026-05-003. Index of turns within a conversation, ordered by
+     *     `turn_number` ascending (falls back to message creation time for
+     *     legacy rows without `turn_number`).
+     */
+    ConversationTurnIndex: {
+      /**
+       * @description Stable conversation identifier from the conversation entity's
+       *     `conversation_id` field.
+       */
+      conversation_id: string;
+      /** @description The `entity_id` of the conversation entity (`ent_...`). */
+      conversation_entity_id: string;
+      turns: components["schemas"]["ConversationTurn"][];
+    };
+    ConversationTurn: {
+      /**
+       * @description 1-based ordinal of the turn within the conversation. Read from the
+       *     message's `turn_number` snapshot field; falls back to its index in
+       *     creation order for legacy rows.
+       */
+      turn_number: number;
+      message_entity_id: string;
+      /**
+       * @description `user`, `assistant`, `agent`, `system`, or `tool` per the
+       *     `conversation_message` `role` / `sender_kind` fields.
+       */
+      role: string;
+      turn_key: string;
+      /**
+       * @description First ~200 characters of the message `content` field, intended for
+       *     sidebar previews. Full content is on the message entity itself.
+       */
+      content_preview?: string | null;
+      /** Format: date-time */
+      created_at?: string | null;
+      /** @description Non-bookkeeping entities REFERS_TO from this message. */
+      stored: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Entities REFERS_TO from this message that are not also REFERS_TO
+       *     from the matching assistant message (preserves the
+       *     stored-vs-retrieved partition `neotoma_turn_summary` uses).
+       */
+      retrieved: components["schemas"]["TurnSummaryEntityRef"][];
+      /** @description Entities of `entity_type` `issue` REFERS_TO from this message. */
       issues: components["schemas"]["TurnSummaryEntityRef"][];
     };
     TurnSummaryEntityRef: {
@@ -6925,6 +6997,47 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getConversationTurnIndex: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path: {
+        /**
+         * @description Conversation identifier. Accepts either the `conversation_id`
+         *     field on the conversation entity (host-provided or agent-derived)
+         *     or the conversation `entity_id` (e.g. `ent_...`).
+         */
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Turn index for the conversation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationTurnIndex"];
+        };
+      };
+      /** @description Conversation not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error_code?: string;
+            message?: string;
+          };
         };
       };
     };
