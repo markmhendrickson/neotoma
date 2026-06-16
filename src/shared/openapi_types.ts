@@ -6211,6 +6211,15 @@ export interface operations {
              * @enum {string}
              */
             match_mode?: "direct" | "snapshot_field" | "semantic" | "none";
+            /**
+             * @description Present only when the `identifier` is shaped like an
+             *     entity_id (`ent_<hex>`) but no entity with that id exists
+             *     for the caller (`match_mode: "none"`, `total: 0`). Tells
+             *     the caller the input looks like an entity_id and that
+             *     `retrieve_entity_snapshot(entity_id=…)` is the direct
+             *     fetch path (#1597). Omitted for every other result.
+             */
+            hint?: string;
           };
         };
       };
