@@ -22,6 +22,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { WIN_SHELL } from "../shared/spawn_platform.js";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 
@@ -255,11 +256,15 @@ async function doInstall(
         const addRes = spawnSync("claude", ["plugin", "marketplace", "add", pluginDir], {
           cwd: repoRoot,
           stdio: "inherit",
+          // claude resolves to claude.cmd on Windows; .cmd needs shell mode
+          // (CVE-2024-27980) or spawn throws EINVAL.
+          ...WIN_SHELL,
         });
         const installRes = spawnSync(
           "claude",
           ["plugin", "install", CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC],
-          { cwd: repoRoot, stdio: "inherit" }
+          // claude.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+          { cwd: repoRoot, stdio: "inherit", ...WIN_SHELL }
         );
         const ok = installRes.status === 0;
         const addOk = addRes.status === 0;

@@ -25,6 +25,7 @@ import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
 import { createApiClient } from "../shared/api_client.js";
+import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
@@ -806,6 +807,9 @@ async function runNpmScript(scriptName: string, args: string[]): Promise<never> 
     cwd: repoRoot,
     stdio: "inherit",
     env: { ...process.env },
+    // npm resolves to npm.cmd on Windows; spawning a .cmd needs shell mode
+    // (CVE-2024-27980), else EINVAL. args stay an argv array — no injection.
+    ...WIN_SHELL,
   });
   child.on("close", (code) => {
     process.exit(code ?? 1);
@@ -2685,7 +2689,9 @@ async function runGlobalNeotomaUninstall(): Promise<GlobalUninstallResult> {
   return await new Promise<GlobalUninstallResult>((resolve) => {
     const child = spawn(command, args, {
       stdio: "pipe",
-      shell: Boolean(overrideCommand),
+      // Shell mode for an explicit override command, or on Windows where the
+      // default npm.cmd shim needs it (CVE-2024-27980) or it throws EINVAL.
+      shell: Boolean(overrideCommand) || shellOnWin(),
       env: { ...process.env },
     });
     let stderr = "";
@@ -11627,6 +11633,8 @@ apiCommand
           detached: true,
           stdio: ["ignore", logStream, logStream],
           env: spawnEnv,
+          // npm.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+          ...WIN_SHELL,
         });
         child.unref();
         await fs.writeFile(apiPidPath, String(child.pid ?? ""));
@@ -11742,6 +11750,8 @@ apiCommand
         cwd: repoRoot,
         stdio: "inherit",
         env: spawnEnv,
+        // npm.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+        ...WIN_SHELL,
       });
       const exitCode = await new Promise<number | null>((resolve) => {
         child.on("close", (code, _sig) => resolve(code ?? null));
@@ -17947,7 +17957,8 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
                 cwd: repoRoot,
                 stdio: ["ignore", logStream, logStream],
                 env: devEnv,
-                shell: false,
+                // npx.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+                shell: shellOnWin(),
               });
               devChild.on("error", (err) => {
                 process.stderr.write(`neotoma: dev server error: ${err.message}\n`);
@@ -17965,7 +17976,8 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
                 cwd: repoRoot,
                 stdio: ["ignore", logStream, logStream],
                 env: prodEnv,
-                shell: false,
+                // npx.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+                shell: shellOnWin(),
               });
               prodChild.on("error", (err) => {
                 process.stderr.write(`neotoma: prod server error: ${err.message}\n`);

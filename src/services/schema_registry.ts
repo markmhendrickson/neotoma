@@ -16,6 +16,7 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./entity_snapshot_embedding.js";
 import { spawn } from "child_process";
+import { WIN_SHELL } from "../shared/spawn_platform.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -2504,6 +2505,9 @@ export class SchemaRegistryService {
       stdio: "ignore", // Suppress output to avoid cluttering logs
       detached: true,
       env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development" },
+      // tsx resolves to tsx.cmd on Windows; .cmd needs shell mode
+      // (CVE-2024-27980) or spawn throws EINVAL.
+      ...WIN_SHELL,
     });
 
     // Don't wait for completion - let it run in background
