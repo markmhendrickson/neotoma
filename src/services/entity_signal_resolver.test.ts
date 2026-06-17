@@ -379,4 +379,71 @@ describe("identifyEntityBySignals", () => {
     // best_match takes 1, candidates capped at 3
     expect(result.candidates.length).toBeLessThanOrEqual(3);
   });
+
+  it("tertiary tie-break: equal-score candidate with more matched signals ranks first", async () => {
+    // Two custom signal keys both fall under OTHER_SIGNAL_WEIGHT = 0.4.
+    // Supplied signals: sig1="ab", sig2="abcde" → total weight W = 0.8.
+    //
+    // entityOne (id "ent_tiebreak_AAA"): snapshot has sig1="ab" (exact match → 1.0),
+    //   no sig2 field. Score = 0.4*1.0 / 0.8 = 0.5. Matched signals: 1.
+    //
+    // entityTwo (id "ent_tiebreak_BBB"): snapshot has sig1="ac" (fuzzy → 0.5) and
+    //   sig2="xxxde" (fuzzy → 0.4). Score = (0.4*0.5 + 0.4*0.4)/0.8 + 0.05 = 0.45+0.05 = 0.5.
+    //   Matched signals: 2.
+    //
+    // Scores are exactly equal (verified via IEEE-754 float arithmetic). The tertiary
+    // tie-break (matchedSignals.length desc) must rank entityTwo first, not the
+    // entity_id lexicographic fallback which would rank "AAA" before "BBB".
+    const entityOne = makeEntity("ent_tiebreak_AAA", {
+      canonical_name: "Entity One",
+      snapshot: { sig1: "ab" },
+    });
+    const entityTwo = makeEntity("ent_tiebreak_BBB", {
+      canonical_name: "Entity Two",
+      snapshot: { sig1: "ac", sig2: "xxxde" },
+    });
+
+    // sig1 lookup returns both; sig2 lookup returns only entityTwo.
+    mockLookup.mockImplementation(async (params: { identifier: string }) => {
+      if (params.identifier === "ab") {
+        return { entities: [entityOne, entityTwo], total: 2, match_mode: "direct" };
+      }
+      if (params.identifier === "abcde") {
+        return { entities: [entityTwo], total: 1, match_mode: "direct" };
+      }
+      return { entities: [], total: 0, match_mode: "none" };
+    });
+
+    const result = await identifyEntityBySignals({
+      signals: { sig1: "ab", sig2: "abcde" },
+      userId: USER_ID,
+      max_candidates: 5,
+    });
+
+    // Both entities must appear in the results
+    const allIds = [
+      result.best_match?.entity_id,
+      ...result.candidates.map((c) => c.entity_id),
+    ].filter(Boolean);
+    expect(allIds).toContain("ent_tiebreak_AAA");
+    expect(allIds).toContain("ent_tiebreak_BBB");
+
+    // Scores must be equal (confirming the tie-break is the deciding factor)
+    const scoreOne =
+      result.best_match?.entity_id === "ent_tiebreak_AAA"
+        ? result.best_match?.identity_score
+        : result.candidates.find((c) => c.entity_id === "ent_tiebreak_AAA")?.identity_score;
+    const scoreTwo =
+      result.best_match?.entity_id === "ent_tiebreak_BBB"
+        ? result.best_match?.identity_score
+        : result.candidates.find((c) => c.entity_id === "ent_tiebreak_BBB")?.identity_score;
+    expect(scoreOne).toBeCloseTo(0.5, 10);
+    expect(scoreTwo).toBeCloseTo(0.5, 10);
+
+    // The entity with MORE matched signals (entityTwo, 2 signals) must be ranked first
+    expect(result.best_match?.entity_id).toBe("ent_tiebreak_BBB");
+    expect(result.best_match?.matched_signals).toHaveLength(2);
+    expect(result.best_match?.matched_signals).toContain("sig1");
+    expect(result.best_match?.matched_signals).toContain("sig2");
+  });
 });

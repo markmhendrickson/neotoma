@@ -328,10 +328,12 @@ export async function identifyEntityBySignals(
   }
 
   // ------------------------------------------------------------------
-  // 5. Sort deterministically: score desc, entity_id asc
+  // 5. Sort deterministically: score desc, matchedSignals.length desc, entity_id asc
   // ------------------------------------------------------------------
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
+    if (b.matchedSignals.length !== a.matchedSignals.length)
+      return b.matchedSignals.length - a.matchedSignals.length;
     return a.entry.entity_id.localeCompare(b.entry.entity_id);
   });
 
