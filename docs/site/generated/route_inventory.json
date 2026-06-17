@@ -76,11 +76,27 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/subscriptions-guide",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/issue-reporting",
     "classification": "static_mdx"
   },
   {
+    "path": "/issues-guide",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/security-hardening",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/plans-guide",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/mirror-guide",
     "classification": "static_mdx"
   },
   {

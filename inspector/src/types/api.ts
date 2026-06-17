@@ -657,8 +657,8 @@ export interface UserInfo {
   email?: string;
   storage?: {
     storage_backend: string;
-    data_dir: string;
-    sqlite_db: string;
+    data_dir?: string;
+    sqlite_db?: string;
   };
   /**
    * Boot-resolved server mode. Always set when the server has completed

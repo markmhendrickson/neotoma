@@ -10,6 +10,7 @@ import {
   entityRelationshipSubpageHref,
   parseEntityRelationshipSubpageRoute,
 } from "./entity_relationship_routes";
+import { isLikelyMachineCanonicalName } from "./humanize";
 import type { SearchPrimitiveKind } from "@/lib/search_primitives";
 
 /** Inspector primitive kinds that have a stable detail URL. */
@@ -224,7 +225,15 @@ export function mergePinnedPrimitivesOnRemoteHydration(
     const relatedEntityType =
       remotePin.related_entity_type?.trim() || localPin.related_entity_type?.trim();
     const subtitle = remotePin.subtitle?.trim() || localPin.subtitle?.trim();
-    const label = remotePin.label.trim() || localPin.label.trim();
+    const remoteLabel = remotePin.label.trim();
+    const localLabel = localPin.label.trim();
+    const shouldUseLocalLabel =
+      !remoteLabel ||
+      (isLikelyMachineCanonicalName(remoteLabel) &&
+        localLabel &&
+        !isLikelyMachineCanonicalName(localLabel));
+    const label =
+      (shouldUseLocalLabel ? localLabel : remoteLabel) || localLabel;
     if (
       entityType === remotePin.entity_type &&
       relatedEntityType === remotePin.related_entity_type &&
@@ -246,15 +255,19 @@ export function mergePinnedPrimitivesOnRemoteHydration(
 export function enrichPinnedPrimitivesWithEntityTypes(
   pins: PinnedPrimitive[],
   entityTypeByHref: ReadonlyMap<string, string>,
+  entityLabelByHref: ReadonlyMap<string, string> = new Map(),
 ): PinnedPrimitive[] {
-  if (entityTypeByHref.size === 0) return pins;
+  if (entityTypeByHref.size === 0 && entityLabelByHref.size === 0) return pins;
   let changed = false;
   const next = pins.map((pin) => {
-    if (pin.kind !== "entity" || pin.entity_type?.trim()) return pin;
+    if (pin.kind !== "entity") return pin;
     const type = entityTypeByHref.get(pin.href)?.trim();
-    if (!type) return pin;
+    const label = entityLabelByHref.get(pin.href)?.trim();
+    const entity_type = pin.entity_type?.trim() || type || undefined;
+    const nextLabel = label || pin.label;
+    if (entity_type === pin.entity_type && nextLabel === pin.label) return pin;
     changed = true;
-    return { ...pin, entity_type: type };
+    return { ...pin, label: nextLabel, entity_type };
   });
   return changed ? next : pins;
 }

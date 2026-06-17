@@ -287,6 +287,12 @@ function snapshotFriendlyTitle(snap: Record<string, unknown>): string | null {
     const t = desc.trim();
     if (t && t.length <= 140) return t.length > 120 ? t.slice(0, 117) + "…" : t;
   }
+  for (const k of ["content", "body"] as const) {
+    const v = snap[k];
+    if (typeof v !== "string") continue;
+    const t = v.trim().replace(/\s+/g, " ");
+    if (t) return t.length > 120 ? t.slice(0, 117) + "…" : t;
+  }
   return null;
 }
 

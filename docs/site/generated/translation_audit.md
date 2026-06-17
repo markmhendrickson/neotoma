@@ -34,9 +34,11 @@
 | `/install/manual` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/integrations` | en | 2026-05-13 | canonical |
 | `/issue-reporting` | en | 2026-05-12 | canonical |
+| `/issues-guide` | en | 2026-05-20 | canonical |
 | `/logistics` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/mcp` | en | 2026-05-07 | canonical |
 | `/memory-guarantees` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/mirror-guide` | en | 2026-05-20 | canonical |
 | `/neotoma-vs-database` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-vs-files` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-vs-mem0` | en, es | 2026-05-07 | canonical, machine_draft |
@@ -68,6 +70,7 @@
 | `/operating` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/peer-sync` | en | 2026-05-12 | canonical |
 | `/personal-data` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/plans-guide` | en | 2026-05-20 | canonical |
 | `/portfolio` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/primitives` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/primitives/entities` | en, es | 2026-05-07 | canonical, machine_draft |
@@ -96,6 +99,7 @@
 | `/silent-mutation-risk` | en | 2026-05-07 | canonical |
 | `/strong-consistency` | en | 2026-05-08 | canonical |
 | `/subscriptions` | en | 2026-05-12 | canonical |
+| `/subscriptions-guide` | en | 2026-05-20 | canonical |
 | `/terms` | en | 2026-05-07 | canonical |
 | `/trading` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/transactional-writes` | en | 2026-05-08 | canonical |

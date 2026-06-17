@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run the Neotoma HTTP API entry with Node's native watch mode so the process
-# restarts on source edits. More reliable under macOS LaunchAgents than some
-# pure-FSEvents watchers (see docs/developer/launchd_dev_servers.md).
+# Run the Neotoma HTTP API entry with a watcher so the process restarts on
+# source edits. On macOS, prefer the chokidar polling watcher: Node's native
+# watch mode can leave the supervisor alive after the server child exits,
+# leaving no process bound to the HTTP port.
 #
 # Usage:
 #   scripts/run-neotoma-api-node-watch.sh              # default: src/actions.ts
@@ -21,9 +22,21 @@ export TSC_WATCHDIRECTORY="${TSC_WATCHDIRECTORY:-UseFsEventsWithFallbackDynamicP
 # Node version is used even when the launchd PATH resolves an older system node.
 NODE_BIN="${NEOTOMA_LAUNCHD_NODE:-node}"
 
-# LaunchAgent sessions: Node --watch (fs.watch / FSEvents) often misses saves. The launchd
-# wrapper sets NEOTOMA_API_WATCH_FORCE_POLL=1 so we use chokidar polling instead.
-if [ "${NEOTOMA_API_WATCH_FORCE_POLL:-}" = "1" ] || [ "${NEOTOMA_API_WATCH_FORCE_POLL:-}" = "true" ]; then
+# LaunchAgent sessions: Node --watch (fs.watch / FSEvents) often misses saves.
+# Interactive macOS sessions can also leave the watch supervisor alive after the
+# API child disappears, so use chokidar polling by default on Darwin. Operators
+# can opt back into native watch with NEOTOMA_API_WATCH_NATIVE=1 or
+# NEOTOMA_API_WATCH_FORCE_POLL=0.
+force_poll="${NEOTOMA_API_WATCH_FORCE_POLL:-}"
+native_watch="${NEOTOMA_API_WATCH_NATIVE:-}"
+platform="$(uname -s 2>/dev/null || echo unknown)"
+if [ "$force_poll" = "1" ] || [ "$force_poll" = "true" ] || {
+  [ "$platform" = "Darwin" ] &&
+    [ "$force_poll" != "0" ] &&
+    [ "$force_poll" != "false" ] &&
+    [ "$native_watch" != "1" ] &&
+    [ "$native_watch" != "true" ];
+}; then
   exec "$NODE_BIN" "$SCRIPT_DIR/run_neotoma_api_chokidar_poll_watch.js" "$ENTRY"
 fi
 
