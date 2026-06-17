@@ -54,7 +54,10 @@ export function RecentConversationsFeed({
               <div className="min-w-0 flex-1">
                 <Link
                   to={`/conversations/${encodeURIComponent(c.conversation_id)}`}
-                  className={cn("font-medium text-foreground underline-offset-4 hover:text-primary hover:underline", compact ? "text-xs" : "text-sm")}
+                  className={cn(
+                    "block max-w-full truncate font-medium text-foreground underline-offset-4 hover:text-primary hover:underline",
+                    compact ? "text-xs" : "text-sm"
+                  )}
                   title={c.conversation_id}
                 >
                   {label}

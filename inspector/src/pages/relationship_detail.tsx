@@ -118,11 +118,26 @@ export default function RelationshipDetailPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Details</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Type</span><span className="font-mono">{s.relationship_type}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Source</span><EntityLink id={s.source_entity_id} /></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Target</span><EntityLink id={s.target_entity_id} /></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Observations</span><span>{s.observation_count}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Computed</span><span>{formatDate(s.computed_at)}</span></div>
+            <div className="flex min-w-0 justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Type</span>
+              <span className="min-w-0 break-all text-right font-mono">{s.relationship_type}</span>
+            </div>
+            <div className="flex min-w-0 justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Source</span>
+              <EntityLink id={s.source_entity_id} className="truncate text-right" />
+            </div>
+            <div className="flex min-w-0 justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Target</span>
+              <EntityLink id={s.target_entity_id} className="truncate text-right" />
+            </div>
+            <div className="flex min-w-0 justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Observations</span>
+              <span>{s.observation_count}</span>
+            </div>
+            <div className="flex min-w-0 justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Computed</span>
+              <span className="min-w-0 truncate text-right">{formatDate(s.computed_at)}</span>
+            </div>
           </CardContent>
         </Card>
 

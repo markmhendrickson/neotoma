@@ -85,24 +85,25 @@ function EntityCard({ entity, groupField }: { entity: EntitySnapshot; groupField
     .slice(0, 3);
 
   return (
-    <div className="cursor-grab rounded-md border bg-card p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing">
+    <div className="min-w-0 cursor-grab rounded-md border bg-card p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing">
       <Link
         to={`/entities/${encodeURIComponent(eid)}`}
-        className="block font-medium text-sm text-foreground underline-offset-4 hover:text-primary hover:underline"
+        className="block max-w-full truncate text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
         onClick={(e) => e.stopPropagation()}
+        title={String(entity.canonical_name || snap.name || snap.title || eid)}
       >
         {String(entity.canonical_name || snap.name || snap.title || truncateId(eid))}
       </Link>
-      <div className="mt-1 flex items-center gap-1">
-        <TypeBadge type={entity.entity_type} humanize className="text-[10px]" />
-        <span className="font-mono text-[10px] text-muted-foreground">{truncateId(eid, 8)}</span>
+      <div className="mt-1 flex min-w-0 items-center gap-1">
+        <TypeBadge type={entity.entity_type} humanize className="max-w-[10rem] truncate text-[10px]" />
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{truncateId(eid, 8)}</span>
       </div>
       {displayFields.length > 0 && (
         <div className="mt-2 space-y-0.5">
           {displayFields.map(([k, v]) => (
-            <div key={k} className="flex items-baseline gap-1 text-xs">
+            <div key={k} className="flex min-w-0 items-baseline gap-1 text-xs">
               <span className="shrink-0 text-muted-foreground">{humanizeKey(k)}:</span>
-              <span className="truncate"><FieldValue value={v} /></span>
+              <div className="min-w-0 flex-1 truncate"><FieldValue value={v} /></div>
             </div>
           ))}
         </div>

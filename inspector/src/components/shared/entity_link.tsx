@@ -12,10 +12,15 @@ interface EntityLinkProps {
 }
 
 export function EntityLink({ id, name, className, title: titleAttr }: EntityLinkProps) {
+  const shouldTruncate = className?.split(/\s+/).includes("truncate") ?? false;
   return (
     <Link
       to={`/entities/${encodeURIComponent(id)}`}
-      className={cn("text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline", className)}
+      className={cn(
+        "min-w-0 max-w-full text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline",
+        shouldTruncate ? "inline-block align-bottom" : "break-words",
+        className
+      )}
       title={titleAttr ?? id}
     >
       {name ?? compactPrefixedId(id)}

@@ -52,7 +52,7 @@ export function RecentActivityFeed({
               <div className="min-w-0 flex-1">
                 <Link
                   to={`/timeline/${encodeURIComponent(ev.id)}`}
-                  className={cn("font-medium hover:underline", compact ? "text-xs" : "text-sm")}
+                  className={cn("break-words font-medium hover:underline", compact ? "text-xs" : "text-sm")}
                 >
                   {label}
                 </Link>
@@ -69,9 +69,9 @@ export function RecentActivityFeed({
                       className="relative z-10 text-inherit hover:text-foreground"
                     />
                   ) : entityLabel ? (
-                    <span>{entityLabel}</span>
+                    <span className="break-words">{entityLabel}</span>
                   ) : null}
-                  {detail ? <span className="truncate max-w-full">- {detail}</span> : null}
+                  {detail ? <span className="min-w-0 max-w-full break-words">- {detail}</span> : null}
                   {eventDate ? <span>· {eventDate}</span> : null}
                 </div>
                 {!compact && metadataChips.length > 0 ? (

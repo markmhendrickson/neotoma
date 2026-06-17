@@ -100,7 +100,7 @@ function rowHeadline(item: RecordActivityItem): ReactNode {
       const name = item.entity_name ?? item.title;
       return (
         <span>
-          <Link to={linkForItem(item)} className="font-medium hover:underline">
+          <Link to={linkForItem(item)} className="break-words font-medium hover:underline">
             {name}
           </Link>
         </span>
@@ -109,7 +109,7 @@ function rowHeadline(item: RecordActivityItem): ReactNode {
     case "source": {
       const filename = item.source_filename ?? item.title;
       return (
-        <Link to={linkForItem(item)} className="font-medium hover:underline">
+        <Link to={linkForItem(item)} className="break-words font-medium hover:underline">
           {filename || "Untitled source"}
         </Link>
       );
@@ -121,7 +121,7 @@ function rowHeadline(item: RecordActivityItem): ReactNode {
         return (
           <span>
             Observation of{" "}
-            <Link to={entityLink(item.entity_id)} className="font-medium hover:underline">
+            <Link to={entityLink(item.entity_id)} className="break-words font-medium hover:underline">
               {entityName}
             </Link>
             {entityType ? (
@@ -146,7 +146,7 @@ function rowHeadline(item: RecordActivityItem): ReactNode {
         return (
           <span>
             {status || "Interpretation"} of{" "}
-            <Link to={sourceLink(item.source_id)} className="font-medium hover:underline">
+            <Link to={sourceLink(item.source_id)} className="break-words font-medium hover:underline">
               {filename}
             </Link>
           </span>
@@ -162,7 +162,7 @@ function rowHeadline(item: RecordActivityItem): ReactNode {
         item.source_entity_id ? (
           <Link
             to={entityLink(item.source_entity_id)}
-            className="font-medium hover:underline"
+            className="break-words font-medium hover:underline"
             title={item.source_entity_id}
           >
             {srcName}
@@ -174,7 +174,7 @@ function rowHeadline(item: RecordActivityItem): ReactNode {
         item.target_entity_id ? (
           <Link
             to={entityLink(item.target_entity_id)}
-            className="font-medium hover:underline"
+            className="break-words font-medium hover:underline"
             title={item.target_entity_id}
           >
             {tgtName}
@@ -195,14 +195,14 @@ function rowHeadline(item: RecordActivityItem): ReactNode {
         return (
           <span>
             {label} —{" "}
-            <Link to={entityLink(item.entity_id)} className="font-medium hover:underline">
+            <Link to={entityLink(item.entity_id)} className="break-words font-medium hover:underline">
               {entityName}
             </Link>
           </span>
         );
       }
       return (
-        <Link to={linkForItem(item)} className="font-medium hover:underline">
+        <Link to={linkForItem(item)} className="break-words font-medium hover:underline">
           {label}
         </Link>
       );
@@ -347,7 +347,7 @@ export function RecentRecordsFeed({
                 {chips.map((chip, idx) => (
                   <span
                     key={`${item.record_type}-${item.id}-chip-${idx}`}
-                    className="rounded bg-muted px-1.5 py-0.5"
+                    className="min-w-0 max-w-full break-words rounded bg-muted px-1.5 py-0.5"
                   >
                     {chip}
                   </span>
