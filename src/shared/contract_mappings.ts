@@ -526,6 +526,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "entities search",
   },
   {
+    operationId: "identifyEntityBySignals",
+    method: "post",
+    path: "/identify_entity_by_signals",
+    adapter: "mcp",
+    mcpTool: "identify_entity_by_signals",
+  },
+  {
     operationId: "retrieveRelatedEntities",
     method: "post",
     path: "/retrieve_related_entities",
@@ -840,6 +847,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   create_interpretation: "createInterpretation",
   list_interpretations: "listInterpretations",
   retrieve_entity_by_identifier: "retrieveEntityByIdentifier",
+  identify_entity_by_signals: "identifyEntityBySignals",
   retrieve_related_entities: "retrieveRelatedEntities",
   retrieve_graph_neighborhood: "retrieveGraphNeighborhood",
   delete_entity: "deleteEntity",
