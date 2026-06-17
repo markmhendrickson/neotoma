@@ -204,7 +204,7 @@ export function MarkdownBodySheet({
               title="Copy raw field value (markdown source)"
             >
               {copied ? (
-                <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                <Check className="h-3.5 w-3.5 text-success" aria-hidden />
               ) : (
                 <Copy className="h-3.5 w-3.5" aria-hidden />
               )}

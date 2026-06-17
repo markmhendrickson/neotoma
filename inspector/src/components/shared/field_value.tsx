@@ -49,7 +49,7 @@ function renderKind(kind: ValueKind, value: unknown, expanded?: boolean) {
       return <span className="text-muted-foreground italic">empty</span>;
     case "boolean":
       return (
-        <span className={cn("font-medium", (value as boolean) ? "text-emerald-700" : "text-muted-foreground")}>
+        <span className={cn("font-medium", (value as boolean) ? "text-success" : "text-muted-foreground")}>
           {(value as boolean) ? "Yes" : "No"}
         </span>
       );

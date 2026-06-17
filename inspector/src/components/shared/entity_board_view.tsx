@@ -17,8 +17,10 @@ import { batchCorrect } from "@/api/endpoints/corrections";
 import { useQueryClient } from "@tanstack/react-query";
 import { TypeBadge } from "@/components/shared/type_badge";
 import { FieldValue } from "@/components/shared/field_value";
+import { Columns3 } from "lucide-react";
 import { humanizeKey } from "@/lib/humanize";
 import { truncateId } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/empty_state";
 import type { EntitySnapshot, EntitySchema } from "@/types/api";
 
 interface EntityBoardViewProps {
@@ -86,7 +88,7 @@ function EntityCard({ entity, groupField }: { entity: EntitySnapshot; groupField
     <div className="cursor-grab rounded-md border bg-card p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing">
       <Link
         to={`/entities/${encodeURIComponent(eid)}`}
-        className="block font-medium text-sm text-primary hover:underline"
+        className="block font-medium text-sm text-foreground underline-offset-4 hover:text-primary hover:underline"
         onClick={(e) => e.stopPropagation()}
       >
         {String(entity.canonical_name || snap.name || snap.title || truncateId(eid))}
@@ -125,6 +127,16 @@ export function EntityBoardView({ entities, groupField }: EntityBoardViewProps) 
   }, [entities, groupField]);
 
   const activeEntity = activeId ? entities.find((e) => getEntityId(e) === activeId) : null;
+
+  if (entities.length === 0) {
+    return (
+      <EmptyState
+        icon={Columns3}
+        title="No entities to display on the board"
+        description={`Entities grouped by "${humanizeKey(groupField)}" will appear as columns here. Try a different filter, or add entities of this type.`}
+      />
+    );
+  }
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));

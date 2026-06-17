@@ -35,7 +35,7 @@ export function CopyIdButton({ id, className, label }: CopyIdButtonProps) {
           )}
         >
           {copied ? (
-            <Check className="h-3 w-3 text-emerald-600" aria-hidden="true" />
+            <Check className="h-3 w-3 text-success" aria-hidden="true" />
           ) : (
             <Copy className="h-3 w-3 opacity-60" aria-hidden="true" />
           )}

@@ -11,7 +11,7 @@ alwaysApply: false
 
 Keep the Inspector app visually and behaviorally consistent with the Neotoma design system by using shadcn/ui-style primitives from `inspector/src/components/ui/` instead of ad hoc native HTML controls and one-off Tailwind patterns.
 
-Inspector is an inspection surface, not a marketing or agentic UI. Prefer consistency, accessibility, and design tokens over decorative variation.
+Inspector is an inspection surface. Prefer consistency, accessibility, and design tokens over decorative variation.
 
 ## Canonical references
 
@@ -25,7 +25,7 @@ Prefer these when they fit the interaction. Do not add new primitives in feature
 
 **Core (use first):** `Button`, `Input`, `Label`, `Textarea`, `Select`, `Card`, `Badge`, `Separator`, `Dialog`, `Sheet`, `Alert`, `Skeleton`, `Tooltip`, `ScrollArea`, `Tabs`, `Switch`, `DropdownMenu`
 
-**Composites (preserve mirror contract):** `DataTable`, `Pagination`, `ConfirmDialog` — keep in sync with `frontend/src/components/ui/` when editing; see comments in those files.
+**Composites:** `DataTable`, `Pagination`, `ConfirmDialog`, `CopyableCodeBlock` — Inspector-owned shells layered on shadcn primitives. `CopyableCodeBlock` is the canonical copy-to-clipboard surface for any snippet a user can paste or run; use it for activation prompts, CLI examples, MCP config, and JSON payloads. **MUST NOT** re-implement copy-block chrome with a bespoke `<pre>` + `<button>` pair; evolve `CopyableCodeBlock` (e.g. add a `variant` prop) if a new visual treatment is needed.
 
 **Available but often unused in pages:** `Checkbox`, `Popover`, `Toggle`, `ToggleGroup` — use them before inventing custom segmented controls or native checkboxes.
 
@@ -53,7 +53,21 @@ Prefer these when they fit the interaction. Do not add new primitives in feature
 ### Data display
 
 - **MUST** use shared `DataTable` for tabular data — do not add parallel raw `<table>` layouts in pages.
+- **MUST** keep repetitive index-table links neutral by default. In `DataTable`, row links render as foreground text and shift to primary/underline only on hover or focus. **MUST NOT** use always-blue `text-primary` links for repeated entity/source/name cells.
 - **MUST** use `Card` / `CardHeader` / `CardContent` for grouped content blocks when replacing hand-built bordered `div` list cards (e.g. sources list, issue rows) unless a feed-specific layout is intentionally feed-only.
+- **MUST** use `CopyableCodeBlock` from `@/components/ui/copyable_code_block` for any user-copyable snippet — CLI, config, JSON payloads, activation prompts. **MUST NOT** introduce bespoke `<pre>` + clipboard `<Button>` pairs in feature code.
+
+## Design-system reconciliation (agent workflow)
+
+When an agent makes a UI change in Inspector, before completing the change it MUST run the following check:
+
+1. **Classify the change.** Does it (a) use an existing standardized primitive in `inspector/src/components/ui/`, (b) modify one, or (c) introduce visual behavior that should become a new primitive?
+2. **If (b) or (c):** update the design-system showcase at `inspector/src/components/design/` (specifically `design_showcase.tsx` and `design_site_reference.tsx`) so `/design` reflects the new or modified primitive. The showcase is the operator-facing source of truth; out-of-date showcase entries are bugs.
+3. **If (b) or (c):** propagate the change to every existing callsite of the primitive — search with `rg "<PrimitiveName>" inspector/src` and update each, not just the originating spot. Bespoke parallel implementations are also callsites: search for the visual chrome (CSS class names, `<pre>` + `<Button>` pairs, etc.) and migrate them too.
+4. **Single design-system lineage.** There is one Inspector design system; primitives, composites, prose utilities, and tokens all live under `inspector/src/` and `inspector/src/index.css`. New visual chrome must be expressed through tokens and shadcn primitives — do not introduce parallel "site" or "doc" pattern families with hand-rolled palettes.
+5. **Document the primitive.** New primitives MUST be listed in `docs/ui/shadcn_components.md` and the `Composites` section of this file in the same change.
+
+This applies whether the change request was one-off ("tweak this card") or systemic ("update the copy block"). Agents should not need a per-request reminder.
 
 ## SHOULD
 
@@ -73,6 +87,8 @@ Before marking Inspector UI work complete:
 
 - [ ] No new native `<select>` for product controls in touched files
 - [ ] No new raw `<button>` for primary actions in touched files (except inside shadcn `Button` composition patterns)
+- [ ] No new bespoke `<pre>` + copy `<Button>` pairs in touched files (use `CopyableCodeBlock`)
 - [ ] Errors and confirmations use shared alert/confirm patterns
+- [ ] If a primitive in `components/ui/` was added or modified, the `/design` showcase, the inventory in `docs/ui/shadcn_components.md`, and all existing callsites have been updated in the same change
 - [ ] `npm run lint` and `npm run build` succeed in `inspector/`
 - [ ] Smoke-test changed routes (especially Issues, Settings, entity detail) in light and dark mode

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { CopyableCodeBlock } from "@/components/ui/copyable_code_block";
 import { JsonViewer } from "@/components/shared/json_viewer";
 import { AttributionSummary } from "@/components/shared/attribution_summary";
 import { SessionAttestationCard } from "@/components/shared/session_attestation_card";
@@ -29,36 +30,12 @@ import { areDestructiveActionsHidden, isApiUrlOverrideDisabled } from "@/lib/san
 import { readStoredSandboxSession } from "@/lib/sandbox_session";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Circle, Copy, RefreshCw } from "lucide-react";
+import { Circle, RefreshCw } from "lucide-react";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { InspectorThemeToggle } from "@/components/shared/inspector_theme_toggle";
 
 const LOCAL_PROXY_PLACEHOLDER = "/api";
-
-/** Inline copy button used inside ConnectHarnessCard. */
-function CopyButton({ text, label }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* ignore */
-    }
-  }
-  return (
-    <Button variant="outline" size="sm" onClick={handleCopy} className="shrink-0 gap-1.5">
-      {copied ? (
-        <Check className="h-3.5 w-3.5 text-emerald-600" />
-      ) : (
-        <Copy className="h-3.5 w-3.5 opacity-70" />
-      )}
-      {label ?? "Copy"}
-    </Button>
-  );
-}
 
 /** Harness connection snippets for Claude Code and Claude Desktop. */
 function ConnectHarnessCard({ mcpUrl }: { mcpUrl: string }) {
@@ -85,11 +62,13 @@ function ConnectHarnessCard({ mcpUrl }: { mcpUrl: string }) {
         <div className="space-y-2">
           <div className="flex min-w-0 items-center justify-between gap-2">
             <span className="font-medium">Claude Code</span>
-            <CopyButton text={claudeCodeSnippet} label="Copy command" />
           </div>
-          <pre className="min-w-0 overflow-x-auto rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs break-all whitespace-pre-wrap">
-            {claudeCodeSnippet}
-          </pre>
+          <CopyableCodeBlock
+            code={claudeCodeSnippet}
+            variant="code"
+            copyAriaLabel="Copy Claude Code command"
+            preClassName="text-xs break-all"
+          />
         </div>
         <div className="space-y-2">
           <div className="flex min-w-0 items-center justify-between gap-2">
@@ -99,11 +78,13 @@ function ConnectHarnessCard({ mcpUrl }: { mcpUrl: string }) {
                 Add to <span className="font-mono">claude_desktop_config.json</span>
               </p>
             </div>
-            <CopyButton text={claudeDesktopSnippet} label="Copy JSON" />
           </div>
-          <pre className="min-w-0 overflow-x-auto rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs break-all whitespace-pre-wrap">
-            {claudeDesktopSnippet}
-          </pre>
+          <CopyableCodeBlock
+            code={claudeDesktopSnippet}
+            variant="code"
+            copyAriaLabel="Copy Claude Desktop JSON"
+            preClassName="text-xs"
+          />
         </div>
         <p className="text-xs text-muted-foreground">
           MCP URL: <span className="font-mono break-all">{mcpUrl}</span>
@@ -157,7 +138,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="min-w-0 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Choose how the Inspector looks on this device.
+              Choose how the app looks on this device.
             </p>
             <InspectorThemeToggle showLabels className="border-border bg-muted/40" />
           </CardContent>
@@ -180,7 +161,7 @@ export default function SettingsPage() {
               <>
                 <div className="flex min-w-0 justify-between gap-2">
                   <span className="shrink-0 text-muted-foreground">API</span>
-                  <span className={health.data?.ok ? "text-green-600" : "text-red-600"}>
+                  <span className={health.data?.ok ? "text-success" : "text-destructive"}>
                     {health.data?.ok ? "Healthy" : "Unreachable"}
                   </span>
                 </div>
@@ -228,7 +209,7 @@ export default function SettingsPage() {
                 (<span className="font-mono">{activeSandboxSession.apiBase}</span>, pack{" "}
                 <span className="font-mono">{activeSandboxSession.packId || "unknown"}</span>). The
                 manual overrides below are collapsed by default — expand them only if you need to
-                point the Inspector at a different Neotoma instance.
+                point the app at a different Neotoma instance.
               </div>
             ) : null}
             {activeSandboxSession && !showAdvanced ? (
@@ -242,7 +223,7 @@ export default function SettingsPage() {
                   Show advanced connection settings
                 </Button>
                 <div className="flex items-center gap-2 text-sm">
-                  <Circle className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-green-500" : "text-red-500"}`} />
+                  <Circle className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-success" : "text-destructive"}`} />
                   <span>{health.data?.ok ? "Connected" : "Disconnected"}</span>
                 </div>
               </div>
@@ -302,7 +283,7 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <Circle className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-green-500" : "text-red-500"}`} />
+                    <Circle className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-success" : "text-destructive"}`} />
                     <span>{health.data?.ok ? "Connected" : "Disconnected"}</span>
                   </div>
                 </div>

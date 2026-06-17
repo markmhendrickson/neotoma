@@ -13,7 +13,12 @@ export function RelationshipEntityList({
   developerView?: boolean;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No related entities in this group.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No related entities in this group yet. Linked entities appear here as
+        relationships are created.
+      </p>
+    );
   }
 
   return (
@@ -49,7 +54,7 @@ function RelationshipEntityListItem({
         {row.otherId ? (
           <Link
             to={`/entities/${encodeURIComponent(row.otherId)}`}
-            className="truncate text-sm font-medium text-primary hover:underline"
+            className="truncate text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             title={row.otherId}
           >
             {otherLabel}

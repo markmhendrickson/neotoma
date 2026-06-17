@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import wordmarkUrl from "@/assets/neotoma_wordmark.svg";
+import neotomaWordmarkUrl from "@/assets/neotoma_wordmark.svg?url";
 import {
   BUNDLED_DOCS_FOOTER_COLUMNS,
   isExternalBundledDocsLink,
@@ -52,9 +52,9 @@ export function BundledDocsFooter({ className }: BundledDocsFooterProps) {
           <div className="sm:col-span-2 lg:col-span-1">
             <Link to="/docs" className="inline-block">
               <img
-                src={wordmarkUrl}
+                src={neotomaWordmarkUrl}
                 alt="Neotoma"
-                className="h-7 w-auto dark:invert"
+                className="h-7 w-auto max-w-none shrink-0 object-contain object-left dark:brightness-0 dark:invert"
                 width={140}
                 height={40}
               />

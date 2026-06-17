@@ -49,7 +49,7 @@ export default function DesignPage() {
   return (
     <PageShell
       title="Design system"
-      description="Inspector shadcn/ui primitives, semantic tokens, and neotoma.io doc/marketing patterns (source builds)"
+      description="Neotoma app shadcn/ui primitives, semantic tokens, and app documentation patterns (source builds)"
     >
       <Tabs
         value={tab}

@@ -12,6 +12,15 @@ import { bulkCloseIssues, bulkRemoveIssues, issuesAddMessage } from "@/api/endpo
 import { IssueAuthorLine } from "@/components/shared/issue_author_attribution";
 import { formatDate } from "@/lib/utils";
 import { querySettledWithoutData, showInitialQuerySkeleton } from "@/lib/query_loading";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { CopyableCodeBlock } from "@/components/ui/copyable_code_block";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/shared/segmented_control";
 
 type RelRow = {
   relationship_type: string;
@@ -53,33 +62,23 @@ function issueGuestAccessTokenField(entity: EntitySnapshot | undefined): string 
 }
 
 function IssueAccessTokenPanel({ token }: { token: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // ignore
-    }
-  }
   return (
-    <div className="mb-4 rounded-lg border border-border bg-muted/25 px-3 py-2.5 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 gap-y-1">
-        <span className="font-medium text-muted-foreground">Issue access token</span>
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="shrink-0 rounded border border-border bg-background px-2 py-0.5 text-xs hover:bg-muted"
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
+    <div className="mb-4 space-y-2">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Issue access token
       </div>
-      <code className="mt-2 block break-all font-mono text-xs leading-relaxed">{token}</code>
-      <p className="mt-1.5 text-xs text-muted-foreground">
-        For guest-scoped issue APIs (e.g. <code className="text-[11px]">/entities/…</code>). Treat like a
-        secret.
-      </p>
+      <CopyableCodeBlock
+        code={token}
+        variant="code"
+        copyAriaLabel="Copy issue access token"
+        preClassName="text-xs leading-relaxed"
+        footer={
+          <p className="text-xs text-muted-foreground">
+            For guest-scoped issue APIs (e.g. <code className="text-[11px]">/entities/…</code>). Treat like a
+            secret.
+          </p>
+        }
+      />
     </div>
   );
 }
@@ -498,15 +497,12 @@ export default function IssueDetailPage() {
 
       <div className="mb-6">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span
-            className={`px-2 py-0.5 text-xs rounded-full ${
-              issueStatus === "open"
-                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-            }`}
+          <Badge
+            variant={issueStatus === "open" ? "default" : "secondary"}
+            className="font-normal"
           >
             {issueStatus}
-          </span>
+          </Badge>
           <IssueAuthorLine
             author={issueHeaderAuthor}
             provenance={issueEntity.provenance}
@@ -531,12 +527,9 @@ export default function IssueDetailPage() {
       {Array.isArray(issueLabelsRaw) && (issueLabelsRaw as string[]).length > 0 ? (
         <div className="flex gap-2 flex-wrap mb-4">
           {(issueLabelsRaw as string[]).map((label) => (
-            <span
-              key={label}
-              className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground"
-            >
+            <Badge key={label} variant="outline" className="font-normal">
               {label}
-            </span>
+            </Badge>
           ))}
         </div>
       ) : null}
@@ -554,8 +547,10 @@ export default function IssueDetailPage() {
         ) : null}
         {issueRowId ? (
           <>
-            <button
+            <Button
               type="button"
+              size="sm"
+              variant="outline"
               disabled={actionBusy !== null || issueStatus === "closed"}
               onClick={async () => {
                 setActionError(null);
@@ -578,42 +573,46 @@ export default function IssueDetailPage() {
                   setActionBusy(null);
                 }
               }}
-              className="text-sm px-3 py-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
             >
               {actionBusy === "close" ? "Closing…" : "Close"}
-            </button>
-            <button
-              type="button"
-              disabled={actionBusy !== null}
-              onClick={async () => {
-                if (
-                  !window.confirm(
-                    "Remove this issue from Neotoma? If it is linked to GitHub and still open, it will be closed there first.",
-                  )
-                ) {
-                  return;
-                }
-                setActionError(null);
-                setActionBusy("remove");
-                try {
-                  const res = await bulkRemoveIssues([issueRowId]);
-                  const row = res.results[0];
-                  if (!row?.ok) {
-                    setActionError(row?.error ?? "Remove failed");
-                    return;
+            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                  disabled={actionBusy !== null}
+                >
+                  {actionBusy === "remove" ? "Removing…" : "Remove"}
+                </Button>
+              }
+              title="Remove this issue?"
+              description="If it is linked to GitHub and still open, it will be closed there first, then removed from this list."
+              confirmLabel="Remove"
+              variant="destructive"
+              onConfirm={() => {
+                void (async () => {
+                  setActionError(null);
+                  setActionBusy("remove");
+                  try {
+                    const res = await bulkRemoveIssues([issueRowId]);
+                    const row = res.results[0];
+                    if (!row?.ok) {
+                      setActionError(row?.error ?? "Remove failed");
+                      return;
+                    }
+                    await queryClient.invalidateQueries({ queryKey: ["entities"] });
+                    navigate("/issues");
+                  } catch (e) {
+                    setActionError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setActionBusy(null);
                   }
-                  await queryClient.invalidateQueries({ queryKey: ["entities"] });
-                  navigate("/issues");
-                } catch (e) {
-                  setActionError(e instanceof Error ? e.message : String(e));
-                } finally {
-                  setActionBusy(null);
-                }
+                })();
               }}
-              className="text-sm px-3 py-1 rounded-md border border-destructive/50 text-destructive bg-background hover:bg-destructive/10 disabled:opacity-50"
-            >
-              {actionBusy === "remove" ? "Removing…" : "Remove"}
-            </button>
+            />
           </>
         ) : null}
       </div>
@@ -622,34 +621,22 @@ export default function IssueDetailPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Conversation</h2>
           {messages.length > 0 ? (
-            <div
-              className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 text-xs"
-              role="group"
+            <SegmentedControl
+              type="single"
+              size="sm"
+              value={conversationBodyView}
+              onValueChange={(v) => {
+                if (v === "formatted" || v === "raw") setConversationBodyView(v);
+              }}
               aria-label="Message body display mode"
             >
-              <button
-                type="button"
-                onClick={() => setConversationBodyView("formatted")}
-                className={`rounded px-2 py-1 font-medium transition-colors ${
-                  conversationBodyView === "formatted"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
+              <SegmentedControlItem value="formatted" aria-label="Formatted">
                 Formatted
-              </button>
-              <button
-                type="button"
-                onClick={() => setConversationBodyView("raw")}
-                className={`rounded px-2 py-1 font-medium transition-colors ${
-                  conversationBodyView === "raw"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
+              </SegmentedControlItem>
+              <SegmentedControlItem value="raw" aria-label="Raw">
                 Raw
-              </button>
-            </div>
+              </SegmentedControlItem>
+            </SegmentedControl>
           ) : null}
         </div>
         {messages.length === 0 ? (
@@ -699,7 +686,7 @@ export default function IssueDetailPage() {
               Markdown supported. Posts to the issue thread (and GitHub when linked), same as{" "}
               <code className="text-[11px]">add_issue_message</code>.
             </p>
-            <textarea
+            <Textarea
               value={composeBody}
               onChange={(e) => {
                 setComposeBody(e.target.value);
@@ -708,7 +695,6 @@ export default function IssueDetailPage() {
               disabled={composeBusy || issueStatus === "closed"}
               rows={5}
               placeholder="Write a message…"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             />
             {composeError ? (
               <p className="text-sm text-destructive mt-2" role="alert">
@@ -719,8 +705,9 @@ export default function IssueDetailPage() {
               <p className="text-xs text-muted-foreground mt-2">Reopen the issue before adding replies from here.</p>
             ) : null}
             <div className="mt-3 flex justify-end gap-2">
-              <button
+              <Button
                 type="button"
+                size="sm"
                 disabled={composeBusy || !composeBody.trim() || issueStatus === "closed"}
                 onClick={async () => {
                   const body = composeBody.trim();
@@ -744,10 +731,9 @@ export default function IssueDetailPage() {
                     setComposeBusy(false);
                   }
                 }}
-                className="text-sm px-3 py-1.5 rounded-md border border-border bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
                 {composeBusy ? "Sending…" : "Send message"}
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}

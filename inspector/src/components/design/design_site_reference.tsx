@@ -1,5 +1,3 @@
-import { Copy } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   DesignPatternSourceNote,
   DesignPatternStack,
@@ -10,35 +8,81 @@ import {
   DesignSection,
   DesignSubsection,
 } from "@/components/design/design_section";
-import {
-  CODE_BLOCK_CARD_INNER_CLASS,
-  EVALUATE_PROMPT_CARD_SHELL_CLASS,
-  EVALUATE_PROMPT_DOT_CLASS,
-  EVALUATE_PROMPT_PILL_CLASS,
-  HOME_EVALUATE_CTA_CLASS,
-  INTEGRATION_SNIPPET_CARD_SHELL_CLASS,
-  INTEGRATION_SNIPPET_DOT_CLASS,
-  INTEGRATION_SNIPPET_INNER_CLASS,
-  INTEGRATION_SNIPPET_PILL_CLASS,
-} from "@/components/design/marketing_pattern_classes";
+import { Button } from "@/components/ui/button";
+import { CopyableCodeBlock } from "@/components/ui/copyable_code_block";
 
 const SAMPLE_CLI = `neotoma store --json='[{"entity_type":"task","title":"Review design tokens"}]'`;
+const SAMPLE_MCP_JSON = `{
+  "mcpServers": {
+    "neotoma": {
+      "command": "neotoma",
+      "args": ["mcp", "serve"]
+    }
+  }
+}`;
+const SAMPLE_AGENT_PROMPT = `Wire this agent to the local Neotoma dev server.
 
-const CODE_BLOCK_FENCED_CLASS =
-  "code-block-palette mb-0 overflow-x-auto whitespace-pre-wrap break-words rounded-lg border p-4 font-mono text-ui";
+1. Run \`neotoma status --json\` to identify my current tool and the running dev API port.
+2. Run \`neotoma setup --tool <current_tool> --yes --mcp-transport c\` to register the source-checkout stdio MCP.
+3. Confirm success by grepping stdout for the \`Neotoma installed at\` line.
+
+This is a developer dev environment (source checkout). See https://neotoma.io/install.md.`;
 
 export function DesignCodeReferencePanel() {
   return (
     <DesignPatternStack>
       <DesignSection
         title="Code patterns"
-        description="Fenced blocks, inline code, and copyable snippet cards — design tokens and shadcn Button."
+        description="The app uses one copy-to-clipboard primitive (CopyableCodeBlock) for shell/config snippets and agent prompts. Use variant=&quot;prompt&quot; for multi-line instructions (app body typography); variant=&quot;code&quot; (default) for monospace snippets. Inline code is a separate token-level pattern."
       >
-        <DesignSubsection title="Fenced block (code-block-palette)">
+        <DesignSubsection title="Agent prompt block (variant=prompt)">
           <DesignPatternSourceNote
-            paths={["inspector/src/index.css (.code-block-palette)", "frontend/src/index.css"]}
+            paths={[
+              "inspector/src/components/ui/copyable_code_block.tsx",
+              "inspector/src/components/home/activate_card.tsx (consumer)",
+            ]}
           />
-          <pre className={CODE_BLOCK_FENCED_CLASS}>{SAMPLE_CLI}</pre>
+          <CopyableCodeBlock
+            code={SAMPLE_AGENT_PROMPT}
+            variant="prompt"
+            copyAriaLabel="Copy agent prompt"
+            footer={
+              <p className="text-xs text-muted-foreground">
+                Footer slot for doc links (see ActivateCard).
+              </p>
+            }
+          />
+          <p className="pattern-specimen-note">
+            Paste-into-agent instructions: normal app body size/color inside a visibly copyable surface.
+            Use the stronger prompt chrome for instructions, not for ordinary prose.
+          </p>
+        </DesignSubsection>
+
+        <DesignSubsection title="Copyable code block (variant=code)">
+          <DesignPatternSourceNote
+            paths={[
+              "inspector/src/components/ui/copyable_code_block.tsx",
+              "inspector/src/components/home/activate_card.tsx (consumer)",
+            ]}
+          />
+          <CopyableCodeBlock code={SAMPLE_CLI} copyAriaLabel="Copy CLI snippet" />
+          <p className="pattern-specimen-note">
+            One reusable primitive. To attach doc links or follow-up actions below the block, pass a{" "}
+            <code className="doc-inline-code">footer</code> ReactNode (see ActivateCard).
+          </p>
+        </DesignSubsection>
+
+        <DesignSubsection title="Multi-line config snippet">
+          <DesignPatternSourceNote paths={["inspector/src/components/ui/copyable_code_block.tsx"]} />
+          <CopyableCodeBlock
+            code={SAMPLE_MCP_JSON}
+            copyAriaLabel="Copy MCP config"
+            preClassName="max-h-48"
+          />
+          <p className="pattern-specimen-note">
+            Use <code className="doc-inline-code">preClassName=&quot;max-h-*&quot;</code> when the snippet is long enough
+            that it should scroll inside the card instead of expanding the page.
+          </p>
         </DesignSubsection>
 
         <DesignSubsection title="Inline code in prose / lists">
@@ -56,53 +100,17 @@ export function DesignCodeReferencePanel() {
           </ul>
         </DesignSubsection>
 
-        <DesignSubsection title="Copyable snippet card (primary chrome)">
-          <DesignPatternSourceNote
-            paths={[
-              "inspector/src/components/design/marketing_pattern_classes.ts",
-              "frontend/src/components/CopyableCodeBlock.tsx",
-            ]}
-          />
-          <div className={EVALUATE_PROMPT_CARD_SHELL_CLASS}>
-            <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-              <div className="space-y-2 px-1">
-                <div className={EVALUATE_PROMPT_PILL_CLASS}>
-                  <span className={EVALUATE_PROMPT_DOT_CLASS} aria-hidden />
-                  Code snippet
-                </div>
-                <p className="text-fine leading-5 text-muted-foreground">Copy the exact snippet shown below.</p>
-              </div>
-              <Button type="button" size="sm" aria-label="Copy">
-                <Copy className="h-3.5 w-3.5" />
-                Copy
-              </Button>
-            </div>
-            <pre className={`${CODE_BLOCK_CARD_INNER_CLASS} overflow-x-auto whitespace-pre-wrap break-words`}>
-              <code>{SAMPLE_CLI}</code>
-            </pre>
-          </div>
-        </DesignSubsection>
-
-        <DesignSubsection title="Integration snippet card (muted chrome)">
-          <DesignPatternSourceNote paths={["inspector/src/index.css (.integration-pill-*)"]} />
-          <div className={INTEGRATION_SNIPPET_CARD_SHELL_CLASS}>
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-2 px-1">
-                <div className={INTEGRATION_SNIPPET_PILL_CLASS}>
-                  <span className={INTEGRATION_SNIPPET_DOT_CLASS} aria-hidden />
-                  MCP config
-                </div>
-                <p className="text-fine leading-5 text-muted-foreground">Add this client config to connect Neotoma over stdio.</p>
-              </div>
-              <Button type="button" size="sm" variant="outline" aria-label="Copy">
-                <Copy className="h-3.5 w-3.5" />
-                Copy
-              </Button>
-            </div>
-            <pre className={`${INTEGRATION_SNIPPET_INNER_CLASS} overflow-x-auto whitespace-pre-wrap break-words`}>
-              {`{ "mcpServers": { "neotoma": { "command": "neotoma", "args": ["mcp", "serve"] } } }`}
-            </pre>
-          </div>
+        <DesignSubsection title="Action button next to a snippet">
+          <DesignPatternSourceNote paths={["inspector/src/components/ui/button.tsx"]} />
+          <DesignRow>
+            <Button>Run command</Button>
+            <Button variant="outline">Open docs</Button>
+          </DesignRow>
+          <p className="pattern-specimen-note">
+            Prefer <code className="doc-inline-code">Button</code> with <code className="doc-inline-code">variant</code>{" "}
+            over hand-rolled anchor chrome. CopyableCodeBlock already provides the copy action; pair it with a Button
+            only when the user has a separate next step (open docs, run installer, …).
+          </p>
         </DesignSubsection>
       </DesignSection>
     </DesignPatternStack>
@@ -112,10 +120,10 @@ export function DesignCodeReferencePanel() {
 export function DesignProseReferencePanel() {
   return (
     <DesignPatternStack>
-      <DesignSection title="Prose patterns" description="MDX body, links, blockquotes, and step rails.">
-        <DesignSubsection title="MDX / markdown body (mdx-site-page-content)">
-          <DesignPatternSourceNote paths={["inspector/src/index.css (.mdx-site-page-content)"]} />
-          <article className="mdx-site-page-content post-prose max-w-none">
+      <DesignSection title="Prose patterns" description="Markdown body, links, blockquotes, and step rails.">
+        <DesignSubsection title="Markdown body (inspector-prose-page)">
+          <DesignPatternSourceNote paths={["inspector/src/index.css (.inspector-prose-page)"]} />
+          <article className="inspector-prose-page inspector-prose max-w-none">
             <h2>Section heading (h2)</h2>
             <p>
               Body copy uses <code className="doc-inline-code">text-body</code>. Fenced blocks use{" "}
@@ -132,17 +140,17 @@ export function DesignProseReferencePanel() {
           </article>
         </DesignSubsection>
 
-        <DesignSubsection title="Post prose links">
-          <DesignPatternSourceNote paths={["inspector/src/index.css (.post-prose, .post-prose-cta)"]} />
-          <div className="post-prose mdx-site-page-content max-w-prose space-y-2">
+        <DesignSubsection title="Prose links">
+          <DesignPatternSourceNote paths={["inspector/src/index.css (.inspector-prose, .inspector-prose-cta)"]} />
+          <div className="inspector-prose inspector-prose-page max-w-prose space-y-2">
             <p className="text-body leading-7">
               Default links are underlined; hover removes underline. CTAs use{" "}
-              <code className="doc-inline-code">data-post-prose-cta</code> with{" "}
-              <code className="doc-inline-code">.post-prose-cta</code>.
+              <code className="doc-inline-code">data-inspector-prose-cta</code> with{" "}
+              <code className="doc-inline-code">.inspector-prose-cta</code>.
             </p>
             <p className="text-body leading-7">
-              <a href="#example">Underlined doc link</a> versus{" "}
-              <a href="#cta" data-post-prose-cta className="post-prose-cta">
+              <a href="#example">Underlined link</a> versus{" "}
+              <a href="#cta" data-inspector-prose-cta className="inspector-prose-cta">
                 Install CTA
               </a>
             </p>
@@ -194,10 +202,10 @@ export function DesignProseReferencePanel() {
         </DesignSubsection>
 
         <DesignSubsection title="Article column width">
-          <DesignPatternSourceNote paths={["frontend/src/components/subpages/MdxSitePage.tsx"]} />
+          <DesignPatternSourceNote paths={["inspector/src/components/layout/page_shell.tsx"]} />
           <p className="pattern-specimen-note">
-            Detail docs often use <code>max-w-[52em] mx-auto px-4</code>; bare landings omit{" "}
-            <code>mdx-site-page-content</code>.
+            Long-form prose pages cap width with <code className="doc-inline-code">max-w-[52em] mx-auto px-4</code>{" "}
+            wrappers; bare landings omit <code className="doc-inline-code">inspector-prose-page</code>.
           </p>
         </DesignSubsection>
       </DesignSection>
@@ -208,10 +216,10 @@ export function DesignProseReferencePanel() {
 export function DesignTablesReferencePanel() {
   return (
     <DesignPatternStack>
-      <DesignSection title="Table patterns" description="GFM markdown tables, scroll wrapper, and plain doc tables.">
+      <DesignSection title="Table patterns" description="GFM markdown tables, scroll wrapper, and plain reference tables.">
         <DesignSubsection title="GFM markdown table">
           <DesignPatternSourceNote paths={["inspector/src/index.css (.markdown-table)"]} />
-          <div className="mdx-site-page-content overflow-x-auto">
+          <div className="inspector-prose-page overflow-x-auto">
             <table className="markdown-table mb-4 w-full border-collapse text-body">
               <thead>
                 <tr>
@@ -245,7 +253,7 @@ export function DesignTablesReferencePanel() {
           <DesignTableScrollDemo />
         </DesignSubsection>
 
-        <DesignSubsection title="Plain doc table">
+        <DesignSubsection title="Plain reference table">
           <DesignPatternSourceNote paths={["inspector/src/index.css (.doc-plain-table)"]} />
           <table className="doc-plain-table">
             <thead>
@@ -317,16 +325,7 @@ export function DesignNoticesReferencePanel() {
 export function DesignChromeReferencePanel() {
   return (
     <DesignPatternStack>
-      <DesignSection title="Section chrome" description="Landing CTAs and section backgrounds.">
-        <DesignSubsection title="Evaluate CTA">
-          <DesignPatternSourceNote paths={["marketing_pattern_classes.ts (HOME_EVALUATE_CTA_CLASS)"]} />
-          <Button asChild size="lg">
-            <a href="#evaluate" className={HOME_EVALUATE_CTA_CLASS}>
-              Evaluate Neotoma for your workflow
-            </a>
-          </Button>
-        </DesignSubsection>
-
+      <DesignSection title="Section chrome" description="Section backgrounds and prose text scale.">
         <DesignSubsection title="Hero / section gradients">
           <DesignPatternSourceNote paths={["inspector/src/index.css (.gradient-hero-success)"]} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -336,11 +335,11 @@ export function DesignChromeReferencePanel() {
           <p className="pattern-specimen-note">Radial overlays using primary and secondary tokens.</p>
         </DesignSubsection>
 
-        <DesignSubsection title="Doc text scale">
+        <DesignSubsection title="Prose text scale">
           <DesignPatternSourceNote paths={["inspector/tailwind.config.mjs"]} />
           <ul className="space-y-2 text-body text-muted-foreground">
             <li>
-              <code className="font-mono text-ui">text-body</code> — doc paragraphs
+              <code className="font-mono text-ui">text-body</code> — prose paragraphs
             </li>
             <li>
               <code className="font-mono text-ui">text-body-lg</code> — h2 in markdown content
@@ -349,7 +348,7 @@ export function DesignChromeReferencePanel() {
               <code className="font-mono text-ui">text-ui</code> — chrome and code in cards
             </li>
             <li>
-              <code className="font-mono text-ui">text-fine</code> — subtitles under code pills
+              <code className="font-mono text-ui">text-fine</code> — subtitles under cards
             </li>
             <li>
               <code className="font-mono text-ui">text-caption</code> — pill labels, scroll hints

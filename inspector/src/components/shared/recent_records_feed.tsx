@@ -277,7 +277,7 @@ const BUCKET_ORDER: TimeBucket[] = ["now", "today", "yesterday", "older"];
 
 export function RecentRecordsFeed({
   items,
-  emptyMessage = "No records yet.",
+  emptyMessage = "No records yet. Ingest data or interact with an MCP-connected agent to see entities, sources, and observations land here.",
   compact = false,
   showViewAll = false,
   showBuckets,

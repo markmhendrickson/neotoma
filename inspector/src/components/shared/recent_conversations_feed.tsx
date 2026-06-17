@@ -12,6 +12,9 @@ interface RecentConversationsFeedProps {
   showViewAll?: boolean;
 }
 
+const DEFAULT_EMPTY_MESSAGE =
+  "No conversations yet. Connect a harness and the next chat turn will land here.";
+
 function conversationLabel(c: RecentConversationItem): string {
   const raw = c.title?.trim() || c.canonical_name?.trim();
   if (raw) return truncate(raw, 80);
@@ -20,7 +23,7 @@ function conversationLabel(c: RecentConversationItem): string {
 
 export function RecentConversationsFeed({
   conversations,
-  emptyMessage = "No conversations yet.",
+  emptyMessage = DEFAULT_EMPTY_MESSAGE,
   compact = false,
   showViewAll = false,
 }: RecentConversationsFeedProps) {
@@ -51,7 +54,7 @@ export function RecentConversationsFeed({
               <div className="min-w-0 flex-1">
                 <Link
                   to={`/conversations/${encodeURIComponent(c.conversation_id)}`}
-                  className={cn("font-medium text-primary hover:underline", compact ? "text-xs" : "text-sm")}
+                  className={cn("font-medium text-foreground underline-offset-4 hover:text-primary hover:underline", compact ? "text-xs" : "text-sm")}
                   title={c.conversation_id}
                 >
                   {label}

@@ -15,7 +15,7 @@ export function EntityLink({ id, name, className, title: titleAttr }: EntityLink
   return (
     <Link
       to={`/entities/${encodeURIComponent(id)}`}
-      className={cn("text-sm font-medium text-primary hover:underline", className)}
+      className={cn("text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline", className)}
       title={titleAttr ?? id}
     >
       {name ?? compactPrefixedId(id)}

@@ -58,15 +58,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ObservationTimeline } from "@/components/shared/observation_timeline";
 import { WorldTimeEventTimeline } from "@/components/shared/world_time_event_timeline";
 import { QueryErrorAlert, DataTableSkeleton, ListSkeleton } from "@/components/shared/query_status";
+import { SegmentedControl, SegmentedControlItem } from "@/components/shared/segmented_control";
+import { ActiveFilterBadges } from "@/components/shared/active_filter_badges";
+import { FiltersCard } from "@/components/shared/filters_card";
+import { ListSurface } from "@/components/shared/list_surface";
+import { MobileFilterPopover } from "@/components/shared/mobile_filter_popover";
 import type { Observation, TimelineEvent } from "@/types/api";
-
-const LAYOUT_TOGGLE_GROUP_CLASS =
-  "gap-0 [&>button]:rounded-none [&>button:first-child]:rounded-l-md [&>button:last-child]:rounded-r-md [&>button+button]:border-l-0";
 
 const SAMPLE_OBSERVATIONS: Observation[] = [
   {
@@ -133,7 +134,7 @@ export function DesignOverviewPanel() {
   return (
     <div className="space-y-4">
       <DesignSection
-        title="Inspector design system"
+        title="Neotoma app design system"
         description="Live reference for shadcn/ui primitives, CSS tokens, and inspection-surface patterns. Canonical docs live in the Neotoma repo under docs/ui/."
       >
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
@@ -147,48 +148,47 @@ export function DesignOverviewPanel() {
           </li>
           <li>
             <code className="rounded bg-muted px-1 py-0.5 text-xs">docs/ui/design_system/color_palette.md</code> — token
-            registry (Inspector mirrors frontend)
+            registry for the unified Inspector palette
           </li>
           <li>
             <code className="rounded bg-muted px-1 py-0.5 text-xs">inspector/src/index.css</code> — deployed CSS
-            variables and doc pattern utilities
+            variables and prose pattern utilities
           </li>
         </ul>
       </DesignSection>
 
       <DesignSection
         title="Implementation stack"
-        description="Tokens → shadcn primitives → composites → route patterns. Doc/marketing specimens (Code–Chrome tabs) share the same semantic tokens as product UI — not a separate palette."
+        description="One unified design system for the Inspector app. Tokens → shadcn primitives → composites → route patterns. Every tab on this page renders product UI."
       >
         <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
           <div>
             <p className="mb-1 font-medium text-foreground">Layers</p>
             <ol className="list-decimal space-y-1 pl-5">
-              <li>CSS variables (`--primary`, `--doc-*`, surfaces)</li>
+              <li>CSS variables (`--primary`, `--prose-*`, surfaces)</li>
               <li>shadcn/ui in <code className="text-xs">components/ui/</code></li>
-              <li>Composites (DataTable, ConfirmDialog, …)</li>
-              <li>Pages and marketing pattern classes</li>
+              <li>Composites (DataTable, ConfirmDialog, CopyableCodeBlock, …)</li>
+              <li>Page-level compositions</li>
             </ol>
           </div>
           <div>
-            <p className="mb-1 font-medium text-foreground">Site pattern sources</p>
+            <p className="mb-1 font-medium text-foreground">Reuse contract</p>
             <ul className="list-disc space-y-1 pl-5">
               <li>
-                <code className="text-xs">marketing_pattern_classes.ts</code> — snippet card shells
+                Copy snippets → <code className="text-xs">CopyableCodeBlock</code> (see Code tab)
               </li>
               <li>
-                <code className="text-xs">frontend/.../code_block_copy_button_classes.ts</code> — product parity
+                Prose / markdown → <code className="text-xs">inspector-prose-page</code> utilities (see Prose tab)
               </li>
               <li>
-                Global utilities: <code className="text-xs">code-block-palette</code>,{" "}
-                <code className="text-xs">toc-panel</code>, <code className="text-xs">doc-tip-panel</code>
+                Status / chrome → token-driven utilities, no hand-rolled hex palettes
               </li>
             </ul>
           </div>
         </div>
       </DesignSection>
 
-      <DesignSection title="Standards (summary)" description="Prefer these patterns in Inspector feature work.">
+      <DesignSection title="Standards (summary)" description="Prefer these patterns in app feature work.">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <h4 className="mb-2 text-sm font-medium">Use</h4>
@@ -196,7 +196,7 @@ export function DesignOverviewPanel() {
               <li>Button variants for actions; Link for navigation</li>
               <li>Select for single-value dropdowns</li>
               <li>DropdownMenu for menus and column visibility</li>
-              <li>ToggleGroup for segmented filters</li>
+              <li>SegmentedControl for compact filters</li>
               <li>Switch + Label for boolean settings</li>
               <li>Checkbox + Label for multi-select rows</li>
               <li>QueryErrorAlert / Alert for errors</li>
@@ -287,7 +287,7 @@ export function DesignTypographyPanel() {
         <p className="text-2xl font-semibold tracking-tight">Page title (text-2xl semibold)</p>
         <p className="text-lg font-semibold">Section title (text-lg semibold)</p>
         <p className="text-base font-medium">Subsection (text-base medium)</p>
-        <p className="text-sm">Body default (text-sm) — primary reading size in Inspector.</p>
+        <p className="text-sm">Body default (text-sm) — primary reading size in the app.</p>
         <p className="text-sm text-muted-foreground">Muted secondary (text-sm text-muted-foreground)</p>
         <p className="text-xs text-muted-foreground">Caption / meta (text-xs text-muted-foreground)</p>
         <p className="font-mono text-sm">ent_a1b2c3d4e5f6 — entity ID (font-mono text-sm)</p>
@@ -339,11 +339,23 @@ export function DesignPrimitivesPanel() {
         </DesignRow>
       </DesignSection>
 
-      <DesignSection title="Toggle group" description="Segmented single-select (Graph layout, Activity filters).">
-        <ToggleGroup type="single" variant="outline" defaultValue="a" className={LAYOUT_TOGGLE_GROUP_CLASS}>
-          <ToggleGroupItem value="a">Option A</ToggleGroupItem>
-          <ToggleGroupItem value="b">Option B</ToggleGroupItem>
-        </ToggleGroup>
+      <DesignSection title="Segmented control" description="Segmented filters built on ToggleGroup (Activity types, Conversation ranges, Graph layout).">
+        <DesignSubsection title="Single-select">
+          <SegmentedControl type="single" defaultValue="a">
+            <SegmentedControlItem value="a">Option A</SegmentedControlItem>
+            <SegmentedControlItem value="b">Option B</SegmentedControlItem>
+          </SegmentedControl>
+        </DesignSubsection>
+        <DesignSubsection title="Multi-select active state">
+          <SegmentedControl type="multiple" defaultValue={["entity", "source"]}>
+            <SegmentedControlItem value="entity">Entity</SegmentedControlItem>
+            <SegmentedControlItem value="source">Source</SegmentedControlItem>
+            <SegmentedControlItem value="relationship">Relationship</SegmentedControlItem>
+          </SegmentedControl>
+          <p className="pattern-specimen-note">
+            Selected segments use primary fill, stronger text weight, and a visible ring so dense filters have an unmistakable active state.
+          </p>
+        </DesignSubsection>
       </DesignSection>
 
       <DesignSection title="Separator">
@@ -568,6 +580,117 @@ export function DesignPatternsPanel() {
   return (
     <div className="space-y-4">
       <DesignSection
+        title="Index-page primitives"
+        description="Reusable shells that polished index pages compose: a filters card above, a list surface below, an active-filter summary row, and a mobile filter popover. Activity, Issues, and Sources all use these primitives — match them when polishing other index pages."
+      >
+        <DesignSubsection title="FiltersCard + ActiveFilterBadges">
+          <FiltersCard
+            title="Record filters"
+            description="Choose which record families appear in the activity stream."
+            headerEnd={<Badge variant="secondary">2 of 6 types</Badge>}
+            footer={<ActiveFilterBadges values={["Entity", "Source"]} divider />}
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <Label className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Types
+              </Label>
+              <SegmentedControl type="multiple" size="sm" defaultValue={["entity", "source"]}>
+                <SegmentedControlItem value="entity">Entity</SegmentedControlItem>
+                <SegmentedControlItem value="source">Source</SegmentedControlItem>
+                <SegmentedControlItem value="observation">Observation</SegmentedControlItem>
+                <SegmentedControlItem value="relationship">Relationship</SegmentedControlItem>
+              </SegmentedControl>
+            </div>
+          </FiltersCard>
+          <p className="pattern-specimen-note">
+            Titled `Card` with header description, optional right-aligned `headerEnd` (badges / shortcut menus), and an
+            optional `footer` slot. Pair with `ActiveFilterBadges` (with `divider`) to summarise active filters under
+            the controls.
+          </p>
+        </DesignSubsection>
+
+        <DesignSubsection title="ListSurface (loaded)">
+          <ListSurface
+            title="Activity feed"
+            description="Entity, Source"
+            headerEnd={
+              <Badge variant="outline" className="font-normal tabular-nums">
+                Showing 1–3
+              </Badge>
+            }
+          >
+            <ul className="space-y-2 text-sm">
+              <li className="flex items-center justify-between rounded-md border px-3 py-2">
+                <span>ent_a1b2 — Activate dev MCP</span>
+                <Badge variant="secondary">entity</Badge>
+              </li>
+              <li className="flex items-center justify-between rounded-md border px-3 py-2">
+                <span>src_c3d4 — sample-receipt.pdf</span>
+                <Badge variant="secondary">source</Badge>
+              </li>
+              <li className="flex items-center justify-between rounded-md border px-3 py-2">
+                <span>ent_e5f6 — Pay Sarah $20</span>
+                <Badge variant="secondary">entity</Badge>
+              </li>
+            </ul>
+          </ListSurface>
+          <p className="pattern-specimen-note">
+            Content card that owns loading (`loading`), error (`error`), empty (`isEmpty` + `emptyMessage`), and
+            pagination (`footer`) states alongside the list body. Header carries the title, a dynamic description
+            (active filter summary), and an optional right-aligned slot.
+          </p>
+        </DesignSubsection>
+
+        <DesignSubsection title="ListSurface (empty state)">
+          <ListSurface
+            title="Issues"
+            description="Closed · GitHub"
+            isEmpty
+            emptyMessage="No closed issues match the current filters."
+          />
+          <p className="pattern-specimen-note">
+            Use `isEmpty` + `emptyMessage` for first-class empty copy inside the surface. `headerEnd` hides
+            automatically during loading and error states.
+          </p>
+        </DesignSubsection>
+
+        <DesignSubsection title="MobileFilterPopover">
+          <MobileFilterPopover
+            triggerLabel="Types"
+            heading="Included record types"
+            badgeLabel="2/6"
+            options={[
+              { value: "entity", label: "Entity", description: "Canonical entities you own." },
+              { value: "source", label: "Source", description: "Raw uploaded files and blobs." },
+              { value: "observation", label: "Observation", description: "Structured facts." },
+            ]}
+            selected={["entity", "source"]}
+            onToggle={() => undefined}
+            onSelectAll={() => undefined}
+            selectAllLabel="Select all types"
+          />
+          <p className="pattern-specimen-note">
+            Narrow-viewport alternative to a `SegmentedControl`. Renders an outline trigger with an optional counter
+            badge; the popover body is a checkbox list with optional helper descriptions and an optional select-all
+            action. Use behind `hidden md:flex` / `md:hidden` so the desktop and mobile filter share state.
+          </p>
+        </DesignSubsection>
+
+        <DesignSubsection title="ActiveFilterBadges (multiple groups)">
+          <ActiveFilterBadges
+            groups={[
+              { label: "Status", values: ["Open"] },
+              { label: "Source", values: ["GitHub"] },
+            ]}
+          />
+          <p className="pattern-specimen-note">
+            Use the `groups` prop for labeled filter summaries (Issues, Sources). Use `values` for a single unlabeled
+            list (Activity). Pass `divider` to render the top border + padding inside a `FiltersCard` footer.
+          </p>
+        </DesignSubsection>
+      </DesignSection>
+
+      <DesignSection
         title="Timeline layers"
         description="Observation history (audit) vs world-time dates (source temporal fields). Do not merge these in UI copy or sort keys."
       >
@@ -585,14 +708,14 @@ export function DesignPatternsPanel() {
         </div>
       </DesignSection>
 
-      <DesignSection title="Graph Explorer toolbar" description="Reference pattern: primary Button, outline ToggleGroup, Switch + Label.">
+      <DesignSection title="Graph Explorer toolbar" description="Reference pattern: primary Button, SegmentedControl, Switch + Label.">
         <DesignRow className="items-center gap-3">
           <Input placeholder="Entity or Source ID…" className="max-w-[220px]" />
           <Button>Explore</Button>
-          <ToggleGroup type="single" variant="outline" defaultValue="tree" className={LAYOUT_TOGGLE_GROUP_CLASS}>
-            <ToggleGroupItem value="tree">Tree</ToggleGroupItem>
-            <ToggleGroupItem value="radial">Radial</ToggleGroupItem>
-          </ToggleGroup>
+          <SegmentedControl type="single" defaultValue="tree">
+            <SegmentedControlItem value="tree">Tree</SegmentedControlItem>
+            <SegmentedControlItem value="radial">Radial</SegmentedControlItem>
+          </SegmentedControl>
           <div className="flex items-center gap-2">
             <Switch id="design-graph-rel" defaultChecked />
             <Label htmlFor="design-graph-rel">Relationships</Label>

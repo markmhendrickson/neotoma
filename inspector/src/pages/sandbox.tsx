@@ -223,7 +223,7 @@ function ReportStatusLookup() {
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : null}
         {statusQuery.isError ? (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-destructive">
             {(statusQuery.error as Error)?.message || "Could not load status"}
           </p>
         ) : null}
@@ -272,7 +272,7 @@ function TermsCard() {
         {termsQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading terms…</p>
         ) : termsQuery.isError ? (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-destructive">
             Terms could not be loaded from the server.
           </p>
         ) : (
@@ -294,7 +294,7 @@ export default function SandboxPage() {
             <AlertTriangle className="h-4 w-4 mt-0.5" aria-hidden />
             <span>
               This page is only active on the public sandbox deployment
-              (<code>sandbox.neotoma.io</code>). Run a local Inspector without{" "}
+              (<code>sandbox.neotoma.io</code>). Run the local app without{" "}
               <code>VITE_NEOTOMA_SANDBOX_UI=1</code> to hide it.
             </span>
           </div>

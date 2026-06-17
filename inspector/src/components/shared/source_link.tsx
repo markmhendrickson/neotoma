@@ -11,7 +11,7 @@ export function SourceLink({ id, filename, className }: SourceLinkProps) {
   return (
     <Link
       to={`/sources/${encodeURIComponent(id)}`}
-      className={`text-sm font-medium text-primary hover:underline ${className ?? ""}`}
+      className={`text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline ${className ?? ""}`}
       title={id}
     >
       {filename || truncateId(id)}

@@ -57,7 +57,15 @@ export function DataTable<TData>({
   });
 
   return (
-    <div className={cn("overflow-hidden rounded-md border bg-card text-card-foreground", className)}>
+    <div
+      className={cn(
+        "overflow-hidden rounded-md border bg-card text-card-foreground",
+        "[&_tbody_a]:font-medium [&_tbody_a]:text-foreground [&_tbody_a]:underline-offset-4",
+        "[&_tbody_a:hover]:text-primary [&_tbody_a:hover]:underline",
+        "[&_tbody_a:focus-visible]:rounded-sm [&_tbody_a:focus-visible]:outline-none [&_tbody_a:focus-visible]:ring-2 [&_tbody_a:focus-visible]:ring-ring [&_tbody_a:focus-visible]:ring-offset-2",
+        className,
+      )}
+    >
       <table className="w-full bg-card text-inherit text-sm">
         <thead>
           {table.getHeaderGroups().map((hg) => (

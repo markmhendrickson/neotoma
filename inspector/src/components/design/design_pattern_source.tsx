@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** Cites where a doc/marketing pattern is defined in the shared design system (frontend package). */
+/** Cites where an Inspector design-system pattern is defined (CSS utility, primitive, or composite). */
 export function DesignPatternSourceNote({ paths }: { paths: string[] }) {
   return (
     <p className="text-xs text-muted-foreground">

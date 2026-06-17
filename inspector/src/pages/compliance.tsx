@@ -32,9 +32,9 @@ function formatNumber(n: number): string {
 }
 
 function severity(rate: number): string {
-  if (rate >= 0.3) return "text-red-600 dark:text-red-400";
-  if (rate >= 0.1) return "text-amber-600 dark:text-amber-400";
-  return "text-emerald-600 dark:text-emerald-400";
+  if (rate >= 0.3) return "text-destructive";
+  if (rate >= 0.1) return "text-warning";
+  return "text-success";
 }
 
 function HeatBar({ values }: { values: number[] }) {
