@@ -7023,6 +7023,36 @@ export async function storeStructuredForApi(params: {
           }`
         );
       }
+
+      // Schema-driven derived-entity extraction: if the entity's active schema
+      // declares `derived_entities`, evaluate each rule and create matching
+      // entities linked back to the source entity. Non-fatal: failures are
+      // logged and skipped, never blocking the primary store.
+      if (commit) {
+        try {
+          const { schemaRegistry: schemaReg2 } = await import("./services/schema_registry.js");
+          const schemaEntry2 = await schemaReg2.loadActiveSchema(r.entity_type, userId);
+          if (schemaEntry2?.schema_definition?.derived_entities?.length) {
+            const { extractDerivedEntities } =
+              await import("./services/schema_derived_entity_extraction.js");
+            await extractDerivedEntities({
+              entityId: r.entity_id,
+              entityType: r.entity_type,
+              fields: r.fields,
+              schema: schemaEntry2.schema_definition,
+              userId,
+              sourceId: observationSourceId,
+              idempotencyKey,
+            });
+          }
+        } catch (derivedErr) {
+          logger.warn(
+            `Derived entity extraction failed for ${r.entity_type}/${r.entity_id}: ${
+              derivedErr instanceof Error ? derivedErr.message : String(derivedErr)
+            }`
+          );
+        }
+      }
     }
 
     createdEntities.push({

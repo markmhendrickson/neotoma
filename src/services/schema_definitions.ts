@@ -1173,6 +1173,18 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         },
         tags: { type: "string", required: false },
         notes: { type: "string", required: false, preserveCase: true },
+        /**
+         * Broad category of the task. Registered values include
+         * "awaiting_reply" (auto-extracted from outbound emails) and any
+         * user-defined type. Deliberately an open string rather than an enum
+         * so callers can introduce types without a schema migration.
+         */
+        task_type: { type: "string", required: false },
+        /**
+         * Free-text description of the due context (e.g. "reply expected").
+         * Supplements `due_date` when an exact date is unknown.
+         */
+        due_context: { type: "string", required: false, preserveCase: true },
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
@@ -1279,7 +1291,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   email: {
     entity_type: "email",
-    schema_version: "1.0",
+    schema_version: "1.1",
     metadata: {
       label: "Email",
       description: "Email-specific messages with threads and subjects.",
@@ -1299,6 +1311,14 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         received_at: { type: "date", required: false },
         thread_id: { type: "string", required: false },
         message_id: { type: "string", required: false },
+        /**
+         * Message direction from the perspective of the local user.
+         * "outbound" = sent by the user; "inbound" = received by the user.
+         * When present, the derived-entity rule below auto-extracts an
+         * awaiting_reply task for outbound messages with pending-reply
+         * signals.
+         */
+        direction: { type: "string", required: false },
         status: { type: "string", required: false },
         tags: { type: "string", required: false },
         notes: { type: "string", required: false },
@@ -1309,12 +1329,47 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // present. Fall back to (from, subject, sent_at) which uniquely
       // identifies the message within most mailboxes.
       canonical_name_fields: ["message_id", { composite: ["from", "subject", "sent_at"] }],
+      /**
+       * Auto-extract an awaiting_reply task when an outbound email contains
+       * signals that a reply is expected (question mark, "please let me know",
+       * etc.). See `docs/foundation/schema_agnostic_design_rules.md`.
+       */
+      derived_entities: [
+        {
+          conditions: [
+            { field: "direction", op: "eq", value: "outbound" },
+            {
+              field: "body",
+              op: "matches_any_pattern",
+              patterns: [
+                "\\?",
+                "please let me know",
+                "looking forward to hearing",
+                "please reply",
+                "awaiting your response",
+                "let me know",
+                "your thoughts",
+                "waiting to hear",
+              ],
+            },
+          ],
+          derived_entity_type: "task",
+          derived_fields: {
+            title: { template: "Awaiting reply: {{subject}}" },
+            task_type: { value: "awaiting_reply" },
+            status: { value: "pending" },
+            due_context: { value: "reply expected" },
+          },
+          relationship_type: "REFERS_TO",
+        },
+      ],
     },
     reducer_config: {
       merge_policies: {
         sent_at: { strategy: "last_write" },
         received_at: { strategy: "last_write" },
         body: { strategy: "highest_priority" },
+        direction: { strategy: "last_write" },
       },
     },
   },
