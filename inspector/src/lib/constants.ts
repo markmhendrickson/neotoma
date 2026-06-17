@@ -43,23 +43,23 @@ export const RELATIONSHIP_TYPES = [
 ] as const;
 
 export const ENTITY_TYPE_COLORS: Record<string, string> = {
-  contact: "bg-blue-100 text-blue-800",
-  person: "bg-blue-100 text-blue-800",
-  transaction: "bg-green-100 text-green-800",
-  receipt: "bg-green-100 text-green-800",
-  invoice: "bg-green-100 text-green-800",
-  task: "bg-yellow-100 text-yellow-800",
-  event: "bg-purple-100 text-purple-800",
-  note: "bg-gray-100 text-gray-800",
-  document: "bg-gray-100 text-gray-800",
-  conversation: "bg-indigo-100 text-indigo-800",
-  agent_message: "bg-indigo-100 text-indigo-800",
-  company: "bg-orange-100 text-orange-800",
-  location: "bg-teal-100 text-teal-800",
-  property: "bg-teal-100 text-teal-800",
+  contact: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200",
+  person: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200",
+  transaction: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200",
+  receipt: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200",
+  invoice: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200",
+  task: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200",
+  event: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200",
+  note: "bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-200",
+  document: "bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-200",
+  conversation: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200",
+  agent_message: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200",
+  company: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200",
+  location: "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200",
+  property: "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200",
 };
 
-export const DEFAULT_ENTITY_COLOR = "bg-slate-100 text-slate-800";
+export const DEFAULT_ENTITY_COLOR = "bg-slate-100 text-slate-800 dark:bg-slate-800/60 dark:text-slate-200";
 
 export function getEntityTypeColor(entityType: string): string {
   return ENTITY_TYPE_COLORS[entityType] ?? DEFAULT_ENTITY_COLOR;

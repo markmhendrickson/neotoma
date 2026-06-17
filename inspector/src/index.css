@@ -5,18 +5,13 @@
 /* ---------------------------------------------------------------------------
  * Inspector design tokens
  *
- * Mirrors the canonical warm-cream palette declared in
- * `frontend/src/index.css` and `docs/ui/design_system/color_palette.md`.
- * Inspector ships fewer token families (no soft-callout, surface, or code
- * accents at this time) but the values it does declare must match the
- * canonical registry exactly. The design-system validator
- * (`scripts/validate_design_system.js`) enforces parity via the
- * `palette_divergences` registry in
- * `docs/ui/design_system/dependencies.yaml`.
+ * Canonical warm-cream palette for the Inspector app. Token registry lives in
+ * `docs/ui/design_system/color_palette.md`; the design-system validator
+ * (`scripts/validate_design_system.js`) enforces parity against that registry
+ * via `docs/ui/design_system/dependencies.yaml`.
  *
- * Adding a new token? Declare it in `frontend/src/index.css` first, then
- * mirror the value here and update the canonical YAML block in
- * `color_palette.md`.
+ * Adding a new token? Declare it here, update the canonical YAML block in
+ * `color_palette.md`, and document any new utility class below.
  * ------------------------------------------------------------------------- */
 
 @layer base {
@@ -30,8 +25,8 @@
     --popover: 38 8% 100%;               /* Floating overlays (menus, tooltips) */
     --popover-foreground: 28 22% 18%;
 
-    /* Action — primary red */
-    --primary: 0 85% 51%;
+    /* Action — professional blue. Red is reserved for destructive/error states. */
+    --primary: 211 100% 40%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary / muted / accent — warm tan */
@@ -47,17 +42,35 @@
     /* Status */
     --destructive: 0 65% 50%;
     --destructive-foreground: 0 0% 100%;
+    --success: 142 56% 32%;               /* Healthy / OK signals (badges, dot indicators) */
+    --success-foreground: 0 0% 100%;
+    --warning: 32 80% 38%;                /* Caution / pending signals */
+    --warning-foreground: 0 0% 100%;
+
+    /* JSON / payload syntax — used by JsonViewer and similar code-shaped surfaces. */
+    --syntax-string: 32 80% 38%;          /* Amber-leaning: string literals */
+    --syntax-number: 142 56% 32%;         /* Green-leaning: numeric literals */
+    --syntax-boolean: 211 100% 40%;       /* Primary blue: boolean literals */
+    --syntax-key: 268 50% 45%;            /* Plum: object keys */
+
+    /* Charts — shadcn-canonical categorical palette. Use sequentially: --chart-1 for the
+       first series, --chart-2 for the second, etc. Picked to read against both warm-cream
+       light surfaces and deep slate dark surfaces; the dark overrides below brighten each
+       hue so 3:1 contrast against the chart background is preserved. */
+    --chart-1: 211 100% 40%;              /* Professional blue (matches --primary in light) */
+    --chart-2: 142 56% 32%;               /* Forest green */
+    --chart-3: 32 80% 45%;                /* Warm amber */
+    --chart-4: 268 50% 50%;               /* Plum */
+    --chart-5: 0 70% 50%;                 /* Coral red */
 
     /* Borders / inputs / focus ring */
     --border: 32 10% 93%;
     --input: 32 10% 93%;
-    --ring: 0 85% 51%;
+    --ring: 211 100% 40%;
 
     --radius: 0.5rem;
 
-    /* Sidebar — inspector uses `--sidebar` (singular) where the marketing
-       site uses `--sidebar-background`. Tailwind config maps both to
-       `bg-sidebar`. Values match the canonical sidebar registry. */
+    /* Sidebar rail — Tailwind config maps `--sidebar` to `bg-sidebar`. */
     --sidebar: 35 12% 95%;               /* Darkest inset — nav rail */
     --sidebar-foreground: 28 26% 14%;     /* Slightly darker than body text for contrast on the rail */
     --sidebar-accent: 35 10% 92%;
@@ -91,6 +104,23 @@
     /* Status */
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
+    --success: 142 70% 60%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 90% 60%;
+    --warning-foreground: 0 0% 100%;
+
+    /* JSON / payload syntax */
+    --syntax-string: 32 90% 60%;
+    --syntax-number: 142 70% 60%;
+    --syntax-boolean: 217 91% 70%;
+    --syntax-key: 268 70% 75%;
+
+    /* Charts — brightened so series fills clear ~3:1 against the dark slate background. */
+    --chart-1: 217 91% 65%;               /* Brightened primary blue */
+    --chart-2: 142 65% 55%;               /* Brightened green */
+    --chart-3: 32 92% 60%;                /* Brightened amber */
+    --chart-4: 268 75% 72%;               /* Brightened plum */
+    --chart-5: 0 78% 65%;                 /* Brightened coral */
 
     /* Borders / inputs / focus ring */
     --border: 217 22% 30%;
@@ -142,34 +172,46 @@
   }
 }
 
+/*
+ * Tailwind display utilities on details children (for example `grid`) can
+ * outrank the browser's closed-details UA rule. Keep collapsed content out of
+ * flow so page height tracks only visible content.
+ */
+details:not([open]) > :not(summary) {
+  display: none;
+}
+
 @layer base {
-  /* Doc/marketing palette — mirrors frontend/src/index.css for pattern specimens */
+  /* Prose palette — token family used by inline-code, callouts, step rails, and
+   * other prose chrome that ships in `/design` pattern specimens. Kept distinct
+   * from the surface tokens so prose styling can evolve without disturbing
+   * card / popover / sidebar layering. */
   :root {
-    --doc-background: 38 22% 98%;
-    --doc-foreground: 28 22% 18%;
-    --doc-secondary: 28 14% 44%;
-    --doc-border: 32 18% 88%;
-    --doc-code-bg: 35 18% 92%;
-    --doc-primary: 12 48% 38%;
-    --doc-primary-hover: 12 48% 30%;
-    --doc-primary-foreground: 0 0% 100%;
-    --doc-radius-minimal: 2px;
-    --doc-radius-default: 4px;
+    --prose-background: 38 22% 98%;
+    --prose-foreground: 28 22% 18%;
+    --prose-secondary: 28 14% 44%;
+    --prose-border: 32 18% 88%;
+    --prose-code-bg: 35 18% 92%;
+    --prose-primary: 12 48% 38%;
+    --prose-primary-hover: 12 48% 30%;
+    --prose-primary-foreground: 0 0% 100%;
+    --prose-radius-minimal: 2px;
+    --prose-radius-default: 4px;
   }
 
   .dark {
-    --doc-background: 222 47% 11%;
-    --doc-foreground: 210 40% 98%;
-    --doc-secondary: 215 16% 47%;
-    --doc-border: 217 33% 24%;
-    --doc-code-bg: 217 33% 17%;
-    --doc-primary: 217 91% 60%;
-    --doc-primary-hover: 217 91% 52%;
-    --doc-primary-foreground: 0 0% 100%;
+    --prose-background: 222 47% 11%;
+    --prose-foreground: 210 40% 98%;
+    --prose-secondary: 215 16% 47%;
+    --prose-border: 217 33% 24%;
+    --prose-code-bg: 217 33% 17%;
+    --prose-primary: 217 91% 60%;
+    --prose-primary-hover: 217 91% 52%;
+    --prose-primary-foreground: 0 0% 100%;
   }
 }
 
-/* Shared table scroll UX (marketing/docs tables) */
+/* Shared horizontal scroll UX for wide reference tables. */
 .table-scroll-outer {
   @apply relative;
 }
@@ -202,60 +244,38 @@
 }
 
 @layer components {
-  .code-block-shell {
-    backdrop-filter: saturate(115%);
-  }
-
+  /*
+   * Neutral fenced code surface used by `.inspector-prose-page pre` for
+   * markdown specimens. Matches the `CopyableCodeBlock` aesthetic — muted
+   * surface, border, foreground text, no gradient. The standalone copyable
+   * snippet primitive lives in `components/ui/copyable_code_block.tsx`; do not
+   * compose this class manually in feature code.
+   */
   .code-block-palette {
-    border-width: 1px;
-    border-color: color-mix(in srgb, hsl(var(--primary)) 35%, hsl(var(--doc-border)) 65%);
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--background)) 88%),
-      color-mix(in srgb, hsl(var(--doc-code-bg)) 84%, hsl(var(--background)) 16%)
-    );
-    color: color-mix(in srgb, hsl(var(--doc-foreground)) 94%, hsl(var(--foreground)) 6%);
-    box-shadow:
-      0 1px 3px color-mix(in srgb, hsl(var(--primary)) 15%, transparent),
-      inset 0 1px 0 color-mix(in srgb, hsl(var(--card)) 42%, transparent),
-      inset 0 0 0 1px color-mix(in srgb, hsl(var(--border)) 65%, transparent);
+    @apply border-border bg-muted/40 text-foreground;
   }
 
-  .mdx-site-page-content {
+  .inspector-prose-page {
     @apply text-body leading-7 text-foreground;
   }
-  .mdx-site-page-content h2 {
+  .inspector-prose-page h2 {
     @apply mb-3 mt-8 text-body-lg font-medium tracking-tight text-foreground;
   }
-  .mdx-site-page-content h3 {
+  .inspector-prose-page h3 {
     @apply mb-2 mt-4 text-body-lg font-medium text-foreground;
   }
-  .mdx-site-page-content p {
+  .inspector-prose-page p {
     @apply mb-4;
   }
-  .mdx-site-page-content li {
+  .inspector-prose-page li {
     @apply mb-1;
   }
-  .mdx-site-page-content ul,
-  .mdx-site-page-content ol {
+  .inspector-prose-page ul,
+  .inspector-prose-page ol {
     @apply text-body leading-7 text-foreground;
   }
-  .mdx-site-page-content pre {
+  .inspector-prose-page pre {
     @apply code-block-palette mb-6 overflow-x-auto whitespace-pre-wrap break-words rounded-lg border p-4 font-mono text-base;
-  }
-
-  .dark .code-block-palette {
-    border-color: color-mix(in srgb, hsl(var(--primary)) 40%, hsl(var(--doc-border)) 60%);
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, hsl(var(--primary)) 25%, hsl(var(--doc-code-bg)) 75%),
-      color-mix(in srgb, hsl(var(--doc-code-bg)) 90%, black 10%)
-    );
-    color: color-mix(in srgb, hsl(var(--doc-foreground)) 93%, hsl(var(--foreground)) 7%);
-    box-shadow:
-      0 1px 3px color-mix(in srgb, hsl(var(--primary)) 20%, transparent),
-      inset 0 1px 0 color-mix(in srgb, hsl(var(--foreground)) 5%, transparent),
-      inset 0 0 0 1px color-mix(in srgb, hsl(var(--border)) 55%, transparent);
   }
 
   .doc-inline-code {
@@ -274,7 +294,7 @@
     @apply rounded-md border border-border bg-muted/40 px-3 py-2 text-ui leading-5 text-muted-foreground;
   }
 
-  .post-prose-cta {
+  .inspector-prose-cta {
     @apply inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-2 text-ui font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-muted;
   }
 
@@ -316,22 +336,6 @@
 
   .doc-plain-table td {
     @apply py-2 text-foreground;
-  }
-
-  .snippet-pill-label {
-    @apply inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-primary/30 bg-primary/15 px-2.5 py-1 text-caption font-semibold uppercase tracking-widest text-foreground;
-  }
-
-  .snippet-pill-dot {
-    @apply h-2 w-2 shrink-0 rounded-full bg-primary/80;
-  }
-
-  .integration-pill-label {
-    @apply inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-border bg-muted px-2.5 py-1 text-caption font-semibold uppercase tracking-widest text-foreground;
-  }
-
-  .integration-pill-dot {
-    @apply h-2 w-2 shrink-0 rounded-full bg-muted-foreground/60;
   }
 
   .env-chip {
@@ -381,16 +385,16 @@
     box-shadow: none;
   }
 
-  .post-prose a:not([data-post-prose-cta]):not([class*="no-underline"]) {
+  .inspector-prose a:not([data-inspector-prose-cta]):not([class*="no-underline"]) {
     @apply text-foreground underline underline-offset-2;
   }
-  .post-prose a:not([data-post-prose-cta]):not([class*="no-underline"]):hover {
+  .inspector-prose a:not([data-inspector-prose-cta]):not([class*="no-underline"]):hover {
     @apply text-foreground no-underline;
   }
-  .post-prose section[data-integration-section="getting-started"] a {
+  .inspector-prose section[data-integration-section="getting-started"] a {
     @apply no-underline;
   }
-  .post-prose section[data-integration-section="getting-started"] a:hover {
+  .inspector-prose section[data-integration-section="getting-started"] a:hover {
     @apply no-underline;
   }
 
