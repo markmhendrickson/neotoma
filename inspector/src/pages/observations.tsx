@@ -50,7 +50,13 @@ export default function ObservationsPage() {
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtersActive = Boolean(entityId || entityType || sourceId);
+  const observations = query.data?.observations ?? [];
+  const { filter, filterRows, AgentFilterControl } =
+    useAgentAttributionFilter(observations);
+  const displayed = filterRows(observations);
+
+  const filtersActive =
+    Boolean(entityId || entityType || sourceId) || filter.kind !== "all";
 
   if (!isApiUrlConfigured()) {
     return (
@@ -59,11 +65,6 @@ export default function ObservationsPage() {
       </PageShell>
     );
   }
-
-  const observations = query.data?.observations ?? [];
-  const { filterRows, AgentFilterControl } =
-    useAgentAttributionFilter(observations);
-  const displayed = filterRows(observations);
 
   const columns: ColumnDef<Observation, unknown>[] = [
     {

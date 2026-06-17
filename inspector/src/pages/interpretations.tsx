@@ -55,9 +55,10 @@ export default function InterpretationsPage() {
   ];
 
   const items = interps.data?.interpretations ?? [];
-  const { filterRows, AgentFilterControl } = useAgentAttributionFilter(items);
+  const { filter, filterRows, AgentFilterControl } =
+    useAgentAttributionFilter(items);
   const displayed = filterRows(items);
-  const filtersActive = Boolean(sourceId);
+  const filtersActive = Boolean(sourceId) || filter.kind !== "all";
 
   if (!isApiUrlConfigured()) {
     return (

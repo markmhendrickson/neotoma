@@ -124,6 +124,14 @@ export function useAgentAttributionFilter<T>(
           ? `tier:${filter.tier}`
           : `agent:${filter.key}`;
 
+    // If the persisted agent selection is no longer present in the current
+    // page's distinct-agents list (pagination, refresh, or different filter),
+    // we still need a SelectItem with this value so the controlled trigger
+    // resolves and the user can see / clear what they selected. Render a
+    // muted, "(not on this page)" entry that stays selectable.
+    const selectedAgentMissing =
+      filter.kind === "agent" && !agents.some((a) => a.key === filter.key);
+
     function handleValueChange(v: string) {
       if (v === "all") {
         setFilter({ kind: "all" });
@@ -138,7 +146,11 @@ export function useAgentAttributionFilter<T>(
         setFilter({
           kind: "agent",
           key,
-          label: agent?.label ?? key,
+          label:
+            agent?.label ??
+            (filter.kind === "agent" && filter.key === key
+              ? filter.label
+              : key),
         });
       }
     }
@@ -160,6 +172,17 @@ export function useAgentAttributionFilter<T>(
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All agents</SelectItem>
+            {selectedAgentMissing && filter.kind === "agent" ? (
+              <SelectGroup>
+                <SelectLabel>Currently selected</SelectLabel>
+                <SelectItem
+                  value={`agent:${filter.key}`}
+                  className="text-muted-foreground"
+                >
+                  {filter.label} (not on this page)
+                </SelectItem>
+              </SelectGroup>
+            ) : null}
             <SelectGroup>
               <SelectLabel>By trust tier</SelectLabel>
               <SelectItem value="tier:hardware">◆ Hardware-verified</SelectItem>

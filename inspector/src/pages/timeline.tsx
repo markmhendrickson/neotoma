@@ -84,9 +84,11 @@ export default function TimelinePage() {
 
   const events = timeline.data?.events ?? [];
   const timelineTotal = timeline.data?.total;
-  const { filterRows, AgentFilterControl } = useAgentAttributionFilter(events);
+  const { filter, filterRows, AgentFilterControl } =
+    useAgentAttributionFilter(events);
   const displayed = filterRows(events);
-  const filtersActive = Boolean(startDate || endDate || eventType);
+  const filtersActive =
+    Boolean(startDate || endDate || eventType) || filter.kind !== "all";
 
   if (!isApiUrlConfigured()) {
     return (

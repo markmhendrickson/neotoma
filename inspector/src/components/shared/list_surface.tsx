@@ -202,7 +202,7 @@ export function ListSurface({
       </CardHeader>
       <CardContent className="p-0">
         {body}
-        {disabled ? null : footer}
+        {disabled || loading || error || isEmpty ? null : footer}
       </CardContent>
     </Card>
   );

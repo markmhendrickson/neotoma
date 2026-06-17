@@ -82,8 +82,10 @@ export default function SourcesPage() {
     offset,
   });
   const sourcesList = sources.data?.sources ?? [];
-  const { filterRows, AgentFilterControl } = useAgentAttributionFilter(sourcesList);
+  const { filter, filterRows, AgentFilterControl } =
+    useAgentAttributionFilter(sourcesList);
   const displayedSources = filterRows(sourcesList);
+  const agentFilterActive = filter.kind !== "all";
 
   function setMimePresetAndReset(preset: MimePreset) {
     setMimePreset(preset);
@@ -335,7 +337,7 @@ export default function SourcesPage() {
           errorTitle="Could not load sources"
           isEmpty={isEmpty}
           emptyMessage={
-            search.trim() || mimePreset !== "all"
+            search.trim() || mimePreset !== "all" || agentFilterActive
               ? "No sources match the current filters."
               : "No sources have been stored yet."
           }
