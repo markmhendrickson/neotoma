@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { Pin } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePinnedPrimitives } from "@/hooks/use_pinned_primitives";
 import { useSchemas } from "@/hooks/use_schemas";
@@ -33,10 +34,25 @@ export function PinnedDashboardPanel() {
     return map;
   }, [schemas.data?.schemas]);
 
-  if (pins.length === 0) return null;
+  if (pins.length === 0) {
+    return (
+      <div data-testid="pinned-dashboard-panel" data-state="empty">
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Pinned</h2>
+        <Card className="border-dashed">
+          <CardContent className="flex items-start gap-3 p-4">
+            <Pin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">
+              Nothing pinned yet. Pin entities, types, sources, or relationships from any
+              app page to surface them here.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div data-testid="pinned-dashboard-panel">
+    <div data-testid="pinned-dashboard-panel" data-state="populated">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">Pinned</h2>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {pins.map((pin) => {

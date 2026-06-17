@@ -3,50 +3,38 @@ import { isApiUrlConfigured } from "@/api/client";
 import { BundledDocsFooter } from "@/components/layout/bundled_docs_footer";
 import { PageShell } from "@/components/layout/page_shell";
 import { StatTotalsGrid } from "@/components/shared/stat_totals_grid";
-import { HeroSection } from "@/components/home/hero_section";
-import { StateFlowDiagram } from "@/components/home/state_flow_diagram";
-import { DifferentiatorStrip } from "@/components/home/differentiator_strip";
-import { OutcomesCarousel } from "@/components/home/outcomes_carousel";
-import { FaqPreviewSection } from "@/components/home/faq_preview_section";
-import { QuotesStrip } from "@/components/home/quotes_strip";
 import { PinnedDashboardPanel } from "@/components/home/pinned_dashboard_panel";
+import { OrientationStrip } from "@/components/home/orientation_strip";
 
 /**
- * Marketing home — six stacked sections in order:
+ * Operator-focused home — three stacked sections in this order:
  *
- *   1. Hero (headline, subheader, chips, primary + GitHub CTA)
- *   2. State flow diagram (invoice → stored → balance answer)
- *   3. Differentiator strip (vs platform memory / RAG / SQLite / cloud)
- *   4. Before/after outcomes carousel (4 categories)
- *   5. FAQ preview (3 highest-priority questions; link to /faq)
- *   6. Quotes + final install/docs CTA bar
+ *   1. At-a-glance stat totals (whenever a configured API is reachable).
+ *   2. Orientation strip (visitor modes only: hosted_sandbox / local_sandbox /
+ *      refuse). One factual line; hidden for installed operators.
+ *   3. Pinned dashboard panel (rendered whenever the API is reachable; shows
+ *      an empty-state placeholder when nothing has been pinned yet).
  *
- * The `StatTotalsGrid` is shown only for users hitting their own configured
- * instance (`isApiUrlConfigured()`) — first-time public visitors do not see
- * a wall of zero counts.
+ * Marketing content (hero, state-flow diagram, differentiator strip, outcomes
+ * carousel, FAQ preview, quotes strip) was removed in this RC: the inspector
+ * is an operator surface for users who have already chosen to run Neotoma, not
+ * a marketing site for first-time visitors.
  */
 export default function HomePage() {
   const me = useMe();
   const mode = me.data?.sandbox_mode;
-  // The sandbox CTA is the right primary when the server can mint an
-  // ephemeral session for the visitor. In `local` mode the visitor is
-  // already on their own install and the install CTA is noise; flip to docs.
-  const sandboxAvailable = mode === "hosted_sandbox" || mode === "local_sandbox";
-  const showOperatorStats = isApiUrlConfigured() && mode === "local";
-  const showPinnedPanel = isApiUrlConfigured();
+  const dataDir = me.data?.storage?.data_dir;
+  const apiConfigured = isApiUrlConfigured();
+  const showPinnedPanel = apiConfigured;
+  const showOperatorStats = apiConfigured;
 
   return (
     <div className="flex min-h-full flex-col">
       <PageShell>
-        <div className="space-y-12">
-          {showPinnedPanel ? <PinnedDashboardPanel /> : null}
-          <HeroSection sandboxAvailable={sandboxAvailable} />
+        <div className="space-y-6">
           {showOperatorStats ? <StatTotalsGrid /> : null}
-          <StateFlowDiagram />
-          <DifferentiatorStrip />
-          <OutcomesCarousel />
-          <FaqPreviewSection />
-          <QuotesStrip />
+          <OrientationStrip mode={mode} dataDir={dataDir} />
+          {showPinnedPanel ? <PinnedDashboardPanel /> : null}
         </div>
       </PageShell>
       <BundledDocsFooter />
