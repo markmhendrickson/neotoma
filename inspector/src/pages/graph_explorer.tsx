@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { SegmentedControl, SegmentedControlItem } from "@/components/shared/segmented_control";
 import { JsonViewer } from "@/components/shared/json_viewer";
 import { Search } from "lucide-react";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
@@ -21,10 +21,6 @@ import {
   type GraphLayoutMode,
 } from "@/lib/graph_layout";
 const LAYOUT_STORAGE_KEY = "inspector_graph_layout_mode";
-
-/** Segmented layout control: outline toggle group with shared outer radius. */
-const LAYOUT_TOGGLE_GROUP_CLASS =
-  "gap-0 [&>button]:rounded-none [&>button:first-child]:rounded-l-md [&>button:last-child]:rounded-r-md [&>button+button]:border-l-0";
 
 function readStoredLayoutMode(): GraphLayoutMode {
   try {
@@ -109,22 +105,20 @@ export default function GraphExplorerPage() {
         <Button onClick={() => setActiveNodeId(nodeId)} disabled={!nodeId}>
           Explore
         </Button>
-        <ToggleGroup
+        <SegmentedControl
           type="single"
-          variant="outline"
           size="default"
           value={layoutMode}
           onValueChange={onLayoutModeChange}
           aria-label="Graph layout"
-          className={LAYOUT_TOGGLE_GROUP_CLASS}
         >
-          <ToggleGroupItem value="tree" aria-label="Tree layout">
+          <SegmentedControlItem value="tree" aria-label="Tree layout">
             Tree
-          </ToggleGroupItem>
-          <ToggleGroupItem value="radial" aria-label="Radial layout">
+          </SegmentedControlItem>
+          <SegmentedControlItem value="radial" aria-label="Radial layout">
             Radial
-          </ToggleGroupItem>
-        </ToggleGroup>
+          </SegmentedControlItem>
+        </SegmentedControl>
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Switch

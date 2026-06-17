@@ -435,9 +435,9 @@ function RelatedSection({
             return (
               <div
                 key={`${title}:${id}`}
-                className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"
+                className="flex min-w-0 items-center justify-between gap-3 rounded border px-3 py-2 text-sm"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {rel?.entity_type ? (
                       <TypeBadge type={rel.entity_type} humanize />
@@ -468,8 +468,8 @@ function RelatedSection({
 function RelatedRow({ rel }: { rel: ConversationTurnRelatedEntity }) {
   const label = rel.title?.trim() || rel.canonical_name?.trim() || shortId(rel.entity_id, 10);
   return (
-    <div className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm">
-      <div className="min-w-0">
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded border px-3 py-2 text-sm">
+      <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">
             {rel.direction === "outgoing" ? "→" : "←"}{" "}

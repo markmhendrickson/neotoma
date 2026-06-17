@@ -7,46 +7,31 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Home,
-  BarChart3,
-  Box,
-  Eye,
-  FileText,
-  GitBranch,
-  Network,
-  Database,
-  Clock,
-  Activity,
-  Repeat,
-  MessageSquare,
-  MessageSquareText,
-  Cpu,
-  ShieldCheck,
-  Shield,
-  Bell,
-  RefreshCw,
-  KeyRound,
-  Settings,
   Loader2,
   Search,
   PanelLeft,
   PanelLeftClose,
   ChevronRight,
-  Layers,
-  BookOpen,
-  PenLine,
-  Palette,
-  TrendingUp,
-  type LucideIcon,
 } from "lucide-react";
 import neotomaWordmarkUrl from "@/assets/neotoma_wordmark.svg?url";
 import { get_runtime_inspector_skin } from "@/lib/inspector_skin";
 import { SidebarExternalLinks } from "@/components/layout/sidebar_external_links";
 import { SidebarUserFooter } from "@/components/layout/sidebar_user_footer";
 import { PinnedPrimitivesSidebar } from "@/components/layout/pinned_primitives_sidebar";
+import {
+  allSidebarNavTargets,
+  buildCorrectNavItem,
+  isNavTargetActive,
+  SIDEBAR_ANALYTICS_NAV_ITEMS,
+  SIDEBAR_DESIGN_SYSTEM_NAV_ITEM,
+  SIDEBAR_DOCUMENTATION_NAV_ITEMS,
+  SIDEBAR_MORE_NAV_ITEMS,
+  SIDEBAR_NAV_GROUPS,
+  SIDEBAR_SETTINGS_NAV_ITEMS,
+  type SidebarNavItem,
+} from "@/components/layout/sidebar_nav_data";
 import { useResizableWidth } from "@/hooks/use_resizable_width";
 import { buildSearchLocation, isSearchPath } from "@/lib/search_route";
-import { isInspectorSourceBuild } from "@/lib/inspector_source_build";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "inspector_sidebar_collapsed";
 const SIDEBAR_MORE_EXPANDED_STORAGE_KEY = "inspector_sidebar_more_expanded";
@@ -55,63 +40,6 @@ const SIDEBAR_COLLAPSED_WIDTH_PX = 64;
 const SIDEBAR_DEFAULT_WIDTH_PX = 256;
 const SIDEBAR_MIN_WIDTH_PX = 200;
 const SIDEBAR_MAX_WIDTH_PX = 480;
-
-type NavItem = { to: string; label: string; icon: LucideIcon };
-
-const navGroups: Array<{ items: NavItem[] }> = [
-  {
-    items: [
-      { to: "/", label: "Home", icon: Home },
-      { to: "/conversations", label: "Conversations", icon: MessageSquareText },
-      { to: "/activity", label: "Activity", icon: Activity },
-      { to: "/issues", label: "Issues", icon: MessageSquare },
-    ],
-  },
-  {
-    items: [
-      { to: "/entities", label: "Entities", icon: Box },
-      { to: "/entity-types", label: "Entity types", icon: Layers },
-      { to: "/observations", label: "Observations", icon: Eye },
-      { to: "/sources", label: "Sources", icon: FileText },
-      { to: "/relationships", label: "Relationships", icon: GitBranch },
-      { to: "/graph", label: "Graph Explorer", icon: Network },
-      { to: "/timeline", label: "Timeline", icon: Clock },
-    ],
-  },
-];
-
-const moreNavItems: NavItem[] = [
-  { to: "/turns", label: "Turns", icon: Repeat },
-  { to: "/compliance", label: "Compliance", icon: ShieldCheck },
-  { to: "/schemas", label: "Schemas", icon: Database },
-  { to: "/interpretations", label: "Interpretations", icon: Cpu },
-  { to: "/subscriptions", label: "Subscriptions", icon: Bell },
-  { to: "/peers", label: "Peers", icon: RefreshCw },
-  { to: "/agents", label: "Agents", icon: ShieldCheck },
-  { to: "/agents/grants", label: "Agent grants", icon: KeyRound },
-  { to: "/access-policies", label: "Access Policies", icon: Shield },
-];
-
-const documentationNavItems: NavItem[] = [{ to: "/docs", label: "Documentation", icon: BookOpen }];
-
-const analyticsNavItems: NavItem[] = [
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/usage", label: "Usage", icon: TrendingUp },
-];
-
-const settingsNavItems: NavItem[] = [{ to: "/settings", label: "Settings", icon: Settings }];
-
-const designSystemNavItem: NavItem = { to: "/design", label: "Design system", icon: Palette };
-
-function entityIdFromInspectorPath(pathname: string): string | null {
-  const match = pathname.match(/^\/entities\/([^/]+)(?:\/|$)/);
-  if (!match) return null;
-  const encodedId = match[1];
-  if (!encodedId) return null;
-  const id = decodeURIComponent(encodedId);
-  if (id === "correct") return null;
-  return id;
-}
 
 function LoadingIndicator({ active, label }: { active: boolean; label: string }) {
   if (!active) return null;
@@ -133,11 +61,30 @@ function LoadingIndicator({ active, label }: { active: boolean; label: string })
   );
 }
 
+function CollapsedLoadingIndicator({ active, label }: { active: boolean; label: string }) {
+  if (!active) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="absolute left-1/2 top-1/2 ml-1 -mt-4 inline-flex size-3 shrink-0 items-center justify-center rounded-full bg-sidebar text-sidebar-foreground/70"
+          aria-label={label}
+          aria-live="polite"
+          role="status"
+        >
+          <Loader2 className="size-3 animate-spin" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activeFetchCount = useIsFetching();
-  const show_design_system_nav = isInspectorSourceBuild();
   const inspector_skin = get_runtime_inspector_skin();
   const sidebar_brand_title = inspector_skin?.brand?.sidebar_title;
   const sidebar_home_aria = inspector_skin?.brand?.home_aria_label ?? "Neotoma home";
@@ -181,37 +128,21 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
 
   // Longest-prefix match across all nav items so nested entries (e.g.
   // `/agents/grants` under `/agents`) don't double-highlight their parent.
-  const allNavTargets = [
-    ...navGroups.flatMap((g) => g.items.map((i) => i.to)),
-    ...moreNavItems.map((i) => i.to),
-    ...documentationNavItems.map((i) => i.to),
-    ...analyticsNavItems.map((i) => i.to),
-    ...settingsNavItems.map((i) => i.to),
-    ...(show_design_system_nav ? [designSystemNavItem.to] : []),
-  ];
+  const allNavTargets = allSidebarNavTargets();
 
-  const correctEntityId = entityIdFromInspectorPath(location.pathname);
-  const correctNavTo = correctEntityId
-    ? `/entities/${encodeURIComponent(correctEntityId)}/correct`
-    : "/entities";
-  const correctNavItem: NavItem = { to: correctNavTo, label: "Correct", icon: PenLine };
-  const correctNavActive = Boolean(
-    correctEntityId &&
-    location.pathname === `/entities/${encodeURIComponent(correctEntityId)}/correct`
-  );
+  const {
+    item: correctNavItem,
+    isActive: correctNavActive,
+  } = buildCorrectNavItem(location.pathname);
 
   function isActive(to: string) {
-    if (to === "/") return location.pathname === "/";
-    if (to === "/entity-types") return location.pathname === "/entity-types";
-    if (!location.pathname.startsWith(to)) return false;
-    const longerMatch = allNavTargets.find(
-      (other) => other !== to && other.startsWith(to) && location.pathname.startsWith(other)
-    );
-    return !longerMatch;
+    return isNavTargetActive(to, location.pathname, allNavTargets);
   }
 
   const moreSectionHasActiveRoute =
-    correctNavActive || moreNavItems.some((item) => isActive(item.to));
+    correctNavActive ||
+    isActive(SIDEBAR_DESIGN_SYSTEM_NAV_ITEM.to) ||
+    SIDEBAR_MORE_NAV_ITEMS.some((item) => isActive(item.to));
 
   useEffect(() => {
     if (moreSectionHasActiveRoute) {
@@ -229,7 +160,7 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
     navigate({ pathname, search });
   }
 
-  function renderNavItem(item: NavItem, activeOverride?: boolean) {
+  function renderNavItem(item: SidebarNavItem, activeOverride?: boolean) {
     const Icon = item.icon;
     const active = activeOverride ?? isActive(item.to);
     const link = (
@@ -275,7 +206,7 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
       )}
     >
       <div className="flex h-14 min-h-14 w-full min-w-0 shrink-0 overflow-hidden border-b">
-        <div className="min-w-0 flex-1 overflow-hidden">
+        <div className={cn("min-w-0 flex-1 overflow-hidden", sidebar_collapsed && "hidden")}>
           <div
             style={{
               width: sidebar_collapsed ? SIDEBAR_DEFAULT_WIDTH_PX : sidebar_width_px,
@@ -300,14 +231,23 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
                 <img
                   src={neotomaWordmarkUrl}
                   alt="Neotoma"
-                  className="h-5 w-auto max-w-none shrink-0 object-contain object-left dark:invert"
+                  className="h-5 w-auto max-w-none shrink-0 object-contain object-left dark:brightness-0 dark:invert"
                 />
               )}
             </Link>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1 self-center pr-3">
-          <LoadingIndicator active={isPageLoading} label={pageLoadingLabel} />
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-1 self-center",
+            sidebar_collapsed ? "relative w-full justify-center pr-0" : "pr-3"
+          )}
+        >
+          {sidebar_collapsed ? (
+            <CollapsedLoadingIndicator active={isPageLoading} label={pageLoadingLabel} />
+          ) : (
+            <LoadingIndicator active={isPageLoading} label={pageLoadingLabel} />
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -350,7 +290,7 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
               </Tooltip>
             </div>
           ) : null}
-          {navGroups.map((group, gi) => (
+          {SIDEBAR_NAV_GROUPS.map((group, gi) => (
             <div key={gi}>
               {gi > 0 && <Separator className="my-2" />}
               {group.items.map((item) => (
@@ -360,9 +300,9 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
             </div>
           ))}
           <Separator className="my-2" />
-          {documentationNavItems.map((item) => renderNavItem(item))}
-          {analyticsNavItems.map((item) => renderNavItem(item))}
-          {settingsNavItems.map((item) => renderNavItem(item))}
+          {SIDEBAR_DOCUMENTATION_NAV_ITEMS.map((item) => renderNavItem(item))}
+          {SIDEBAR_ANALYTICS_NAV_ITEMS.map((item) => renderNavItem(item))}
+          {SIDEBAR_SETTINGS_NAV_ITEMS.map((item) => renderNavItem(item))}
           <Separator className="my-2" />
           <div>
             {!sidebar_collapsed ? (
@@ -385,8 +325,8 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
             {show_more_nav_items ? (
               <>
                 {renderNavItem(correctNavItem, correctNavActive)}
-                {show_design_system_nav ? renderNavItem(designSystemNavItem) : null}
-                {moreNavItems.map((item) => renderNavItem(item))}
+                {renderNavItem(SIDEBAR_DESIGN_SYSTEM_NAV_ITEM)}
+                {SIDEBAR_MORE_NAV_ITEMS.map((item) => renderNavItem(item))}
               </>
             ) : null}
           </div>

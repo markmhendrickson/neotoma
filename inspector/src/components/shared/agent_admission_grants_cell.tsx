@@ -95,7 +95,7 @@ export function AgentAdmissionGrantsCell({
                       href={`https://github.com/${g.linked_github_login}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+                      className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
                       @{g.linked_github_login}

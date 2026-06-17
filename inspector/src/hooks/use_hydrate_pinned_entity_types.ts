@@ -10,7 +10,7 @@ import {
   type PinnedPrimitive,
 } from "@/lib/pinned_primitives";
 import { parseEntityRelationshipSubpageRoute } from "@/lib/entity_relationship_routes";
-import { entityDisplayHeadline } from "@/lib/humanize";
+import { entityDisplayHeadline, isLikelyMachineCanonicalName } from "@/lib/humanize";
 import { pluralizeEntityTypeLabel } from "@/lib/entity_type_labels";
 
 /**
@@ -27,7 +27,10 @@ export function useHydratePinnedEntityTypes(
   const entityIdsByHref = useMemo(() => {
     const pairs: Array<{ href: string; entityId: string }> = [];
     for (const pin of pins) {
-      if (pin.kind === "entity" && !pin.entity_type?.trim()) {
+      if (
+        pin.kind === "entity" &&
+        (!pin.entity_type?.trim() || isLikelyMachineCanonicalName(pin.label))
+      ) {
         const entityId = parseEntityIdFromPinHref(pin.href);
         if (entityId) pairs.push({ href: pin.href, entityId });
         continue;
@@ -51,6 +54,7 @@ export function useHydratePinnedEntityTypes(
 
   useEffect(() => {
     const entityTypeByHref = new Map<string, string>();
+    const entityLabelByHref = new Map<string, string>();
     const relationshipHydrationByHref = new Map<string, EntityRelationshipPinHydration>();
 
     entityIdsByHref.forEach(({ href, entityId }, index) => {
@@ -76,6 +80,7 @@ export function useHydratePinnedEntityTypes(
       const pin = pins.find((p) => p.href === href);
       if (pin?.kind === "entity") {
         entityTypeByHref.set(href, anchorEntityType);
+        entityLabelByHref.set(href, anchorLabel);
         return;
       }
 
@@ -93,9 +98,15 @@ export function useHydratePinnedEntityTypes(
       }
     });
 
-    if (entityTypeByHref.size === 0 && relationshipHydrationByHref.size === 0) return;
+    if (
+      entityTypeByHref.size === 0 &&
+      entityLabelByHref.size === 0 &&
+      relationshipHydrationByHref.size === 0
+    ) {
+      return;
+    }
 
-    let next = enrichPinnedPrimitivesWithEntityTypes(pins, entityTypeByHref);
+    let next = enrichPinnedPrimitivesWithEntityTypes(pins, entityTypeByHref, entityLabelByHref);
     next = enrichEntityRelationshipPins(next, relationshipHydrationByHref);
     if (next !== pins) onHydrated(next, { source: "hydration" });
   }, [entityIdsByHref, onHydrated, pins, queries]);

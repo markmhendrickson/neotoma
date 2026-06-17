@@ -136,7 +136,7 @@ export default function SchemaDetailPage() {
       <div className="flex items-center gap-2 mb-4">
         <TypeBadge type={s.entity_type} />
         <span className="text-sm text-muted-foreground">v{s.schema_version}</span>
-        {s.active !== false && <span className="text-xs text-green-600 font-medium">Active</span>}
+        {s.active !== false && <span className="text-xs text-success font-medium">Active</span>}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 mb-4">
@@ -173,7 +173,7 @@ export default function SchemaDetailPage() {
                 <div className="space-y-1">
                   {Object.entries(fields).map(([name, def]) => (
                     <div key={name} className="flex items-start gap-4 py-2 border-b last:border-0">
-                      <span className="font-mono text-sm text-purple-600 min-w-[160px]">{name}</span>
+                      <span className="font-mono text-sm text-[hsl(var(--syntax-key))] min-w-[160px]">{name}</span>
                       <div className="flex-1"><JsonViewer data={def} /></div>
                     </div>
                   ))}

@@ -21,11 +21,11 @@ import { AlertTriangle, Flag, RefreshCw, LogOut } from "lucide-react";
 function tierLabel(tier?: string): { label: string; className: string } {
   switch (tier) {
     case "hardware":
-      return { label: "Hardware-verified", className: "border-green-600 text-green-700" };
+      return { label: "Hardware-verified", className: "border-green-600 text-green-700 dark:border-green-500 dark:text-green-300" };
     case "software":
-      return { label: "Software-verified", className: "border-emerald-600 text-emerald-700" };
+      return { label: "Software-verified", className: "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-300" };
     case "unverified_client":
-      return { label: "Unverified client", className: "border-amber-600 text-amber-700" };
+      return { label: "Unverified client", className: "border-amber-600 text-amber-700 dark:border-amber-500 dark:text-amber-300" };
     case "anonymous":
       return { label: "Anonymous", className: "border-muted-foreground text-muted-foreground" };
     default:

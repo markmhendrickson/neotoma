@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { isApiUrlConfigured, MISSING_API_URL_MESSAGE } from "@/api/client";
+import { isApiUrlConfigured } from "@/api/client";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
@@ -11,8 +13,7 @@ import type { EntitySnapshot } from "@/types/api";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Shield } from "lucide-react";
+import { Shield, ShieldCheck, Inbox } from "lucide-react";
 import { TypeBadge } from "@/components/shared/type_badge";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
@@ -82,7 +83,7 @@ const submissionColumns: ColumnDef<SubmissionConfigRow, unknown>[] = [
     cell: ({ row }) => (
       <Link
         to={`/entities/${encodeURIComponent(row.original.entity_id)}`}
-        className="font-medium text-primary hover:underline"
+        className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
       >
         {row.original.config_key}
       </Link>
@@ -163,25 +164,8 @@ export default function AccessPoliciesPage() {
 
   if (!isApiUrlConfigured()) {
     return (
-      <PageShell
-        title="Guest Access Policies"
-        description="API not configured — this page cannot load until the Inspector knows which Neotoma API to call."
-      >
-        <Card>
-          <CardContent className="pt-6 space-y-3">
-            <p className="text-sm text-muted-foreground">{MISSING_API_URL_MESSAGE}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="default" size="sm">
-                <a href="/?from=inspector" rel="noopener">
-                  Start a sandbox session
-                </a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link to="/settings">Open Settings</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <PageShell title="Guest Access Policies">
+        <ApiNotConfiguredState />
       </PageShell>
     );
   }
@@ -201,7 +185,7 @@ export default function AccessPoliciesPage() {
         <p className="mt-3 text-sm text-muted-foreground">
           <code className="text-xs">GET /access_policies</code> requires an authenticated session.
           Open <Link className="underline" to="/settings">Settings</Link> and sign in, or use a
-          sandbox handoff so the Inspector stores a bearer token.
+          sandbox handoff so the app stores a bearer token.
         </p>
       </PageShell>
     );
@@ -233,19 +217,24 @@ export default function AccessPoliciesPage() {
       </Card>
 
       {rows.length === 0 ? (
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            No entity types currently resolve to a non-default guest access policy (everything
-            behaves as <Badge variant="secondary">{defaultMode}</Badge> unless overridden by env or
-            schema metadata).
-          </p>
-          <p>
-            If this list should show types such as <code className="text-xs">issue</code>, ensure
-            you are signed in (Settings), the API is reachable, and schemas are seeded. Use{" "}
-            <code className="text-xs">neotoma access enable-issues</code> or{" "}
-            <code className="text-xs">neotoma access list</code> on the server to confirm.
-          </p>
-        </div>
+        <EmptyState
+          icon={ShieldCheck}
+          title="No custom access policies"
+          description={
+            <>
+              <span className="block">
+                Every entity type behaves as <Badge variant="secondary">{defaultMode}</Badge>{" "}
+                unless overridden by env or schema metadata.
+              </span>
+              <span className="mt-2 block">
+                Override per-type via the CLI:{" "}
+                <code className="text-xs">neotoma access set &lt;type&gt; &lt;mode&gt;</code>, or
+                run <code className="text-xs">neotoma access enable-issues</code> to allow guest
+                issue filing.
+              </span>
+            </>
+          }
+        />
       ) : (
         <>
           <Input
@@ -276,7 +265,11 @@ export default function AccessPoliciesPage() {
               {submissionConfigsQ.error.message}
             </QueryErrorAlert>
           ) : submissionRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No submission_config entities in this workspace.</p>
+            <EmptyState
+              icon={Inbox}
+              title="No submission configs"
+              description="Operators seed submission_config entities to enable guest submit_entity / POST /submit/:entity_type pipelines. Use the CLI to seed a config for an entity type."
+            />
           ) : (
             <DataTable columns={submissionColumns} data={submissionRows} />
           )}

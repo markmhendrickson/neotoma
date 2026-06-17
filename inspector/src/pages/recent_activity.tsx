@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { Filter, ListFilter, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
-import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
+import { ActiveFilterBadges } from "@/components/shared/active_filter_badges";
+import { FiltersCard } from "@/components/shared/filters_card";
+import { ListSurface } from "@/components/shared/list_surface";
+import { MobileFilterPopover } from "@/components/shared/mobile_filter_popover";
+import { ListSkeleton } from "@/components/shared/query_status";
 import { RecentRecordsFeed } from "@/components/shared/recent_records_feed";
 import { showInitialQuerySkeleton } from "@/lib/query_loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
@@ -24,9 +25,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { SegmentedControl, SegmentedControlItem } from "@/components/shared/segmented_control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRecordActivity } from "@/hooks/use_record_activity";
 import type { RecordActivityType } from "@/types/api";
@@ -75,7 +74,6 @@ export default function RecentActivityPage() {
   const [selectedTypes, setSelectedTypes] = useState<RecordActivityType[]>(() => [
     ...ALL_RECORD_ACTIVITY_TYPES,
   ]);
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   const recordTypesParam = useMemo(() => {
     if (selectedTypes.length === 0 || isFullSelection(selectedTypes)) return undefined;
@@ -95,6 +93,11 @@ export default function RecentActivityPage() {
   const items = activity.data?.items ?? [];
   const hasMore = activity.data?.has_more ?? false;
   const showSkeleton = showInitialQuerySkeleton(activity);
+  const isAllTypesSelected = isFullSelection(selectedTypes);
+  const activeTypeLabels = useMemo(
+    () => sortTypes(selectedTypes).map((t) => TYPE_LABELS[t]),
+    [selectedTypes],
+  );
 
   function setTypesFromToggleValues(vals: string[]) {
     const next = vals as RecordActivityType[];
@@ -123,132 +126,128 @@ export default function RecentActivityPage() {
     });
   }
 
-  const filterBadgeLabel = isFullSelection(selectedTypes)
+  const filterBadgeLabel = isAllTypesSelected
     ? "All"
     : `${selectedTypes.length}/${ALL_RECORD_ACTIVITY_TYPES.length}`;
+  const filterSummary = isAllTypesSelected
+    ? "All record types"
+    : activeTypeLabels.join(", ");
+  const filterBadgeSummary = isAllTypesSelected
+    ? "All record types"
+    : `${selectedTypes.length} of ${ALL_RECORD_ACTIVITY_TYPES.length} types`;
+  const pageRangeLabel =
+    items.length === 0
+      ? "No rows on this page"
+      : `Showing ${offset + 1}–${offset + items.length}${hasMore ? "+" : ""}`;
+
+  const mobileFilterOptions = ALL_RECORD_ACTIVITY_TYPES.map((t) => ({
+    value: t,
+    label: TYPE_LABELS[t],
+    description: TYPE_TOOLTIPS[t],
+  }));
 
   return (
     <PageShell
       title="Activity"
+      description="A unified audit stream of recently changed entities, sources, observations, interpretations, timeline rows, and relationships."
     >
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Label className="text-muted-foreground">Types</Label>
-
-              <div className="hidden flex-wrap items-center gap-1 md:flex">
-                <ToggleGroup
-                  type="multiple"
-                  variant="outline"
-                  size="sm"
-                  value={selectedTypes}
-                  onValueChange={setTypesFromToggleValues}
-                  aria-label="Filter by record type"
-                >
-                  {ALL_RECORD_ACTIVITY_TYPES.map((t) => (
-                    <Tooltip key={t}>
-                      <TooltipTrigger asChild>
-                        <ToggleGroupItem value={t} aria-label={TYPE_LABELS[t]}>
-                          {TYPE_LABELS[t]}
-                        </ToggleGroupItem>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        {TYPE_TOOLTIPS[t]}
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
-                </ToggleGroup>
-              </div>
-
-              <div className="flex md:hidden">
-                <Popover open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <PopoverTrigger asChild>
-                        <Button type="button" variant="outline" size="sm" className="gap-2">
-                          <ListFilter className="h-4 w-4 shrink-0" aria-hidden />
-                          <span>Types</span>
-                          <Badge variant="secondary" className="font-normal tabular-nums">
-                            {filterBadgeLabel}
-                          </Badge>
-                        </Button>
-                      </PopoverTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">Open type filter</TooltipContent>
-                  </Tooltip>
-                  <PopoverContent className="w-80" align="start">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Filter className="h-4 w-4 text-muted-foreground" aria-hidden />
-                        Included record types
-                      </div>
-                      <div className="space-y-2">
-                        {ALL_RECORD_ACTIVITY_TYPES.map((t) => (
-                          <label
-                            key={t}
-                            className="flex cursor-pointer items-center gap-2 rounded-md py-1 text-sm leading-none hover:bg-muted/60"
-                          >
-                            <Checkbox
-                              checked={selectedTypes.includes(t)}
-                              onCheckedChange={(v) => toggleTypeCheckbox(t, v === true)}
-                            />
-                            <span>{TYPE_LABELS[t]}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <Button type="button" variant="secondary" size="sm" className="w-full" onClick={selectAllTypes}>
-                        Select all types
+      <div className="space-y-5">
+        <FiltersCard
+          title="Record filters"
+          description="Choose which record families appear in the activity stream."
+          headerEnd={
+            <>
+              <Badge
+                variant={isAllTypesSelected ? "secondary" : "default"}
+                className="tabular-nums"
+                title={filterSummary}
+              >
+                {filterBadgeSummary}
+              </Badge>
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="outline" size="icon" aria-label="Type filter shortcuts">
+                        <MoreHorizontal className="h-4 w-4" />
                       </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Type filter shortcuts</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Type filter shortcuts</DropdownMenuLabel>
+                  <DropdownMenuItem onSelect={() => selectAllTypes()}>Select all types</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => invertSelection()}>Invert selection</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          }
+          footer={
+            !isAllTypesSelected ? (
+              <ActiveFilterBadges values={activeTypeLabels} divider />
+            ) : null
+          }
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <Label className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Types
+            </Label>
+
+            <div className="hidden flex-wrap items-center gap-1 md:flex">
+              <SegmentedControl
+                type="multiple"
+                size="sm"
+                value={selectedTypes}
+                onValueChange={setTypesFromToggleValues}
+                aria-label="Filter by record type"
+              >
+                {ALL_RECORD_ACTIVITY_TYPES.map((t) => (
+                  <Tooltip key={t}>
+                    <TooltipTrigger asChild>
+                      <SegmentedControlItem value={t} aria-label={TYPE_LABELS[t]}>
+                        {TYPE_LABELS[t]}
+                      </SegmentedControlItem>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      {TYPE_TOOLTIPS[t]}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </SegmentedControl>
+            </div>
+
+            <div className="flex md:hidden">
+              <MobileFilterPopover
+                triggerLabel="Types"
+                heading="Included record types"
+                tooltip="Open type filter"
+                options={mobileFilterOptions}
+                selected={selectedTypes}
+                onToggle={toggleTypeCheckbox}
+                onSelectAll={selectAllTypes}
+                selectAllLabel="Select all types"
+                badgeLabel={filterBadgeLabel}
+              />
             </div>
           </div>
+        </FiltersCard>
 
-          <div className="flex shrink-0 items-center gap-1 self-start sm:self-center">
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" aria-label="More type filter actions">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">More actions and type checklist</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Type filters</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={() => selectAllTypes()}>Select all types</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => invertSelection()}>Invert selection</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {ALL_RECORD_ACTIVITY_TYPES.map((t) => (
-                  <DropdownMenuCheckboxItem
-                    key={t}
-                    checked={selectedTypes.includes(t)}
-                    onCheckedChange={(checked) => toggleTypeCheckbox(t, checked === true)}
-                  >
-                    {TYPE_LABELS[t]}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        <Separator />
-
-        {showSkeleton ? (
-          <ListSkeleton rows={8} />
-        ) : activity.error ? (
-          <QueryErrorAlert title="Could not load activity">{activity.error.message}</QueryErrorAlert>
-        ) : (
-          <>
-            <RecentRecordsFeed items={items} emptyMessage="No records yet." />
-            {(offset > 0 || hasMore) && (
-              <Pagination className="mx-0 w-full justify-between">
+        <ListSurface
+          title="Activity feed"
+          description={filterSummary}
+          headerEnd={
+            <Badge variant="outline" className="shrink-0 font-normal tabular-nums">
+              {pageRangeLabel}
+            </Badge>
+          }
+          loading={showSkeleton}
+          loadingNode={<ListSkeleton rows={8} />}
+          error={activity.error ?? null}
+          errorTitle="Could not load activity"
+          footer={
+            (offset > 0 || hasMore) && (
+              <Pagination className="mx-0 w-full justify-between border-t px-4 py-3">
                 <PaginationContent className="flex w-full flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">
                     {items.length === 0
@@ -287,9 +286,18 @@ export default function RecentActivityPage() {
                   </div>
                 </PaginationContent>
               </Pagination>
-            )}
-          </>
-        )}
+            )
+          }
+        >
+          <RecentRecordsFeed
+            items={items}
+            emptyMessage={
+              isAllTypesSelected
+                ? "No activity has been recorded yet."
+                : "No activity matches the selected record types."
+            }
+          />
+        </ListSurface>
       </div>
     </PageShell>
   );

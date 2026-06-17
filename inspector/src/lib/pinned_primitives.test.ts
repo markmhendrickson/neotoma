@@ -9,6 +9,7 @@ import {
   mergePinnedPrimitivesOnRemoteHydration,
   normalizePinHref,
   parseEntityIdFromPinHref,
+  removePinnedPrimitive,
   reorderPinnedPrimitives,
   togglePinnedPrimitive,
   type PinnedPrimitive,
@@ -74,7 +75,7 @@ describe("pinned_primitives", () => {
     expect(parseEntityIdFromPinHref("/entities?type=task")).toBeNull();
   });
 
-  it("merges local icon fields into remote pins on hydration", () => {
+  it("merges local icon fields and human labels into remote pins on hydration", () => {
     const local: PinnedPrimitive[] = [
       {
         href: "/entities/ent_doc",
@@ -88,14 +89,14 @@ describe("pinned_primitives", () => {
       {
         href: "/entities/ent_doc",
         kind: "entity",
-        label: "ent_doc",
+        label: "id:turn_key:f59be30a-e2ea-4939-8e26-8209df6802d5:1781605469058",
         pinned_at: "2026-05-19T00:00:00.000Z",
       },
     ];
     const merged = mergePinnedPrimitivesOnRemoteHydration(local, remote);
     expect(merged).toHaveLength(1);
     expect(merged[0]?.entity_type).toBe("document");
-    expect(merged[0]?.label).toBe("ent_doc");
+    expect(merged[0]?.label).toBe("Q1 report");
     expect(merged[0]?.pinned_at).toBe("2026-05-19T00:00:00.000Z");
   });
 
@@ -114,6 +115,25 @@ describe("pinned_primitives", () => {
     );
     expect(next[0]?.entity_type).toBe("company");
     expect(enrichPinnedPrimitivesWithEntityTypes(pins, new Map())).toBe(pins);
+  });
+
+  it("enriches entity pins with hydrated human labels", () => {
+    const pins: PinnedPrimitive[] = [
+      {
+        href: "/entities/ent_message",
+        kind: "entity",
+        label: "id:turn_key:f59be30a-e2ea-4939-8e26-8209df6802d5:1781605469058",
+        entity_type: "conversation_message",
+        pinned_at: "2026-05-18T00:00:00.000Z",
+      },
+    ];
+    const next = enrichPinnedPrimitivesWithEntityTypes(
+      pins,
+      new Map(),
+      new Map([["/entities/ent_message", "Pinned entity name"]]),
+    );
+    expect(next[0]?.label).toBe("Pinned entity name");
+    expect(next[0]?.entity_type).toBe("conversation_message");
   });
 
   it("enriches entity_relationships pins with anchor type and related label", () => {
@@ -158,6 +178,26 @@ describe("pinned_primitives", () => {
     expect(next[0]?.href).toBe("/entities/contact");
     expect(next[0]?.kind).toBe("entity_type");
     expect(next[0]?.entity_type).toBe("contact");
+  });
+
+  it("removes stale entity pins by href without loading the target", () => {
+    const pins: PinnedPrimitive[] = [
+      {
+        href: "/entities/ent_missing",
+        kind: "entity",
+        label: "Missing entity",
+        pinned_at: "2026-05-18T00:00:00.000Z",
+      },
+      {
+        href: "/entities/task",
+        kind: "entity_type",
+        label: "Task",
+        entity_type: "task",
+        pinned_at: "2026-05-18T00:00:01.000Z",
+      },
+    ];
+
+    expect(removePinnedPrimitive(pins, "entities/ent_missing")).toEqual([pins[1]]);
   });
 
   it("reorders pins by moving one index to another", () => {

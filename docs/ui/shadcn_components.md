@@ -106,6 +106,71 @@ This document lists all available shadcn/ui components in the Neotoma applicatio
     - **Usage:** Expandable/collapsible sections for advanced options
     - **Sub-components:** Collapsible, CollapsibleTrigger, CollapsibleContent
     - **Used in:** Not currently used in application (recommended for SourceDetail advanced sections, EntityDetail provenance, filter panels)
+
+#### Inspector-Native Composites
+
+22. **DataTable** (`@/components/ui/data-table`)
+    - **Status:** ✅ Active (Inspector only)
+    - **Usage:** Canonical TanStack-backed table shell for Inspector index/list pages.
+    - **Features:** Shared table chrome, row selection, column visibility, custom cell rendering.
+    - **Link style:** Row links are neutral foreground by default and shift to primary/underline on hover or focus. Avoid always-blue `text-primary` links in repetitive index-table cells.
+    - **Used in:** Entity, search, source, observation, relationship, schema, issue, peer, and subscription index pages.
+23. **CopyableCodeBlock** (`@/components/ui/copyable_code_block`)
+    - **Status:** ✅ Active (Inspector only)
+    - **Usage:** Canonical copy-to-clipboard surface for any snippet a user can paste or run (CLI, config, JSON, agent activation prompts).
+    - **Props:** `code` (required), `variant` (`code` | `prompt`, default `code`), `copyAriaLabel`, `className`, `preClassName`, `footer`
+    - **Used in:** `ActivateCard` on the home page, `DesignCodeReferencePanel` (`/design?tab=code`)
+    - **Rule:** Do not introduce bespoke `<pre>` + clipboard `<Button>` pairs in feature code. Evolve `CopyableCodeBlock` (e.g. add a `variant` prop) if a new visual treatment is needed. See `docs/ui/inspector_shadcn_rules.mdc` for the design-system reconciliation contract.
+24. **SegmentedControl** (`@/components/shared/segmented_control`)
+    - **Status:** ✅ Active (Inspector only)
+    - **Usage:** Canonical segmented filter/control shell built on shadcn `ToggleGroup` for single- or multi-value filters.
+    - **Used in:** Activity type filters, Conversations activity range filters, Graph layout selection, and `/design` segmented-control examples.
+    - **Rule:** Use for segmented filters and compact mode controls. Use `Tabs` only when switching between distinct content panels.
+25. **FiltersCard** (`@/components/shared/filters_card`)
+    - **Status:** ✅ Active (Inspector only)
+    - **Usage:** Titled `Card` shell used at the top of index pages to group filter controls. Header on a muted strip with title, optional description, optional right-aligned `headerEnd` (badges / shortcut menus); `children` slot for the controls; optional `footer` slot (typically `<ActiveFilterBadges divider />`).
+    - **Used in:** Activity (`recent_activity.tsx`), Issues (`issues.tsx`), Sources (`sources.tsx`), and `/design?tab=patterns` index-page primitive specimens.
+    - **Rule:** Use for the primary filter region on any index/list page. Compose with `SegmentedControl`, `MobileFilterPopover`, and `ActiveFilterBadges`.
+26. **ListSurface** (`@/components/shared/list_surface`)
+    - **Status:** ✅ Active (Inspector only)
+    - **Usage:** Content `Card` that wraps a list/feed/table body together with its loading skeleton (`loading` + optional `loadingNode`), error alert (`error` + `errorTitle`), empty state (`isEmpty` + `emptyMessage`), and pagination footer (`footer`). Header carries title, a dynamic `description` (active filter summary), and an optional right-aligned `headerEnd`.
+    - **Used in:** Activity, Issues, Sources, and `/design?tab=patterns` index-page primitive specimens.
+    - **Rule:** Use as the canonical surface for index-page bodies. Move loading/error/empty placements inside the surface so all states render with the same chrome.
+27. **ActiveFilterBadges** (`@/components/shared/active_filter_badges`)
+    - **Status:** ✅ Active (Inspector only)
+    - **Usage:** Helper row that renders outline `Badge` chips summarising active filters. Accepts either a single `values` list (unlabeled, like Activity) or labeled `groups` (Issues, Sources). Pass `divider` to render the top border + padding inside a `FiltersCard` footer.
+    - **Used in:** Activity, Issues, Sources, and `/design?tab=patterns` index-page primitive specimens.
+    - **Rule:** Use to surface "what is currently filtered" beneath filter controls. Renders nothing when no filters are active.
+28. **MobileFilterPopover** (`@/components/shared/mobile_filter_popover`)
+    - **Status:** ✅ Active (Inspector only)
+    - **Usage:** Narrow-viewport alternative to a `SegmentedControl` for multi-select or single-select filters. Outline trigger button with optional counter badge; popover body is a checkbox list with optional helper descriptions and an optional select-all action.
+    - **Used in:** Activity (`hidden md:flex` / `md:hidden` pair), Issues, and `/design?tab=patterns` index-page primitive specimens.
+    - **Rule:** Place behind a responsive container so the desktop `SegmentedControl` and the mobile popover share state on the same filter axis.
+
+#### Status / Chart Color Tokens
+
+The Inspector palette declares a small status and chart token family in `inspector/src/index.css`. Tailwind exposes each family as a first-class utility (`text-success`, `bg-warning/10`, `border-destructive/30`, `fill-[hsl(var(--chart-1))]`, …) via the extended `colors` map in `inspector/tailwind.config.mjs`.
+
+**Status tokens** (each has a `:root` light value and a `.dark` override hand-tuned for ≥3:1 contrast against the dark slate canvas):
+
+- **`--destructive` / `--destructive-foreground`** — `text-destructive`, `bg-destructive`. Errors, failed health checks, destructive confirmation surfaces.
+- **`--success` / `--success-foreground`** — `text-success`, `bg-success`. Healthy status, success toasts, "copied" feedback, boolean `true`.
+- **`--warning` / `--warning-foreground`** — `text-warning`, `bg-warning`. Caution states, raw-fragment markers, throttle/risk indicators.
+
+Use the matching `Badge` variant when the surface is a pill (`variant="secondary"`, `variant="outline"`, `variant="destructive"`); use the bare token utilities for inline icon tints, dot indicators, or short prose status copy.
+
+**Chart tokens** — shadcn-canonical categorical palette, used sequentially per series:
+
+- **`--chart-1`** — Primary blue. Default for the first series in a chart.
+- **`--chart-2`** — Green. Second series.
+- **`--chart-3`** — Amber. Third series.
+- **`--chart-4`** — Plum. Fourth series.
+- **`--chart-5`** — Coral. Fifth series.
+
+Reference as `fill="hsl(var(--chart-1))"` / `stroke="hsl(var(--chart-1))"` inside Recharts components (axes, grids, and tooltips continue to use `--border`, `--muted-foreground`, and `--popover`). Light values target a ~4.5:1 contrast vs. the warm cream surface; dark overrides brighten each hue so series fills stay legible against the deep-slate dark surface.
+
+When a feature genuinely needs a status / chart hue the token registry does not cover, raise the gap rather than reintroducing raw Tailwind palette classes; the token registry should grow before any component leaks a hex value.
+
 ## Component Usage Guidelines
 ### When to Use Select vs DropdownMenu
 **Use Select (`@/components/ui/select`):**

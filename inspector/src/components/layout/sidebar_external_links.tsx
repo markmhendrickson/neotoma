@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { SiGithub, SiNpm } from "react-icons/si";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useServerInfo } from "@/hooks/use_infra";
+import { getInspectorEnvironment, resolveInspectorBadgeEnvironment } from "@/api/client";
 import { cn } from "@/lib/utils";
 
 const GITHUB_URL = "https://github.com/markmhendrickson/neotoma";
@@ -16,22 +17,66 @@ type SidebarExternalLinksProps = {
   collapsed: boolean;
 };
 
-function formatBuildVersionLabel(version?: string, gitSha?: string | null): string | null {
+function isLocalRuntime(): boolean {
+  if (import.meta.env.VITE_INSPECTOR_SOURCE_BUILD) return true;
+  if (import.meta.env.DEV) return true;
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+function buildVersionPrefix(isLocal: boolean, dataEnvironment: "dev" | "prod"): string {
+  if (!isLocal) return "";
+  return `local · ${dataEnvironment} data · `;
+}
+
+export function formatBuildVersionLabel(
+  version?: string,
+  gitSha?: string | null,
+  options?: { isLocal?: boolean; dataEnvironment?: "dev" | "prod" },
+): string | null {
   const trimmedVersion = version?.trim();
   const trimmedSha = gitSha?.trim();
   if (!trimmedVersion && !trimmedSha) return null;
+  const prefix = buildVersionPrefix(
+    options?.isLocal ?? false,
+    options?.dataEnvironment ?? getInspectorEnvironment(),
+  );
   if (trimmedVersion && trimmedSha) {
-    return `v${trimmedVersion} · ${trimmedSha.slice(0, 7)}`;
+    return `${prefix}v${trimmedVersion} · ${trimmedSha.slice(0, 7)}`;
   }
-  if (trimmedVersion) return `v${trimmedVersion}`;
-  return trimmedSha!.slice(0, 7);
+  if (trimmedVersion) return `${prefix}v${trimmedVersion}`;
+  return `${prefix}${trimmedSha!.slice(0, 7)}`;
+}
+
+export function formatBuildVersionTitle(
+  version?: string,
+  gitSha?: string | null,
+  options?: { isLocal?: boolean; dataEnvironment?: "dev" | "prod" },
+): string | null {
+  const label = formatBuildVersionLabel(version, gitSha, options);
+  if (!label) return null;
+  const context = options?.isLocal
+    ? `Local app using ${options.dataEnvironment ?? getInspectorEnvironment()} data`
+    : "Build";
+  return `${context}: ${label}`;
 }
 
 export function SidebarExternalLinks({ collapsed }: SidebarExternalLinksProps) {
   const serverInfo = useServerInfo();
+  const dataEnvironment = resolveInspectorBadgeEnvironment(
+    serverInfo.data?.neotoma_env,
+    getInspectorEnvironment(),
+  );
+  const localRuntime = isLocalRuntime();
   const buildVersionLabel = formatBuildVersionLabel(
     serverInfo.data?.version,
     serverInfo.data?.git_sha,
+    { isLocal: localRuntime, dataEnvironment },
+  );
+  const buildVersionTitle = formatBuildVersionTitle(
+    serverInfo.data?.version,
+    serverInfo.data?.git_sha,
+    { isLocal: localRuntime, dataEnvironment },
   );
 
   const buildVersion = buildVersionLabel ? (
@@ -40,7 +85,7 @@ export function SidebarExternalLinks({ collapsed }: SidebarExternalLinksProps) {
         "font-mono text-sidebar-foreground/60",
         collapsed ? "max-w-full truncate text-[10px] leading-none" : "ml-auto truncate text-xs",
       )}
-      title={buildVersionLabel}
+      title={buildVersionTitle ?? buildVersionLabel}
     >
       {buildVersionLabel}
     </span>
@@ -88,7 +133,7 @@ export function SidebarExternalLinks({ collapsed }: SidebarExternalLinksProps) {
           <TooltipTrigger asChild>
             <span className="inline-flex max-w-full">{buildVersion}</span>
           </TooltipTrigger>
-          <TooltipContent side="right">Build {buildVersionLabel}</TooltipContent>
+          <TooltipContent side="right">{buildVersionTitle ?? `Build ${buildVersionLabel}`}</TooltipContent>
         </Tooltip>
       ) : null}
     </div>

@@ -17,8 +17,10 @@ import { batchCorrect } from "@/api/endpoints/corrections";
 import { useQueryClient } from "@tanstack/react-query";
 import { TypeBadge } from "@/components/shared/type_badge";
 import { FieldValue } from "@/components/shared/field_value";
+import { Columns3 } from "lucide-react";
 import { humanizeKey } from "@/lib/humanize";
 import { truncateId } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/empty_state";
 import type { EntitySnapshot, EntitySchema } from "@/types/api";
 
 interface EntityBoardViewProps {
@@ -83,24 +85,25 @@ function EntityCard({ entity, groupField }: { entity: EntitySnapshot; groupField
     .slice(0, 3);
 
   return (
-    <div className="cursor-grab rounded-md border bg-card p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing">
+    <div className="min-w-0 cursor-grab rounded-md border bg-card p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing">
       <Link
         to={`/entities/${encodeURIComponent(eid)}`}
-        className="block font-medium text-sm text-primary hover:underline"
+        className="block max-w-full truncate text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
         onClick={(e) => e.stopPropagation()}
+        title={String(entity.canonical_name || snap.name || snap.title || eid)}
       >
         {String(entity.canonical_name || snap.name || snap.title || truncateId(eid))}
       </Link>
-      <div className="mt-1 flex items-center gap-1">
-        <TypeBadge type={entity.entity_type} humanize className="text-[10px]" />
-        <span className="font-mono text-[10px] text-muted-foreground">{truncateId(eid, 8)}</span>
+      <div className="mt-1 flex min-w-0 items-center gap-1">
+        <TypeBadge type={entity.entity_type} humanize className="max-w-[10rem] truncate text-[10px]" />
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{truncateId(eid, 8)}</span>
       </div>
       {displayFields.length > 0 && (
         <div className="mt-2 space-y-0.5">
           {displayFields.map(([k, v]) => (
-            <div key={k} className="flex items-baseline gap-1 text-xs">
+            <div key={k} className="flex min-w-0 items-baseline gap-1 text-xs">
               <span className="shrink-0 text-muted-foreground">{humanizeKey(k)}:</span>
-              <span className="truncate"><FieldValue value={v} /></span>
+              <div className="min-w-0 flex-1 truncate"><FieldValue value={v} /></div>
             </div>
           ))}
         </div>
@@ -125,6 +128,16 @@ export function EntityBoardView({ entities, groupField }: EntityBoardViewProps) 
   }, [entities, groupField]);
 
   const activeEntity = activeId ? entities.find((e) => getEntityId(e) === activeId) : null;
+
+  if (entities.length === 0) {
+    return (
+      <EmptyState
+        icon={Columns3}
+        title="No entities to display on the board"
+        description={`Entities grouped by "${humanizeKey(groupField)}" will appear as columns here. Try a different filter, or add entities of this type.`}
+      />
+    );
+  }
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));

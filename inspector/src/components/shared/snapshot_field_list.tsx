@@ -56,7 +56,7 @@ export function RawFragmentsFieldList({
   if (keys.length === 0) return null;
 
   const labelClassName = developerView
-    ? "font-mono text-xs text-purple-700"
+    ? "font-mono text-xs text-[hsl(var(--syntax-key))]"
     : "text-xs uppercase tracking-wide text-muted-foreground";
 
   return (
@@ -85,7 +85,7 @@ export function RawFragmentsFieldList({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="inline-flex h-7 w-7 shrink-0 cursor-default items-center justify-center text-amber-600 dark:text-amber-500"
+                      className="inline-flex h-7 w-7 shrink-0 cursor-default items-center justify-center text-warning"
                       aria-label={`Raw field: ${key}`}
                     >
                       <TriangleAlert className="h-3.5 w-3.5" aria-hidden />
@@ -175,7 +175,7 @@ function FieldRow({
 
   const label = snapshotFieldDisplayLabel(fieldKey, entityType, developerView);
   const labelClassName = developerView
-    ? "font-mono text-xs text-purple-700"
+    ? "font-mono text-xs text-[hsl(var(--syntax-key))]"
     : "text-xs uppercase tracking-wide text-muted-foreground";
 
   const showMarkdownSidebar = isLikelyMarkdownFieldValue(value);
@@ -216,7 +216,7 @@ function FieldRow({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground"
+                      className="h-9 w-9 text-muted-foreground sm:h-7 sm:w-7"
                       aria-label="Open in sidebar"
                       onClick={() => {
                         window.setTimeout(() => setMarkdownSheetOpen(true), 0);
@@ -243,7 +243,7 @@ function FieldRow({
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-7 w-7 shrink-0 text-muted-foreground",
+                    "h-9 w-9 shrink-0 text-muted-foreground sm:h-7 sm:w-7",
                     open && "bg-muted text-foreground",
                   )}
                   onClick={() => setOpen((v) => !v)}

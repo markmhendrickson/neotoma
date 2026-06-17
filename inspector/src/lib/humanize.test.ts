@@ -32,6 +32,19 @@ describe("entityDisplayHeadline", () => {
       }),
     ).toBe("Fitness — Track lifting progression (ChatGPT Fitness GPT)");
   });
+
+  it("uses message content when the canonical name is a turn key", () => {
+    expect(
+      entityDisplayHeadline({
+        canonical_name: "id:turn_key:f59be30a-e2ea-4939-8e26-8209df6802d5:1781605469058",
+        entity_type: "conversation_message",
+        snapshot: {
+          content: "still no text label here?",
+          turn_key: "f59be30a-e2ea-4939-8e26-8209df6802d5:1781605469058",
+        },
+      }),
+    ).toBe("still no text label here?");
+  });
 });
 
 describe("entityIdentityKeyForDisplay", () => {

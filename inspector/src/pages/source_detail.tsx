@@ -289,8 +289,10 @@ function SourceRelationshipsSection({
   query: ReturnType<typeof useSourceRelationships>;
 }) {
   const rawRelationships = query.data?.relationships ?? [];
-  const { filterRows, AgentFilterControl } = useAgentAttributionFilter(rawRelationships);
+  const { filter, filterRows, AgentFilterControl } =
+    useAgentAttributionFilter(rawRelationships);
   const filteredRelationships = filterRows(rawRelationships);
+  const agentFilterActive = filter.kind !== "all";
 
   const filteredData = useMemo(
     () =>
@@ -325,26 +327,30 @@ function SourceRelationshipsSection({
             <p className="mb-4 text-xs text-muted-foreground">
               Edges stamped with this source or touching entities observed from this source.
             </p>
+            {rawRelationships.length > 0 ? (
+              <div className="mb-4 flex flex-wrap items-end gap-3">
+                <AgentFilterControl />
+              </div>
+            ) : null}
             {filteredRelationships.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No relationships linked to this source.</p>
+              <p className="text-sm text-muted-foreground">
+                {agentFilterActive
+                  ? "No matches for current filters. Clear the agent filter above to see all relationships."
+                  : "No relationships linked to this source."}
+              </p>
             ) : (
-              <>
-                <div className="mb-4 flex flex-wrap items-end gap-3">
-                  <AgentFilterControl />
-                </div>
-                <RelationshipPanel
-                  rows={directedRows}
-                  getSubpageHref={(relationshipType, relatedEntityType) => {
-                    const hubId = hubByRelationshipType.get(relationshipType);
-                    if (!hubId) return null;
-                    return entityRelationshipSubpageHref(
-                      hubId,
-                      relationshipType,
-                      relatedEntityType,
-                    );
-                  }}
-                />
-              </>
+              <RelationshipPanel
+                rows={directedRows}
+                getSubpageHref={(relationshipType, relatedEntityType) => {
+                  const hubId = hubByRelationshipType.get(relationshipType);
+                  if (!hubId) return null;
+                  return entityRelationshipSubpageHref(
+                    hubId,
+                    relationshipType,
+                    relatedEntityType,
+                  );
+                }}
+              />
             )}
           </CardContent>
         </Card>

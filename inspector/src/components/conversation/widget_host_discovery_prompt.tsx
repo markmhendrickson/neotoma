@@ -58,7 +58,7 @@ export function WidgetHostDiscoveryPrompt() {
         <p className="text-xs text-muted-foreground">
           MCP clients that load <code className="font-mono">@neotoma/ext-apps-widget-host</code>{" "}
           render the per-turn status line, stored/retrieved counts, and issue consent card
-          directly in the chat thread — same data shown here. The Inspector page works
+          directly in the chat thread — same data shown here. This page works
           standalone, so this is informational only.
         </p>
       </div>

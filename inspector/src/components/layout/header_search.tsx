@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { sourceDisplayTitle, sourceKindLabel } from "@/lib/source_display";
 import { isNeotomaEntityId } from "@/lib/neotoma_entity_id";
 import { buildSearchLocation, isSearchPath, resolveSearchQuery } from "@/lib/search_route";
-import { truncateId } from "@/lib/utils";
+import { cn, truncateId } from "@/lib/utils";
 import type { EntitySnapshot } from "@/types/api";
 import type { HeaderSearchContextValue, HeaderSearchSuggestion } from "./page_title_context";
 
@@ -123,13 +123,35 @@ function SuggestionSection({
   );
 }
 
-export function HeaderSearch({ pageSearch }: { pageSearch: HeaderSearchContextValue | null }) {
+export interface HeaderSearchProps {
+  pageSearch: HeaderSearchContextValue | null;
+  /** When true the search input fills its container width and skips the expand-on-focus width animation. */
+  fullWidth?: boolean;
+  /** Focus the input on mount (used when revealed via the mobile search toggle). */
+  autoFocus?: boolean;
+  /** Optional callback fired after a search submit (used to close the mobile overlay). */
+  onSubmitComplete?: () => void;
+}
+
+export function HeaderSearch({
+  pageSearch,
+  fullWidth = false,
+  autoFocus = false,
+  onSubmitComplete,
+}: HeaderSearchProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [globalSearch, setGlobalSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (autoFocus) {
+      inputRef.current?.focus();
+    }
+  }, [autoFocus]);
 
   const search = pageSearch?.value ?? globalSearch;
   const trimmedSearch = search.trim();
@@ -212,14 +234,17 @@ export function HeaderSearch({ pageSearch }: { pageSearch: HeaderSearchContextVa
     if (pageSearch?.onSubmit) {
       pageSearch.onSubmit(trimmed);
       setIsFocused(false);
+      onSubmitComplete?.();
       return;
     }
     if (isNeotomaEntityId(trimmed)) {
       navigate(`/entities/${encodeURIComponent(trimmed)}`);
       setIsFocused(false);
+      onSubmitComplete?.();
       return;
     }
     navigateToGlobalSearchResults(trimmed);
+    onSubmitComplete?.();
   }
 
   function handleSearchContainerBlur(event: React.FocusEvent<HTMLDivElement>) {
@@ -236,6 +261,7 @@ export function HeaderSearch({ pageSearch }: { pageSearch: HeaderSearchContextVa
   const hasSuggestions =
     pageSuggestions.length > 0 || entitySuggestions.length > 0 || sourceSuggestions.length > 0 || docSuggestions.length > 0;
   const showSuggestions = isFocused && trimmedSearch.length > 0;
+  const isSearchExpanded = isFocused || showSuggestions;
   const isResolvingSuggestions =
     trimmedSearch.length > 0 &&
     (trimmedSearch !== debouncedSearch ||
@@ -246,11 +272,21 @@ export function HeaderSearch({ pageSearch }: { pageSearch: HeaderSearchContextVa
   return (
     <div
       ref={searchContainerRef}
-      className="relative w-full max-w-sm"
+      className={cn(
+        "relative",
+        fullWidth
+          ? "w-full"
+          : cn(
+              "w-52 transition-[width] duration-200 ease-out",
+              "max-w-[calc(100vw-12rem)]",
+              isSearchExpanded && "w-[min(32rem,calc(100vw-12rem))]",
+            ),
+      )}
       onBlurCapture={handleSearchContainerBlur}
     >
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <Input
+        ref={inputRef}
         value={search}
         onChange={(event) => setSearchValue(event.target.value)}
         onFocus={() => setIsFocused(true)}

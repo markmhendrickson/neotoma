@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { MessagesSquare } from "lucide-react";
+import { isApiUrlConfigured } from "@/api/client";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { Button } from "@/components/ui/button";
@@ -15,7 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SegmentedControl, SegmentedControlItem } from "@/components/shared/segmented_control";
 import {
   Select,
   SelectContent,
@@ -162,6 +166,7 @@ export default function RecentConversationsPage() {
   const showBackgroundRefresh = showBackgroundQueryRefresh(conversations);
 
   function handleTabChange(next: string) {
+    if (!next) return;
     setTimeTab(next as TimeRangeTab);
     setOffset(0);
   }
@@ -177,6 +182,14 @@ export default function RecentConversationsPage() {
     toast.success("Date range applied.");
   }
 
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell title="Conversations">
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title="Conversations"
@@ -184,14 +197,19 @@ export default function RecentConversationsPage() {
     >
       <div className="space-y-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <Tabs value={timeTab} onValueChange={handleTabChange} className="min-w-0 flex-1">
-            <TabsList className="h-auto min-h-10 w-full flex-wrap justify-start gap-1">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="today">Today</TabsTrigger>
-              <TabsTrigger value="recent">Recently</TabsTrigger>
-              <TabsTrigger value="custom">Custom range</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <SegmentedControl
+            type="single"
+            size="sm"
+            value={timeTab}
+            onValueChange={handleTabChange}
+            aria-label="Filter conversations by activity range"
+            className="min-w-0 flex-1"
+          >
+            <SegmentedControlItem value="all">All</SegmentedControlItem>
+            <SegmentedControlItem value="today">Today</SegmentedControlItem>
+            <SegmentedControlItem value="recent">Recently</SegmentedControlItem>
+            <SegmentedControlItem value="custom">Custom range</SegmentedControlItem>
+          </SegmentedControl>
           <div className="flex flex-col gap-1.5 lg:w-72">
             <Select
               value={agentKeyFilter}
@@ -279,9 +297,19 @@ export default function RecentConversationsPage() {
         ) : (
           <div className="space-y-4">
             {items.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                No conversations in this range.
-              </div>
+              <EmptyState
+                icon={MessagesSquare}
+                title={
+                  timeTab === "all" && agentKeyFilter === AGENT_FILTER_ALL
+                    ? "No conversations yet"
+                    : "No conversations in this range"
+                }
+                description={
+                  timeTab === "all" && agentKeyFilter === AGENT_FILTER_ALL
+                    ? "Connect a harness (Cursor, Claude Code, Codex, or another MCP client) and the next chat turn will land here automatically."
+                    : "Try a wider time range, choose a different agent, or clear the filters."
+                }
+              />
             ) : (
               items.map((conversation) => (
                 <ConversationCard key={conversation.conversation_id} conversation={conversation} />

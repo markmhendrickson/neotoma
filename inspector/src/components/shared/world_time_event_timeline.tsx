@@ -66,7 +66,7 @@ function WorldTimeRow({ event }: { event: TimelineEvent }) {
         </span>
         <Link
           to={`/timeline/${encodeURIComponent(event.id)}`}
-          className="text-sm font-medium text-primary hover:underline"
+          className="text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
         >
           {humanizeKey(eventType)}
         </Link>

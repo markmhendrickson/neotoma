@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
-import { GripVertical } from "lucide-react";
+import { GripVertical, PinOff } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { usePinnedPrimitives } from "@/hooks/use_pinned_primitives";
 import { useHydratePinnedEntityTypes } from "@/hooks/use_hydrate_pinned_entity_types";
 import { useSchemas } from "@/hooks/use_schemas";
@@ -57,6 +58,7 @@ function PinnedNavItem({
   onDragEnd,
   onDragOver,
   onDrop,
+  onUnpin,
 }: {
   pin: PinnedPrimitive;
   collapsed: boolean;
@@ -72,6 +74,7 @@ function PinnedNavItem({
   onDragEnd: () => void;
   onDragOver: (index: number) => void;
   onDrop: (index: number) => void;
+  onUnpin: (href: string) => void;
 }) {
   const relatedTypeLabel =
     pin.kind === "entity_relationships"
@@ -84,8 +87,8 @@ function PinnedNavItem({
       to={pin.href}
       title={collapsed ? undefined : label}
       className={cn(
-        "flex w-0 min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-md py-2 text-sm font-medium transition-colors",
-        collapsed ? "justify-center px-0" : "px-3",
+        "flex min-w-0 items-center gap-3 overflow-hidden rounded-md py-2 text-sm font-medium transition-colors",
+        collapsed ? "h-9 w-9 justify-center px-0" : "w-0 flex-1 px-3",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
@@ -112,7 +115,9 @@ function PinnedNavItem({
     </Link>
   );
 
-  const row = reorderable ? (
+  const row = collapsed ? (
+    link
+  ) : (
     <div
       className={cn(
         "group flex w-full min-w-0 max-w-full items-center overflow-hidden rounded-md",
@@ -130,25 +135,39 @@ function PinnedNavItem({
       }}
     >
       {link}
-      <button
+      <Button
         type="button"
-        draggable
-        aria-label={`Reorder ${label}`}
+        variant="ghost"
+        size="icon"
+        aria-label={`Unpin ${label}`}
+        title={`Unpin ${label}`}
         className={cn(
-          "flex h-9 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground",
-          "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
+          "h-9 w-7 shrink-0 rounded-md text-muted-foreground hover:text-sidebar-foreground",
+          "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
         )}
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = "move";
-          onDragStart(index);
-        }}
-        onDragEnd={onDragEnd}
+        onClick={() => onUnpin(pin.href)}
       >
-        <GripVertical className="h-4 w-4" aria-hidden />
-      </button>
+        <PinOff className="h-4 w-4" aria-hidden />
+      </Button>
+      {reorderable ? (
+        <button
+          type="button"
+          draggable
+          aria-label={`Reorder ${label}`}
+          className={cn(
+            "flex h-9 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground",
+            "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
+          )}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            onDragStart(index);
+          }}
+          onDragEnd={onDragEnd}
+        >
+          <GripVertical className="h-4 w-4" aria-hidden />
+        </button>
+      ) : null}
     </div>
-  ) : (
-    link
   );
 
   if (collapsed) {
@@ -173,14 +192,16 @@ const SIDEBAR_PIN_LIMIT = 8;
 
 export function PinnedPrimitivesSidebar({ collapsed }: { collapsed: boolean }) {
   const location = useLocation();
-  const { pins, replacePins } = usePinnedPrimitives();
+  const { pins, replacePins, unpin } = usePinnedPrimitives();
   useHydratePinnedEntityTypes(pins, replacePins);
   const schemas = useSchemas();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [showAllPins, setShowAllPins] = useState(false);
 
-  const visiblePins = pins.slice(0, SIDEBAR_PIN_LIMIT);
+  const hasHiddenPins = pins.length > SIDEBAR_PIN_LIMIT;
   const hiddenCount = Math.max(0, pins.length - SIDEBAR_PIN_LIMIT);
+  const visiblePins = showAllPins ? pins : pins.slice(0, SIDEBAR_PIN_LIMIT);
   const reorderable = !collapsed && pins.length > 1;
 
   const handleDragEnd = useCallback(() => {
@@ -256,19 +277,25 @@ export function PinnedPrimitivesSidebar({ collapsed }: { collapsed: boolean }) {
             onDragEnd={handleDragEnd}
             onDragOver={setDropIndex}
             onDrop={handleDrop}
+            onUnpin={unpin}
           />
         ))}
-        {hiddenCount > 0 && (
-          <Link
-            to="/"
+        {hasHiddenPins && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-expanded={showAllPins}
+            aria-label={showAllPins ? "Show fewer pinned items" : `Show all ${pins.length} pinned items`}
+            onClick={() => setShowAllPins((expanded) => !expanded)}
             className={cn(
-              "flex items-center gap-3 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground",
-              collapsed ? "justify-center px-0" : "px-3"
+              "h-auto justify-start gap-3 rounded-md py-2 text-xs font-medium text-muted-foreground hover:text-sidebar-foreground",
+              collapsed ? "h-9 w-9 justify-center px-0" : "w-full max-w-full px-3"
             )}
           >
-            {!collapsed && <span>Show all ({pins.length})</span>}
-            {collapsed && <span className="text-[10px]">+{hiddenCount}</span>}
-          </Link>
+            {!collapsed && <span>{showAllPins ? "Show fewer" : `Show all (${pins.length})`}</span>}
+            {collapsed && <span className="text-[10px]">{showAllPins ? "−" : `+${hiddenCount}`}</span>}
+          </Button>
         )}
       </div>
     </>

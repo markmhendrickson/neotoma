@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { isApiUrlConfigured } from "@/api/client";
 import { useDuplicateCandidateIds, useEntitiesQuery } from "@/hooks/use_entities";
 import { useAgentGrants } from "@/hooks/use_agents";
 import { PageShell } from "@/components/layout/page_shell";
 import type { HeaderSearchContextValue } from "@/components/layout/page_title_context";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { TypeBadge } from "@/components/shared/type_badge";
@@ -40,7 +43,7 @@ import { EntityBoardView } from "@/components/shared/entity_board_view";
 import { CreateEntityDialog } from "@/components/shared/create_entity_dialog";
 import { getSavedViews, saveView, generateViewId, type SavedView } from "@/lib/saved_views";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Filter, LayoutGrid, List, Plus, Save } from "lucide-react";
+import { Boxes, Filter, LayoutGrid, List, Plus, Save } from "lucide-react";
 
 const PAGE_SIZE = 25;
 
@@ -267,7 +270,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
           const eid = entityRowId(row.original);
           return (
             <span className="inline-flex min-w-0 items-center">
-              <Link to={`/entities/${encodeURIComponent(eid)}`} className="font-medium text-primary hover:underline">
+              <Link to={`/entities/${encodeURIComponent(eid)}`} className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
                 {String(
                   row.original.canonical_name ||
                     row.original.snapshot?.name ||
@@ -348,6 +351,14 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
     setViewMode(view.view_mode);
     if (view.board_group_field) setBoardGroupField(view.board_group_field);
     setOffset(0);
+  }
+
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell title={pluralTypeTitle ?? "Entities"}>
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
   }
 
   return (
@@ -543,6 +554,32 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
         <DataTableSkeleton rows={12} cols={6} />
       ) : query.error ? (
         <QueryErrorAlert title="Could not load entities">{query.error.message}</QueryErrorAlert>
+      ) : (query.data?.entities.length ?? 0) === 0 ? (
+        <EmptyState
+          icon={Boxes}
+          title={
+            entityType
+              ? `No ${pluralTypeTitle?.toLowerCase() ?? "entities"} yet`
+              : "No entities yet"
+          }
+          description={
+            search || Object.keys(snapshotFilters).length > 0 || identityBasis
+              ? "No entities match the current filters. Clear filters or broaden the search to see more."
+              : entityType
+                ? "Nothing of this type has been ingested yet. Store records via MCP, CLI, or a connector to populate this list."
+                : "Ingest your first records via MCP, CLI, or a connector to populate this list."
+          }
+          actions={
+            <>
+              <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+                <Plus className="mr-1 h-3 w-3" /> New entity
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/docs">View ingestion docs</Link>
+              </Button>
+            </>
+          }
+        />
       ) : viewMode === "board" && boardGroupField ? (
         <EntityBoardView
           entities={query.data?.entities ?? []}

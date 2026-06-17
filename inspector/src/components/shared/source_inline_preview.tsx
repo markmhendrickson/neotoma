@@ -111,7 +111,7 @@ export function SourceInlinePreview({ source }: SourceInlinePreviewProps) {
               type="button"
               variant="outline"
               size="icon"
-              className="h-7 w-7"
+              className="h-9 w-9 sm:h-7 sm:w-7"
               aria-expanded={canInline ? open : undefined}
               aria-label={toggleTitle}
               disabled={canInline && open && rawText.isPending}

@@ -80,6 +80,11 @@ const projectRoot = resolveProjectRootFromRuntime();
 // Use override:true so a worktree .env can pin NEOTOMA_DATA_DIR to a branch-specific path.
 if (env === "production") {
   dotenv.config({ path: join(projectRoot, ".env.production"), override: true });
+  // Local prod-data dev stacks (`npm run dev:full:prod`) intentionally run with
+  // NEOTOMA_ENV=production while still using worktree-local development secrets.
+  if ((process.env.NEOTOMA_INSPECTOR_LIVE_BUILD || "").trim() === "1") {
+    dotenv.config({ path: join(projectRoot, ".env.development"), override: false });
+  }
   dotenv.config({ path: join(projectRoot, ".env"), override: false }); // .env as fallback for prod
 } else {
   dotenv.config({ path: join(projectRoot, ".env"), override: true });

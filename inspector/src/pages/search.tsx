@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnDef, OnChangeFn, VisibilityState } from "@tanstack/react-table";
-import { Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon, SearchX } from "lucide-react";
+import { isApiUrlConfigured } from "@/api/client";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableSkeleton, ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { EntityTypeSelect } from "@/components/shared/entity_type_select";
@@ -152,7 +155,7 @@ export default function SearchPage() {
           return (
             <Link
               to={`/entities/${encodeURIComponent(entityId)}`}
-              className="font-medium text-primary hover:underline"
+              className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
             >
               {String(
                 row.original.canonical_name ||
@@ -199,6 +202,14 @@ export default function SearchPage() {
       ? `Searching ${activeLabel}…`
       : undefined;
 
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell title="Search">
+        <ApiNotConfiguredState description="Search needs a configured Neotoma API to query records. Start a sandbox or open Settings to connect." />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell title="Search" description={pageDescription}>
       <div className="space-y-4">
@@ -244,9 +255,11 @@ export default function SearchPage() {
           {SEARCH_PRIMITIVE_KINDS.map((kind) => (
             <TabsContent key={kind} value={kind} className="mt-4">
               {!isSearching ? (
-                <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                  Type a keyword to search {SEARCH_PRIMITIVE_LABELS[kind].toLowerCase()} only.
-                </div>
+                <EmptyState
+                  icon={SearchIcon}
+                  title="Start typing to search"
+                  description={`Type a keyword to search ${SEARCH_PRIMITIVE_LABELS[kind].toLowerCase()} only.`}
+                />
               ) : kind !== activeKind ? null : (
                 <PrimitiveSearchResults
                   kind={kind}
@@ -407,12 +420,18 @@ function EmptyMatches({
   hint?: string;
 }) {
   return (
-    <div className="rounded-md border p-4 text-sm text-muted-foreground">
-      <p>
-        No matching {SEARCH_PRIMITIVE_LABELS[kind].toLowerCase()} for &ldquo;{query}&rdquo;.
-      </p>
-      {hint ? <p className="mt-2">{hint}</p> : null}
-    </div>
+    <EmptyState
+      icon={SearchX}
+      title={`No matching ${SEARCH_PRIMITIVE_LABELS[kind].toLowerCase()}`}
+      description={
+        <>
+          <span className="block">
+            Nothing came back for &ldquo;{query}&rdquo;.
+          </span>
+          {hint ? <span className="mt-2 block">{hint}</span> : null}
+        </>
+      }
+    />
   );
 }
 
@@ -423,7 +442,7 @@ function SourceSearchCard({ source }: { source: Source }) {
         <div className="min-w-0 flex-1">
           <Link
             to={`/sources/${encodeURIComponent(source.id)}`}
-            className="block truncate text-sm font-medium text-primary hover:underline"
+            className="block truncate text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
           >
             {sourceDisplayTitle(source)}
           </Link>

@@ -13,7 +13,12 @@ export function RelationshipEntityList({
   developerView?: boolean;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No related entities in this group.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No related entities in this group yet. Linked entities appear here as
+        relationships are created.
+      </p>
+    );
   }
 
   return (
@@ -44,18 +49,18 @@ function RelationshipEntityListItem({
   const lastObserved = row.otherLastObservedAt ?? row.rel.last_observation_at ?? null;
 
   return (
-    <li className="flex items-center justify-between gap-3 px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2">
+    <li className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         {row.otherId ? (
           <Link
             to={`/entities/${encodeURIComponent(row.otherId)}`}
-            className="truncate text-sm font-medium text-primary hover:underline"
+            className="block min-w-0 max-w-full truncate text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             title={row.otherId}
           >
             {otherLabel}
           </Link>
         ) : (
-          <span className="truncate text-sm font-medium">{otherLabel}</span>
+          <span className="block min-w-0 max-w-full truncate text-sm font-medium">{otherLabel}</span>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">

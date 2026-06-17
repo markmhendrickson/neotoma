@@ -25,6 +25,17 @@ import {
   getAttributionKey,
   getAttributionLabel,
 } from "./agent_badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { AgentAttributionTier } from "@/types/api";
 
 export type AgentFilterValue =
@@ -113,55 +124,84 @@ export function useAgentAttributionFilter<T>(
           ? `tier:${filter.tier}`
           : `agent:${filter.key}`;
 
+    // If the persisted agent selection is no longer present in the current
+    // page's distinct-agents list (pagination, refresh, or different filter),
+    // we still need a SelectItem with this value so the controlled trigger
+    // resolves and the user can see / clear what they selected. Render a
+    // muted, "(not on this page)" entry that stays selectable.
+    const selectedAgentMissing =
+      filter.kind === "agent" && !agents.some((a) => a.key === filter.key);
+
+    function handleValueChange(v: string) {
+      if (v === "all") {
+        setFilter({ kind: "all" });
+      } else if (v.startsWith("tier:")) {
+        setFilter({
+          kind: "tier",
+          tier: v.slice(5) as AgentAttributionTier,
+        });
+      } else if (v.startsWith("agent:")) {
+        const key = v.slice(6);
+        const agent = agents.find((a) => a.key === key);
+        setFilter({
+          kind: "agent",
+          key,
+          label:
+            agent?.label ??
+            (filter.kind === "agent" && filter.key === key
+              ? filter.label
+              : key),
+        });
+      }
+    }
+
     return (
-      <div className={"flex flex-col gap-1.5 " + (className ?? "")}>
-        <label
+      <div className={cn("flex flex-col gap-1.5", className)}>
+        <Label
           htmlFor="agent-filter"
           className="text-xs font-medium text-muted-foreground"
         >
           Agent
-        </label>
-        <select
-          id="agent-filter"
-          value={currentValue}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === "all") {
-              setFilter({ kind: "all" });
-            } else if (v.startsWith("tier:")) {
-              setFilter({
-                kind: "tier",
-                tier: v.slice(5) as AgentAttributionTier,
-              });
-            } else if (v.startsWith("agent:")) {
-              const key = v.slice(6);
-              const agent = agents.find((a) => a.key === key);
-              setFilter({
-                kind: "agent",
-                key,
-                label: agent?.label ?? key,
-              });
-            }
-          }}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-        >
-          <option value="all">All agents</option>
-          <optgroup label="By trust tier">
-            <option value="tier:hardware">◆ Hardware-verified</option>
-            <option value="tier:software">◇ Software-verified</option>
-            <option value="tier:unverified_client">● Self-reported</option>
-            <option value="tier:anonymous">○ Anonymous</option>
-          </optgroup>
-          {agents.length > 0 && (
-            <optgroup label="By agent (this page)">
-              {agents.map((a) => (
-                <option key={a.key} value={`agent:${a.key}`}>
-                  {a.label} ({a.count})
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+        </Label>
+        <Select value={currentValue} onValueChange={handleValueChange}>
+          <SelectTrigger
+            id="agent-filter"
+            className="h-9 w-full min-w-[12rem] text-sm sm:w-auto"
+          >
+            <SelectValue placeholder="All agents" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All agents</SelectItem>
+            {selectedAgentMissing && filter.kind === "agent" ? (
+              <SelectGroup>
+                <SelectLabel>Currently selected</SelectLabel>
+                <SelectItem
+                  value={`agent:${filter.key}`}
+                  className="text-muted-foreground"
+                >
+                  {filter.label} (not on this page)
+                </SelectItem>
+              </SelectGroup>
+            ) : null}
+            <SelectGroup>
+              <SelectLabel>By trust tier</SelectLabel>
+              <SelectItem value="tier:hardware">◆ Hardware-verified</SelectItem>
+              <SelectItem value="tier:software">◇ Software-verified</SelectItem>
+              <SelectItem value="tier:unverified_client">● Self-reported</SelectItem>
+              <SelectItem value="tier:anonymous">○ Anonymous</SelectItem>
+            </SelectGroup>
+            {agents.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>By agent (this page)</SelectLabel>
+                {agents.map((a) => (
+                  <SelectItem key={a.key} value={`agent:${a.key}`}>
+                    {a.label} ({a.count})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+          </SelectContent>
+        </Select>
       </div>
     );
   };

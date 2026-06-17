@@ -1,10 +1,13 @@
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
+import { isApiUrlConfigured } from "@/api/client";
 import { useSchemas } from "@/hooks/use_schemas";
 import { useAgentGrants } from "@/hooks/use_agents";
 import { useRegisterSchema } from "@/hooks/use_mutations";
 import { PageShell } from "@/components/layout/page_shell";
 import type { HeaderSearchContextValue } from "@/components/layout/page_title_context";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { OffsetPagination } from "@/components/ui/pagination";
@@ -17,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, FileCode } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { EntitySchema } from "@/types/api";
 import { grantsForEntityType } from "@/lib/agent_grant_key";
@@ -82,7 +85,7 @@ export default function SchemasPage() {
       header: "Entity Type",
       accessorKey: "entity_type",
       cell: ({ row }) => (
-        <Link to={`/schemas/${encodeURIComponent(row.original.entity_type)}`} className="font-medium text-primary hover:underline">
+        <Link to={`/schemas/${encodeURIComponent(row.original.entity_type)}`} className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
           <TypeBadge type={row.original.entity_type} />
         </Link>
       ),
@@ -158,6 +161,17 @@ export default function SchemasPage() {
     [searchQuery],
   );
 
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell
+        title="Schemas"
+        description="Admission grants column counts agent_grant capabilities that list each entity_type (or *)."
+      >
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title="Schemas"
@@ -221,15 +235,23 @@ export default function SchemasPage() {
               </div>
             </div>
           </div>
-          <DataTable
-            columns={columns}
-            data={pageRows}
-            emptyLabel={
-              searchQuery.trim()
-                ? "No schemas match the current filter."
-                : "No registered schemas."
-            }
-          />
+          {pageRows.length === 0 ? (
+            <EmptyState
+              icon={FileCode}
+              title={
+                searchQuery.trim()
+                  ? "No schemas match the current filter"
+                  : "No registered schemas"
+              }
+              description={
+                searchQuery.trim()
+                  ? "Try a different entity type, version, or field name."
+                  : "Register a schema with the button above, or store an entity to let Neotoma infer one automatically."
+              }
+            />
+          ) : (
+            <DataTable columns={columns} data={pageRows} />
+          )}
           {filteredSchemas.length > 0 ? (
             <OffsetPagination
               offset={pageOffset}

@@ -1,35 +1,37 @@
 {
-  "generated_at": "2026-05-22T17:03:13.632Z",
-  "total_files": 663,
+  "generated_at": "2026-06-17T14:44:40.468Z",
+  "total_files": 686,
   "by_top_level_folder": {
     "api": 1,
-    "architecture": 19,
+    "architecture": 20,
     "conventions": 12,
     "coverage_manifest.md": 1,
-    "developer": 113,
+    "developer": 122,
     "examples": 1,
     "feature_units": 20,
-    "foundation": 21,
+    "foundation": 24,
     "icp": 8,
     "implementation": 2,
-    "infrastructure": 1,
+    "infrastructure": 2,
     "integrations": 12,
     "legal": 8,
     "migration": 2,
     "NEOTOMA_MANIFEST.md": 1,
     "observability": 3,
     "operations": 4,
+    "performance": 1,
     "plans": 68,
     "proposals": 10,
     "prototypes": 2,
     "reference": 1,
+    "rendered_page.md": 1,
     "reports": 48,
     "research": 1,
-    "security": 3,
-    "site": 169,
+    "security": 6,
+    "site": 171,
     "skills": 1,
     "specs": 14,
-    "subsystems": 45,
+    "subsystems": 47,
     "templates": 2,
     "testing": 10,
     "ui": 42,
@@ -103,6 +105,10 @@
     },
     {
       "rel": "docs/architecture/query_convergence.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/schema_compatibility_policy.md",
       "top": "architecture"
     },
     {
@@ -330,6 +336,14 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/eval_requirements.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/exit_rebuild_test.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/fix_doc_inconsistencies_plan.md",
       "top": "developer"
     },
@@ -407,6 +421,10 @@
     },
     {
       "rel": "docs/developer/inspector/timeline.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/issues_guide.md",
       "top": "developer"
     },
     {
@@ -522,6 +540,10 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/mirror_guide.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/npm_scripts.md",
       "top": "developer"
     },
@@ -531,6 +553,10 @@
     },
     {
       "rel": "docs/developer/package_scripts.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/plans_guide.md",
       "top": "developer"
     },
     {
@@ -554,11 +580,23 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/rule_neotoma_sync.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/schema_initialization.md",
       "top": "developer"
     },
     {
       "rel": "docs/developer/scripts_reference.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/sdk_agent.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/sdk_python.md",
       "top": "developer"
     },
     {
@@ -599,6 +637,10 @@
     },
     {
       "rel": "docs/developer/spec_compliance_validation_system.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/subscriptions_guide.md",
       "top": "developer"
     },
     {
@@ -706,6 +748,10 @@
       "top": "feature_units"
     },
     {
+      "rel": "docs/foundation/adopter_dependency_commitments.md",
+      "top": "foundation"
+    },
+    {
       "rel": "docs/foundation/ai_safety.md",
       "top": "foundation"
     },
@@ -770,11 +816,19 @@
       "top": "foundation"
     },
     {
+      "rel": "docs/foundation/redlines.md",
+      "top": "foundation"
+    },
+    {
       "rel": "docs/foundation/schema_agnostic_design_rules.md",
       "top": "foundation"
     },
     {
       "rel": "docs/foundation/scope_decisions.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/substrate_and_applications.md",
       "top": "foundation"
     },
     {
@@ -831,6 +885,10 @@
     },
     {
       "rel": "docs/infrastructure/deployment.md",
+      "top": "infrastructure"
+    },
+    {
+      "rel": "docs/infrastructure/multi_tenant_deployment_topology.md",
       "top": "infrastructure"
     },
     {
@@ -952,6 +1010,10 @@
     {
       "rel": "docs/operations/runbook.md",
       "top": "operations"
+    },
+    {
+      "rel": "docs/performance/graph_traversal.md",
+      "top": "performance"
     },
     {
       "rel": "docs/plans/aauth-attribution-parity-cli-mcp-agent-instructions.md",
@@ -1278,6 +1340,10 @@
       "top": "reference"
     },
     {
+      "rel": "docs/rendered_page.md",
+      "top": "rendered_page.md"
+    },
+    {
       "rel": "docs/reports/AUTO_ENHANCEMENT_TEST_RESULTS.md",
       "top": "reports"
     },
@@ -1478,7 +1544,19 @@
       "top": "security"
     },
     {
+      "rel": "docs/security/advisories/2026-05-21-relationship-endpoint-tenant-isolation.md",
+      "top": "security"
+    },
+    {
       "rel": "docs/security/advisories/README.md",
+      "top": "security"
+    },
+    {
+      "rel": "docs/security/practices.md",
+      "top": "security"
+    },
+    {
+      "rel": "docs/security/reviews/2026-06-02-pr1479-tenant-isolation.md",
       "top": "security"
     },
     {
@@ -1847,6 +1925,14 @@
     },
     {
       "rel": "docs/site/pages/en/schemas/versioning.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/sdk-agent.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/sdk-python.md",
       "top": "site"
     },
     {
@@ -2358,6 +2444,10 @@
       "top": "subsystems"
     },
     {
+      "rel": "docs/subsystems/repo_discovery_manifest.md",
+      "top": "subsystems"
+    },
+    {
       "rel": "docs/subsystems/sandbox_deployment.md",
       "top": "subsystems"
     },
@@ -2395,6 +2485,10 @@
     },
     {
       "rel": "docs/subsystems/timeline_events.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/usage_digest.md",
       "top": "subsystems"
     },
     {
