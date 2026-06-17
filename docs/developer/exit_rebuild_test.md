@@ -54,18 +54,29 @@ The bulk-import path is the load-bearing mechanism and is already shipped:
   "rebuild again" step cheap and replay-safe. Runs in dry-run/plan mode without
   `--commit`. See [`cli_reference.md`](cli_reference.md).
 
-The export side has more than one candidate and **the protocol must confirm
-which produces import-compatible JSONL** rather than assume it (see Known gaps):
+The paired export side is **`neotoma entities export`** — the inverse of
+`entities import`, added so a Neotoma instance can be exported and rebuilt with
+one matched pair of commands:
 
-- `neotoma entities list` (with `--type`, `--limit`, `--offset`) — enumerates
-  entities; the run must confirm its output is, or can be trivially shaped into,
-  the JSONL `entities import` consumes.
+- **`neotoma entities export [--type <t>] [--out <file>] [--with-relationships]`** —
+  pages through all entities and emits **import-compatible JSONL** (one object
+  per line, `entity_type` plus the snapshot's fields at the top level — exactly
+  the shape `entities import` consumes). With `--with-relationships` it also
+  writes a companion `<out>.relationships.json` that `relationships create
+  --file` re-imports, for a full entities-plus-edges round-trip. See
+  [`cli_reference.md`](cli_reference.md).
+
+Other read paths exist but are **not** the import inverse, and should be used for
+verification rather than as a rebuild source:
+
 - `neotoma snapshots export` — fleet-neutral snapshot JSON with per-field
-  provenance; a different shape than the import format, useful for verification
-  rather than as a direct import source.
+  provenance. A different shape (fields nested under `snapshot`, plus
+  `entity_id`/provenance); useful to diff two instances for equivalence, not to
+  feed `entities import`.
 - For the rebuild-from-source-of-record case, the JSONL is generated from the
   adopter's own Postgres export, not from Neotoma at all — this is the primary
-  path the posture above describes.
+  path the posture above describes, and `entities export` is the format
+  reference for what that JSONL should look like.
 
 ## Procedure
 
@@ -105,34 +116,63 @@ exercise the cost that matters.
   surfaced that reversibility is thinner than advertised **before** anyone
   depended on it. File the specific gap and treat it as blocking for #6.
 
+## Reference run (Neotoma-side, synthetic)
+
+A first Neotoma-side dry run was executed to de-risk the mechanism before any
+joint, adopter-data run. It is **not** the gated test — that one rebuilds from an
+adopter's Postgres export and is run jointly — but it confirms the substrate side
+works and establishes a baseline.
+
+- **Dataset:** 10,000 synthetic `contact` entities (CRM-shaped), isolated dev
+  instances, offline in-process transport (no network, no auth server).
+- **Import (build):** ~9.9s for 10k. **Export:** ~2.5s. **Rebuild import (fresh
+  instance from the export):** ~8.1s. **Idempotent re-run** of the same import:
+  ~0.5s with the entity count unchanged (no duplicates).
+- **Equivalence:** exporting from the rebuilt instance produced **byte-identical
+  content** (order-independent) to the original export — a faithful round-trip at
+  the declared-field level.
+- **Conclusion:** the chunked transactional import scales fine at this size, the
+  `entities export` → `entities import` pair round-trips faithfully, and the
+  rebuild is idempotent. The remaining unknowns are dataset shape and the
+  relationship/observation dimensions (below), which the joint adopter run
+  exercises.
+
 ## Known gaps to confirm during the run
 
-These are open questions the first execution should resolve and record, rather
-than assume away:
+Status reflects the reference run above; items it did not exercise remain open
+for the joint run.
 
-- **Export → import format pairing.** Confirm which export command emits JSONL
-  that `entities import` consumes directly, or document the (deterministic)
-  shaping step between them. If no single command round-trips today, that is a
-  finding, and closing it is part of flipping #6.
-- **Relationships and observations.** Confirm whether `entities import` rebuilds
-  relationships and full observation history, or only current-entity snapshots —
-  and if the latter, what additional step restores edges and provenance.
-- **Idempotency across a full dataset.** Confirm the per-chunk idempotency holds
-  for the entire realistic dataset on the "rebuild again" pass, not just a small
-  sample.
-- **Idempotency prefix across a teardown.** The "rebuild again" step (7) reuses
-  the same `--idempotency-prefix` as the first build, but against a _fresh_
-  instance whose idempotency ledger was destroyed at teardown (step 6). Confirm
-  whether the prefix's no-op safety is per-instance (so a post-teardown rebuild
-  re-writes from scratch as intended) or whether any cross-instance state would
-  cause the second build to skip writes it should perform. Record which.
-- **Snapshot-equivalence semantics.** "Equivalent to the source" (steps 5, 8)
-  needs a stated definition before the run, not after. Decide what equivalence
-  means: exact `snapshots export` byte-equality, equality modulo timestamps and
-  instance-local ids, or equality of the reduced field values per entity. Record
-  the chosen definition and the comparison method, since a too-strict definition
-  fails on benign id/timestamp differences and a too-loose one misses real
-  rebuild gaps.
+- **Export → import format pairing — CLOSED.** `neotoma entities export` now
+  emits exactly the JSONL `entities import` consumes; the reference run confirmed
+  a faithful round-trip. (Previously there was no paired export command.)
+- **Idempotency across a full dataset — CONFIRMED** at 10k: re-running the import
+  is a fast no-op and does not duplicate entities.
+- **Idempotency prefix across a teardown — CONFIRMED:** the per-chunk keys live
+  in the target instance, so a rebuild into a fresh instance writes from scratch
+  as intended; re-running into the _same_ instance is the no-op case.
+- **Snapshot-equivalence semantics — DEFINED:** equivalence is measured by
+  exporting both instances with `entities export` and diffing the sorted output
+  (declared-field equality, order- and instance-id-independent). The reference
+  run passed this check.
+- **Schema fidelity (NEW finding — must confirm per dataset).** Export reflects
+  only what the snapshot captured. Fields the entity's registered schema does not
+  declare are not in the snapshot, so they do not survive the round-trip via this
+  path. In the reference run the `contact` schema declared only `name` and
+  `role`, so other generated fields (`company`, `city`, …) were absent from both
+  the export and the rebuild. For a real migration this means: **the adopter's
+  schemas must declare every field that matters before the rebuild**, or those
+  fields must be carried by a source-of-record import that includes them. Confirm
+  the schema coverage of the adopter's dataset as part of the joint run.
+- **Relationships and observations — NOT YET EXERCISED.** `entities export
+  --with-relationships` exports typed edges to a companion file that
+  `relationships create --file` re-imports, but the reference dataset had no
+  edges, so the relationship round-trip is implemented-but-unverified. Full
+  observation _history_ (vs. current snapshot) is not reproduced by this path.
+  The joint run, with a relationship-bearing dataset, must exercise both.
+- **Setup reality.** The import runs through the store path; for an isolated run,
+  `NEOTOMA_ENV` and `NEOTOMA_DATA_DIR` must be aligned so offline transport
+  targets the intended database (a mismatch silently targets the default
+  instance). This is a real operational detail, not "just run the command."
 
 ## Running it as a joint exercise
 

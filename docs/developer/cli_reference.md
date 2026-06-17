@@ -594,6 +594,14 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--user-id <userId>`: store under a specific user.
   - `--commit`: actually write. Without it the command runs in dry-run/plan mode.
   - The `/store` endpoint already writes each batch transactionally; this command owns file reading, chunking, and per-chunk idempotency. For very large backfills, this is the supported "replay from an external source" path.
+- `neotoma entities export`: the inverse of `entities import` — pages through all entities and emits import-compatible JSONL (one object per line, `entity_type` plus the snapshot fields at the top level), so an instance can be exported and rebuilt with a matched command pair. See [`exit_rebuild_test.md`](exit_rebuild_test.md) for the leave-and-rebuild protocol this supports.
+  - `--type <entityType>`: only export this entity type.
+  - `--out <path>`: write JSONL here (default: stdout).
+  - `--with-relationships`: also write a companion `<out>.relationships.json` of typed edges that `relationships create --file` re-imports, for a full entities-plus-edges round-trip.
+  - `--page-size <n>`: entities fetched per page (default `500`).
+  - `--include-merged`: include merged entities (default: exclude).
+  - `--user-id <userId>`: export under a specific user scope.
+  - Export reflects only what the snapshot captured: fields an entity's registered schema does not declare are not in the snapshot and do not survive this path. Declare every field that matters before relying on export for a rebuild.
 
 ### Sources
 
