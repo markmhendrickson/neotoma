@@ -1,6 +1,10 @@
 import { useState } from "react";
+import { Wand2 } from "lucide-react";
+import { isApiUrlConfigured } from "@/api/client";
 import { useInterpretations } from "@/hooks/use_interpretations";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { SourceLink } from "@/components/shared/source_link";
@@ -53,6 +57,18 @@ export default function InterpretationsPage() {
   const items = interps.data?.interpretations ?? [];
   const { filterRows, AgentFilterControl } = useAgentAttributionFilter(items);
   const displayed = filterRows(items);
+  const filtersActive = Boolean(sourceId);
+
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell
+        title="Interpretations"
+        description="AI interpretation runs on sources"
+      >
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell
@@ -69,6 +85,16 @@ export default function InterpretationsPage() {
         <DataTableSkeleton rows={10} cols={6} />
       ) : interps.error ? (
         <QueryErrorAlert title="Could not load interpretations">{interps.error.message}</QueryErrorAlert>
+      ) : displayed.length === 0 ? (
+        <EmptyState
+          icon={Wand2}
+          title={filtersActive ? "No interpretations match these filters" : "No interpretations yet"}
+          description={
+            filtersActive
+              ? "Try a different source ID or clear the agent filter."
+              : "Interpretations are recorded when sources are parsed into entities — e.g. when an agent runs an extraction over an uploaded document."
+          }
+        />
       ) : (
         <>
           <DataTable columns={columns} data={displayed} />

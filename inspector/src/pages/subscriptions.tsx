@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Radio } from "lucide-react";
+import { isApiUrlConfigured } from "@/api/client";
 import { useEntitiesQuery } from "@/hooks/use_entities";
 import { useUnsubscribeMutation } from "@/hooks/use_subscriptions";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +63,7 @@ export default function SubscriptionsPage() {
           const eid = rowEntityId(row.original);
           return (
             <div className="space-y-1">
-              <Link to={`/entities/${encodeURIComponent(eid)}`} className="font-medium text-primary hover:underline">
+              <Link to={`/entities/${encodeURIComponent(eid)}`} className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
                 {sid ? truncateId(sid, 16) : truncateId(eid, 12)}
               </Link>
               {sid ? (
@@ -179,6 +183,17 @@ export default function SubscriptionsPage() {
     [busyId, unsub.isPending],
   );
 
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell
+        title="Subscriptions"
+        description="Substrate event subscriptions (webhook or SSE). Secrets are redacted after creation."
+      >
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title="Subscriptions"
@@ -195,7 +210,26 @@ export default function SubscriptionsPage() {
             Rows are <code className="text-xs">subscription</code> entities. Create subscriptions via MCP{" "}
             <code className="text-xs">subscribe</code> or <code className="text-xs">POST /subscribe</code>.
           </p>
-          <DataTable columns={columns} data={rows} />
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={Radio}
+              title="No subscriptions active"
+              description={
+                <>
+                  <span className="block">
+                    Create one to watch substrate events for specific entity types, ids, or
+                    event types.
+                  </span>
+                  <span className="mt-2 block">
+                    Use MCP <code className="text-xs">subscribe</code> or HTTP{" "}
+                    <code className="text-xs">POST /subscribe</code>.
+                  </span>
+                </>
+              }
+            />
+          ) : (
+            <DataTable columns={columns} data={rows} />
+          )}
         </>
       )}
     </PageShell>

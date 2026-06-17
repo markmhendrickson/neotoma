@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { isApiUrlConfigured } from "@/api/client";
 import { useObservationsQuery } from "@/hooks/use_observations";
 import { useCreateObservation } from "@/hooks/use_mutations";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { EntityLink } from "@/components/shared/entity_link";
@@ -20,7 +23,7 @@ import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/quer
 import { formatDate } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { toast } from "sonner";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, ListChecks } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Observation } from "@/types/api";
 
@@ -46,6 +49,16 @@ export default function ObservationsPage() {
   });
 
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  const filtersActive = Boolean(entityId || entityType || sourceId);
+
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell title="Observations">
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
 
   const observations = query.data?.observations ?? [];
   const { filterRows, AgentFilterControl } =
@@ -144,6 +157,16 @@ export default function ObservationsPage() {
         <DataTableSkeleton rows={12} cols={7} />
       ) : query.error ? (
         <QueryErrorAlert title="Could not load observations">{query.error.message}</QueryErrorAlert>
+      ) : displayed.length === 0 ? (
+        <EmptyState
+          icon={ListChecks}
+          title={filtersActive ? "No observations match these filters" : "No observations yet"}
+          description={
+            filtersActive
+              ? "Clear or adjust the entity, type, source, or agent filters to see other observations."
+              : "Every store and correct call records an observation. Ingest data through chat, MCP, or the CLI to see entries land here."
+          }
+        />
       ) : (
         <>
           <DataTable columns={columns} data={displayed} />

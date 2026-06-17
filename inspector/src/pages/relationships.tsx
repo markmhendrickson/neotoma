@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
+import { isApiUrlConfigured } from "@/api/client";
 import { useRelationships } from "@/hooks/use_relationships";
 import { useCreateRelationship } from "@/hooks/use_mutations";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { EntityLink } from "@/components/shared/entity_link";
@@ -17,7 +20,7 @@ import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/quer
 import { formatDate } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Network } from "lucide-react";
 import { useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { RelationshipSnapshot } from "@/types/api";
@@ -29,6 +32,14 @@ export default function RelationshipsPage() {
   const [createType, setCreateType] = useState("");
   const [createSource, setCreateSource] = useState("");
   const [createTarget, setCreateTarget] = useState("");
+
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell title="Relationships">
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
 
   const columns: ColumnDef<RelationshipSnapshot, unknown>[] = [
     {
@@ -139,7 +150,19 @@ function RelationshipsTable({
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <AgentFilterControl />
       </div>
-      <DataTable columns={columns} data={displayed} />
+      {displayed.length === 0 ? (
+        <EmptyState
+          icon={Network}
+          title={rows.length === 0 ? "No relationships yet" : "No relationships match this filter"}
+          description={
+            rows.length === 0
+              ? "Relationships connect entities (PART_OF, REFERS_TO, EMBEDS, …). Create one above or store entities with a relationships array."
+              : "Try a different agent filter to see other writers' edges."
+          }
+        />
+      ) : (
+        <DataTable columns={columns} data={displayed} />
+      )}
     </>
   );
 }

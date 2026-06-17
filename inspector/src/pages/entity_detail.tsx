@@ -223,7 +223,7 @@ export default function EntityDetailPage() {
       />
       <Link
         to={`/graph?node=${encodeURIComponent(entityId)}`}
-        className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+        className="inline-flex items-center gap-1.5 font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
       >
         <Network className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         Open in graph explorer
@@ -241,7 +241,7 @@ export default function EntityDetailPage() {
         <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           <Link
             to={`/conversations/${encodeURIComponent(entityId)}`}
-            className="font-medium text-primary hover:underline"
+            className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
           >
             View conversation transcript
           </Link>
@@ -458,7 +458,7 @@ function SourceCard({ source }: { source: Source }) {
               <FileText className="h-4 w-4 text-muted-foreground" />
               <Link
                 to={`/sources/${encodeURIComponent(source.id)}`}
-                className="min-w-0 truncate text-sm font-medium text-primary hover:underline"
+                className="min-w-0 truncate text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
                 title={source.id}
               >
                 {sourceDisplayTitle(source)}

@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Network } from "lucide-react";
+import { isApiUrlConfigured } from "@/api/client";
 import { usePeersList, useRemovePeerMutation } from "@/hooks/use_peers";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +39,7 @@ export default function PeersPage() {
           <div className="space-y-1">
             <Link
               to={`/peers/${encodeURIComponent(row.original.peer_id)}`}
-              className="font-medium text-primary hover:underline"
+              className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
             >
               {row.original.peer_name}
             </Link>
@@ -118,6 +122,17 @@ export default function PeersPage() {
     [busyId, removeMut.isPending],
   );
 
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell
+        title="Peers"
+        description="Cross-instance Neotoma sync configuration (Phase 5). Shared secrets are never shown after creation."
+      >
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title="Peers"
@@ -136,7 +151,21 @@ export default function PeersPage() {
             <code className="text-xs">POST /sync/webhook</code> with HMAC verification.
           </p>
           {rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No peers configured.</p>
+            <EmptyState
+              icon={Network}
+              title="No peers configured"
+              description={
+                <>
+                  <span className="block">
+                    Add a peer to start syncing memory across Neotoma instances.
+                  </span>
+                  <span className="mt-2 block">
+                    Use MCP <code className="text-xs">add_peer</code> or HTTP{" "}
+                    <code className="text-xs">POST /peers</code> to create one.
+                  </span>
+                </>
+              }
+            />
           ) : (
             <DataTable columns={columns} data={rows} />
           )}

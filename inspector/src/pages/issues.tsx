@@ -4,7 +4,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEntitiesQuery } from "@/hooks/use_entities";
 import { showInitialQuerySkeleton } from "@/lib/query_loading";
 import { PageShell } from "@/components/layout/page_shell";
-import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
+import { ActiveFilterBadges } from "@/components/shared/active_filter_badges";
+import { FiltersCard } from "@/components/shared/filters_card";
+import { ListSurface } from "@/components/shared/list_surface";
+import { MobileFilterPopover } from "@/components/shared/mobile_filter_popover";
+import { SegmentedControl, SegmentedControlItem } from "@/components/shared/segmented_control";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Label } from "@/components/ui/label";
 import {
   getIssueListNumberLabel,
   getIssueRouteSegment,
@@ -43,9 +52,24 @@ function formatSubmitted(issue: EntitySnapshot): string | null {
   return formatted === "—" ? null : formatted;
 }
 
+type StatusFilter = "open" | "closed" | "all";
+type VisibilityFilter = "all" | "public" | "private";
+
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: "open", label: "Open" },
+  { value: "closed", label: "Closed" },
+  { value: "all", label: "All" },
+];
+
+const VISIBILITY_OPTIONS: { value: VisibilityFilter; label: string }[] = [
+  { value: "all", label: "All sources" },
+  { value: "public", label: "GitHub" },
+  { value: "private", label: "Private" },
+];
+
 export default function IssuesPage() {
-  const [filter, setFilter] = useState<"open" | "closed" | "all">("open");
-  const [visibility, setVisibility] = useState<"all" | "public" | "private">("all");
+  const [filter, setFilter] = useState<StatusFilter>("open");
+  const [visibility, setVisibility] = useState<VisibilityFilter>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<"close" | "remove" | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -72,7 +96,7 @@ export default function IssuesPage() {
       if (d !== 0) return d;
       return rowEntityId(a).localeCompare(rowEntityId(b));
     });
-  }, [query.data?.entities, filter]);
+  }, [query.data?.entities, filter, visibility]);
 
   const issueIdsOnPage = useMemo(
     () => issues.map(rowEntityId).filter((id) => id.length > 0),
@@ -136,251 +160,344 @@ export default function IssuesPage() {
     }
   }
 
+  async function closeSingle(id: string) {
+    setLastError(null);
+    setBusy("close");
+    try {
+      const res = await bulkCloseIssues([id]);
+      const row = res.results[0];
+      if (!row?.ok) setLastError(row?.error ?? "Close failed");
+      await queryClient.invalidateQueries({ queryKey: ["entities"] });
+    } catch (err) {
+      setLastError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeSingle(id: string) {
+    setLastError(null);
+    setBusy("remove");
+    try {
+      const res = await bulkRemoveIssues([id]);
+      const row = res.results[0];
+      if (!row?.ok) {
+        setLastError(row?.error ?? "Remove failed");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["entities"] });
+    } catch (err) {
+      setLastError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const statusLabel = STATUS_OPTIONS.find((s) => s.value === filter)?.label ?? filter;
+  const visibilityLabel = VISIBILITY_OPTIONS.find((v) => v.value === visibility)?.label ?? visibility;
+  const activeFilterGroups = [
+    { label: "Status", values: [statusLabel] },
+    { label: "Source", values: [visibilityLabel] },
+  ];
+
+  const statusBadgeLabel =
+    filter === "open" ? "Open" : filter === "closed" ? "Closed" : "All";
+
+  const totalCount = query.data?.entities?.length ?? 0;
+  const showSkeleton = showInitialQuerySkeleton(query);
+  const headerCountLabel =
+    issues.length === 0
+      ? "No issues"
+      : totalCount === issues.length
+        ? `${issues.length} issue${issues.length === 1 ? "" : "s"}`
+        : `${issues.length} of ${totalCount}`;
+
   return (
-    <PageShell title="Issues" description="Issues and conversation threads stored in Neotoma">
-      <div className="flex flex-col gap-3 mb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <div className="flex gap-2">
-              {(["open", "closed", "all"] as const).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => {
-                    setFilter(f);
-                    setSelected(new Set());
+    <PageShell
+      title="Issues"
+      description="Issues and conversation threads stored in Neotoma. Use status and source filters to scope the list; bulk close or remove from the selection row."
+    >
+      <div className="space-y-5">
+        <FiltersCard
+          title="Issue filters"
+          description="Filter by issue status and origin (GitHub-linked or private)."
+          footer={<ActiveFilterBadges groups={activeFilterGroups} divider />}
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+              <Label className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground md:w-20">
+                Status
+              </Label>
+              <div className="hidden md:flex">
+                <SegmentedControl
+                  type="single"
+                  size="sm"
+                  value={filter}
+                  onValueChange={(val) => {
+                    if (val) {
+                      setFilter(val as StatusFilter);
+                      setSelected(new Set());
+                    }
                   }}
-                  className={`px-3 py-1 text-sm rounded-md border transition-colors ${
-                    filter === f
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-border hover:bg-muted"
-                  }`}
+                  aria-label="Filter by issue status"
                 >
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              {(["all", "public", "private"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => {
-                    setVisibility(v);
-                    setSelected(new Set());
+                  {STATUS_OPTIONS.map((opt) => (
+                    <SegmentedControlItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SegmentedControlItem>
+                  ))}
+                </SegmentedControl>
+              </div>
+              <div className="flex md:hidden">
+                <MobileFilterPopover
+                  triggerLabel="Status"
+                  heading="Issue status"
+                  tooltip="Open status filter"
+                  badgeLabel={statusBadgeLabel}
+                  options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  selected={[filter]}
+                  onToggle={(value, checked) => {
+                    if (checked) {
+                      setFilter(value);
+                      setSelected(new Set());
+                    }
                   }}
-                  className={`px-3 py-1 text-sm rounded-md border transition-colors ${
-                    visibility === v
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-border hover:bg-muted"
-                  }`}
-                >
-                  {v === "all" ? "All sources" : v === "public" ? "GitHub" : "Private"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {issues.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={allVisibleSelected}
-                onChange={toggleSelectAllOnPage}
-                aria-label="Select all issues"
-              />
-              <span className="text-muted-foreground">Select all</span>
-            </label>
-            <span className="text-muted-foreground text-sm">({selectedIds.length})</span>
-            <button
-              type="button"
-              disabled={selectedIds.length === 0 || busy !== null}
-              onClick={async () => {
-                const { ok, message } = await runBulk("close", selectedIds);
-                if (!ok) setLastError(message);
-              }}
-              className="px-3 py-1 text-sm rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
-            >
-              {busy === "close" ? "Closing…" : "Close"}
-            </button>
-            <button
-              type="button"
-              disabled={selectedIds.length === 0 || busy !== null}
-              onClick={async () => {
-                if (
-                  !window.confirm(
-                    `Remove ${selectedIds.length} issue(s) from Neotoma? Linked GitHub issues will be closed if still open, then removed from this list.`,
-                  )
-                ) {
-                  return;
-                }
-                const { ok, message } = await runBulk("remove", selectedIds);
-                if (!ok) setLastError(message);
-              }}
-              className="px-3 py-1 text-sm rounded-md border border-destructive/50 text-destructive bg-background hover:bg-destructive/10 disabled:opacity-50"
-            >
-              {busy === "remove" ? "Removing…" : "Remove"}
-            </button>
-          </div>
-        )}
-        </div>
-      </div>
-
-      {lastError && (
-        <p className="text-sm text-destructive mb-4" role="alert">
-          {lastError}
-        </p>
-      )}
-
-      {showInitialQuerySkeleton(query) && <ListSkeleton />}
-      {query.error && (
-        <QueryErrorAlert title="Failed to load issues">{query.error.message}</QueryErrorAlert>
-      )}
-
-      {!showInitialQuerySkeleton(query) && !query.error && issues.length === 0 && (
-        <p className="text-muted-foreground">
-          No {filter === "all" ? "" : filter} issues found. Use{" "}
-          <code className="text-sm">neotoma issues sync</code> to pull from GitHub.
-        </p>
-      )}
-
-      {!showInitialQuerySkeleton(query) && issues.length > 0 && (
-        <div className="space-y-2">
-          {issues.map((issue) => {
-            const id = rowEntityId(issue);
-            const listNumberLabel = getIssueListNumberLabel(issue);
-            const submittedLabel = formatSubmitted(issue);
-            return (
-              <div
-                key={id || getIssueRouteSegment(issue)}
-                className="flex gap-3 p-4 border rounded-lg hover:bg-muted/50 transition-colors items-start"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1 shrink-0"
-                  checked={id ? selected.has(id) : false}
-                  onChange={() => id && toggleSelect(id)}
-                  disabled={!id}
-                  aria-label={`Select issue ${listNumberLabel !== "—" ? listNumberLabel : id ?? "unnumbered"}`}
-                  onClick={(e) => e.stopPropagation()}
                 />
-                <div className="flex-1 min-w-0">
-                  <Link
-                    to={`/issues/${encodeURIComponent(getIssueRouteSegment(issue))}`}
-                    className="block group"
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+              <Label className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground md:w-20">
+                Source
+              </Label>
+              <div className="hidden md:flex">
+                <SegmentedControl
+                  type="single"
+                  size="sm"
+                  value={visibility}
+                  onValueChange={(val) => {
+                    if (val) {
+                      setVisibility(val as VisibilityFilter);
+                      setSelected(new Set());
+                    }
+                  }}
+                  aria-label="Filter by issue source"
+                >
+                  {VISIBILITY_OPTIONS.map((opt) => (
+                    <SegmentedControlItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SegmentedControlItem>
+                  ))}
+                </SegmentedControl>
+              </div>
+              <div className="flex md:hidden">
+                <MobileFilterPopover
+                  triggerLabel="Source"
+                  heading="Issue source"
+                  tooltip="Open source filter"
+                  badgeLabel={visibilityLabel}
+                  options={VISIBILITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  selected={[visibility]}
+                  onToggle={(value, checked) => {
+                    if (checked) {
+                      setVisibility(value);
+                      setSelected(new Set());
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </FiltersCard>
+
+        {lastError ? (
+          <p className="text-sm text-destructive" role="alert">
+            {lastError}
+          </p>
+        ) : null}
+
+        <ListSurface
+          title="Issues"
+          description={`${statusLabel} · ${visibilityLabel}`}
+          headerEnd={
+            !showSkeleton && !query.error ? (
+              <Badge variant="outline" className="shrink-0 font-normal tabular-nums">
+                {headerCountLabel}
+              </Badge>
+            ) : null
+          }
+          loading={showSkeleton}
+          error={query.error ? { message: query.error.message } : null}
+          errorTitle="Failed to load issues"
+          isEmpty={!showSkeleton && !query.error && issues.length === 0}
+          emptyMessage={
+            <>
+              No {filter === "all" ? "" : filter} issues found. Use{" "}
+              <code className="text-sm">neotoma issues sync</code> to pull from GitHub.
+            </>
+          }
+        >
+          {issues.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-3 py-2">
+                <Label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    onCheckedChange={toggleSelectAllOnPage}
+                    aria-label="Select all issues"
+                  />
+                  <span className="text-muted-foreground">Select all</span>
+                </Label>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  ({selectedIds.length})
+                </span>
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={selectedIds.length === 0 || busy !== null}
+                    onClick={async () => {
+                      const { ok, message } = await runBulk("close", selectedIds);
+                      if (!ok) setLastError(message);
+                    }}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          {listNumberLabel !== "—" ? (
-                            <span className="font-mono text-muted-foreground text-sm">#{listNumberLabel}</span>
-                          ) : null}
-                          <h3 className="font-medium truncate group-hover:underline">
-                            {String(issueEntityField(issue, "title") ?? "")}
-                          </h3>
-                        </div>
-                        <div className="mt-1 flex min-w-0 flex-row flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
-                          {submittedLabel ? (
-                            <span className="min-w-0 flex-1">
-                              Submitted{" "}
-                              <span className="text-foreground/90">{submittedLabel}</span>
-                            </span>
-                          ) : null}
-                          <span className="shrink-0">
-                            <IssueAuthorLine
-                              author={String(issueEntityField(issue, "author") ?? "unknown")}
-                              provenance={issue.provenance}
-                            />
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span
-                          className={`px-2 py-0.5 text-xs rounded-full ${
-                            issueEntityField(issue, "status") === "open"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                              : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                          }`}
-                        >
-                          {String(issueEntityField(issue, "status") ?? "")}
-                        </span>
-                        {Array.isArray(issueEntityField(issue, "labels")) &&
-                          (issueEntityField(issue, "labels") as string[]).map((label) => (
-                            <span
-                              key={label}
-                              className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground"
-                            >
-                              {label}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  </Link>
-                  {id ? (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      <button
+                    {busy === "close" ? "Closing…" : "Close"}
+                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button
                         type="button"
-                        className="text-xs px-2 py-1 rounded border border-border hover:bg-background"
-                        disabled={busy !== null || issueEntityField(issue, "status") === "closed"}
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          setLastError(null);
-                          setBusy("close");
-                          try {
-                            const res = await bulkCloseIssues([id]);
-                            const row = res.results[0];
-                            if (!row?.ok) setLastError(row?.error ?? "Close failed");
-                            await queryClient.invalidateQueries({ queryKey: ["entities"] });
-                          } catch (err) {
-                            setLastError(err instanceof Error ? err.message : String(err));
-                          } finally {
-                            setBusy(null);
-                          }
-                        }}
+                        size="sm"
+                        variant="destructive"
+                        disabled={selectedIds.length === 0 || busy !== null}
                       >
-                        Close
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs px-2 py-1 rounded border border-destructive/40 text-destructive hover:bg-destructive/10"
-                        disabled={busy !== null}
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          if (
-                            !window.confirm(
-                              "Remove this issue from Neotoma? If it is linked to GitHub and still open, it will be closed there first.",
-                            )
-                          ) {
-                            return;
-                          }
-                          setLastError(null);
-                          setBusy("remove");
-                          try {
-                            const res = await bulkRemoveIssues([id]);
-                            const row = res.results[0];
-                            if (!row?.ok) {
-                              setLastError(row?.error ?? "Remove failed");
-                              return;
-                            }
-                            await queryClient.invalidateQueries({ queryKey: ["entities"] });
-                          } catch (err) {
-                            setLastError(err instanceof Error ? err.message : String(err));
-                          } finally {
-                            setBusy(null);
-                          }
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : null}
+                        {busy === "remove" ? "Removing…" : "Remove"}
+                      </Button>
+                    }
+                    title={`Remove ${selectedIds.length} issue${selectedIds.length === 1 ? "" : "s"}?`}
+                    description="Linked GitHub issues will be closed if still open, then removed from this list."
+                    confirmLabel="Remove"
+                    variant="destructive"
+                    onConfirm={async () => {
+                      const { ok, message } = await runBulk("remove", selectedIds);
+                      if (!ok) setLastError(message);
+                    }}
+                  />
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              <div className="space-y-2">
+                {issues.map((issue) => {
+                  const id = rowEntityId(issue);
+                  const listNumberLabel = getIssueListNumberLabel(issue);
+                  const submittedLabel = formatSubmitted(issue);
+                  const isClosed = issueEntityField(issue, "status") === "closed";
+                  return (
+                    <div
+                      key={id || getIssueRouteSegment(issue)}
+                      className="flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        className="mt-1 shrink-0"
+                        checked={id ? selected.has(id) : false}
+                        onCheckedChange={() => id && toggleSelect(id)}
+                        disabled={!id}
+                        aria-label={`Select issue ${listNumberLabel !== "—" ? listNumberLabel : (id ?? "unnumbered")}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          to={`/issues/${encodeURIComponent(getIssueRouteSegment(issue))}`}
+                          className="block group"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                {listNumberLabel !== "—" ? (
+                                  <span className="font-mono text-sm text-muted-foreground">#{listNumberLabel}</span>
+                                ) : null}
+                                <h3 className="truncate font-medium group-hover:underline">
+                                  {String(issueEntityField(issue, "title") ?? "")}
+                                </h3>
+                              </div>
+                              <div className="mt-1 flex min-w-0 flex-row flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+                                {submittedLabel ? (
+                                  <span className="min-w-0 flex-1">
+                                    Submitted{" "}
+                                    <span className="text-foreground/90">{submittedLabel}</span>
+                                  </span>
+                                ) : null}
+                                <span className="shrink-0">
+                                  <IssueAuthorLine
+                                    author={String(issueEntityField(issue, "author") ?? "unknown")}
+                                    provenance={issue.provenance}
+                                  />
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Badge
+                                variant={isClosed ? "secondary" : "default"}
+                                className="font-normal"
+                              >
+                                {String(issueEntityField(issue, "status") ?? "")}
+                              </Badge>
+                              {Array.isArray(issueEntityField(issue, "labels")) &&
+                                (issueEntityField(issue, "labels") as string[]).map((label) => (
+                                  <Badge key={label} variant="outline" className="font-normal">
+                                    {label}
+                                  </Badge>
+                                ))}
+                            </div>
+                          </div>
+                        </Link>
+                        {id ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-9 px-3 text-xs sm:h-7 sm:px-2"
+                              disabled={busy !== null || isClosed}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                void closeSingle(id);
+                              }}
+                            >
+                              Close
+                            </Button>
+                            <ConfirmDialog
+                              trigger={
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-9 border-destructive/40 px-3 text-xs text-destructive hover:bg-destructive/10 sm:h-7 sm:px-2"
+                                  disabled={busy !== null}
+                                  onClick={(e) => e.preventDefault()}
+                                >
+                                  Remove
+                                </Button>
+                              }
+                              title="Remove this issue?"
+                              description="If it is linked to GitHub and still open, it will be closed there first, then removed from this list."
+                              confirmLabel="Remove"
+                              variant="destructive"
+                              onConfirm={() => {
+                                void removeSingle(id);
+                              }}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </ListSurface>
+      </div>
     </PageShell>
   );
 }

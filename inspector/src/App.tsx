@@ -46,8 +46,8 @@ const AccessPoliciesPage = lazy(() => import("@/pages/access_policies"));
 const SubscriptionsPage = lazy(() => import("@/pages/subscriptions"));
 const PeersPage = lazy(() => import("@/pages/peers"));
 const PeerDetailPage = lazy(() => import("@/pages/peer_detail"));
-const UsagePage = lazy(() => import("@/pages/usage"));
 const DesignPage = lazy(() => import("@/pages/design"));
+const NotFoundPage = lazy(() => import("@/pages/not_found"));
 
 function InspectorRedirect() {
   const location = useLocation();
@@ -64,7 +64,7 @@ export default function App() {
         <Route path="/faq" element={<FaqPage />} />
         <Route path="/analytics" element={<DashboardPage />} />
         <Route path="/dashboard" element={<Navigate to="/analytics" replace />} />
-        <Route path="/usage" element={<UsagePage />} />
+        <Route path="/usage" element={<Navigate to="/analytics" replace />} />
         <Route path="/docs" element={<DocsPage />} />
         <Route path="/docs/*" element={<DocsPage />} />
         <Route path="/search/:query" element={<SearchPage />} />
@@ -113,6 +113,7 @@ export default function App() {
         <Route path="/compliance" element={<ComplianceDashboardPage />} />
         <Route path="/inspector" element={<InspectorRedirect />} />
         <Route path="/inspector/*" element={<InspectorRedirect />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );

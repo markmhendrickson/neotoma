@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Activity } from "lucide-react";
+import { isApiUrlConfigured } from "@/api/client";
 import { PageShell } from "@/components/layout/page_shell";
+import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
+import { EmptyState } from "@/components/shared/empty_state";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import {
   Pagination,
@@ -75,6 +79,18 @@ export default function TurnsPage() {
   const turns = useTurns(queryParams);
   const items = turns.data?.items ?? [];
   const hasMore = turns.data?.has_more ?? false;
+  const filtersActive = harness !== "all" || status !== "all" || agentKey !== "all";
+
+  if (!isApiUrlConfigured()) {
+    return (
+      <PageShell
+        title="Turns"
+        description="Per-turn telemetry accreted from Neotoma harness hooks. One row per (session_id, turn_id) — covers conversation_turn plus the legacy turn_compliance / turn_activity aliases."
+      >
+        <ApiNotConfiguredState />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell
@@ -164,9 +180,15 @@ export default function TurnsPage() {
         ) : turns.error ? (
           <QueryErrorAlert title="Could not load turns">{turns.error.message}</QueryErrorAlert>
         ) : items.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            No turns recorded yet for this filter.
-          </div>
+          <EmptyState
+            icon={Activity}
+            title={filtersActive ? "No turns match these filters" : "No turns recorded yet"}
+            description={
+              filtersActive
+                ? "Try a different harness, status, or agent — or clear the filters to see everything."
+                : "Run a harness hook (Claude Code, Cursor, Codex) and the next turn will land here with stored/retrieved entity counts."
+            }
+          />
         ) : (
           <div className="overflow-hidden rounded-lg border bg-card">
             <table className="w-full text-sm">
