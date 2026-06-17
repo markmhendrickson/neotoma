@@ -1008,18 +1008,24 @@ export async function submitIssue(
   const entityId = structuredEntityIdAt(storeResult, 0);
   const conversationId = structuredEntityIdAt(storeResult, 1);
 
-  // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
+  // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs
+  // and, when present, to the originating conversation turn entity.
   const entityIdsToLink = Array.isArray(params.entity_ids_to_link)
     ? params.entity_ids_to_link.filter(
         (id): id is string => typeof id === "string" && id.trim().length > 0
       )
     : [];
-  if (entityId && entityIdsToLink.length > 0) {
+  const conversationTurnId =
+    typeof params.conversation_turn_id === "string" && params.conversation_turn_id.trim().length > 0
+      ? params.conversation_turn_id.trim()
+      : null;
+  const allTargetIds = [...entityIdsToLink, ...(conversationTurnId ? [conversationTurnId] : [])];
+  if (entityId && allTargetIds.length > 0) {
     const relationships: import("../../core/operations.js").CreateRelationshipInput[] =
-      entityIdsToLink.map((targetId) => ({
+      allTargetIds.map((targetId) => ({
         relationship_type: "REFERS_TO" as const,
         source_entity_id: entityId,
-        target_entity_id: targetId.trim(),
+        target_entity_id: targetId,
       }));
     await ops.createRelationships({ relationships });
   }

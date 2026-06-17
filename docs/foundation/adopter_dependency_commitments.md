@@ -43,7 +43,7 @@ back once met.
 Related:
 
 - `docs/foundation/redlines.md` — the constitutional governance commitments
-  (R1–R16) that the governance commitments below reference.
+  (R1–R17) that the governance commitments below reference.
 - `docs/foundation/substrate_and_applications.md` — the substrate/application
   boundary that defines what these commitments do and do not cover.
 - `docs/developer/developer_preview_launch_checklist.md` — what the current
@@ -90,7 +90,7 @@ work behind each move is open and itemized.
 | 2   | Contract stability                         | Partial  | OpenAPI-first flow, legacy-payload corpus, and BC-diff gate exist; a stated **deprecation window** does not.                                         | [#1521](https://github.com/markmhendrickson/neotoma/issues/1521) |
 | 3   | Backward compatibility + replay            | Partial  | Immutability of observations/source is enforced (`docs/subsystems/observation_architecture.md`); a stated **support window** is not yet set.         | [#1522](https://github.com/markmhendrickson/neotoma/issues/1522) |
 | 4   | Deterministic extraction across versions   | In place | Content-derived IDs, stable ordering, deterministic reducers are enforced invariants (`docs/architecture/determinism.md`).                           | —                                                                |
-| 5   | Redlines demonstrated, not just stated     | Partial  | `redlines.md` is in force; MIT + open core are real and verifiable; a recurring demonstration record is still being built.                           | [#1523](https://github.com/markmhendrickson/neotoma/issues/1523) |
+| 5   | Redlines demonstrated, not just stated     | Partial  | `redlines.md` is in force; MIT + open core are real and verifiable; a recurring demonstration record is still being built. R12's multi-party ratification mechanism is committed but not yet operational — amendments today are ratified under single-party founder approval (see the redlines Amendment history). | [#1523](https://github.com/markmhendrickson/neotoma/issues/1523) |
 | 6   | Portability + exit proven                  | Partial  | Export (`memory-export`, `snapshots export`), bulk import, and deletion commands exist; the leave-and-rebuild protocol is now written (`docs/developer/exit_rebuild_test.md`), but a recorded run against a realistic dataset is still pending. | [#1524](https://github.com/markmhendrickson/neotoma/issues/1524) |
 | 7   | Change governance published                | Partial  | Breaking-change discipline (release supplements, BC gate) exists; the deprecation window and decision process are not yet written down.              | [#1525](https://github.com/markmhendrickson/neotoma/issues/1525) |
 | 8   | Supported multi-tenant deployment topology | Partial  | The topology decision aid exists (`docs/infrastructure/multi_tenant_deployment_topology.md`); a _tested_ production topology is not yet established. | [#1526](https://github.com/markmhendrickson/neotoma/issues/1526) |
@@ -130,8 +130,8 @@ The detail for each follows.
    `docs/foundation/redlines.md` (R1–R16) is in force, and this bar requires
    evidence that the load-bearing ones are real: open-source core under MIT (R6),
    no hosted-only features that compromise local-first (R5), no unilateral
-   capture or quiet license/policy drift (R12), no category drift into the
-   vertical applications built on the substrate (R13).
+   capture or quiet license/policy drift (R12), no competition with the
+   vertical applications built on the substrate (R17).
 6. **Portability and exit are proven.** _(Partial)_ Export, deletion, and rebuild-from-source-
    of-record are documented end-to-end, so an adopter can leave with
    their data at any time. Dependence on Neotoma is reversible by construction,
@@ -171,7 +171,7 @@ The detail for each follows.
 - **Not the end of the substrate/application boundary.** Reaching it does not
   change what the substrate owns versus what the application owns
   (`docs/foundation/substrate_and_applications.md`). Neotoma at 1.0 is still the
-  State Layer and still does not move up into vertical applications (R13).
+  State Layer and still does not move up into vertical applications (R17).
 - **Not a managed-service commitment.** This is about the substrate's maturity,
   not about a hosted offering. The self-hosted path is the supported path; any
   managed offering is a separate decision.

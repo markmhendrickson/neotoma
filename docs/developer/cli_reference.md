@@ -354,8 +354,10 @@ neotoma session --servers
   - `--force`: Overwrite existing configuration.
   - `--skip-db`: Skip database initialization.
   - `--skip-env`: Skip interactive `.env` creation and variable prompts (e.g. for CI or non-interactive use).
+  - `--project-local`: Store the Neotoma config in `.neotoma/config.json` in the current directory (project-scoped) instead of the user-level `~/.config/neotoma/config.json`. The CLI reads this project-local config automatically for all subsequent commands run from that directory via `readEffectiveConfig`, which checks for `.neotoma/config.json` before falling back to the user-level config. Trust boundary: project-local config is only loaded when the containing directory is owned by the current user (prevents untrusted directories from silently overriding user settings). Use this when you want per-project Neotoma configuration independent of the user-level setup.
+  - `--safe`: Dry-run mode. Reports what `init` would do (create directories, write config, run migrations) without writing any files or making any changes. Output lists each planned action with a check mark or blocker reason. Exit code is 0 if all planned actions would succeed; exit code 1 if any blocker is detected (e.g. config already exists without `--force`, parent directory not writable). Combine with `--json` to get machine-readable output. Note: `--safe` checks the filesystem layout planned by `init`; it does not simulate authentication or preflight steps.
 
-**Example:**
+**Examples:**
 
 ```bash
 # Basic initialization
@@ -363,6 +365,18 @@ neotoma init
 
 # Initialize with custom data directory
 neotoma init --data-dir /path/to/data
+
+# Store config in current project directory instead of user home
+neotoma init --project-local
+
+# Preview what init would do without making any changes
+neotoma init --safe
+
+# Dry-run with machine-readable output
+neotoma init --safe --json
+
+# Combine: dry-run scoped to current project
+neotoma init --safe --project-local
 ```
 
 **What it creates:**
@@ -371,6 +385,17 @@ neotoma init --data-dir /path/to/data
 - SQLite database: `<data-dir>/neotoma.db` (with WAL mode enabled)
 - Encryption key (if user chooses key-derived auth when prompted): `~/.config/neotoma/keys/neotoma.key` (mode 0600).
 - Environment file target: project `<checkout>/.env` when checkout is detected, otherwise `~/.config/neotoma/.env`
+- Config file: `~/.config/neotoma/config.json` (default) or `.neotoma/config.json` in the current directory when `--project-local` is given.
+
+**Runtime overrides** for `neotoma init`:
+
+| Precedence | Source | Description |
+|------------|--------|-------------|
+| 1 (highest) | `--data-dir` flag | Explicit data directory path |
+| 2 | `NEOTOMA_DATA_DIR` env var | Environment variable override |
+| 3 (default) | Auto-detected or `~/neotoma/data` | Resolved at startup |
+
+Config scope for `neotoma init` is a binary switch: `--project-local` writes to `.neotoma/config.json` in cwd; without the flag, init writes to `~/.config/neotoma/config.json`. All subsequent commands that call `readEffectiveConfig` will read the project-local file when present (and owned by the current user).
 
 ### Harness setup
 
@@ -569,6 +594,14 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--user-id <userId>`: store under a specific user.
   - `--commit`: actually write. Without it the command runs in dry-run/plan mode.
   - The `/store` endpoint already writes each batch transactionally; this command owns file reading, chunking, and per-chunk idempotency. For very large backfills, this is the supported "replay from an external source" path.
+- `neotoma entities export`: the inverse of `entities import` — pages through all entities and emits import-compatible JSONL (one object per line, `entity_type` plus the snapshot fields at the top level), so an instance can be exported and rebuilt with a matched command pair. See [`exit_rebuild_test.md`](exit_rebuild_test.md) for the leave-and-rebuild protocol this supports.
+  - `--type <entityType>`: only export this entity type.
+  - `--out <path>`: write JSONL here (default: stdout).
+  - `--with-relationships`: also write a companion `<out>.relationships.json` of typed edges that `relationships create --file` re-imports, for a full entities-plus-edges round-trip.
+  - `--page-size <n>`: entities fetched per page (default `500`).
+  - `--include-merged`: include merged entities (default: exclude).
+  - `--user-id <userId>`: export under a specific user scope.
+  - Export reflects only what the snapshot captured: fields an entity's registered schema does not declare are not in the snapshot and do not survive this path. Declare every field that matters before relying on export for a rebuild.
 
 ### Sources
 

@@ -2182,6 +2182,80 @@ components:
             externally. Empty unless the auto-file flow flagged something.
           items:
             $ref: "#/components/schemas/TurnSummaryEntityRef"
+    ConversationTurnIndex:
+      type: object
+      description: |
+        FU-2026-05-003. Index of turns within a conversation, ordered by
+        `turn_number` ascending (falls back to message creation time for
+        legacy rows without `turn_number`).
+      required: [conversation_id, conversation_entity_id, turns]
+      properties:
+        conversation_id:
+          type: string
+          description: |
+            Stable conversation identifier from the conversation entity's
+            `conversation_id` field.
+        conversation_entity_id:
+          type: string
+          description: The `entity_id` of the conversation entity (`ent_...`).
+        turns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationTurn"
+    ConversationTurn:
+      type: object
+      required:
+        - turn_number
+        - message_entity_id
+        - role
+        - turn_key
+        - stored
+        - retrieved
+        - issues
+      properties:
+        turn_number:
+          type: integer
+          description: |
+            1-based ordinal of the turn within the conversation. Read from the
+            message's `turn_number` snapshot field; falls back to its index in
+            creation order for legacy rows.
+        message_entity_id:
+          type: string
+        role:
+          type: string
+          description: |
+            `user`, `assistant`, `agent`, `system`, or `tool` per the
+            `conversation_message` `role` / `sender_kind` fields.
+        turn_key:
+          type: string
+        content_preview:
+          type: string
+          nullable: true
+          description: |
+            First ~200 characters of the message `content` field, intended for
+            sidebar previews. Full content is on the message entity itself.
+        created_at:
+          type: string
+          nullable: true
+          format: date-time
+        stored:
+          type: array
+          description: Non-bookkeeping entities REFERS_TO from this message.
+          items:
+            $ref: "#/components/schemas/TurnSummaryEntityRef"
+        retrieved:
+          type: array
+          description: |
+            Entities REFERS_TO from this message that are not also REFERS_TO
+            from the matching assistant message (preserves the
+            stored-vs-retrieved partition `neotoma_turn_summary` uses).
+          items:
+            $ref: "#/components/schemas/TurnSummaryEntityRef"
+        issues:
+          type: array
+          description: Entities of `entity_type` `issue` REFERS_TO from this message.
+          items:
+            $ref: "#/components/schemas/TurnSummaryEntityRef"
     TurnSummaryEntityRef:
       type: object
       required: [entity_id, entity_type]
@@ -2685,6 +2759,163 @@ paths:
               schema:
                 type: object
 
+  /entities:
+    get:
+      summary: List entities
+      description: >
+        REST/GET alias of `POST /entities/query`. Maps query-string parameters
+        to the same handler so consumers that issue
+        `GET /entities?entity_type=...&search=...` reach the canonical list
+        behavior instead of a 404. Scoped to the authenticated user. The
+        request body of `POST /entities/query` and the query string here accept
+        the same field names; complex object fields (`snapshot_filters`) are
+        passed as a JSON-encoded string. Unmatched verbs on `/entities` return
+        a 404 whose `details.hint` points back at this endpoint and
+        `POST /entities/query`.
+      operationId: listEntities
+      parameters:
+        - in: query
+          name: entity_type
+          required: false
+          schema: { type: string }
+        - in: query
+          name: search
+          required: false
+          description: Canonical free-text query parameter for retrieval relevance.
+          schema: { type: string }
+        - in: query
+          name: query
+          required: false
+          description: Compatibility alias for `search`.
+          schema: { type: string }
+        - in: query
+          name: search_query
+          required: false
+          description: Compatibility alias for `search`.
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: sort_by
+          required: false
+          description: |
+            Sort field. Non-default values cannot be combined with `search`.
+            Mirrors the `sort_by` body field of `POST /entities/query`.
+          schema: { type: string }
+        - in: query
+          name: sort_order
+          required: false
+          description: "`desc` cannot be combined with `search`."
+          schema:
+            type: string
+            enum: [asc, desc]
+        - in: query
+          name: published
+          required: false
+          description: "Cannot be combined with `search`."
+          schema: { type: boolean }
+        - in: query
+          name: published_after
+          required: false
+          description: "Inclusive lower bound for snapshot.published_date. Cannot be combined with `search`."
+          schema: { type: string }
+        - in: query
+          name: published_before
+          required: false
+          description: "Inclusive upper bound for snapshot.published_date. Cannot be combined with `search`."
+          schema: { type: string }
+        - in: query
+          name: include_snapshots
+          required: false
+          description: When false, omit snapshot/provenance/raw_fragments payloads for lighter responses.
+          schema: { type: boolean }
+        - in: query
+          name: include_merged
+          required: false
+          schema: { type: boolean }
+        - in: query
+          name: user_id
+          required: false
+          description: Optional user scope. When omitted the authenticated user is used.
+          schema: { type: string }
+        - in: query
+          name: updated_since
+          required: false
+          description: ISO 8601 timestamp; return only entities updated at or after this value.
+          schema: { type: string }
+        - in: query
+          name: created_since
+          required: false
+          description: ISO 8601 timestamp; return only entities created at or after this value.
+          schema: { type: string }
+        - in: query
+          name: identity_basis
+          required: false
+          description: Return only entities with at least one observation resolved with the given identity_basis.
+          schema:
+            type: string
+            enum:
+              - schema_rule
+              - schema_lookup
+              - heuristic_name
+              - heuristic_fallback
+              - target_id
+        - in: query
+          name: exclude_bookkeeping
+          required: false
+          description: When true, omit chat bookkeeping types from results.
+          schema: { type: boolean }
+        - in: query
+          name: snapshot_filters
+          required: false
+          description: |
+            JSON-encoded object filtering entities by snapshot field values,
+            equivalent to the `snapshot_filters` body field of
+            `POST /entities/query`. Example:
+            `{"status":{"op":"eq","value":"active"}}`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Entity list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EntitySnapshot"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+                  applied_search_strategies:
+                    type: array
+                    items:
+                      type: string
+                      enum:
+                        - strict
+                        - semantic
+                        - partial_overlap
+                        - concept_bridge
+                  search_mode:
+                    type: string
+                    enum: [none, semantic, lexical_typed, lexical_fallback]
+        "400":
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
   /entities/query:
     post:
       summary: Query entities
@@ -2698,6 +2929,18 @@ paths:
               properties:
                 entity_type:
                   type: string
+                  description: |
+                    Single entity-type filter. Combined as a union with
+                    `entity_types` when both are supplied.
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Multi-type filter. When non-empty, results are restricted
+                    to entities whose `entity_type` is in this list (an IN
+                    filter), OR-combined with the singular `entity_type` when
+                    both are provided. An empty array is treated as no filter.
                 search:
                   type: string
                   description: Canonical free-text query parameter for retrieval relevance.
@@ -4886,6 +5129,15 @@ paths:
                       - snapshot_field
                       - semantic
                       - none
+                  hint:
+                    type: string
+                    description: |
+                      Present only when the `identifier` is shaped like an
+                      entity_id (`ent_<hex>`) but no entity with that id exists
+                      for the caller (`match_mode: "none"`, `total: 0`). Tells
+                      the caller the input looks like an entity_id and that
+                      `retrieve_entity_snapshot(entity_id=…)` is the direct
+                      fetch path (#1597). Omitted for every other result.
         "400":
           description: Invalid request
           content:
@@ -5311,6 +5563,13 @@ paths:
                   description: >
                     Entity IDs to link to this issue via REFERS_TO relationships.
                     Created server-side in the same operation as issue creation.
+                conversation_turn_id:
+                  type: string
+                  description: >
+                    Entity ID of the conversation turn (conversation_message entity) where this
+                    issue was observed. When provided, a REFERS_TO relationship is created from
+                    the filed issue entity to this conversation turn entity, making the origin
+                    of the issue traceable.
                 user_id:
                   type: string
       responses:
@@ -6070,6 +6329,52 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /conversations/{conversation_id}/turn-index:
+    get:
+      summary: Conversation turn index
+      description: |
+        FU-2026-05-003. Returns one row per `conversation_message` linked
+        `PART_OF` the conversation, with the entities the message stored or
+        retrieved this turn (via REFERS_TO edges) and the issue entities
+        surfaced. Used by the Inspector conversation page to render per-turn
+        anchor sections (`#msg-N`, `#stored-N`, `#retrieved-N`, `#issues-N`)
+        and the turn timeline sidebar.
+      operationId: getConversationTurnIndex
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: |
+            Conversation identifier. Accepts either the `conversation_id`
+            field on the conversation entity (host-provided or agent-derived)
+            or the conversation `entity_id` (e.g. `ent_...`).
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Turn index for the conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationTurnIndex"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error_code:
+                    type: string
+                  message:
+                    type: string
 
   /turn_summary:
     post:

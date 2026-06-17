@@ -29,10 +29,13 @@ const RELATIONSHIP_TYPE_ENUM = [
  *   allow runtime description customization).
  * @param timelineWidgetResourceUri - Optional resource URI for the timeline
  *   widget, attached as _meta on list_timeline_events.
+ * @param turnSummaryWidgetResourceUri - Optional resource URI for the turn
+ *   summary widget, attached as _meta on neotoma_turn_summary.
  */
 export function buildToolDefinitions(
   descriptionOverrides?: Map<string, string>,
-  timelineWidgetResourceUri?: string
+  timelineWidgetResourceUri?: string,
+  turnSummaryWidgetResourceUri?: string
 ): ToolDefinition[] {
   const desc = (name: string, fallback: string): string =>
     descriptionOverrides?.get(name) ?? fallback;
@@ -128,7 +131,14 @@ export function buildToolDefinitions(
         properties: {
           entity_type: {
             type: "string",
-            description: "Optional entity type filter (for example: post, task, contact).",
+            description:
+              "Optional single entity type filter (for example: post, task, contact). Combined as a union with `entity_types` when both are supplied.",
+          },
+          entity_types: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional multi-type filter. When non-empty, results are restricted to entities whose type is in this list (IN filter), OR-combined with `entity_type`. An empty array is treated as no filter.",
           },
           search: {
             type: "string",
@@ -1101,6 +1111,11 @@ export function buildToolDefinitions(
               "Use when filing issues about a repo other than the one Neotoma is globally configured for " +
               "(e.g. `markmhendrickson/ateles`). Overrides only the GitHub mirror — Neotoma authoring home is unchanged.",
           },
+          conversation_turn_id: {
+            type: "string",
+            description:
+              "Entity ID of the conversation turn (conversation_message entity) where this issue was observed. When provided, a REFERS_TO relationship is created from the filed issue to the conversation turn so the origin is traceable.",
+          },
         },
         required: ["title", "body"],
         // Keep the top-level schema to a plain object for Codex/OpenAI
@@ -1326,6 +1341,14 @@ export function buildToolDefinitions(
         "Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("neotoma_turn_summary"),
+      ...(turnSummaryWidgetResourceUri
+        ? {
+            _meta: {
+              ui: { resourceUri: turnSummaryWidgetResourceUri },
+              "openai/outputTemplate": turnSummaryWidgetResourceUri,
+            },
+          }
+        : {}),
     },
     {
       name: "npm_check_update",

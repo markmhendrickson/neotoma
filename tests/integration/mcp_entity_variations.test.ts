@@ -309,6 +309,120 @@ describe("MCP entity actions - parameter variations", () => {
     });
   });
 
+  // Regression: retrieve_entities must honor the plural `entity_types` filter
+  // (an IN-filter OR-combined with singular `entity_type`) rather than silently
+  // running an unfiltered query. See issue #1562.
+  describe("retrieve_entities entity_types (plural) filter (#1562)", () => {
+    const typesUserId = `test-user-entity-types-${Date.now()}`;
+    const planIds: string[] = [];
+    const noteIds: string[] = [];
+    const taskIds: string[] = [];
+
+    beforeAll(async () => {
+      const sourceId = `src_entity_types_${Date.now()}`;
+      const { error: sourceError } = await db.from("sources").insert({
+        id: sourceId,
+        user_id: typesUserId,
+        content_hash: `entity_types_${Date.now()}`,
+        storage_url: "file:///test/minimal.txt",
+        mime_type: "text/plain",
+        file_size: 0,
+      });
+      expect(sourceError).toBeNull();
+      tracker.trackSource(sourceId);
+
+      const seed = async (
+        bucket: string[],
+        entityType: string,
+        count: number
+      ): Promise<void> => {
+        for (let i = 0; i < count; i++) {
+          const entityId = `ent_${entityType}_${Date.now()}_${i}`;
+          bucket.push(entityId);
+          tracker.trackEntity(entityId);
+          const { error } = await db.from("observations").insert({
+            entity_id: entityId,
+            entity_type: entityType,
+            source_id: sourceId,
+            fields: {
+              title: `${entityType} ${i}`,
+              canonical_name: `${entityType} ${i}`,
+            },
+            user_id: typesUserId,
+            schema_version: "1.0",
+            observed_at: new Date().toISOString(),
+          });
+          expect(error).toBeNull();
+          await computeEntitySnapshot(entityId);
+        }
+      };
+
+      // Distinct counts per type so a filter leak is observable in `total`.
+      await seed(planIds, "plan", 3);
+      await seed(noteIds, "note", 2);
+      await seed(taskIds, "task", 4);
+    });
+
+    it("returns a deterministic, type-filtered list for entity_types: [plan]", async () => {
+      const result = await queryEntitiesWithCount({
+        userId: typesUserId,
+        entityTypes: ["plan"],
+        includeMerged: false,
+        limit: 100,
+        offset: 0,
+      });
+
+      expect(result.total).toBe(planIds.length);
+      expect(result.entities).toHaveLength(planIds.length);
+      expect(result.entities.every((e) => e.entity_type === "plan")).toBe(true);
+      expect(result.search_mode).toBe("none");
+    });
+
+    it("filters across both types for a multi-type entity_types array", async () => {
+      const result = await queryEntitiesWithCount({
+        userId: typesUserId,
+        entityTypes: ["plan", "note"],
+        includeMerged: false,
+        limit: 100,
+        offset: 0,
+      });
+
+      expect(result.total).toBe(planIds.length + noteIds.length);
+      expect(result.entities).toHaveLength(planIds.length + noteIds.length);
+      expect(result.entities.every((e) => ["plan", "note"].includes(e.entity_type))).toBe(true);
+      // Excludes the unrequested type entirely.
+      expect(result.entities.some((e) => e.entity_type === "task")).toBe(false);
+    });
+
+    it("OR-combines singular entity_type with plural entity_types", async () => {
+      const result = await queryEntitiesWithCount({
+        userId: typesUserId,
+        entityType: "task",
+        entityTypes: ["plan"],
+        includeMerged: false,
+        limit: 100,
+        offset: 0,
+      });
+
+      expect(result.total).toBe(taskIds.length + planIds.length);
+      expect(result.entities.every((e) => ["task", "plan"].includes(e.entity_type))).toBe(true);
+      expect(result.entities.some((e) => e.entity_type === "note")).toBe(false);
+    });
+
+    it("treats an empty entity_types array as no type filter", async () => {
+      const result = await queryEntitiesWithCount({
+        userId: typesUserId,
+        entityTypes: [],
+        includeMerged: false,
+        limit: 100,
+        offset: 0,
+      });
+
+      // All seeded types are returned when no filter is applied.
+      expect(result.total).toBe(planIds.length + noteIds.length + taskIds.length);
+    });
+  });
+
   describe("retrieve_entity_by_identifier variations", () => {
     it("should find entity by canonical_name", async () => {
       const canonicalName = `Unique Task ${Date.now()}`;

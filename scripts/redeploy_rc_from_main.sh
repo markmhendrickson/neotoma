@@ -5,7 +5,10 @@
 # Brings the running prod server up to the latest origin/main by:
 #   1. fast-forwarding the RC checkout (this repo) to origin/main,
 #      preserving the uncommitted RC version bump (e.g. 0.16.0-rc.1),
-#   2. rebuilding dist (so the global CLI + any dist consumers are current),
+#   2. rebuilding dist — both the server (so the global CLI + any dist
+#      consumers are current) AND the Inspector SPA (so the content-negotiated
+#      bundle served at / reflects the new main; a server-only rebuild leaves
+#      the UI stale),
 #   3. HARD-restarting the prod-server launchagent (kill + relaunch) so tsx /
 #      node --watch re-imports fresh modules — a soft reload was observed to
 #      miss reducer changes (see the #1595 deploy session).
@@ -99,6 +102,18 @@ if ! npm run build:server >/dev/null 2>&1; then
   exit 1
 fi
 log "build:server complete."
+
+# Rebuild the Inspector SPA too. The prod-server serves the static
+# dist/inspector bundle (content-negotiated at /), so a server-only rebuild
+# leaves the UI frozen at whatever was last built by hand — observed in the
+# v0.16 RC, where the git pointer advanced but the served Inspector was 10
+# days stale because this step was missing. build:inspector:prod-target emits
+# the prod-targeted bundle into dist/inspector.
+if ! npm run build:inspector:prod-target >/dev/null 2>&1; then
+  log "ERROR: build:inspector:prod-target failed; server left on prior build."
+  exit 1
+fi
+log "build:inspector complete."
 
 # HARD restart: kickstart -k kills the existing job instance and relaunches it,
 # forcing tsx/node --watch to re-import modules from the updated source.

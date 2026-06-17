@@ -205,6 +205,23 @@ Acquirer money where the explicit or implicit plan is to translate Neotoma into
 something its current architecture refuses to be is not on the table, regardless
 of multiple.
 
+### R17. No competition with the applications built on the substrate
+
+Neotoma is the State Layer. The applications built on it — CRMs, vertical
+relationship products, domain tools — own the layer above: their domain schemas,
+ranking and merge policies, behavioral data, and distribution. The redline is
+Neotoma moving up into those verticals to compete with the adopters depending on
+it: shipping a first-party application that competes with an adopter's product,
+or absorbing an adopter's differentiating logic (its ranking methodology, its
+behavioral-signal models, its domain-specific workflows) into the substrate and
+re-exposing it to that adopter's competitors. Substrate hardening every adopter
+needs belongs upstream; an individual adopter's vertical moat is theirs and stays
+theirs. An adopter must be able to depend on Neotoma without the substrate
+becoming their competitor — that safety is what makes building on an open core
+rational rather than reckless. (This is the structural commitment behind the
+boundary in [`substrate_and_applications.md`](substrate_and_applications.md); R13
+governs the separate, narrower question of marketing-positioning drift.)
+
 ## The meta-redline
 
 Underneath all of the above is the same test, applied at the project level:
@@ -236,6 +253,45 @@ protect.
 The substance survives translation only if the institutions that hold it survive
 translation. This document, and the process around it, is one of those
 institutions.
+
+## Amendment history
+
+Each entry records what changed, when, why, who ratified it, and — honestly —
+under what process, including where that process is not yet what R12 ultimately
+requires.
+
+### 2026-06-10 — R17 added (clarification)
+
+- **What:** Added **R17, No competition with the applications built on the
+  substrate.** Corrected the citation for the no-vertical-competition commitment
+  from R13 to R17 in [`substrate_and_applications.md`](substrate_and_applications.md)
+  and [`adopter_dependency_commitments.md`](adopter_dependency_commitments.md).
+- **Why:** The commitment that Neotoma will not move up into the verticals built
+  on it was already operative and asserted in
+  [`substrate_and_applications.md`](substrate_and_applications.md), but it was
+  cited to R13 — which governs marketing-positioning drift, not structural
+  non-competition. R17 states the existing commitment explicitly and puts it in
+  the redline set, where adopters verify commitments, rather than leaving it as
+  prose in a downstream document.
+- **Classification:** **Clarification, not a change to the substantive position.**
+  R17 does not weaken or alter any commitment; it names one that already bound
+  and files it correctly. The amendment process exists to guard against the
+  substantive position being weakened under pressure (capture); recording a
+  pre-existing adopter protection in its proper place is the opposite of that.
+- **Ratified by:** Mark Hendrickson (founder), under the single-party founder
+  approval that is the governance actually operational today.
+- **Process caveat (stated, not hidden):** R12 commits to multi-party
+  stewardship — ratification authority that is not concentrated in one party —
+  and to that institution existing *before* the leverage to capture the
+  commitments does. **That multi-party ratification mechanism is not yet
+  operational;** today's governance is single-human (founder) approval. This
+  amendment is therefore made under the current single-party model. The gap
+  between R12's commitment and the present mechanism is a known governance item,
+  tracked alongside the other dependency-stability commitments
+  ([`adopter_dependency_commitments.md`](adopter_dependency_commitments.md), the
+  governance row). When the multi-party process exists, clarifications of this
+  kind should route through it; this entry records that it did not, because it
+  could not yet.
 
 ## Related documents
 

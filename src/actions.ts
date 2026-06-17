@@ -855,7 +855,9 @@ const mcpServerInstances = new Map<string, NeotomaServer>();
 // solely when an `eventStore` is configured (resumability opt-in). We do not
 // configure an event store, and the stream that drops is the standalone GET
 // SSE stream, which never emits a priming event. Setting `retryInterval` would
-// therefore be an inert knob with no runtime effect, so it is omitted.
+// therefore be an inert knob with no runtime effect, so it is omitted. Instead
+// we write the SSE `retry:` field ourselves as the first frame on the GET SSE
+// stream (issue #1503); see MCP_SSE_RETRY_MS / parseMcpSseRetryMs below.
 
 /** Default MCP SSE heartbeat interval in ms when the env var is unset/invalid. */
 export const MCP_SSE_KEEPALIVE_DEFAULT_MS = 25_000;
@@ -880,6 +882,43 @@ export function parseMcpSseKeepaliveMs(raw: string | undefined): number {
 
 const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS);
 
+// ----------------------------------------------------------------------------
+// MCP SSE reconnect hint (issue #1503)
+//
+// The SSE spec defines a `retry:` field that tells the client how many
+// milliseconds to wait before reconnecting after the stream drops. Without it,
+// a client that sees an unexpected close (proxy idle reap, NAT timeout) has no
+// server-provided guidance and may not reconnect promptly — the exact silent
+// failure mode in #1503 where Claude.ai loses the Neotoma tool registry until a
+// manual disconnect/reconnect. We write the `retry:` field as the very first
+// frame on the standalone GET SSE stream (right after the SDK flushes headers),
+// so the client records it on open and honors it on the *next* disconnect.
+//
+// This is independent of the keepalive heartbeat (#1483): the retry hint is
+// emitted even when the heartbeat is disabled, because reconnect guidance is
+// useful regardless of whether we are also sending warm-keeping pings.
+
+/** Default MCP SSE `retry:` reconnect hint in ms when the env var is unset/invalid. */
+export const MCP_SSE_RETRY_DEFAULT_MS = 3_000;
+
+/**
+ * Parse the `NEOTOMA_MCP_SSE_RETRY_MS` env value into a reconnect-hint interval.
+ *
+ * Mirrors {@link parseMcpSseKeepaliveMs}: only an unset / empty / non-numeric
+ * value falls back to the default. A literal `0` (or any negative number) is a
+ * VALID "do not emit a retry frame" sentinel and MUST flow through unchanged to
+ * the `retryMs <= 0` guard in `attachMcpSseKeepalive`.
+ */
+export function parseMcpSseRetryMs(raw: string | undefined): number {
+  if (raw === undefined) return MCP_SSE_RETRY_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return MCP_SSE_RETRY_DEFAULT_MS;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : MCP_SSE_RETRY_DEFAULT_MS;
+}
+
+const MCP_SSE_RETRY_MS = parseMcpSseRetryMs(process.env.NEOTOMA_MCP_SSE_RETRY_MS);
+
 /**
  * Attach SSE keepalive behavior to a `/mcp` GET request before the transport
  * takes over the response. Safe to call on every GET `/mcp`; it is a no-op
@@ -890,9 +929,10 @@ const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_
 export function attachMcpSseKeepalive(
   req: express.Request,
   res: express.Response,
-  options?: { keepaliveMs?: number; logger?: { warn: (msg: string) => void } }
+  options?: { keepaliveMs?: number; retryMs?: number; logger?: { warn: (msg: string) => void } }
 ): void {
   const keepaliveMs = options?.keepaliveMs ?? MCP_SSE_KEEPALIVE_MS;
+  const retryMs = options?.retryMs ?? MCP_SSE_RETRY_MS;
   const log = options?.logger ?? logger;
 
   // Inject X-Accel-Buffering only when the SDK actually opens an SSE stream.
@@ -903,23 +943,35 @@ export function attachMcpSseKeepalive(
   // so plain JSON-RPC POST replies are unaffected.
   const originalWriteHead = res.writeHead as typeof res.writeHead;
   let writeHeadPatched = true;
+  let retryFrameWritten = false;
   (res as express.Response).writeHead = function patchedWriteHead(
     this: express.Response,
     ...args: Parameters<typeof res.writeHead>
   ): express.Response {
+    let isSseStream = false;
     try {
       const contentType = String(res.getHeader("content-type") || "").toLowerCase();
-      if (
-        writeHeadPatched &&
-        contentType.includes("text/event-stream") &&
-        !res.getHeader("x-accel-buffering")
-      ) {
+      isSseStream = contentType.includes("text/event-stream");
+      if (writeHeadPatched && isSseStream && !res.getHeader("x-accel-buffering")) {
         res.setHeader("X-Accel-Buffering", "no");
       }
     } catch {
       // Header inspection is best-effort; never block the response.
     }
-    return originalWriteHead.apply(this, args) as express.Response;
+    const result = originalWriteHead.apply(this, args) as express.Response;
+    // Once headers are flushed for an SSE stream, write the SSE `retry:` field
+    // as the first frame so the client records the reconnect delay on open and
+    // honors it on the next unexpected close (#1503). SSE comment/field frames
+    // interleave safely before the SDK's own events. Carries no PII.
+    if (writeHeadPatched && isSseStream && !retryFrameWritten && retryMs > 0) {
+      retryFrameWritten = true;
+      try {
+        res.write(`retry: ${retryMs}\n\n`);
+      } catch {
+        // Non-fatal: the heartbeat below remains the primary keepalive.
+      }
+    }
+    return result;
   } as typeof res.writeHead;
 
   // Enable OS-level TCP keepalive so the kernel probes the peer and the
@@ -3706,10 +3758,16 @@ function handleApiError(
 // v0.2.15 Entity-Based HTTP API Endpoints
 // ============================================================================
 
-// POST /api/entities/query - Query entities with filters
-// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
-app.post("/entities/query", async (req, res) => {
-  const parsed = EntitiesQueryRequestSchema.safeParse(req.body);
+// Shared entity-query executor backing both POST /entities/query and the
+// GET /entities REST alias. `rawInput` is the already-shaped request payload
+// (POST body, or query-string params coerced by coerceEntitiesQueryParams).
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id.
+async function runEntitiesQuery(
+  req: express.Request,
+  res: express.Response,
+  rawInput: unknown
+): Promise<express.Response> {
+  const parsed = EntitiesQueryRequestSchema.safeParse(rawInput);
   if (!parsed.success) {
     logWarn("ValidationError:entities_query", req, {
       issues: parsed.error.issues,
@@ -3718,11 +3776,14 @@ app.post("/entities/query", async (req, res) => {
   }
 
   try {
-    // Get authenticated user_id (REQUIRED)
+    // Get authenticated user_id (REQUIRED). user_id is used for SECURITY
+    // scoping only via getAuthenticatedUserId; it is never read directly off
+    // the request for access control.
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
     const {
       entity_type,
+      entity_types,
       search,
       limit,
       offset,
@@ -3743,6 +3804,7 @@ app.post("/entities/query", async (req, res) => {
       await queryEntitiesWithCount({
         userId,
         entityType: entity_type,
+        entityTypes: entity_types,
         includeMerged: include_merged,
         includeSnapshots: include_snapshots,
         sortBy: sort_by,
@@ -3778,6 +3840,94 @@ app.post("/entities/query", async (req, res) => {
       "APIError:entities_query"
     );
   }
+}
+
+// Coerce GET /entities query-string parameters into the shape
+// EntitiesQueryRequestSchema expects. Query strings are always strings, so
+// numeric, boolean, and JSON-object fields are converted here; values that
+// fail conversion are passed through unchanged so Zod surfaces a 400.
+function coerceEntitiesQueryParams(query: express.Request["query"]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const readString = (key: string): string | undefined => {
+    const value = query[key];
+    if (typeof value === "string") return value;
+    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+    return undefined;
+  };
+  const parseBool = (value: string): boolean | string => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+  };
+
+  for (const key of [
+    "entity_type",
+    "search",
+    "query",
+    "search_query",
+    "sort_by",
+    "sort_order",
+    "published_after",
+    "published_before",
+    "user_id",
+    "updated_since",
+    "created_since",
+    "identity_basis",
+  ]) {
+    const value = readString(key);
+    if (value !== undefined) out[key] = value;
+  }
+
+  for (const key of ["limit", "offset"]) {
+    const value = readString(key);
+    if (value !== undefined && value !== "") {
+      const num = Number(value);
+      out[key] = Number.isNaN(num) ? value : num;
+    }
+  }
+
+  for (const key of ["published", "include_snapshots", "include_merged", "exclude_bookkeeping"]) {
+    const value = readString(key);
+    if (value !== undefined) out[key] = parseBool(value);
+  }
+
+  const snapshotFilters = readString("snapshot_filters");
+  if (snapshotFilters !== undefined && snapshotFilters !== "") {
+    try {
+      out.snapshot_filters = JSON.parse(snapshotFilters);
+    } catch {
+      out.snapshot_filters = snapshotFilters;
+    }
+  }
+
+  return out;
+}
+
+// GET /entities - REST/GET alias of POST /entities/query (issue #1499).
+// Maps query-string params to the same handler so consumers that issue
+// `GET /entities?entity_type=...&search=...` no longer hit a 404 and silently
+// degrade. REQUIRES AUTHENTICATION - identical user scoping to the POST path.
+app.get("/entities", async (req, res) => {
+  return runEntitiesQuery(req, res, coerceEntitiesQueryParams(req.query));
+});
+
+// POST /api/entities/query - Query entities with filters
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
+app.post("/entities/query", async (req, res) => {
+  return runEntitiesQuery(req, res, req.body);
+});
+
+// Hinted 404 fallback for the /entities collection path. GET is handled above
+// and POST/PUT/DELETE/PATCH on the bare collection are misuse; respond with a
+// structured hint (in `details`, never concatenated into `message`) that
+// points callers at the canonical list and query endpoints so the mistake is
+// self-correcting. See issue #1499.
+app.all("/entities", (req, res) => {
+  return sendError(res, 404, "RESOURCE_NOT_FOUND", `No ${req.method} route on /entities.`, {
+    hint: "List entities with GET /entities?entity_type=...&search=..., or query with POST /entities/query.",
+    method: req.method,
+    supported: ["GET /entities", "POST /entities/query"],
+  });
 });
 
 // GET /api/entities/:id - Get entity detail with snapshot and provenance (FU-601)
@@ -6764,6 +6914,36 @@ export async function storeStructuredForApi(params: {
           }`
         );
       }
+
+      // Schema-driven derived-entity extraction: if the entity's active schema
+      // declares `derived_entities`, evaluate each rule and create matching
+      // entities linked back to the source entity. Non-fatal: failures are
+      // logged and skipped, never blocking the primary store.
+      if (commit) {
+        try {
+          const { schemaRegistry: schemaReg2 } = await import("./services/schema_registry.js");
+          const schemaEntry2 = await schemaReg2.loadActiveSchema(r.entity_type, userId);
+          if (schemaEntry2?.schema_definition?.derived_entities?.length) {
+            const { extractDerivedEntities } =
+              await import("./services/schema_derived_entity_extraction.js");
+            await extractDerivedEntities({
+              entityId: r.entity_id,
+              entityType: r.entity_type,
+              fields: r.fields,
+              schema: schemaEntry2.schema_definition,
+              userId,
+              sourceId: observationSourceId,
+              idempotencyKey,
+            });
+          }
+        } catch (derivedErr) {
+          logger.warn(
+            `Derived entity extraction failed for ${r.entity_type}/${r.entity_id}: ${
+              derivedErr instanceof Error ? derivedErr.message : String(derivedErr)
+            }`
+          );
+        }
+      }
     }
 
     createdEntities.push({
@@ -8964,6 +9144,9 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           ...(parsed.data.entity_ids_to_link
             ? { entity_ids_to_link: parsed.data.entity_ids_to_link }
             : {}),
+          ...(parsed.data.conversation_turn_id
+            ? { conversation_turn_id: parsed.data.conversation_turn_id }
+            : {}),
         });
       })();
       logDebug("Success:issues_submit", req, { entity_id: result.entity_id });
@@ -9712,6 +9895,39 @@ app.post("/correct", async (req, res) => {
 });
 
 // POST /get_authenticated_user - Get authenticated user ID
+// FU-2026-05-003: GET /conversations/:conversation_id/turn-index — Inspector
+// per-turn anchor sections and turn timeline sidebar.
+app.get("/conversations/:conversation_id/turn-index", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const identifier = String(req.params.conversation_id ?? "").trim();
+    if (!identifier) {
+      return sendError(
+        res,
+        400,
+        "ERR_TURN_INDEX_BAD_REQUEST",
+        "conversation_id path parameter is required"
+      );
+    }
+    const { computeConversationTurnIndex, ConversationTurnIndexError } =
+      await import("./services/conversation_turn_index.js");
+    try {
+      const result = await computeConversationTurnIndex({
+        userId,
+        conversationIdentifier: identifier,
+      });
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof ConversationTurnIndexError) {
+        return sendError(res, err.status, err.code, err.message);
+      }
+      throw err;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to compute conversation turn index");
+  }
+});
+
 // FU-2026-05-002: neotoma_turn_summary — computes per-turn status line.
 app.post("/turn_summary", async (req, res) => {
   try {

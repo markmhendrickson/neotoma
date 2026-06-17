@@ -331,6 +331,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/entities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List entities
+     * @description REST/GET alias of `POST /entities/query`. Maps query-string parameters to the same handler so consumers that issue `GET /entities?entity_type=...&search=...` reach the canonical list behavior instead of a 404. Scoped to the authenticated user. The request body of `POST /entities/query` and the query string here accept the same field names; complex object fields (`snapshot_filters`) are passed as a JSON-encoded string. Unmatched verbs on `/entities` return a 404 whose `details.hint` points back at this endpoint and `POST /entities/query`.
+     */
+    get: operations["listEntities"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/entities/query": {
     parameters: {
       query?: never;
@@ -1729,6 +1749,31 @@ export interface paths {
      *     snapshot until the field is added to the schema.
      */
     post: operations["correct"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/conversations/{conversation_id}/turn-index": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Conversation turn index
+     * @description FU-2026-05-003. Returns one row per `conversation_message` linked
+     *     `PART_OF` the conversation, with the entities the message stored or
+     *     retrieved this turn (via REFERS_TO edges) and the issue entities
+     *     surfaced. Used by the Inspector conversation page to render per-turn
+     *     anchor sections (`#msg-N`, `#stored-N`, `#retrieved-N`, `#issues-N`)
+     *     and the turn timeline sidebar.
+     */
+    get: operations["getConversationTurnIndex"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3594,6 +3639,53 @@ export interface components {
        */
       issues: components["schemas"]["TurnSummaryEntityRef"][];
     };
+    /**
+     * @description FU-2026-05-003. Index of turns within a conversation, ordered by
+     *     `turn_number` ascending (falls back to message creation time for
+     *     legacy rows without `turn_number`).
+     */
+    ConversationTurnIndex: {
+      /**
+       * @description Stable conversation identifier from the conversation entity's
+       *     `conversation_id` field.
+       */
+      conversation_id: string;
+      /** @description The `entity_id` of the conversation entity (`ent_...`). */
+      conversation_entity_id: string;
+      turns: components["schemas"]["ConversationTurn"][];
+    };
+    ConversationTurn: {
+      /**
+       * @description 1-based ordinal of the turn within the conversation. Read from the
+       *     message's `turn_number` snapshot field; falls back to its index in
+       *     creation order for legacy rows.
+       */
+      turn_number: number;
+      message_entity_id: string;
+      /**
+       * @description `user`, `assistant`, `agent`, `system`, or `tool` per the
+       *     `conversation_message` `role` / `sender_kind` fields.
+       */
+      role: string;
+      turn_key: string;
+      /**
+       * @description First ~200 characters of the message `content` field, intended for
+       *     sidebar previews. Full content is on the message entity itself.
+       */
+      content_preview?: string | null;
+      /** Format: date-time */
+      created_at?: string | null;
+      /** @description Non-bookkeeping entities REFERS_TO from this message. */
+      stored: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Entities REFERS_TO from this message that are not also REFERS_TO
+       *     from the matching assistant message (preserves the
+       *     stored-vs-retrieved partition `neotoma_turn_summary` uses).
+       */
+      retrieved: components["schemas"]["TurnSummaryEntityRef"][];
+      /** @description Entities of `entity_type` `issue` REFERS_TO from this message. */
+      issues: components["schemas"]["TurnSummaryEntityRef"][];
+    };
     TurnSummaryEntityRef: {
       entity_id: string;
       entity_type: string;
@@ -4204,6 +4296,96 @@ export interface operations {
       };
     };
   };
+  listEntities: {
+    parameters: {
+      query?: {
+        entity_type?: string;
+        /** @description Canonical free-text query parameter for retrieval relevance. */
+        search?: string;
+        /** @description Compatibility alias for `search`. */
+        query?: string;
+        /** @description Compatibility alias for `search`. */
+        search_query?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * @description Sort field. Non-default values cannot be combined with `search`.
+         *     Mirrors the `sort_by` body field of `POST /entities/query`.
+         */
+        sort_by?: string;
+        /** @description `desc` cannot be combined with `search`. */
+        sort_order?: "asc" | "desc";
+        /** @description Cannot be combined with `search`. */
+        published?: boolean;
+        /** @description Inclusive lower bound for snapshot.published_date. Cannot be combined with `search`. */
+        published_after?: string;
+        /** @description Inclusive upper bound for snapshot.published_date. Cannot be combined with `search`. */
+        published_before?: string;
+        /** @description When false, omit snapshot/provenance/raw_fragments payloads for lighter responses. */
+        include_snapshots?: boolean;
+        include_merged?: boolean;
+        /** @description Optional user scope. When omitted the authenticated user is used. */
+        user_id?: string;
+        /** @description ISO 8601 timestamp; return only entities updated at or after this value. */
+        updated_since?: string;
+        /** @description ISO 8601 timestamp; return only entities created at or after this value. */
+        created_since?: string;
+        /** @description Return only entities with at least one observation resolved with the given identity_basis. */
+        identity_basis?:
+          | "schema_rule"
+          | "schema_lookup"
+          | "heuristic_name"
+          | "heuristic_fallback"
+          | "target_id";
+        /** @description When true, omit chat bookkeeping types from results. */
+        exclude_bookkeeping?: boolean;
+        /**
+         * @description JSON-encoded object filtering entities by snapshot field values,
+         *     equivalent to the `snapshot_filters` body field of
+         *     `POST /entities/query`. Example:
+         *     `{"status":{"op":"eq","value":"active"}}`.
+         */
+        snapshot_filters?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Entity list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            entities?: components["schemas"]["EntitySnapshot"][];
+            total?: number;
+            limit?: number;
+            offset?: number;
+            applied_search_strategies?: (
+              | "strict"
+              | "semantic"
+              | "partial_overlap"
+              | "concept_bridge"
+            )[];
+            /** @enum {string} */
+            search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+          };
+        };
+      };
+      /** @description Invalid query parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
   queryEntities: {
     parameters: {
       query?: never;
@@ -4214,7 +4396,18 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
+          /**
+           * @description Single entity-type filter. Combined as a union with
+           *     `entity_types` when both are supplied.
+           */
           entity_type?: string;
+          /**
+           * @description Multi-type filter. When non-empty, results are restricted
+           *     to entities whose `entity_type` is in this list (an IN
+           *     filter), OR-combined with the singular `entity_type` when
+           *     both are provided. An empty array is treated as no filter.
+           */
+          entity_types?: string[];
           /** @description Canonical free-text query parameter for retrieval relevance. */
           search?: string;
           /** @description Compatibility alias for `search`. */
@@ -6029,6 +6222,15 @@ export interface operations {
              * @enum {string}
              */
             match_mode?: "direct" | "snapshot_field" | "semantic" | "none";
+            /**
+             * @description Present only when the `identifier` is shaped like an
+             *     entity_id (`ent_<hex>`) but no entity with that id exists
+             *     for the caller (`match_mode: "none"`, `total: 0`). Tells
+             *     the caller the input looks like an entity_id and that
+             *     `retrieve_entity_snapshot(entity_id=…)` is the direct
+             *     fetch path (#1597). Omitted for every other result.
+             */
+            hint?: string;
           };
         };
       };
@@ -6325,6 +6527,8 @@ export interface operations {
           target_repo?: string;
           /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
           entity_ids_to_link?: string[];
+          /** @description Entity ID of the conversation turn (conversation_message entity) where this issue was observed. When provided, a REFERS_TO relationship is created from the filed issue entity to this conversation turn entity, making the origin of the issue traceable. */
+          conversation_turn_id?: string;
           user_id?: string;
         };
       };
@@ -6925,6 +7129,47 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getConversationTurnIndex: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path: {
+        /**
+         * @description Conversation identifier. Accepts either the `conversation_id`
+         *     field on the conversation entity (host-provided or agent-derived)
+         *     or the conversation `entity_id` (e.g. `ent_...`).
+         */
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Turn index for the conversation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationTurnIndex"];
+        };
+      };
+      /** @description Conversation not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error_code?: string;
+            message?: string;
+          };
         };
       };
     };

@@ -225,6 +225,19 @@
       ]
     },
     {
+      "path": "/conversations/{conversation_id}/turn-index",
+      "method": "GET",
+      "operation_id": "getConversationTurnIndex",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/correct",
       "method": "POST",
       "operation_id": "correct",
@@ -280,6 +293,19 @@
       "path": "/delete_relationship",
       "method": "POST",
       "operation_id": "deleteRelationship",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities",
+      "method": "GET",
+      "operation_id": "listEntities",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [

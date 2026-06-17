@@ -7,6 +7,8 @@
  * - harness filter narrows the set of files
  * - missing home directory reports gracefully
  * - result counts are consistent with input
+ * - POST body carries required fields (file_path, observation_source, optional user_id)
+ * - store errors are recorded and reflected in result counts
  *
  * The tests import the module function directly rather than spawning the CLI,
  * consistent with db_repair_schema_lag.test.ts and schemas_repair_plural_types.test.ts.
@@ -140,6 +142,149 @@ describe("onboarding import-transcripts", () => {
       expect(result.files_skipped).toBe(0);
       expect(result.errors).toHaveLength(0);
       expect(calls).toHaveLength(2);
+    });
+
+    it("POST body has correct structure for each transcript file", async () => {
+      // Regression guard: a broken parser that sends malformed payloads to
+      // /store would silently pass earlier tests because they only counted
+      // POSTs. This test inspects the actual body sent to the API.
+      const { calls, api } = makeApiStub({ data: { ok: true } });
+
+      vi.resetModules();
+      vi.doMock("../../src/cli/discovery.js", () => ({
+        discoverHarnessTranscripts: async () => [
+          {
+            harness: "claude-code",
+            paths: ["/fake/transcript_a.jsonl", "/fake/transcript_b.jsonl"],
+            fileCount: 2,
+            estimatedDateRange: null,
+            sampleTitles: [],
+          },
+        ],
+      }));
+
+      const { runTranscriptImport: run } = await import(
+        "../../src/cli/onboarding_transcript_import.js"
+      );
+
+      await run({ dryRun: false, api });
+
+      // All POSTs go to /store
+      expect(calls.every((c) => c.path === "/store")).toBe(true);
+
+      // Each body MUST carry file_path and observation_source="import".
+      // These are the contract fields the server-side unstructured ingest
+      // path relies on to route the transcript through the parser.
+      for (const c of calls) {
+        const body = c.body as Record<string, unknown>;
+        expect(typeof body.file_path).toBe("string");
+        expect((body.file_path as string).length).toBeGreaterThan(0);
+        expect(body.observation_source).toBe("import");
+      }
+
+      // Each file is submitted exactly once, with its own path.
+      const paths = calls.map((c) => (c.body as { file_path: string }).file_path).sort();
+      expect(paths).toEqual(["/fake/transcript_a.jsonl", "/fake/transcript_b.jsonl"]);
+
+      vi.doUnmock("../../src/cli/discovery.js");
+    });
+
+    it("POST body includes user_id when supplied", async () => {
+      const { calls, api } = makeApiStub({ data: { ok: true } });
+
+      vi.resetModules();
+      vi.doMock("../../src/cli/discovery.js", () => ({
+        discoverHarnessTranscripts: async () => [
+          {
+            harness: "codex",
+            paths: ["/fake/codex_session_1.jsonl"],
+            fileCount: 1,
+            estimatedDateRange: null,
+            sampleTitles: [],
+          },
+        ],
+      }));
+
+      const { runTranscriptImport: run } = await import(
+        "../../src/cli/onboarding_transcript_import.js"
+      );
+
+      await run({ dryRun: false, api, userId: "user-abc-123" });
+
+      expect(calls).toHaveLength(1);
+      const body = calls[0].body as Record<string, unknown>;
+      expect(body.user_id).toBe("user-abc-123");
+      expect(body.file_path).toBe("/fake/codex_session_1.jsonl");
+      expect(body.observation_source).toBe("import");
+
+      vi.doUnmock("../../src/cli/discovery.js");
+    });
+
+    it("POST body omits user_id when not supplied", async () => {
+      const { calls, api } = makeApiStub({ data: { ok: true } });
+
+      vi.resetModules();
+      vi.doMock("../../src/cli/discovery.js", () => ({
+        discoverHarnessTranscripts: async () => [
+          {
+            harness: "cursor",
+            paths: ["/fake/cursor_chat.jsonl"],
+            fileCount: 1,
+            estimatedDateRange: null,
+            sampleTitles: [],
+          },
+        ],
+      }));
+
+      const { runTranscriptImport: run } = await import(
+        "../../src/cli/onboarding_transcript_import.js"
+      );
+
+      await run({ dryRun: false, api });
+
+      expect(calls).toHaveLength(1);
+      const body = calls[0].body as Record<string, unknown>;
+      expect("user_id" in body).toBe(false);
+
+      vi.doUnmock("../../src/cli/discovery.js");
+    });
+
+    it("records errors when store returns an error response", async () => {
+      // Store returns an error envelope on each call.
+      const calls: Array<{ path: string; body: unknown }> = [];
+      const api = {
+        POST: async (path: string, opts: { body: unknown }) => {
+          calls.push({ path, body: opts.body });
+          return { error: { message: "store failed" } };
+        },
+      } as any;
+
+      vi.resetModules();
+      vi.doMock("../../src/cli/discovery.js", () => ({
+        discoverHarnessTranscripts: async () => [
+          {
+            harness: "claude-code",
+            paths: ["/fake/t1.jsonl", "/fake/t2.jsonl"],
+            fileCount: 2,
+            estimatedDateRange: null,
+            sampleTitles: [],
+          },
+        ],
+      }));
+
+      const { runTranscriptImport: run } = await import(
+        "../../src/cli/onboarding_transcript_import.js"
+      );
+
+      const result = await run({ dryRun: false, api });
+
+      expect(result.files_found).toBe(2);
+      expect(result.files_stored).toBe(0);
+      expect(result.files_skipped).toBe(2);
+      expect(result.errors).toHaveLength(2);
+      expect(result.errors[0].error).toContain("store failed");
+
+      vi.doUnmock("../../src/cli/discovery.js");
     });
   });
 });

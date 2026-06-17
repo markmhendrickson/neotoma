@@ -5,6 +5,8 @@ import {
   attachMcpSseKeepalive,
   parseMcpSseKeepaliveMs,
   MCP_SSE_KEEPALIVE_DEFAULT_MS,
+  parseMcpSseRetryMs,
+  MCP_SSE_RETRY_DEFAULT_MS,
 } from "../../src/actions.js";
 
 /**
@@ -76,7 +78,9 @@ describe("attachMcpSseKeepalive (issue #1483)", () => {
 
   it("writes periodic SSE comment heartbeat frames once the event-stream is established", () => {
     const { req, res } = makeReqRes("GET");
-    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000 });
+    // retryMs: 0 isolates this test to the heartbeat sequence; the retry frame
+    // is covered by the dedicated #1503 describe block below.
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000, retryMs: 0 });
 
     // Before headers are sent, no frame should be written.
     vi.advanceTimersByTime(3000);
@@ -136,7 +140,7 @@ describe("attachMcpSseKeepalive (issue #1483)", () => {
   it("stops the heartbeat and restores writeHead when the stream closes", () => {
     const { req, res } = makeReqRes("GET");
     const originalWriteHead = res.writeHead;
-    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000 });
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000, retryMs: 0 });
     expect(res.writeHead).not.toBe(originalWriteHead);
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -153,7 +157,7 @@ describe("attachMcpSseKeepalive (issue #1483)", () => {
 
   it("stops the heartbeat when the response has already ended", () => {
     const { req, res } = makeReqRes("GET");
-    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000 });
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000, retryMs: 0 });
 
     res.setHeader("Content-Type", "text/event-stream");
     res.writeHead(200);
@@ -165,7 +169,7 @@ describe("attachMcpSseKeepalive (issue #1483)", () => {
 
   it("disables the heartbeat when keepaliveMs <= 0 but still enables a bounded TCP keepalive", () => {
     const { req, res } = makeReqRes("GET");
-    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 0 });
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 0, retryMs: 0 });
 
     res.setHeader("Content-Type", "text/event-stream");
     res.writeHead(200);
@@ -211,6 +215,90 @@ describe("attachMcpSseKeepalive (issue #1483)", () => {
 
     vi.advanceTimersByTime(10000);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("attachMcpSseKeepalive SSE retry: field (issue #1503)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("writes the SSE retry: field as the first frame once the event-stream opens", () => {
+    const { req, res } = makeReqRes("GET");
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000, retryMs: 3000 });
+
+    // No frame before the SDK flushes headers.
+    vi.advanceTimersByTime(5000);
+    expect(res.writes).toHaveLength(0);
+
+    // SDK opens the SSE stream: the retry hint lands immediately, ahead of any
+    // heartbeat, so the client records it on open and honors it on disconnect.
+    res.setHeader("Content-Type", "text/event-stream");
+    res.writeHead(200);
+    expect(res.writes).toEqual(["retry: 3000\n\n"]);
+
+    // Subsequent traffic is the heartbeat; the retry frame is written only once.
+    vi.advanceTimersByTime(2000);
+    expect(res.writes).toEqual(["retry: 3000\n\n", ": hb\n\n", ": hb\n\n"]);
+  });
+
+  it("emits the retry: field even when the heartbeat is disabled (independent of keepalive)", () => {
+    const { req, res } = makeReqRes("GET");
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 0, retryMs: 3000 });
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.writeHead(200);
+    vi.advanceTimersByTime(60000);
+
+    // Reconnect guidance is useful regardless of warm-keeping pings: exactly one
+    // retry frame, and no heartbeat frames.
+    expect(res.writes).toEqual(["retry: 3000\n\n"]);
+  });
+
+  it("does NOT write a retry: field on non-SSE (JSON) responses", () => {
+    const { req, res } = makeReqRes("GET");
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 1000, retryMs: 3000 });
+
+    res.setHeader("Content-Type", "application/json");
+    res.writeHead(200);
+    vi.advanceTimersByTime(5000);
+    expect(res.writes).toHaveLength(0);
+  });
+
+  it("suppresses the retry: field when retryMs <= 0", () => {
+    const { req, res } = makeReqRes("GET");
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs: 0, retryMs: 0 });
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.writeHead(200);
+    vi.advanceTimersByTime(5000);
+    expect(res.writes).toHaveLength(0);
+  });
+});
+
+describe("parseMcpSseRetryMs (issue #1503)", () => {
+  it("falls back to the default for unset / empty / non-numeric values", () => {
+    expect(parseMcpSseRetryMs(undefined)).toBe(MCP_SSE_RETRY_DEFAULT_MS);
+    expect(parseMcpSseRetryMs("")).toBe(MCP_SSE_RETRY_DEFAULT_MS);
+    expect(parseMcpSseRetryMs("   ")).toBe(MCP_SSE_RETRY_DEFAULT_MS);
+    expect(parseMcpSseRetryMs("abc")).toBe(MCP_SSE_RETRY_DEFAULT_MS);
+  });
+
+  it("passes a literal 0 through as the suppress sentinel (NOT coerced to default)", () => {
+    expect(parseMcpSseRetryMs("0")).toBe(0);
+  });
+
+  it("passes negative values through (also suppress, via the <= 0 guard)", () => {
+    expect(parseMcpSseRetryMs("-1")).toBe(-1);
+  });
+
+  it("returns the parsed value for valid positive integers", () => {
+    expect(parseMcpSseRetryMs("5000")).toBe(5000);
+    expect(parseMcpSseRetryMs(" 1500 ")).toBe(1500);
   });
 });
 
@@ -261,7 +349,7 @@ describe("attachMcpSseKeepalive env-driven disable (issue #1483 review)", () => 
     expect(keepaliveMs).toBe(0);
 
     const { req, res } = makeReqRes("GET");
-    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs });
+    attachMcpSseKeepalive(req as never, res as never, { keepaliveMs, retryMs: 0 });
     res.setHeader("Content-Type", "text/event-stream");
     res.writeHead(200);
     vi.advanceTimersByTime(60000);
