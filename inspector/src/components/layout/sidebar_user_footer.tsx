@@ -73,7 +73,7 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
           <Circle
             className={cn(
               "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 fill-current",
-              isHealthy ? "text-green-500" : health.isLoading ? "text-yellow-500" : "text-red-500",
+              isHealthy ? "text-success" : health.isLoading ? "text-warning" : "text-destructive",
             )}
           />
         </span>
@@ -86,7 +86,7 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
               <Circle
                 className={cn(
                   "h-2 w-2 shrink-0 fill-current",
-                  isHealthy ? "text-green-500" : health.isLoading ? "text-yellow-500" : "text-red-500",
+                  isHealthy ? "text-success" : health.isLoading ? "text-warning" : "text-destructive",
                 )}
               />
               <span className="shrink-0">{connectionLabel}</span>
@@ -110,7 +110,7 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
           align="start"
           className="w-80 max-w-[calc(100vw-2rem)]"
         >
-          <DropdownMenuLabel>Inspector session</DropdownMenuLabel>
+          <DropdownMenuLabel>App session</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <div className="space-y-3 p-2 text-xs">
             <div className="flex min-w-0 items-start gap-2">
@@ -138,7 +138,7 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
                 <p className="break-all font-mono text-muted-foreground">{apiTarget}</p>
                 <p className="text-muted-foreground">
                   API <span className="font-mono">neotoma_env</span>:{" "}
-                  {serverInfo.data?.neotoma_env ?? "..."}; Vite fallback:{" "}
+                  {serverInfo.data?.neotoma_env ?? "..."}; app build default:{" "}
                   <span className="font-mono">{viteInspectorEnv}</span>
                 </p>
               </div>
@@ -161,7 +161,9 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
                     ) : null}
                   </>
                 ) : (
-                  <p className="text-muted-foreground">No local SQLite path on this session.</p>
+                  <p className="text-muted-foreground">
+                    Local SQLite path is not disclosed for this session.
+                  </p>
                 )}
               </div>
             </div>
