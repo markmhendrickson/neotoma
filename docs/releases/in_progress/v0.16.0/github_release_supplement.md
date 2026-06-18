@@ -36,6 +36,13 @@ Field-reported regression: on Windows with modern Node.js (post CVE-2024-27980 p
 - **Updated spawn sites** — `src/cli/index.ts`, `src/cli/hooks.ts`, `src/cli/doctor.ts`, `src/services/schema_registry.ts`, `src/mcp_dev_shim.ts` now use the helper. `doctor.ts` also maps `which` → `where` on Windows.
 - **Tests** — `src/shared/spawn_platform.test.ts` covers both platform branches and the spread-into-options shape.
 
+### Session identity inspector origin (#1591 / #1688)
+
+Agents were defaulting Inspector links to `sandbox.neotoma.io` when no configured origin was available. `GET /session` and MCP `get_session_identity` now expose `origins.inspector_origin` and `origins.app_origin` from `NEOTOMA_PUBLIC_BASE_URL` when set, otherwise from the inbound request — never a hardcoded sandbox guess. MCP instructions require agents to use session-provided origins for turn-summary links.
+
+- **Server** — `src/services/session_info.ts` builds normalized origin info; OpenAPI documents `SessionOriginInfo`.
+- **Tests** — unit coverage for empty/malformed origins; integration test confirms configured URL wins over request-derived host headers.
+
 ## Known issues (won't ship a fix this release)
 
 These were surfaced during the RC audit and are tracked for follow-up; they do not block v0.16.0 but are worth user awareness.
@@ -168,3 +175,4 @@ Operators with a configured API URL see pinned primitives on the Inspector home 
 | #396, #395 | Merged | Site UI salvage |
 | #1674 | Merged | Inspector pre-merge UI audit (mobile shell, design system, empty states, color audit, dashboard backing service) |
 | #1677 (closes #1676) | Merged | Windows `spawn EINVAL` regression fix for `.cmd` shims |
+| #1688 (closes #1591) | Merged | Session identity exposes inspector origin (no sandbox default) |
