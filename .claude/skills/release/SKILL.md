@@ -6,6 +6,7 @@ description: Release
 <!-- Source: .cursor/skills/release/SKILL.md -->
 
 
+
 # Release
 
 Prepare and ship a GitHub + npm + sandbox release with a mandatory preview step. A confirmed **execute** run is **not complete** until **`npm publish`** succeeds from the published package root and `sandbox.neotoma.io` is deployed and verified, unless the user explicitly scoped the request to GitHub-only / no registry / no sandbox.
@@ -41,6 +42,7 @@ Run before anything else:
 7. **Current package.json version**: Read and display.
 8. **Existing GitHub Release check**: Run `gh release view "vX.Y.Z" --json isDraft,tagName 2>/dev/null` for the target version. If a release exists and is a draft, surface this to the user ("Draft release vX.Y.Z already exists on GitHub — execute will update it rather than create a new one."). If a release exists and is **not** a draft (already published), **STOP** and ask the user explicitly before proceeding — updating a published release's notes is a hold point.
 9. **Sandbox deploy readiness**: Confirm `fly.sandbox.toml` exists, `flyctl` is available, and the active Fly account can deploy `neotoma-sandbox`. If Fly auth is missing, report that execute will block at sandbox deployment unless the user explicitly scopes the release to no sandbox.
+10. **npm publish readiness (env-token preferred)**: Before going further, source `.env` and run `npm whoami` so the publish step does not fail at the very end. If `npm whoami` exits 0, record the username and continue. If it exits non-zero, surface that `npm publish` will block in Step 4.10 unless the operator either (a) writes a fresh GAT into `.env` as `NPM_TOKEN=...` (sourced from the 1Password `npm` item, field `access token – ateles`; see `.env.example`) **and** ensures `~/.npmrc` contains `//registry.npmjs.org/:_authToken=${NPM_TOKEN}`, or (b) plans to fall back to interactive `npm login` (with the well-known web-login risks). Skip this check only when the user explicitly scoped the release to no npm publish.
 
 ### Step 2: Resolve Version
 
@@ -267,27 +269,50 @@ After the RC PR is merged and the user confirms execute, run **every** step belo
    If a draft already exists it is updated in place; otherwise a new draft is created. In either case the release remains invisible to users and does not trigger the "latest release" pointer until published in step 11b. If `gh release view` returns a release that is **not** a draft, **STOP** — do not overwrite a published release without explicit user approval.
 
 10. **Publish to npm (mandatory for a full release)**:
-   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout):
+   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout).
 
-   - **Registry auth:** If `npm publish` fails for auth or the session is stale, run `npm login` in an interactive terminal when needed.
-   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`.
+   **Preferred path — env-token via `scripts/npm_publish.sh` (agent-runnable, no browser):**
 
-   **npm web-login checkpoint (mandatory — do not skip):** Browser sign-in does **not** prove the same shell that will run `npm publish` has a valid token. After any web-login assist **or** when the user says they finished signing in:
+   The default release path is a token-based, unattended publish. `scripts/npm_publish.sh` sources `.env`, verifies `npm whoami` against the resulting `NPM_TOKEN`, and then runs `npm publish` — so an agent shell can complete the step without an interactive browser handshake. The token in `.env` is a Granular Access Token (GAT) with publish scope on the `neotoma` package; for this repo's maintainer it lives in 1Password under item `npm`, field `access token – ateles` (the dash is an en-dash, U+2013). See the `NPM_TOKEN` block in `.env.example` for the canonical setup commands.
 
-   1. **Immediately** run `npm whoami` in the **same** environment you use for `npm publish` (same repo root, same `HOME` / `~/.npmrc`).
-   2. **If `npm whoami` succeeds:** State clearly that the session is authenticated, then run `npm publish` (and `npm publish --otp=<code>` when 2FA applies). Do not advance to sandbox until publish and registry verification succeed.
-   3. **If `npm whoami` still fails (`E401` / unauthorized) or `npm login` exited before completing (for example npm printed `Exit handler never called`):** You **must** end the user-visible turn with an explicit handoff that includes all of the following — do not assume the user knows the next step:
-      - Explain that the browser login authorized the **browser**, not necessarily the **agent shell** (or that the CLI session aborted before writing a token).
-      - Give **copy-paste** commands for the operator to finish auth where `npm publish` will run (their own Terminal with the repo as cwd, or fixing `~/.npmrc` / `NPM_TOKEN` for CI-style shells).
-      - Ask them to reply **`ready`** (or confirm they ran `npm publish` locally and the registry shows `X.Y.Z`) so the next turn **retries `npm whoami` then `npm publish` immediately** without waiting for another vague ping.
-   4. **If the user message is only “I signed in” / “done” in the browser:** Treat that as a signal to run the checkpoint (step 1), not as permission to end the release thread without step 2 or step 3 text above.
+   **One-time setup on the publishing host** (the `op://vault/item/field` shorthand rejects the en-dash with `invalid character in secret reference '-'`, so use `op item get --fields label=…`). Avoid pasting explanatory `#` comment lines into interactive zsh unless `setopt interactive_comments` is enabled:
 
    ```bash
-   npm publish
+   eval "$(op signin)"
+   cd /path/to/neotoma
+   echo "NPM_TOKEN=$(op item get npm --fields label='access token – ateles' --reveal)" >> .env
+   printf '//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n' > ~/.npmrc
+   chmod 600 ~/.npmrc
+   set -a; . .env; set +a
+   npm whoami   # confirm
    ```
-   Do not treat the release as finished until this succeeds (capture or report the registry URL / version). **Skip only** if the user explicitly confirmed a scope that excludes npm (for example tag-only or internal).
 
-   After `npm publish` returns, confirm the registry actually reflects the new version before moving on:
+   Omit `--vault` first so this works when the operator's vault is not named `Personal`; add `--vault <name-or-id>` only if multiple `npm` items exist. If the item name or field label differs on the operator's account, discover the real values first: `op item list --categories API_CREDENTIAL,LOGIN`, `op item get npm --format json | jq '.fields[] | {id, label}'`, and `op vault list`.
+
+   ```bash
+   bash scripts/npm_publish.sh
+   ```
+
+   The script forwards extra args to `npm publish`, so `bash scripts/npm_publish.sh --otp=123456` and `bash scripts/npm_publish.sh --dry-run` both work. On a missing or stale token it exits non-zero with copy-pasteable remediation pointing back at the `.env` + `~/.npmrc` setup; if it succeeds, treat its exit as equivalent to a clean `npm publish` and continue to registry verification below.
+
+   **Fallback path — interactive `npm login` (use only when the env-token path is unavailable, e.g. token revoked mid-release and `op` is offline):**
+
+   - **Registry auth:** Run `npm login` in an interactive terminal when needed.
+   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`.
+
+   **npm web-login checkpoint (mandatory whenever the fallback path is used — do not skip):** Browser sign-in does **not** prove the same shell that will run `npm publish` has a valid token. After any web-login assist **or** when the user says they finished signing in:
+
+   1. **Immediately** run `npm whoami` in the **same** environment you use for `npm publish` (same repo root, same `HOME` / `~/.npmrc`).
+   2. **If `npm whoami` succeeds:** State clearly that the session is authenticated, then run `bash scripts/npm_publish.sh` (or bare `npm publish` if the helper is unavailable; add `--otp=<code>` when 2FA applies). Do not advance to sandbox until publish and registry verification succeed. Once the publish is confirmed, **propose persisting a fresh GAT into `.env` + `~/.npmrc`** so the next release can stay on the preferred path.
+   3. **If `npm whoami` still fails (`E401` / unauthorized) or `npm login` exited before completing (for example npm printed `Exit handler never called`):** You **must** end the user-visible turn with an explicit handoff that includes all of the following — do not assume the user knows the next step:
+      - Explain that the browser login authorized the **browser**, not necessarily the **agent shell** (or that the CLI session aborted before writing a token).
+      - Recommend the operator either (a) drop a fresh GAT into `.env` as `NPM_TOKEN=` (sourced from the 1Password `npm` / `access token – ateles` field) so the env-token path resumes working forever, or (b) run `npm login` in their own Terminal with the repo as cwd.
+      - Ask them to reply **`ready`** (or confirm they ran `npm publish` locally and the registry shows `X.Y.Z`) so the next turn **retries `npm whoami` then `bash scripts/npm_publish.sh` immediately** without waiting for another vague ping.
+   4. **If the user message is only “I signed in” / “done” in the browser:** Treat that as a signal to run the checkpoint (step 1), not as permission to end the release thread without step 2 or step 3 text above.
+
+   Do not treat the release as finished until publish succeeds (capture or report the registry URL / version). **Skip only** if the user explicitly confirmed a scope that excludes npm (for example tag-only or internal).
+
+   After publish returns, confirm the registry actually reflects the new version before moving on:
    ```bash
    npm view neotoma version
    ```
@@ -466,7 +491,7 @@ If the user says `/release foundation` (or another submodule name):
 - Do not merge or tag without user approval of the preview.
 - For a standard `/release`, always open a release candidate PR (`release/vX.Y.Z` → `main`) in Step 3.7 after all review lanes pass, and do not proceed to Step 4 until the user confirms execute (or confirms the PR is merged).
 - For a standard `/release`, always create the GitHub Release as a **draft** (`--draft`) in Step 4.9 and publish it (`gh release edit --draft=false`) only after sandbox verification passes in Step 4.11b.
-- For a standard `/release`, **always** run **`npm publish`** after `gh release create --draft` unless the user explicitly confirmed GitHub-only / no registry.
+- For a standard `/release`, **always** run **`npm publish`** after `gh release create --draft` unless the user explicitly confirmed GitHub-only / no registry. Prefer `bash scripts/npm_publish.sh` (env-token via `.env` + `~/.npmrc` interpolation) so the publish is agent-runnable without an interactive browser; only fall back to `npm login` + the web-login checkpoint when the env-token path is unavailable.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
 - For a standard `/release`, **always** run Step 3.5 (Security review lane) before Step 4 and Step 5 (Deployed probes) before declaring complete; the supplement MUST contain a `Security hardening` section linking `docs/releases/in_progress/<TAG>/security_review.md` (and `post_deploy_security_probes.md` after Step 5).
 - For a standard `/release`, **always** run Step 5.2 (Advisory publication) when the supplement's `Security hardening` section references any advisory file. Draft GHSAs MUST be published after the tag is live and before declaring the release complete. Never publish a GHSA before the fix tag exists.
