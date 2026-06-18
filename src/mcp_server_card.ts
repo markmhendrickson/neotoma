@@ -3,6 +3,7 @@ import { join } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
+import { readPackageVersion } from "./shared/package_version.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
@@ -20,16 +21,6 @@ function loadToolDescriptionsMap(): Map<string, string> {
     // Missing or invalid YAML; inline descriptions from tool_definitions apply.
   }
   return new Map();
-}
-
-function readPackageVersion(): string {
-  try {
-    const pkgPath = join(config.projectRoot, "package.json");
-    const parsed = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
-    return typeof parsed.version === "string" ? parsed.version : "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
 }
 
 /**
@@ -58,7 +49,7 @@ export function buildSmitheryServerCard(): Record<string, unknown> {
   return {
     serverInfo: {
       name: "neotoma",
-      version: readPackageVersion(),
+      version: readPackageVersion(config.projectRoot),
     },
     authentication,
     tools,

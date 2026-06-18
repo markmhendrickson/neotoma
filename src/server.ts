@@ -21,6 +21,7 @@ import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
+import { readPackageVersion } from "./shared/package_version.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
@@ -222,7 +223,7 @@ export class NeotomaServer {
     this.mcpServer = new McpServer(
       {
         name: "neotoma",
-        version: "1.0.0",
+        version: readPackageVersion(config.projectRoot),
       },
       {
         capabilities: NEOTOMA_MCP_DECLARED_CAPABILITIES,
@@ -526,7 +527,7 @@ export class NeotomaServer {
       },
       serverInfo: {
         name: "neotoma",
-        version: "1.0.0",
+        version: readPackageVersion(config.projectRoot),
         title: invalidConnection ? "Invalid connection" : "Authentication needed",
         description,
         // Add authenticationStrategies array (used by SDK-based servers like oauth-ping)
@@ -636,7 +637,7 @@ export class NeotomaServer {
       },
       serverInfo: {
         name: "neotoma",
-        version: "1.0.0",
+        version: readPackageVersion(config.projectRoot),
         ...(updateNotice
           ? {
               title: "Update available",
