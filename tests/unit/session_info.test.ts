@@ -85,12 +85,27 @@ describe("buildSessionInfo", () => {
     expect(normalizeSessionOrigin("https://neotoma.example.com/path")).toBe(
       "https://neotoma.example.com"
     );
+    expect(normalizeSessionOrigin("")).toBeUndefined();
+    expect(normalizeSessionOrigin("   ")).toBeUndefined();
+    expect(normalizeSessionOrigin(null)).toBeUndefined();
+    expect(normalizeSessionOrigin(undefined)).toBeUndefined();
     expect(normalizeSessionOrigin("not a url")).toBeUndefined();
 
     process.env.NEOTOMA_PUBLIC_BASE_URL = "https://configured.neotoma.test/root";
     expect(resolveConfiguredSessionOrigin()).toBe("https://configured.neotoma.test");
     process.env.NEOTOMA_PUBLIC_BASE_URL = "not a url";
     expect(resolveConfiguredSessionOrigin()).toBeUndefined();
+  });
+
+  it("omits origins for falsy app origins even when originSource is missing", () => {
+    const session = buildSessionInfo({
+      userId: "user-falsy-origin",
+      identity: null,
+      appOrigin: "",
+      originSource: null,
+    });
+
+    expect(session.origins).toBeUndefined();
   });
 
   it("populates identity fields from a hardware-tier AAuth identity", () => {
@@ -132,9 +147,7 @@ describe("buildSessionInfo", () => {
     });
     expect(session.attribution.decision).toBeDefined();
     expect(session.attribution.decision!.client_info_raw_name).toBe("mcp");
-    expect(
-      session.attribution.decision!.client_info_normalised_to_null_reason,
-    ).toBe("too_generic");
+    expect(session.attribution.decision!.client_info_normalised_to_null_reason).toBe("too_generic");
     expect(session.attribution.decision!.resolved_tier).toBe("anonymous");
   });
 
