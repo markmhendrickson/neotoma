@@ -73,7 +73,11 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
-import { buildSessionInfo } from "./services/session_info.js";
+import {
+  buildSessionInfo,
+  resolveConfiguredSessionOrigin,
+  type SessionOriginInfo,
+} from "./services/session_info.js";
 import { getActiveStandingRules, type StandingRule } from "./services/standing_rules.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
@@ -146,7 +150,7 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), render `🧠 Neotoma — [<conversation name>](<origin>/inspector/conversations/<id>)` with bullet groups Created (N), Updated (N), Retrieved (N). Each bullet: emoji + label + linked entity_type to `<origin>/inspector/entities/<id>`. Origin: 3080 dev, 3180 prod.",
+  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), render `🧠 Neotoma — [<conversation name>](<origin>/inspector/conversations/<id>)` with bullet groups Created (N), Updated (N), Retrieved (N). Use `get_session_identity.origins.inspector_origin` as `<origin>` when present; if absent, do NOT guess sandbox/localhost and render labels without hyperlinks. Each bullet: emoji + label + linked entity_type to `<origin>/inspector/entities/<id>` only when an origin is known.",
   "",
   "Schema/fidelity: for known entity_types (seen this session), check declared fields via get_schema_recommendations or an existing snapshot before storing; use declared fields, invent snake_case only for unfit data. unknown_fields_count > 0 = mandatory repair before closing store. FORBIDDEN: inventing all fields for a known type without checking; ignoring unknown_fields_count > 0.",
   "",
@@ -199,6 +203,9 @@ export class NeotomaServer {
   private sessionAAuth: AAuthRequestContext | null = null;
   /** Client self-report from MCP initialize `clientInfo` (fallback attribution). */
   private sessionClientInfo: { name?: string; version?: string } | null = null;
+  /** Browser app origin resolved by HTTP transport or explicit public URL config. */
+  private sessionAppOrigin: string | null = null;
+  private sessionAppOriginSource: SessionOriginInfo["source"] | null = null;
   /** Tool descriptions loaded from docs/developer/mcp/tool_descriptions.yaml; empty Map if file missing */
   private toolDescriptions: Map<string, string> = new Map();
   /** In-memory cache for npm registry dist-tags: key = "packageName:distTag", value = { version, until } */
@@ -539,6 +546,19 @@ export class NeotomaServer {
   }
 
   /**
+   * Set the browser app/Inspector origin for this MCP session. HTTP transport
+   * supplies the actual request origin (or configured public origin). Stdio
+   * sessions only report an origin when NEOTOMA_PUBLIC_BASE_URL is configured.
+   */
+  setSessionAppOrigin(
+    origin: string | null,
+    source: SessionOriginInfo["source"] | null = null
+  ): void {
+    this.sessionAppOrigin = origin;
+    this.sessionAppOriginSource = source;
+  }
+
+  /**
    * Stash the AAuth verification result from the HTTP middleware so the
    * write-path services can attribute rows to the signing agent (Phase 1).
    * Called by actions.ts before the transport handles the MCP request. Pass
@@ -801,12 +821,15 @@ export class NeotomaServer {
     z.object({}).parse(args ?? {});
     const userId = this.getAuthenticatedUserId();
     const identity = this.getAgentIdentity();
+    const configuredOrigin = resolveConfiguredSessionOrigin();
     const session = buildSessionInfo({
       userId,
       identity,
       middlewareDecision: getCurrentAttributionDecision(),
       rawClientInfoName: this.sessionClientInfo?.name ?? null,
       admission: getCurrentAAuthAdmission(),
+      appOrigin: this.sessionAppOrigin ?? configuredOrigin ?? null,
+      originSource: this.sessionAppOriginSource ?? (configuredOrigin ? "configured" : null),
     });
     return this.buildTextResponse(session);
   }

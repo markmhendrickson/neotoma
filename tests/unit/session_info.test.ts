@@ -14,12 +14,17 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentIdentity } from "../../src/crypto/agent_identity.js";
-import { buildSessionInfo } from "../../src/services/session_info.js";
+import {
+  buildSessionInfo,
+  normalizeSessionOrigin,
+  resolveConfiguredSessionOrigin,
+} from "../../src/services/session_info.js";
 
 const ENV_KEYS = [
   "NEOTOMA_ATTRIBUTION_POLICY",
   "NEOTOMA_MIN_ATTRIBUTION_TIER",
   "NEOTOMA_ATTRIBUTION_POLICY_JSON",
+  "NEOTOMA_PUBLIC_BASE_URL",
 ] as const;
 
 describe("buildSessionInfo", () => {
@@ -50,6 +55,42 @@ describe("buildSessionInfo", () => {
     expect(session.attribution.agent_thumbprint).toBeUndefined();
     expect(session.policy.anonymous_writes).toBe("allow");
     expect(session.eligible_for_trusted_writes).toBe(true);
+  });
+
+  it("omits origins when no transport supplied an authoritative app origin", () => {
+    const session = buildSessionInfo({
+      userId: "user-no-origin",
+      identity: null,
+    });
+
+    expect(session.origins).toBeUndefined();
+  });
+
+  it("normalizes and surfaces configured app origins for safe Inspector links", () => {
+    const session = buildSessionInfo({
+      userId: "user-origin",
+      identity: null,
+      appOrigin: "https://neotoma.example.com/some/path?ignored=1",
+      originSource: "configured",
+    });
+
+    expect(session.origins).toEqual({
+      app_origin: "https://neotoma.example.com",
+      inspector_origin: "https://neotoma.example.com",
+      source: "configured",
+    });
+  });
+
+  it("normalizes origin values and ignores malformed configured URLs", () => {
+    expect(normalizeSessionOrigin("https://neotoma.example.com/path")).toBe(
+      "https://neotoma.example.com"
+    );
+    expect(normalizeSessionOrigin("not a url")).toBeUndefined();
+
+    process.env.NEOTOMA_PUBLIC_BASE_URL = "https://configured.neotoma.test/root";
+    expect(resolveConfiguredSessionOrigin()).toBe("https://configured.neotoma.test");
+    process.env.NEOTOMA_PUBLIC_BASE_URL = "not a url";
+    expect(resolveConfiguredSessionOrigin()).toBeUndefined();
   });
 
   it("populates identity fields from a hardware-tier AAuth identity", () => {

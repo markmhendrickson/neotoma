@@ -29,8 +29,11 @@ const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
 describe("GET /session", () => {
   let httpServer: ReturnType<typeof createServer>;
+  let originalPublicBaseUrl: string | undefined;
 
   beforeAll(async () => {
+    originalPublicBaseUrl = process.env.NEOTOMA_PUBLIC_BASE_URL;
+    delete process.env.NEOTOMA_PUBLIC_BASE_URL;
     httpServer = createServer(app);
     await new Promise<void>((resolve, reject) => {
       httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
@@ -42,6 +45,8 @@ describe("GET /session", () => {
     await new Promise<void>((resolve, reject) => {
       httpServer.close((err) => (err ? reject(err) : resolve()));
     });
+    if (originalPublicBaseUrl === undefined) delete process.env.NEOTOMA_PUBLIC_BASE_URL;
+    else process.env.NEOTOMA_PUBLIC_BASE_URL = originalPublicBaseUrl;
   });
 
   it("returns anonymous tier + allow policy for an unsigned, nameless session", async () => {
@@ -55,6 +60,27 @@ describe("GET /session", () => {
     expect(body.eligible_for_trusted_writes).toBe(true);
     expect(body.attribution.decision).toBeDefined();
     expect(body.attribution.decision.signature_present).toBe(false);
+    expect(body.origins).toEqual({
+      app_origin: API_BASE,
+      inspector_origin: API_BASE,
+      source: "request",
+    });
+  });
+
+  it("prefers NEOTOMA_PUBLIC_BASE_URL over the inbound request origin", async () => {
+    process.env.NEOTOMA_PUBLIC_BASE_URL = "https://configured.neotoma.test/root";
+    try {
+      const res = await fetch(`${API_BASE}/session?user_id=${TEST_USER_ID}`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.origins).toEqual({
+        app_origin: "https://configured.neotoma.test",
+        inspector_origin: "https://configured.neotoma.test",
+        source: "configured",
+      });
+    } finally {
+      delete process.env.NEOTOMA_PUBLIC_BASE_URL;
+    }
   });
 
   it("surfaces too_generic normalisation reason when clientInfo is a placeholder", async () => {

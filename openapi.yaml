@@ -588,6 +588,24 @@ components:
             make on the default write path. Admission alone does NOT
             override this — admitted callers still need a tier that
             satisfies the active write attribution policy.
+        origins:
+          type: object
+          description: |
+            Browser origins agents may safely use for user-visible links.
+            Omitted when the server cannot determine the connected
+            instance origin; callers must not guess a sandbox or localhost
+            fallback when absent.
+          properties:
+            app_origin:
+              type: string
+              description: Canonical origin for browser app links.
+            inspector_origin:
+              type: string
+              description: Canonical origin for Inspector/app entity pages.
+            source:
+              type: string
+              enum: [configured, request]
+              description: How the origin was resolved.
     AgentDirectoryEntry:
       type: object
       description: |

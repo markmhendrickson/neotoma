@@ -2471,6 +2471,23 @@ export interface components {
        *     satisfies the active write attribution policy.
        */
       eligible_for_trusted_writes: boolean;
+      /**
+       * @description Browser origins agents may safely use for user-visible links.
+       *     Omitted when the server cannot determine the connected
+       *     instance origin; callers must not guess a sandbox or localhost
+       *     fallback when absent.
+       */
+      origins?: {
+        /** @description Canonical origin for browser app links. */
+        app_origin?: string;
+        /** @description Canonical origin for Inspector/app entity pages. */
+        inspector_origin?: string;
+        /**
+         * @description How the origin was resolved.
+         * @enum {string}
+         */
+        source?: "configured" | "request";
+      };
     };
     /**
      * @description One row returned by `/agents`. Aggregates a distinct agent's
