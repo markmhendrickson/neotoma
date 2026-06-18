@@ -29,10 +29,13 @@ const RELATIONSHIP_TYPE_ENUM = [
  *   allow runtime description customization).
  * @param timelineWidgetResourceUri - Optional resource URI for the timeline
  *   widget, attached as _meta on list_timeline_events.
+ * @param turnSummaryWidgetResourceUri - Optional resource URI for the turn
+ *   summary widget, attached as _meta on neotoma_turn_summary.
  */
 export function buildToolDefinitions(
   descriptionOverrides?: Map<string, string>,
-  timelineWidgetResourceUri?: string
+  timelineWidgetResourceUri?: string,
+  turnSummaryWidgetResourceUri?: string
 ): ToolDefinition[] {
   const desc = (name: string, fallback: string): string =>
     descriptionOverrides?.get(name) ?? fallback;
@@ -85,7 +88,10 @@ export function buildToolDefinitions(
     },
     {
       name: "list_relationships",
-      description: desc("list_relationships", "List relationships for an entity"),
+      description: desc(
+        "list_relationships",
+        "List relationships for an entity, or discover the relationship type(s) between two specific entities. Filter by entity_id (with direction), or by source_entity_id and/or target_entity_id, and optionally relationship_type. To discover the type before delete_relationship, pass both source_entity_id and target_entity_id: each returned relationship carries its relationship_type. Soft-deleted relationships are excluded by default, so a deleted edge will not be re-offered for deletion; pass include_deleted: true to include them for audit. Paginated via limit/offset."
+      ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_relationships"),
     },
     {
@@ -125,7 +131,14 @@ export function buildToolDefinitions(
         properties: {
           entity_type: {
             type: "string",
-            description: "Optional entity type filter (for example: post, task, contact).",
+            description:
+              "Optional single entity type filter (for example: post, task, contact). Combined as a union with `entity_types` when both are supplied.",
+          },
+          entity_types: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional multi-type filter. When non-empty, results are restricted to entities whose type is in this list (IN filter), OR-combined with `entity_type`. An empty array is treated as no filter.",
           },
           search: {
             type: "string",
@@ -157,8 +170,14 @@ export function buildToolDefinitions(
           },
           sort_by: {
             type: "string",
-            enum: ["entity_id", "canonical_name", "observation_count", "last_observation_at"],
-            description: "Sort field. Non-default values cannot be combined with `search`.",
+            description:
+              "Sort field. Non-default values cannot be combined with `search`. " +
+              "Predefined values: `entity_id`, `canonical_name`, `observation_count`, " +
+              "`last_observation_at`, `submitted_at` (orders by `snapshot.created_at`). " +
+              "In addition, `snapshot.<field>` is supported for any snapshot field " +
+              "(e.g. `snapshot.period_end` for time-series entity types such as `usage_digest`). " +
+              "The field value is sorted lexicographically as a string, so ISO-8601 date strings " +
+              "must use a consistent format so that lexicographic order matches temporal order.",
           },
           sort_order: {
             type: "string",
@@ -207,6 +226,27 @@ export function buildToolDefinitions(
             description:
               "When true, omit chat bookkeeping types (`conversation`, `conversation_message`, etc.) from results. Default false. Has no effect when `entity_type` already filters to a bookkeeping type.",
             default: false,
+          },
+          snapshot_filters: {
+            type: "object",
+            description:
+              "Filter entities by snapshot field values. Each key is a snake_case snapshot field name " +
+              "(e.g. `status`, `priority`); the value specifies operator and comparison value. Filters " +
+              "are applied server-side via `snapshot->>{field}` JSONB extraction, so only entities whose " +
+              "snapshot contains a matching value are returned. Example: " +
+              '`{ "status": { "op": "eq", "value": "active" } }` returns only entities with ' +
+              '`snapshot.status === "active"`. Supported ops: `eq`, `in`, `gt`, `lt`, `gte`, `lte`, `contains`.',
+            additionalProperties: {
+              type: "object",
+              required: ["op"],
+              properties: {
+                op: {
+                  type: "string",
+                  enum: ["eq", "in", "gt", "lt", "gte", "lte", "contains"],
+                },
+                value: {},
+              },
+            },
           },
         },
         required: [],
@@ -549,7 +589,7 @@ export function buildToolDefinitions(
       name: "delete_relationship",
       description: desc(
         "delete_relationship",
-        "Delete a relationship. Creates a deletion observation so the relationship is excluded from snapshots and queries. Immutable and reversible for audit."
+        "Delete a relationship. Requires the exact relationship_type between the two entities; if unknown, call list_relationships with source_entity_id and target_entity_id first to discover it. Creates a deletion observation so the relationship is excluded from snapshots and queries. Immutable and reversible for audit. Returns 404 with a discovery hint when no live relationship matches the supplied triple."
       ),
       inputSchema: {
         type: "object",
@@ -668,6 +708,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
     {
+      name: "describe_entity_type",
+      description: desc(
+        "describe_entity_type",
+        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. Read-only."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("describe_entity_type"),
+    },
+    {
       name: "analyze_schema_candidates",
       description: desc(
         "analyze_schema_candidates",
@@ -697,6 +745,14 @@ export function buildToolDefinitions(
         },
         required: [],
       },
+    },
+    {
+      name: "audit_undeclared_fragments",
+      description: desc(
+        "audit_undeclared_fragments",
+        "Audit accumulated undeclared raw_fragments awaiting schema declaration. Values stored for fields not on an entity type's active schema are preserved on observations but excluded from the snapshot until the field is declared. This read-only report lists, per entity_type, the fragment_keys not declared on the active schema, how many distinct entities carry each, and total occurrences — surfacing the stored-but-invisible backlog so it can be triaged into analyze_schema_candidates / register_schema / update_schema_incremental. Pair with the unknown_fields / required_fields_missing repair workflow described in the MCP instructions."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("audit_undeclared_fragments"),
     },
     {
       name: "get_schema_recommendations",
@@ -1006,6 +1062,7 @@ export function buildToolDefinitions(
           "When a non-empty target URL is configured, the tool fails (MCP error) if that remote store is unreachable or rejects the request; a local row with sync_pending may still be written first. " +
           "When the operator accepts the issue, the response includes guest_access_token for token-scoped get_issue_status / add_issue_message read-back when the local snapshot does not already carry the token. " +
           "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps. " +
+          "To file issues about a repo other than the one Neotoma is globally configured for, pass `target_repo` in `owner/repo` format. This overrides the GitHub mirror destination only — the Neotoma authoring home remains unchanged. " +
           "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`."
       ),
       inputSchema: {
@@ -1046,6 +1103,18 @@ export function buildToolDefinitions(
           reporter_patch_source_id: {
             type: "string",
             description: "Optional source id for reporter patch artifact.",
+          },
+          target_repo: {
+            type: "string",
+            description:
+              "Optional GitHub mirror destination override (`owner/repo`). " +
+              "Use when filing issues about a repo other than the one Neotoma is globally configured for " +
+              "(e.g. `markmhendrickson/ateles`). Overrides only the GitHub mirror — Neotoma authoring home is unchanged.",
+          },
+          conversation_turn_id: {
+            type: "string",
+            description:
+              "Entity ID of the conversation turn (conversation_message entity) where this issue was observed. When provided, a REFERS_TO relationship is created from the filed issue to the conversation turn so the origin is traceable.",
           },
         },
         required: ["title", "body"],
@@ -1266,6 +1335,22 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
     {
+      name: "neotoma_turn_summary",
+      description: desc(
+        "neotoma_turn_summary",
+        "Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("neotoma_turn_summary"),
+      ...(turnSummaryWidgetResourceUri
+        ? {
+            _meta: {
+              ui: { resourceUri: turnSummaryWidgetResourceUri },
+              "openai/outputTemplate": turnSummaryWidgetResourceUri,
+            },
+          }
+        : {}),
+    },
+    {
       name: "npm_check_update",
       description: desc(
         "npm_check_update",
@@ -1295,6 +1380,53 @@ export function buildToolDefinitions(
           },
         },
         required: ["packageName", "currentVersion"],
+      },
+    },
+    {
+      name: "publish_rendered_page",
+      description: desc(
+        "publish_rendered_page",
+        "Turn a rendered_page into a ready-to-share guest URL in one call. Pass an existing rendered_page entity_id, OR inline { title, html_body, custom_css } to create one first. Mints a guest_access_token scoped to that page and returns the absolute `…/entities/<id>/html?access_token=<token>` URL plus ttl_seconds — the link works for non-authenticated viewers. html_body is injected verbatim into a server template; do NOT include <html>/<head>/<body> wrappers. Note: each call mints a fresh token (raw tokens are not stored, only hashed), so repeated calls return new working URLs rather than a single stable one."
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_id: {
+            type: "string",
+            description:
+              "Existing rendered_page entity id to publish. Omit to create a new page from the inline fields below.",
+          },
+          title: {
+            type: "string",
+            description:
+              "Page title (used when creating a new rendered_page). Rendered into <title> and the <h1> if no html_body header overrides.",
+          },
+          html_body: {
+            type: "string",
+            description:
+              "Page body HTML, injected verbatim into the server template. Do NOT include <html>/<head>/<body> wrappers. Used when creating a new rendered_page.",
+          },
+          custom_css: {
+            type: "string",
+            description:
+              "Optional CSS injected as an inline <style> in <head> (used when creating a new rendered_page).",
+          },
+          meta_description: {
+            type: "string",
+            description:
+              "Optional <meta name=description> value, escaped on render (used when creating a new rendered_page).",
+          },
+          idempotency_key: {
+            type: "string",
+            description:
+              "Optional idempotency key for the inline-create path (mutating op). Same key + same content reuses the same rendered_page instead of creating a duplicate. Ignored when entity_id is supplied.",
+          },
+          user_id: {
+            type: "string",
+            description: "Optional. Inferred from authentication if omitted.",
+          },
+        },
+        additionalProperties: false,
       },
     },
   ];
@@ -1329,7 +1461,9 @@ export const NEOTOMA_TOOL_NAMES = [
   "restore_relationship",
   "get_entity_type_counts",
   "list_entity_types",
+  "describe_entity_type",
   "analyze_schema_candidates",
+  "audit_undeclared_fragments",
   "get_schema_recommendations",
   "update_schema_incremental",
   "register_schema",
@@ -1359,6 +1493,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "sync_peer",
   "resolve_sync_conflict",
   "npm_check_update",
+  "neotoma_turn_summary",
+  "publish_rendered_page",
 ] as const;
 
 export type NeotomaToolName = (typeof NEOTOMA_TOOL_NAMES)[number];

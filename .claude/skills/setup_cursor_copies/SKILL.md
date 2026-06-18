@@ -1,12 +1,10 @@
 ---
-name: setup-cursor-copies
-description: Setup foundation cursor rules and commands in .cursor/ (run setup script).
-triggers:
-  - setup cursor copies
-  - sync cursor files
-  - /setup_cursor_copies
-  - setup-cursor-copies
+name: setup_cursor_copies
+description: Setup Foundation Cursor Copies
 ---
+
+<!-- Source: .cursor/skills/setup-cursor-copies/SKILL.md -->
+
 
 # Setup Foundation Cursor Copies
 
@@ -26,7 +24,7 @@ setup cursor copies
 
 ## Purpose
 
-This command runs the foundation setup script (`foundation/scripts/setup_cursor_copies.sh`) which:
+This command runs the foundation setup script (`foundation/scriptsscripts/setup_claude_instructions.sh.sh`) which:
 
 1. **If foundation is a git submodule:** Delegates to `setup_cursor_rules.sh` and creates **symlinks** from foundation to `.cursor/` (single source of truth; updates apply with `git submodule update`).
 2. **Otherwise:** Creates **independent copies** of foundation rules/commands in `.cursor/`.
@@ -70,13 +68,13 @@ This command runs the foundation setup script (`foundation/scripts/setup_cursor_
 **Execute the script:**
 
 ```bash
-./foundation/scripts/setup_cursor_copies.sh
+./foundation/scriptsscripts/setup_claude_instructions.sh.sh
 ```
 
 **Or if foundation is in parent directory:**
 
 ```bash
-../foundation/scripts/setup_cursor_copies.sh
+../foundation/scriptsscripts/setup_claude_instructions.sh.sh
 ```
 
 ### Step 3: Run Copy Script in Peer Repositories (If in Foundation Repo)
@@ -103,7 +101,7 @@ This command runs the foundation setup script (`foundation/scripts/setup_cursor_
        if [ "$SYMLINK_TARGET" = "$CURRENT_REPO" ]; then
          echo "Found peer repo with foundation symlink: $(basename "$peer_repo")"
          # Run copy script in peer repo using absolute path
-         (cd "$peer_repo" && "$CURRENT_REPO/scripts/setup_cursor_copies.sh" || echo "Failed to run in $(basename "$peer_repo")")
+         (cd "$peer_repo" && "$CURRENT_REPO/scriptsscripts/setup_claude_instructions.sh.sh" || echo "Failed to run in $(basename "$peer_repo")")
        fi
      fi
    done
@@ -135,8 +133,8 @@ This command runs the foundation setup script (`foundation/scripts/setup_cursor_
 
 **Check output:**
 
-- **Submodule:** Script reports "Foundation is a git submodule; using symlinks", then rules **linked**. Check `.cursor/rules/` for symlinks; `.cursor/skills/` is populated from foundation skills.
-- **Copy mode:** Script reports rules and skills **copied**. Check `.cursor/rules/` and `.cursor/skills/` for regular files (not symlinks).
+- **Submodule:** Script reports "Foundation is a git submodule; using symlinks", then rules **linked**. Check `.claude/rules/` for symlinks; `.cursor/skills/` is populated from foundation skills.
+- **Copy mode:** Script reports rules and skills **copied**. Check `.claude/rules/` and `.cursor/skills/` for regular files (not symlinks).
 
 **Expected output (submodule):**
 
@@ -166,10 +164,10 @@ This command runs the foundation setup script (`foundation/scripts/setup_cursor_
 ## What Gets Created
 
 **When foundation is a submodule (symlinks):**
-- `.cursor/rules/` contains **symlinks** to `foundation/agent_instructions/cursor_rules/`. `.cursor/skills/` is populated from `foundation/agent_instructions/cursor_skills/` (skills replace legacy commands). Updates to foundation apply when you re-run setup.
+- `.claude/rules/` contains **symlinks** to `foundation/agent_instructions/cursor_rules/`. `.cursor/skills/` is populated from `foundation/agent_instructions/cursor_skills/` (skills replace legacy commands). Updates to foundation apply when you re-run setup.
 
 **When foundation is not a submodule (copies):**
-- `.cursor/rules/` and `.cursor/skills/` contain **independent copies** of foundation rules and skills (e.g. `security.mdc`, `worktree_env.mdc`, and full skill workflows). Re-run to refresh after foundation updates.
+- `.claude/rules/` and `.cursor/skills/` contain **independent copies** of foundation rules and skills (e.g. `security.mdc`, `worktree_env.mdc`, and full skill workflows). Re-run to refresh after foundation updates.
 
 **Note:** Repository rules from `docs/` are handled per `setup_cursor_rules` (symlinks when submodule) or copied in copy mode. Source files in `docs/` remain the source of truth.
 
@@ -219,7 +217,7 @@ Foundation workflows are in `foundation/agent_instructions/cursor_skills/`. If p
 
 ## Related Documents
 
-- `foundation/scripts/setup_cursor_copies.sh` - Entry script (delegates to symlink or copy logic)
+- `foundation/scriptsscripts/setup_claude_instructions.sh.sh` - Entry script (delegates to symlink or copy logic)
 - `foundation/scripts/setup_cursor_rules.sh` - Symlink implementation (used when foundation is submodule)
 - `foundation/agent_instructions/README.md` - Cursor rules and commands documentation
 - `foundation/README.md` - Foundation overview and installation

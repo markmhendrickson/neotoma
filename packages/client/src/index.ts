@@ -24,11 +24,13 @@ export {
 } from "./types.js";
 
 export {
+  extractStoredEntities,
   storeChatTurn,
   retrieveOrStore,
   snapshotOnUpdate,
   recordConversationTurn,
   type ChatTurnMessage,
+  type ChatTurnSenderKind,
   type StoreChatTurnInput,
   type StoreChatTurnResult,
   type RetrieveOrStoreInput,

@@ -195,9 +195,28 @@ Both G2 and G3 independently reject a re-introduction of the v0.11.1 shape; G1 r
 | 2026-05-12 | Pre-release security gates (this directory) shipped to prevent regressions of the same class. |
 | 2026-05-12 | Self-test recorded: G2 + G3 independently reject the pre-fix `isLocalRequest` shape (see § _Self-test evidence_). |
 
+## Closure plan — sandbox-mode resolver (2026-05-19)
+
+The pre-release gates (G1–G5) block *future* regressions of the v0.11.1 shape on the diff path, but the original silent fallback — a no-auth, non-loopback server defaulting to `LOCAL_DEV_USER_ID` — remains a runtime topology any operator can still construct. Plan [`ent_b4958d038bd41e8694fe0aef`](https://github.com/markmhendrickson/neotoma/blob/main/docs/plans/sandbox-mode-for-unauthenticated-servers.md) (`docs/plans/sandbox-mode-for-unauthenticated-servers.md`) closes that runtime channel with a boot-time mode resolver and an explicit `refuse` verdict.
+
+**Implementation in this repo (phase order):**
+
+| Phase | Surface | What it does |
+|-------|---------|--------------|
+| 1 | `src/services/sandbox_mode.ts` + `tests/security/sandbox_mode_resolver.test.ts` | Pure-function `resolveSandboxMode()` returns one of `authenticated` / `local_sandbox` / `hosted_sandbox` / `refuse`. Install-fingerprint helper renames the silent fallback principal. 20 regression tests. |
+| 2 | `src/actions.ts` startup | Resolver runs before `app.listen`; emits a boot banner to stderr. `NEOTOMA_REFUSE_MODE=enforce` makes `refuse` fatal; default `warn` logs only. |
+| 3 | `src/services/local_auth.ts` | `ensureLocalSandboxUser()` materialises the install-fingerprinted principal so local_sandbox no longer routes through the shared `LOCAL_DEV_USER_ID`. |
+| 4 | `scripts/security/protected_routes_manifest.json` (+ generator) | New `sandbox_allowed` column (`none` / `local_only` / `hosted_ok`) governs sandbox-principal reachability per route. Auth-required rows default `none`; the manifest sanity tests in `tests/security/auth_topology_matrix.test.ts` assert this. |
+| 5 | `src/actions.ts` AUTH_REQUIRED envelope | 401s include a `sandbox` block with onboarding endpoints when `NEOTOMA_SANDBOX_MODE=1`, so UIs can replace the hard "Missing Bearer token" surface. |
+| 6 | This advisory | Cross-references the closure plan and the new resolver. |
+
+**Rollout safety:** `NEOTOMA_REFUSE_MODE` defaults to `warn` so upgrades do not break existing self-host topologies; a later release flips the default to `enforce` once telemetry confirms the population is on a clean auth posture.
+
 ## References
 
 - v0.11.1 release supplement: `docs/releases/completed/v0.11.1/github_release_supplement.md` (after the in-progress folder is moved per `/release` Step 5).
 - Threat model channels covered: `docs/security/threat_model.md` § 1, § 2.
 - Track 1 plan that produced the gates: `.cursor/skills/release/SKILL.md` § Step 3.5.
 - Track 2 (advisory + rollout via subscriptions / peer / guest) — _planned_.
+- Closure plan: `docs/plans/sandbox-mode-for-unauthenticated-servers.md` (Neotoma entity `ent_b4958d038bd41e8694fe0aef`).
+- Resolver: `src/services/sandbox_mode.ts` (`resolveSandboxMode`, `getOrCreateInstallFingerprint`, `sandboxPrincipalIdFromFingerprint`).

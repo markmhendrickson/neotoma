@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { IS_WINDOWS } from "../shared/spawn_platform.js";
 
 import type { Config } from "./config.js";
 import { discoverApiInstances } from "./config.js";
@@ -214,7 +215,15 @@ async function hasPriorSqliteRepairArtifacts(dataDir: string): Promise<boolean> 
 
 function safeExec(cmd: string, args: string[]): string | null {
   try {
-    const out = execFileSync(cmd, args, { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8" });
+    // On Windows `which` does not exist (use `where`), and `npm` is a .cmd shim
+    // that needs shell mode (CVE-2024-27980) or execFileSync throws EINVAL.
+    const winCmd = cmd === "which" ? "where" : cmd;
+    const needsShell = IS_WINDOWS && (winCmd === "npm" || winCmd.endsWith(".cmd"));
+    const out = execFileSync(IS_WINDOWS ? winCmd : cmd, args, {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      shell: needsShell,
+    });
     return out.trim() || null;
   } catch {
     return null;

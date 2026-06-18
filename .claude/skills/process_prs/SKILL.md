@@ -26,6 +26,31 @@ gh pr list --state open --json number,title,headRefName,baseRefName,isDraft,revi
 
 Exclude draft PRs from automated merge actions. Include them in the summary report.
 
+### Step 1a: Partition the queue and fan out the audit to subagents
+
+The per-PR audit (Steps 1b, 1c, 2, 3-discovery) is read-only `gh`/`git` work with no cross-PR dependencies. It is the right shape for parallel subagent delegation: each subagent audits a disjoint batch, returns a structured verdict, and the main thread synthesizes and takes all merge/comment/review actions itself. This keeps mutation single-threaded (no two agents racing to merge) while collapsing the wall-clock cost of a large queue.
+
+**Partition first — do not audit every PR at full depth.** From the Step 1 JSON, bucket PRs before spending audit budget:
+
+- **`mergeable: CONFLICTING`** → blocked-needs-rebase. These cannot merge regardless of any other signal. Do not deep-audit; list them in the report's rebase bucket. (Verify the bucket isn't masking a base-branch issue, but a conflicting PR is never merge-eligible this run.)
+- **Stacked PRs** (`baseRefName` is not `main`/`dev` but another open PR's head) → blocked on parent. Note the parent; do not deep-audit until the parent lands.
+- **`mergeable: MERGEABLE`** → the real audit candidates. These get the full Step 1b/1c/2/3 fan-out.
+
+**When to fan out vs. inline:** if the MERGEABLE candidate set is **> 6 PRs**, fan out. At or below that, audit inline on the main thread (subagent spin-up overhead isn't worth it). Scale the subagent count so each handles **3–5 PRs**: `ceil(candidates / 4)` subagents, capped at 8.
+
+**Dispatch (single message, multiple `Agent` calls so they run concurrently):**
+
+- `subagent_type: "Explore"` for the audit batches — it is read-only by construction (cannot merge, comment, or push), which is exactly the guarantee you want for a discovery agent. Give each one a disjoint list of PR numbers and the full per-PR audit checklist (CI status + mechanical-vs-substantive failure classification, base-branch/stacked detection, security-adjacency with triggering files, diff size + contract-surface flag, Step 1c review-blocker verdict with quoted blocking findings, linked-issue detection including the auto-close gap, and `reviewDecision`/`mergeable`). Require a terminal one-line verdict per PR: `MERGE-ELIGIBLE | BLOCKED(<reason>) | STACKED(base=<branch>) | REVIEW-BLOCKED | SECURITY-GATE-NEEDED`.
+- For a deep correctness read of a specific high-risk PR (security-adjacent + large contract diff), additionally spawn the `code-reviewer` subagent on that single PR. Use this sparingly — it is for the PRs where a holistic human-grade review matters, not routine triage.
+
+**Synthesis is mandatory and adversarial — never act on a subagent verdict alone.** Subagents read excerpts, not whole files, and will miss things. Before any merge, the main thread MUST independently re-confirm the load-bearing facts for that specific PR:
+
+- **CI freshness** — re-run `gh pr checks <n>` and confirm the green run is against the **current head SHA**, not a months-old run. A subagent reporting "CI passed" may be quoting a stale run; main moving (or the baseline gate's openapi-drift check) can invalidate it. This is the single most common synthesis correction.
+- **Actual diff surface** — re-run `gh pr diff <n> --name-only`. Subagents have under-counted security-adjacency and contract-surface by trusting a PR's self-description or a stale rebase view. Verify `src/actions.ts`, `openapi.yaml`, and the security-adjacency file set directly.
+- **`mergeStateStatus`** — `CLEAN` is required to merge; `UNKNOWN` means GitHub is still computing mergeability (wait/re-poll), `BEHIND`/`DIRTY` means rebase needed.
+
+Treat the subagent report as a **prioritized worklist with evidence**, not a decision. The main thread owns every `gh pr merge`, `gh pr comment`, `gh issue comment/close`, and `@claude review` call.
+
 ### Step 1b: Gate Substantial PRs for Opus Review
 
 Before classifying for merge, check whether each PR needs (or needs another) automated Opus review. The `claude_pr_review.yml` workflow runs on `synchronize` events but deliberately skips `claude/*` branches to avoid runaway agent loops. This step compensates by explicitly posting `@claude review` on PRs that are worth a holistic look.
@@ -135,6 +160,122 @@ fi
 
 If the review had Blocking items and zero substantive (non-housekeeping) commits landed after it, **the PR is review-blocked**. Post a summary comment listing the unaddressed findings and request fixes; do not merge.
 
+### Step 1d: Check Agentic Behavior Eval Coverage (Merge Blocker)
+
+A PR that changes agentic behavior — the instructions agents receive, the tools they can call, or the flows they execute — must demonstrate eval coverage before it can be merged.
+
+**Detect agentic behavior changes.** A PR is _agentic-behavior-adjacent_ if its diff touches any of:
+- `docs/developer/mcp/instructions.md`
+- `src/tool_definitions.ts`
+- `src/server.ts`
+- `.cursor/skills/*/SKILL.md`
+- `.claude/skills/*/SKILL.md`
+- Any file whose path contains `agent_instructions`
+- Any file under `src/services/` whose name contains `agent` or `instruction`
+
+Detection command:
+```bash
+gh pr diff <number> --name-only | grep -E \
+  'docs/developer/mcp/instructions\.md|src/tool_definitions\.ts|src/server\.ts|\.cursor/skills/.*/SKILL\.md|\.claude/skills/.*/SKILL\.md|agent_instructions'
+```
+
+If the command produces any output, the PR is agentic-behavior-adjacent.
+
+**Check for eval evidence.** A PR satisfies the eval requirement if _at least one_ of the following is true:
+
+1. **PR body references evals.** The PR description body (not just title) contains at least one of: `eval`, `agentic eval`, `agentic_eval`, `scenario`, `tier 1`, `tier 2`.
+   ```bash
+   gh pr view <number> --json body --jq '.body' | grep -iE 'eval|agentic_eval|scenario|tier 1|tier 2'
+   ```
+
+2. **Linked issue references evals.** Any issue closed by the PR (from `gh pr view <number> --json closingIssuesReferences`) has a body or comment referencing eval coverage.
+
+3. **New or modified eval fixture.** The diff includes a file under `tests/fixtures/agentic_eval/`.
+   ```bash
+   gh pr diff <number> --name-only | grep 'tests/fixtures/agentic_eval/'
+   ```
+
+4. **Human reviewer confirmed evals pass.** A human reviewer (non-bot) posted a comment containing `eval coverage confirmed`, `evals pass`, or `evals verified` (case-insensitive).
+   ```bash
+   gh pr view <number> --json comments --jq '.comments[] | select(.author.login != "github-actions[bot]") | select(.body | test("eval coverage confirmed|evals pass|evals verified"; "i")) | .body'
+   ```
+
+**If no eval evidence is found, the PR is eval-blocked.** Post a comment on the PR:
+
+```
+This PR modifies agentic behavior (agent instructions, MCP tool definitions, skill files, or related paths) and does not yet have eval coverage.
+
+**Before this PR can be merged, please provide at least one of:**
+
+1. Update the PR description to reference passing evals (mention `eval`, `agentic eval`, `scenario`, or `tier 1`/`tier 2`).
+2. Add or update an eval fixture in `tests/fixtures/agentic_eval/` that covers the changed behavior.
+3. Post a comment confirming evals pass: `eval coverage confirmed` or `evals pass`.
+
+See [docs/developer/eval_requirements.md](../docs/developer/eval_requirements.md) for how to write an eval fixture and what counts as eval evidence.
+```
+
+**If eval evidence is found, continue to Step 2.** Note this in the per-PR summary as "Eval coverage: ✓".
+
+_Note: a commit message referencing evals (e.g. `test: add eval fixture for …`) is not by itself eval evidence unless the commit also adds/modifies a fixture file under `tests/fixtures/agentic_eval/`._
+
+### Step 1e: Docs-Coverage Gate
+
+For each PR that adds or modifies user-facing surfaces (CLI commands, flags, API endpoints, MCP tools, config knobs), verify that documentation was updated in the same PR.
+
+**Surfaces that require documentation updates:**
+
+- New or modified CLI commands/flags → `docs/developer/cli_reference.md` and `docs/developer/cli_agent_instructions.md`
+- New or modified MCP tools → `docs/developer/mcp/tool_descriptions.yaml` and `docs/developer/mcp/instructions.md`
+- New or modified API endpoints or request/response fields → `openapi.yaml`
+- New config options or environment variables → `docs/developer/cli_reference.md` Runtime overrides table
+- New behavioral rules affecting agents → mirrored in both MCP and CLI instruction files
+
+**Check for missing docs coverage:**
+
+```bash
+gh pr diff <number> --name-only
+```
+
+If the diff contains files under `src/cli/` (new CLI surface), `src/services/` (new tool behavior), or `openapi.yaml` — cross-check that the PR also modifies the corresponding doc files listed above.
+
+If a documented surface was added or modified but the corresponding doc file was **not** changed:
+
+- Flag the PR as **docs-blocked**
+- Post a comment naming the missing doc update(s)
+- Do not merge until the doc gap is filled or the author posts `Waiver: <reason>` explaining why no doc update is needed
+
+A `Waiver:` comment on the PR is sufficient to clear a docs-blocked status.
+
+### Step 1f: Test-Coverage Gate
+
+For each PR that adds or modifies user-facing surfaces, verify that tests covering the new behavior were added or updated in the same PR.
+
+**Surfaces that require test coverage per `change_guardrails_rules.md` rules 19–21:**
+
+- New CLI commands → integration test in `tests/cli/` exercising the command end-to-end
+- New destructive or data-mutating operations (migrations, repair commands, bulk rewrites) → round-trip integration test covering identity, dry-run non-mutation, idempotency, and NULL preservation
+- New external-file-shape parsers (harness transcripts, SQLite imports, third-party configs) → fixture-based test exercising the actual parser path (not just `detectSource`)
+- New HTTP runtime-config knobs (timeouts, headers, keep-alive) → runtime behavior test asserting observable output, not just source constants
+- New store/ingestion paths → test asserting the POST body fields sent to the store API
+
+**Check for missing test coverage:**
+
+```bash
+gh pr diff <number> --name-only
+```
+
+If the diff adds files in `src/cli/` (new CLI command), `src/services/` (new service behavior), or touches migration scripts — cross-check that the PR also adds or modifies test files in `tests/` or co-located `*.test.ts` files.
+
+For transcript/file-import surfaces specifically: verify that tests assert **POST body structure** (field names and values), not just the count of POST calls. A test that only counts calls will not catch a broken parser that sends `{}` instead of `{ file_path, observation_source }`.
+
+If a testable surface was added but no test covers it:
+
+- Flag the PR as **test-blocked**
+- Post a comment naming the missing test coverage
+- Do not merge until tests are added or the author posts `Test-waiver: <reason>` explaining why coverage is not feasible
+
+A `Test-waiver:` comment (distinct from `Waiver:` used for docs and review findings) is sufficient to clear a test-blocked status.
+
 ### Step 2: Classify Each PR
 
 For each open PR, determine:
@@ -158,6 +299,9 @@ For each open PR, determine:
    - `mergeable` is `MERGEABLE`
    - Security gates pass (see Step 3)
    - **No unaddressed review blockers from Step 1c.** A PR with Blocking findings from the most recent substantive `github-actions[bot]` review and no substantive (non-housekeeping) commits or `Waiver:` comments since is **review-blocked** and must not be merged.
+   - **Eval coverage present for agentic-behavior-adjacent PRs (Step 1d).** A PR that touches agent instructions, MCP tool definitions, skill files, or related agentic flows is **eval-blocked** until eval evidence is provided.
+   - **No docs-coverage gaps from Step 1e.** A PR that adds a user-facing surface without updating the corresponding doc files is **docs-blocked** until the gap is filled or a `Waiver:` comment explains the omission.
+   - **No test-coverage gaps from Step 1f.** A PR that adds a testable surface without adding tests is **test-blocked** until tests are added or a `Test-waiver:` comment explains why coverage is not feasible.
    - **Closure comments drafted for every linked issue (Step 4).** A merge that closes issues without a closure narrative loses the resolution trail. The closure comment must be posted before `gh pr merge`.
 
 ### Step 3: Run Security Gates
@@ -285,95 +429,16 @@ gh issue close <iss> --reason completed
 
 For each PR that cannot be merged, take the appropriate action:
 
-- **CI failing**: Before posting a failure comment, check whether the failure is purely mechanical (prettier formatting or eslint auto-fixable lint errors). If so, apply the mechanical fix in-place:
-
-  **Mechanical CI auto-fix (prettier / eslint only):**
-
-  ```bash
-  # Determine what failed
-  gh pr checks <number> --json name,conclusion,detailsUrl \
-    | jq '[.[] | select(.conclusion == "failure") | .name]'
-  ```
-
-  If and only if **all** failed checks are formatting or lint checks (names containing `prettier`, `format`, `lint`, or `eslint` — and no type-check, test, build, or security failures), apply the fix:
-
-  ```bash
-  BRANCH=$(gh pr view <number> --json headRefName --jq '.headRefName')
-  git fetch origin "$BRANCH"
-  git worktree add ".claude/worktrees/fmt-pr-<number>" "origin/$BRANCH"
-  cd ".claude/worktrees/fmt-pr-<number>"
-
-  # Check what scripts are available
-  cat package.json | jq '.scripts | keys'
-
-  # Apply formatting and lint fixes
-  npm run format 2>/dev/null || npx prettier --write "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}"
-  npm run lint:fix 2>/dev/null || npx eslint --fix "src/**/*.ts" "tests/**/*.ts"
-
-  # Verify no type errors were introduced
-  npm run type-check
-
-  # If type-check passes, commit and push
-  git add -A
-  git commit -m "chore: apply prettier formatting
-
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-  git push origin "$BRANCH"
-
-  cd /Users/markmhendrickson/repos/neotoma
-  git worktree remove ".claude/worktrees/fmt-pr-<number>" --force
-  ```
-
-  After pushing, post a comment on the PR:
-
-  ```bash
-  gh pr comment <number> --body "Applied automatic prettier/eslint formatting fix. Re-running CI."
-  ```
-
-  Do **not** apply the mechanical fix if:
-  - Any non-formatting check also failed (type errors, test failures, build failures, security gates)
-  - `npm run type-check` fails after applying formatting
-  - The diff produced by formatting exceeds 50 lines (indicates something unexpected; surface to user instead)
-
-  If the mechanical fix is not applicable, fall through to the normal CI-failing path:
-  Post a comment summarizing which checks failed. Do not merge.
-
+- **CI failing**: Post a comment summarizing which checks failed. Do not merge.
 - **Security gate errors (G2/G3)**: Post a comment with the specific `security:lint` errors or manifest/auth-matrix failures. Do not merge.
 - **Review-blocked (Step 1c)**: Post a comment listing the unaddressed Blocking findings from the most recent review, quoting the relevant lines and naming the file paths. Request that the author either land substantive fix commits, post `Waiver: <reason>` comments per finding, or re-request `@claude review` after the fixes. Do not merge.
+- **Eval-blocked (Step 1d)**: Post the standard eval-coverage-required comment (see Step 1d comment template). Do not merge until at least one of the four eval-evidence criteria is satisfied.
+- **Docs-blocked (Step 1e)**: Post a comment naming the missing documentation files. Request the author add the doc updates or post `Waiver: <reason>` explaining why no doc change is needed. Do not merge.
+- **Test-blocked (Step 1f)**: Post a comment naming the missing test coverage and the specific surface (CLI command, parser, migration, etc.) that lacks tests. Request the author add tests or post `Test-waiver: <reason>` explaining why coverage is not feasible. Do not merge.
 - **Awaiting review**: Note in the summary report. Do not post a comment unless explicitly requested.
 - **Merge conflicts**: Post a comment asking the author to rebase.
 - **Draft**: Skip. Report in summary.
 - **Release PR**: Report in summary, instruct user to run `/release`.
-
-### Step 5b: Suggest `/fix_pr` for Suitable Blocked PRs
-
-After handling each blocked PR, determine whether it is a good candidate for `/fix_pr` and include the suggestion in the report. A PR is a good candidate if it has at least one auto-fixable blocking reason and no hard stops.
-
-**Suggest `/fix_pr <number>` when ALL of the following are true:**
-
-- PR is not a draft
-- PR is not a release PR
-- At least one blocking reason is in the auto-fixable category:
-  - CI failures that are TypeScript type errors, failing unit/integration tests, or non-formatting lint errors
-  - Review findings that are rename/style/naming issues (not logic, architecture, or security)
-  - Merge conflicts in non-sensitive files (not `openapi.yaml`, lock files, or migration files)
-
-**Do NOT suggest `/fix_pr` when:**
-
-- All CI failures were already handled by the mechanical auto-fix in Step 5 (fix already applied)
-- The only blockers are security-adjacent findings (`src/actions.ts`, `src/services/local_auth.ts`, `protected_routes_manifest.json`, `docs/security/`)
-- The only blockers are architectural or design-discussion review findings
-- Merge conflicts are only in `openapi.yaml`, lock files, or migration files
-- The PR is awaiting review with no other blockers (nothing for `/fix_pr` to act on)
-
-Include the suggestion inline in the blocked PR's report entry, e.g.:
-
-```
-PR #217 — Add user preference caching [BLOCKED]
-  CI: type-check failing (3 errors in src/services/preferences.ts)
-  Review: 1 Blocking finding (rename `prefMap` → `preferenceMap`)
-  → Run `/fix_pr 217` to address these automatically.
-```
 
 ### Step 6: Report
 
@@ -383,9 +448,12 @@ Produce a comprehensive summary covering:
 - For each PR: title, number, classification (release / security-adjacent / standard), CI status, security gate results, and action taken (merged / blocked / handed off / skipped / review requested)
 - PRs where `@claude review` was posted and why (new substantial PR, or N new commits since last review)
 - Any security gate errors found, with PR numbers
+- Any docs-blocked PRs (Step 1d), with the specific missing doc files named
+- Any test-blocked PRs (Step 1e), with the specific missing test coverage named
 - Release PRs identified, with a clear "run `/release` to ship these" callout
 - Outstanding blockers that require author or user action
 - A "What I need from you" section if any PR requires a decision
+- When the queue was fanned out (Step 1a): how many subagents ran, the batch partition, and any verdict the main-thread synthesis **overrode** (e.g. a "CI passed" that was a stale run, an under-counted security surface). Surfacing overrides keeps the fan-out honest and flags subagent blind spots for the next run.
 
 ## Security Gate Reference
 
@@ -407,7 +475,6 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 
 ## Constraints
 
-- The mechanical CI auto-fix in Step 5 is scoped strictly to prettier formatting and eslint `--fix`-able lint errors. Never apply it when other check types also failed, and never skip `npm run type-check` before pushing the fix commit.
 - Never push to `main` directly. Merges to `main` only happen via `/release`.
 - Never merge a release PR (dev→main with version bump). Hand off to `/release`.
 - Never use `--no-verify`.
@@ -415,15 +482,24 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Never merge if CI is failing or pending unless the user explicitly instructs.
 - Never merge if G2 or G3 produce errors on a security-adjacent PR.
 - **Never merge a PR that is review-blocked per Step 1c.** A substantive `github-actions[bot]` review with Blocking findings followed only by housekeeping commits is **not** a green light. The author must either (a) land non-housekeeping fix commits, (b) post `Waiver: <reason>` comments per deferred finding, or (c) trigger a re-review whose verdict is `approve`.
+- **Never merge a PR that is eval-blocked per Step 1d.** A PR touching agentic behavior (agent instructions, MCP tool definitions, skill files, or store/correction flows) without eval evidence is not merge-eligible. The author must satisfy at least one eval-evidence criterion before merge.
+- **Never merge a PR that is docs-blocked per Step 1e** until the missing doc files are added or a `Waiver:` comment explains the omission.
+- **Never merge a PR that is test-blocked per Step 1f** until tests are added or a `Test-waiver:` comment explains why coverage is not feasible.
 - Always run G2 and G3 before merging a security-adjacent PR.
 - Always report security gate results in the summary, even when advisory.
 - Always run Step 1c (Audit Existing Review Findings) for every non-draft PR before classification in Step 2.
+- Always run Step 1d (Check Agentic Behavior Eval Coverage) for every non-draft PR before classification in Step 2.
+- Always run Step 1e (Docs-Coverage Gate) for every non-draft PR before classification in Step 2.
+- Always run Step 1f (Test-Coverage Gate) for every non-draft PR before classification in Step 2.
 - Always run Step 4 (Post issue-closure comments) before `gh pr merge` for every PR that closes a linked issue. Auto-close alone does not produce a resolution trail.
 - After merge, manually close any issue that the PR resolved but GitHub did not auto-close (the auto-close-gap case: closure verb in body/commit but issue not in `closingIssuesReferences`).
 - Never post `@claude review` on a `claude/*` branch PR — the workflow already runs on `opened` for those.
 - Never post `@claude review` more than once per batch run on the same PR.
 - Do not post `@claude review` on trivially small PRs (≤5 files, ≤150 lines, no contract surface changes, not security-adjacent).
 - Treat placeholder review bodies (`I'll analyze this and get back to you.` with 0 tokens) as "review not delivered," not "review approved." Re-trigger once per batch.
+- Fan out the audit to read-only subagents (Step 1a) when the MERGEABLE candidate set exceeds 6 PRs; keep it inline below that threshold.
+- Use `Explore` (read-only) for audit-batch subagents so they structurally cannot merge, comment, or push. Keep every mutating action (`gh pr merge`, `gh pr comment`, `gh issue comment/close`, `@claude review`) on the main thread.
+- Always re-confirm CI freshness against the current head SHA, the actual diff surface, and `mergeStateStatus` on the main thread before merging — never merge on a subagent's verdict alone.
 
 ## Forbidden Patterns
 
@@ -435,9 +511,12 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Force-pushing or rebasing shared branches
 - Spamming `@claude review` on every push — only request when the diff genuinely warrants a holistic re-review (≥3 new commits since last request)
 - **Merging on the strength of a review timestamp alone.** A review was _posted_ does not mean its findings were _addressed_. Verify via Step 1c.
+- **Merging an eval-blocked PR.** A PR touching agentic behavior without eval evidence is not merge-eligible regardless of CI status or human approvals.
 - **Counting `chore: regenerate test catalog` / `prettier` / rebase-merge commits as "post-review fixes."** They are housekeeping and do not clear review blockers.
 - **Treating placeholder review comments (`I'll analyze this and get back to you.` with 0 output tokens) as completed reviews.** Re-trigger and wait for a substantive review.
 - **Merging a PR that closes issues without first posting a closure-narrative comment on each linked issue (Step 4).** The GitHub auto-close link is not a resolution trail.
-- **Applying the mechanical CI auto-fix when non-formatting checks also failed.** The fix is scoped to prettier/eslint-only failures. Mixed failures go to the user.
-- **Skipping `npm run type-check` after applying prettier/eslint fixes.** A formatting pass that produces type errors must not be pushed.
 - **Leaving issues open that the merged PR resolved.** When detection in Step 4 surfaces an auto-close gap (closure verb in body/commit but issue not in `closingIssuesReferences`), close the issue manually after merge with `gh issue close <iss> --reason completed` and a comment linking the resolving PR.
+- **Acting on a subagent verdict without main-thread re-verification.** A subagent reporting "MERGE-ELIGIBLE / CI passed" is a worklist entry with evidence, not a merge authorization. Stale CI runs and under-counted security/contract surfaces are the recurring failure modes; re-confirm before merging.
+- **Letting a subagent perform a mutating action.** Audit subagents are read-only by design. If an audit needs a follow-up that mutates state, the main thread does it.
+- **Merging a PR that added a user-facing CLI command, parser, migration, or store path without test coverage.** Counting POST calls is not coverage of POST body structure; tests must assert the fields sent.
+- **Treating a `Waiver:` comment as clearing a test-blocked status.** Docs waivers and test waivers are distinct; only `Test-waiver:` clears a test-blocked status.

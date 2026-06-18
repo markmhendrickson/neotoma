@@ -16,10 +16,11 @@ When a Neotoma CLI session starts (dev or prod), applied rule files (e.g. `.curs
 
 ## Canonical behavioral instructions (read these for semantics)
 
-| Situation                        | Action                                                                                                                                                |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MCP tools visible in the session | Follow MCP `instructions` / tool surface only for Neotoma behavior.                                                                                   |
-| MCP not available                | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout. |
+| Situation                           | Action                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP tools visible in the session    | Follow MCP `instructions` / tool surface only for Neotoma behavior.                                                                                                                                                                                                                                                        |
+| MCP not available                   | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout.                                                                                                                                                                      |
+| Install / MCP / configuration tasks | Read `install.md` (repo root) **first**. It is the canonical CLI-driven setup sequence covering `neotoma auth keygen`, `neotoma mcp config`, LaunchAgent install, transport presets, and data-directory configuration. Do not substitute shell introspection or manual JSON/plist edits for the CLI commands it documents. |
 
 Index and dual-host notes: `docs/developer/agent_instructions.md`.
 
@@ -71,6 +72,10 @@ neotoma relationships create --source-entity-id <container_id> --target-entity-i
 
 Entity IDs are returned in the `store` response (`entities[].entity_id`). If `relationships create` fails or is unavailable, check `neotoma relationships --help` for current syntax.
 
+## Relationship creation guidance (canonical)
+
+For when and how to link a newly stored entity to existing entities (pre-store candidate discovery, `retrieve_related_entities`, canonical relationship examples, direction convention), see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].
+
 ## Pre-check before storing (CLI backup)
 
 Before storing a new entity, check for an existing record to avoid duplicates:
@@ -81,6 +86,17 @@ neotoma entities list --type contact
 ```
 
 If a matching entity exists, use its `entity_id` for relationship creation instead of creating a duplicate. Only store if no match is found.
+
+## Schema audit (CLI backup)
+
+The per-store `unknown_fields` signal (see the canonical "Full data fidelity" rule in `docs/developer/mcp/instructions.md`) repairs one write. To triage the _accumulated_ stranded backlog — fields stored to `raw_fragments` but excluded from the snapshot until a schema declares them — run the aggregate audit:
+
+```bash
+neotoma schemas audit-fragments                 # all entity types
+neotoma schemas audit-fragments contact         # one entity type
+```
+
+It is read-only (declares nothing) and reports, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag. Use it before drafting `neotoma schemas update` (`update_schema_incremental`) / `register_schema` work to pick the high-occurrence fields to promote first.
 
 ## Retrieval command quick reference (CLI backup)
 
@@ -106,7 +122,13 @@ neotoma relationships list --entity-id <entity_id>
 
 Use narrow queries first, then expand only if needed.
 
+**Entity-id identifiers:** when the identifier is a literal entity_id (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
+
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
+
+## Inspector link origin (CLI backup)
+
+When rendering Neotoma Inspector links from CLI-backed memory operations, first run `neotoma auth session` (or call `GET /session`) and use `origins.inspector_origin` when it is present. If the session response has no `origins.inspector_origin`, do not guess `sandbox.neotoma.io`, localhost, or any other default host; render unlinked entity labels/ids instead. This mirrors the MCP display rule and prevents wrong-instance links.
 
 ## Install verification
 
@@ -115,7 +137,7 @@ After running `neotoma setup --tool <harness> --yes`, two plain-text lines alway
 1. **Install-verification line** — grep for `Neotoma installed at` to confirm install succeeded. Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`.
 2. **Privacy/transport summary** — `Transport: local stdio MCP (no network egress). ...` Answers the first question from privacy-conscious users about where data goes.
 
-If the install-verification line is absent, check `neotoma doctor --json` for `neotoma.path_fix_hint` and surface it to the user.
+If the install-verification line is absent, check `neotoma status --json` (the `doctor` alias still works) for `neotoma.path_fix_hint` and surface it to the user.
 
 ## When to load
 

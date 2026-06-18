@@ -331,6 +331,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/entities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List entities
+     * @description REST/GET alias of `POST /entities/query`. Maps query-string parameters to the same handler so consumers that issue `GET /entities?entity_type=...&search=...` reach the canonical list behavior instead of a 404. Scoped to the authenticated user. The request body of `POST /entities/query` and the query string here accept the same field names; complex object fields (`snapshot_filters`) are passed as a JSON-encoded string. Unmatched verbs on `/entities` return a 404 whose `details.hint` points back at this endpoint and `POST /entities/query`.
+     */
+    get: operations["listEntities"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/entities/query": {
     parameters: {
       query?: never;
@@ -1071,7 +1091,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Get schema by entity type */
+    /**
+     * Get schema by entity type
+     * @description Return the full active schema definition for a single entity type:
+     *     field names, types, descriptions, `required` flags, and the schema
+     *     version. Exposed over MCP as the `describe_entity_type` tool. Use this
+     *     before storing structured data to learn the exact field names and which
+     *     fields are required, so the first `store` lands with no
+     *     `unknown_fields` and no `required_fields_missing` warnings.
+     */
     get: operations["getSchemaByEntityType"];
     put?: never;
     post?: never;
@@ -1124,6 +1152,29 @@ export interface paths {
     };
     /** Get dashboard stats */
     get: operations["getStats"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/usage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get local aggregate usage statistics
+     * @description Returns aggregate usage statistics computed entirely from local data —
+     *     no external calls are made. Covers entities by type, observations by
+     *     source, recent ingestion counts (7-day and 30-day windows), and
+     *     schema coverage. All figures are scoped to the authenticated user.
+     */
+    get: operations["getUsage"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1277,6 +1328,19 @@ export interface paths {
      * @description Query relationships filtered by entity ID, source entity ID, target entity ID, or
      *     relationship type. At least one of `entity_id`, `source_entity_id`,
      *     `target_entity_id`, or `relationship_type` must be provided. Results are paginated.
+     *
+     *     Relationship-type discovery: to find the relationship type(s) between two
+     *     specific entities (for example before calling `/delete_relationship`, which
+     *     requires the exact `relationship_type`), pass both `source_entity_id` and
+     *     `target_entity_id`. Each returned `RelationshipSnapshot` carries its
+     *     `relationship_type`, so the caller can read the type(s) directly without
+     *     knowing them in advance.
+     *
+     *     Soft-deleted edges are excluded by default: after a successful
+     *     `/delete_relationship`, the deleted edge no longer appears here, so a caller
+     *     following the discovery-then-delete flow will not re-offer (and re-delete into
+     *     a 404) an edge that is already gone. Pass `include_deleted: true` to include
+     *     soft-deleted edges (for audit or history use).
      */
     post: operations["listRelationshipsForEntity"];
     delete?: never;
@@ -1526,7 +1590,14 @@ export interface paths {
     put?: never;
     /**
      * Delete relationship
-     * @description Soft delete relationship (creates deletion observation, reversible)
+     * @description Soft delete a relationship (creates a deletion observation, reversible).
+     *     The exact `relationship_type` between two entities must be supplied. If
+     *     the type is unknown, first call `/list_relationships` with
+     *     `source_entity_id` and `target_entity_id` to discover the typed edges
+     *     between them, then pass one of the returned `relationship_type` values
+     *     here. When no live relationship matches the supplied triple, a 404
+     *     `RESOURCE_NOT_FOUND` is returned with a `hint` pointing to the discovery
+     *     path rather than silently recording a no-op deletion.
      */
     post: operations["deleteRelationship"];
     delete?: never;
@@ -1569,6 +1640,26 @@ export interface paths {
      * @description Analyze raw_fragments to identify fields for schema promotion
      */
     post: operations["analyzeSchemaCandidates"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/audit_undeclared_fragments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Audit undeclared raw_fragments
+     * @description Report accumulated undeclared raw_fragments awaiting schema declaration. Stored data routed to raw_fragments (fields not on the active schema) is preserved on the observation but excluded from the entity snapshot until the field is declared. This read-only audit lists, per entity_type, the fragment_keys not declared on the active schema, how many distinct entities carry each, and total occurrences — so the stored-but-invisible backlog is auditable and can be triaged into analyze_schema_candidates / register_schema / update_schema_incremental work.
+     */
+    post: operations["auditUndeclaredFragments"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1646,9 +1737,69 @@ export interface paths {
     put?: never;
     /**
      * Create correction
-     * @description Create high-priority correction observation
+     * @description Create a high-priority correction observation. When `field` is declared
+     *     on the entity's active schema, the correction overrides that field at
+     *     priority 1000. When `field` is NOT declared on the schema, the
+     *     correction is still applied (append path): the field is preserved on the
+     *     correction observation and mirrored to `raw_fragments` so it is
+     *     recoverable and can be promoted to the schema later. This mirrors the
+     *     `store` path, which routes undeclared fields to `raw_fragments` instead
+     *     of rejecting them. The response sets `unknown_field: true` and includes a
+     *     `hint` so the caller knows the value will not surface in the entity
+     *     snapshot until the field is added to the schema.
      */
     post: operations["correct"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/conversations/{conversation_id}/turn-index": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Conversation turn index
+     * @description FU-2026-05-003. Returns one row per `conversation_message` linked
+     *     `PART_OF` the conversation, with the entities the message stored or
+     *     retrieved this turn (via REFERS_TO edges) and the issue entities
+     *     surfaced. Used by the Inspector conversation page to render per-turn
+     *     anchor sections (`#msg-N`, `#stored-N`, `#retrieved-N`, `#issues-N`)
+     *     and the turn timeline sidebar.
+     */
+    get: operations["getConversationTurnIndex"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/turn_summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Compute per-turn Neotoma activity summary
+     * @description FU-2026-05-002. Computes the single-line per-turn status (`msg N/M,
+     *     stored K, retrieved L`) and an optional `ui://` widget URI for the
+     *     ext-apps widget host. Inputs identify the conversation and the turn;
+     *     the server resolves all other state (turn number, total message count,
+     *     stored entities REFERS_TO from the assistant message, retrieved
+     *     entities, pending issues). Agents call this at end of every turn after
+     *     the closing assistant store completes.
+     */
+    post: operations["turnSummary"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1694,6 +1845,26 @@ export interface paths {
     get: operations["getSessionInfo"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/rendered-pages/publish": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Publish a rendered_page as a shareable guest URL
+     * @description Mints a guest_access_token scoped to a rendered_page and returns an absolute /entities/:id/html?access_token=<token> URL plus its TTL. Pass an existing rendered_page entity_id, or inline {title, html_body, custom_css, meta_description} to create one first. html_body is injected verbatim into a server template; do not include html/head/body wrappers.
+     */
+    post: operations["publishRenderedPage"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2300,6 +2471,23 @@ export interface components {
        *     satisfies the active write attribution policy.
        */
       eligible_for_trusted_writes: boolean;
+      /**
+       * @description Browser origins agents may safely use for user-visible links.
+       *     Omitted when the server cannot determine the connected
+       *     instance origin; callers must not guess a sandbox or localhost
+       *     fallback when absent.
+       */
+      origins?: {
+        /** @description Canonical origin for browser app links. */
+        app_origin?: string;
+        /** @description Canonical origin for Inspector/app entity pages. */
+        inspector_origin?: string;
+        /**
+         * @description How the origin was resolved.
+         * @enum {string}
+         */
+        source?: "configured" | "request";
+      };
     };
     /**
      * @description One row returned by `/agents`. Aggregates a distinct agent's
@@ -2348,13 +2536,29 @@ export interface components {
     };
     AgentCapabilityEntry: {
       /** @enum {string} */
-      op: "store" | "store_structured" | "create_relationship" | "correct" | "retrieve";
+      op:
+        | "store"
+        | "store_structured"
+        | "create_relationship"
+        | "correct"
+        | "retrieve"
+        | "github_harness:read"
+        | "github_harness:write"
+        | "github_harness:*";
       /**
        * @description Allowed entity types for this op. The single string `*` widens
        *     to any entity_type that is not protected (see
-       *     `protected_entity_types`).
+       *     `protected_entity_types`). Empty array is valid for
+       *     `github_harness:*` ops, which use `repos` instead.
        */
       entity_types: string[];
+      /**
+       * @description Repo-scope for `github_harness:*` ops. List of `owner/repo`
+       *     strings. The single string `*` wildcards any repo. Only
+       *     meaningful for `github_harness:*` ops; ignored for
+       *     Neotoma-native ops.
+       */
+      repos?: string[];
     };
     /**
      * @description First-class persistent grant that admits a verified AAuth
@@ -2621,6 +2825,28 @@ export interface components {
       field_summary?: {
         [key: string]: unknown;
       };
+      /**
+       * @description Full schema definition. `schema_definition.fields` is a map of field
+       *     name to `{ type, required?, description?, ... }`. Returned by
+       *     `getSchemaByEntityType` / the `describe_entity_type` MCP tool so
+       *     agents can read field names, types, and required flags before
+       *     storing.
+       */
+      schema_definition?: {
+        fields?: {
+          [key: string]: {
+            type?: string;
+            required?: boolean;
+            description?: string;
+          } & {
+            [key: string]: unknown;
+          };
+        };
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
     };
     Interpretation: {
       id?: string;
@@ -2709,6 +2935,31 @@ export interface components {
       relationships_created?: {
         [key: string]: unknown;
       }[];
+    };
+    /** @description Aggregate usage statistics computed from local data only. */
+    UsageStats: {
+      /** @description Count of active (non-merged) entities per entity_type, sorted by count desc. */
+      entities_by_type?: {
+        [key: string]: number;
+      };
+      /** @description Total active entities. */
+      total_entities?: number;
+      /** @description Count of observations grouped by observation_source. */
+      observations_by_source?: {
+        [key: string]: number;
+      };
+      /** @description Total observations. */
+      total_observations?: number;
+      /** @description Number of entities created in the last 7 days. */
+      entities_created_last_7_days?: number;
+      /** @description Number of entities created in the last 30 days. */
+      entities_created_last_30_days?: number;
+      /** @description Number of distinct entity_types that have a registered schema. */
+      entity_types_with_schema?: number;
+      /** @description Total distinct entity_types present in the entities table. */
+      entity_types_total?: number;
+      /** @description ISO timestamp when stats were computed. */
+      last_updated?: string;
     };
     Stats: {
       entities?: number;
@@ -3115,6 +3366,19 @@ export interface components {
          *     `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
          */
         warnings?: components["schemas"]["ResolverWarning"][];
+        /**
+         * @description Existing entities surfaced as possible duplicates when the
+         *     stored name is a single token that prefixes a same-type
+         *     multi-token canonical name. Emitted by the single-token
+         *     prefix-match pass. The new entity is still created (no
+         *     auto-merge); callers SHOULD present these candidates to the
+         *     operator or agent for review. Present only when at least one
+         *     candidate was found. Deterministically ordered by
+         *     `candidate_entity_id` ascending. Callers that forward this
+         *     field to logs or metrics MUST drop or redact
+         *     `candidate_canonical_name` per docs/subsystems/privacy.md.
+         */
+        prefix_duplicate_candidates?: components["schemas"]["ResolverDuplicateCandidate"][];
       }[];
       /**
        * @description Batch-aggregated non-fatal resolver warnings (R3). Mirrors each
@@ -3138,9 +3402,19 @@ export interface components {
        */
       store_warnings?: {
         /**
-         * @description Schema-defined warning code (declared in the schema's
-         *     `store_warnings[].code`). Stable identifier callers can
-         *     switch on.
+         * @description Stable warning code callers can switch on. Two sources:
+         *     (1) schema-defined rules declared in the schema's
+         *     `store_warnings[].code`; (2) schema-declaration-driven
+         *     codes emitted by the store path itself —
+         *     `MISSING_CONTENT_FIELD` (fired when a schema declares
+         *     `content_field` and the stored observation omits or
+         *     empties that field), `UNKNOWN_FIELD` (fired per field that
+         *     is not declared on the entity's active schema; the value is
+         *     preserved on the observation but dropped from the snapshot
+         *     projection until the field is added to the schema), and
+         *     `MISSING_REQUIRED_FIELD` (fired per schema field declared
+         *     `required: true` that the stored observation omits or leaves
+         *     empty).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */
@@ -3156,10 +3430,14 @@ export interface components {
       /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
       interpretation_id?: string | null;
       /**
-       * @description Names of fields that were dropped because they are not declared in
-       *     the entity's active schema. Present when `unknown_fields_count > 0`.
-       *     Use `update_schema_incremental` or `register_schema` to add these
-       *     fields before re-storing.
+       * @description Names of fields that are not declared in the entity's active schema.
+       *     Present when `unknown_fields_count > 0`. The values are preserved on
+       *     the written observation but are NOT projected into the entity
+       *     snapshot until the field is added to the schema. To surface them:
+       *     (a) when an existing declared field already fits the data, re-store
+       *     (or `correct`) into that field; (b) otherwise add the field to the
+       *     schema with `register_schema` or, when the schema declares
+       *     `canonical_name_fields`, `update_schema_incremental`. See `hint`.
        */
       unknown_fields?: string[];
       /**
@@ -3172,17 +3450,47 @@ export interface components {
        */
       no_schema_entity_types?: string[];
       /**
-       * @description Number of entity fields that were dropped because they are not
-       *     declared in the entity's active schema. These fields were stored in
-       *     `raw_fragments` and can be recovered.
+       * @description Number of entity fields across the batch that are not declared in
+       *     the entity's active schema. The values are preserved on the written
+       *     observations but are not projected into the snapshot until the
+       *     fields are added to the schema.
        */
       unknown_fields_count?: number;
       /**
-       * @description Actionable guidance when fields were dropped to `raw_fragments`.
-       *     Present only when `unknown_fields_count > 0`. Directs the caller
-       *     to use `update_schema_incremental` with `migrate_existing: true`
-       *     to promote the unknown fields into the schema and backfill existing
-       *     data.
+       * @description Schema fields declared `required: true` that the stored observation
+       *     omitted or left empty. Mirror of `unknown_fields` for the inverse
+       *     case: the write is non-fatally accepted, but the entity is missing a
+       *     field its schema marks required. Callers SHOULD repair in-turn by
+       *     `correct`-ing the missing field. Present only when at least one
+       *     required field was missing.
+       */
+      required_fields_missing?: {
+        entity_type: string;
+        field: string;
+        observation_index: number;
+      }[];
+      /**
+       * @description Total number of `conversation_message` entities `PART_OF` the
+       *     conversation referenced by this store call, computed after commit.
+       *     Populated only when at least one `conversation_message` entity was
+       *     created or updated in this request and its `PART_OF` target
+       *     conversation can be resolved. Omitted (null) for store calls with
+       *     no conversation context. Reflects the current snapshot at the time
+       *     of the response. Consumed by `neotoma_turn_summary` to populate
+       *     the `msg N/M` component of the turn status line without an extra
+       *     retrieval round-trip.
+       */
+      conversation_message_count?: number | null;
+      /**
+       * @description Actionable guidance, present only when `unknown_fields_count > 0`.
+       *     The wording is conditional on the schema's identity configuration:
+       *     when the schema declares `canonical_name_fields`, it directs the
+       *     caller to `update_schema_incremental` (with `migrate_existing: true`
+       *     to backfill); when the schema has no identity config (so
+       *     `update_schema_incremental` would fail with
+       *     `ERR_SCHEMA_MISSING_IDENTITY_CONFIG`), it instead directs the caller
+       *     to `correct` the data into an already-declared field or to
+       *     `register_schema` a new version with the field added.
        */
       hint?: string;
     };
@@ -3209,6 +3517,45 @@ export interface components {
       identity_rule: string;
     };
     /**
+     * @description An existing entity surfaced as a possible duplicate of the entity being
+     *     resolved. Emitted by the single-token prefix-match pass: when a
+     *     single-token input (e.g. a contact stored as "Simon") is a strict
+     *     prefix of an existing same-type multi-token canonical name (e.g.
+     *     "Simon Bergeron"), the resolver mints the new entity (no auto-merge)
+     *     but attaches the existing entity here for operator/agent review.
+     *     Callers that forward this to logs or metrics MUST drop or redact
+     *     `candidate_canonical_name` per docs/subsystems/privacy.md.
+     */
+    ResolverDuplicateCandidate: {
+      /**
+       * @description Stable machine code for the surfacing reason.
+       * @enum {string}
+       */
+      code: "PREFIX_DUPLICATE_CANDIDATE";
+      /** @description The entity_type shared by the resolving entity and the candidate. */
+      entity_type: string;
+      /** @description Deterministic id of the existing candidate entity. */
+      candidate_entity_id: string;
+      /**
+       * @description canonical_name of the existing candidate entity. Review-facing;
+       *     callers MUST NOT forward to logs or metrics without redaction.
+       */
+      candidate_canonical_name: string;
+      /**
+       * @description Present and true on every item in a truncated candidate set. When
+       *     the total number of prefix matches exceeded the server-side cap
+       *     (currently 25), only the first 25 (ordered by candidate_entity_id
+       *     ascending) are returned and this flag is set so callers can
+       *     distinguish "exactly 25 matches" from "25+ matches".
+       */
+      truncated?: boolean;
+      /**
+       * @description Total number of candidates found before the cap was applied.
+       *     Only present when truncated is true.
+       */
+      matched_count?: number;
+    };
+    /**
      * @description Unstructured-only store payload. Closed shape; unknown top-level
      *     fields are rejected with `ERR_UNKNOWN_FIELD`.
      */
@@ -3233,6 +3580,133 @@ export interface components {
         [key: string]: unknown;
       };
       entity_ids?: string[];
+    };
+    /**
+     * @description FU-2026-05-002. Identifies the conversation and the assistant message
+     *     whose turn just completed. The server resolves stored/retrieved/issue
+     *     entity IDs from the REFERS_TO edges of the assistant `conversation_message`
+     *     and computes total message count for the conversation.
+     */
+    TurnSummaryRequest: {
+      /**
+       * @description Stable conversation identifier (the `conversation_id` field on the
+       *     `conversation` entity, host-provided or agent-derived per the turn
+       *     identity rules). Used to disambiguate when the same `turn_key`
+       *     string could in principle belong to multiple conversations.
+       */
+      conversation_id: string;
+      /**
+       * @description `turn_key` of the assistant `conversation_message` whose turn just
+       *     completed. Format `{conversation_id}:{turn_id}:assistant` per the
+       *     closing-store recipe. The server resolves the entity via
+       *     `canonical_name_fields: ["turn_key"]`.
+       */
+      turn_key: string;
+      /** Format: uuid */
+      user_id?: string;
+    };
+    /**
+     * @description FU-2026-05-002. Plain-text status line (always present) plus an
+     *     optional `ui://` widget URI for ext-apps clients. Agents emit
+     *     `status_line` in the user-visible reply; ext-apps clients additionally
+     *     render the widget inline when `widget_uri` is present.
+     */
+    TurnSummaryResponse: {
+      /**
+       * @description Single-line plain-text status of the form
+       *     `msg N/M, stored K, retrieved L` (with optional `, issues J`
+       *     suffix when J > 0). Always present, including bookkeeping-only
+       *     turns where K, L, and J are zero.
+       */
+      status_line: string;
+      /**
+       * @description MCP resource URI (`ui://neotoma/turn-summary?...`) resolvable by
+       *     the ext-apps widget host. Omitted when no host context is
+       *     available. Clients without ext-apps support fall back to
+       *     `status_line` plain text.
+       */
+      widget_uri?: string | null;
+      /**
+       * @description 1-based ordinal of this turn within the conversation. Read from
+       *     the resolved assistant message's `turn_number` field; falls back
+       *     to total message count when the field is absent on legacy rows.
+       */
+      turn_number: number;
+      /**
+       * @description Total `conversation_message` entities `PART_OF` the conversation
+       *     at the time of the call. Matches the `conversation_message_count`
+       *     field returned by the closing assistant store (FU-2026-05-001).
+       */
+      conversation_message_count: number;
+      /**
+       * @description Non-bookkeeping entities the assistant message REFERS_TO that were
+       *     created or updated this turn. `conversation` and
+       *     `conversation_message` are excluded.
+       */
+      stored: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Entities cited in the reply that already existed before this turn
+       *     (no new observation was written by this turn). Excludes chat
+       *     bookkeeping.
+       */
+      retrieved: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Issue entities surfaced this turn that need user consent to file
+       *     externally. Empty unless the auto-file flow flagged something.
+       */
+      issues: components["schemas"]["TurnSummaryEntityRef"][];
+    };
+    /**
+     * @description FU-2026-05-003. Index of turns within a conversation, ordered by
+     *     `turn_number` ascending (falls back to message creation time for
+     *     legacy rows without `turn_number`).
+     */
+    ConversationTurnIndex: {
+      /**
+       * @description Stable conversation identifier from the conversation entity's
+       *     `conversation_id` field.
+       */
+      conversation_id: string;
+      /** @description The `entity_id` of the conversation entity (`ent_...`). */
+      conversation_entity_id: string;
+      turns: components["schemas"]["ConversationTurn"][];
+    };
+    ConversationTurn: {
+      /**
+       * @description 1-based ordinal of the turn within the conversation. Read from the
+       *     message's `turn_number` snapshot field; falls back to its index in
+       *     creation order for legacy rows.
+       */
+      turn_number: number;
+      message_entity_id: string;
+      /**
+       * @description `user`, `assistant`, `agent`, `system`, or `tool` per the
+       *     `conversation_message` `role` / `sender_kind` fields.
+       */
+      role: string;
+      turn_key: string;
+      /**
+       * @description First ~200 characters of the message `content` field, intended for
+       *     sidebar previews. Full content is on the message entity itself.
+       */
+      content_preview?: string | null;
+      /** Format: date-time */
+      created_at?: string | null;
+      /** @description Non-bookkeeping entities REFERS_TO from this message. */
+      stored: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Entities REFERS_TO from this message that are not also REFERS_TO
+       *     from the matching assistant message (preserves the
+       *     stored-vs-retrieved partition `neotoma_turn_summary` uses).
+       */
+      retrieved: components["schemas"]["TurnSummaryEntityRef"][];
+      /** @description Entities of `entity_type` `issue` REFERS_TO from this message. */
+      issues: components["schemas"]["TurnSummaryEntityRef"][];
+    };
+    TurnSummaryEntityRef: {
+      entity_id: string;
+      entity_type: string;
+      canonical_name?: string | null;
     };
     GetRelationshipSnapshotRequest: {
       /** @enum {string} */
@@ -3839,6 +4313,96 @@ export interface operations {
       };
     };
   };
+  listEntities: {
+    parameters: {
+      query?: {
+        entity_type?: string;
+        /** @description Canonical free-text query parameter for retrieval relevance. */
+        search?: string;
+        /** @description Compatibility alias for `search`. */
+        query?: string;
+        /** @description Compatibility alias for `search`. */
+        search_query?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * @description Sort field. Non-default values cannot be combined with `search`.
+         *     Mirrors the `sort_by` body field of `POST /entities/query`.
+         */
+        sort_by?: string;
+        /** @description `desc` cannot be combined with `search`. */
+        sort_order?: "asc" | "desc";
+        /** @description Cannot be combined with `search`. */
+        published?: boolean;
+        /** @description Inclusive lower bound for snapshot.published_date. Cannot be combined with `search`. */
+        published_after?: string;
+        /** @description Inclusive upper bound for snapshot.published_date. Cannot be combined with `search`. */
+        published_before?: string;
+        /** @description When false, omit snapshot/provenance/raw_fragments payloads for lighter responses. */
+        include_snapshots?: boolean;
+        include_merged?: boolean;
+        /** @description Optional user scope. When omitted the authenticated user is used. */
+        user_id?: string;
+        /** @description ISO 8601 timestamp; return only entities updated at or after this value. */
+        updated_since?: string;
+        /** @description ISO 8601 timestamp; return only entities created at or after this value. */
+        created_since?: string;
+        /** @description Return only entities with at least one observation resolved with the given identity_basis. */
+        identity_basis?:
+          | "schema_rule"
+          | "schema_lookup"
+          | "heuristic_name"
+          | "heuristic_fallback"
+          | "target_id";
+        /** @description When true, omit chat bookkeeping types from results. */
+        exclude_bookkeeping?: boolean;
+        /**
+         * @description JSON-encoded object filtering entities by snapshot field values,
+         *     equivalent to the `snapshot_filters` body field of
+         *     `POST /entities/query`. Example:
+         *     `{"status":{"op":"eq","value":"active"}}`.
+         */
+        snapshot_filters?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Entity list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            entities?: components["schemas"]["EntitySnapshot"][];
+            total?: number;
+            limit?: number;
+            offset?: number;
+            applied_search_strategies?: (
+              | "strict"
+              | "semantic"
+              | "partial_overlap"
+              | "concept_bridge"
+            )[];
+            /** @enum {string} */
+            search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+          };
+        };
+      };
+      /** @description Invalid query parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
   queryEntities: {
     parameters: {
       query?: never;
@@ -3849,7 +4413,18 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
+          /**
+           * @description Single entity-type filter. Combined as a union with
+           *     `entity_types` when both are supplied.
+           */
           entity_type?: string;
+          /**
+           * @description Multi-type filter. When non-empty, results are restricted
+           *     to entities whose `entity_type` is in this list (an IN
+           *     filter), OR-combined with the singular `entity_type` when
+           *     both are provided. An empty array is treated as no filter.
+           */
+          entity_types?: string[];
           /** @description Canonical free-text query parameter for retrieval relevance. */
           search?: string;
           /** @description Compatibility alias for `search`. */
@@ -3859,16 +4434,15 @@ export interface operations {
           limit?: number;
           offset?: number;
           /**
-           * @description Non-default values cannot be combined with `search`.
-           *     `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
-           * @enum {string}
+           * @description Sort field. Non-default values cannot be combined with `search`.
+           *     Predefined values: `entity_id`, `canonical_name`, `observation_count`,
+           *     `last_observation_at`, `submitted_at` (orders by `snapshot.created_at`).
+           *     In addition, `snapshot.<field>` is supported for any snapshot field
+           *     (e.g. `snapshot.period_end` for time-series types such as `usage_digest`).
+           *     Snapshot field values are compared as strings, so ISO-8601 dates sort
+           *     correctly with lexicographic ordering.
            */
-          sort_by?:
-            | "entity_id"
-            | "canonical_name"
-            | "observation_count"
-            | "last_observation_at"
-            | "submitted_at";
+          sort_by?: string;
           /**
            * @description `desc` cannot be combined with `search`.
            * @enum {string}
@@ -3919,6 +4493,22 @@ export interface operations {
            * @default false
            */
           exclude_bookkeeping?: boolean;
+          /**
+           * @description Filter entities by snapshot field values. Each key is a
+           *     snake_case snapshot field name (e.g. `status`, `priority`);
+           *     the value specifies operator and comparison value. Filters
+           *     are applied server-side via `snapshot->>{field}` JSONB
+           *     extraction, so only entities whose snapshot contains a
+           *     matching value are returned. Example:
+           *     `{"status": {"op": "eq", "value": "active"}}`.
+           */
+          snapshot_filters?: {
+            [key: string]: {
+              /** @enum {string} */
+              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+              value?: unknown;
+            };
+          };
         };
       };
     };
@@ -3934,6 +4524,35 @@ export interface operations {
             total?: number;
             limit?: number;
             offset?: number;
+            /**
+             * @description Which non-strict retrieval strategies contributed to this
+             *     result set, so callers can tell when a match came from a
+             *     relaxed pass rather than exact token matching. Present only
+             *     on `search` requests. Possible members: `strict` (exact
+             *     all-token lexical match), `semantic` (vector similarity),
+             *     `partial_overlap` (#1551 partial-token fallback),
+             *     `concept_bridge` (#1496 schema `query_synonyms` bridged a
+             *     concept phrase to an entity_type). Omitted for non-search
+             *     listings.
+             */
+            applied_search_strategies?: (
+              | "strict"
+              | "semantic"
+              | "partial_overlap"
+              | "concept_bridge"
+            )[];
+            /**
+             * @description Which retrieval strategy answered the query. `none` when no
+             *     `search` text was supplied; `semantic` when embedding search
+             *     answered; `lexical_typed` when an entity-type token was
+             *     detected; `lexical_fallback` when semantic search was
+             *     attempted but returned nothing usable and lexical substring
+             *     matching answered instead. Lets callers detect a silent
+             *     semantic→lexical degradation (e.g. embedding provider
+             *     unavailable). See issue #1506.
+             * @enum {string}
+             */
+            search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
           };
         };
       };
@@ -4114,6 +4733,8 @@ export interface operations {
         content: {
           "application/json": {
             observations_moved?: number;
+            /** @description Number of relationship_observations rows repointed from the merged-away entity to the survivor. Self-loops and duplicates already present on the survivor are deleted and not counted here. */
+            relationships_repointed?: number;
             /** Format: date-time */
             merged_at?: string;
           };
@@ -4930,7 +5551,9 @@ export interface operations {
   };
   getSchemaByEntityType: {
     parameters: {
-      query?: never;
+      query?: {
+        user_id?: string;
+      };
       header?: never;
       path: {
         entity_type: string;
@@ -5023,6 +5646,37 @@ export interface operations {
       };
     };
   };
+  getUsage: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Usage statistics */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UsageStats"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
   getAccessPolicies: {
     parameters: {
       query?: never;
@@ -5093,6 +5747,20 @@ export interface operations {
           "application/json":
             | components["schemas"]["StoreResolutionErrorEnvelope"]
             | components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description Write rejected by policy. `OVERRIDE_POLICY_VIOLATION` is returned
+       *     when an `agent_definition` entity's `override_policy` denies the
+       *     calling agent role a field being written; the envelope details
+       *     carry `field_name`, `agent_role`, and `entity_id`.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
       /**
@@ -5444,6 +6112,14 @@ export interface operations {
                */
               offset?: number;
               /**
+               * @description When `false` (default), soft-deleted relationships are excluded from
+               *     the result. When `true`, soft-deleted edges are included (audit/history
+               *     use). A relationship is soft-deleted once its highest-priority
+               *     deletion observation is recorded; the snapshot row itself persists.
+               * @default false
+               */
+              include_deleted?: boolean;
+              /**
                * @description Optional user_id override (scoped to callers with privilege to query on
                *     behalf of another user). When omitted, the authenticated user is used.
                */
@@ -5466,7 +6142,18 @@ export interface operations {
         content: {
           "application/json": {
             relationships?: components["schemas"]["RelationshipSnapshot"][];
-            /** @description Total number of matching relationships before pagination. */
+            /**
+             * @description Total number of matching relationships before pagination.
+             *     Canonical pagination field, matching
+             *     `/retrieve_graph_neighborhood`.
+             */
+            total_count?: number;
+            /**
+             * @deprecated
+             * @description Deprecated alias of `total_count`, retained for back-compat
+             *     with pre-existing clients. New clients SHOULD read
+             *     `total_count`. See issue #369.
+             */
             total?: number;
             /** @description Echo of the requested `limit`. */
             limit?: number;
@@ -5495,9 +6182,11 @@ export interface operations {
           user_id?: string;
           /**
            * @description Restrict snapshot-field matching to a single field
-           *     (e.g. "email", "domain", "company"). When omitted, a
-           *     default identity-bearing set is checked
-           *     (name, full_name, title, email, domain, company).
+           *     (e.g. "email", "domain", "company"). When omitted, a generic
+           *     identity-bearing base set (name, full_name, title, email,
+           *     domain, company) is checked, extended per entity_type by any
+           *     `identity_search_fields` the schema declares (e.g.
+           *     institution, account_name for financial_account).
            */
           by?: string;
           /** @description Maximum number of matching entities to return (default 100). */
@@ -5538,6 +6227,27 @@ export interface operations {
               }[];
             })[];
             total?: number;
+            /**
+             * @description Which resolution pass produced these results, so callers
+             *     can tell when a match came from a relaxed fallback rather
+             *     than a direct identifier hit. `direct` — canonical_name or
+             *     alias match (or derived-id lookup). `snapshot_field` —
+             *     matched an identity-bearing snapshot field (generic base or
+             *     schema `identity_search_fields`, #1495). `semantic` —
+             *     vector-similarity fallback. `none` — no match. Omitted on
+             *     error responses.
+             * @enum {string}
+             */
+            match_mode?: "direct" | "snapshot_field" | "semantic" | "none";
+            /**
+             * @description Present only when the `identifier` is shaped like an
+             *     entity_id (`ent_<hex>`) but no entity with that id exists
+             *     for the caller (`match_mode: "none"`, `total: 0`). Tells
+             *     the caller the input looks like an entity_id and that
+             *     `retrieve_entity_snapshot(entity_id=…)` is the direct
+             *     fetch path (#1597). Omitted for every other result.
+             */
+            hint?: string;
           };
         };
       };
@@ -5644,10 +6354,15 @@ export interface operations {
             relationships?: {
               [key: string]: unknown;
             }[];
-            /** @description Entities connected to the node via relationships. Each item uses `entity_id` (not `id`). */
+            /** @description Entities connected to the node via relationships. Each item carries the canonical `entity_id`. A deprecated `id` alias with the same value is also present for one minor release to preserve backward compatibility; prefer `entity_id` and stop reading `id`. */
             related_entities?: ({
-              /** @description The entity identifier. Always present as `entity_id`; the raw database `id` column is not exposed. */
+              /** @description The canonical entity identifier, matching `relationships[].source_entity_id` / `target_entity_id` and every other Neotoma response surface. Always present. */
               entity_id?: string;
+              /**
+               * @deprecated
+               * @description Deprecated alias of `entity_id`, retained for one minor release for backward compatibility. Equal to `entity_id`. Will be removed in a future release; use `entity_id` instead.
+               */
+              id?: string;
             } & {
               [key: string]: unknown;
             })[];
@@ -5822,8 +6537,15 @@ export interface operations {
           local_issue_id?: string;
           /** @description Guest submitter timestamp used for deterministic local thread identity. */
           submission_timestamp?: string;
+          /**
+           * @description Optional GitHub mirror destination in `owner/repo` format (e.g. `markmhendrickson/ateles`). Overrides the globally-configured `NEOTOMA_ISSUES_REPO` / `issues.repo` for this call only. The Neotoma authoring home (operator instance) is unaffected. Use when filing issues about a repo other than the one Neotoma is configured for.
+           * @example markmhendrickson/ateles
+           */
+          target_repo?: string;
           /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
           entity_ids_to_link?: string[];
+          /** @description Entity ID of the conversation turn (conversation_message entity) where this issue was observed. When provided, a REFERS_TO relationship is created from the filed issue entity to this conversation turn entity, making the origin of the issue traceable. */
+          conversation_turn_id?: string;
           user_id?: string;
         };
       };
@@ -6060,6 +6782,20 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description No live relationship matches the supplied
+       *     `relationship_type` / `source_entity_id` / `target_entity_id`
+       *     triple. `details.hint` points to `/list_relationships` for
+       *     discovering the actual typed edges between the two entities.
+       */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   restoreRelationship: {
@@ -6151,6 +6887,48 @@ export interface operations {
         content: {
           "application/json": {
             [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  auditUndeclaredFragments: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Restrict the audit to a single entity_type. */
+          entity_type?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Undeclared-fragment audit grouped by entity_type */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            audit: {
+              entity_type: string;
+              undeclared_fields: {
+                fragment_key: string;
+                affected_entities: number;
+                occurrences: number;
+              }[];
+              affected_entities: number;
+              total_occurrences: number;
+              schema_missing: boolean;
+            }[];
+            total_entity_types: number;
+            total_undeclared_fields: number;
           };
         };
       };
@@ -6269,7 +7047,14 @@ export interface operations {
         };
         content: {
           "application/json": {
-            [key: string]: unknown;
+            success: boolean;
+            entity_type: string;
+            schema_version: string;
+            activated?: boolean;
+            scope?: string;
+            schema_id: string;
+            /** @description Non-blocking warnings about entity type naming anti-patterns (redundant suffixes, non-snake_case, overly generic names, etc.). Registration succeeds even when warnings are present. */
+            name_lint_warnings: string[];
           };
         };
       };
@@ -6302,8 +7087,130 @@ export interface operations {
         };
         content: {
           "application/json": {
-            [key: string]: unknown;
+            observation_id?: string;
+            entity_id?: string;
+            field?: string;
+            value?: unknown;
+            message?: string;
+            /**
+             * @description HTTP-only. Always `true` on a 2xx correction. Absent on the
+             *     MCP transport.
+             */
+            success?: boolean;
+            /**
+             * @description HTTP-only. The recomputed entity snapshot after the
+             *     correction, or `null`. Absent on the MCP transport.
+             */
+            snapshot?: {
+              [key: string]: unknown;
+            } | null;
+            /**
+             * @description Present and `true` when `field` is not declared on the
+             *     entity's active schema. The correction observation is still
+             *     written and the value is mirrored to `raw_fragments`, but it
+             *     will not appear in the entity snapshot until the field is
+             *     added to the schema. Absent (or `false`) for declared
+             *     fields, which behave as ordinary corrections.
+             */
+            unknown_field?: boolean;
+            /**
+             * @description Actionable guidance, present only when `unknown_field` is
+             *     true. Directs the caller to add the field to the schema
+             *     (via `register_schema` / `update_schema_incremental`) to
+             *     promote the value into the snapshot. The interpolated
+             *     `entity_type` and `field` are carried in `details` rather
+             *     than the hint string.
+             */
+            hint?: string;
+            /**
+             * @description Present only when `unknown_field` is true. Structured
+             *     identifiers for the undeclared field, kept out of the
+             *     free-text `hint` so callers can switch on them.
+             */
+            details?: {
+              entity_type?: string;
+              field?: string;
+            };
           };
+        };
+      };
+      /**
+       * @description Correction rejected by policy. `OVERRIDE_POLICY_VIOLATION` is
+       *     returned when an `agent_definition` entity's `override_policy`
+       *     denies the calling agent role the corrected field; the envelope
+       *     details carry `field_name`, `agent_role`, and `entity_id`.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getConversationTurnIndex: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path: {
+        /**
+         * @description Conversation identifier. Accepts either the `conversation_id`
+         *     field on the conversation entity (host-provided or agent-derived)
+         *     or the conversation `entity_id` (e.g. `ent_...`).
+         */
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Turn index for the conversation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationTurnIndex"];
+        };
+      };
+      /** @description Conversation not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error_code?: string;
+            message?: string;
+          };
+        };
+      };
+    };
+  };
+  turnSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TurnSummaryRequest"];
+      };
+    };
+    responses: {
+      /** @description Turn summary computed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TurnSummaryResponse"];
         };
       };
     };
@@ -6365,6 +7272,47 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SessionInfo"];
+        };
+      };
+    };
+  };
+  publishRenderedPage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Existing rendered_page entity id to publish. */
+          entity_id?: string;
+          title?: string;
+          html_body?: string;
+          custom_css?: string;
+          meta_description?: string;
+          /** @description Idempotency key for the inline-create path. Same key + same content reuses the same rendered_page. Ignored when entity_id is supplied. */
+          idempotency_key?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Share URL minted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            entity_id: string;
+            share_url: string;
+            access_token: string;
+            ttl_seconds: number;
+            /** @description True if a new rendered_page was created from inline content. */
+            created: boolean;
+          };
         };
       };
     };

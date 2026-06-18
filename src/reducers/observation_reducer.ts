@@ -14,6 +14,7 @@ import {
 } from "../services/schema_registry.js";
 import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
+import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
 
 export interface Observation {
   id: string;
@@ -415,8 +416,35 @@ export class ObservationReducer {
     const values = new Set<unknown>();
     const observationIds: string[] = [];
 
-    for (const obs of observations) {
-      const rawValue = obs.fields[field];
+    // A correction (or any higher-priority write) must fully REPLACE the
+    // array, not union into it — corrections are documented as highest
+    // priority and "always win" (see issue #1541). Without this, a
+    // `correct()` observation's array would be merged with every lower-
+    // priority observation's array, so the field could never be cleanly
+    // reset (and a prior malformed correction would persist forever).
+    //
+    // We restrict the union to only the observations carrying this field at
+    // the MAXIMUM source_priority present. When all observations share the
+    // same priority (the common, non-correction case) this is identical to
+    // the previous union-all behavior. When a correction (priority 1000)
+    // exists, only correction-tier observations are merged, so the
+    // correction replaces lower-priority arrays.
+    const maxPriority = observations.reduce(
+      (max, obs) => (obs.source_priority > max ? obs.source_priority : max),
+      Number.NEGATIVE_INFINITY
+    );
+    const topPriorityObservations = observations.filter(
+      (obs) => obs.source_priority === maxPriority
+    );
+
+    for (const obs of topPriorityObservations) {
+      // #1595: a transport/client may deliver a JSON-array-shaped *string*
+      // (e.g. `'["a","b"]'`) to a merge_array field instead of a real array.
+      // Recover it deterministically so it does not get added as a single
+      // literal-string element. Shared heuristic in recover_json_array_string.ts
+      // so this and canonicalizeArray cannot drift. A non-JSON string (and any
+      // string that does not parse to an array) is left untouched.
+      const rawValue = recoverJsonArrayString(obs.fields[field]) ?? obs.fields[field];
       if (rawValue !== undefined && rawValue !== null) {
         // Handle array values
         if (Array.isArray(rawValue)) {

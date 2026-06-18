@@ -33,6 +33,7 @@ import {
   isHookComplianceFollowupEnabled,
   log,
   makeIdempotencyKey,
+  pickStoredEntityId,
   readTurnState,
   recordConversationTurn,
   runHook,
@@ -41,13 +42,7 @@ import {
   type SkippedStoreDiagnosis,
 } from "./_common.js";
 
-function pickEntityId(result: unknown): string | undefined {
-  if (!result || typeof result !== "object") return undefined;
-  const r = result as { structured?: { entities?: Array<{ entity_id?: string }> } };
-  const first = r.structured?.entities?.[0];
-  if (first && typeof first.entity_id === "string") return first.entity_id;
-  return undefined;
-}
+const pickEntityId = pickStoredEntityId;
 
 function followupMessage(
   diagnosis: SkippedStoreDiagnosis | undefined

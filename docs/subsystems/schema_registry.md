@@ -48,6 +48,12 @@ See [`docs/subsystems/schema.md`](./schema.md) for complete table definition.
 ```typescript
 interface SchemaDefinition {
   fields: Record<string, FieldDefinition>;
+  canonical_name_fields?: Array<string | { composite: string[] }>; // Identity rules
+  identity_opt_out?: string;       // e.g. "heuristic_canonical_name"
+  store_warnings?: StoreWarningRule[]; // Non-fatal data-quality warnings
+  temporal_fields?: TemporalFieldRule[]; // Timeline event emission
+  reference_fields?: ReferenceFieldRule[]; // Auto-relationship creation
+  content_field?: string;          // Primary long-form body field (document types)
 }
 
 interface FieldDefinition {
@@ -403,6 +409,33 @@ Schemas MUST be validated before registration:
 - Field definitions must be valid
 - Merge policies must reference valid fields
 - Schema version must be unique per entity_type
+- `content_field` (if present) must be a non-empty string that names an existing field on the schema
+
+### 4.2a Store Warnings (`store_warnings` and `content_field`)
+
+Two mechanisms emit non-fatal `store_warnings[]` entries on a successful `/store` response:
+
+**1. `store_warnings` rules** — an array of identity-quality rules declared on the schema. Each rule fires when the observation omits all of the named fields:
+
+```json
+"store_warnings": [
+  {
+    "code": "MISSING_IDENTITY_FIELDS",
+    "message": "Stored without any feedback source identity field.",
+    "condition": { "missing_all_of": ["github_url", "conversation_id", "session_id"] }
+  }
+]
+```
+
+**2. `content_field` declaration** — marks a schema as a document type. When declared, the store path emits `MISSING_CONTENT_FIELD` if the stored observation omits or empties the named field:
+
+```json
+"content_field": "body"
+```
+
+Both codes are stable, agent-pattern-matchable identifiers. See `docs/reference/error_codes.md` § Store Warnings for the full code catalog.
+
+When `updateSchemaIncremental` removes the field that `content_field` references, `content_field` is automatically dropped from the preserved definition and a warning is logged. The caller does not receive an error — the write succeeds — but the `MISSING_CONTENT_FIELD` warning will no longer fire for that schema.
 
 ### 4.3 Incremental Schema Updates
 

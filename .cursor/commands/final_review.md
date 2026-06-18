@@ -1,1 +1,1 @@
-/Users/markmhendrickson/repos/neotoma/foundation/agent_instructions/cursor_commands/final_review.md
+../../foundation/agent_instructions/cursor_commands/final_review.md

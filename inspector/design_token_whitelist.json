@@ -1,0 +1,86 @@
+{
+  "$schema": "../docs/ui/design_system/dependencies.yaml#whitelist",
+  "_doc": "Files in the Inspector app allowed to use raw color literals or non-token palette utilities. Each entry MUST include a one-line `reason`. Inspector is on a longer reconciliation path than the marketing site (see `palette_divergences:` in dependencies.yaml); tighten this list as Inspector pages adopt canonical tokens.",
+  "files": [
+    {
+      "path": "inspector/src/pages/graph_explorer.tsx",
+      "reason": "Force-directed graph node fills sourced from entity-type palette; entity-type tokens not yet exposed via inline-CSS path."
+    },
+    {
+      "path": "inspector/src/components/layout/header.tsx",
+      "reason": "Inspector header uses Tailwind palette utilities pending reconciliation onto canonical tokens."
+    },
+    {
+      "path": "inspector/src/components/layout/sandbox_banner.tsx",
+      "reason": "Sandbox banner uses amber Tailwind palette utilities; promote into `warning_soft` token family in a follow-up."
+    },
+    {
+      "path": "inspector/src/components/shared/agent_badge.tsx",
+      "reason": "Per-agent identity badges use distinct Tailwind palette colors; promote to entity-type token family."
+    },
+    {
+      "path": "inspector/src/components/shared/attribution_summary.tsx",
+      "reason": "Attribution surface uses Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/components/shared/copy_id_button.tsx",
+      "reason": "Copy-to-clipboard affordance uses gray-* utilities; small surface, migration tracked."
+    },
+    {
+      "path": "inspector/src/components/shared/field_value.tsx",
+      "reason": "Field-value renderer uses gray-* utilities; migration tracked."
+    },
+    {
+      "path": "inspector/src/components/shared/json_viewer.tsx",
+      "reason": "JSON viewer uses Tailwind palette syntax-highlight utilities; specialized viewer."
+    },
+    {
+      "path": "inspector/src/components/shared/snapshot_field_list.tsx",
+      "reason": "Snapshot field list uses gray-* utilities; migration tracked."
+    },
+    {
+      "path": "inspector/src/pages/compliance.tsx",
+      "reason": "Compliance dashboard uses Tailwind palette utilities and rgba() shadows pending token migration."
+    },
+    {
+      "path": "inspector/src/pages/dashboard.tsx",
+      "reason": "Dashboard uses Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/pages/feedback.tsx",
+      "reason": "Feedback queue uses Tailwind palette utilities for status colors pending token migration."
+    },
+    {
+      "path": "inspector/src/pages/sandbox.tsx",
+      "reason": "Sandbox page uses Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/pages/schema_detail.tsx",
+      "reason": "Schema detail uses Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/pages/settings.tsx",
+      "reason": "Settings page uses Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/pages/turn_detail.tsx",
+      "reason": "Turn detail uses Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/lib/constants.ts",
+      "reason": "Entity-type color constants — promote to `entity-types.md` token family in a follow-up."
+    },
+    {
+      "path": "inspector/src/components/feedback/feedback_timeline.tsx",
+      "reason": "Feedback timeline uses status-tinted Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/components/feedback/pending_queue.tsx",
+      "reason": "Pending feedback queue uses status-tinted Tailwind palette utilities pending token migration."
+    },
+    {
+      "path": "inspector/src/components/feedback/scratch_block.tsx",
+      "reason": "Scratch block uses Tailwind palette utilities for note-card visuals; migration tracked."
+    }
+  ]
+}

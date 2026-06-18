@@ -32,8 +32,9 @@ if (process.env.SKIP_INSPECTOR_BUILD === "1") {
 
 if (!existsSync(join(INSPECTOR_DIR, "package.json"))) {
   log(
-    "ERROR: inspector/ submodule not initialised (no package.json). " +
-      "Run `git submodule update --init inspector` before packaging or publishing.",
+    "ERROR: inspector/package.json not found. The inspector source is part " +
+      "of this repository under inspector/. If you cloned without the " +
+      "inspector source (rare), restore it from git history.",
   );
   process.exit(1);
 }
@@ -63,12 +64,21 @@ if (needsInstall) {
 }
 
 log("Building Inspector SPA…");
+// With content-negotiation unification (plan ent_1f176dbbe9a39e6bbad27f1f)
+// the Inspector serves at server root (/). Browsers requesting any
+// non-API path with Accept: text/html receive the SPA shell. Asset URLs
+// resolve under /assets/*. The legacy /inspector/* mount continues to
+// serve assets for old links and is preserved by a 308 redirect (see
+// src/services/inspector_mount.ts).
+//
+// Override VITE_PUBLIC_BASE_PATH to restore the sub-path build for
+// special cases (e.g. testing the legacy mount).
 execSync("npm run build", {
   cwd: INSPECTOR_DIR,
   stdio: "inherit",
   env: {
     ...process.env,
-    VITE_PUBLIC_BASE_PATH: "/inspector/",
+    VITE_PUBLIC_BASE_PATH: process.env.VITE_PUBLIC_BASE_PATH || "/",
   },
 });
 

@@ -9,12 +9,9 @@
  * Read-only guidance stays under `mcp guide` and `cli guide`.
  */
 
-import { existsSync, mkdirSync, symlinkSync, readlinkSync, unlinkSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
 import type { ToolId } from "./doctor.js";
 import { runDoctor } from "./doctor.js";
+import { mirrorToHarness } from "./skills_mirror.js";
 import { runHooksInstall } from "./hooks.js";
 import { toHookHarness } from "./hooks_detect.js";
 import type { PermissionPatch } from "./permissions.js";
@@ -95,119 +92,27 @@ export interface RunSetupOptions {
 }
 
 /**
- * Map a ToolId to the harness skills directory.
- * "user" scope uses the home-directory path; "project" uses cwd.
- */
-function getSkillsTarget(tool: ToolId, cwd: string, scope: "project" | "user"): string | null {
-  const harnessMap: Partial<Record<ToolId, { dir: string }>> = {
-    cursor: { dir: ".cursor/skills" },
-    "claude-code": { dir: ".claude/skills" },
-    "claude-desktop": { dir: ".claude/skills" },
-    codex: { dir: ".codex/skills" },
-    openclaw: { dir: ".openclaw/skills" },
-    // MCP-only tools: no skills directory; setup writes MCP config only.
-    windsurf: undefined,
-    continue: undefined,
-    vscode: undefined,
-  };
-  const entry = harnessMap[tool];
-  if (!entry) return null;
-  const base = scope === "user" ? homedir() : cwd;
-  return join(base, entry.dir);
-}
-
-/**
- * Resolve the `skills/` directory from the installed npm package.
- * Works whether the CLI is running from a global install or a local checkout.
- */
-function getPublishedSkillsSource(): string {
-  const thisFile = fileURLToPath(import.meta.url);
-  const packageRoot = resolve(dirname(thisFile), "..", "..");
-  return join(packageRoot, "skills");
-}
-
-/**
- * Symlink each published skill into the harness skills directory.
- * Idempotent: skips skills that already point to the correct source.
+ * Install published skills into the harness skills directory.
+ *
+ * Delegates to the shared {@link mirrorToHarness} reconciler so `neotoma setup`
+ * and the continuous `neotoma skills sync` mirror use one code path: a whole-
+ * directory symlink when safe, falling back to per-skill symlinks when the
+ * target already holds foreign content.
  */
 function installSkills(tool: ToolId, cwd: string, scope: "project" | "user"): SetupStepResult {
-  const targetDir = getSkillsTarget(tool, cwd, scope);
-  if (!targetDir) {
-    return {
-      id: "skills",
-      ok: true,
-      changed: false,
-      skipped: true,
-      reason: `tool ${tool} has no skills directory`,
-    };
-  }
-
-  const sourceDir = getPublishedSkillsSource();
-  if (!existsSync(sourceDir)) {
-    return {
-      id: "skills",
-      ok: true,
-      changed: false,
-      skipped: true,
-      reason: "no published skills directory found",
-    };
-  }
-
-  let entries: string[];
-  try {
-    entries = readdirSync(sourceDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
-  } catch {
-    return {
-      id: "skills",
-      ok: false,
-      changed: false,
-      reason: "failed to read skills source directory",
-    };
-  }
-
-  if (entries.length === 0) {
-    return {
-      id: "skills",
-      ok: true,
-      changed: false,
-      skipped: true,
-      reason: "no skills to install",
-    };
-  }
-
-  mkdirSync(targetDir, { recursive: true });
-
-  let changed = false;
-  const installed: string[] = [];
-  for (const name of entries) {
-    const src = join(sourceDir, name);
-    const dst = join(targetDir, name);
-    try {
-      if (existsSync(dst)) {
-        try {
-          const current = readlinkSync(dst);
-          if (resolve(current) === resolve(src)) continue;
-        } catch {
-          // dst exists but is not a symlink — skip to avoid overwriting user content
-          continue;
-        }
-        unlinkSync(dst);
-      }
-      symlinkSync(src, dst, "junction");
-      changed = true;
-      installed.push(name);
-    } catch {
-      // non-fatal: individual skill link failure
-    }
-  }
-
+  const result = mirrorToHarness(tool, { cwd, scope });
   return {
     id: "skills",
     ok: true,
-    changed,
-    details: { installed, target: targetDir, source: sourceDir },
+    changed: result.changed,
+    skipped: result.skipped,
+    reason: result.reason,
+    details: {
+      target: result.target,
+      mode: result.mode,
+      base_present: result.base_present,
+      linked: result.linked,
+    },
   };
 }
 

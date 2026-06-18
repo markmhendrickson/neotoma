@@ -84,7 +84,7 @@ export const SKILLS_CATALOG: SkillCatalogEntry[] = [
     relatedUseCases: [],
     installCommands: NEOTOMA_SETUP_INSTALL,
     workflowSteps: [
-      { phase: "1", title: "Check CLI availability", description: "Runs `npx neotoma doctor` to detect installation status" },
+      { phase: "1", title: "Check CLI availability", description: "Runs `npx neotoma status` to detect installation status" },
       { phase: "2", title: "Install if needed", description: "Guides `npm install -g neotoma` when the CLI is not found" },
       { phase: "3", title: "Run setup", description: "Executes `neotoma setup --yes` to configure MCP, hooks, and permissions" },
       { phase: "4", title: "Verify connectivity", description: "Calls `get_session_identity` to confirm the MCP connection is live" },

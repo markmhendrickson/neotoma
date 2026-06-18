@@ -1021,7 +1021,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation_message: {
     entity_type: "conversation_message",
-    schema_version: "1.3",
+    schema_version: "1.4",
     metadata: {
       label: "Chat Message",
       description:
@@ -1058,6 +1058,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         reporter_git_ref: { type: "string", required: false },
         reporter_channel: { type: "string", required: false },
         reporter_app_version: { type: "string", required: false },
+        // v1.4 (FU-2026-05-002): 1-based ordinal of this message within the
+        // owning conversation. Writers supply this directly; readers use it as
+        // the authoritative turn ordinal so neotoma_turn_summary can render
+        // `msg N/M` without re-counting siblings. Optional for legacy rows
+        // (fall through to host turn_key parsing when absent).
+        turn_number: { type: "number", required: false },
       },
       // v1.2: turn-scoped identity via caller-supplied `turn_key`. Falls
       // through to heuristic when missing; R2 `name_collision_policy: reject`
@@ -1078,6 +1084,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         reporter_git_ref: { strategy: "last_write" },
         reporter_channel: { strategy: "last_write" },
         reporter_app_version: { strategy: "last_write" },
+        turn_number: { strategy: "last_write" },
       },
     },
   },
@@ -1166,6 +1173,18 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         },
         tags: { type: "string", required: false },
         notes: { type: "string", required: false, preserveCase: true },
+        /**
+         * Broad category of the task. Registered values include
+         * "awaiting_reply" (auto-extracted from outbound emails) and any
+         * user-defined type. Deliberately an open string rather than an enum
+         * so callers can introduce types without a schema migration.
+         */
+        task_type: { type: "string", required: false },
+        /**
+         * Free-text description of the due context (e.g. "reply expected").
+         * Supplements `due_date` when an exact date is unknown.
+         */
+        due_context: { type: "string", required: false, preserveCase: true },
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
@@ -1272,7 +1291,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   email: {
     entity_type: "email",
-    schema_version: "1.0",
+    schema_version: "1.1",
     metadata: {
       label: "Email",
       description: "Email-specific messages with threads and subjects.",
@@ -1292,6 +1311,14 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         received_at: { type: "date", required: false },
         thread_id: { type: "string", required: false },
         message_id: { type: "string", required: false },
+        /**
+         * Message direction from the perspective of the local user.
+         * "outbound" = sent by the user; "inbound" = received by the user.
+         * When present, the derived-entity rule below auto-extracts an
+         * awaiting_reply task for outbound messages with pending-reply
+         * signals.
+         */
+        direction: { type: "string", required: false },
         status: { type: "string", required: false },
         tags: { type: "string", required: false },
         notes: { type: "string", required: false },
@@ -1302,12 +1329,47 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // present. Fall back to (from, subject, sent_at) which uniquely
       // identifies the message within most mailboxes.
       canonical_name_fields: ["message_id", { composite: ["from", "subject", "sent_at"] }],
+      /**
+       * Auto-extract an awaiting_reply task when an outbound email contains
+       * signals that a reply is expected (question mark, "please let me know",
+       * etc.). See `docs/foundation/schema_agnostic_design_rules.md`.
+       */
+      derived_entities: [
+        {
+          conditions: [
+            { field: "direction", op: "eq", value: "outbound" },
+            {
+              field: "body",
+              op: "matches_any_pattern",
+              patterns: [
+                "\\?",
+                "please let me know",
+                "looking forward to hearing",
+                "please reply",
+                "awaiting your response",
+                "let me know",
+                "your thoughts",
+                "waiting to hear",
+              ],
+            },
+          ],
+          derived_entity_type: "task",
+          derived_fields: {
+            title: { template: "Awaiting reply: {{subject}}" },
+            task_type: { value: "awaiting_reply" },
+            status: { value: "pending" },
+            due_context: { value: "reply expected" },
+          },
+          relationship_type: "REFERS_TO",
+        },
+      ],
     },
     reducer_config: {
       merge_policies: {
         sent_at: { strategy: "last_write" },
         received_at: { strategy: "last_write" },
         body: { strategy: "highest_priority" },
+        direction: { strategy: "last_write" },
       },
     },
   },
@@ -1343,6 +1405,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         { composite: ["thread_id", "sender", "sent_at"] },
         { composite: ["sender", "sent_at"] },
       ],
+      content_field: "body",
     },
     reducer_config: {
       merge_policies: {
@@ -1381,6 +1444,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // R2: title is a natural identifier when present; content is the
       // fallback so title-less scratchpads still resolve deterministically.
       canonical_name_fields: ["title", { composite: ["source", "created_date"] }],
+      content_field: "content",
     },
     reducer_config: {
       merge_policies: {
@@ -1766,6 +1830,55 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       merge_policies: {
         status: { strategy: "last_write" },
         categories: { strategy: "merge_array" },
+      },
+    },
+  },
+
+  financial_account: {
+    entity_type: "financial_account",
+    schema_version: "1.0",
+    metadata: {
+      label: "Financial account",
+      description: "A bank, brokerage, savings, or checking account at an institution.",
+      category: "finance",
+      aliases: ["bank_account", "savings_account", "checking_account", "brokerage_account"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        institution: { type: "string", required: false },
+        account_name: { type: "string", required: false },
+        provider: { type: "string", required: false },
+        account_type: { type: "string", required: false },
+        currency: { type: "string", required: false },
+        balance: { type: "number", required: false },
+        number: { type: "string", required: false },
+        status: { type: "string", required: false },
+        notes: { type: "string", required: false },
+      },
+      // Identity composes from institution + account_name when both are
+      // present; institution alone is a weaker but usable single-field rule.
+      canonical_name_fields: [{ composite: ["institution", "account_name"] }, "institution"],
+      // #1496: natural-language queries name the concept ("bank account",
+      // "savings account"), not the literal entity_type. These bridge the
+      // concept to this type during lexical search. Declared here (not
+      // hardcoded in the search module) per
+      // docs/foundation/schema_agnostic_design_rules.md. Only compound phrases
+      // are declared: bare tokens like "account"/"bank" are overbroad ("github
+      // account", "delete my account", "river bank") and would bridge
+      // unrelated queries to financial_account.
+      query_synonyms: ["bank account", "savings account", "checking account", "brokerage account"],
+      // #1495: the institution name and account label are the identity-bearing
+      // text a caller types when resolving by identifier; neither reliably
+      // reaches canonical_name as a standalone token.
+      identity_search_fields: ["institution", "account_name"],
+    },
+    reducer_config: {
+      merge_policies: {
+        institution: { strategy: "last_write" },
+        account_name: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        balance: { strategy: "last_write" },
       },
     },
   },
@@ -2856,6 +2969,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // Callers commonly supply a pre-formed canonical_name or a stable gist_id;
       // identity_opt_out allows both paths without requiring composite fields.
       identity_opt_out: "heuristic_canonical_name",
+      content_field: "content",
     },
     reducer_config: {
       merge_policies: {
@@ -3127,10 +3241,17 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
-        // Stable identifier for the preference (e.g. "issue_filing_consent"). Acts as the key.
-        title: { type: "string", required: true, preserveCase: false },
-        // Current value of the preference (e.g. "always" | "ask" | "never"). Type is freeform
-        // string because preference shape varies; agents and UIs interpret per-title.
+        // Stable machine identifier for the preference (e.g. "auto_file_issues",
+        // "issue_filing_consent"). Preferred key field for new preferences. Either `key`
+        // or `title` may carry the identifier; both are declared so neither routes to
+        // raw_fragments, and both participate in identity resolution.
+        key: { type: "string", required: false, preserveCase: false },
+        // Stable identifier for the preference (e.g. "issue_filing_consent"). Legacy/alias
+        // of `key`; retained for back-compat with preferences keyed by title.
+        title: { type: "string", required: false, preserveCase: false },
+        // Current value of the preference (e.g. "always" | "ask" | "never", or a boolean
+        // such as auto_file_issues: false). Type is freeform because preference shape
+        // varies; agents and UIs interpret per-key. Stored as written (string or boolean).
         value: { type: "string", required: true, preserveCase: true },
         // Optional scope qualifier — e.g. "global", "project:neotoma". Default behavior treats
         // a preference as global when scope is omitted.
@@ -3140,9 +3261,15 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         created_date: { type: "date", required: false },
         updated_date: { type: "date", required: false },
       },
-      // A preference is uniquely identified by its title (plus optional scope when present).
-      // Two stores with the same title collapse to one entity; the latest write wins on value.
-      canonical_name_fields: ["title", { composite: ["scope", "title"] }],
+      // A preference is uniquely identified by its key (or legacy title), plus optional
+      // scope when present. Two stores with the same key/title collapse to one entity;
+      // the latest write wins on value.
+      canonical_name_fields: [
+        "key",
+        "title",
+        { composite: ["scope", "key"] },
+        { composite: ["scope", "title"] },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -3150,6 +3277,171 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         scope: { strategy: "last_write" },
         description: { strategy: "highest_priority" },
         updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  pull_request: {
+    entity_type: "pull_request",
+    schema_version: "1.0",
+    metadata: {
+      label: "Pull Request",
+      description: "A GitHub pull request.",
+      category: "knowledge",
+      aliases: ["pr", "github_pr"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // GitHub PR number — primary identifier within a repo.
+        pr_number: { type: "number", required: true },
+        title: { type: "string", required: true, preserveCase: true },
+        // Current state: open | closed | merged | draft.
+        status: { type: "string", required: false },
+        // Target branch the PR merges into.
+        base_branch: { type: "string", required: false },
+        // Source branch the PR is merging from.
+        head_branch: { type: "string", required: false },
+        // Canonical URL for the PR on GitHub.
+        github_url: { type: "string", required: false },
+        // PR description body (markdown).
+        body: { type: "string", required: false, preserveCase: true },
+        // ISO timestamp when the PR was merged; null/absent when not merged.
+        merged_at: { type: "string", required: false },
+        // Repository slug in owner/repo format (e.g. "markmhendrickson/neotoma").
+        repo: { type: "string", required: false },
+        // GitHub login of the PR author.
+        author: { type: "string", required: false },
+      },
+      // A pull request is uniquely identified by its number within a repo.
+      // The composite [pr_number, repo] is the primary rule; title is a
+      // fallback for cases where only the title is supplied.
+      canonical_name_fields: [{ composite: ["pr_number", "repo"] }, "title"],
+      agent_instructions:
+        "A pull_request entity represents a single GitHub pull request. " +
+        "Use pr_number and repo together as the primary identifier. " +
+        "The status field should reflect the current state: open, closed, merged, or draft. " +
+        "Set merged_at to the ISO timestamp when the PR was merged.",
+    },
+    reducer_config: {
+      merge_policies: {
+        pr_number: { strategy: "last_write" },
+        title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        status: { strategy: "last_write" },
+        base_branch: { strategy: "last_write" },
+        head_branch: { strategy: "last_write" },
+        github_url: { strategy: "last_write" },
+        body: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        merged_at: { strategy: "last_write" },
+        repo: { strategy: "last_write" },
+        author: { strategy: "last_write" },
+      },
+    },
+  },
+
+  usage_digest: {
+    entity_type: "usage_digest",
+    schema_version: "1.0",
+    metadata: {
+      label: "Usage Digest",
+      description:
+        "Periodic PII-safe aggregate telemetry of a Neotoma deployment's health and usage " +
+        "(rollup grain, distinct from per-event harness_event and per-incident daemon_report).",
+      category: "agent_runtime",
+      aliases: [],
+      // External observers submit digests as guests without an AAuth keypair: they may
+      // write (submit) but not read digests back. AAuth-signed agents with a store grant
+      // use the normal authenticated path. Mirrors conversation's guest posture.
+      guest_access_policy: "submit_only",
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // ISO-8601 string — lexicographic sort must match temporal order; do NOT use date type.
+        period_start: { type: "string", required: true },
+        // ISO-8601 string — used as the time-series sort key (sort_by: "snapshot.period_end").
+        period_end: { type: "string", required: true },
+        // Originating observer slug (e.g. "lemonbrand-observer").
+        reporter_channel: { type: "string", required: true },
+        // Agent attribution; mirrors daemon_report convention.
+        aauth_sub: { type: "string", required: false },
+        reporter_app_version: { type: "string", required: false },
+        reporter_git_sha: { type: "string", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        operation_counts: { type: "object", required: false },
+        error_rate: { type: "number", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        error_counts: { type: "object", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        entity_type_usage: { type: "object", required: false },
+        // Opaque JSONB — shape documented in docs/subsystems/usage_digest.md only.
+        tool_usage: { type: "object", required: false },
+        // Opaque JSONB — agent-instruction adherence metrics ("is Neotoma used AS INTENDED
+        // per the MCP/CLI contract"): turn-lifecycle, relationship, schema-fidelity,
+        // turn-identity, retrieval, coverage, and security signals. Shape (rates 0–1 and
+        // counts, grouped by mandate family) is documented in docs/subsystems/usage_digest.md.
+        compliance_signals: { type: "object", required: false },
+        // Array of strings; PII must be redacted client-side before submission.
+        // Shape is convention (not enforced by registry); see docs/subsystems/usage_digest.md.
+        friction_notes: { type: "array", required: false },
+        // Enum excellent|good|fair|poor|unknown — enforced by convention, not registry.
+        effectiveness_signal: { type: "string", required: false },
+        notes: { type: "string", required: false, preserveCase: true },
+        // Shared salt used for client-side PII redaction of free-text fields.
+        redaction_salt: { type: "string", required: false },
+      },
+      // Composite canonical identity prevents silent merge/duplicate of replayed digests.
+      // Idempotency key convention: usage-digest-<reporter_channel>-<period_end>
+      canonical_name_fields: ["reporter_channel", "period_start", "period_end"],
+      name_collision_policy: "reject",
+      temporal_fields: [{ field: "period_end", event_type: "UsageDigestClosed" }],
+    },
+    reducer_config: {
+      merge_policies: {
+        period_start: { strategy: "last_write" },
+        period_end: { strategy: "last_write" },
+        error_rate: { strategy: "last_write" },
+        operation_counts: { strategy: "last_write" },
+        error_counts: { strategy: "last_write" },
+        entity_type_usage: { strategy: "last_write" },
+        tool_usage: { strategy: "last_write" },
+        compliance_signals: { strategy: "last_write" },
+        effectiveness_signal: { strategy: "last_write" },
+        // Supersede, not accumulate — keep latest friction_notes whole; can change later.
+        friction_notes: { strategy: "last_write" },
+      },
+    },
+  },
+
+  standing_rule: {
+    entity_type: "standing_rule",
+    schema_version: "1.0.0",
+    metadata: {
+      label: "Standing Rule",
+      description:
+        "A persistent agent instruction stored in Neotoma and injected into the MCP initialize response so agents apply it from the first turn of every session. Use scope to restrict a rule to a specific project, repository, or context; omit scope (or set to 'global') for rules that apply everywhere. Priority controls injection order: higher values appear first.",
+      category: "agent_runtime",
+      aliases: ["agent_rule", "persistent_rule", "session_rule"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        title: { type: "string", required: true, preserveCase: true },
+        rule_text: { type: "string", required: true, preserveCase: true },
+        scope: { type: "string", required: false },
+        priority: { type: "number", required: false },
+        enabled: { type: "boolean", required: false },
+      },
+      canonical_name_fields: ["title"],
+      name_collision_policy: "merge",
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        rule_text: { strategy: "last_write" },
+        scope: { strategy: "last_write" },
+        priority: { strategy: "last_write" },
+        enabled: { strategy: "last_write" },
       },
     },
   },

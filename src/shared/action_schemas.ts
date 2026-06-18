@@ -143,6 +143,7 @@ export const ListRelationshipsRequestSchema = z
     relationship_type: RelationshipTypeSchema.optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
+    include_deleted: z.boolean().optional().default(false),
     user_id: z.string().optional(),
   })
   .refine(
@@ -167,13 +168,16 @@ export const TimelineEventsRequestSchema = z.object({
 });
 
 const EntityQuerySortBySchema = z
-  .enum([
-    "entity_id",
-    "canonical_name",
-    "observation_count",
-    "last_observation_at",
-    /** ISO string at `snapshot.created_at` (e.g. GitHub issue opened / submitted time). */
-    "submitted_at",
+  .union([
+    z.enum([
+      "entity_id",
+      "canonical_name",
+      "observation_count",
+      "last_observation_at",
+      /** ISO string at `snapshot.created_at` (e.g. GitHub issue opened / submitted time). */
+      "submitted_at",
+    ]),
+    z.string().startsWith("snapshot."),
   ])
   .optional()
   .default("entity_id");
@@ -182,12 +186,7 @@ const EntityQuerySortOrderSchema = z.enum(["asc", "desc"]).optional().default("a
 function validateEntityQueryCombinations(
   value: {
     search?: string;
-    sort_by?:
-      | "entity_id"
-      | "canonical_name"
-      | "observation_count"
-      | "last_observation_at"
-      | "submitted_at";
+    sort_by?: string;
     sort_order?: "asc" | "desc";
     published?: boolean;
     published_after?: string;
@@ -235,9 +234,37 @@ function validateEntityQueryCombinations(
   }
 }
 
+const SnapshotFilterSchema = z.object({
+  op: z.enum(["eq", "in", "gt", "lt", "gte", "lte", "contains"]),
+  value: z.any(),
+});
+
+/**
+ * Snapshot field names are interpolated into a PostgREST column reference
+ * (`snapshot->>${field}`) in `queryEntities`. Constrain them to safe
+ * identifier characters so a crafted key cannot smuggle PostgREST operators
+ * or filter syntax into the column expression. Dotted paths (e.g.
+ * `address.city`) are permitted for nested snapshot access; every segment
+ * must be a snake_case identifier.
+ */
+const SnapshotFieldNameSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(
+    /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$/,
+    "snapshot_filters keys must be snake_case field identifiers (optionally dotted)"
+  );
+
 const EntitiesQueryRequestBaseSchema = z
   .object({
     entity_type: z.string().optional(),
+    /**
+     * Multi-type filter. When non-empty, results are restricted to entities
+     * whose `entity_type` is in this list (an IN filter), OR-combined with the
+     * singular `entity_type`. An empty array is treated as no filter (#1562).
+     */
+    entity_types: z.array(z.string()).optional(),
     search: z.string().optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
@@ -270,6 +297,11 @@ const EntitiesQueryRequestBaseSchema = z
     identity_basis: z
       .enum(["schema_rule", "schema_lookup", "heuristic_name", "heuristic_fallback", "target_id"])
       .optional(),
+    /**
+     * Filter entities by snapshot field values. Keys are field names (e.g. "status"),
+     * values specify operator and comparison value.
+     */
+    snapshot_filters: z.record(SnapshotFieldNameSchema, SnapshotFilterSchema).optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -290,6 +322,15 @@ const RetrieveEntitiesRequestBaseSchema = z
   .object({
     user_id: z.string().optional(),
     entity_type: z.string().optional(),
+    /**
+     * Multi-type filter. When non-empty, results are restricted to entities
+     * whose `entity_type` is in this list (an IN filter), OR-combined with the
+     * singular `entity_type` when both are provided. An empty array is treated
+     * as no filter. Honored on both the plain listing and search paths so a
+     * caller passing `entity_types` is never silently given an unfiltered
+     * result set (#1562).
+     */
+    entity_types: z.array(z.string()).optional(),
     search: z.string().optional(),
     /**
      * Distance threshold for semantic search (L2, range ~0.9–1.5 in practice).
@@ -318,6 +359,20 @@ const RetrieveEntitiesRequestBaseSchema = z
      * type (the explicit type filter wins).
      */
     exclude_bookkeeping: z.boolean().optional().default(false),
+    /**
+     * R3: filter entities whose observations were resolved with the given
+     * `identity_basis`. Satisfied when ANY observation for the entity carries
+     * this basis.
+     */
+    identity_basis: z
+      .enum(["schema_rule", "schema_lookup", "heuristic_name", "heuristic_fallback", "target_id"])
+      .optional(),
+    /**
+     * Filter entities by snapshot field values. Keys are field names (e.g. "status"),
+     * values specify operator and comparison value.
+     * Example: `{ "status": { "op": "eq", "value": "active" } }`
+     */
+    snapshot_filters: z.record(SnapshotFieldNameSchema, SnapshotFilterSchema).optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -557,6 +612,11 @@ export const ListEntityTypesRequestSchema = z.object({
   summary: z.boolean().optional().default(false),
 });
 
+export const DescribeEntityTypeRequestSchema = z.object({
+  entity_type: z.string(),
+  user_id: z.string().optional(),
+});
+
 export const RetrieveEntityByIdentifierSchema = z.object({
   identifier: z.string(),
   entity_type: z.string().optional(),
@@ -599,6 +659,11 @@ export const AnalyzeSchemaCandidatesRequestSchema = z.object({
   user_id: z.string().optional(),
   min_frequency: z.number().int().positive().optional().default(5),
   min_confidence: z.number().min(0).max(1).optional().default(0.8),
+});
+
+export const AuditUndeclaredFragmentsRequestSchema = z.object({
+  entity_type: z.string().optional(),
+  user_id: z.string().optional(),
 });
 
 export const GetSchemaRecommendationsRequestSchema = z.object({
@@ -698,7 +763,14 @@ export const IssuesSubmitRequestSchema = z.object({
   author: z.string().optional(),
   local_issue_id: z.string().optional(),
   submission_timestamp: z.string().optional(),
+  target_repo: z
+    .string()
+    .regex(/^[^/\s]+\/[^/\s]+$/, {
+      message: "target_repo must be in owner/repo format.",
+    })
+    .optional(),
   entity_ids_to_link: z.array(z.string().min(1)).optional(),
+  conversation_turn_id: z.string().min(1).optional(),
   user_id: z.string().optional(),
 });
 

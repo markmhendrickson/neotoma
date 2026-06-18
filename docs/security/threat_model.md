@@ -74,7 +74,7 @@ The attribution contract (`docs/subsystems/agent_attribution_integration.md`) tr
 ## What the gates do **not** cover
 
 - **Operational-layer secret rotation** (e.g. forcing operators to rotate the bearer token after a regression). Track 2 will wire this through subscriptions / peer / guest with an explicit `remediation_task` entity.
-- **Cryptographic correctness.** AAuth signatures, OAuth PKCE, and the encryption-at-rest path are reviewed against `docs/subsystems/aauth.md` and `docs/subsystems/encryption.md`; the gates here check *usage*, not *primitive correctness*.
+- **Cryptographic correctness.** AAuth signatures, OAuth PKCE, and the AES-256-GCM column-encryption-at-rest path (`src/crypto/column_encryption.ts`, applied by `src/repositories/sqlite/local_db_adapter.ts` when encryption is enabled) are reviewed against `docs/subsystems/aauth.md` and the crypto sources; the gates here check *usage*, not *primitive correctness*. Note: column encryption covers the sensitive content/metadata columns but not the `substrate_events` log or the embedding tables (written via the raw client) — those rely on an encrypted volume; see `docs/architecture/architecture.md` § 7.2.
 - **Supply-chain attacks.** `npm audit`, Socket.dev, and the package lockfile policy stay the canonical defense (see `docs/developer/pre_release_checklist.md` § 1.8).
 - **Social engineering and phishing.** Out of scope; covered by the operator runbook.
 

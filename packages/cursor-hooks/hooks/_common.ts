@@ -42,6 +42,44 @@ export function log(level: string, message: string): void {
   }
 }
 
+/**
+ * Reference to a stored entity as returned by a `store` call.
+ */
+interface StoredEntityRefLike {
+  entity_id?: string;
+}
+
+/**
+ * Tolerantly read the stored-entity list from a `store` response.
+ *
+ * The `/store` transport returns the entity refs at the TOP level
+ * (`result.entities`), but older typings and some code paths expect them
+ * nested under `result.structured.entities`. Prefer the top-level list and
+ * fall back to the nested shape so entity ids are never silently dropped.
+ * Mirrors `extractStoredEntities` in `@neotoma/client`; kept inline here so
+ * cursor-hooks does not depend on an unreleased client export.
+ */
+export function extractStoredEntities(result: unknown): StoredEntityRefLike[] {
+  if (!result || typeof result !== "object") return [];
+  const r = result as {
+    entities?: StoredEntityRefLike[];
+    structured?: { entities?: StoredEntityRefLike[] };
+  };
+  if (Array.isArray(r.entities)) return r.entities;
+  if (Array.isArray(r.structured?.entities)) return r.structured.entities;
+  return [];
+}
+
+/**
+ * Convenience wrapper over {@link extractStoredEntities} returning the
+ * `entity_id` of the stored entity at `index` (default first), or undefined.
+ */
+export function pickStoredEntityId(result: unknown, index = 0): string | undefined {
+  const entity = extractStoredEntities(result)[index];
+  if (entity && typeof entity.entity_id === "string") return entity.entity_id;
+  return undefined;
+}
+
 export async function readHookInput<T = Record<string, unknown>>(): Promise<T> {
   return new Promise((resolve) => {
     let data = "";
@@ -406,13 +444,11 @@ export async function recordConversationTurn(
   const idempotencyKey =
     input.idempotencyKey ?? makeIdempotencyKey(input.sessionId, input.turnId, "turn");
   try {
-    const result = (await client.store({
+    const result = await client.store({
       entities: [entity],
       idempotency_key: idempotencyKey,
-    })) as {
-      structured?: { entities?: Array<{ entity_id?: string }> };
-    };
-    return { entityId: result.structured?.entities?.[0]?.entity_id };
+    });
+    return { entityId: pickStoredEntityId(result) };
   } catch (err) {
     log("debug", `recordConversationTurn store failed: ${(err as Error).message}`);
     return null;

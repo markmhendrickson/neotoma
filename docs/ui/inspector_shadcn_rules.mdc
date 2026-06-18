@@ -1,0 +1,94 @@
+---
+description: Enforce shadcn/ui primitives in Inspector UI work; prefer existing inspector components over native HTML controls.
+globs:
+  - inspector/**
+alwaysApply: false
+---
+
+# Inspector shadcn UI Rules
+
+## Purpose
+
+Keep the Inspector app visually and behaviorally consistent with the Neotoma design system by using shadcn/ui-style primitives from `inspector/src/components/ui/` instead of ad hoc native HTML controls and one-off Tailwind patterns.
+
+Inspector is an inspection surface. Prefer consistency, accessibility, and design tokens over decorative variation.
+
+## Canonical references
+
+- `docs/ui/shadcn_components.md` — component inventory and Select vs DropdownMenu guidance
+- `docs/ui/design_system/implementation_notes.md` — prefer shadcn over native HTML, tokens, dark mode, WCAG AA
+- `docs/ui/inspector_shadcn_audit.md` — route-level adoption backlog (if present)
+
+## Installed primitives (`inspector/src/components/ui/`)
+
+Prefer these when they fit the interaction. Do not add new primitives in feature work without a short justification.
+
+**Core (use first):** `Button`, `Input`, `Label`, `Textarea`, `Select`, `Card`, `Badge`, `Separator`, `Dialog`, `Sheet`, `Alert`, `Skeleton`, `Tooltip`, `ScrollArea`, `Tabs`, `Switch`, `DropdownMenu`
+
+**Composites:** `DataTable`, `Pagination`, `ConfirmDialog`, `CopyableCodeBlock` — Inspector-owned shells layered on shadcn primitives. `CopyableCodeBlock` is the canonical copy-to-clipboard surface for any snippet a user can paste or run; use it for activation prompts, CLI examples, MCP config, and JSON payloads. **MUST NOT** re-implement copy-block chrome with a bespoke `<pre>` + `<button>` pair; evolve `CopyableCodeBlock` (e.g. add a `variant` prop) if a new visual treatment is needed.
+
+**Available but often unused in pages:** `Checkbox`, `Popover`, `Toggle`, `ToggleGroup` — use them before inventing custom segmented controls or native checkboxes.
+
+**Not present in Inspector yet (add only with plan):** shadcn `Table` markup inside `DataTable`, `AlertDialog` (prefer `ConfirmDialog` until added), `Command` for search/command palettes.
+
+## MUST
+
+### Control selection
+
+- **MUST** use `Select` from `@/components/ui/select` for single-value dropdowns. **MUST NOT** use native `<select>` (including `agent_filter.tsx` and similar filters).
+- **MUST** use `DropdownMenu` for context menus, column visibility, and action menus — not `Select`.
+- **MUST** use `Button` with appropriate `variant` and `size` instead of raw `<button>` with hand-rolled border/background classes.
+- **MUST** use `Checkbox` + `Label` for boolean row selection and multi-select lists — not native `<input type="checkbox">`.
+- **MUST** use `Textarea` for multi-line text entry — not unstyled native `<textarea>` except where a documented exception applies.
+- **MUST** use `ToggleGroup` / `ToggleGroupItem` for segmented filters (e.g. open/closed/all, formatted/raw) — not custom `role="group"` button clusters unless accessibility requirements cannot be met with shadcn.
+- **MUST** use `Badge` for status, labels, and compact chips — not ad hoc `rounded-full` span pills with hard-coded palette classes.
+- **MUST** use `Alert` or shared `QueryErrorAlert` for errors — not bare `<p className="text-destructive">` alone.
+- **MUST** use `ConfirmDialog` (or `AlertDialog` once added) for destructive confirmations — **MUST NOT** use `window.confirm`.
+
+### Layout and tokens
+
+- **MUST** use design tokens from `inspector/src/index.css` (`--background`, `--foreground`, `--primary`, `--border`, `--muted`, `--destructive`, sidebar/popover tokens, etc.). **MUST NOT** hard-code one-off hex colors for product chrome (graph node styling may use theme-aware variables when touched).
+- **MUST** preserve semantic `<Link>` from `react-router-dom` for navigation; do not replace links with `Button` unless the control is an action, not navigation.
+
+### Data display
+
+- **MUST** use shared `DataTable` for tabular data — do not add parallel raw `<table>` layouts in pages.
+- **MUST** keep repetitive index-table links neutral by default. In `DataTable`, row links render as foreground text and shift to primary/underline only on hover or focus. **MUST NOT** use always-blue `text-primary` links for repeated entity/source/name cells.
+- **MUST** use `Card` / `CardHeader` / `CardContent` for grouped content blocks when replacing hand-built bordered `div` list cards (e.g. sources list, issue rows) unless a feed-specific layout is intentionally feed-only.
+- **MUST** use `CopyableCodeBlock` from `@/components/ui/copyable_code_block` for any user-copyable snippet — CLI, config, JSON payloads, activation prompts. **MUST NOT** introduce bespoke `<pre>` + clipboard `<Button>` pairs in feature code.
+
+## Design-system reconciliation (agent workflow)
+
+When an agent makes a UI change in Inspector, before completing the change it MUST run the following check:
+
+1. **Classify the change.** Does it (a) use an existing standardized primitive in `inspector/src/components/ui/`, (b) modify one, or (c) introduce visual behavior that should become a new primitive?
+2. **If (b) or (c):** update the design-system showcase at `inspector/src/components/design/` (specifically `design_showcase.tsx` and `design_site_reference.tsx`) so `/design` reflects the new or modified primitive. The showcase is the operator-facing source of truth; out-of-date showcase entries are bugs.
+3. **If (b) or (c):** propagate the change to every existing callsite of the primitive — search with `rg "<PrimitiveName>" inspector/src` and update each, not just the originating spot. Bespoke parallel implementations are also callsites: search for the visual chrome (CSS class names, `<pre>` + `<Button>` pairs, etc.) and migrate them too.
+4. **Single design-system lineage.** There is one Inspector design system; primitives, composites, prose utilities, and tokens all live under `inspector/src/` and `inspector/src/index.css`. New visual chrome must be expressed through tokens and shadcn primitives — do not introduce parallel "site" or "doc" pattern families with hand-rolled palettes.
+5. **Document the primitive.** New primitives MUST be listed in `docs/ui/shadcn_components.md` and the `Composites` section of this file in the same change.
+
+This applies whether the change request was one-off ("tweak this card") or systemic ("update the copy block"). Agents should not need a per-request reminder.
+
+## SHOULD
+
+- **SHOULD** use `Sheet` for slide-over detail (markdown preview, large JSON) where a side panel pattern already exists.
+- **SHOULD** use `Skeleton` / shared loading helpers from `components/shared/query_status.tsx` for loading states.
+- **SHOULD** migrate highest-traffic inconsistency surfaces first: `pages/issues.tsx`, `pages/issue_detail.tsx`, `components/shared/agent_filter.tsx`, then segmented controls in `entity_detail.tsx` and `components/shared/inspector_theme_toggle.tsx`.
+
+## MUST NOT
+
+- **MUST NOT** introduce new UI primitives under `inspector/src/components/ui/` without updating `docs/ui/shadcn_components.md` and noting why.
+- **MUST NOT** duplicate full shadcn component source into pages — import from `@/components/ui/*` and `@/lib/utils` (`cn`).
+- **MUST NOT** edit files under `.cursor/rules/` or `.cursor/commands/` — edit this file and run `npm run setup:cursor` (or `./scripts/setup_cursor_copies.sh`).
+
+## Validation
+
+Before marking Inspector UI work complete:
+
+- [ ] No new native `<select>` for product controls in touched files
+- [ ] No new raw `<button>` for primary actions in touched files (except inside shadcn `Button` composition patterns)
+- [ ] No new bespoke `<pre>` + copy `<Button>` pairs in touched files (use `CopyableCodeBlock`)
+- [ ] Errors and confirmations use shared alert/confirm patterns
+- [ ] If a primitive in `components/ui/` was added or modified, the `/design` showcase, the inventory in `docs/ui/shadcn_components.md`, and all existing callsites have been updated in the same change
+- [ ] `npm run lint` and `npm run build` succeed in `inspector/`
+- [ ] Smoke-test changed routes (especially Issues, Settings, entity detail) in light and dark mode

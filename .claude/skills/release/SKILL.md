@@ -1,17 +1,10 @@
 ---
 name: release
-description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, RC branch + PR for public review, version bump, tag, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
-triggers:
-  - new release
-  - release
-  - /release
-  - create release
-  - prepare a release
-  - prepare release
-  - prep release
-  - /publish
-  - publish
+description: Release
 ---
+
+<!-- Source: .cursor/skills/release/SKILL.md -->
+
 
 # Release
 

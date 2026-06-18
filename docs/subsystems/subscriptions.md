@@ -99,9 +99,12 @@ The bridge is wired once at server startup by `installSubscriptionBridge`. The i
 ## SSE delivery contract
 
 - Endpoint: `GET /events/stream?subscription_id=<id>` (auth required; subscription must be owned by the caller). This is the canonical path (registered in `src/actions.ts` and exposed in `openapi.yaml`); the legacy `GET /subscriptions/sse` shorthand was dropped before v0.12.0 — update any older clients.
-- Frame format: `id: <ring_id>\nevent: <event_type>\ndata: <json>\n\n`.
-- Resume: clients should send `Last-Event-ID: <ring_id>` so the hub replays buffered events newer than that id (subject to the ring cap).
-- Buffer eviction: when the ring exceeds `NEOTOMA_SSE_EVENT_BUFFER`, the oldest entries are dropped; reconnects past that watermark resume from the live tail.
+- Frame format: `id: <seq>\nevent: <event_type>\ndata: <json>\n\n`. The `id` is the durable event-log `seq` (monotonic, AUTOINCREMENT), not the in-memory ring counter — so a client's `Last-Event-ID` is a stable cursor that survives a server restart.
+- Resume order (`Last-Event-ID: <seq>`):
+  1. **In-memory ring** — if the cursor is still buffered, replay from the ring (hot path).
+  2. **Durable event log** — if the cursor has left the ring (restart, or a gap larger than `NEOTOMA_SSE_EVENT_BUFFER`) but is still within retention, replay from the `substrate_events` table. Resume is gap-free across restarts within the retention window.
+  3. **Gap signal** — only when the cursor predates the retained window (or is not a valid cursor), the stream emits a one-time `event: gap` frame (`reason: cursor_beyond_retention`) and resumes from the current head. A consumer requiring gap-free delivery treats this as "reconcile via a full read."
+- Durable event log (`substrate_events`): every emitted event is persisted **synchronously** in the same path as the ring push, so durability holds as soon as the event is emitted. Retention is a rolling window, `NEOTOMA_EVENT_RETENTION_DAYS` (default 7); a background prune runs on startup and every 6h. The ring remains the fast path; a log write/prune failure never blocks delivery.
 
 ## Loop prevention with peer sync
 
@@ -116,6 +119,7 @@ Environment variables:
 
 - `NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER` — soft cap; default 50.
 - `NEOTOMA_SSE_EVENT_BUFFER` — ring capacity; clamped 100–10000, default 1000.
+- `NEOTOMA_EVENT_RETENTION_DAYS` — durable `substrate_events` retention window; min 1, default 7. Events older than this are pruned (startup + every 6h).
 - `NEOTOMA_ENV` / `NODE_ENV` — switches the production allow-list for webhook URLs.
 - `NEOTOMA_DEBUG_SUBSTRATE_EVENTS` — debug logging on the underlying bus.
 

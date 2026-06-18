@@ -98,7 +98,7 @@ If the user is not already installed:
 
 **Step 2.3 — Inspect state with a single call**
 
-Run `neotoma doctor --json`. This returns a consolidated snapshot covering:
+Run `neotoma status --json`. (If that command is not found on an older install, fall back to `neotoma doctor --json` — `doctor` is the deprecated former name of this command and still works as an alias.) This returns a consolidated snapshot covering:
 
 - install state (installed, version, `path_fix_hint` when PATH is wrong)
 - data/init state (config_dir, data_dir, db_exists, initialized)
@@ -109,7 +109,7 @@ Run `neotoma doctor --json`. This returns a consolidated snapshot covering:
 - `current_tool_hint` and `suggested_next_step`
 
 Do NOT run shell introspection commands to recover any of this state. Every
-field above is available from `doctor --json`.
+field above is available from `status --json`.
 
 **Step 2.4 — Apply the full setup in one call**
 
@@ -128,9 +128,21 @@ For the full flag surface (`--install-scope` for MCP + CLI instruction files,
 permission `--scope`, `--mcp-transport`, `--rewrite-neotoma-mcp`,
 `--skip-hooks`, `--all-harnesses`, `--dry-run`, and `--skip-permissions`), see
 [`docs/developer/cli_reference.md#harness-setup`](docs/developer/cli_reference.md#harness-setup).
-The default MCP transport is **B**: local stdio for normal npm onboarding, with
-transport **A** available when you want signed HTTP `/mcp` proxy entries and
-the API is already running.
+
+**MCP transport presets** (`--mcp-transport <preset>`):
+
+| Preset | Description | Requires |
+|--------|-------------|----------|
+| `a` | Signed HTTP proxy via `/mcp`, auto-detected port | AAuth keypair, running API |
+| `b` | Unsigned local stdio (npm global binary) — **default for npm onboarding** | npm global install |
+| `c` | Direct stdio via `tsx src/actions.ts` (source checkout, hot-reload) | Source checkout, tsx |
+| `d` | Two slots: `neotoma` (signed proxy) + `neotoma-dev` (direct stdio) | Source checkout, AAuth keypair |
+| `e` | Single slot, signed shim, prod port profile (source-checkout recommended) | AAuth keypair, running API |
+
+The default MCP transport is **B** for standard npm onboarding. Use **E** when
+working from a source checkout with a running dev server (`neotoma auth keygen
+--register` first). See [Developer setup (source checkout)](#developer-setup-source-checkout)
+for the full workflow.
 
 **Step 2.5 — Verify install (grep for canonical confirmation line)**
 
@@ -139,18 +151,18 @@ After `neotoma setup` completes, two plain-text lines appear on stdout:
 1. `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)` — grep for `Neotoma installed at` to confirm success.
 2. `Transport: local stdio MCP (no network egress). ...` — answers the privacy/transport question.
 
-If the first line is absent (for example, after a standalone `npm install -g neotoma` without running setup), run `neotoma setup --tool <current_tool> --yes` to produce it. If the binary is not on PATH, check `neotoma doctor --json` → `.neotoma.path_fix_hint` and surface that hint to the user before retrying.
+If the first line is absent (for example, after a standalone `npm install -g neotoma` without running setup), run `neotoma setup --tool <current_tool> --yes` to produce it. If the binary is not on PATH, check `neotoma status --json` → `.neotoma.path_fix_hint` and surface that hint to the user before retrying.
 
 **If the user is already installed**
 
-Run `neotoma doctor --json` to verify, then `neotoma setup --tool <tool> --yes`
+Run `neotoma status --json` to verify, then `neotoma setup --tool <tool> --yes`
 (idempotent) to bring any missing pieces into compliance. Do not improvise
 shell introspection to confirm state.
 
 **Forbidden during installation**
 
 - Do NOT run `python3 -c`, `grep -r`, `ls`, `cat`, `jq`, `find`, `which`, `node -e`
-  to introspect Neotoma state. Use `neotoma doctor --json`.
+  to introspect Neotoma state. Use `neotoma status --json`.
 - Do NOT run arbitrary `npm run <script>` from the user's repositories during
   install-first onboarding. The only approved npm command is `npm install -g neotoma`.
 - Do NOT `open` URLs, documentation, or application packages on the user's
@@ -401,7 +413,7 @@ See [`docs/integrations/hooks/README.md`](docs/integrations/hooks/README.md) for
 
 - Do NOT run `neotoma hooks install` without an explicit "yes" from the user in the same session. Silent installs, "I'll set this up while you review the timeline" phrasing, or bundling hook installs into the Installation-aha step are all forbidden.
 - Do NOT proceed with `neotoma hooks install --tool <tool>` when `doctor.hooks.installed[<tool>].other_hook_plugins` is non-empty unless the user has explicitly acknowledged those plugins by name. `--force` is reserved for that acknowledgment path.
-- Do NOT skip `neotoma doctor --json` before offering hooks. Eligibility, installed-state, and other-plugin detection all come from that single snapshot; improvised detection is forbidden.
+- Do NOT skip `neotoma status --json` before offering hooks. Eligibility, installed-state, and other-plugin detection all come from that single snapshot; improvised detection is forbidden.
 - Do NOT offer hooks when `doctor.hooks.eligible_for_offer === false`. That value already encodes "supported harness, not installed yet, MCP configured" -- do not second-guess it.
 
 #### Activation step 6.6: Offer markdown mirror (opt-in)
@@ -454,7 +466,7 @@ See [`docs/subsystems/markdown_mirror.md`](docs/subsystems/markdown_mirror.md) f
 
 - Do NOT run `neotoma mirror enable` without an explicit "yes" from the user in the same session. Silent enables or bundling the mirror into the Installation-aha step are both forbidden.
 - Do NOT run `neotoma mirror gitignore` without the explicit sub-prompt "yes". The helper only writes to the enclosing git repo of the resolved mirror path; it never prompts for a path, and the agent MUST not pass one.
-- Do NOT skip `neotoma doctor --json` before offering the mirror. Eligibility, `inside_git_repo`, and `gitignored` all come from that single snapshot.
+- Do NOT skip `neotoma status --json` before offering the mirror. Eligibility, `inside_git_repo`, and `gitignored` all come from that single snapshot.
 - Do NOT offer the mirror when `doctor.mirror.eligible_for_offer === false`.
 
 #### Activation step 7: Correction
@@ -522,7 +534,7 @@ End the activation flow after delivering the plan. Do not ingest as a "natural n
 After activation, confirm the current tool is configured for robust ongoing
 usage. If `neotoma setup` was run in Phase 2, most of this is already in place.
 
-1. Run `neotoma doctor --json` once more. If `suggested_next_step` is `ready`,
+1. Run `neotoma status --json` once more. If `suggested_next_step` is `ready`,
    stop. If it is `configure-mcp`, `configure-cli-instructions`, or
    `configure-permissions`, re-run `neotoma setup --tool <tool> --yes` to
    close the gap. Do NOT grep, `ls`, or `cat` config files to verify state.
@@ -650,7 +662,7 @@ Run `neotoma preflight --tool <harness> --apply` at the start of the install
 flow to write the allowlist entry directly, or `neotoma preflight --tool <harness>`
 (no `--apply`) to print a copy-paste block for manual application. Either path
 ensures the agent never needs individual approvals for `neotoma init`,
-`neotoma doctor`, `neotoma setup`, `neotoma mcp …`, or any other `neotoma`
+`neotoma status`, `neotoma setup`, `neotoma mcp …`, or any other `neotoma`
 subcommand.
 
 If a permission prompt appears for anything other than those two items, stop
@@ -672,7 +684,7 @@ command. Do NOT fall back to shell introspection (`python3 -c`, `grep -r`,
 - Do not skip Activation step 0 (context detection). Always check whether the install directory is developer-oriented before defaulting to personal-file ingestion.
 - The developer / repo-integration branch must not ingest files or store entities. Its output is a written integration plan only. Any ingest requires a separate, explicit user request that re-enters the personal or mixed branch.
 - The preview contract (Activation step 4) is mandatory even for single-file or single-transcript ingests. Count-only summaries are forbidden as the first post-action output.
-- Do not improvise shell introspection in place of `neotoma doctor --json`,
+- Do not improvise shell introspection in place of `neotoma status --json`,
   `neotoma mcp guide --json`, or `neotoma cli guide --json`.
   Every fact these commands surface is authoritative; searching for "where X is
   defined" in the codebase is a permission-prompt anti-pattern.
@@ -689,7 +701,7 @@ installs). Only offer the local install path when the user explicitly asks:
 
 ```
 npm install neotoma       # local to the current directory
-npx neotoma doctor        # then prefix all commands with npx
+npx neotoma status        # then prefix all commands with npx
 ```
 
 Local installs often require additional allowlist entries (`npx:*`) and
@@ -776,6 +788,110 @@ automatically upload source artifacts via `file_content` instead of
 - Deployment runbook: [`docs/operations/runbook.md`](docs/operations/runbook.md)
 - CLI reference (including ingest auto-upload and size cap): [`docs/developer/cli_reference.md`](docs/developer/cli_reference.md)
 - Environment conventions and env-var naming: [`docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md`](docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md)
+
+## Developer setup (source checkout)
+
+When working from a git clone of the Neotoma repo — as a contributor or a local-first power user who wants a dev server that rebuilds on file changes — several steps differ from the standard agent-led onboarding above. Use this section in place of the npm-global install path.
+
+### When to use this path
+
+- You have cloned the repo and want to iterate against the source
+- You want a persistent background server via macOS LaunchAgent
+- You want a dev server that reloads on source changes (`npm run dev:server`)
+- You need AAuth-signed MCP entries (preset `a` or `e`)
+
+### Pre-setup decision checklist
+
+| Question | Answer → action |
+|----------|----------------|
+| Source checkout or npm global install? | Source checkout → this section; global → [Phase 2](#phase-2-installation) |
+| macOS or Linux? | macOS → LaunchAgent steps below; Linux → [Production deployment](#production-deployment-headless--systemd) |
+| Do you need AAuth-signed MCP entries? | Yes → run `neotoma auth keygen --register` (Step D2); No → skip D2 |
+| Which MCP transport? | See preset table in Step D3; use `e` for source-checkout with running dev server |
+| Dev server or prod server? | Dev (hot-reload, `NEOTOMA_ENV=production`) → `com.neotoma.dev-server`; compiled dist → `com.neotoma.prod-server` |
+
+### Step D1: Install LaunchAgents (macOS)
+
+The repo ships LaunchAgent templates that manage server processes on login. Run the install script once after cloning:
+
+```bash
+cd deploy/launchagents
+./install.sh           # renders templates → ~/Library/LaunchAgents/
+./install.sh --dry-run # preview rendered output without writing
+```
+
+The script auto-detects `NODE_BIN`, `NPM_CLI`, `NPM_BIN`, and `NEOTOMA_REPO_PATH` from your environment. Override any by exporting before running:
+
+```bash
+NODE_BIN=/path/to/node ./install.sh
+```
+
+Load agents after install:
+
+```bash
+# Dev server (reloads on source changes; sets NEOTOMA_ENV=production)
+launchctl load ~/Library/LaunchAgents/com.neotoma.dev-server.plist
+
+# Production server (compiled dist, KeepAlive)
+launchctl load ~/Library/LaunchAgents/com.neotoma.prod-server.plist
+```
+
+Status and logs:
+
+```bash
+launchctl list | grep neotoma
+tail -f ~/repos/neotoma/data/logs/launchd-dev-server.log
+tail -f ~/repos/neotoma/data/logs/launchd-dev-server.error.log
+```
+
+See `deploy/launchagents/README.md` for the full agent inventory, reload commands, and template variable reference.
+
+**After changing `NEOTOMA_DATA_DIR` or any environment variable:** unload and reload the affected agents to pick up the new value.
+
+### Step D2: AAuth keypair (signed transports only)
+
+Transports **A** and **E** require an AAuth ES256 keypair and a registered `agent_grant` record. Generate and register in one step (server must be running):
+
+```bash
+neotoma auth keygen --register
+```
+
+Keys are written to `~/.neotoma/aauth/`. The `--register` flag calls the running API to create the `agent_grant`. Re-run after data-directory changes (grants are database-scoped).
+
+Verify the grant is active:
+
+```bash
+neotoma auth status
+```
+
+### Step D3: Configure MCP entries
+
+Use the CLI — do not hand-edit MCP JSON files. The source of truth for the repo is `.cursor/mcp.json`; run `npm run sync:mcp` to propagate changes to `.mcp.json` and `.codex/config.toml`.
+
+```bash
+# Configure a single signed-shim entry (preset e) with prod port profile
+neotoma mcp config --mcp-transport e --rewrite-neotoma-mcp --yes
+
+# User-level (writes to claude_desktop_config.json and ~/.cursor/mcp.json)
+neotoma mcp config --mcp-transport e --user-level --rewrite-neotoma-mcp --yes
+
+# Sync to .mcp.json and .codex/config.toml
+npm run sync:mcp
+```
+
+The resulting entry reads `.dev-serve/local_http_port_prod` (written by the dev server running with `NEOTOMA_ENV=production`) to discover the port at startup.
+
+**Note on Claude Desktop:** Claude Desktop overwrites `mcpServers` when saving preferences. After any Claude Desktop settings save, re-run:
+
+```bash
+neotoma mcp config --mcp-transport e --user-level --rewrite-neotoma-mcp --yes
+```
+
+### Tooling principle
+
+Use `neotoma mcp config`, `neotoma auth keygen`, `neotoma status --json`, and `neotoma launchagent` (when available) for all configuration. Avoid direct edits to MCP JSON files, plists, or `.env` files unless the CLI does not cover the specific change. CLI commands are idempotent; manual edits risk drift between `.cursor/mcp.json`, `.mcp.json`, and `claude_desktop_config.json`.
+
+---
 
 ## Standing instruction handoff
 

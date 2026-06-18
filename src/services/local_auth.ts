@@ -1,5 +1,10 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { config } from "../config.js";
 import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import {
+  getOrCreateInstallFingerprint,
+  sandboxPrincipalIdFromFingerprint,
+} from "./sandbox_mode.js";
 
 export const LOCAL_DEV_USER_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -161,6 +166,44 @@ export function ensureLocalDevUser(): LocalAuthUser {
   ).run(LOCAL_DEV_USER_ID, email, hash, salt, now, now, null);
   return {
     id: LOCAL_DEV_USER_ID,
+    email,
+    created_at: now,
+    updated_at: now,
+    last_login_at: null,
+  };
+}
+
+/**
+ * Ensure the install-fingerprinted local_sandbox user exists.
+ *
+ * Plan ent_b4958d038bd41e8694fe0aef Phase 3. This is the named replacement
+ * for the silent `LOCAL_DEV_USER_ID` fallback: when the resolver lands on
+ * `local_sandbox`, we materialize a deterministic per-install user instead
+ * of leaking the shared all-zeros UUID across installs.
+ *
+ * The user_id is `sandboxPrincipalIdFromFingerprint(<install fingerprint>)`,
+ * so two co-located installs (e.g. dev + prod data dirs on the same box)
+ * resolve to distinct sandbox principals. The fingerprint file lives under
+ * `<dataDir>/.install_fingerprint`; see `getOrCreateInstallFingerprint`.
+ *
+ * Idempotent. Safe to call on every boot.
+ */
+export function ensureLocalSandboxUser(): LocalAuthUser {
+  const db = getSqliteDb();
+  const fingerprint = getOrCreateInstallFingerprint(config.dataDir);
+  const userId = sandboxPrincipalIdFromFingerprint(fingerprint);
+  const existing = getLocalAuthUserById(userId);
+  if (existing) {
+    return existing;
+  }
+  const now = new Date().toISOString();
+  const email = `local-sandbox-${fingerprint.slice(0, 8)}@neotoma.local`;
+  const { salt, hash } = hashPassword(`local-sandbox-no-password:${fingerprint}`);
+  db.prepare(
+    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(userId, email, hash, salt, now, now, null);
+  return {
+    id: userId,
     email,
     created_at: now,
     updated_at: now,

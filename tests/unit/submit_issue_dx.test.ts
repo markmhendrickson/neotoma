@@ -1,10 +1,11 @@
 /**
- * DX tests for submit_issue improvements (issues #181, #182, #183, #191, #206).
+ * DX tests for submit_issue improvements (issues #181, #182, #183, #191, #206, #1484).
  *
- * #181 — store tool description must rank high in tool_search for common verbs
- * #182 — reporter_app_version auto-populate logic in the server layer
+ * #181  — store tool description must rank high in tool_search for common verbs
+ * #182  — reporter_app_version auto-populate logic in the server layer
  * #183/#206 — AUTH_REQUIRED errors surface an actionable hint instead of a raw JSON blob
- * #191 — tool deregistration documented in mcp/instructions.md (doc-only, no code test)
+ * #191  — tool deregistration documented in mcp/instructions.md (doc-only, no code test)
+ * #1484 — body with literal \n sequences normalised to real newlines at parse time
  */
 
 import { describe, it, expect } from "vitest";
@@ -76,6 +77,43 @@ describe("AUTH_REQUIRED error shaping (#183, #206)", () => {
   it("handles string error gracefully", () => {
     const msg = formatRemoteSubmitError("something went wrong");
     expect(msg).toContain("something went wrong");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1484 — body literal \n normalisation
+// ---------------------------------------------------------------------------
+
+/** Mirrors the unescapeBody helper in handleSubmitIssue */
+function unescapeBody(s: string): string {
+  return s.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+}
+
+describe("submit_issue body literal \\n normalisation (#1484)", () => {
+  it("converts literal backslash-n to real newlines", () => {
+    const input = "## Summary\\n\\nSome text.\\n\\n## Steps\\n\\n1. First";
+    const result = unescapeBody(input);
+    expect(result).toBe("## Summary\n\nSome text.\n\n## Steps\n\n1. First");
+    expect(result).not.toContain("\\n");
+  });
+
+  it("converts literal backslash-t to real tabs", () => {
+    const input = "col1\\tcol2\\tcol3";
+    expect(unescapeBody(input)).toBe("col1\tcol2\tcol3");
+  });
+
+  it("leaves strings with real newlines unchanged", () => {
+    const input = "## Summary\n\nSome text.";
+    expect(unescapeBody(input)).toBe(input);
+  });
+
+  it("handles body with no escape sequences unchanged", () => {
+    const input = "Plain body with no special chars.";
+    expect(unescapeBody(input)).toBe(input);
+  });
+
+  it("handles empty string", () => {
+    expect(unescapeBody("")).toBe("");
   });
 });
 

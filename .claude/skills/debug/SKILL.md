@@ -1,5 +1,12 @@
 ---
 name: debug
+description: Debug Command
+---
+
+<!-- Source: foundation/.cursor/skills/debug/SKILL.md -->
+
+---
+name: debug
 description: Debug workflow per foundation command.
 triggers:
   - debug

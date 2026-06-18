@@ -28,8 +28,9 @@ import {
 } from "./middleware/aauth_verify.js";
 import { attributionContext } from "./middleware/attribution_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
-import { buildSessionInfo } from "./services/session_info.js";
+import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
+import { OverridePolicyViolationError } from "./services/override_validation.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
@@ -80,15 +81,21 @@ import {
 import { OAuthError } from "./services/mcp_oauth_errors.js";
 import {
   ensureLocalDevUser,
+  ensureLocalSandboxUser,
   ensureSandboxAauthUser,
   ensureSandboxPublicUser,
   LOCAL_DEV_USER_ID,
   SANDBOX_PUBLIC_USER_ID,
 } from "./services/local_auth.js";
 import {
+  buildSandboxBootBannerLines,
   isSandboxMode,
+  resolveForceMode,
+  resolveRefusePolicy,
+  resolveSandboxMode,
   sandboxDestructiveGuard,
   sandboxHeaderMiddleware,
+  type NeotomaSandboxModeName,
 } from "./services/sandbox_mode.js";
 import {
   createSandboxSession,
@@ -100,20 +107,31 @@ import {
   SESSION_COOKIE_NAME,
 } from "./services/sandbox/sessions.js";
 import {
+  buildEndpointsMap,
   buildLandingContext,
   buildRootLandingHtml,
   buildRootLandingJson,
   buildRootLandingMarkdown,
   buildRobotsTxt,
+  readGitSha,
   readNeotomaConfigEnvironment,
+  readPackageVersion,
+  resolveLandingMode,
   wantsHtml as acceptWantsHtml,
   wantsMarkdown as acceptWantsMarkdown,
 } from "./services/root_landing/index.js";
 import { mountDocsRoutes } from "./services/docs/index.js";
-import { installInspectorMount } from "./services/inspector_mount.js";
+import {
+  installInspectorLegacyRedirect,
+  installInspectorRootStaticAssets,
+  installInspectorSpaFallback,
+  installInspectorSpaShellEarly,
+  resolveBundledInspectorDir,
+} from "./services/inspector_mount.js";
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
 import type { SandboxReportReason } from "./services/sandbox/types.js";
+import type { SubstrateEvent } from "./events/types.js";
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
 import { getMcpAuthToken } from "./crypto/mcp_auth_token.js";
 import {
@@ -123,6 +141,7 @@ import {
 } from "./services/oauth_key_gate.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
+  AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
@@ -164,6 +183,7 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { isNeotomaEntityId } from "./shared/neotoma_entity_id.js";
+import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
 import { buildSmitheryServerCard } from "./mcp_server_card.js";
 import {
@@ -175,6 +195,7 @@ import {
   listRecentConversations,
 } from "./services/recent_conversations.js";
 import { listConversationTurns, getConversationTurn } from "./services/conversation_turn.js";
+import { getTimelineEventForUser, listTimelineEventsForUser } from "./services/timeline_query.js";
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
@@ -186,6 +207,21 @@ type ErrorEnvelope = {
   trace_id?: string;
   timestamp: string;
 };
+
+// Set to true during startHTTPServer() when resolveSandboxMode() returns
+// "local_sandbox". Read by getAuthenticatedUserId() to substitute the
+// per-install fingerprinted sandbox principal for the shared nil UUID fallback.
+let _localSandboxActive = false;
+
+// Resolved server mode (set during startHTTPServer()). Read by /me and any
+// other route that needs to surface the active mode to clients. Defaults to
+// null until the resolver runs at boot.
+let _resolvedServerMode: NeotomaSandboxModeName | null = null;
+
+/** Exposed for the /me route and any other surface that needs the boot-time mode verdict. */
+export function getResolvedServerMode(): NeotomaSandboxModeName | null {
+  return _resolvedServerMode;
+}
 
 export const app = express();
 // Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
@@ -263,10 +299,27 @@ if (isSandboxMode()) {
   );
 }
 
-// Inspector SPA mount. Deliberately registered before all auth / rate-limit
-// middleware so the SPA shell + assets are reachable without a bearer — the
-// API calls the Inspector makes still flow through the normal auth stack below.
-installInspectorMount(app, process.env, logger);
+// Inspector SPA mount at the server root `/` (content-negotiation
+// unification, plan ent_1f176dbbe9a39e6bbad27f1f). Deliberately registered
+// before all auth / rate-limit middleware so the SPA shell + assets are
+// reachable without a bearer — the API calls the SPA makes still flow through
+// the normal auth stack below.
+//
+//   - installInspectorRootStaticAssets: serves /assets/*, /favicon.svg from
+//     dist/inspector at the server root. The SPA is built with
+//     VITE_PUBLIC_BASE_PATH=/ so its asset + router base resolve here.
+//   - installInspectorLegacyRedirect: 308 /inspector/* → /* so stale links
+//     (MCP instructions, conversation summary URLs) keep working without a
+//     second SPA mount.
+//
+// The SPA shell is served by the content-negotiation handler in two places:
+//   - installInspectorSpaShellEarly (registered just before the auth gate):
+//     browser HTML requests to SPA client routes (/sources, /entities/:id, …)
+//     get the shell BEFORE the JSON data routes can intercept them.
+//   - installInspectorSpaFallback (registered at the END): catches any
+//     remaining unmatched HTML request. Both reuse the same handler.
+installInspectorRootStaticAssets(app, process.env, logger);
+installInspectorLegacyRedirect(app, logger);
 
 // ── Sandbox session endpoints ───────────────────────────────────────────
 // Registered before general auth so the session handshake works for
@@ -522,16 +575,41 @@ app.get("/favicon.ico", (_req, res) => res.status(204).end());
 // ============================================================================
 // Root landing page + robots.txt (no-auth, content-negotiated)
 // ============================================================================
-// HTML for browsers (identity, harness connect snippets, Learn index).
-// JSON for agents/curl (same content, structured). See
-// src/services/root_landing/index.ts.
-app.get("/", (req, res) => {
+// HTML for browsers (identity, harness connect snippets, Learn index, plus a
+// prominent "Open Inspector" CTA pointing at /inspector when the bundled SPA
+// is available). JSON/markdown for agents/curl (same content, structured).
+//
+// NOTE: The Inspector itself lives at `/inspector` because the API route
+// namespace (`/entities`, `/relationships`, `/schemas`, etc.) overlaps with
+// Inspector client routes. A future feature unit migrates the API to `/api/*`
+// and the Inspector to `/`. See plan ent_c1d65039242aa2a920d805c7.
+//
+// See src/services/root_landing/index.ts for the agent-facing payload.
+{
+  const bundled = resolveBundledInspectorDir();
+  if (bundled) {
+    logger.info(
+      `[Inspector] Bundled SPA detected at ${bundled}; landing page surfaces "Open Inspector" CTA.`
+    );
+  }
+}
+app.get("/", (req, res, next) => {
   try {
     const ctx = buildLandingContext(req);
     res.setHeader("Cache-Control", "public, max-age=60");
+    // For HTML requests, serve the server-rendered landing page only in
+    // hosted_sandbox mode (public funnel).  In all other modes (local, personal,
+    // prod) the Inspector SPA is the primary UI: fall through to the SPA
+    // fallback handler registered by installInspectorSpaFallback so the
+    // Inspector's HomePage loads instead.
     if (acceptWantsHtml(req.headers.accept)) {
-      return res.type("html").send(buildRootLandingHtml(ctx));
+      if (ctx.hostedSandbox) {
+        return res.type("html").send(buildRootLandingHtml(ctx));
+      }
+      return next();
     }
+    // JSON and Markdown consumers (agents, curl) always get the structured
+    // server-rendered payload regardless of mode.
     if (acceptWantsMarkdown(req.headers.accept)) {
       res.type("text/markdown; charset=utf-8");
       return res.send(buildRootLandingMarkdown(ctx));
@@ -694,17 +772,24 @@ app.get("/.well-known/aauth-resource.json", (_req, res) => {
 
 // Server info endpoint (no-auth) - exposes server port for MCP configuration
 // When NEOTOMA_MCP_PROXY_URL or MCP_PROXY_URL is set (e.g. ngrok tunnel), mcpUrl uses it so "Add to Cursor" uses the proxy.
-app.get("/server-info", (_req, res) => {
+// Extended to include version, git_sha, and endpoints map so the Inspector
+// Settings page can surface "This instance" and "Endpoints" info without
+// requiring auth.
+app.get("/server-info", (req, res) => {
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
   const httpPort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;
   const mcpBase = process.env.NEOTOMA_MCP_PROXY_URL || process.env.MCP_PROXY_URL || config.apiBase;
   const base = mcpBase.replace(/\/$/, "");
   const mcpUrl = base.endsWith("/mcp") ? base : `${base}/mcp`;
+  const mode = resolveLandingMode(req);
   res.json({
     httpPort,
     apiBase: config.apiBase,
     mcpUrl,
     neotoma_env: readNeotomaConfigEnvironment(),
+    version: readPackageVersion(),
+    git_sha: readGitSha(),
+    endpoints: buildEndpointsMap(mode),
   });
 });
 
@@ -740,6 +825,252 @@ app.get("/mcp-interaction-instructions", (_req, res) => {
 const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
 // Store server instances by session ID to preserve authentication state
 const mcpServerInstances = new Map<string, NeotomaServer>();
+
+// ----------------------------------------------------------------------------
+// MCP SSE keepalive (issue #1483)
+//
+// The MCP StreamableHTTP transport (SDK >= 1.29) holds a long-lived GET SSE
+// stream open for server-initiated messages, but the SDK emits no heartbeat
+// frames on that stream and Node's `keepAliveTimeout` only governs socket
+// reuse, not application-level idle. A reverse proxy (Cloudflare Tunnel,
+// nginx, ngrok) or the client's own idle timeout then silently closes the
+// idle stream mid-session; `/health` stays green because the process is alive,
+// only the stream is gone. The client loses the tool registry and the only
+// recovery is a manual disconnect/reconnect.
+//
+// Fix: for the standalone GET SSE stream we (1) inject `X-Accel-Buffering: no`
+// onto the SDK's `text/event-stream` response so buffering proxies flush each
+// frame immediately, (2) enable TCP keepalive on the socket, and (3) write a
+// periodic SSE comment frame (`: hb\n\n`) so intermediaries and clients see
+// regular traffic and never treat the stream as idle. SSE comment lines are
+// ignored by the client per the spec and interleave safely between the SDK's
+// own events because Node serializes writes on the response stream.
+//
+// The heartbeat interval is env-configurable; a value of 0 (or any value <= 0)
+// disables the heartbeat for parity with the prior behavior.
+//
+// Note on the SDK's `retryInterval` option: it is intentionally NOT used here.
+// In SDK 1.29 `retryInterval` only emits an SSE `retry:` field inside the
+// *priming event*, which the transport writes solely on the POST->SSE path and
+// solely when an `eventStore` is configured (resumability opt-in). We do not
+// configure an event store, and the stream that drops is the standalone GET
+// SSE stream, which never emits a priming event. Setting `retryInterval` would
+// therefore be an inert knob with no runtime effect, so it is omitted. Instead
+// we write the SSE `retry:` field ourselves as the first frame on the GET SSE
+// stream (issue #1503); see MCP_SSE_RETRY_MS / parseMcpSseRetryMs below.
+
+/** Default MCP SSE heartbeat interval in ms when the env var is unset/invalid. */
+export const MCP_SSE_KEEPALIVE_DEFAULT_MS = 25_000;
+
+/**
+ * Parse the `NEOTOMA_MCP_SSE_KEEPALIVE_MS` env value into a heartbeat interval.
+ *
+ * Only an unset / empty / non-numeric value falls back to the default. A
+ * literal `0` (or any negative number) is a VALID, intentional "disable the
+ * heartbeat" sentinel and MUST flow through unchanged to the `keepaliveMs <= 0`
+ * guard in `attachMcpSseKeepalive` — using `parseInt(...) || DEFAULT` would
+ * silently coerce `0`/negatives back to the default and break the documented
+ * disable knob (issue #1483 review BLOCKING finding).
+ */
+export function parseMcpSseKeepaliveMs(raw: string | undefined): number {
+  if (raw === undefined) return MCP_SSE_KEEPALIVE_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return MCP_SSE_KEEPALIVE_DEFAULT_MS;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : MCP_SSE_KEEPALIVE_DEFAULT_MS;
+}
+
+const MCP_SSE_KEEPALIVE_MS = parseMcpSseKeepaliveMs(process.env.NEOTOMA_MCP_SSE_KEEPALIVE_MS);
+
+// ----------------------------------------------------------------------------
+// MCP SSE reconnect hint (issue #1503)
+//
+// The SSE spec defines a `retry:` field that tells the client how many
+// milliseconds to wait before reconnecting after the stream drops. Without it,
+// a client that sees an unexpected close (proxy idle reap, NAT timeout) has no
+// server-provided guidance and may not reconnect promptly — the exact silent
+// failure mode in #1503 where Claude.ai loses the Neotoma tool registry until a
+// manual disconnect/reconnect. We write the `retry:` field as the very first
+// frame on the standalone GET SSE stream (right after the SDK flushes headers),
+// so the client records it on open and honors it on the *next* disconnect.
+//
+// This is independent of the keepalive heartbeat (#1483): the retry hint is
+// emitted even when the heartbeat is disabled, because reconnect guidance is
+// useful regardless of whether we are also sending warm-keeping pings.
+
+/** Default MCP SSE `retry:` reconnect hint in ms when the env var is unset/invalid. */
+export const MCP_SSE_RETRY_DEFAULT_MS = 3_000;
+
+/**
+ * Parse the `NEOTOMA_MCP_SSE_RETRY_MS` env value into a reconnect-hint interval.
+ *
+ * Mirrors {@link parseMcpSseKeepaliveMs}: only an unset / empty / non-numeric
+ * value falls back to the default. A literal `0` (or any negative number) is a
+ * VALID "do not emit a retry frame" sentinel and MUST flow through unchanged to
+ * the `retryMs <= 0` guard in `attachMcpSseKeepalive`.
+ */
+export function parseMcpSseRetryMs(raw: string | undefined): number {
+  if (raw === undefined) return MCP_SSE_RETRY_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return MCP_SSE_RETRY_DEFAULT_MS;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : MCP_SSE_RETRY_DEFAULT_MS;
+}
+
+const MCP_SSE_RETRY_MS = parseMcpSseRetryMs(process.env.NEOTOMA_MCP_SSE_RETRY_MS);
+
+/**
+ * Attach SSE keepalive behavior to a `/mcp` GET request before the transport
+ * takes over the response. Safe to call on every GET `/mcp`; it is a no-op
+ * once the response finishes and tears itself down when the stream closes.
+ *
+ * Exported for unit testing of the heartbeat lifecycle. See issue #1483.
+ */
+export function attachMcpSseKeepalive(
+  req: express.Request,
+  res: express.Response,
+  options?: { keepaliveMs?: number; retryMs?: number; logger?: { warn: (msg: string) => void } }
+): void {
+  const keepaliveMs = options?.keepaliveMs ?? MCP_SSE_KEEPALIVE_MS;
+  const retryMs = options?.retryMs ?? MCP_SSE_RETRY_MS;
+  const log = options?.logger ?? logger;
+
+  // Inject X-Accel-Buffering only when the SDK actually opens an SSE stream.
+  // The @hono/node-server adapter calls res.writeHead() with a fresh header
+  // record built from the SDK's Web Response, so headers set earlier via
+  // res.setHeader() would be discarded; patching writeHead is the only place
+  // that survives. We add the header solely for text/event-stream responses
+  // so plain JSON-RPC POST replies are unaffected.
+  const originalWriteHead = res.writeHead as typeof res.writeHead;
+  let writeHeadPatched = true;
+  let retryFrameWritten = false;
+  (res as express.Response).writeHead = function patchedWriteHead(
+    this: express.Response,
+    ...args: Parameters<typeof res.writeHead>
+  ): express.Response {
+    let isSseStream = false;
+    try {
+      const contentType = String(res.getHeader("content-type") || "").toLowerCase();
+      isSseStream = contentType.includes("text/event-stream");
+      if (writeHeadPatched && isSseStream && !res.getHeader("x-accel-buffering")) {
+        res.setHeader("X-Accel-Buffering", "no");
+      }
+    } catch {
+      // Header inspection is best-effort; never block the response.
+    }
+    const result = originalWriteHead.apply(this, args) as express.Response;
+    // Once headers are flushed for an SSE stream, write the SSE `retry:` field
+    // as the first frame so the client records the reconnect delay on open and
+    // honors it on the next unexpected close (#1503). SSE comment/field frames
+    // interleave safely before the SDK's own events. Carries no PII.
+    if (writeHeadPatched && isSseStream && !retryFrameWritten && retryMs > 0) {
+      retryFrameWritten = true;
+      try {
+        res.write(`retry: ${retryMs}\n\n`);
+      } catch {
+        // Non-fatal: the heartbeat below remains the primary keepalive.
+      }
+    }
+    return result;
+  } as typeof res.writeHead;
+
+  // Enable OS-level TCP keepalive so the kernel probes the peer and the
+  // connection is not reaped by an idle NAT/proxy before our heartbeat fires.
+  // Bound the probe delay independently of the app-level heartbeat: even when
+  // the heartbeat is disabled (keepaliveMs <= 0) we still want a sane,
+  // proxy-survivable TCP probe interval, so clamp into [15s, 60s].
+  const TCP_KEEPALIVE_MIN_MS = 15_000;
+  const TCP_KEEPALIVE_MAX_MS = 60_000;
+  const tcpKeepaliveDelay =
+    keepaliveMs > 0
+      ? Math.min(Math.max(keepaliveMs, TCP_KEEPALIVE_MIN_MS), TCP_KEEPALIVE_MAX_MS)
+      : TCP_KEEPALIVE_MIN_MS;
+  const socket = res.socket ?? req.socket;
+  if (socket && typeof socket.setKeepAlive === "function") {
+    try {
+      socket.setKeepAlive(true, tcpKeepaliveDelay);
+    } catch {
+      // Non-fatal: heartbeat frames below are the primary mechanism.
+    }
+  }
+
+  if (keepaliveMs <= 0) {
+    return;
+  }
+
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const stop = () => {
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = undefined;
+    }
+  };
+
+  // Runtime guard for the X-Accel-Buffering injection. The writeHead patch
+  // assumes the @hono/node-server adapter calls our patched res.writeHead; a
+  // future adapter that snapshots the original method reference before we patch
+  // would silently no-op the header, re-enabling proxy buffering. FakeRes in
+  // the unit test cannot reproduce that adapter behavior, so warn once at
+  // runtime if the SSE stream has ticked several times without the header
+  // landing — operators learn the proxy-flush path regressed.
+  const ACCEL_BUFFERING_WARN_AFTER_TICKS = 5;
+  let ticksOnStream = 0;
+  let accelBufferingWarned = false;
+
+  heartbeat = setInterval(() => {
+    // Only write once the SSE stream is established (headers sent) and still
+    // writable. For non-SSE responses (plain POST replies) headersSent flips
+    // after a synchronous write and writableEnded becomes true, so this stops
+    // on its own without ever emitting a stray frame into a JSON body.
+    if (res.writableEnded || res.destroyed) {
+      stop();
+      return;
+    }
+    if (!res.headersSent) {
+      return;
+    }
+    const contentType = String(res.getHeader("content-type") || "").toLowerCase();
+    if (!contentType.includes("text/event-stream")) {
+      // Not an SSE stream (e.g. a buffered JSON-RPC reply); nothing to keep
+      // alive. Stop so we never corrupt a non-SSE body.
+      stop();
+      return;
+    }
+    ticksOnStream += 1;
+    if (
+      !accelBufferingWarned &&
+      ticksOnStream >= ACCEL_BUFFERING_WARN_AFTER_TICKS &&
+      !res.getHeader("x-accel-buffering")
+    ) {
+      accelBufferingWarned = true;
+      log.warn(
+        "[MCP HTTP] SSE stream is alive but X-Accel-Buffering header is absent after " +
+          `${ticksOnStream} heartbeats; a buffering proxy may delay frames. The ` +
+          "res.writeHead patch may not be reaching the SDK adapter (possible @hono/node-server upgrade)."
+      );
+    }
+    try {
+      // Bare SSE comment frame: ignored by clients, keeps the stream warm.
+      res.write(": hb\n\n");
+    } catch {
+      stop();
+    }
+  }, keepaliveMs);
+  if (typeof heartbeat.unref === "function") {
+    heartbeat.unref();
+  }
+
+  const cleanup = () => {
+    stop();
+    if (writeHeadPatched) {
+      writeHeadPatched = false;
+      (res as express.Response).writeHead = originalWriteHead;
+    }
+  };
+  res.on("close", cleanup);
+  res.on("finish", cleanup);
+  req.on("close", cleanup);
+}
 
 function isLoopbackAddress(value: string | undefined): boolean {
   const remote = (value || "").trim().toLowerCase();
@@ -1173,6 +1504,24 @@ export function canonicalAauthAuthority(): string {
   }
 }
 
+function resolvePublicAppOriginFromRequest(req: express.Request): {
+  origin?: string;
+  source?: "configured" | "request";
+} {
+  const configured = normalizeSessionOrigin(process.env.NEOTOMA_PUBLIC_BASE_URL);
+  if (configured) return { origin: configured, source: "configured" };
+
+  const host = req.get("host");
+  if (!host) return {};
+
+  const forwardedProto = req.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProto || req.protocol;
+  return {
+    origin: normalizeSessionOrigin(`${protocol}://${host}`),
+    source: "request",
+  };
+}
+
 // AAuth middleware — runs before every handler so `req.aauth` is populated
 // uniformly across HTTP surfaces. Non-blocking by design (see middleware
 // docstring), so OAuth, bearer-token, and unauthenticated clients keep
@@ -1402,6 +1751,8 @@ app.all("/mcp", async (req, res) => {
       if (connectionIdFromReq) {
         serverInstance.setSessionConnectionId(connectionIdFromReq);
       }
+      const appOrigin = resolvePublicAppOriginFromRequest(req);
+      serverInstance.setSessionAppOrigin(appOrigin.origin ?? null, appOrigin.source ?? null);
 
       // Create new transport for initialization
       transport = new StreamableHTTPServerTransport({
@@ -1496,6 +1847,15 @@ app.all("/mcp", async (req, res) => {
         connectionId: typeof connId === "string" ? connId : undefined,
       });
     })();
+
+    // For the long-lived GET SSE stream, attach keepalive (heartbeat frames +
+    // X-Accel-Buffering + TCP keepalive) before the transport takes over the
+    // response, so the stream survives proxy/client idle timeouts (#1483).
+    // The helper inspects the response content-type at write time and is a
+    // no-op for buffered JSON-RPC POST replies.
+    if (req.method === "GET") {
+      attachMcpSseKeepalive(req, res);
+    }
 
     // Handle request with the transport inside the attribution context.
     const attributionDecision = getAttributionDecisionFromRequest(req);
@@ -2658,7 +3018,7 @@ export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" |
         path === "/list_subscriptions" ||
         path === "/get_subscription_status")) ||
     (req.method === "GET" &&
-      (/^\/entities\/[^/]+(?:\/(?:observations|relationships))?$/.test(path) ||
+      (/^\/entities\/[^/]+(?:\/(?:observations|relationships|html))?$/.test(path) ||
         path === "/events/stream"))
   ) {
     return true;
@@ -2829,6 +3189,14 @@ export async function resolveGuestUserId(
 
   const headerAuth = (req.headers.authorization || "") as string;
   if (isLocalRequest(req) && !headerAuth.startsWith("Bearer ")) {
+    // In local_sandbox mode return the per-install fingerprinted principal so
+    // that different installs (e.g. two different browsers on the same machine
+    // pointing at distinct data dirs) resolve to distinct users rather than the
+    // shared nil-UUID LOCAL_DEV_USER_ID. Outside local_sandbox mode (e.g. pure
+    // dev with explicit auth configured) continue to use the nil-UUID fallback.
+    if (_localSandboxActive) {
+      return ensureLocalSandboxUser().id;
+    }
     return ensureLocalDevUser().id;
   }
 
@@ -2945,6 +3313,19 @@ async function resolveGuestScopedEntityAccess(
   return { userId: entity.user_id, entityType: entity.entity_type };
 }
 
+// Inspector SPA shell — early content-negotiation handler. Registered BEFORE
+// the auth gate and the JSON data routes (/sources, /entities/:id, /schemas, …)
+// so that a browser navigating to a SPA client route (Accept: text/html) gets
+// the SPA shell instead of a 401/JSON from the data route. API / agent / curl
+// clients (Accept: application/json | */* | absent) fall through to the real
+// data route. Excludes API-only paths (isApiOnlyPath, incl. /openapi*.yaml and
+// /me) and entity rendered-page surfaces (/entities/:id/html|markdown).
+// Registered after GET / and mountDocsRoutes (so the hosted_sandbox funnel and
+// docs HTML still win). Routes that register LATER (e.g. /me at ~3306,
+// /openapi.yaml at ~9960) are NOT shadowed because their paths are in the
+// API-only deny-list, so this handler next()s them through.
+installInspectorSpaShellEarly(app, process.env, logger);
+
 // Public key-based authentication middleware
 // MCP-style auth (same patterns as /mcp): encryption off = no auth or dev token; encryption on = key-derived token
 app.use(async (req, res, next) => {
@@ -2962,7 +3343,10 @@ app.use(async (req, res, next) => {
 
   const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
 
-  // Local mode: when storage is local and request is from localhost, no Bearer → default user (00..) by default
+  // Local mode: when storage is local and request is from localhost, no Bearer → default user.
+  // In local_sandbox mode (_localSandboxActive) use the per-install fingerprinted principal
+  // instead of the shared nil-UUID LOCAL_DEV_USER_ID so different installs resolve to
+  // distinct users (closes the v0.11.1 advisory fallback path for local deployments).
   if (
     config.storageBackend === "local" &&
     isLocalRequest(req) &&
@@ -2970,6 +3354,14 @@ app.use(async (req, res, next) => {
   ) {
     if (await maybeStampGuestPrincipal(req)) {
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+      return next();
+    }
+    if (_localSandboxActive) {
+      const sandboxUser = ensureLocalSandboxUser();
+      stampUserPrincipal(req, sandboxUser.id);
+      logger.info(
+        `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
+      );
       return next();
     }
     const devUser = ensureLocalDevUser();
@@ -3051,6 +3443,14 @@ app.use(async (req, res, next) => {
         return next();
       }
       if (isLocalRequest(req)) {
+        if (_localSandboxActive) {
+          const sandboxUser = ensureLocalSandboxUser();
+          stampUserPrincipal(req, sandboxUser.id);
+          logger.info(
+            `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
+          );
+          return next();
+        }
         const devUser = ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
         logger.info(
@@ -3099,10 +3499,26 @@ app.use(async (req, res, next) => {
       return next();
     }
     logWarn("AuthMissingBearer", req);
+    // Plan ent_b4958d038bd41e8694fe0aef Phase 5: surface sandbox availability
+    // in the 401 envelope so UIs can replace the hard "Missing Bearer token"
+    // error with a sandbox-session onboarding affordance when one is live.
+    const sandboxLive = isSandboxMode();
     return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
-      hint:
-        "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. " +
-        "Create a grant via Inspector → Agents → Grants.",
+      hint: sandboxLive
+        ? "Hosted sandbox is enabled; visit /sandbox/session/new to mint an ephemeral session, " +
+          "or sign in with a bearer token."
+        : "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. " +
+          "Create a grant via Inspector → Agents → Grants.",
+      sandbox: sandboxLive
+        ? {
+            available: true,
+            mode: "hosted_sandbox",
+            session_endpoints: {
+              create: "/sandbox/session/new",
+              redeem: "/sandbox/session/redeem",
+            },
+          }
+        : { available: false },
     });
   }
 
@@ -3190,7 +3606,19 @@ app.get("/me", async (req, res) => {
             }
           : { storage_backend: "local" as const }
         : undefined;
-    return res.json({ user_id: userId, email: email ?? undefined, storage });
+    // Surface the boot-resolved server mode so clients (Inspector, CLI) can
+    // dispatch UI/behavior without inferring from indirect signals. Falls back
+    // to the legacy `_localSandboxActive` reading when the resolver has not
+    // run yet (e.g. in test harnesses that drive the app without
+    // startHTTPServer()).
+    const sandboxMode: NeotomaSandboxModeName | null =
+      _resolvedServerMode ?? (_localSandboxActive ? "local_sandbox" : null);
+    return res.json({
+      user_id: userId,
+      email: email ?? undefined,
+      storage,
+      ...(sandboxMode ? { sandbox_mode: sandboxMode } : {}),
+    });
   } catch (error: any) {
     logError("GetMe", req, error);
     return sendError(res, 401, "AUTH_REQUIRED", error.message ?? "Not authenticated");
@@ -3307,6 +3735,12 @@ function handleApiError(
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (error instanceof OverridePolicyViolationError) {
+    logWarn(logContext || "OverridePolicyRejection", req, error.toErrorEnvelope());
+    return res
+      .status(403)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
   if (error instanceof IssueValidationError) {
     logWarn(logContext || "IssueValidationError", req, {
       code: error.code,
@@ -3344,10 +3778,16 @@ function handleApiError(
 // v0.2.15 Entity-Based HTTP API Endpoints
 // ============================================================================
 
-// POST /api/entities/query - Query entities with filters
-// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
-app.post("/entities/query", async (req, res) => {
-  const parsed = EntitiesQueryRequestSchema.safeParse(req.body);
+// Shared entity-query executor backing both POST /entities/query and the
+// GET /entities REST alias. `rawInput` is the already-shaped request payload
+// (POST body, or query-string params coerced by coerceEntitiesQueryParams).
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id.
+async function runEntitiesQuery(
+  req: express.Request,
+  res: express.Response,
+  rawInput: unknown
+): Promise<express.Response> {
+  const parsed = EntitiesQueryRequestSchema.safeParse(rawInput);
   if (!parsed.success) {
     logWarn("ValidationError:entities_query", req, {
       issues: parsed.error.issues,
@@ -3356,11 +3796,14 @@ app.post("/entities/query", async (req, res) => {
   }
 
   try {
-    // Get authenticated user_id (REQUIRED)
+    // Get authenticated user_id (REQUIRED). user_id is used for SECURITY
+    // scoping only via getAuthenticatedUserId; it is never read directly off
+    // the request for access control.
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
     const {
       entity_type,
+      entity_types,
       search,
       limit,
       offset,
@@ -3374,32 +3817,38 @@ app.post("/entities/query", async (req, res) => {
       updated_since,
       created_since,
       identity_basis,
+      snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total } = await queryEntitiesWithCount({
-      userId,
-      entityType: entity_type,
-      includeMerged: include_merged,
-      includeSnapshots: include_snapshots,
-      sortBy: sort_by,
-      sortOrder: sort_order,
-      published,
-      publishedAfter: published_after,
-      publishedBefore: published_before,
-      search,
-      limit,
-      offset,
-      updatedSince: updated_since,
-      createdSince: created_since,
-      identityBasis: identity_basis,
-      excludeBookkeeping: exclude_bookkeeping,
-    });
+    const { entities, total, applied_search_strategies, search_mode } =
+      await queryEntitiesWithCount({
+        userId,
+        entityType: entity_type,
+        entityTypes: entity_types,
+        includeMerged: include_merged,
+        includeSnapshots: include_snapshots,
+        sortBy: sort_by,
+        sortOrder: sort_order,
+        published,
+        publishedAfter: published_after,
+        publishedBefore: published_before,
+        search,
+        limit,
+        offset,
+        updatedSince: updated_since,
+        createdSince: created_since,
+        identityBasis: identity_basis,
+        snapshotFilters: snapshot_filters,
+        excludeBookkeeping: exclude_bookkeeping,
+      });
 
     return res.json({
       entities,
       total,
       limit,
       offset,
+      ...(applied_search_strategies ? { applied_search_strategies } : {}),
+      search_mode,
     });
   } catch (error) {
     return handleApiError(
@@ -3411,6 +3860,94 @@ app.post("/entities/query", async (req, res) => {
       "APIError:entities_query"
     );
   }
+}
+
+// Coerce GET /entities query-string parameters into the shape
+// EntitiesQueryRequestSchema expects. Query strings are always strings, so
+// numeric, boolean, and JSON-object fields are converted here; values that
+// fail conversion are passed through unchanged so Zod surfaces a 400.
+function coerceEntitiesQueryParams(query: express.Request["query"]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const readString = (key: string): string | undefined => {
+    const value = query[key];
+    if (typeof value === "string") return value;
+    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+    return undefined;
+  };
+  const parseBool = (value: string): boolean | string => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+  };
+
+  for (const key of [
+    "entity_type",
+    "search",
+    "query",
+    "search_query",
+    "sort_by",
+    "sort_order",
+    "published_after",
+    "published_before",
+    "user_id",
+    "updated_since",
+    "created_since",
+    "identity_basis",
+  ]) {
+    const value = readString(key);
+    if (value !== undefined) out[key] = value;
+  }
+
+  for (const key of ["limit", "offset"]) {
+    const value = readString(key);
+    if (value !== undefined && value !== "") {
+      const num = Number(value);
+      out[key] = Number.isNaN(num) ? value : num;
+    }
+  }
+
+  for (const key of ["published", "include_snapshots", "include_merged", "exclude_bookkeeping"]) {
+    const value = readString(key);
+    if (value !== undefined) out[key] = parseBool(value);
+  }
+
+  const snapshotFilters = readString("snapshot_filters");
+  if (snapshotFilters !== undefined && snapshotFilters !== "") {
+    try {
+      out.snapshot_filters = JSON.parse(snapshotFilters);
+    } catch {
+      out.snapshot_filters = snapshotFilters;
+    }
+  }
+
+  return out;
+}
+
+// GET /entities - REST/GET alias of POST /entities/query (issue #1499).
+// Maps query-string params to the same handler so consumers that issue
+// `GET /entities?entity_type=...&search=...` no longer hit a 404 and silently
+// degrade. REQUIRES AUTHENTICATION - identical user scoping to the POST path.
+app.get("/entities", async (req, res) => {
+  return runEntitiesQuery(req, res, coerceEntitiesQueryParams(req.query));
+});
+
+// POST /api/entities/query - Query entities with filters
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
+app.post("/entities/query", async (req, res) => {
+  return runEntitiesQuery(req, res, req.body);
+});
+
+// Hinted 404 fallback for the /entities collection path. GET is handled above
+// and POST/PUT/DELETE/PATCH on the bare collection are misuse; respond with a
+// structured hint (in `details`, never concatenated into `message`) that
+// points callers at the canonical list and query endpoints so the mistake is
+// self-correcting. See issue #1499.
+app.all("/entities", (req, res) => {
+  return sendError(res, 404, "RESOURCE_NOT_FOUND", `No ${req.method} route on /entities.`, {
+    hint: "List entities with GET /entities?entity_type=...&search=..., or query with POST /entities/query.",
+    method: req.method,
+    supported: ["GET /entities", "POST /entities/query"],
+  });
 });
 
 // GET /api/entities/:id - Get entity detail with snapshot and provenance (FU-601)
@@ -3522,6 +4059,68 @@ app.get("/entities/:id/markdown", async (req, res) => {
     }
     logError("APIError:entity_markdown", req, error);
     const message = error instanceof Error ? error.message : "Failed to render entity markdown";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// GET /entities/:id/html - Render a `rendered_page` entity as a standalone HTML
+// page. Accepts ?access_token=<guest_token> for unauthenticated (guest) reads;
+// authenticated users may omit it. 404s for any entity_type other than
+// `rendered_page` so the publish surface stays explicit.
+app.get("/entities/:id/html", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+
+    if (principal.kind === "guest") {
+      await resolveGuestScopedEntityAccess(principal, entityId);
+    } else {
+      const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      const { data: entity, error: entityError } = await db
+        .from("entities")
+        .select("id, user_id, entity_type")
+        .eq("id", entityId)
+        .eq("user_id", userId)
+        .single();
+      if (entityError || !entity) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+    }
+
+    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+    const current = await getEntityWithProvenance(entityId);
+    if (!current) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+    if (current.entity_type !== "rendered_page") {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity is not a rendered_page");
+    }
+
+    const snap = (current.snapshot ?? {}) as Record<string, unknown>;
+    const title = typeof snap.title === "string" ? snap.title : "Untitled";
+    const htmlBody = typeof snap.html_body === "string" ? snap.html_body : "";
+    const metaDescription =
+      typeof snap.meta_description === "string" ? snap.meta_description : undefined;
+    const customCss = typeof snap.custom_css === "string" ? snap.custom_css : undefined;
+
+    const { renderRenderedPageHtml } = await import("./services/rendered_page/html_template.js");
+    const html = renderRenderedPageHtml({ title, htmlBody, metaDescription, customCss });
+
+    const etag = current.last_observation_at
+      ? `W/"${Buffer.from(current.last_observation_at).toString("base64")}"`
+      : undefined;
+    if (etag) res.setHeader("ETag", etag);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(html);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
+        hint: "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. Create a grant via Inspector → Agents → Grants.",
+        sandbox: { available: false },
+      });
+    }
+    logError("APIError:entity_html", req, error);
+    const message = error instanceof Error ? error.message : "Failed to render entity HTML";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
@@ -4065,8 +4664,13 @@ app.get("/relationships", async (req, res) => {
       query = query.eq("target_entity_id", targetEntityId);
     }
 
+    // Stable pagination: tiebreak on the `relationship_key` primary key so rows
+    // sharing a `last_observation_at` value (batch upserts) keep a fixed order
+    // across paginated calls (docs/architecture/determinism.md). Same defect
+    // class as issue #368 on /list_relationships and /retrieve_graph_neighborhood.
     const { data, error, count } = await query
       .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
@@ -4288,7 +4892,7 @@ app.post("/relationships/snapshot", async (req, res) => {
 });
 
 // GET /api/timeline - Get timeline events with filtering (FU-303)
-// REQUIRES AUTHENTICATION - filters events through sources.user_id
+// REQUIRES AUTHENTICATION - filters events through timeline_events.user_id
 app.get("/timeline", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
@@ -4303,122 +4907,17 @@ app.get("/timeline", async (req, res) => {
     const rawOrderBy = String(req.query.order_by ?? "event_timestamp")
       .trim()
       .toLowerCase();
-    const orderByColumn = rawOrderBy === "created_at" ? "created_at" : "event_timestamp";
 
-    // Get source IDs for this user first (timeline_events doesn't have user_id)
-    const { data: userSources, error: sourcesError } = await db
-      .from("sources")
-      .select("id")
-      .eq("user_id", userId);
-
-    if (sourcesError) throw sourcesError;
-
-    const sourceIds = (userSources || []).map((s: any) => s.id);
-
-    // Build query - filter by source_ids that belong to authenticated user
-    let query = db.from("timeline_events").select("*", { count: "exact" });
-
-    // SECURITY: Only return events from sources that belong to authenticated user
-    if (sourceIds.length > 0) {
-      query = query.in("source_id", sourceIds);
-    } else {
-      // User has no sources - return empty result
-      return res.json({
-        events: [],
-        total: 0,
-        limit,
-        offset,
-      });
-    }
-
-    // Filter by date range
-    if (startDate) {
-      query = query.gte("event_timestamp", startDate);
-    }
-    if (endDate) {
-      query = query.lte("event_timestamp", endDate);
-    }
-
-    // Filter by event type
-    if (eventType) {
-      query = query.eq("event_type", eventType);
-    }
-
-    // Filter by entity_id
-    if (entityId) {
-      query = query.eq("entity_id", entityId);
-    }
-
-    // Default: sort by event_timestamp (document dates). Use order_by=created_at for "what changed recently".
-    // Secondary sort on id is a deterministic tie-breaker — events with identical
-    // event_timestamp values (common when many are ingested from the same source)
-    // otherwise produce non-stable page boundaries across offset queries.
-    query = query.order(orderByColumn, { ascending: false }).order("id", { ascending: true });
-
-    // Pagination
-    query = query.range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      const err = error as { code?: string; message?: string };
-      const errorDetails =
-        typeof error === "object" && error && "details" in error
-          ? (error as { details?: string }).details
-          : undefined;
-      const errorHint =
-        typeof error === "object" && error && "hint" in error
-          ? (error as { hint?: string }).hint
-          : undefined;
-
-      logError("APIError:timeline_query", req, error, {
-        errorCode: err.code,
-        errorMessage: err.message,
-        errorDetails,
-        errorHint,
-        userId: userId || "none",
-      });
-
-      return sendError(res, 500, "DB_QUERY_FAILED", "Failed to query timeline events", {
-        code: err.code,
-        message: err.message,
-        hint: errorHint,
-      });
-    }
-
-    // Enrich events with entity canonical names and types
-    const events = data || [];
-    const entityIds = [...new Set(events.map((e: any) => e.entity_id).filter(Boolean))];
-    const entityLookup = new Map<string, { canonical_name: string; entity_type: string }>();
-    if (entityIds.length > 0) {
-      const { data: entities } = await db
-        .from("entities")
-        .select("id, canonical_name, entity_type")
-        .in("id", entityIds);
-      if (entities) {
-        for (const ent of entities) {
-          entityLookup.set(ent.id, {
-            canonical_name: ent.canonical_name,
-            entity_type: ent.entity_type,
-          });
-        }
-      }
-    }
-    const enrichedEvents = events.map((ev: any) => {
-      const entity = ev.entity_id ? entityLookup.get(ev.entity_id) : undefined;
-      return {
-        ...ev,
-        entity_name: entity?.canonical_name || undefined,
-        entity_type: entity?.entity_type || undefined,
-      };
-    });
-
-    return res.json({
-      events: enrichedEvents,
-      total: count || 0,
+    const timeline = await listTimelineEventsForUser(userId, {
+      startDate,
+      endDate,
+      eventType,
+      entityId,
       limit,
       offset,
+      orderBy: rawOrderBy,
     });
+    return res.json(timeline);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
@@ -4433,40 +4932,13 @@ app.get("/timeline", async (req, res) => {
 });
 
 // GET /api/timeline/:id - Get one timeline event by ID (FU-303)
-// REQUIRES AUTHENTICATION - verifies event source belongs to authenticated user
+// REQUIRES AUTHENTICATION - verifies event belongs to authenticated user
 app.get("/timeline/:id", async (req, res) => {
   try {
     const eventId = decodeURIComponent(req.params.id);
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
-    // Get source IDs for this user first (timeline_events doesn't have user_id)
-    const { data: userSources, error: sourcesError } = await db
-      .from("sources")
-      .select("id")
-      .eq("user_id", userId);
-
-    if (sourcesError) throw sourcesError;
-    const sourceIds = (userSources || []).map((source: { id: string }) => source.id);
-
-    if (sourceIds.length === 0) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
-    }
-
-    const { data: event, error } = await db
-      .from("timeline_events")
-      .select("*")
-      .eq("id", eventId)
-      .in("source_id", sourceIds)
-      .maybeSingle();
-
-    if (error) {
-      const err = error as { code?: string; message?: string };
-      if (err.code === "PGRST116") {
-        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
-      }
-      throw error;
-    }
-
+    const event = await getTimelineEventForUser(userId, eventId);
     if (!event) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
     }
@@ -5570,6 +6042,28 @@ app.get("/stats", async (req, res) => {
   }
 });
 
+// GET /usage - Get Inspector usage statistics
+// REQUIRES AUTHENTICATION - all usage stats filtered by authenticated user_id
+app.get("/usage", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const { getUsageStats } = await import("./services/dashboard_stats.js");
+    const stats = await getUsageStats(userId);
+
+    return res.json(stats);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get usage stats",
+      "DB_QUERY_FAILED",
+      "APIError:usage_stats"
+    );
+  }
+});
+
 // GET /access_policies - List effective guest access policies
 // REQUIRES AUTHENTICATION
 app.get("/access_policies", async (req, res) => {
@@ -5791,6 +6285,38 @@ export async function storeStructuredForApi(params: {
     await assertGuestWriteAllowed(entityTypes, guestId);
   }
 
+  // usage_digest store-seam redaction guard (server-side backstop).
+  // Scope: strictly usage_digest entities only — no impact on any other entity type.
+  // For each incoming usage_digest entity, scan free-text fields `notes` and
+  // `friction_notes` via the pure redactUsageDigestEntity helper, and write the
+  // redacted copies back onto the entity object so the raw input is never persisted.
+  // This is a redact-and-store (scan) approach, not hard-reject, so a digest is
+  // never silently dropped on a client-side redaction miss.
+  //
+  // NOTE: Single telemetry sink today — entity_type === "usage_digest" is the only
+  // branch. If a second redacted-free-text entity_type appears, lift these field
+  // names into schema metadata (redact_free_text_fields) rather than adding another
+  // branch here.
+  {
+    const hasUsageDigest = entities.some(
+      (e) => (e as Record<string, unknown>)?.entity_type === "usage_digest"
+    );
+    if (hasUsageDigest) {
+      const { redactUsageDigestEntity } =
+        await import("./services/feedback/usage_digest_redaction.js");
+      for (const entityData of entities) {
+        const ed = entityData as Record<string, unknown>;
+        if (ed.entity_type !== "usage_digest") continue;
+        const result = redactUsageDigestEntity(ed as Parameters<typeof redactUsageDigestEntity>[0]);
+        if (result.applied) {
+          logger.warn(
+            `[STORE] usage_digest server-side redaction applied: ${result.hits} hit(s) in free-text fields.`
+          );
+        }
+      }
+    }
+  }
+
   // Capability scoping: when the caller is an AAuth-verified agent covered
   // by the capability registry, gate store_structured by entity_type here
   // before any writes touch the DB. Guests who passed access policy above
@@ -5968,6 +6494,17 @@ export async function storeStructuredForApi(params: {
         identity_basis: string;
         identity_rule: string;
       }>;
+      /**
+       * Existing entities surfaced as possible duplicates by the single-token
+       * prefix-match pass. See `ResolverDuplicateCandidate` in
+       * `src/services/entity_resolution.ts`.
+       */
+      duplicate_candidates?: Array<{
+        code: string;
+        entity_type: string;
+        candidate_entity_id: string;
+        candidate_canonical_name: string;
+      }>;
     };
     intent?: string;
     targetId?: string;
@@ -6095,6 +6632,19 @@ export async function storeStructuredForApi(params: {
                   entity_type: w.entityType,
                   identity_basis: w.identityBasis,
                   identity_rule: w.identityRule,
+                })),
+              }
+            : {}),
+          ...(result.trace.duplicateCandidates && result.trace.duplicateCandidates.length > 0
+            ? {
+                duplicate_candidates: result.trace.duplicateCandidates.map((c) => ({
+                  code: c.code,
+                  entity_type: c.entityType,
+                  candidate_entity_id: c.candidateEntityId,
+                  candidate_canonical_name: c.candidateCanonicalName,
+                  ...(c.truncated
+                    ? { truncated: c.truncated, matched_count: c.matched_count }
+                    : {}),
                 })),
               }
             : {}),
@@ -6277,6 +6827,7 @@ export async function storeStructuredForApi(params: {
     identity_basis: string;
     identity_rule: string;
     warnings?: ResolvedEntity["trace"]["warnings"];
+    prefix_duplicate_candidates?: ResolvedEntity["trace"]["duplicate_candidates"];
     entity_snapshot_after: Record<string, unknown> | null;
   }> = [];
 
@@ -6383,6 +6934,36 @@ export async function storeStructuredForApi(params: {
           }`
         );
       }
+
+      // Schema-driven derived-entity extraction: if the entity's active schema
+      // declares `derived_entities`, evaluate each rule and create matching
+      // entities linked back to the source entity. Non-fatal: failures are
+      // logged and skipped, never blocking the primary store.
+      if (commit) {
+        try {
+          const { schemaRegistry: schemaReg2 } = await import("./services/schema_registry.js");
+          const schemaEntry2 = await schemaReg2.loadActiveSchema(r.entity_type, userId);
+          if (schemaEntry2?.schema_definition?.derived_entities?.length) {
+            const { extractDerivedEntities } =
+              await import("./services/schema_derived_entity_extraction.js");
+            await extractDerivedEntities({
+              entityId: r.entity_id,
+              entityType: r.entity_type,
+              fields: r.fields,
+              schema: schemaEntry2.schema_definition,
+              userId,
+              sourceId: observationSourceId,
+              idempotencyKey,
+            });
+          }
+        } catch (derivedErr) {
+          logger.warn(
+            `Derived entity extraction failed for ${r.entity_type}/${r.entity_id}: ${
+              derivedErr instanceof Error ? derivedErr.message : String(derivedErr)
+            }`
+          );
+        }
+      }
     }
 
     createdEntities.push({
@@ -6396,6 +6977,9 @@ export async function storeStructuredForApi(params: {
       identity_basis: r.trace.identity_basis,
       identity_rule: r.trace.identity_rule,
       ...(r.trace.warnings && r.trace.warnings.length > 0 ? { warnings: r.trace.warnings } : {}),
+      ...(r.trace.duplicate_candidates && r.trace.duplicate_candidates.length > 0
+        ? { prefix_duplicate_candidates: r.trace.duplicate_candidates }
+        : {}),
       entity_snapshot_after: snapshotAfter,
     });
   }
@@ -6507,6 +7091,23 @@ export async function storeStructuredForApi(params: {
     entity_type: string;
     entity_id: string;
   }> = [];
+  // Issue #1552 / #1559: surface a non-fatal signal when a stored observation
+  // carries fields the schema does not declare (dropped from the snapshot
+  // projection by the reducer) or omits fields the schema marks `required`.
+  // Both mirror each other and the existing unknown_fields contract — the write
+  // is accepted; the caller repairs in-turn (correct() into a declared field,
+  // or register/extend the schema). No storage change here; the reducer already
+  // projects only declared fields, so undeclared values are preserved on the
+  // observation but invisible until the schema declares them.
+  const unknownFieldNamesSet = new Set<string>();
+  const requiredFieldsMissing: Array<{
+    entity_type: string;
+    field: string;
+    observation_index: number;
+  }> = [];
+  // Track whether any flagged entity's schema declares identity config, so the
+  // batch hint can prescribe the path that actually works (issue #1549).
+  let anyUnknownFieldSchemaHasIdentityConfig = false;
   {
     const { schemaRegistry } = await import("./services/schema_registry.js");
     for (const r of resolved) {
@@ -6516,24 +7117,135 @@ export async function storeStructuredForApi(params: {
       } catch {
         // Best-effort; never block store on registry IO failure.
       }
-      const storeWarningRules = schemaEntry?.schema_definition?.store_warnings;
-      if (!storeWarningRules?.length) continue;
-      for (const rule of storeWarningRules) {
-        const hasIdentityField = rule.fields.some(
-          (f) => r.fields[f] !== undefined && r.fields[f] !== null && r.fields[f] !== ""
-        );
-        if (!hasIdentityField) {
+      const schemaDef = schemaEntry?.schema_definition;
+      const storeWarningRules = schemaDef?.store_warnings;
+      if (storeWarningRules?.length) {
+        for (const rule of storeWarningRules) {
+          const hasIdentityField = rule.fields.some(
+            (f) => r.fields[f] !== undefined && r.fields[f] !== null && r.fields[f] !== ""
+          );
+          if (!hasIdentityField) {
+            schemaStoreWarnings.push({
+              code: rule.code,
+              message: rule.message,
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+          }
+        }
+      }
+
+      // Schema-driven content_field warning: when a schema declares
+      // `content_field`, emit MISSING_CONTENT_FIELD if the stored payload
+      // omits that field or leaves it empty. See issue #949.
+      const contentField = schemaDef?.content_field;
+      if (contentField) {
+        const value = r.fields[contentField];
+        const isMissing =
+          value === undefined || value === null || (typeof value === "string" && value === "");
+        if (isMissing) {
           schemaStoreWarnings.push({
-            code: rule.code,
-            message: rule.message,
+            code: "MISSING_CONTENT_FIELD",
+            message:
+              `${r.entity_type} stored without its primary content field "${contentField}". ` +
+              "For document-derived entities, include the full original markdown/prose " +
+              "in this field; structured fields complement it but do not replace it.",
             observation_index: r.observation_index,
             entity_type: r.entity_type,
             entity_id: r.entity_id,
           });
         }
       }
+
+      // Unknown-field (#1552) and missing-required (#1559) signals require a
+      // schema to compare against. When no schema is declared the no_schema /
+      // raw_fragments path (handled elsewhere) already covers the caller.
+      const schemaFieldDefs = schemaDef?.fields;
+      if (schemaFieldDefs) {
+        const declaredFieldNames = new Set(Object.keys(schemaFieldDefs));
+        let entityHadFlaggedField = false;
+
+        // Unknown fields: present on the payload but not declared by the schema.
+        for (const key of Object.keys(r.fields)) {
+          if (NON_SCHEMA_META_KEYS.has(key)) continue;
+          const value = r.fields[key];
+          if (value === undefined) continue;
+          if (!declaredFieldNames.has(key)) {
+            unknownFieldNamesSet.add(key);
+            entityHadFlaggedField = true;
+            schemaStoreWarnings.push({
+              code: "UNKNOWN_FIELD",
+              message:
+                `${r.entity_type} stored with field "${key}" that is not declared on its ` +
+                "active schema. The value is preserved on the observation but is dropped from " +
+                "the entity snapshot until the field is added to the schema. To surface it: " +
+                "re-store or correct() the data into an already-declared field, or add the " +
+                "field via register_schema (or update_schema_incremental when the schema " +
+                "declares canonical_name_fields).",
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+          }
+        }
+
+        // Missing required fields: declared `required: true` but absent/empty.
+        for (const [fieldName, fieldDef] of Object.entries(schemaFieldDefs)) {
+          if (fieldName === "schema_version") continue;
+          if (!fieldDef?.required) continue;
+          const value = r.fields[fieldName];
+          const isMissing =
+            value === undefined || value === null || (typeof value === "string" && value === "");
+          if (isMissing) {
+            entityHadFlaggedField = true;
+            requiredFieldsMissing.push({
+              entity_type: r.entity_type,
+              field: fieldName,
+              observation_index: r.observation_index,
+            });
+            schemaStoreWarnings.push({
+              code: "MISSING_REQUIRED_FIELD",
+              message:
+                `${r.entity_type} stored without required field "${fieldName}". The schema marks ` +
+                "this field required; the write was accepted but the entity is incomplete. " +
+                "Use correct() to supply the missing field.",
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+          }
+        }
+
+        if (
+          entityHadFlaggedField &&
+          Array.isArray(schemaDef?.canonical_name_fields) &&
+          schemaDef.canonical_name_fields.length > 0
+        ) {
+          anyUnknownFieldSchemaHasIdentityConfig = true;
+        }
+      }
     }
   }
+
+  const unknownFieldNames = Array.from(unknownFieldNamesSet).sort();
+  // Conditional hint (#1549): update_schema_incremental requires the schema to
+  // declare canonical_name_fields, else it dead-ends on
+  // ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Only prescribe it when at least one
+  // flagged schema has identity config; otherwise point at the path that works.
+  const unknownFieldsHint =
+    unknownFieldNames.length === 0
+      ? undefined
+      : anyUnknownFieldSchemaHasIdentityConfig
+        ? "Undeclared fields are preserved on the observation but excluded from the entity " +
+          "snapshot. To promote them, call update_schema_incremental to add the fields to the " +
+          "schema, then set migrate_existing: true to backfill existing observations. If an " +
+          "existing declared field already fits the data, prefer correct()-ing into that field."
+        : "Undeclared fields are preserved on the observation but excluded from the entity " +
+          "snapshot. This schema has no canonical_name_fields, so update_schema_incremental " +
+          "would fail with ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Instead: correct() the data into " +
+          "an already-declared field (use describe_entity_type to see declared fields), or call " +
+          "register_schema with a new version that adds the field.";
 
   if (commit && interpretationId) {
     await completeInterpretationRun({
@@ -6541,6 +7253,72 @@ export async function storeStructuredForApi(params: {
       observationsCreated: createdEntities.filter((e) => e.observation_id).length,
       unknownFieldsCount: 0,
     });
+  }
+
+  // FU-2026-05-001: conversation_message_count.
+  // When this request created/updated a conversation_message linked to a
+  // conversation via PART_OF, return the post-commit count of all sibling
+  // conversation_messages so neotoma_turn_summary (FU-2026-05-002) can populate
+  // `msg N/M` without an extra retrieval round-trip.
+  let conversationMessageCount: number | null = null;
+  if (commit) {
+    try {
+      const conversationMessageEntityIds = createdEntities
+        .filter(
+          (e: { entity_type?: string; entity_id?: string }) =>
+            e.entity_type === "conversation_message" &&
+            typeof e.entity_id === "string" &&
+            e.entity_id.length > 0
+        )
+        .map((e: { entity_id?: string }) => e.entity_id as string);
+      if (conversationMessageEntityIds.length > 0) {
+        const { data: partOfRows } = await db
+          .from("relationship_snapshots")
+          .select("target_entity_id")
+          .eq("user_id", userId)
+          .eq("relationship_type", "PART_OF")
+          .in("source_entity_id", conversationMessageEntityIds);
+        const conversationIds: string[] = [];
+        for (const row of (partOfRows ?? []) as Array<{ target_entity_id?: string | null }>) {
+          if (typeof row.target_entity_id === "string" && row.target_entity_id.length > 0) {
+            conversationIds.push(row.target_entity_id);
+          }
+        }
+        const uniqueConversationIds = Array.from(new Set(conversationIds));
+        if (uniqueConversationIds.length > 0) {
+          const { data: siblingRows } = await db
+            .from("relationship_snapshots")
+            .select("source_entity_id")
+            .eq("user_id", userId)
+            .eq("relationship_type", "PART_OF")
+            .in("target_entity_id", uniqueConversationIds);
+          const siblingIds: string[] = [];
+          for (const row of (siblingRows ?? []) as Array<{
+            source_entity_id?: string | null;
+          }>) {
+            if (typeof row.source_entity_id === "string" && row.source_entity_id.length > 0) {
+              siblingIds.push(row.source_entity_id);
+            }
+          }
+          const uniqueSiblingIds = Array.from(new Set(siblingIds));
+          if (uniqueSiblingIds.length > 0) {
+            const { count } = await db
+              .from("entity_snapshots")
+              .select("entity_id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("entity_type", "conversation_message")
+              .in("entity_id", uniqueSiblingIds);
+            if (typeof count === "number") conversationMessageCount = count;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(
+        `store: conversation_message_count computation failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
   }
 
   return {
@@ -6559,6 +7337,17 @@ export async function storeStructuredForApi(params: {
     relationships_created: relationshipsCreated,
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
     ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
+    ...(unknownFieldNames.length > 0
+      ? {
+          unknown_fields: unknownFieldNames,
+          unknown_fields_count: unknownFieldNames.length,
+          ...(unknownFieldsHint ? { hint: unknownFieldsHint } : {}),
+        }
+      : {}),
+    ...(requiredFieldsMissing.length > 0 ? { required_fields_missing: requiredFieldsMissing } : {}),
+    ...(conversationMessageCount !== null
+      ? { conversation_message_count: conversationMessageCount }
+      : {}),
   };
 }
 
@@ -7645,6 +8434,7 @@ app.post("/list_relationships", async (req, res) => {
     relationship_type,
     limit = 100,
     offset = 0,
+    include_deleted = false,
   } = parsed.data;
 
   try {
@@ -7655,7 +8445,25 @@ app.post("/list_relationships", async (req, res) => {
 
     // Flexible query supporting source_entity_id / target_entity_id in addition
     // to the legacy entity_id + direction pattern.
-    let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
+    //
+    // Both the default and audit paths now paginate at the DB, keeping memory
+    // O(limit) (issues #277 + #367/#369 + #1570):
+    //   - include_deleted=false (default): soft-deleted edges are excluded via
+    //     the materialized `is_live` column (#1570), so the live-edge filter is
+    //     a DB predicate (`is_live = 1`). The DB applies the filter, exact
+    //     count, and `.range()` pagination together — no load-then-filter in
+    //     process. `is_live` is kept in sync with the highest-priority deletion
+    //     observation by computeRelationshipSnapshot / softDeleteRelationship.
+    //   - include_deleted=true (audit/history): no liveness filter; all rows
+    //     (deleted included) are counted and paginated at the DB.
+    let query = db
+      .from("relationship_snapshots")
+      .select("*", { count: "exact" })
+      .eq("user_id", userId);
+
+    if (!include_deleted) {
+      query = query.eq("is_live", 1);
+    }
 
     if (source_entity_id && target_entity_id) {
       query = query
@@ -7685,25 +8493,54 @@ app.post("/list_relationships", async (req, res) => {
       query = query.eq("relationship_type", relationship_type);
     }
 
-    query = query.order("last_observation_at", { ascending: false });
+    // Deterministic ordering: `last_observation_at` is mutable and produces ties
+    // for rows upserted within the same millisecond (common in batch ingestion).
+    // `relationship_key` is the table's primary key — a stable, unique, monotonic
+    // tiebreaker that fully determines order. Without it, tied rows can move
+    // between pages across successive calls, breaking pagination stability and
+    // violating the determinism invariant (docs/architecture/determinism.md §
+    // "Sorting MUST use deterministic tiebreakers"). See issue #368.
+    query = query
+      .order("last_observation_at", { ascending: false })
+      .order("relationship_key", { ascending: true });
 
-    const { data, error } = await query;
+    // Both paths paginate at the DB now that liveness is a column (#1570): the
+    // `is_live` predicate above already excludes soft-deleted edges on the
+    // default path, so the exact count and the page slice both reflect the
+    // correct (live, or all-when-include_deleted) set without loading the full
+    // match into memory.
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
     if (error) {
       throw new Error(error.message);
     }
 
-    const all = data || [];
-    const paginated = all.slice(offset, offset + limit);
+    // `count` is the exact total of rows matching the (filtered) query — live
+    // edges only on the default path (#277/#1570), all rows on the audit path
+    // (#367/#369).
+    const paginated = data || [];
+    const total = count ?? paginated.length;
 
     logDebug("Success:list_relationships", req, {
       entity_id,
       source_entity_id,
       target_entity_id,
       relationship_type,
+      include_deleted,
       count: paginated.length,
-      total: all.length,
+      total,
     });
-    return res.json({ relationships: paginated, total: all.length, limit, offset });
+    // `total_count` is the canonical field name (matches
+    // /retrieve_graph_neighborhood). `total` is retained as a deprecated alias
+    // for back-compat with pre-existing clients. See issue #369.
+    return res.json({
+      relationships: paginated,
+      total,
+      total_count: total,
+      limit,
+      offset,
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -7802,77 +8639,102 @@ app.post("/retrieve_related_entities", async (req, res) => {
       entity_id,
       relationship_types,
       direction = "both",
-      max_hops: _max_hops = 1,
+      max_hops = 1,
       include_entities = true,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
 
-    // Simple 1-hop query implementation
+    // Breadth-first traversal up to max_hops. Mirrors the MCP handler
+    // (server.ts retrieveRelatedEntities): a visited set provides cycle
+    // protection and de-duplicates entities discovered via multiple paths.
+    // max_hops defaults to 1, so single-hop callers see identical results.
     const relationships: any[] = [];
+    const visited = new Set<string>([entity_id]);
+    const relatedIds = new Set<string>();
+    let currentLevel = [entity_id];
 
-    // Get outbound relationships
-    if (direction === "outbound" || direction === "both") {
-      let query = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("source_entity_id", entity_id)
-        .eq("user_id", userId)
-        .order("relationship_key", { ascending: true });
+    for (let hop = 0; hop < max_hops; hop++) {
+      const nextLevel: string[] = [];
 
-      if (relationship_types && relationship_types.length > 0) {
-        query = query.in("relationship_type", relationship_types);
+      for (const currentId of currentLevel) {
+        // Get outbound relationships
+        if (direction === "outbound" || direction === "both") {
+          let query = db
+            .from("relationship_snapshots")
+            .select("*")
+            .eq("source_entity_id", currentId)
+            .eq("user_id", userId)
+            .order("relationship_key", { ascending: true });
+
+          if (relationship_types && relationship_types.length > 0) {
+            query = query.in("relationship_type", relationship_types);
+          }
+
+          const { data, error } = await query;
+          if (!error && data) {
+            relationships.push(...data);
+            for (const rel of data) {
+              if (!visited.has(rel.target_entity_id)) {
+                visited.add(rel.target_entity_id);
+                relatedIds.add(rel.target_entity_id);
+                nextLevel.push(rel.target_entity_id);
+              }
+            }
+          }
+        }
+
+        // Get inbound relationships
+        if (direction === "inbound" || direction === "both") {
+          let query = db
+            .from("relationship_snapshots")
+            .select("*")
+            .eq("target_entity_id", currentId)
+            .eq("user_id", userId)
+            .order("relationship_key", { ascending: true });
+
+          if (relationship_types && relationship_types.length > 0) {
+            query = query.in("relationship_type", relationship_types);
+          }
+
+          const { data, error } = await query;
+          if (!error && data) {
+            relationships.push(...data);
+            for (const rel of data) {
+              if (!visited.has(rel.source_entity_id)) {
+                visited.add(rel.source_entity_id);
+                relatedIds.add(rel.source_entity_id);
+                nextLevel.push(rel.source_entity_id);
+              }
+            }
+          }
+        }
       }
 
-      const { data, error } = await query;
-      if (!error && data) {
-        relationships.push(...data);
-      }
-    }
-
-    // Get inbound relationships
-    if (direction === "inbound" || direction === "both") {
-      let query = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("target_entity_id", entity_id)
-        .eq("user_id", userId)
-        .order("relationship_key", { ascending: true });
-
-      if (relationship_types && relationship_types.length > 0) {
-        query = query.in("relationship_type", relationship_types);
-      }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        relationships.push(...data);
-      }
+      if (nextLevel.length === 0) break;
+      currentLevel = nextLevel;
     }
 
     // Get entities if requested
     let entities: any[] = [];
-    if (include_entities && relationships.length > 0) {
-      const relatedIds = new Set<string>();
-      relationships.forEach((rel) => {
-        if (rel.source_entity_id !== entity_id) relatedIds.add(rel.source_entity_id);
-        if (rel.target_entity_id !== entity_id) relatedIds.add(rel.target_entity_id);
-      });
+    if (include_entities && relatedIds.size > 0) {
+      const { data, error } = await db
+        .from("entities")
+        .select("*")
+        .eq("user_id", userId)
+        .order("canonical_name", { ascending: true })
+        .order("id", { ascending: true })
+        .in("id", Array.from(relatedIds));
 
-      if (relatedIds.size > 0) {
-        const { data, error } = await db
-          .from("entities")
-          .select("*")
-          .eq("user_id", userId)
-          .order("canonical_name", { ascending: true })
-          .order("id", { ascending: true })
-          .in("id", Array.from(relatedIds));
-
-        if (!error && data) {
-          entities = data;
-        }
+      if (!error && data) {
+        entities = data;
       }
     }
 
-    logDebug("Success:retrieve_related_entities", req, { entity_id, count: relationships.length });
+    logDebug("Success:retrieve_related_entities", req, {
+      entity_id,
+      count: relationships.length,
+      max_hops,
+    });
     return res.json({ relationships, entities });
   } catch (error) {
     return handleApiError(
@@ -7941,11 +8803,19 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         result.total_count = total;
         result.has_more = offset + limit < total;
 
+        // Deterministic ordering before paginating: this query previously had no
+        // `.order()` clause, so Postgres scan order (unspecified) decided which
+        // rows landed on each page — non-deterministic across calls. Order by the
+        // mutable `last_observation_at` first, then by the primary key
+        // `relationship_key` as a stable, unique tiebreaker so pagination is
+        // reproducible (docs/architecture/determinism.md). See issue #368.
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
           .eq("user_id", userId)
+          .order("last_observation_at", { ascending: false })
+          .order("relationship_key", { ascending: true })
           .range(offset, offset + limit - 1);
 
         if (!relError) {
@@ -7971,8 +8841,14 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
               .eq("user_id", userId);
 
             if (!relatedEntitiesError) {
+              // Expose the canonical `entity_id` (issue #276) so callers can
+              // correlate against relationships[].source_entity_id /
+              // target_entity_id. Keep `id` as a deprecated alias with the same
+              // value for one minor release to avoid breaking callers that read
+              // the legacy field. Prefer `entity_id`; `id` will be removed later.
               result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
                 entity_id: id,
+                id,
                 ...rest,
               }));
             }
@@ -7998,7 +8874,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
         if (sourceIds.length > 0) {
           const { data: sources, error: srcError } = await db
-            .from("source")
+            .from("sources")
             .select("*")
             .in("id", sourceIds)
             .eq("user_id", userId);
@@ -8011,7 +8887,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
     } else if (node_type === "source") {
       // Get source
       const { data: source, error: srcError } = await db
-        .from("source")
+        .from("sources")
         .select("*")
         .eq("id", node_id)
         .eq("user_id", userId)
@@ -8284,8 +9160,12 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           reporter_app_version: parsed.data.reporter_app_version,
           reporter_ci_run_id: parsed.data.reporter_ci_run_id,
           reporter_patch_source_id: parsed.data.reporter_patch_source_id,
+          ...(parsed.data.target_repo ? { target_repo: parsed.data.target_repo } : {}),
           ...(parsed.data.entity_ids_to_link
             ? { entity_ids_to_link: parsed.data.entity_ids_to_link }
+            : {}),
+          ...(parsed.data.conversation_turn_id
+            ? { conversation_turn_id: parsed.data.conversation_turn_id }
             : {}),
         });
       })();
@@ -8455,6 +9335,38 @@ app.post("/delete_relationship", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { relationship_type, source_entity_id, target_entity_id, reason } = parsed.data;
 
+    // Discovery guard (#277): deletion requires the exact relationship_type
+    // between two entities, but a caller who does not know the type can only
+    // guess. Without this check the soft-delete silently "succeeds" by writing
+    // a deletion observation for an edge that never existed, masking the gap.
+    // Verify a live (non-deleted) relationship matches the supplied triple
+    // first; if not, return 404 with a structured hint pointing to
+    // `list_relationships` for type discovery.
+    const { relationshipsService } = await import("./services/relationships.js");
+    const liveRelationship = await relationshipsService.getRelationshipSnapshot(
+      relationship_type,
+      source_entity_id,
+      target_entity_id,
+      userId
+    );
+    if (!liveRelationship) {
+      return sendError(
+        res,
+        404,
+        "RESOURCE_NOT_FOUND",
+        "No live relationship matches the supplied relationship_type, source_entity_id, and target_entity_id.",
+        {
+          relationship_type,
+          source_entity_id,
+          target_entity_id,
+          hint:
+            "Call list_relationships with source_entity_id and target_entity_id to discover the " +
+            "relationship_type(s) between these two entities, then retry delete_relationship with " +
+            "one of the returned types.",
+        }
+      );
+    }
+
     const { softDeleteRelationship } = await import("./services/deletion.js");
 
     // Construct relationship key
@@ -8621,6 +9533,43 @@ app.post("/analyze_schema_candidates", async (req, res) => {
       "Failed to analyze schema candidates",
       "DB_QUERY_FAILED",
       "APIError:analyze_schema_candidates"
+    );
+  }
+});
+
+// POST /audit_undeclared_fragments - Report undeclared raw_fragments awaiting
+// schema declaration (#1576). Delegates to the shared service so the HTTP and
+// MCP surfaces return the same audit.
+app.post("/audit_undeclared_fragments", async (req, res) => {
+  const parsed = AuditUndeclaredFragmentsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:audit_undeclared_fragments", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+    const audit = await schemaRecommendationService.auditUndeclaredFragments({
+      entity_type: parsed.data.entity_type,
+      user_id: userId,
+    });
+
+    return res.json({
+      audit,
+      total_entity_types: audit.length,
+      total_undeclared_fields: audit.reduce((sum, t) => sum + t.undeclared_fields.length, 0),
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to audit undeclared fragments",
+      "DB_QUERY_FAILED",
+      "APIError:audit_undeclared_fragments"
     );
   }
 });
@@ -8882,24 +9831,78 @@ app.post("/correct", async (req, res) => {
       admission: getCurrentAAuthAdmission(),
     });
 
-    const { createCorrection } = await import("./services/correction.js");
+    // Issue #1540 / BLOCKING 2+3: resolve the schema and the `unknown_field`
+    // determination through the SAME shared helper the MCP correct() tool uses,
+    // so the two transports cannot diverge. A schema-registry IO failure
+    // propagates (it is NOT coerced to "declared field" — product principle
+    // 10.2); a missing schema throws CorrectionSchemaNotFoundError, surfaced as
+    // ERR_NO_SCHEMA_FOR_ENTITY_TYPE. Both reach the catch below.
+    const { createCorrection, resolveCorrectionSchema, buildCorrectionResponse } =
+      await import("./services/correction.js");
+
+    const { schemaVersion: correctionSchemaVersion, isUnknownField } =
+      await resolveCorrectionSchema(entity_type, field, userId);
+
     const result = await createCorrection({
       entity_id,
       entity_type,
       field,
       value,
-      schema_version: "1.0",
+      schema_version: correctionSchemaVersion,
       user_id: userId,
       idempotency_key,
     });
 
+    if (isUnknownField) {
+      try {
+        const { storeFragment } = await import("./services/raw_fragments.js");
+        await storeFragment({
+          sourceId: result.observation_id,
+          userId,
+          entityId: entity_id,
+          entityType: entity_type,
+          schemaVersion: correctionSchemaVersion,
+          key: field,
+          value,
+          reason: "unknown_field",
+        });
+      } catch (fragErr) {
+        logger.warn(
+          `[correct] raw_fragments mirror failed for ${entity_type}.${field}: ${
+            fragErr instanceof Error ? fragErr.message : String(fragErr)
+          }`
+        );
+      }
+    }
+
     logDebug("Success:correct", req, { entity_id, field });
+    // Unified body shared with the MCP path (declared verbatim in
+    // openapi.yaml CorrectResponse). The transport-only `success` and `snapshot`
+    // fields are merged on top for HTTP callers.
     return res.json({
       success: true,
-      observation_id: result.observation_id,
       snapshot: result.snapshot,
+      ...buildCorrectionResponse({
+        observation_id: result.observation_id,
+        entity_id,
+        entity_type,
+        field,
+        value,
+        isUnknownField,
+      }),
     });
   } catch (error) {
+    // Parity with the MCP correct() path: a missing schema is a client error
+    // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
+    // IO failure is NOT swallowed here — it falls through to the generic 500
+    // handler below instead of being coerced into a "declared field" outcome.
+    const { CorrectionSchemaNotFoundError } = await import("./services/correction.js");
+    if (error instanceof CorrectionSchemaNotFoundError) {
+      logWarn("ValidationError:correct", req, { code: error.code });
+      return res
+        .status(400)
+        .json(buildErrorEnvelope(error.code, error.message, { entity_type: error.entityType }));
+    }
     return handleApiError(
       req,
       res,
@@ -8912,6 +9915,70 @@ app.post("/correct", async (req, res) => {
 });
 
 // POST /get_authenticated_user - Get authenticated user ID
+// FU-2026-05-003: GET /conversations/:conversation_id/turn-index — Inspector
+// per-turn anchor sections and turn timeline sidebar.
+app.get("/conversations/:conversation_id/turn-index", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const identifier = String(req.params.conversation_id ?? "").trim();
+    if (!identifier) {
+      return sendError(
+        res,
+        400,
+        "ERR_TURN_INDEX_BAD_REQUEST",
+        "conversation_id path parameter is required"
+      );
+    }
+    const { computeConversationTurnIndex, ConversationTurnIndexError } =
+      await import("./services/conversation_turn_index.js");
+    try {
+      const result = await computeConversationTurnIndex({
+        userId,
+        conversationIdentifier: identifier,
+      });
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof ConversationTurnIndexError) {
+        return sendError(res, err.status, err.code, err.message);
+      }
+      throw err;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to compute conversation turn index");
+  }
+});
+
+// FU-2026-05-002: neotoma_turn_summary — computes per-turn status line.
+app.post("/turn_summary", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, undefined);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const conversationId =
+      typeof body.conversation_id === "string" ? body.conversation_id : undefined;
+    const turnKey = typeof body.turn_key === "string" ? body.turn_key : undefined;
+    if (!conversationId || !turnKey) {
+      return sendError(
+        res,
+        400,
+        "ERR_TURN_SUMMARY_BAD_REQUEST",
+        "conversation_id and turn_key are required"
+      );
+    }
+    const { computeTurnSummary, TurnSummaryError } = await import("./services/turn_summary.js");
+    try {
+      const result = await computeTurnSummary({ userId, conversationId, turnKey });
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof TurnSummaryError) {
+        return sendError(res, err.status, err.code, err.message);
+      }
+      throw err;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to compute turn summary");
+  }
+});
+
 app.post("/get_authenticated_user", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, undefined);
@@ -8955,6 +10022,7 @@ app.get("/session", async (req, res) => {
       ? connectionIdHeader[0]
       : connectionIdHeader;
     const rawClientName = typeof req.query.client_name === "string" ? req.query.client_name : null;
+    const appOrigin = resolvePublicAppOriginFromRequest(req);
     const identity = getAgentIdentityFromRequest(req, {
       clientName: rawClientName,
       clientVersion: typeof req.query.client_version === "string" ? req.query.client_version : null,
@@ -8966,6 +10034,8 @@ app.get("/session", async (req, res) => {
       middlewareDecision: getAttributionDecisionFromRequest(req),
       rawClientInfoName: rawClientName,
       admission: getAAuthAdmissionFromRequest(req),
+      appOrigin: appOrigin.origin,
+      originSource: appOrigin.source,
     });
     return res.json(session);
   } catch (error) {
@@ -9253,10 +10323,12 @@ app.get("/events/stream", async (req, res) => {
       (await getAuthenticatedUserId(req, req.query.user_id as string | undefined));
     const { getSubscriptionStatus } =
       await import("./services/subscriptions/subscription_actions.js");
-    const { registerSseClient, getRingEntriesAfter } =
+    const { registerSseClient, getRingEntriesAfter, ringHasId } =
       await import("./services/subscriptions/sse_hub.js");
     const { subscriptionMatchesEvent } =
       await import("./services/subscriptions/subscription_types.js");
+    const { getEventsAfterSeq, hasDurableCursor } =
+      await import("./services/subscriptions/event_log.js");
 
     const sub = await getSubscriptionStatus({ userId, subscription_id });
     if (!sub) {
@@ -9285,12 +10357,69 @@ app.get("/events/stream", async (req, res) => {
     const lastEventIdHeader = req.headers["last-event-id"];
     const lastEventId = Array.isArray(lastEventIdHeader) ? lastEventIdHeader[0] : lastEventIdHeader;
 
-    for (const entry of getRingEntriesAfter(lastEventId, (ev) =>
-      subscriptionMatchesEvent(sub, ev)
-    )) {
-      res.write(`id: ${entry.id}\n`);
-      res.write(`event: ${entry.event.event_type}\n`);
-      res.write(`data: ${JSON.stringify(entry.event)}\n\n`);
+    // Resume strategy (#1464). The event id is the durable monotonic `seq`, so
+    // it survives restarts. Resolve resume against, in order:
+    //   1. the in-memory ring (hot path, fastest);
+    //   2. the durable event log, if the cursor is still within retention but
+    //      no longer in the ring (e.g. after a restart or a gap > buffer);
+    //   3. a one-time `gap` signal, only when the cursor predates the retained
+    //      window — a true unrecoverable gap that requires a full reconcile.
+    const writeEvent = (id: string, ev: SubstrateEvent): void => {
+      res.write(`id: ${id}\n`);
+      res.write(`event: ${ev.event_type}\n`);
+      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+    };
+
+    if (lastEventId !== undefined && !ringHasId(lastEventId)) {
+      const cursorSeq = Number(lastEventId);
+      if (Number.isFinite(cursorSeq) && hasDurableCursor(userId, cursorSeq)) {
+        // Recoverable from durable storage: replay from the log, paging until
+        // drained, then continue from the ring tail for anything newer.
+        // Push the subscription's column-backed predicates into SQL so a narrow
+        // subscription does not scan the whole user log. Payload-only predicates
+        // (entity_type, peer-loop) are still enforced by subscriptionMatchesEvent
+        // below — the SQL filter only narrows, never widens.
+        const durableFilter = {
+          eventTypes: sub.watch_event_types,
+          entityIds: sub.watch_entity_ids,
+        };
+        let after = cursorSeq;
+        for (;;) {
+          const batch = getEventsAfterSeq(userId, after, 1000, durableFilter);
+          if (batch.length === 0) break;
+          for (const d of batch) {
+            if (subscriptionMatchesEvent(sub, d.event)) writeEvent(String(d.seq), d.event);
+          }
+          after = batch[batch.length - 1]!.seq;
+          if (batch.length < 1000) break;
+        }
+      } else {
+        // Cursor is gone (older than retention, or never valid): signal the gap
+        // so the client reconciles, then resume from the current ring head.
+        res.write(`event: gap\n`);
+        res.write(
+          `data: ${JSON.stringify({
+            reason: "cursor_beyond_retention",
+            requested_last_event_id: lastEventId,
+            message:
+              "Requested Last-Event-ID is older than the durable event-log " +
+              "retention window (or not a valid cursor). Replaying from the " +
+              "current head; reconcile via a full read for gap-free delivery.",
+          })}\n\n`
+        );
+        for (const entry of getRingEntriesAfter(undefined, (ev) =>
+          subscriptionMatchesEvent(sub, ev)
+        )) {
+          writeEvent(entry.id, entry.event);
+        }
+      }
+    } else {
+      // Cursor is in the ring (or this is a fresh subscriber): serve from ring.
+      for (const entry of getRingEntriesAfter(lastEventId, (ev) =>
+        subscriptionMatchesEvent(sub, ev)
+      )) {
+        writeEvent(entry.id, entry.event);
+      }
     }
 
     const client = {
@@ -9636,7 +10765,42 @@ app.get("/openapi_actions.yaml", (req, res) => {
 // Documentation routes (FU-301) - must be before SPA fallback
 // setupDocumentationRoutes(app); // TODO: Re-enable after implementing routes/documentation.ts
 
+// Content-negotiation SPA fallback (plan ent_1f176dbbe9a39e6bbad27f1f).
+//
+// Registered LAST so it only matches paths no API route handled. For an
+// unmatched GET with Accept: text/html, serves the Inspector shell so the
+// SPA's client router can resolve the path. JSON / curl / agent requests
+// fall through to the default 404. API-only prefixes (/me, /server-info,
+// /sandbox/session, /.well-known/*, /mcp/*, /oauth/*, etc.) are explicitly
+// excluded so they never serve HTML even with Accept: text/html.
+//
+// Mutations (POST/PATCH/DELETE) are not dispatched — only GET / HEAD.
+installInspectorSpaFallback(app, process.env, logger);
+
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
+
+/**
+ * Emit a boot-time banner naming the resolved sandbox mode. Writes directly
+ * to stderr (not via `logger`) so the banner is visible even when log level
+ * is set to silent — operators must see refuse-mode warnings on every start.
+ */
+function emitSandboxBootBanner(
+  mode: NeotomaSandboxModeName,
+  reason: string,
+  shouldRefuseBoot: boolean,
+  refusePolicy: "warn" | "enforce",
+  productionEnv: boolean
+): void {
+  // Line construction lives in sandbox_mode.ts (pure, unit-tested). See #1505.
+  const lines = buildSandboxBootBannerLines({
+    mode,
+    reason,
+    shouldRefuseBoot,
+    refusePolicy,
+    productionEnv,
+  });
+  process.stderr.write(lines.join("\n"));
+}
 
 /** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
 function tryListen(
@@ -9720,6 +10884,15 @@ export async function startHTTPServer() {
     logger.warn(`[Plans] failed to seed plan schema: ${(err as Error).message}`);
   }
 
+  // Seed `skill` schema (harness-mirrored skills, slash-command palette).
+  try {
+    const { seedSkillSchema } = await import("./services/skills/seed_schema.js");
+    await seedSkillSchema();
+    logger.info("[Skills] skill schema seeded");
+  } catch (err) {
+    logger.warn(`[Skills] failed to seed skill schema: ${(err as Error).message}`);
+  }
+
   try {
     const { seedSubscriptionSchema } = await import("./services/subscriptions/seed_schema.js");
     await seedSubscriptionSchema();
@@ -9761,6 +10934,97 @@ export async function startHTTPServer() {
         `[Sandbox] failed to seed sandbox_abuse_report schema: ${(err as Error).message}`
       );
     }
+  }
+
+  // ----------------------------------------------------------------------
+  // Sandbox mode banner (plan ent_b4958d038bd41e8694fe0aef Phase 2).
+  //
+  // Resolve the effective sandbox mode at boot and emit a banner. The
+  // resolver is informational in this first cut: when refusePolicy=warn
+  // (default), a `refuse` verdict logs a loud advisory pointer but does
+  // not halt boot. Set NEOTOMA_REFUSE_MODE=enforce to make the refuse
+  // verdict abort startup with a non-zero exit code.
+  //
+  // The `authConfigured` signal is conservative: the in-memory public-key
+  // registry starts empty (keys register on first verified request), so
+  // boot-time we can only observe explicit operator signals
+  // (NEOTOMA_REQUIRE_AUTH=1). Future operator-config integration can
+  // extend this without changing the resolver shape.
+  //
+  // The bind topology is interpreted from the host the listener will use.
+  // express's app.listen(port) with no host binds to 0.0.0.0/::, which is
+  // explicitly non-loopback — that's the v0.11.1 advisory shape when no
+  // auth is configured. Operators on loopback-only deployments should set
+  // NEOTOMA_HTTP_HOST=127.0.0.1.
+  // ----------------------------------------------------------------------
+  try {
+    const hostEnv = (process.env.NEOTOMA_HTTP_HOST || "").trim().toLowerCase();
+    const loopbackBindOnly =
+      hostEnv === "127.0.0.1" || hostEnv === "localhost" || hostEnv === "::1";
+    const productionEnv =
+      (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
+      (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod";
+    const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
+    const refusePolicy = resolveRefusePolicy();
+    const forceMode = resolveForceMode();
+    // Hard-reject FORCE_MODE in production envs. The resolver itself ignores
+    // the override under productionEnv, but a misconfigured deploy that sets
+    // both NEOTOMA_ENV=production AND NEOTOMA_FORCE_MODE is almost certainly
+    // a mistake — refuse boot rather than silently dropping the override.
+    if (forceMode && productionEnv) {
+      process.stderr.write(
+        `\n[neotoma] FATAL: NEOTOMA_FORCE_MODE=${forceMode} is set but NEOTOMA_ENV=production. ` +
+          `The force-mode override is a dev-only affordance and is not honored in production. ` +
+          `Unset NEOTOMA_FORCE_MODE or change NEOTOMA_ENV. Exit code 1.\n\n`
+      );
+      process.exit(1);
+    }
+    if (forceMode) {
+      process.stderr.write(
+        `\n[neotoma] WARNING: NEOTOMA_FORCE_MODE=${forceMode} is active. ` +
+          `This is a dev-only override; it bypasses the normal mode resolution.\n\n`
+      );
+    }
+    const verdict = resolveSandboxMode({
+      authConfigured,
+      loopbackBindOnly,
+      productionEnv,
+      hostedSandboxEnabled: isSandboxMode(),
+      refusePolicy,
+      forceMode,
+    });
+    _resolvedServerMode = verdict.mode;
+    emitSandboxBootBanner(
+      verdict.mode,
+      verdict.reason,
+      verdict.shouldRefuseBoot,
+      refusePolicy,
+      productionEnv
+    );
+    if (verdict.shouldRefuseBoot) {
+      // Refuse mode + enforce policy: hard exit. The banner above already
+      // explains the why; do not start the listener.
+      process.exit(1);
+    }
+    if (verdict.mode === "local_sandbox") {
+      // Activate per-install sandbox principal. From this point forward,
+      // unauthenticated local requests resolve to the fingerprinted sandbox
+      // user rather than the shared nil-UUID LOCAL_DEV_USER_ID fallback.
+      _localSandboxActive = true;
+      try {
+        const sandboxUser = ensureLocalSandboxUser();
+        logger.info(`[sandbox_mode] local_sandbox principal provisioned: ${sandboxUser.id}`);
+      } catch (err) {
+        // DB may not be initialised yet on very first boot; the principal will
+        // be provisioned lazily on the first request. Do not block startup.
+        logger.warn(
+          `[sandbox_mode] eager sandbox principal provisioning failed (will retry on first request): ${(err as Error).message}`
+        );
+      }
+    }
+  } catch (err) {
+    // Banner emission must never block boot in warn mode.
+    logger.warn(`[sandbox_mode] banner emission failed: ${(err as Error).message}`);
   }
 
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;

@@ -3,6 +3,31 @@ import path from "path";
 import { config } from "../../config.js";
 import Database, { type SqliteDatabase } from "./sqlite_driver.js";
 
+/**
+ * Milliseconds a SQLite connection waits for a contended lock before failing
+ * with SQLITE_BUSY. better-sqlite3 defaults to 0 (fail immediately), which
+ * surfaces as a hard error the moment a second process (a backup job, a
+ * migration, an instance-per-tenant host running an out-of-band task) touches
+ * the write lock. A non-zero busy_timeout makes that case degrade to a short
+ * wait-and-retry instead. Override via NEOTOMA_SQLITE_BUSY_TIMEOUT_MS; default
+ * 5000ms. See docs/infrastructure/multi_tenant_deployment_topology.md.
+ */
+export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
+  0,
+  Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
+);
+
+/**
+ * Apply the connection PRAGMAs every Neotoma SQLite handle needs: WAL for
+ * concurrent readers alongside a single writer, foreign-key enforcement, and a
+ * busy_timeout so lock contention waits rather than throwing immediately.
+ */
+function applyConnectionPragmas(db: SqliteDatabase): void {
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+}
+
 let cachedDb: SqliteDatabase | null = null;
 
 const SCHEMA_STATEMENTS = [
@@ -296,6 +321,19 @@ const SCHEMA_STATEMENTS = [
     entity_type TEXT NOT NULL,
     merged INTEGER DEFAULT 0
   )`,
+  // Durable substrate-event log (#1464 Tier 2): persists every emitted
+  // SubstrateEvent so SSE resume survives a server restart or a gap larger than
+  // the in-memory ring. `seq` is the durable monotonic cursor (distinct from
+  // the in-memory ring id). Pruned to NEOTOMA_EVENT_RETENTION_DAYS (default 7).
+  `CREATE TABLE IF NOT EXISTS substrate_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    ring_id TEXT,
+    event_type TEXT NOT NULL,
+    user_id TEXT,
+    entity_id TEXT,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
 ];
 
 /** Legacy tables that may exist in older neotoma.db files. Dropped on open so DB matches canonical schema. */
@@ -380,6 +418,18 @@ function ensureSchema(db: SqliteDatabase): void {
 
     addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
 
+    // Materialized relationship liveness (#1570). Derived from the
+    // highest-priority `relationship_observations` row's `metadata._deleted`
+    // for each `relationship_key` — the same rule `filterDeletedRelationships`
+    // applies — so the default `list_relationships` read can exclude
+    // soft-deleted edges via a DB predicate instead of loading the full
+    // matching set into memory and filtering in process. DEFAULT 1 (live)
+    // keeps pre-existing rows behaving exactly as before until the one-time
+    // backfill below recomputes them; the value is re-stamped on every
+    // snapshot recompute (computeRelationshipSnapshot), so observations remain
+    // the source of truth and the column self-heals.
+    addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
+
     db.prepare(
       `CREATE TABLE IF NOT EXISTS sandbox_sessions (
       user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
@@ -398,12 +448,122 @@ function ensureSchema(db: SqliteDatabase): void {
       "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
     ).run();
 
+    // Graph-traversal indexes (#1467): every hop of retrieve_related_entities /
+    // retrieve_graph_neighborhood filters relationship_snapshots by
+    // (source_entity_id, user_id) for outbound and (target_entity_id, user_id)
+    // for inbound. Without these, each hop full-scans the table, so deep
+    // traversal cost grows with total table size. Composite indexes turn each
+    // hop into an indexed lookup, flattening traversal latency vs graph size
+    // (measured: 3-hop over 50k relationships dropped from ~777ms to ~6ms).
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
+    ).run();
+    // Liveness-aware composites (#1570): the default list_relationships read
+    // filters by (source|target entity, user_id, is_live) before paginating at
+    // the DB. Including is_live in the index keeps that access path covered so
+    // the live-edge filter never falls back to a table scan.
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
+    ).run();
+
+    // Durable substrate-event log (#1464 Tier 2): resume queries read by
+    // (user_id, seq); pruning reads by created_at.
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
+    ).run();
+
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
     db.prepare(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
     ).run();
+
+    // One-time backfill of relationship_snapshots.is_live (#1570). New rows are
+    // stamped at write time by computeRelationshipSnapshot, but pre-existing
+    // rows and rows written before this column existed all default to 1 (live).
+    // Recompute liveness from the highest-priority deletion observation per
+    // relationship_key — the same rule filterDeletedRelationships uses — and
+    // flip stale rows to 0. Idempotent: re-running only updates rows whose
+    // materialized is_live disagrees with the observation-derived value, so it
+    // is a no-op once converged. Guarded so it only runs when there is at least
+    // one deletion observation to reconcile (the common case has none).
+    backfillRelationshipLiveness(db);
   });
   transaction();
+}
+
+/**
+ * Reconcile `relationship_snapshots.is_live` against the observation log
+ * (#1570). A relationship is live unless the highest-priority (then most
+ * recent) `relationship_observations` row for its `relationship_key` carries
+ * `metadata._deleted === true` — mirroring `filterDeletedRelationships`. Runs
+ * inside `ensureSchema`'s transaction; idempotent and cheap when no deletion
+ * observations exist.
+ */
+function backfillRelationshipLiveness(db: SqliteDatabase): void {
+  // Fast exit: if no deletion observations exist, every snapshot is live and
+  // the column default (1) is already correct — nothing to reconcile.
+  const deletionProbe = db
+    .prepare(
+      `SELECT 1 FROM relationship_observations
+       WHERE json_extract(metadata, '$._deleted') = 1
+          OR json_extract(metadata, '$._deleted') = 'true'
+       LIMIT 1`
+    )
+    .get();
+  if (!deletionProbe) return;
+
+  // Derive the dead set: relationship_keys whose highest-priority (source_priority
+  // DESC, then observed_at DESC) observation is a deletion. SQLite window-function
+  // ranking selects one winning observation per key, matching the app-side rule.
+  const deadRows = db
+    .prepare(
+      `WITH ranked AS (
+         SELECT relationship_key,
+                metadata,
+                ROW_NUMBER() OVER (
+                  PARTITION BY relationship_key
+                  ORDER BY source_priority DESC, observed_at DESC
+                ) AS rn
+         FROM relationship_observations
+       )
+       SELECT relationship_key FROM ranked
+       WHERE rn = 1
+         AND (json_extract(metadata, '$._deleted') = 1
+              OR json_extract(metadata, '$._deleted') = 'true')`
+    )
+    .all() as { relationship_key: string }[];
+
+  const deadKeys = new Set(deadRows.map((r) => r.relationship_key));
+
+  // Flip snapshots to dead where the observation log says so; restore any that
+  // were marked dead but whose winning observation is no longer a deletion
+  // (e.g. a later re-assertion). Only rows that disagree are written.
+  const setDead = db.prepare(
+    "UPDATE relationship_snapshots SET is_live = 0 WHERE relationship_key = ? AND is_live <> 0"
+  );
+  const setLive = db.prepare(
+    "UPDATE relationship_snapshots SET is_live = 1 WHERE relationship_key = ? AND is_live <> 1"
+  );
+
+  const allKeys = db.prepare("SELECT relationship_key FROM relationship_snapshots").all() as {
+    relationship_key: string;
+  }[];
+  for (const { relationship_key } of allKeys) {
+    if (deadKeys.has(relationship_key)) {
+      setDead.run(relationship_key);
+    } else {
+      setLive.run(relationship_key);
+    }
+  }
 }
 
 /**
@@ -432,8 +592,7 @@ export function getSqliteDb(): SqliteDatabase {
   mkdirSync(dir, { recursive: true });
 
   const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  applyConnectionPragmas(db);
 
   ensureSchema(db);
   cachedDb = db;
@@ -449,8 +608,7 @@ export function ensureSqliteDbInitialized(dbPath: string): void {
   mkdirSync(dir, { recursive: true });
   const db = new Database(dbPath);
   try {
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
+    applyConnectionPragmas(db);
     ensureSchema(db);
   } finally {
     db.close();

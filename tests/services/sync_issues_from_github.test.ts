@@ -116,7 +116,11 @@ describe("syncIssuesFromGitHub", () => {
       .mockResolvedValueOnce([comment(101), comment(102)])
       .mockResolvedValueOnce([comment(201)]);
 
-    const result = await syncIssuesFromGitHub(ops, { state: "all", labels: ["bug"], since: "2026-05-01T00:00:00Z" });
+    const result = await syncIssuesFromGitHub(ops, {
+      state: "all",
+      labels: ["bug"],
+      since: "2026-05-01T00:00:00Z",
+    });
 
     expect(mockListIssues).toHaveBeenCalledWith({
       state: "all",
@@ -162,18 +166,90 @@ describe("syncIssuesFromGitHub", () => {
     await syncIssuesFromGitHub(ops);
     await syncIssuesFromGitHub(ops);
 
+    // The issue key includes updated_at so a changed issue gets a fresh key,
+    // but an unchanged issue re-synced twice keeps the same key (dedup).
     expect(store).toHaveBeenCalledTimes(4);
     expect(seenIdempotencyKeys).toEqual(
       new Set([
-        "issue-sync-test/repo-1",
-        "issue-comment-sync-test/repo-1-101",
-      ]),
+        "issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2",
+        "issue-comment-sync-test/repo-1-101-2026-05-01T00:00:00Z-m2",
+      ])
     );
+  });
+
+  it("gives a changed issue a fresh idempotency key (avoids ERR_IDEMPOTENCY_MISMATCH)", async () => {
+    const { ops, seenIdempotencyKeys } = createOps();
+    mockListIssueComments.mockResolvedValue([]);
+
+    // Same issue number, different content + later updated_at (as GitHub returns
+    // after an edit). The store must use a distinct key, or Neotoma rejects the
+    // write as a mismatch and the issue never updates locally.
+    const v1 = { ...issue(1, "Original title"), updated_at: "2026-05-01T00:00:00Z" };
+    const v2 = { ...issue(1, "Edited title"), updated_at: "2026-05-02T12:00:00Z" };
+
+    mockListIssues.mockResolvedValueOnce([v1]);
+    await syncIssuesFromGitHub(ops);
+    mockListIssues.mockResolvedValueOnce([v2]);
+    await syncIssuesFromGitHub(ops);
+
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-01T00:00:00Z-m2")).toBe(true);
+    expect(seenIdempotencyKeys.has("issue-sync-test/repo-1-2026-05-02T12:00:00Z-m2")).toBe(true);
+  });
+
+  it("re-stores an unchanged issue with a byte-identical payload (no wall-clock drift)", async () => {
+    // The idempotency check hashes the FULL entity payload. A wall-clock
+    // last_synced_at/data_source made the payload differ every run, so an
+    // unchanged issue under its stable updated_at key tripped
+    // ERR_IDEMPOTENCY_MISMATCH. Provenance is now derived from updated_at, so
+    // two runs over identical GitHub data must produce identical store payloads.
+    const { ops, store } = createOps();
+    mockListIssues.mockResolvedValue([issue(1)]);
+    mockListIssueComments.mockResolvedValue([]);
+
+    await syncIssuesFromGitHub(ops);
+    const firstPayload = JSON.stringify(store.mock.calls[0]?.[0]?.entities);
+
+    store.mockClear();
+    mockListIssues.mockResolvedValue([issue(1)]);
+    await syncIssuesFromGitHub(ops);
+    const secondPayload = JSON.stringify(store.mock.calls[0]?.[0]?.entities);
+
+    expect(secondPayload).toBe(firstPayload);
+    // And provenance reflects the issue's updated_at, not wall-clock.
+    const issueEntity = store.mock.calls[0]?.[0]?.entities?.[0] as Record<string, unknown>;
+    expect(issueEntity.last_synced_at).toBe("2026-05-01T00:00:00Z");
+    expect(issueEntity.data_source).toContain("2026-05-01");
+  });
+
+  it("gives a comment a fresh key when its issue's updated_at changes", async () => {
+    // The comment store re-stores the issue entity (deterministic, tracks
+    // issue.updated_at). When the issue changes, the comment payload changes
+    // too, so its key must include issue.updated_at — otherwise the new content
+    // collides with the stale row under a comment.id-only key. This accumulated
+    // in production once the swarm started bumping issue.updated_at.
+    const { ops, seenIdempotencyKeys } = createOps();
+    mockListIssueComments.mockResolvedValue([comment(101)]);
+
+    mockListIssues.mockResolvedValueOnce([
+      { ...issue(1), updated_at: "2026-05-01T00:00:00Z" },
+    ]);
+    await syncIssuesFromGitHub(ops);
+    mockListIssues.mockResolvedValueOnce([
+      { ...issue(1, "Edited"), updated_at: "2026-05-02T12:00:00Z" },
+    ]);
+    await syncIssuesFromGitHub(ops);
+
+    expect(
+      seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-01T00:00:00Z-m2")
+    ).toBe(true);
+    expect(
+      seenIdempotencyKeys.has("issue-comment-sync-test/repo-1-101-2026-05-02T12:00:00Z-m2")
+    ).toBe(true);
   });
 
   describe("push leg — local public issues without github_number", () => {
     function makeEntityList(
-      entities: Array<{ entity_id: string; snapshot: Record<string, unknown> }>,
+      entities: Array<{ entity_id: string; snapshot: Record<string, unknown> }>
     ) {
       return { entities };
     }
@@ -183,6 +259,7 @@ describe("syncIssuesFromGitHub", () => {
       mockCreateIssue.mockResolvedValue({
         number: 42,
         html_url: "https://github.com/test/repo/issues/42",
+        created_at: "2026-06-09T00:00:00Z",
       });
     });
 
@@ -200,7 +277,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: ["bug"],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -209,18 +286,28 @@ describe("syncIssuesFromGitHub", () => {
         expect.objectContaining({
           title: "[redacted] Public bug",
           body: "[redacted] Details here",
-        }),
+        })
       );
-      expect(ops.correct).toHaveBeenCalledWith(
-        expect.objectContaining({
-          entity_id: "ent-public-1",
-          corrections: expect.objectContaining({
-            github_number: 42,
-            github_url: "https://github.com/test/repo/issues/42",
-            sync_pending: false,
-          }),
-        }),
+      // #1610: write-back uses per-field correct() calls (field + value +
+      // idempotency_key), NOT a `corrections` map (which fails Zod validation
+      // and caused duplicate GitHub issues on every sync).
+      const correctCalls = (ops.correct as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c) => c[0] as Record<string, unknown>
       );
+      for (const arg of correctCalls) {
+        expect(arg).not.toHaveProperty("corrections");
+        expect(arg.entity_id).toBe("ent-public-1");
+        expect(arg.entity_type).toBe("issue");
+        expect(typeof arg.field).toBe("string");
+        expect(typeof arg.idempotency_key).toBe("string");
+        expect((arg.idempotency_key as string).length).toBeGreaterThan(0);
+      }
+      const byField = Object.fromEntries(correctCalls.map((a) => [a.field, a.value]));
+      expect(byField.github_number).toBe(42);
+      expect(byField.github_url).toBe("https://github.com/test/repo/issues/42");
+      expect(byField.sync_pending).toBe(false);
+      expect(byField.last_synced_at).toBe("2026-06-09T00:00:00Z");
+
       expect(result.issues_pushed).toBe(1);
       expect(result.push_errors).toEqual([]);
     });
@@ -239,7 +326,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -262,7 +349,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -285,7 +372,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops);
@@ -308,7 +395,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
       mockCreateIssue.mockRejectedValue(new Error("GitHub 422 Unprocessable"));
 
@@ -335,7 +422,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       const result = await syncIssuesFromGitHub(ops, { push: false });
@@ -359,7 +446,7 @@ describe("syncIssuesFromGitHub", () => {
               labels: [],
             },
           },
-        ]),
+        ])
       );
 
       await syncIssuesFromGitHub(ops);
@@ -369,7 +456,7 @@ describe("syncIssuesFromGitHub", () => {
         expect.objectContaining({
           title: "[redacted] Issue with PII name",
           body: "[redacted] Contact me at private@example.com",
-        }),
+        })
       );
     });
   });

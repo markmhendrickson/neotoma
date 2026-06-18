@@ -3,18 +3,25 @@
 
 import { db } from "../db.js";
 
+export interface SnapshotFilter {
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  value?: unknown;
+}
+
 export interface EntityQueryOptions {
   userId?: string;
   entityType?: string;
+  /**
+   * Multi-type filter. When non-empty, restricts results to entities whose
+   * `entity_type` is in this list (an IN filter), OR-combined with the singular
+   * `entityType` when both are provided. An empty/omitted list applies no
+   * multi-type filter. See {@link normalizeEntityTypeFilter}.
+   */
+  entityTypes?: string[];
   includeMerged?: boolean;
   includeDeleted?: boolean;
   includeSnapshots?: boolean;
-  sortBy?:
-    | "entity_id"
-    | "canonical_name"
-    | "observation_count"
-    | "last_observation_at"
-    | "submitted_at";
+  sortBy?: string;
   sortOrder?: "asc" | "desc";
   published?: boolean;
   publishedAfter?: string;
@@ -43,6 +50,8 @@ export interface EntityQueryOptions {
     | "heuristic_name"
     | "heuristic_fallback"
     | "target_id";
+  /** Filter entities by snapshot field values. */
+  snapshotFilters?: Record<string, SnapshotFilter>;
 }
 
 export interface EntityWithProvenance {
@@ -92,6 +101,27 @@ interface EntitySnapshotRow {
 const ENTITY_BASE_SELECT =
   "id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at, created_at";
 
+/**
+ * Combine the singular `entityType` and plural `entityTypes` filters into a
+ * single deduplicated, deterministically-ordered list of entity types to
+ * filter on. Returns an empty array when neither is provided (no type filter).
+ * Blank/whitespace-only entries are dropped so an `entity_types: [""]` payload
+ * does not silently match nothing.
+ */
+export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: string[]): string[] {
+  const types = new Set<string>();
+  if (typeof entityType === "string" && entityType.trim().length > 0) {
+    types.add(entityType);
+  }
+  for (const candidate of entityTypes ?? []) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      types.add(candidate);
+    }
+  }
+  // Stable ordering keeps the generated SQL/IN clause deterministic.
+  return [...types].sort();
+}
+
 async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
   const deletedEntityIds = new Set<string>();
   if (entityIds.length === 0) {
@@ -135,6 +165,7 @@ export async function queryEntities(
   const {
     userId,
     entityType,
+    entityTypes,
     includeMerged = false,
     includeDeleted = false,
     includeSnapshots = true,
@@ -149,7 +180,25 @@ export async function queryEntities(
     updatedSince,
     createdSince,
     identityBasis,
+    snapshotFilters,
   } = options;
+
+  // Union of singular + plural type filters. Empty → no type filter.
+  const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
+  const applyTypeFilter = <
+    T extends { eq: (c: string, v: string) => T; in: (c: string, v: string[]) => T },
+  >(
+    query: T,
+    column: string
+  ): T => {
+    if (typeFilter.length === 1) {
+      return query.eq(column, typeFilter[0]);
+    }
+    if (typeFilter.length > 1) {
+      return query.in(column, typeFilter);
+    }
+    return query;
+  };
 
   // R3: when an `identity_basis` filter is set, resolve candidate entity_ids
   // from the observations table first. Distinct per entity; we only need the
@@ -196,10 +245,8 @@ export async function queryEntities(
     entityQuery = entityQuery.eq("user_id", userId);
   }
 
-  // Filter by entity type if provided
-  if (entityType) {
-    entityQuery = entityQuery.eq("entity_type", entityType);
-  }
+  // Filter by entity type(s) if provided (singular + plural union)
+  entityQuery = applyTypeFilter(entityQuery, "entity_type");
 
   // Exclude merged entities unless explicitly requested
   if (!includeMerged) {
@@ -226,10 +273,15 @@ export async function queryEntities(
     entityQuery = entityQuery.order("id", { ascending: sortBy === "entity_id" ? ascending : true });
   }
 
+  const isSnapshotFieldSort = typeof sortBy === "string" && sortBy.startsWith("snapshot.");
+  const hasSnapshotFilters = snapshotFilters && Object.keys(snapshotFilters).length > 0;
+
   const shouldUseSnapshotDrivenScan =
     sortBy === "observation_count" ||
     sortBy === "last_observation_at" ||
     sortBy === "submitted_at" ||
+    isSnapshotFieldSort ||
+    hasSnapshotFilters ||
     published !== undefined ||
     Boolean(publishedAfter) ||
     Boolean(publishedBefore);
@@ -240,9 +292,7 @@ export async function queryEntities(
     if (userId) {
       query = query.eq("user_id", userId);
     }
-    if (entityType) {
-      query = query.eq("entity_type", entityType);
-    }
+    query = applyTypeFilter(query, "entity_type");
     if (!includeMerged) {
       query = query.is("merged_to_entity_id", null);
     }
@@ -271,9 +321,7 @@ export async function queryEntities(
       if (userId) {
         snapshotQuery = snapshotQuery.eq("user_id", userId);
       }
-      if (entityType) {
-        snapshotQuery = snapshotQuery.eq("entity_type", entityType);
-      }
+      snapshotQuery = applyTypeFilter(snapshotQuery, "entity_type");
       if (effectiveEntityIds && effectiveEntityIds.length > 0) {
         snapshotQuery = snapshotQuery.in("entity_id", effectiveEntityIds);
       }
@@ -287,12 +335,46 @@ export async function queryEntities(
         snapshotQuery = snapshotQuery.lte("snapshot->>published_date", publishedBefore);
       }
 
+      if (snapshotFilters) {
+        for (const [field, filter] of Object.entries(snapshotFilters)) {
+          const col = `snapshot->>${field}`;
+          switch (filter.op) {
+            case "eq":
+              snapshotQuery = snapshotQuery.eq(col, String(filter.value));
+              break;
+            case "in":
+              if (Array.isArray(filter.value)) {
+                snapshotQuery = snapshotQuery.in(col, filter.value.map(String));
+              }
+              break;
+            case "gt":
+              snapshotQuery = snapshotQuery.gt(col, String(filter.value));
+              break;
+            case "lt":
+              snapshotQuery = snapshotQuery.lt(col, String(filter.value));
+              break;
+            case "gte":
+              snapshotQuery = snapshotQuery.gte(col, String(filter.value));
+              break;
+            case "lte":
+              snapshotQuery = snapshotQuery.lte(col, String(filter.value));
+              break;
+            case "contains":
+              snapshotQuery = snapshotQuery.ilike(col, `%${String(filter.value)}%`);
+              break;
+          }
+        }
+      }
+
       if (sortBy === "observation_count") {
         snapshotQuery = snapshotQuery.order("observation_count", { ascending });
       } else if (sortBy === "last_observation_at") {
         snapshotQuery = snapshotQuery.order("last_observation_at", { ascending });
       } else if (sortBy === "submitted_at") {
         snapshotQuery = snapshotQuery.order("snapshot->>created_at", { ascending });
+      } else if (isSnapshotFieldSort) {
+        const snapshotField = sortBy.replace("snapshot.", "");
+        snapshotQuery = snapshotQuery.order(`snapshot->>${snapshotField}`, { ascending });
       } else {
         snapshotQuery = snapshotQuery.order("entity_id", { ascending: true });
       }
@@ -403,9 +485,17 @@ export async function queryEntities(
 
   const entityIds = entities.map((e: any) => e.id);
   const filteredEntityIds = entityIds;
+  // For the lightweight (no-snapshot) projection we still need the `status`
+  // field that callers expect on the returned row. We cannot project it with a
+  // PostgREST `snapshot->>status` JSON operator here: that syntax is only
+  // translated by the SQLite adapter inside filter clauses (normalizeColumnName),
+  // not inside the raw SELECT list, so SQLite resolves `status` as a literal
+  // column and throws `no such column: status`. Instead, select the `snapshot`
+  // JSON column itself and derive `status` from it in JS below. This keeps the
+  // returned row shape identical across the Postgres and SQLite backends.
   const snapshotSelect = includeSnapshots
     ? "*"
-    : "entity_id, schema_version, observation_count, last_observation_at, computed_at";
+    : "entity_id, schema_version, observation_count, last_observation_at, computed_at, snapshot";
   const { data: snapshots, error: snapshotsError } = await db
     .from("entity_snapshots")
     .select(snapshotSelect)
@@ -581,12 +671,18 @@ export async function queryEntities(
   return entities.map((entity: any) => {
     const snapshot = snapshotMap.get(entity.id);
     const rawFragments = rawFragmentsByEntity.get(entity.id);
+    const snapshotData = (snapshot?.snapshot ?? {}) as Record<string, unknown>;
+    const lightweightStatus = snapshotData["status"];
     return {
       entity_id: entity.id,
       entity_type: entity.entity_type,
       canonical_name: entity.canonical_name,
       schema_version: snapshot?.schema_version,
-      snapshot: includeSnapshots ? snapshot?.snapshot || {} : {},
+      snapshot: includeSnapshots
+        ? snapshot?.snapshot || {}
+        : lightweightStatus != null
+          ? { status: lightweightStatus }
+          : {},
       raw_fragments:
         includeSnapshots && rawFragments && Object.keys(rawFragments).length > 0
           ? rawFragments

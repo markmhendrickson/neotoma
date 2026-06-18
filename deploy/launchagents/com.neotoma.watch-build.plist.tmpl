@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.neotoma.watch-build</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{NEOTOMA_REPO_PATH}}/scripts/run_watch_build_launchd.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{NEOTOMA_REPO_PATH}}</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{NEOTOMA_REPO_PATH}}/data/logs/launchd-watch-build.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{NEOTOMA_REPO_PATH}}/data/logs/launchd-watch-build.error.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>NEOTOMA_LAUNCHD_NODE</key>
+    <string>{{NODE_BIN}}</string>
+    <key>NEOTOMA_LAUNCHD_NPM_CLI</key>
+    <string>{{NPM_CLI}}</string>
+    <key>NEOTOMA_LAUNCHD_NPM_BIN</key>
+    <string>{{NPM_BIN}}</string>
+    <key>TSC_WATCHFILE</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
+    <key>TSC_WATCHDIRECTORY</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
+  </dict>
+</dict>
+</plist>

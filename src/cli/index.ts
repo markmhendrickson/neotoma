@@ -9,6 +9,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  constants as fsConstants,
   createWriteStream,
   readdirSync,
   readFileSync,
@@ -24,6 +25,7 @@ import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
 import { createApiClient } from "../shared/api_client.js";
+import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
@@ -39,11 +41,14 @@ import {
   isTokenExpired,
   isProd,
   readConfig,
+  readEffectiveConfig,
   rememberKnownApiPort,
   resolveBaseUrl as resolveBaseUrlInner,
   waitForApiReady,
   waitForHealth,
   writeConfig,
+  writeProjectLocalConfig,
+  projectLocalConfigPath,
   type ApiInstance,
   type Config,
 } from "./config.js";
@@ -680,7 +685,7 @@ async function resolveRepoRootWithPrecedence(params?: {
   repoRoot: string | null;
   source: RepoRootSource;
 }> {
-  const config = params?.config ?? (await readConfig());
+  const config = params?.config ?? (await readEffectiveConfig());
   const cwd = params?.cwd ?? process.cwd();
 
   const explicitRepoRoot = params?.explicitRepoRoot?.trim();
@@ -802,6 +807,9 @@ async function runNpmScript(scriptName: string, args: string[]): Promise<never> 
     cwd: repoRoot,
     stdio: "inherit",
     env: { ...process.env },
+    // npm resolves to npm.cmd on Windows; spawning a .cmd needs shell mode
+    // (CVE-2024-27980), else EINVAL. args stay an argv array — no injection.
+    ...WIN_SHELL,
   });
   child.on("close", (code) => {
     process.exit(code ?? 1);
@@ -2321,7 +2329,7 @@ type InitAuthMode = "dev_local" | "oauth" | "key_derived" | "skip";
 type InitInstallScope = "user" | "project" | "both";
 type InitScopeSelection = InitInstallScope | "skip";
 type InitMcpEnv = "dev" | "prod" | "both";
-type InitMcpTransport = "a" | "b" | "c" | "d";
+type InitMcpTransport = "a" | "b" | "c" | "d" | "e";
 type InitKeySource = "create" | "existing" | "skip";
 
 type InitAuthSummary = {
@@ -2422,6 +2430,14 @@ function normalizeInitMcpTransport(input?: string): InitMcpTransport | null {
     normalized === "prod-parity"
   ) {
     return "d";
+  }
+  if (
+    normalized === "5" ||
+    normalized === "e" ||
+    normalized === "signed-prod-profile" ||
+    normalized === "prod-signed"
+  ) {
+    return "e";
   }
   return null;
 }
@@ -2673,7 +2689,9 @@ async function runGlobalNeotomaUninstall(): Promise<GlobalUninstallResult> {
   return await new Promise<GlobalUninstallResult>((resolve) => {
     const child = spawn(command, args, {
       stdio: "pipe",
-      shell: Boolean(overrideCommand),
+      // Shell mode for an explicit override command, or on Windows where the
+      // default npm.cmd shim needs it (CVE-2024-27980) or it throws EINVAL.
+      shell: Boolean(overrideCommand) || shellOnWin(),
       env: { ...process.env },
     });
     let stderr = "";
@@ -4594,7 +4612,7 @@ const initCommand = program
   )
   .option(
     "--mcp-transport <mode>",
-    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp, e signed HTTP proxy prod profile single neotoma slot (local dev with NEOTOMA_ENV=production)"
   )
   .option(
     "--configure-cli <choice>",
@@ -4630,6 +4648,14 @@ const initCommand = program
     "Limit transcript import to a specific harness: claude-code, codex, or cursor"
   )
   .option("--transcript-limit <n>", "Maximum number of transcript files to import per harness")
+  .option(
+    "--project-local",
+    "Store init config in .neotoma/config.json in the current directory (project-scoped) instead of ~/.config/neotoma/config.json (user-scoped)"
+  )
+  .option(
+    "--safe",
+    "Dry-run mode: report what init would do (create directories, write config, run migrations) without making any changes. Exit 0 if everything would succeed."
+  )
   .action(
     async (opts: {
       dataDir?: string;
@@ -4654,6 +4680,8 @@ const initCommand = program
       importTranscripts?: boolean;
       transcriptHarness?: string;
       transcriptLimit?: string;
+      projectLocal?: boolean;
+      safe?: boolean;
     }) => {
       try {
         const outputMode = resolveOutputMode();
@@ -4677,6 +4705,128 @@ const initCommand = program
             // Fall through to normal init on any detection error.
           }
         }
+        // --safe: dry-run mode — report planned actions without making any changes.
+        if (opts.safe) {
+          const cwd = process.cwd();
+          const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
+          const dataDirDefault = path.join(homeDir, "neotoma", "data");
+          const resolvedDataDir =
+            opts.dataDir?.trim() || process.env.NEOTOMA_DATA_DIR?.trim() || dataDirDefault;
+          const configTarget = opts.projectLocal ? projectLocalConfigPath(cwd) : CONFIG_PATH;
+          // Env file lands next to the config dir for user-level init, or in the
+          // detected checkout root when a checkout is present. --safe reports the
+          // user-level path; the real init may differ when a checkout is detected.
+          const envTarget = USER_ENV_PATH;
+
+          // Compute blocker reasons for each planned action.
+          const configExists = await fs
+            .stat(configTarget)
+            .then(() => true)
+            .catch(() => false);
+          // Walk up to the nearest existing ancestor of resolvedDataDir to check writability.
+          // The data dir itself may not exist yet; we check whether we can create it.
+          const nearestWritableAncestor = async (dir: string): Promise<boolean> => {
+            let current = dir;
+            for (;;) {
+              try {
+                await fs.access(current, fsConstants.W_OK);
+                return true;
+              } catch {
+                const parent = path.dirname(current);
+                if (parent === current) return false; // reached filesystem root
+                current = parent;
+              }
+            }
+          };
+          const dataDirParentWritable = await nearestWritableAncestor(
+            path.dirname(resolvedDataDir)
+          );
+
+          const plannedActions: Array<{ label: string; path?: string; blockerReason?: string }> = [
+            {
+              label: "Create data directory",
+              path: resolvedDataDir,
+              blockerReason: !dataDirParentWritable
+                ? `data directory cannot be created: no writable ancestor found for ${resolvedDataDir}`
+                : undefined,
+            },
+            {
+              label: "Create sources directory",
+              path: path.join(resolvedDataDir, "sources"),
+            },
+            {
+              label: "Create logs directory",
+              path: path.join(resolvedDataDir, "logs"),
+            },
+            ...(!opts.skipDb
+              ? [path.join(resolvedDataDir, isProd ? "neotoma.prod.db" : "neotoma.db")].map(
+                  (p) => ({ label: `Initialize database`, path: p })
+                )
+              : []),
+            {
+              label: `Write config`,
+              path: configTarget,
+              blockerReason:
+                configExists && !opts.force
+                  ? `already exists (pass --force to overwrite)`
+                  : undefined,
+            },
+            ...(!opts.skipEnv ? [{ label: "Write environment file", path: envTarget }] : []),
+          ];
+          const hasBlocker = plannedActions.some((a) => a.blockerReason);
+          const outputMode = resolveOutputMode();
+          if (outputMode === "json") {
+            writeOutput(
+              {
+                ok: !hasBlocker,
+                dry_run: true,
+                planned_actions: plannedActions.map((a) => ({
+                  label: a.label,
+                  ...(a.path ? { path: a.path } : {}),
+                  would_succeed: !a.blockerReason,
+                  ...(a.blockerReason ? { blocker: a.blockerReason } : {}),
+                })),
+              },
+              outputMode
+            );
+          } else {
+            process.stdout.write(
+              bold("neotoma init --safe") + " (dry-run — no files will be written)\n\n"
+            );
+            process.stdout.write(
+              dim("Config scope: ") +
+                (opts.projectLocal
+                  ? pathStyle(configTarget) + " (project-local)"
+                  : pathStyle(configTarget) + " (user-level)") +
+                "\n\n"
+            );
+            for (const action of plannedActions) {
+              const ok = !action.blockerReason;
+              const icon = ok ? success("✓") : warn("✗");
+              const pathPart = action.path ? " " + pathStyle(action.path) : "";
+              const blockerPart = action.blockerReason
+                ? "\n    " + dim("blocker: " + action.blockerReason)
+                : "";
+              process.stdout.write(`  ${icon} ${action.label}${pathPart}${blockerPart}\n`);
+            }
+            if (hasBlocker) {
+              process.stdout.write(
+                "\n" +
+                  warn(
+                    "One or more planned actions have blockers. Resolve them before running without --safe."
+                  ) +
+                  "\n"
+              );
+            } else {
+              process.stdout.write(
+                "\n" + dim("All checks passed. Run without --safe to apply.") + "\n"
+              );
+            }
+          }
+          if (hasBlocker) process.exitCode = 1;
+          return;
+        }
+
         const interactiveRequested = Boolean(opts.interactive || opts.advanced);
         let useAdvancedPrompts = interactiveRequested;
         const applyDefaultsWithoutPrompts = Boolean(opts.yes || !interactiveRequested);
@@ -4708,7 +4858,7 @@ const initCommand = program
         }
         const mcpTransportFromFlag = normalizeInitMcpTransport(opts.mcpTransport);
         if (opts.mcpTransport && !mcpTransportFromFlag) {
-          throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+          throw new Error("Invalid --mcp-transport. Use a, b, c, d, or e.");
         }
         let keySourceFromFlag = normalizeInitKeySource(opts.keySource);
         if (opts.keySource && !keySourceFromFlag) {
@@ -6397,7 +6547,19 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             ...(configRepoRoot ? { project_root: configRepoRoot, repo_root: configRepoRoot } : {}),
             ...(initAuthSummary.mode !== "skip" ? { init_auth_mode: initAuthSummary.mode } : {}),
           };
-          await writeConfig(nextConfig);
+          if (opts.projectLocal) {
+            // Write project-local config to .neotoma/config.json in cwd; this takes
+            // precedence over user-level config when running Neotoma from this directory.
+            const localConfigPath = await writeProjectLocalConfig(nextConfig, process.cwd());
+            if (outputMode === "pretty") {
+              process.stdout.write(
+                bullet(success("Project-local config written: ") + pathStyle(localConfigPath)) +
+                  "\n"
+              );
+            }
+          } else {
+            await writeConfig(nextConfig);
+          }
         }
 
         // If repo root was discovered late (after env setup phase), still ensure
@@ -7672,7 +7834,7 @@ mcpCommand
   .option("--yes", "Skip confirmation prompts for hook installation", false)
   .option(
     "--mcp-transport <mode>",
-    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp, e signed HTTP proxy prod profile single neotoma slot (local dev with NEOTOMA_ENV=production)"
   )
   .option(
     "--rewrite-neotoma-mcp",
@@ -7695,7 +7857,7 @@ mcpCommand
       const outputMode = resolveOutputMode();
       const mcpTransportFromFlag = normalizeInitMcpTransport(opts.mcpTransport);
       if (opts.mcpTransport && !mcpTransportFromFlag) {
-        throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+        throw new Error("Invalid --mcp-transport. Use a, b, c, d, or e.");
       }
 
       try {
@@ -8824,6 +8986,61 @@ program
     }
   );
 
+const skillsCommand = program
+  .command("skills")
+  .description(
+    "Skills mirroring: keep harness skills directories in sync with the canonical source."
+  );
+
+skillsCommand
+  .command("sync")
+  .description(
+    "Mirror published skills into every detected harness (claude-code, cursor, codex, openclaw). " +
+      "Creates and populates the skills directory for any harness whose base directory exists."
+  )
+  .option("--scope <scope>", "Mirror at user or project level", "user")
+  .action(async (opts) => {
+    const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
+    const scope = opts.scope === "project" ? "project" : "user";
+    // `--json` is the global program option; Commander binds it to program.opts(),
+    // not the subcommand's local opts (a locally-declared --json stays undefined
+    // when a global one exists). Read the global flag, like other commands here.
+    const json = Boolean((program.opts() as { json?: boolean }).json);
+    const report = mirrorSkillsToAllHarnesses({
+      scope,
+      onLog: json ? undefined : (msg) => console.log(`  ${msg}`),
+    });
+    if (json) {
+      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+      if (!report.source_present || report.has_errors) process.exitCode = 1;
+      return;
+    }
+    if (!report.source_present) {
+      console.error(`No published skills source found at ${report.source}`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`Skills source: ${report.source} (scope=${report.scope})`);
+    for (const r of report.results) {
+      if (r.skipped) {
+        console.log(`  ${r.tool}: skipped — ${r.reason}`);
+        continue;
+      }
+      const verb = r.changed ? "synced" : "up-to-date";
+      const detail =
+        r.mode === "whole-dir-symlink" ? "dir-symlink" : `${r.linked.length} skill link(s)`;
+      console.log(`  ${r.tool}: ${verb} (${r.mode}, ${detail}) → ${r.target}`);
+      for (const e of r.errors ?? []) {
+        console.error(`    ⚠ ${e.skill}: ${e.reason}`);
+      }
+    }
+    console.log(report.changed ? "Skills mirror updated." : "All harnesses already up-to-date.");
+    if (report.has_errors) {
+      console.error("Some skills failed to link; see warnings above.");
+      process.exitCode = 1;
+    }
+  });
+
 const agentsCommand = program
   .command("agents")
   .description("Agent attribution / admission management commands");
@@ -9120,6 +9337,60 @@ issuesCommand
     await issuesAuth({ json: Boolean((program.opts() as { json?: boolean }).json) });
   });
 
+issuesCommand
+  .command("import")
+  .description("Import observer JSONL logs and file/fold issues for detected anomalies")
+  .requiredOption("--from-jsonl <path>", "Path to the observer JSONL file to import")
+  .option("--since <iso8601>", "Only process lines with timestamp >= this ISO 8601 date")
+  .option("--until <iso8601>", "Only process lines with timestamp <= this ISO 8601 date")
+  .option("--reporter-channel <label>", "Override the reporter channel for all filed issues")
+  .option(
+    "--reporter-git-sha <sha>",
+    "Override reporter git SHA when JSONL lines lack per-line values"
+  )
+  .option(
+    "--reporter-app-version <version>",
+    "Override reporter app version when JSONL lines lack per-line values"
+  )
+  .option(
+    "--mode <mode>",
+    "Submission mode: proactive (file immediately) or consent (prompt before each issue)",
+    "consent"
+  )
+  .option("--dry-run", "Emit a structured JSON report without filing any issues")
+  .option("--limit <n>", "Stop after extracting this many anomalies", parseInt)
+  .action(async (opts) => {
+    const mode = String(opts.mode ?? "consent").toLowerCase();
+    if (mode !== "proactive" && mode !== "consent") {
+      process.stderr.write("Error: --mode must be proactive or consent\n");
+      process.exitCode = 1;
+      return;
+    }
+    const { issuesImport } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    await issuesImport(
+      {
+        fromJsonl: opts.fromJsonl,
+        since: opts.since,
+        until: opts.until,
+        reporterChannel: opts.reporterChannel,
+        reporterGitSha: opts.reporterGitSha,
+        reporterAppVersion: opts.reporterAppVersion,
+        mode: mode as "proactive" | "consent",
+        dryRun: Boolean(opts.dryRun),
+        limit:
+          typeof opts.limit === "number" && Number.isFinite(opts.limit) ? opts.limit : undefined,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api
+    );
+  });
+
 // ─── Plans commands ────────────────────────────────────────────────────────
 const plansCommand = program
   .command("plans")
@@ -9337,11 +9608,25 @@ program
   });
 
 program
-  .command("doctor")
+  .command("status")
+  .alias("doctor")
   .description(
-    "Consolidated diagnostics for agent-led onboarding (install/runtime/api/mcp/cli-instructions/permissions)"
+    "Check Neotoma configuration and connectivity (CLI path, data directory, local API, MCP entries, permissions)"
   )
-  .action(async () => {
+  .action(async (_opts, command) => {
+    // Emit a one-shot deprecation notice to stderr (never stdout, so `--json`
+    // output stays machine-parseable) when invoked via the legacy `doctor`
+    // alias. The alias still works; this nudges callers to migrate before it
+    // is removed in a future minor. Commander resolves the alias to the
+    // canonical name (`command.name()` === "status"), so detect the alias
+    // from the raw argv Commander parsed rather than the resolved name.
+    const rawArgs: string[] = (command?.parent?.rawArgs as string[] | undefined) ?? [];
+    const invokedAsAlias = rawArgs.includes("doctor");
+    if (invokedAsAlias) {
+      process.stderr.write(
+        "[neotoma] `neotoma doctor` is deprecated and will be removed in a future minor; use `neotoma status` instead (identical output).\n"
+      );
+    }
     const outputMode = resolveOutputMode();
     const { runDoctor } = await import("./doctor.js");
     const report = await runDoctor({ cwd: process.cwd() });
@@ -9362,7 +9647,7 @@ program
   )
   .option(
     "--mcp-transport <mode>",
-    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp, e signed HTTP proxy prod profile single neotoma slot (local dev with NEOTOMA_ENV=production)"
   )
   .option(
     "--rewrite-neotoma-mcp",
@@ -9388,7 +9673,7 @@ program
     const outputMode = resolveOutputMode();
     const mcpTransport = normalizeInitMcpTransport(opts.mcpTransport);
     if (opts.mcpTransport && !mcpTransport) {
-      throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+      throw new Error("Invalid --mcp-transport. Use a, b, c, d, or e.");
     }
     const installScopeInput = String(opts.installScope ?? "project").toLowerCase();
     const installScope =
@@ -9551,7 +9836,7 @@ const hooksCommand = program
 
 hooksCommand
   .command("status")
-  .description("Print per-harness hook installation state (uses `neotoma doctor`).")
+  .description("Print per-harness hook installation state (uses `neotoma status`).")
   .action(async () => {
     const outputMode = resolveOutputMode();
     const { runHooksStatus } = await import("./hooks.js");
@@ -11348,6 +11633,8 @@ apiCommand
           detached: true,
           stdio: ["ignore", logStream, logStream],
           env: spawnEnv,
+          // npm.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+          ...WIN_SHELL,
         });
         child.unref();
         await fs.writeFile(apiPidPath, String(child.pid ?? ""));
@@ -11463,6 +11750,8 @@ apiCommand
         cwd: repoRoot,
         stdio: "inherit",
         env: spawnEnv,
+        // npm.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+        ...WIN_SHELL,
       });
       const exitCode = await new Promise<number | null>((resolve) => {
         child.on("close", (code, _sig) => resolve(code ?? null));
@@ -11764,6 +12053,10 @@ entitiesCommand
     "--created-since <iso>",
     "Return only entities whose created_at is >= this ISO 8601 timestamp"
   )
+  .option(
+    "--status <value>",
+    "Filter by snapshot status field (server-side, exact match). Example: --status active"
+  )
   .action(async (...args: any[]) => {
     // Commander passes different arguments depending on whether optional argument is provided:
     // Without entityId: (command)
@@ -11782,6 +12075,7 @@ entitiesCommand
       since?: string;
       updatedSince?: string;
       createdSince?: string;
+      status?: string;
     };
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -11847,6 +12141,9 @@ entitiesCommand
         include_merged: Boolean(opts.includeMerged),
         ...(updatedSince ? { updated_since: updatedSince } : {}),
         ...(opts.createdSince ? { created_since: opts.createdSince } : {}),
+        ...(opts.status
+          ? { snapshot_filters: { status: { op: "eq" as const, value: opts.status } } }
+          : {}),
       },
     });
     const status = response?.status;
@@ -11995,6 +12292,295 @@ entitiesCommand
       });
       if (error) throw new Error("Failed to search entity");
       writeOutput(data, outputMode);
+    }
+  );
+
+entitiesCommand
+  .command("import")
+  .description(
+    "Bulk-import entities from a JSONL file (one entity JSON object per line) by " +
+      "chunking them into batched POST /store calls. The store endpoint already writes " +
+      "each batch transactionally; this command handles file reading, chunking, and " +
+      "per-chunk idempotency so a large backfill can be replayed safely."
+  )
+  .argument("<file>", "Path to a JSONL file: one entity object per line")
+  .option(
+    "--batch-size <n>",
+    "Entities per POST /store call (default 200). Lower this if requests exceed the server body limit.",
+    (v) => Number(v),
+    200
+  )
+  .option(
+    "--idempotency-prefix <prefix>",
+    "Prefix for the per-chunk idempotency key (default: derived from the file name). " +
+      "Re-running with the same prefix and file is a safe no-op."
+  )
+  .option("--user-id <userId>", "Store under this user ID")
+  .option("--commit", "Actually write. Without this flag the command runs in dry-run/plan mode.")
+  .action(
+    async (
+      file: string,
+      opts: {
+        batchSize: number;
+        idempotencyPrefix?: string;
+        userId?: string;
+        commit?: boolean;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+
+      const batchSize =
+        Number.isFinite(opts.batchSize) && opts.batchSize > 0 ? opts.batchSize : 200;
+      const commit = Boolean(opts.commit);
+      const raw = await fs.readFile(file, "utf8");
+      const lines = raw
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      const entities: Record<string, unknown>[] = [];
+      lines.forEach((line, idx) => {
+        try {
+          entities.push(JSON.parse(line) as Record<string, unknown>);
+        } catch {
+          throw new Error(`Invalid JSON on line ${idx + 1} of ${file}`);
+        }
+      });
+
+      if (entities.length === 0) {
+        throw new Error(`No entities found in ${file} (expected one JSON object per line)`);
+      }
+
+      // Stable prefix so re-running the same file is idempotent. Derived from
+      // the file's base name when not supplied; chunk index is appended below.
+      const baseName = file.split("/").pop() ?? file;
+      const prefix = opts.idempotencyPrefix ?? `import:${baseName}`;
+
+      const totalChunks = Math.ceil(entities.length / batchSize);
+      const results: Array<Record<string, unknown>> = [];
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const chunk = entities.slice(chunkIndex * batchSize, (chunkIndex + 1) * batchSize);
+        const { data, error } = await api.POST("/store", {
+          body: {
+            entities: chunk,
+            idempotency_key: `${prefix}:${chunkIndex}`,
+            user_id: opts.userId,
+            commit,
+          },
+        });
+        if (error) {
+          throw new Error(
+            `Failed to store chunk ${chunkIndex + 1}/${totalChunks}: ${JSON.stringify(error)}`
+          );
+        }
+        results.push({ chunk: chunkIndex + 1, size: chunk.length, result: data });
+      }
+
+      writeOutput(
+        {
+          file,
+          total_entities: entities.length,
+          batch_size: batchSize,
+          chunks: totalChunks,
+          committed: commit,
+          idempotency_prefix: prefix,
+          results,
+        },
+        outputMode
+      );
+    }
+  );
+
+entitiesCommand
+  .command("export")
+  .description(
+    "Export entities as import-compatible JSONL (one object per line, schema fields at the " +
+      "top level) — the inverse of `entities import`, so an instance can be torn down and " +
+      "rebuilt from the export. Pages through all entities. With --with-relationships, also " +
+      "writes a companion JSON file of typed edges that `relationships create --file` re-imports."
+  )
+  .option("--type <entityType>", "Only export this entity type")
+  .option("--out <path>", "Write entity JSONL here (default: stdout)")
+  .option(
+    "--with-relationships",
+    "Also export relationships to a companion file (<out>.relationships.json) for a full round-trip"
+  )
+  .option("--page-size <n>", "Entities fetched per page (default 500)", (v) => Number(v), 500)
+  .option("--include-merged", "Include merged entities (default: exclude)")
+  .option("--user-id <userId>", "Export under this user scope")
+  .action(
+    async (opts: {
+      type?: string;
+      out?: string;
+      withRelationships?: boolean;
+      pageSize: number;
+      includeMerged?: boolean;
+      userId?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+
+      const pageSize =
+        Number.isFinite(opts.pageSize) && opts.pageSize > 0 ? Math.floor(opts.pageSize) : 500;
+      const effectiveUserId = resolveEffectiveUserId(opts.userId);
+
+      // The relationships companion file is written next to --out. Without
+      // --out (stdout mode) there is nowhere to put it, so refuse rather than
+      // page the edges and silently discard them.
+      if (opts.withRelationships && !opts.out) {
+        throw new Error(
+          "--with-relationships requires --out: relationships are written to a companion " +
+            "<out>.relationships.json file, which has no destination in stdout mode. " +
+            "Re-run with --out <path>."
+        );
+      }
+
+      // Page through /entities/query, flattening each EntitySnapshot to the
+      // shape `entities import` consumes: entity_type at top level plus the
+      // snapshot's fields spread to the top level. entity_id/provenance and
+      // other reducer metadata are intentionally dropped — identity is
+      // re-derived deterministically on import from canonical_name_fields, so
+      // a rebuilt instance reproduces the same entity_id without us pinning it.
+      const lines: string[] = [];
+      let offset = 0;
+      let total = Infinity;
+      while (offset < total) {
+        const { data, error, response } = await api.POST("/entities/query", {
+          body: {
+            entity_type: opts.type,
+            user_id: effectiveUserId,
+            limit: pageSize,
+            offset,
+            include_merged: Boolean(opts.includeMerged),
+            // Pin paging order so the export contract owns it rather than
+            // relying on the endpoint's evolving default sort. This is what
+            // makes a teardown→rebuild round-trip reproducible: the same
+            // instance exports the same byte stream regardless of any future
+            // change to the query endpoint's default ordering.
+            sort_by: "entity_id",
+            sort_order: "asc",
+          },
+        });
+        if (error) {
+          const status = (response as { status?: number } | undefined)?.status;
+          let msg = `Failed to page entities (offset ${offset}): ${formatApiError(error)}`;
+          if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+          throw new Error(msg);
+        }
+        const page = (data ?? {}) as {
+          entities?: Array<{
+            entity_type?: string;
+            snapshot?: Record<string, unknown>;
+          }>;
+          total?: number;
+        };
+        const batch = page.entities ?? [];
+        if (typeof page.total === "number") total = page.total;
+        for (const e of batch) {
+          if (!e.entity_type) continue;
+          const snapshot = (e.snapshot ?? {}) as Record<string, unknown>;
+          // entity_type first, then the snapshot fields at the top level.
+          lines.push(JSON.stringify({ entity_type: e.entity_type, ...snapshot }));
+        }
+        if (batch.length === 0) break;
+        offset += batch.length;
+      }
+
+      const entityCount = lines.length;
+      const jsonl = lines.join("\n") + (lines.length > 0 ? "\n" : "");
+
+      let relationshipFile: string | undefined;
+      let relationshipCount = 0;
+      if (opts.withRelationships) {
+        // Page through /relationships and capture the import shape that
+        // `relationships create --file` accepts.
+        const rels: Array<Record<string, unknown>> = [];
+        let relOffset = 0;
+        // No total from this endpoint; page until a short page.
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { data, error } = await api.GET("/relationships", {
+            params: {
+              query: {
+                limit: pageSize,
+                offset: relOffset,
+                ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
+              } as any,
+            } as any,
+          });
+          if (error) {
+            throw new Error(
+              `Failed to page relationships (offset ${relOffset}): ${formatApiError(error)}`
+            );
+          }
+          const arr = ((data as { relationships?: Array<Record<string, unknown>> } | undefined)
+            ?.relationships ??
+            (Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [])) as Array<
+            Record<string, unknown>
+          >;
+          for (const r of arr) {
+            if (r.source_entity_id && r.target_entity_id && r.relationship_type) {
+              rels.push({
+                relationship_type: r.relationship_type,
+                source_entity_id: r.source_entity_id,
+                target_entity_id: r.target_entity_id,
+                ...(r.metadata ? { metadata: r.metadata } : {}),
+              });
+            }
+          }
+          if (arr.length < pageSize) break;
+          relOffset += arr.length;
+        }
+        relationshipCount = rels.length;
+        if (opts.out) {
+          const base = path.isAbsolute(opts.out) ? opts.out : path.resolve(process.cwd(), opts.out);
+          relationshipFile = `${base}.relationships.json`;
+          await fs.writeFile(
+            relationshipFile,
+            JSON.stringify({ relationships: rels }, null, 2),
+            "utf-8"
+          );
+        }
+      }
+
+      if (opts.out) {
+        const resolved = path.isAbsolute(opts.out)
+          ? opts.out
+          : path.resolve(process.cwd(), opts.out);
+        await fs.writeFile(resolved, jsonl, "utf-8");
+        writeOutput(
+          {
+            wrote: resolved,
+            total_entities: entityCount,
+            ...(opts.withRelationships
+              ? { relationships_file: relationshipFile, total_relationships: relationshipCount }
+              : {}),
+            rebuild_hint:
+              "Rebuild: neotoma entities import " +
+              resolved +
+              " --commit" +
+              (relationshipFile
+                ? "  &&  neotoma relationships create --file " + relationshipFile
+                : ""),
+          },
+          outputMode
+        );
+        return;
+      }
+      // stdout: emit the JSONL directly so it can be piped into a file.
+      process.stdout.write(jsonl);
     }
   );
 
@@ -12880,6 +13466,33 @@ schemasCommand
       if (error) throw new Error("Failed to analyze schema candidates");
       const result = data as any;
       writeOutput({ analysis: result?.candidates ?? result }, outputMode);
+    }
+  );
+
+schemasCommand
+  .command("audit-fragments")
+  .description("Report undeclared raw_fragments awaiting schema declaration")
+  .argument("[entityType]", "Entity type to audit (or use --entity-type; omit for all types)")
+  .option("--entity-type <type>", "Entity type to audit (alternative to positional argument)")
+  .option("--user-id <userId>", "User ID")
+  .action(
+    async (entityTypeArg: string | undefined, opts: { entityType?: string; userId?: string }) => {
+      const outputMode = resolveOutputMode();
+      const entityTypeResolved = opts.entityType ?? entityTypeArg;
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const { data, error } = await api.POST("/audit_undeclared_fragments", {
+        body: {
+          entity_type: entityTypeResolved,
+          user_id: opts.userId,
+        },
+      });
+      if (error) throw new Error("Failed to audit undeclared fragments");
+      writeOutput(data, outputMode);
     }
   );
 
@@ -17344,7 +17957,8 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
                 cwd: repoRoot,
                 stdio: ["ignore", logStream, logStream],
                 env: devEnv,
-                shell: false,
+                // npx.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+                shell: shellOnWin(),
               });
               devChild.on("error", (err) => {
                 process.stderr.write(`neotoma: dev server error: ${err.message}\n`);
@@ -17362,7 +17976,8 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
                 cwd: repoRoot,
                 stdio: ["ignore", logStream, logStream],
                 env: prodEnv,
-                shell: false,
+                // npx.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
+                shell: shellOnWin(),
               });
               prodChild.on("error", (err) => {
                 process.stderr.write(`neotoma: prod server error: ${err.message}\n`);

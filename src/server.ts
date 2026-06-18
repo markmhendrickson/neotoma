@@ -14,15 +14,17 @@ import { db } from "./db.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
+import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
+  AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
@@ -31,9 +33,11 @@ import {
   FieldProvenanceRequestSchema,
   GetSchemaRecommendationsRequestSchema,
   ListEntityTypesRequestSchema,
+  DescribeEntityTypeRequestSchema,
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   MergeEntitiesRequestSchema,
+  SplitEntityRequestSchema,
   DeleteEntityRequestSchema,
   DeleteRelationshipRequestSchema,
   RestoreEntityRequestSchema,
@@ -69,8 +73,14 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
-import { buildSessionInfo } from "./services/session_info.js";
+import {
+  buildSessionInfo,
+  resolveConfiguredSessionOrigin,
+  type SessionOriginInfo,
+} from "./services/session_info.js";
+import { getActiveStandingRules, type StandingRule } from "./services/standing_rules.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
+import { OverridePolicyViolationError } from "./services/override_validation.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
@@ -112,6 +122,7 @@ type StoreRelationshipRef = {
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
+const TURN_SUMMARY_WIDGET_RESOURCE_URI = "ui://neotoma/turn-summary";
 const ADVISORY_VISIBILITY_DEPRECATION =
   "visibility 'advisory' is deprecated; use 'private' instead.";
 
@@ -139,7 +150,7 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), render `🧠 Neotoma — [<conversation name>](<origin>/inspector/conversations/<id>)` with bullet groups Created (N), Updated (N), Retrieved (N). Each bullet: emoji + label + linked entity_type to `<origin>/inspector/entities/<id>`. Origin: 3080 dev, 3180 prod.",
+  "Display rule: when a turn creates, updates, or retrieves non-chat entities, render `🧠 Neotoma — [<conversation name>](<origin>/inspector/conversations/<id>)` with Created/Updated/Retrieved groups. Use `get_session_identity.origins.inspector_origin` as `<origin>` when present; if absent, do NOT guess sandbox/localhost; render labels without links. Each bullet: emoji + label + linked entity_type only when origin and entity_id are known.",
   "",
   "Schema/fidelity: for known entity_types (seen this session), check declared fields via get_schema_recommendations or an existing snapshot before storing; use declared fields, invent snake_case only for unfit data. unknown_fields_count > 0 = mandatory repair before closing store. FORBIDDEN: inventing all fields for a known type without checking; ignoring unknown_fields_count > 0.",
   "",
@@ -192,6 +203,9 @@ export class NeotomaServer {
   private sessionAAuth: AAuthRequestContext | null = null;
   /** Client self-report from MCP initialize `clientInfo` (fallback attribution). */
   private sessionClientInfo: { name?: string; version?: string } | null = null;
+  /** Browser app origin resolved by HTTP transport or explicit public URL config. */
+  private sessionAppOrigin: string | null = null;
+  private sessionAppOriginSource: SessionOriginInfo["source"] | null = null;
   /** Tool descriptions loaded from docs/developer/mcp/tool_descriptions.yaml; empty Map if file missing */
   private toolDescriptions: Map<string, string> = new Map();
   /** In-memory cache for npm registry dist-tags: key = "packageName:distTag", value = { version, until } */
@@ -283,6 +297,41 @@ export class NeotomaServer {
   }
 
   /**
+   * Return the list of skill names available in the installed Neotoma package.
+   *
+   * Skills live under `<package_root>/skills/<skill-name>/SKILL.md`. This
+   * method enumerates the top-level subdirectories of `skills/` and returns
+   * their names so harnesses receive the list at `initialize` time without a
+   * separate discovery round-trip.
+   *
+   * Returns an empty array when the `skills/` directory is absent (e.g. in
+   * development checkouts that have not yet staged skill assets, or in test
+   * environments with stripped package layouts).
+   */
+  private getAvailableSkills(): string[] {
+    const roots = [config.projectRoot, resolveNeotomaPackageRoot()];
+    const seen = new Set<string>();
+    for (const root of roots) {
+      const key = resolve(root);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const skillsDir = join(root, "skills");
+      if (!existsSync(skillsDir)) continue;
+      try {
+        const entries = readdirSync(skillsDir, { withFileTypes: true });
+        const names = entries
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name)
+          .sort();
+        if (names.length > 0) return names;
+      } catch {
+        // Unreadable; try next root
+      }
+    }
+    return [];
+  }
+
+  /**
    * Setup MCP initialize request handler for authentication
    * Supports both OAuth connections (recommended) and session tokens (deprecated)
    * Works with both stdio (env vars) and HTTP (request context) transports
@@ -357,7 +406,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
           );
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
@@ -370,7 +419,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Using HTTP no-auth (anonymous user: ${this.authenticatedUserId})`
           );
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
@@ -382,7 +431,7 @@ export class NeotomaServer {
             token: "dev-local",
           });
           logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // OAuth flow - check if connection ID is valid
@@ -398,7 +447,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
           );
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         } catch (error: any) {
           const isConnectionNotFound =
             error.message?.includes("Connection not found") ||
@@ -425,7 +474,7 @@ export class NeotomaServer {
               userId: this.authenticatedUserId,
               token: "dev-local",
             });
-            return this.buildAuthenticatedInitializeResponse(updateNotice);
+            return await this.buildAuthenticatedInitializeResponse(updateNotice);
           }
 
           if (isConnectionNotFound) {
@@ -497,6 +546,19 @@ export class NeotomaServer {
   }
 
   /**
+   * Set the browser app/Inspector origin for this MCP session. HTTP transport
+   * supplies the actual request origin (or configured public origin). Stdio
+   * sessions only report an origin when NEOTOMA_PUBLIC_BASE_URL is configured.
+   */
+  setSessionAppOrigin(
+    origin: string | null,
+    source: SessionOriginInfo["source"] | null = null
+  ): void {
+    this.sessionAppOrigin = origin;
+    this.sessionAppOriginSource = source;
+  }
+
+  /**
    * Stash the AAuth verification result from the HTTP middleware so the
    * write-path services can attribute rows to the signing agent (Phase 1).
    * Called by actions.ts before the transport handles the MCP request. Pass
@@ -553,10 +615,19 @@ export class NeotomaServer {
     };
   }
 
-  private buildAuthenticatedInitializeResponse(updateNotice: string | null) {
+  private async buildAuthenticatedInitializeResponse(updateNotice: string | null) {
     const instructions = updateNotice
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
       : this.getMcpInteractionInstructions();
+
+    // Load standing rules for the authenticated user and inject them so agents
+    // apply them from the first turn of the session (issue #184).
+    let standingRules: StandingRule[] = [];
+    if (this.authenticatedUserId) {
+      standingRules = await getActiveStandingRules(this.authenticatedUserId);
+    }
+
+    const availableSkills = this.getAvailableSkills();
 
     return {
       protocolVersion: "2025-11-25",
@@ -572,6 +643,10 @@ export class NeotomaServer {
               description: updateNotice,
             }
           : {}),
+        _neotoma: {
+          standing_rules: standingRules,
+          available_skills: availableSkills,
+        },
       },
       instructions,
     };
@@ -746,12 +821,15 @@ export class NeotomaServer {
     z.object({}).parse(args ?? {});
     const userId = this.getAuthenticatedUserId();
     const identity = this.getAgentIdentity();
+    const configuredOrigin = resolveConfiguredSessionOrigin();
     const session = buildSessionInfo({
       userId,
       identity,
       middlewareDecision: getCurrentAttributionDecision(),
       rawClientInfoName: this.sessionClientInfo?.name ?? null,
       admission: getCurrentAAuthAdmission(),
+      appOrigin: this.sessionAppOrigin ?? configuredOrigin ?? null,
+      originSource: this.sessionAppOriginSource ?? (configuredOrigin ? "configured" : null),
     });
     return this.buildTextResponse(session);
   }
@@ -962,13 +1040,45 @@ export class NeotomaServer {
     });
   }
 
+  // FU-2026-05-002: neotoma_turn_summary MCP tool.
+  private async handleTurnSummary(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      conversation_id: z.string().min(1),
+      turn_key: z.string().min(1),
+    });
+    const parsed = schema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId();
+    const { computeTurnSummary, TurnSummaryError } = await import("./services/turn_summary.js");
+    try {
+      const result = await computeTurnSummary({
+        userId,
+        conversationId: parsed.conversation_id,
+        turnKey: parsed.turn_key,
+      });
+      return this.buildTextResponse(result);
+    } catch (err) {
+      if (err instanceof TurnSummaryError) {
+        return this.buildTextResponse({
+          error: { code: err.code, message: err.message },
+        });
+      }
+      throw err;
+    }
+  }
+
   private async handleSubmitIssue(
     args: unknown,
     userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Normalize escape sequences that MCP clients sometimes send as literal
+    // two-character sequences (e.g. backslash-n) instead of real control chars.
+    const unescapeBody = (s: string) => s.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+
     const schema = z.object({
       title: z.string().min(1),
-      body: z.string().min(1),
+      body: z.string().min(1).transform(unescapeBody),
       labels: z.array(z.string()).optional(),
       visibility: z.enum(["public", "private", "advisory"]).optional(),
       reporter_git_sha: z.string().optional(),
@@ -977,7 +1087,14 @@ export class NeotomaServer {
       reporter_app_version: z.string().optional(),
       reporter_ci_run_id: z.string().optional(),
       reporter_patch_source_id: z.string().optional(),
+      target_repo: z
+        .string()
+        .regex(/^[^/\s]+\/[^/\s]+$/, {
+          message: "target_repo must be in owner/repo format.",
+        })
+        .optional(),
       entity_ids_to_link: z.array(z.string().min(1)).optional(),
+      conversation_turn_id: z.string().min(1).optional(),
     });
     const parsed = schema.parse(args ?? {});
 
@@ -1007,7 +1124,11 @@ export class NeotomaServer {
         reporter_app_version: effectiveReporterAppVersion,
         reporter_ci_run_id: parsed.reporter_ci_run_id,
         reporter_patch_source_id: parsed.reporter_patch_source_id,
+        ...(parsed.target_repo ? { target_repo: parsed.target_repo } : {}),
         ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
+        ...(parsed.conversation_turn_id
+          ? { conversation_turn_id: parsed.conversation_turn_id }
+          : {}),
       });
 
       return this.buildTextResponse({
@@ -1559,15 +1680,17 @@ export class NeotomaServer {
       }
 
       return {
-        tools: buildToolDefinitions(this.toolDescriptions, TIMELINE_WIDGET_RESOURCE_URI).map(
-          (def) => ({
-            name: def.name,
-            description: def.description,
-            inputSchema: def.inputSchema,
-            ...(def.annotations ? { annotations: def.annotations } : {}),
-            ...(def._meta ? { _meta: def._meta } : {}),
-          })
-        ),
+        tools: buildToolDefinitions(
+          this.toolDescriptions,
+          TIMELINE_WIDGET_RESOURCE_URI,
+          TURN_SUMMARY_WIDGET_RESOURCE_URI
+        ).map((def) => ({
+          name: def.name,
+          description: def.description,
+          inputSchema: def.inputSchema,
+          ...(def.annotations ? { annotations: def.annotations } : {}),
+          ...(def._meta ? { _meta: def._meta } : {}),
+        })),
       };
     });
 
@@ -1648,6 +1771,12 @@ export class NeotomaServer {
           // `data` field (see src/services/attribution_policy.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
+        if (error instanceof OverridePolicyViolationError) {
+          // Same structured-envelope contract for override-policy rejections:
+          // clients branch on `OVERRIDE_POLICY_VIOLATION` via the MCP `data`
+          // field (see src/services/override_validation.ts).
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
         // Safely extract error message, handling BigInt values
         let errorMessage = "Unknown error";
         if (error instanceof Error) {
@@ -1726,8 +1855,12 @@ export class NeotomaServer {
         return await this.getEntityTypeCounts(args);
       case "list_entity_types":
         return await this.listEntityTypes(args);
+      case "describe_entity_type":
+        return await this.describeEntityType(args);
       case "analyze_schema_candidates":
         return await this.analyzeSchemaCandidates(args);
+      case "audit_undeclared_fragments":
+        return await this.auditUndeclaredFragments(args);
       case "get_schema_recommendations":
         return await this.getSchemaRecommendations(args);
       case "update_schema_incremental":
@@ -1748,6 +1881,8 @@ export class NeotomaServer {
         return await this.correct(args);
       case "merge_entities":
         return await this.mergeEntities(args);
+      case "split_entity":
+        return await this.splitEntity(args);
       case "list_potential_duplicates":
         return await this.listPotentialDuplicates(args);
       case "delete_entity":
@@ -1768,6 +1903,8 @@ export class NeotomaServer {
         return await this.listRecentChanges(args);
       case "npm_check_update":
         return await this.npmCheckUpdate(args);
+      case "neotoma_turn_summary":
+        return await this.handleTurnSummary(args);
       case "submit_issue":
         return await this.handleSubmitIssue(args, this.getAuthenticatedUserId());
       case "add_issue_message":
@@ -1806,6 +1943,8 @@ export class NeotomaServer {
         return await this.handleSyncPeer(args, this.getAuthenticatedUserId());
       case "resolve_sync_conflict":
         return await this.handleResolveSyncConflict(args, this.getAuthenticatedUserId());
+      case "publish_rendered_page":
+        return await this.handlePublishRenderedPage(args);
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
@@ -1933,6 +2072,13 @@ export class NeotomaServer {
           mimeType: "text/html;profile=mcp-app",
         });
 
+        resources.push({
+          uri: TURN_SUMMARY_WIDGET_RESOURCE_URI,
+          name: "Turn Summary Widget",
+          description: "Inline per-turn status card for neotoma_turn_summary results.",
+          mimeType: "text/html;profile=mcp-app",
+        });
+
         // Get entity types count from schema registry
         try {
           const { SchemaRegistryService } = await import("./services/schema_registry.js");
@@ -2053,6 +2199,16 @@ export class NeotomaServer {
                   uri,
                   mimeType: "text/html;profile=mcp-app",
                   text: this.buildTimelineWidgetHtml(),
+                },
+              ],
+            };
+          case "ui_turn_summary_widget":
+            return {
+              contents: [
+                {
+                  uri,
+                  mimeType: "text/html;profile=mcp-app",
+                  text: this.buildTurnSummaryWidgetHtml(),
                 },
               ],
             };
@@ -2269,6 +2425,161 @@ export class NeotomaServer {
       const total = typeof safePayload.total === "number" ? safePayload.total : events.length;
       summaryEl.textContent = total + " event" + (total === 1 ? "" : "s");
       payloadEl.textContent = JSON.stringify(safePayload, null, 2);
+    }
+
+    window.addEventListener("message", (event) => {
+      const message = event.data;
+      if (!message || typeof message !== "object") return;
+
+      if (message.method === "ui/initialize") {
+        const initial = message.params?.toolResult ?? message.params?.initialToolResult;
+        if (initial) renderPayload(initial);
+        return;
+      }
+
+      if (message.method === "ui/notifications/tool-result") {
+        renderPayload(message.params?.result);
+      }
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  private buildTurnSummaryWidgetHtml(): string {
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neotoma Turn Summary</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 10px;
+      background: transparent;
+    }
+    .card {
+      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: color-mix(in srgb, canvas 92%, transparent);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .status {
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .status .label {
+      opacity: 0.7;
+      font-weight: 400;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: color-mix(in srgb, currentColor 12%, transparent);
+    }
+    .badge.issues {
+      background: color-mix(in srgb, #d97706 30%, transparent);
+      color: color-mix(in srgb, #d97706 80%, canvastext);
+    }
+    .consent {
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: color-mix(in srgb, #d97706 14%, transparent);
+      border: 1px solid color-mix(in srgb, #d97706 30%, transparent);
+      line-height: 1.4;
+    }
+    .consent a {
+      display: inline-block;
+      margin-top: 4px;
+      font-weight: 500;
+      color: inherit;
+      text-decoration: underline;
+    }
+    .empty {
+      font-size: 12px;
+      opacity: 0.65;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="status" id="status">
+      <span class="empty" id="empty">Waiting for turn summary...</span>
+    </div>
+    <div id="consent"></div>
+  </div>
+  <script>
+    const statusEl = document.getElementById("status");
+    const consentEl = document.getElementById("consent");
+
+    function escapeText(value) {
+      return String(value ?? "").replace(/[&<>"']/g, function (ch) {
+        switch (ch) {
+          case "&": return "&amp;";
+          case "<": return "&lt;";
+          case ">": return "&gt;";
+          case '"': return "&quot;";
+          default: return "&#39;";
+        }
+      });
+    }
+
+    function renderPayload(payload) {
+      const safe = payload && typeof payload === "object" ? payload : {};
+      const turnNumber = typeof safe.turn_number === "number" ? safe.turn_number : null;
+      const totalMessages = typeof safe.conversation_message_count === "number"
+        ? safe.conversation_message_count
+        : null;
+      const storedCount = Array.isArray(safe.stored) ? safe.stored.length : 0;
+      const retrievedCount = Array.isArray(safe.retrieved) ? safe.retrieved.length : 0;
+      const issuesCount = Array.isArray(safe.issues) ? safe.issues.length : 0;
+      const statusLine = typeof safe.status_line === "string" ? safe.status_line : null;
+
+      if (turnNumber === null && !statusLine) {
+        statusEl.innerHTML = '<span class="empty">Waiting for turn summary...</span>';
+        consentEl.innerHTML = "";
+        return;
+      }
+
+      const parts = [];
+      if (turnNumber !== null && totalMessages !== null) {
+        parts.push('<span><span class="label">msg</span> ' + escapeText(turnNumber) + '/' + escapeText(totalMessages) + '</span>');
+      }
+      parts.push('<span class="badge"><span class="label">stored</span> ' + escapeText(storedCount) + '</span>');
+      parts.push('<span class="badge"><span class="label">retrieved</span> ' + escapeText(retrievedCount) + '</span>');
+      if (issuesCount > 0) {
+        parts.push('<span class="badge issues"><span class="label">issues</span> ' + escapeText(issuesCount) + '</span>');
+      }
+      statusEl.innerHTML = parts.join("");
+
+      if (issuesCount > 0) {
+        const noun = issuesCount === 1 ? "issue" : "issues";
+        consentEl.innerHTML =
+          '<div class="consent">' +
+          escapeText(issuesCount) + ' ' + noun + ' flagged this turn. Review in Neotoma Inspector.' +
+          '<br><a href="neotoma://issues" rel="noopener">View issues</a>' +
+          '</div>';
+      } else {
+        consentEl.innerHTML = "";
+      }
     }
 
     window.addEventListener("message", (event) => {
@@ -2788,6 +3099,13 @@ export class NeotomaServer {
         .eq("source_entity_id", parsed.entity_id)
         .eq("user_id", userId);
 
+      // Exclude soft-deleted edges at the DB via the materialized `is_live`
+      // column (#1570), so dead edges are never loaded into memory. Audit
+      // reads pass include_deleted=true to skip this filter.
+      if (!parsed.include_deleted) {
+        outboundQuery = outboundQuery.eq("is_live", 1);
+      }
+
       if (parsed.relationship_type) {
         outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
       }
@@ -2822,6 +3140,11 @@ export class NeotomaServer {
         .eq("target_entity_id", parsed.entity_id)
         .eq("user_id", userId);
 
+      // Exclude soft-deleted edges at the DB via `is_live` (#1570).
+      if (!parsed.include_deleted) {
+        inboundQuery = inboundQuery.eq("is_live", 1);
+      }
+
       if (parsed.relationship_type) {
         inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
       }
@@ -2849,13 +3172,27 @@ export class NeotomaServer {
       }
     }
 
-    // Sort by last_observation_at DESC and apply pagination
+    // Sort by last_observation_at DESC, tiebroken by relationship_key ASC
+    // (#1571). last_observation_at is mutable and ties for rows upserted in the
+    // same millisecond (batch ingestion); without a stable tiebreaker, tied
+    // rows can move between pages across successive calls, so pagination over
+    // this order can drop or duplicate rows. relationship_key is the snapshot
+    // primary key — a stable, unique tiebreaker that fully determines order.
+    // This matches the HTTP /list_relationships ordering (actions.ts) and the
+    // determinism invariant (docs/architecture/determinism.md). See issue #368.
     relationships.sort((a, b) => {
       const aTime = new Date(a.last_observation_at || a.computed_at || 0).getTime();
       const bTime = new Date(b.last_observation_at || b.computed_at || 0).getTime();
-      return bTime - aTime;
+      if (bTime !== aTime) return bTime - aTime;
+      const aKey = String(a.relationship_key ?? "");
+      const bKey = String(b.relationship_key ?? "");
+      return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
     });
 
+    // Soft-deleted edges were already excluded at the DB via the `is_live`
+    // predicate on each direction's query (#1570), so `relationships` holds
+    // only live edges on the default path (all edges when include_deleted).
+    // `total` therefore reflects the correct post-filter count.
     const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
@@ -2926,28 +3263,35 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
-    const { entities, total, excluded_merged } = await queryEntitiesWithCount({
-      userId,
-      entityType: parsed.entity_type,
-      includeMerged: parsed.include_merged,
-      includeSnapshots: parsed.include_snapshots,
-      sortBy: parsed.sort_by,
-      sortOrder: parsed.sort_order,
-      published: parsed.published,
-      publishedAfter: parsed.published_after,
-      publishedBefore: parsed.published_before,
-      search: parsed.search,
-      similarityThreshold: parsed.similarity_threshold,
-      limit: parsed.limit,
-      offset: parsed.offset,
-      updatedSince: parsed.updated_since,
-      createdSince: parsed.created_since,
-    });
+    const { entities, total, excluded_merged, applied_search_strategies, search_mode } =
+      await queryEntitiesWithCount({
+        userId,
+        entityType: parsed.entity_type,
+        entityTypes: parsed.entity_types,
+        includeMerged: parsed.include_merged,
+        includeSnapshots: parsed.include_snapshots,
+        sortBy: parsed.sort_by,
+        sortOrder: parsed.sort_order,
+        published: parsed.published,
+        publishedAfter: parsed.published_after,
+        publishedBefore: parsed.published_before,
+        search: parsed.search,
+        similarityThreshold: parsed.similarity_threshold,
+        limit: parsed.limit,
+        offset: parsed.offset,
+        updatedSince: parsed.updated_since,
+        createdSince: parsed.created_since,
+        identityBasis: parsed.identity_basis,
+        snapshotFilters: parsed.snapshot_filters,
+        excludeBookkeeping: parsed.exclude_bookkeeping,
+      });
 
     return this.buildTextResponse({
       entities,
       total,
       excluded_merged,
+      ...(applied_search_strategies ? { applied_search_strategies } : {}),
+      search_mode,
     });
   }
 
@@ -3054,7 +3398,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-    const { entities, total } = await retrieveEntityByIdentifierWithFallback({
+    const { entities, total, match_mode, hint } = await retrieveEntityByIdentifierWithFallback({
       identifier: parsed.identifier,
       entityType: parsed.entity_type,
       userId,
@@ -3064,10 +3408,13 @@ export class NeotomaServer {
       observationsLimit: parsed.observations_limit,
     });
 
-    return this.buildTextResponse({
-      entities,
-      total,
-    });
+    const response: Record<string, unknown> = { entities, total, match_mode };
+    // Only surface `hint` when the handler populated it (id-shaped identifier
+    // that resolved to nothing); omit it from every other result (#1597).
+    if (hint) {
+      response.hint = hint;
+    }
+    return this.buildTextResponse(response);
   }
 
   private async retrieveRelatedEntities(
@@ -3080,6 +3427,7 @@ export class NeotomaServer {
     const relatedEntityIds = new Set<string>();
     const allRelationships: any[] = [];
     let currentLevel = [parsed.entity_id];
+    let hopsTraversed = 0;
 
     // Traverse relationships up to max_hops
     for (let hop = 0; hop < parsed.max_hops; hop++) {
@@ -3141,6 +3489,9 @@ export class NeotomaServer {
         }
       }
 
+      // This hop produced at least one relationship lookup over a non-empty
+      // frontier, so count it as traversed.
+      hopsTraversed = hop + 1;
       if (nextLevel.length === 0) break;
       currentLevel = nextLevel;
     }
@@ -3183,7 +3534,7 @@ export class NeotomaServer {
       relationships: allRelationships,
       total_entities: entities.length,
       total_relationships: allRelationships.length,
-      hops_traversed: Math.min(parsed.max_hops, Array.from(visited).length > 1 ? 1 : 0),
+      hops_traversed: hopsTraversed,
     });
   }
 
@@ -3474,6 +3825,63 @@ export class NeotomaServer {
   }
 
   /**
+   * Issue #247: Field-level schema introspection. Returns the full active schema
+   * definition for a single entity_type (field names, types, descriptions,
+   * required flags, schema version) so agents can learn the exact field shape
+   * before storing — yielding zero unknown_fields / required_fields_missing on
+   * the first store. Read-only; no persistence side effects.
+   */
+  private async describeEntityType(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = DescribeEntityTypeRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const { schemaRegistry, loadCodeDefinedSchemaEntry } =
+      await import("./services/schema_registry.js");
+
+    let schema = await schemaRegistry.loadActiveSchema(parsed.entity_type, userId);
+    if (!schema) {
+      const normalized = parsed.entity_type.toLowerCase().trim().replace(/\s+/g, "_");
+      schema =
+        (await loadCodeDefinedSchemaEntry(parsed.entity_type)) ??
+        (await loadCodeDefinedSchemaEntry(normalized));
+    }
+
+    if (!schema) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `No active schema for entity type: ${parsed.entity_type}. ` +
+          "Use list_entity_types to discover available types, or register_schema to create one."
+      );
+    }
+
+    const fieldDefs = schema.schema_definition?.fields ?? {};
+    const fieldNames = Object.keys(fieldDefs);
+    // Compact, agent-friendly per-field summary mirroring the EntitySchema
+    // field_summary shape used by list_entity_types detail mode.
+    const fieldSummary: Record<string, { type: string; required: boolean; description?: string }> =
+      {};
+    for (const [name, def] of Object.entries(fieldDefs)) {
+      fieldSummary[name] = {
+        type: def.type,
+        required: def.required === true,
+        ...(def.description ? { description: def.description } : {}),
+      };
+    }
+
+    return this.buildTextResponse({
+      entity_type: schema.entity_type,
+      schema_version: schema.schema_version,
+      field_names: fieldNames,
+      field_count: fieldNames.length,
+      required_fields: fieldNames.filter((n) => fieldDefs[n]?.required === true),
+      field_summary: fieldSummary,
+      schema_definition: schema.schema_definition,
+    });
+  }
+
+  /**
    * Analyze raw_fragments to identify schema candidates
    */
   private async analyzeSchemaCandidates(
@@ -3505,6 +3913,36 @@ export class NeotomaServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to analyze schema candidates: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Audit accumulated undeclared raw_fragments awaiting schema declaration (#1576).
+   */
+  private async auditUndeclaredFragments(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = AuditUndeclaredFragmentsRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+
+    try {
+      const audit = await schemaRecommendationService.auditUndeclaredFragments({
+        entity_type: parsed.entity_type,
+        user_id: userId,
+      });
+
+      return this.buildTextResponse({
+        audit,
+        total_entity_types: audit.length,
+        total_undeclared_fields: audit.reduce((sum, t) => sum + t.undeclared_fields.length, 0),
+      });
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to audit undeclared fragments: ${error.message}`
       );
     }
   }
@@ -3572,18 +4010,26 @@ export class NeotomaServer {
     if (!registeredSchema) {
       const codeDefinedSchema = await loadCodeDefinedSchemaEntry(parsed.entity_type);
       if (!codeDefinedSchema) {
+        // Canonical standard error envelope (docs/subsystems/errors.md).
+        // Nested under `error` so CLI/MCP error handlers can pattern-match the
+        // code uniformly. `no_schema_for_entity_type` retained in details for
+        // back-compat with any consumer that switched on it.
         return this.buildTextResponse({
-          success: false,
-          entity_type: parsed.entity_type,
-          error_code: "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
-          no_schema_for_entity_type: true,
-          hint:
-            "No schema is registered for this entity_type. " +
-            "update_schema_incremental requires an existing SchemaDefinition to extend. " +
-            "Call register_schema first with a full schema_definition that includes " +
-            "canonical_name_fields (or identity_opt_out), then optionally call " +
-            "update_schema_incremental to add more fields. " +
-            "Use analyze_schema_candidates to get field suggestions before registering.",
+          error: {
+            error_code: "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
+            message: `No schema is registered for entity_type "${parsed.entity_type}".`,
+            hint:
+              "No schema is registered for this entity_type. " +
+              "update_schema_incremental requires an existing SchemaDefinition to extend. " +
+              "Call register_schema first with a full schema_definition that includes " +
+              "canonical_name_fields (or identity_opt_out), then optionally call " +
+              "update_schema_incremental to add more fields. " +
+              "Use analyze_schema_candidates to get field suggestions before registering.",
+            details: {
+              entity_type: parsed.entity_type,
+              no_schema_for_entity_type: true,
+            },
+          },
         });
       }
     }
@@ -3626,15 +4072,19 @@ export class NeotomaServer {
         error.message.includes("identity_opt_out");
       if (isR2Error) {
         return this.buildTextResponse({
-          success: false,
-          entity_type: parsed.entity_type,
-          error_code: "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
-          hint:
-            "The existing SchemaDefinition for this entity_type does not declare " +
-            "canonical_name_fields or identity_opt_out, which are required before fields can " +
-            "be added incrementally. Call register_schema with a full schema_definition that " +
-            'includes canonical_name_fields (or identity_opt_out: "heuristic_canonical_name") ' +
-            "to establish a baseline, then retry update_schema_incremental.",
+          error: {
+            error_code: "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
+            message: `The SchemaDefinition for entity_type "${parsed.entity_type}" is missing identity configuration.`,
+            hint:
+              "The existing SchemaDefinition for this entity_type does not declare " +
+              "canonical_name_fields or identity_opt_out, which are required before fields can " +
+              "be added incrementally. Call register_schema with a full schema_definition that " +
+              'includes canonical_name_fields (or identity_opt_out: "heuristic_canonical_name") ' +
+              "to establish a baseline, then retry update_schema_incremental.",
+            details: {
+              entity_type: parsed.entity_type,
+            },
+          },
         });
       }
       throw new McpError(
@@ -3656,7 +4106,11 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const { lintEntityTypeName } = await import("./services/entity_type_guard.js");
     const schemaRegistry = new SchemaRegistryService();
+
+    // Collect naming lint warnings (non-blocking — registration proceeds regardless)
+    const nameLintWarnings = lintEntityTypeName(parsed.entity_type);
 
     try {
       const registeredSchema = await schemaRegistry.register({
@@ -3676,6 +4130,7 @@ export class NeotomaServer {
         activated: parsed.activate,
         scope: parsed.user_specific ? "user" : "global",
         schema_id: registeredSchema.id,
+        name_lint_warnings: nameLintWarnings,
       });
     } catch (error: any) {
       throw new McpError(ErrorCode.InternalError, `Failed to register schema: ${error.message}`);
@@ -4567,6 +5022,7 @@ export class NeotomaServer {
       identityBasis: string;
       identityRule: string;
       action: string;
+      duplicateCandidates?: import("./services/entity_resolution.js").ResolverDuplicateCandidate[];
     }> = [];
     // Track the resolved fields per observation index for schema-driven store_warnings.
     const resolvedFieldsByIndex = new Map<number, Record<string, unknown>>();
@@ -4798,6 +5254,7 @@ export class NeotomaServer {
         identityBasis: string;
         identityRule: string;
         action: string;
+        duplicateCandidates?: import("./services/entity_resolution.js").ResolverDuplicateCandidate[];
       };
       try {
         const result = await resolveEntityWithTrace({
@@ -4815,6 +5272,9 @@ export class NeotomaServer {
           identityBasis: result.trace.identityBasis,
           identityRule: result.trace.identityRule,
           action: result.trace.action,
+          ...(result.trace.duplicateCandidates && result.trace.duplicateCandidates.length > 0
+            ? { duplicateCandidates: result.trace.duplicateCandidates }
+            : {}),
         };
       } catch (err) {
         if (err instanceof CanonicalNameUnresolvedError) {
@@ -4939,6 +5399,9 @@ export class NeotomaServer {
         identityBasis: resolverTrace.identityBasis,
         identityRule: resolverTrace.identityRule,
         action: resolverTrace.action,
+        ...(resolverTrace.duplicateCandidates && resolverTrace.duplicateCandidates.length > 0
+          ? { duplicateCandidates: resolverTrace.duplicateCandidates }
+          : {}),
       });
     }
 
@@ -5167,6 +5630,18 @@ export class NeotomaServer {
       entity_type: string;
       entity_id: string;
     }> = [];
+    // Issue #1559: surface a non-fatal signal when a stored observation omits a
+    // field its schema marks `required: true`. Mirror of the unknown_fields
+    // contract — the write is accepted; the caller repairs in-turn via correct().
+    const requiredFieldsMissing: Array<{
+      entity_type: string;
+      field: string;
+      observation_index: number;
+    }> = [];
+    // Issue #1549: the unknown_fields hint must reflect whether the flagged
+    // schema(s) actually support update_schema_incremental (requires
+    // canonical_name_fields). Track it so the batch hint names the working path.
+    let anyUnknownFieldSchemaHasIdentityConfig = false;
     for (let i = 0; i < createdEntities.length; i++) {
       const e = createdEntities[i];
       const entityFields = resolvedFieldsByIndex.get(i) ?? {};
@@ -5176,22 +5651,188 @@ export class NeotomaServer {
       } catch {
         // Best-effort; never block store on registry IO failure.
       }
-      const storeWarningRules = schemaEntry?.schema_definition?.store_warnings;
-      if (!storeWarningRules?.length) continue;
-      for (const rule of storeWarningRules) {
-        const hasIdentityField = rule.fields.some(
-          (f) => entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
-        );
-        if (!hasIdentityField) {
+      const schemaDef = schemaEntry?.schema_definition;
+      const storeWarningRules = schemaDef?.store_warnings;
+      if (storeWarningRules?.length) {
+        for (const rule of storeWarningRules) {
+          const hasIdentityField = rule.fields.some(
+            (f) =>
+              entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
+          );
+          if (!hasIdentityField) {
+            schemaStoreWarnings.push({
+              code: rule.code,
+              message: rule.message,
+              observation_index: i,
+              entity_type: e.entityType,
+              entity_id: e.entityId,
+            });
+          }
+        }
+      }
+
+      // Schema-driven content_field warning: when a schema declares
+      // `content_field`, emit MISSING_CONTENT_FIELD if the stored payload
+      // omits that field or leaves it empty. See issue #949.
+      const contentField = schemaDef?.content_field;
+      if (contentField) {
+        const value = entityFields[contentField];
+        const isMissing =
+          value === undefined || value === null || (typeof value === "string" && value === "");
+        if (isMissing) {
           schemaStoreWarnings.push({
-            code: rule.code,
-            message: rule.message,
+            code: "MISSING_CONTENT_FIELD",
+            message:
+              `${e.entityType} stored without its primary content field "${contentField}". ` +
+              "For document-derived entities, include the full original markdown/prose " +
+              "in this field; structured fields complement it but do not replace it.",
             observation_index: i,
             entity_type: e.entityType,
             entity_id: e.entityId,
           });
         }
       }
+
+      const schemaFieldDefs = schemaDef?.fields;
+      if (schemaFieldDefs) {
+        const declaredFieldNames = new Set(Object.keys(schemaFieldDefs));
+        let entityHadUnknown = false;
+
+        // Issue #1552: emit a per-field UNKNOWN_FIELD store_warning for each
+        // undeclared field present on this entity. Driven by the batch
+        // unknownFieldNamesSet (the authoritative source for the top-level
+        // unknown_fields[] list) intersected with this entity's payload, so the
+        // store_warning entries stay consistent with the top-level list (hoisted
+        // identity fields and date-like unknowns promoted to the observation are
+        // already excluded from that set and so are not re-flagged here).
+        for (const key of Object.keys(entityFields)) {
+          if (NON_SCHEMA_META_KEYS.has(key)) continue;
+          if (entityFields[key] === undefined) continue;
+          if (declaredFieldNames.has(key)) continue;
+          if (!unknownFieldNamesSet.has(key)) continue;
+          entityHadUnknown = true;
+          schemaStoreWarnings.push({
+            code: "UNKNOWN_FIELD",
+            message:
+              `${e.entityType} stored with field "${key}" that is not declared on its ` +
+              "active schema. The value is preserved on the observation but excluded from " +
+              "the entity snapshot until the field is added to the schema.",
+            observation_index: i,
+            entity_type: e.entityType,
+            entity_id: e.entityId,
+          });
+        }
+
+        if (
+          entityHadUnknown &&
+          Array.isArray(schemaDef?.canonical_name_fields) &&
+          schemaDef.canonical_name_fields.length > 0
+        ) {
+          anyUnknownFieldSchemaHasIdentityConfig = true;
+        }
+
+        // Issue #1559: missing required fields.
+        for (const [fieldName, fieldDef] of Object.entries(schemaFieldDefs)) {
+          if (fieldName === "schema_version") continue;
+          if (!fieldDef?.required) continue;
+          const value = entityFields[fieldName];
+          const isMissing =
+            value === undefined || value === null || (typeof value === "string" && value === "");
+          if (isMissing) {
+            requiredFieldsMissing.push({
+              entity_type: e.entityType,
+              field: fieldName,
+              observation_index: i,
+            });
+            schemaStoreWarnings.push({
+              code: "MISSING_REQUIRED_FIELD",
+              message:
+                `${e.entityType} stored without required field "${fieldName}". The schema marks ` +
+                "this field required; the write was accepted but the entity is incomplete. " +
+                "Use correct() to supply the missing field.",
+              observation_index: i,
+              entity_type: e.entityType,
+              entity_id: e.entityId,
+            });
+          }
+        }
+      }
+    }
+
+    // Issue #1549: conditional unknown_fields hint. update_schema_incremental
+    // requires canonical_name_fields, else it dead-ends on
+    // ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Only prescribe it when at least one
+    // flagged schema has identity config; otherwise point at the path that works.
+    const unknownFieldsHint =
+      unknownFieldsCount === 0
+        ? undefined
+        : anyUnknownFieldSchemaHasIdentityConfig
+          ? "Undeclared fields are preserved on the observation but excluded from the entity " +
+            "snapshot. To promote them, call update_schema_incremental to add the fields, then " +
+            "set migrate_existing: true to backfill existing observations. If an existing " +
+            "declared field already fits the data, prefer correct()-ing into that field instead."
+          : "Undeclared fields are preserved on the observation but excluded from the entity " +
+            "snapshot. This schema has no canonical_name_fields, so update_schema_incremental " +
+            "would fail with ERR_SCHEMA_MISSING_IDENTITY_CONFIG. Instead: correct() the data into " +
+            "an already-declared field (use describe_entity_type to see declared fields), or call " +
+            "register_schema with a new version that adds the field.";
+    // FU-2026-05-001: conversation_message_count.
+    // When a conversation_message entity was created/updated in this request,
+    // resolve its PART_OF target conversation and count sibling
+    // conversation_messages so neotoma_turn_summary (FU-2026-05-002) can
+    // populate `msg N/M` without an extra retrieval round-trip.
+    let conversationMessageCount: number | null = null;
+    try {
+      const conversationMessageEntityIds = createdEntities
+        .filter((e) => e.entityType === "conversation_message")
+        .map((e) => e.entityId);
+      if (conversationMessageEntityIds.length > 0) {
+        const { data: partOfRows } = await db
+          .from("relationship_snapshots")
+          .select("target_entity_id")
+          .eq("user_id", userId)
+          .eq("relationship_type", "PART_OF")
+          .in("source_entity_id", conversationMessageEntityIds);
+        const conversationIds: string[] = [];
+        for (const row of (partOfRows ?? []) as Array<{ target_entity_id?: string | null }>) {
+          if (typeof row.target_entity_id === "string" && row.target_entity_id.length > 0) {
+            conversationIds.push(row.target_entity_id);
+          }
+        }
+        const uniqueConversationIds = Array.from(new Set(conversationIds));
+        if (uniqueConversationIds.length > 0) {
+          const { data: siblingRows } = await db
+            .from("relationship_snapshots")
+            .select("source_entity_id")
+            .eq("user_id", userId)
+            .eq("relationship_type", "PART_OF")
+            .in("target_entity_id", uniqueConversationIds);
+          const siblingIds: string[] = [];
+          for (const row of (siblingRows ?? []) as Array<{
+            source_entity_id?: string | null;
+          }>) {
+            if (typeof row.source_entity_id === "string" && row.source_entity_id.length > 0) {
+              siblingIds.push(row.source_entity_id);
+            }
+          }
+          const uniqueSiblingIds = Array.from(new Set(siblingIds));
+          if (uniqueSiblingIds.length > 0) {
+            const { count } = await db
+              .from("entity_snapshots")
+              .select("entity_id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("entity_type", "conversation_message")
+              .in("entity_id", uniqueSiblingIds);
+            if (typeof count === "number") conversationMessageCount = count;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(
+        `store: conversation_message_count computation failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
 
     return this.buildTextResponse({
@@ -5207,16 +5848,26 @@ export class NeotomaServer {
         identity_basis: e.identityBasis,
         identity_rule: e.identityRule,
         entity_snapshot_after: snapshotByEntityId.get(e.entityId) ?? null,
+        ...(e.duplicateCandidates && e.duplicateCandidates.length > 0
+          ? {
+              prefix_duplicate_candidates: e.duplicateCandidates.map((c) => ({
+                code: c.code,
+                entity_type: c.entityType,
+                candidate_entity_id: c.candidateEntityId,
+                candidate_canonical_name: c.candidateCanonicalName,
+                ...(c.truncated ? { truncated: c.truncated, matched_count: c.matched_count } : {}),
+              })),
+            }
+          : {}),
       })),
       unknown_fields_count: unknownFieldsCount,
       unknown_fields: Array.from(unknownFieldNamesSet).sort(),
-      ...(unknownFieldsCount > 0
-        ? {
-            hint:
-              "Unknown fields were stored in raw_fragments. " +
-              "Call update_schema_incremental to promote them to schema fields, " +
-              "then set migrate_existing: true to backfill existing data.",
-          }
+      ...(unknownFieldsHint ? { hint: unknownFieldsHint } : {}),
+      ...(requiredFieldsMissing.length > 0
+        ? { required_fields_missing: requiredFieldsMissing }
+        : {}),
+      ...(conversationMessageCount !== null
+        ? { conversation_message_count: conversationMessageCount }
         : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
@@ -5228,9 +5879,6 @@ export class NeotomaServer {
   private async correct(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const { loadCodeDefinedSchemaEntry, schemaRegistry } =
-      await import("./services/schema_registry.js");
-
     const parsed = CorrectEntityRequestSchema.parse(args);
 
     // Use authenticated user_id, validate if provided
@@ -5291,25 +5939,41 @@ export class NeotomaServer {
       );
     }
 
-    // Load schema to validate field
-    const schemaEntry =
-      (await schemaRegistry.loadActiveSchema(parsed.entity_type)) ??
-      (await loadCodeDefinedSchemaEntry(parsed.entity_type));
-    if (!schemaEntry) {
+    const {
+      createCorrection,
+      resolveCorrectionSchema,
+      buildCorrectionResponse,
+      CorrectionSchemaNotFoundError,
+    } = await import("./services/correction.js");
+
+    // Issue #1540: resolve the schema and determine whether `field` is declared
+    // via the shared helper, so the HTTP /correct handler cannot diverge. A
+    // schema-registry IO failure propagates here (not coerced to "declared");
+    // a missing schema throws CorrectionSchemaNotFoundError. A field not
+    // declared on the schema is no longer rejected — store()'s append path is
+    // mirrored: the correction is accepted, the value is preserved on the
+    // observation and routed to raw_fragments, but the reducer projects only
+    // declared fields so the value does not surface in the snapshot until the
+    // field is added to the schema. The response carries `unknown_field: true`.
+    let schemaVersion: string;
+    let isUnknownField: boolean;
+    try {
+      ({ schemaVersion, isUnknownField } = await resolveCorrectionSchema(
+        parsed.entity_type,
+        parsed.field,
+        userId
+      ));
+    } catch (schemaErr) {
+      if (schemaErr instanceof CorrectionSchemaNotFoundError) {
+        throw new McpError(ErrorCode.InvalidParams, schemaErr.message);
+      }
       throw new McpError(
-        ErrorCode.InvalidParams,
-        `No active entity schema for entity type: ${parsed.entity_type}`
+        ErrorCode.InternalError,
+        `Failed to resolve schema for correction: ${
+          schemaErr instanceof Error ? schemaErr.message : String(schemaErr)
+        }`
       );
     }
-
-    if (!schemaEntry.schema_definition.fields[parsed.field]) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Unknown field for entity type ${parsed.entity_type}: ${parsed.field}`
-      );
-    }
-
-    const { createCorrection } = await import("./services/correction.js");
 
     try {
       const result = await createCorrection({
@@ -5317,23 +5981,118 @@ export class NeotomaServer {
         entity_type: parsed.entity_type,
         field: parsed.field,
         value: parsed.value,
-        schema_version: schemaEntry.schema_version,
+        schema_version: schemaVersion,
         user_id: userId,
         idempotency_key: parsed.idempotency_key,
       });
 
-      return this.buildTextResponse({
-        observation_id: result.observation_id,
-        entity_id: parsed.entity_id,
-        field: parsed.field,
-        value: parsed.value,
-        message: "Correction applied with priority 1000",
-      });
+      if (isUnknownField) {
+        // Best-effort raw_fragments mirror (parity with the store interpretation
+        // path). Never fail the correction if the fragment write fails — the
+        // observation is the durable record.
+        try {
+          const { storeFragment } = await import("./services/raw_fragments.js");
+          await storeFragment({
+            sourceId: result.observation_id,
+            userId,
+            entityId: parsed.entity_id,
+            entityType: parsed.entity_type,
+            schemaVersion: schemaVersion,
+            key: parsed.field,
+            value: parsed.value,
+            reason: "unknown_field",
+          });
+        } catch (fragErr) {
+          logger.warn(
+            `[correct] raw_fragments mirror failed for ${parsed.entity_type}.${parsed.field}: ${
+              fragErr instanceof Error ? fragErr.message : String(fragErr)
+            }`
+          );
+        }
+      }
+
+      return this.buildTextResponse(
+        buildCorrectionResponse({
+          observation_id: result.observation_id,
+          entity_id: parsed.entity_id,
+          entity_type: parsed.entity_type,
+          field: parsed.field,
+          value: parsed.value,
+          isUnknownField,
+        })
+      );
     } catch (corrErr) {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
       );
+    }
+  }
+
+  // neotoma#1619: publish_rendered_page — one call from rendered_page to a
+  // guest-accessible share URL.
+  private async handlePublishRenderedPage(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const a = (args ?? {}) as Record<string, unknown>;
+    const userId = this.getAuthenticatedUserId(
+      typeof a.user_id === "string" ? a.user_id : undefined
+    );
+
+    const { publishRenderedPage, PublishRenderedPageError } =
+      await import("./services/rendered_page/publish.js");
+
+    try {
+      const result = await publishRenderedPage(
+        {
+          entityId: typeof a.entity_id === "string" ? a.entity_id : undefined,
+          title: typeof a.title === "string" ? a.title : undefined,
+          htmlBody: typeof a.html_body === "string" ? a.html_body : undefined,
+          customCss: typeof a.custom_css === "string" ? a.custom_css : undefined,
+          metaDescription: typeof a.meta_description === "string" ? a.meta_description : undefined,
+          idempotencyKey: typeof a.idempotency_key === "string" ? a.idempotency_key : undefined,
+          userId,
+        },
+        // create callback: reuse the structured-store append path so the new
+        // rendered_page lands with full provenance and object-safe fields.
+        async (fields) => {
+          const entity: Record<string, unknown> = {
+            entity_type: "rendered_page",
+            title: fields.title,
+            html_body: fields.html_body,
+          };
+          if (fields.custom_css !== undefined) entity.custom_css = fields.custom_css;
+          if (fields.meta_description !== undefined)
+            entity.meta_description = fields.meta_description;
+
+          const response = await this.storeStructuredInternal(
+            fields.userId,
+            [entity],
+            100,
+            fields.idempotencyKey
+          );
+          const text = response.content?.[0]?.text ?? "{}";
+          const parsed = JSON.parse(text) as {
+            entities?: Array<{ entity_id?: string }>;
+          };
+          const newId = parsed.entities?.[0]?.entity_id;
+          if (!newId) {
+            throw new Error("Failed to create rendered_page: no entity_id returned from store.");
+          }
+          return newId;
+        }
+      );
+
+      return this.buildTextResponse(result);
+    } catch (err) {
+      if (err instanceof PublishRenderedPageError) {
+        // Structured envelope: stable code + optional hint/details, not prose in message.
+        throw new McpError(ErrorCode.InvalidParams, err.message, {
+          code: err.code,
+          ...err.envelope,
+        });
+      }
+      throw new McpError(ErrorCode.InternalError, err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -5363,6 +6122,7 @@ export class NeotomaServer {
         from_entity_id: parsed.from_entity_id,
         to_entity_id: parsed.to_entity_id,
         observations_moved: result.observations_moved,
+        relationships_repointed: result.relationships_repointed,
         merged_at: result.merged_at,
         merge_reason: parsed.merge_reason,
       });
@@ -5376,6 +6136,66 @@ export class NeotomaServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to merge entities: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  // R5: MCP split_entity() Tool — inverse of merge_entities. Re-points a
+  // predicate-selected subset of an entity's observations onto a new (or
+  // pre-existing) entity to repair over-merges. Mirrors the HTTP
+  // POST /entities/split handler in actions.ts and the mergeEntities() shape.
+  private async splitEntity(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = SplitEntityRequestSchema.parse(args);
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const {
+      splitEntity: splitEntityService,
+      EntityNotFoundError,
+      EntityAlreadyMergedError,
+      SplitPredicateMatchedNothingError,
+      SplitPredicateMatchedAllError,
+      IdempotencyMismatchError,
+    } = await import("./services/entity_split.js");
+
+    try {
+      const result = await splitEntityService({
+        sourceEntityId: parsed.source_entity_id,
+        userId,
+        predicate: parsed.predicate,
+        newEntity: {
+          entity_type: parsed.new_entity.entity_type,
+          canonical_name: parsed.new_entity.canonical_name,
+          target_entity_id: parsed.new_entity.target_entity_id,
+        },
+        idempotencyKey: parsed.idempotency_key,
+        reason: parsed.reason,
+        splitBy: "mcp",
+      });
+
+      return this.buildTextResponse({
+        split_id: result.split_id,
+        source_entity_id: result.source_entity_id,
+        new_entity_id: result.new_entity_id,
+        observations_moved: result.observations_moved,
+        split_at: result.split_at,
+        replayed: result.replayed,
+        reason: parsed.reason,
+      });
+    } catch (err) {
+      if (
+        err instanceof EntityNotFoundError ||
+        err instanceof EntityAlreadyMergedError ||
+        err instanceof SplitPredicateMatchedNothingError ||
+        err instanceof SplitPredicateMatchedAllError ||
+        err instanceof IdempotencyMismatchError
+      ) {
+        throw new McpError(ErrorCode.InvalidParams, err.message);
+      }
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to split entity: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
@@ -5469,6 +6289,40 @@ export class NeotomaServer {
     const parsed = DeleteRelationshipRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
+
+    // Discovery guard (#277): mirrors the HTTP /delete_relationship handler.
+    // Deletion requires the exact relationship_type between two entities, but a
+    // caller who does not know the type can only guess. Without this check the
+    // soft-delete silently "succeeds" by writing a deletion observation for an
+    // edge that never existed, masking the gap. Verify a live (non-deleted)
+    // relationship matches the supplied triple first; if not, raise a not-found
+    // MCP error carrying the same structured discovery hint pointing to
+    // `list_relationships`. The guard lives here (and in the HTTP handler)
+    // rather than inside softDeleteRelationship because the GDPR bulk-deletion
+    // path intentionally writes deletion tombstones for every observed edge.
+    const { relationshipsService } = await import("./services/relationships.js");
+    const liveRelationship = await relationshipsService.getRelationshipSnapshot(
+      parsed.relationship_type,
+      parsed.source_entity_id,
+      parsed.target_entity_id,
+      userId
+    );
+    if (!liveRelationship) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "No live relationship matches the supplied relationship_type, source_entity_id, and target_entity_id.",
+        {
+          code: "RESOURCE_NOT_FOUND",
+          relationship_type: parsed.relationship_type,
+          source_entity_id: parsed.source_entity_id,
+          target_entity_id: parsed.target_entity_id,
+          hint:
+            "Call list_relationships with source_entity_id and target_entity_id to discover the " +
+            "relationship_type(s) between these two entities, then retry delete_relationship with " +
+            "one of the returned types.",
+        }
+      );
+    }
 
     const result = await softDeleteRelationshipService(
       relationshipKey,
@@ -5573,6 +6427,9 @@ export class NeotomaServer {
       const [serverName, resourceName, extraSegment] = pathPart.split("/").filter(Boolean);
       if (serverName === "neotoma" && resourceName === "timeline_widget" && !extraSegment) {
         return { type: "ui_timeline_widget" };
+      }
+      if (serverName === "neotoma" && resourceName === "turn-summary" && !extraSegment) {
+        return { type: "ui_turn_summary_widget" };
       }
       throw new McpError(ErrorCode.InvalidRequest, `Unrecognized UI resource URI format: ${uri}`);
     }

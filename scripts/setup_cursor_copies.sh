@@ -8,6 +8,12 @@ print_info() {
   echo "[INFO] $1"
 }
 
+# Compute a relative path from $2 (a directory) to $1 (a file/dir).
+# Uses Python for portability (macOS lacks GNU realpath --relative-to).
+_rel_path() {
+  python3 -c "import os.path; print(os.path.relpath('$1', '$2'))"
+}
+
 sync_repo_sources() {
   local mode="$1"
   local destination_dir="$2"
@@ -19,10 +25,12 @@ sync_repo_sources() {
   while IFS= read -r -d '' source_file; do
     local base_name
     local target
+    local rel_target
     base_name="$(basename "$source_file")"
     target="$destination_dir/$base_name"
+    rel_target="$(_rel_path "$source_file" "$destination_dir")"
     rm -f "$target"
-    ln -sf "$source_file" "$target" 2>/dev/null || cp "$source_file" "$target"
+    ln -sf "$rel_target" "$target" 2>/dev/null || cp "$source_file" "$target"
     count=$((count + 1))
   done < <(
     if [ "$mode" = "rules" ]; then

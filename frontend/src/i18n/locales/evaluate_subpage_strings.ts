@@ -12,6 +12,8 @@ export interface EvaluatePageStrings {
   introP2BeforeLink: string;
   introInstallLink: string;
   introP2After: string;
+  assessHeading: string;
+  assessIntro: string;
   promptToUseLabel: string;
   whatNeotomaHeading: string;
   whatNeotomaP1: string;
@@ -73,17 +75,20 @@ export interface EvaluatePageStrings {
 
 export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   title: "Evaluate Neotoma",
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and whether you recommend offering a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.`,
   onboardingSequenceLiteral: "evaluation -> installation -> activation -> tooling config",
   activationSequenceLiteral:
     "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   introP1:
-    "This page is designed so your AI agent can read it and help you evaluate whether Neotoma fits your workflow, then carry you through the same agent-driven sequence regardless of which tool you start in. Ask your agent to visit this page first.",
+    "Neotoma is a deterministic state layer for AI agents. It stores the facts your agents work from - contacts, tasks, decisions, finances, and more - as versioned, schema-bound, replayable state that persists across sessions and across tools. It runs locally as an npm package with MCP, CLI, and API interfaces.",
   introP2BeforeLink:
-    "If you already plan to install and want to skip this evaluation flow, go straight to the ",
+    "This page contains the facts an agent needs to judge whether Neotoma fits a given workflow. Read it end to end, then use the assessment prompt below. To skip the evaluation and install directly, go to the ",
   introInstallLink: "install page",
   introP2After: " for agent-assisted setup, manual commands, Docker, and integration docs.",
-  promptToUseLabel: "Prompt to use",
+  assessHeading: "Assess fit with your agent",
+  assessIntro:
+    "Once you have the facts above, hand the assessment to your AI agent. Paste this prompt into Claude, Cursor, ChatGPT, or any MCP-capable tool. The agent reads this page, inspects your real workspace and session context, and gives you an honest fit assessment - what to store first, where to start, and any tool constraints.",
+  promptToUseLabel: "Evaluation prompt",
   whatNeotomaHeading: "What Neotoma does for you",
   whatNeotomaP1:
     "Neotoma lets your agents pick up where they left off: across sessions, across tools, without you re-explaining anything. Store a fact once and every agent works from the same truth. Correct something once and the correction sticks everywhere.",
@@ -200,17 +205,20 @@ Next step:       install / learn more / revisit later`,
 
 export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   title: "Evaluar Neotoma",
-  agentEvaluationPrompt: `Lee https://neotoma.io/evaluate. Usa cualquier herramienta, espacio de trabajo y contexto de chat ya disponibles en esta sesión para evaluar mi flujo real. Evita introspección ad hoc en la shell solo para perfilarme; si Neotoma ya está instalado, usa \`neotoma doctor --json\` para el estado. Luego dime si Neotoma encaja de verdad en mi flujo, qué datos conviene persistir primero por valor y si recomiendas ofrecer una prueba no destructiva en https://neotoma.io/non-destructive-testing antes de cualquier despliegue completo.`,
+  agentEvaluationPrompt: `Lee https://neotoma.io/evaluate y dime si Neotoma encaja en mi flujo de trabajo.`,
   onboardingSequenceLiteral: EVALUATE_SUBPAGE_EN.onboardingSequenceLiteral,
   activationSequenceLiteral: EVALUATE_SUBPAGE_EN.activationSequenceLiteral,
   introP1:
-    "Esta página está pensada para que tu agente de IA la lea y te ayude a evaluar si Neotoma encaja en tu flujo, y luego te guíe por la misma secuencia impulsada por el agente sin importar con qué herramienta empieces. Pide a tu agente que visite primero esta página.",
+    "Neotoma es una capa de estado determinista para agentes de IA. Almacena los hechos con los que trabajan tus agentes - contactos, tareas, decisiones, finanzas y más - como estado versionado, ligado a esquema y reproducible que persiste entre sesiones y entre herramientas. Funciona en local como paquete npm con interfaces MCP, CLI y API.",
   introP2BeforeLink:
-    "Si ya piensas instalar y quieres saltarte esta evaluación, ve directamente a la ",
+    "Esta página contiene los hechos que un agente necesita para juzgar si Neotoma encaja en un flujo concreto. Léela completa y luego usa el prompt de evaluación de abajo. Para saltarte la evaluación e instalar directamente, ve a la ",
   introInstallLink: "página de instalación",
   introP2After:
     " para configuración asistida por agente, comandos manuales, Docker y documentación de integración.",
-  promptToUseLabel: "Prompt a usar",
+  assessHeading: "Evalúa el encaje con tu agente",
+  assessIntro:
+    "Cuando tengas los hechos de arriba, entrega la evaluación a tu agente de IA. Pega este prompt en Claude, Cursor, ChatGPT o cualquier herramienta compatible con MCP. El agente lee esta página, inspecciona tu espacio de trabajo y contexto de sesión reales, y te da una valoración honesta de encaje: qué guardar primero, por dónde empezar y cualquier restricción de herramienta.",
+  promptToUseLabel: "Prompt de evaluación",
   whatNeotomaHeading: "Qué hace Neotoma por ti",
   whatNeotomaP1:
     "Neotoma permite que tus agentes retomen donde lo dejaron: entre sesiones y herramientas, sin que vuelvas a explicar todo. Guarda un hecho una vez y todos los agentes trabajan con la misma verdad. Corrige una vez y la corrección perdura.",

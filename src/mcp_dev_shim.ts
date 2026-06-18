@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
+import { WIN_SHELL } from "./shared/spawn_platform.js";
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -154,6 +155,10 @@ class McpDevShim {
       cwd: this.root,
       env,
       stdio: ["pipe", "pipe", "pipe"],
+      // The default worker command may be npx (npx.cmd on Windows); .cmd needs
+      // shell mode (CVE-2024-27980) or spawn throws EINVAL. Harmless for the
+      // process.execPath (dist) case.
+      ...WIN_SHELL,
     });
     this.worker = child;
 

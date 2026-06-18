@@ -5,6 +5,7 @@
  */
 
 import { db } from "../db.js";
+import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
   checkPluralEntityType,
   enforceEntityTypeGuards,
@@ -15,6 +16,7 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./entity_snapshot_embedding.js";
 import { spawn } from "child_process";
+import { WIN_SHELL } from "../shared/spawn_platform.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -155,6 +157,44 @@ export interface SchemaDefinition {
   aliases?: string[];
 
   /**
+   * Natural-language concept phrases that bridge a free-text query to this
+   * entity_type during lexical search (#1496). Queries name a concept ("bank
+   * account", "savings account") rather than the stored `entity_type`
+   * ("financial_account"). When a normalized query token or adjacent token
+   * pair matches one of these phrases, the entity_type is treated as a
+   * type-match hint so its rows survive the partial-token fallback even when
+   * the literal type name is absent from the query.
+   *
+   * Declared on the schema (not hardcoded in the search module) per
+   * docs/foundation/schema_agnostic_design_rules.md: adding a new finance /
+   * domain type with its own concept words requires only a registry edit, no
+   * change to `src/`. Entries are normalized (lowercased, punctuation/hyphen
+   * stripped) at read time; declare them in plain lowercase. Prefer compound
+   * phrases over bare single tokens to keep precision high ("bank account",
+   * not "account").
+   *
+   * This is deterministic and additive: it only widens which entity types a
+   * query *can* match, never narrows results.
+   */
+  query_synonyms?: string[];
+
+  /**
+   * Snapshot fields that carry the identity-bearing text a caller is most
+   * likely to type when resolving an entity of this type by identifier
+   * (#1495). For `financial_account` the institution name ("Ibercaja") and
+   * the account label live in `institution` / `account_name`, never in
+   * `canonical_name` as a standalone token. Declaring these lets the
+   * identifier-resolution fallback scan the right snapshot fields per type
+   * instead of hardcoding finance-specific field names in a generic handler.
+   *
+   * Merged with the generic base set (name, full_name, title, email, domain,
+   * company) at read time. When a type declares nothing, the generic base is
+   * used and a structured warning is logged keyed by entity_type so drift is
+   * auditable. See docs/foundation/schema_agnostic_design_rules.md.
+   */
+  identity_search_fields?: string[];
+
+  /**
    * Explicit opt-out from `canonical_name_fields` (R2). When set, the schema
    * declares that it has no strong identifiers and intentionally resolves
    * via the heuristic canonical-name derivation. This is loud by design:
@@ -254,6 +294,102 @@ export interface SchemaDefinition {
     fields: string[];
     /** Human-readable warning message included in the response. */
     message: string;
+  }>;
+
+  /**
+   * Name of the field that carries the primary long-form content for an
+   * entity of this type. Declaring this marks the schema as a "document"
+   * type for store-time validation:
+   *
+   * - The store path emits a non-blocking `MISSING_CONTENT_FIELD` warning
+   *   when this field is absent or empty on a stored observation, so agents
+   *   receive feedback when they save only structured facets of a document
+   *   (title, summary, risk_level, …) and drop the full body.
+   *
+   * Future: the canonical markdown renderer (`src/services/canonical_markdown.ts`)
+   * will use this declaration to identify the document body field by schema
+   * rather than by per-type heuristic (tracked in issue #949).
+   *
+   * Convention: prefer `"body"` for new document types. Established
+   * alternatives like `"content"` (used by `note`/`gist`) are also valid —
+   * the declaration only requires the named field to exist on the schema.
+   *
+   * See docs/foundation/schema_agnostic_design_rules.md and issue #949.
+   */
+  content_field?: string;
+
+  /**
+   * Schema-driven rules that auto-extract derived entities when an observation
+   * of this type is stored. Each rule specifies conditions on the stored
+   * payload and, when all conditions match, creates a new entity of the
+   * declared `derived_entity_type` and links it to the source entity via the
+   * declared `relationship_type` (defaults to `REFERS_TO`).
+   *
+   * Rules are evaluated after the primary entity has been committed. Failures
+   * are non-fatal: logged as warnings and skipped, never blocking the primary
+   * store.
+   *
+   * Example (awaiting-reply task from outbound email):
+   * ```ts
+   * derived_entities: [{
+   *   conditions: [
+   *     { field: "direction", op: "eq", value: "outbound" },
+   *     { field: "body", op: "matches_any_pattern", patterns: [
+   *       "\\?",
+   *       "please let me know",
+   *       "looking forward to hearing",
+   *       "please reply",
+   *       "awaiting your response",
+   *     ]},
+   *   ],
+   *   derived_entity_type: "task",
+   *   derived_fields: {
+   *     title: { template: "Awaiting reply: {{subject}}" },
+   *     task_type: { value: "awaiting_reply" },
+   *     status: { value: "pending" },
+   *     due_context: { value: "reply expected" },
+   *   },
+   *   relationship_type: "REFERS_TO",
+   * }]
+   * ```
+   */
+  derived_entities?: Array<{
+    /**
+     * All conditions must pass for this rule to fire. An empty conditions
+     * array means the rule always fires.
+     */
+    conditions: Array<{
+      /** Field on the stored payload to evaluate. */
+      field: string;
+      /** Comparison operator. */
+      op:
+        | "eq" // strict equality (string/number/boolean)
+        | "neq" // not equal
+        | "present" // field is present and non-null/non-empty
+        | "absent" // field is missing or null/empty
+        | "matches_any_pattern"; // case-insensitive substring/regex match against any pattern
+      /** Value to compare against (used by eq / neq). */
+      value?: unknown;
+      /**
+       * Patterns for matches_any_pattern. A pattern is a case-insensitive
+       * substring or JS RegExp source string. The condition passes when at
+       * least one pattern matches the field's string value.
+       */
+      patterns?: string[];
+    }>;
+    /** Entity type of the entity to extract. */
+    derived_entity_type: string;
+    /**
+     * Fields to set on the derived entity. Each entry is either a literal
+     * value or a template string (using `{{field}}` placeholders resolved
+     * from the source entity's stored payload).
+     */
+    derived_fields: Record<string, { value: unknown } | { template: string }>;
+    /**
+     * Relationship type to create between the source entity (as `source`)
+     * and the derived entity (as `target`). Defaults to `"REFERS_TO"`.
+     */
+    relationship_type?: string;
   }>;
 }
 
@@ -459,6 +595,120 @@ export async function deriveRequiredIdentityFields(
     anyOfFields,
     compositeFields,
   };
+}
+
+/**
+ * Build the concept-phrase → entity_type map from `query_synonyms`
+ * declarations across all active schemas (global + user-scoped). Replaces the
+ * hardcoded CONCEPT_TYPE_SYNONYMS map per docs/foundation/
+ * schema_agnostic_design_rules.md. Phrases are normalized so they compare on
+ * the same footing as normalized query tokens. When two schemas declare the
+ * same phrase the first-seen wins (deterministic via sorted entity_type
+ * iteration) and a warning is logged.
+ *
+ * Returns an empty map when no schema declares synonyms — the safe generic
+ * fallback (no bridge, strict matching only).
+ */
+export async function loadConceptTypeSynonyms(
+  userId?: string | null
+): Promise<Map<string, string>> {
+  const synonyms = new Map<string, string>();
+
+  // Collect (entity_type, query_synonyms) pairs from both the registry
+  // (user-registered types) and the code-defined ENTITY_SCHEMAS baseline
+  // (seeded built-ins like financial_account that may not yet be written to
+  // the registry — e.g. fresh DB or test fixture). Registry declarations win
+  // on collision since they reflect explicit user intent.
+  const declarations: Array<{ entity_type: string; query_synonyms: string[] }> = [];
+
+  try {
+    const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+    for (const schema of Object.values(ENTITY_SCHEMAS)) {
+      const declared = schema.schema_definition?.query_synonyms;
+      if (Array.isArray(declared) && declared.length > 0) {
+        declarations.push({ entity_type: schema.entity_type, query_synonyms: declared });
+      }
+    }
+  } catch (error) {
+    logSchemaRegistryInfo(
+      `[SCHEMA_REGISTRY] loadConceptTypeSynonyms: failed to load code-defined schemas: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+
+  try {
+    const schemas = await schemaRegistry.listActiveSchemas(userId ?? undefined);
+    for (const schema of schemas) {
+      const declared = schema.schema_definition?.query_synonyms;
+      if (Array.isArray(declared) && declared.length > 0) {
+        declarations.push({ entity_type: schema.entity_type, query_synonyms: declared });
+      }
+    }
+  } catch (error) {
+    logSchemaRegistryInfo(
+      `[SCHEMA_REGISTRY] loadConceptTypeSynonyms: failed to list active schemas: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+
+  // Deterministic iteration so a phrase collision resolves to a stable winner.
+  const sorted = declarations.sort((a, b) => a.entity_type.localeCompare(b.entity_type));
+  for (const { entity_type, query_synonyms } of sorted) {
+    for (const raw of query_synonyms) {
+      const phrase = normalizeSearchText(raw);
+      if (!phrase) continue;
+      if (synonyms.has(phrase)) {
+        if (synonyms.get(phrase) !== entity_type) {
+          logSchemaRegistryInfo(
+            `[SCHEMA_REGISTRY] query_synonyms collision: phrase "${phrase}" declared by ` +
+              `${synonyms.get(phrase)} and ${entity_type}; keeping ${synonyms.get(phrase)}.`
+          );
+        }
+        continue;
+      }
+      synonyms.set(phrase, entity_type);
+    }
+  }
+  return synonyms;
+}
+
+/**
+ * Resolve the snapshot fields the identifier-resolution fallback should scan
+ * for a given entity_type (#1495). Merges the generic identity-bearing base
+ * set with any `identity_search_fields` the schema declares. When the type has
+ * no schema or declares nothing, returns the base set and reports
+ * `usedFallback: true` so the caller can log a structured, entity-type-keyed
+ * warning (schema_agnostic_design_rules.md: warn on heuristic fallback).
+ */
+export async function resolveIdentitySearchFields(
+  entityType: string,
+  baseFields: readonly string[],
+  userId?: string | null
+): Promise<{ fields: string[]; usedFallback: boolean }> {
+  const normalized = normalizeEntityTypeForSchema(entityType);
+  let declared: string[] | undefined;
+  try {
+    const entry = await schemaRegistry.loadActiveSchema(normalized, userId ?? undefined);
+    declared = entry?.schema_definition?.identity_search_fields;
+    if (!declared) {
+      const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+      const codeSchema = ENTITY_SCHEMAS[normalized] ?? ENTITY_SCHEMAS[entityType];
+      declared = codeSchema?.schema_definition?.identity_search_fields;
+    }
+  } catch (error) {
+    logSchemaRegistryInfo(
+      `[SCHEMA_REGISTRY] resolveIdentitySearchFields: failed to load schema for ` +
+        `${normalized}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  if (declared && declared.length > 0) {
+    const merged = new Set<string>(baseFields);
+    for (const field of declared) merged.add(field);
+    return { fields: [...merged], usedFallback: false };
+  }
+  return { fields: [...baseFields], usedFallback: true };
 }
 
 /** Normalize entity type for schema registry: snake_case, safe characters, max length */
@@ -1034,6 +1284,14 @@ export class SchemaRegistryService {
       if (preserved.reference_fields.length === 0) {
         delete preserved.reference_fields;
       }
+    }
+    if (preserved.content_field && removalSet.has(preserved.content_field)) {
+      console.warn(
+        `[schema_registry] updateSchemaIncremental: content_field "${preserved.content_field}" ` +
+          `removed from entity_type "${options.entity_type}" because its target field was removed. ` +
+          `The MISSING_CONTENT_FIELD store warning will no longer fire for this schema.`
+      );
+      delete preserved.content_field;
     }
 
     // 5. Register new version (start inactive, we'll activate separately if needed)
@@ -1937,6 +2195,31 @@ export class SchemaRegistryService {
       }
     }
 
+    if (definition.query_synonyms !== undefined) {
+      if (!Array.isArray(definition.query_synonyms)) {
+        throw new Error("query_synonyms must be an array of strings");
+      }
+      for (const synonym of definition.query_synonyms) {
+        if (typeof synonym !== "string" || !synonym.trim()) {
+          throw new Error("query_synonyms entries must be non-empty strings");
+        }
+      }
+    }
+
+    if (definition.identity_search_fields !== undefined) {
+      if (!Array.isArray(definition.identity_search_fields)) {
+        throw new Error("identity_search_fields must be an array of field names");
+      }
+      for (const field of definition.identity_search_fields) {
+        if (typeof field !== "string" || !field.trim()) {
+          throw new Error("identity_search_fields entries must be non-empty strings");
+        }
+        if (!definition.fields[field]) {
+          throw new Error(`identity_search_fields references unknown field: ${field}`);
+        }
+      }
+    }
+
     const validTypes = ["string", "number", "date", "boolean", "array", "object"];
     for (const [fieldName, fieldDef] of Object.entries(definition.fields)) {
       if (!validTypes.includes(fieldDef.type)) {
@@ -1993,6 +2276,77 @@ export class SchemaRegistryService {
         definition.agent_instructions.trim().length === 0
       ) {
         throw new Error("agent_instructions must be a non-empty string when present");
+      }
+    }
+
+    if (definition.content_field !== undefined) {
+      if (typeof definition.content_field !== "string" || !definition.content_field.trim()) {
+        throw new Error("content_field must be a non-empty string when present");
+      }
+      if (!definition.fields[definition.content_field]) {
+        throw new Error(`content_field references unknown field: ${definition.content_field}`);
+      }
+    }
+
+    if (definition.derived_entities !== undefined) {
+      if (!Array.isArray(definition.derived_entities)) {
+        throw new Error("derived_entities must be an array");
+      }
+      const validOps = ["eq", "neq", "present", "absent", "matches_any_pattern"];
+      for (let i = 0; i < definition.derived_entities.length; i++) {
+        const rule = definition.derived_entities[i];
+        if (!rule || typeof rule !== "object") {
+          throw new Error(`derived_entities[${i}] must be an object`);
+        }
+        if (!Array.isArray(rule.conditions)) {
+          throw new Error(`derived_entities[${i}].conditions must be an array`);
+        }
+        for (let j = 0; j < rule.conditions.length; j++) {
+          const cond = rule.conditions[j];
+          if (typeof cond.field !== "string" || !cond.field.trim()) {
+            throw new Error(
+              `derived_entities[${i}].conditions[${j}].field must be a non-empty string`
+            );
+          }
+          if (!validOps.includes(cond.op)) {
+            throw new Error(
+              `derived_entities[${i}].conditions[${j}].op must be one of: ${validOps.join(", ")}`
+            );
+          }
+          if (
+            cond.op === "matches_any_pattern" &&
+            (!Array.isArray(cond.patterns) || cond.patterns.length === 0)
+          ) {
+            throw new Error(
+              `derived_entities[${i}].conditions[${j}] with op "matches_any_pattern" must have a non-empty patterns array`
+            );
+          }
+        }
+        if (typeof rule.derived_entity_type !== "string" || !rule.derived_entity_type.trim()) {
+          throw new Error(`derived_entities[${i}].derived_entity_type must be a non-empty string`);
+        }
+        if (!rule.derived_fields || typeof rule.derived_fields !== "object") {
+          throw new Error(`derived_entities[${i}].derived_fields must be an object`);
+        }
+        for (const [fieldKey, fieldSpec] of Object.entries(rule.derived_fields)) {
+          if (
+            !fieldSpec ||
+            typeof fieldSpec !== "object" ||
+            (!("value" in fieldSpec) && !("template" in fieldSpec))
+          ) {
+            throw new Error(
+              `derived_entities[${i}].derived_fields.${fieldKey} must be { value: ... } or { template: "..." }`
+            );
+          }
+          if (
+            "template" in fieldSpec &&
+            (typeof fieldSpec.template !== "string" || fieldSpec.template.trim().length === 0)
+          ) {
+            throw new Error(
+              `derived_entities[${i}].derived_fields.${fieldKey}.template must be a non-empty string`
+            );
+          }
+        }
       }
     }
   }
@@ -2151,6 +2505,9 @@ export class SchemaRegistryService {
       stdio: "ignore", // Suppress output to avoid cluttering logs
       detached: true,
       env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development" },
+      // tsx resolves to tsx.cmd on Windows; .cmd needs shell mode
+      // (CVE-2024-27980) or spawn throws EINVAL.
+      ...WIN_SHELL,
     });
 
     // Don't wait for completion - let it run in background

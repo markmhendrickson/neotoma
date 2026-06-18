@@ -32,6 +32,7 @@ import {
   looksLikeRetrieveInvocation,
   looksLikeStoreStructured,
   makeIdempotencyKey,
+  pickStoredEntityId,
   readFailureHint,
   recordConversationTurn,
   runHook,
@@ -141,15 +142,15 @@ async function handle(
       ...harnessProvenance({ hook_event: hookEventName }),
     };
     try {
-      const result = (await client.store({
+      const result = await client.store({
         entities: [entity],
         idempotency_key: makeIdempotencyKey(
           sessionId,
           turnId,
           `tool-${toolName}-${Date.now()}`
         ),
-      })) as { structured?: { entities?: Array<{ entity_id?: string }> } };
-      const id = result.structured?.entities?.[0]?.entity_id;
+      });
+      const id = pickStoredEntityId(result);
       if (typeof id === "string") toolEntityId = id;
     } catch (err) {
       log("debug", `${hookEventName} store failed: ${(err as Error).message}`);

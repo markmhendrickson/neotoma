@@ -14,9 +14,19 @@ type RingEntry = { id: string; event: SubstrateEvent };
 const ring: RingEntry[] = [];
 let seq = 0n;
 
-export function pushSubstrateEventToRing(event: SubstrateEvent): string {
-  seq += 1n;
-  const id = seq.toString();
+export function pushSubstrateEventToRing(event: SubstrateEvent, explicitId?: string): string {
+  // Prefer a caller-supplied id so the ring shares the durable event log's id
+  // space (the AUTOINCREMENT `seq`). That id never resets across restarts,
+  // which is what makes a client's Last-Event-ID a stable, restart-surviving
+  // cursor. The internal counter is only a fallback for callers without a
+  // durable seq (e.g. tests that push directly).
+  let id: string;
+  if (explicitId !== undefined) {
+    id = explicitId;
+  } else {
+    seq += 1n;
+    id = seq.toString();
+  }
   ring.push({ id, event });
   while (ring.length > BUFFER_CAP) {
     ring.shift();
@@ -73,6 +83,11 @@ export function replayRingAfterLastId(
   }
 }
 
+/** True when the given event id is currently present in the in-memory ring. */
+export function ringHasId(eventId: string): boolean {
+  return ring.some((e) => e.id === eventId);
+}
+
 export function getRingEntriesAfter(
   lastEventId: string | undefined,
   filter: (ev: SubstrateEvent) => boolean
@@ -85,4 +100,58 @@ export function getRingEntriesAfter(
     if (filter(e.event)) out.push(e);
   }
   return out;
+}
+
+/**
+ * Result of a resume attempt against the in-memory ring.
+ *
+ * `gap_detected` is true when the caller supplied a `lastEventId` that is no
+ * longer present in the ring — i.e. it was evicted past the buffer cap, or the
+ * server restarted (the ring is in-memory and does not survive a restart). In
+ * that case the entries returned are the full filtered buffer from its current
+ * head, NOT a true continuation from the requested cursor. A consumer that
+ * needs gap-free delivery (e.g. a projection into an external index) must treat
+ * a gap as "reconcile via a full read" rather than trusting the replayed slice.
+ *
+ * When `lastEventId` is undefined (a fresh subscriber) `gap_detected` is false:
+ * there is no prior position to have missed.
+ */
+export interface RingResumeResult {
+  entries: RingEntry[];
+  gap_detected: boolean;
+  /** The newest ring id at read time, or null when the ring is empty. */
+  latest_ring_id: string | null;
+}
+
+export function resumeRingAfter(
+  lastEventId: string | undefined,
+  filter: (ev: SubstrateEvent) => boolean
+): RingResumeResult {
+  const latestRingId = ring.length > 0 ? ring[ring.length - 1]!.id : null;
+
+  if (lastEventId === undefined) {
+    return {
+      entries: getRingEntriesAfter(undefined, filter),
+      gap_detected: false,
+      latest_ring_id: latestRingId,
+    };
+  }
+
+  const idx = ring.findIndex((e) => e.id === lastEventId);
+  if (idx === -1) {
+    // Cursor not in the ring: evicted past the cap or lost to a restart.
+    // Resume from the current head but flag the gap so the consumer can
+    // reconcile rather than silently trust a discontinuous slice.
+    return {
+      entries: getRingEntriesAfter(undefined, filter),
+      gap_detected: true,
+      latest_ring_id: latestRingId,
+    };
+  }
+
+  return {
+    entries: getRingEntriesAfter(lastEventId, filter),
+    gap_detected: false,
+    latest_ring_id: latestRingId,
+  };
 }

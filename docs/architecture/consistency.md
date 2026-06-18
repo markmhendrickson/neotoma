@@ -51,7 +51,7 @@ After a write completes, subsequent reads MAY return stale data for an **unbound
 - Hardest to reason about
 - Complex conflict resolution if applicable
 **MVP Constraint:**
-Neotoma MVP uses **bounded eventual consistency** where needed, never unbounded eventual consistency.
+Neotoma's current subsystems are all **strongly consistent** (see §2.1); no subsystem is bounded-eventual today. The bounded-eventual model is defined here as forward-looking guidance: if a future subsystem ever needs it, it MUST be bounded, never unbounded eventual.
 ## 2. Consistency Tiers by Subsystem
 ### 2.1 Consistency Mapping Table
 | Subsystem                                                    | Consistency Model | Max Delay | UI Handling                |
@@ -63,11 +63,22 @@ Neotoma MVP uses **bounded eventual consistency** where needed, never unbounded 
 | **Graph Edges** (record→entity, record→event, relationships) | Strong            | 0s        | Immediate display          |
 | **Entities** (creation, linking)                             | Strong            | 0s        | Immediate display          |
 | **Timeline Events**                                          | Strong            | 0s        | Immediate display          |
-| **Full-Text Search Index**                                   | Bounded Eventual  | 5s        | "Indexing..." message      |
-| **Vector Embeddings Index**                                  | Bounded Eventual  | 10s       | "Generating embeddings..." |
-| **Cross-Entity Search**                                      | Bounded Eventual  | 5s        | "Indexing..." message      |
+| **Full-Text Search Index**                                   | Strong            | 0s        | Immediate display          |
+| **Vector Embeddings Index**                                  | Strong¹           | 0s        | Immediate display          |
+| **Cross-Entity Search**                                      | Strong¹           | 0s        | Immediate display          |
 | **Provenance Metadata**                                      | Strong            | 0s        | Immediate display          |
 | **Auth Permissions**                                         | Strong            | 0s        | Block on permission change |
+
+¹ **Embeddings are generated synchronously during snapshot upsert**, not on a deferred/async lag. `prepareEntitySnapshotWithEmbedding` (`src/services/entity_snapshot_embedding.ts`) awaits `generateEmbedding` inline, and every caller (`src/server.ts`, `src/actions.ts`, `src/services/interpretation.ts`) awaits it before the `entity_snapshots` upsert. The embedding is committed in the same store path as the snapshot, so an entity is semantically searchable as soon as its store call returns — provided an embedding provider is configured (`OPENAI_API_KEY`). When no provider is configured, embedding is skipped and semantic search degrades to keyword/lexical matching (still strongly consistent, just not vector-ranked). This is a change from an earlier design that treated embeddings as bounded-eventual (~10s); the synchronous behavior is the current contract.
+
+### 2.1.1 Read-after-write contract (for interactive callers)
+
+For callers issuing a query immediately after a store in the same turn (e.g. an interactive chat assistant), the guarantee is:
+
+- **Structured retrieval is strongly consistent.** `retrieve_entities` (by id, by canonical name, by filter), `retrieve_entity_snapshot`, `retrieve_related_entities`, and `retrieve_graph_neighborhood` reflect a just-completed store with no lag. A fact stored in this turn is readable in this turn.
+- **Semantic search is strongly consistent with respect to the write when an embedding provider is configured**, because the embedding is written in the same synchronous path (¹ above). With no provider configured, `search` falls back to keyword matching.
+- **Practical guidance:** for read-after-write correctness in an interactive path, query the *structured* surface (id / canonical-name / filter), which is always strongly consistent. Treat semantic ranking as a best-effort relevance layer on top, not as the consistency boundary. No freshness token or "block until indexed" call is required — the structured read already reflects the write.
+
 ### 2.2 Subsystem Details
 #### 2.2.1 Core Records (Strong Consistency)
 **What:**
@@ -150,83 +161,53 @@ test("events appear in timeline immediately", async () => {
   expect(invoiceEvent.event_type).toBe("InvoiceIssued");
 });
 ```
-#### 2.2.5 Full-Text Search Index (Bounded Eventual Consistency)
+#### 2.2.5 Full-Text Search Index (Strong Consistency)
 **What:**
-- Text search over `raw_text` and `extracted_fields`
+- Lexical/substring search over entity canonical names (and, where present, content fields).
 **Consistency Guarantee:**
-- After `upload_file` returns, search MAY NOT return the record for up to **5 seconds**.
-- After 5 seconds, search MUST return the record if query matches.
+- After a store returns, lexical search reflects the record immediately. There is **no** indexing delay and no "eventually" window.
 **Implementation:**
-- Asynchronous indexing (background worker or pg_trgm index rebuild)
-- Indexing job triggered on record insert
+- Search runs at request time against the committed rows; there is **no asynchronous indexer or background worker**. (A historical design treated this as bounded-eventual with a ~5s indexing lag and an "Indexing…" banner; that design was never the shipped behavior and the contract is now Strong — see footnote ¹ on the mapping table.)
 **UI Behavior:**
-- Show "Indexing new records..." banner if recent upload
-- After 5s delay, automatically refresh search results
-- Do NOT block user on indexing
+- Results are immediate; no "Indexing new records…" banner is required.
 **Testing:**
 ```typescript
-test("search returns record within 5 seconds", async () => {
-  const recordId = await uploadFile(file);
-  // Immediately after upload, MAY NOT be in search results
-  const immediateResults = await search("invoice");
-  // No assertion here (allowed to be absent)
-  // Wait 5 seconds (bounded delay)
-  await sleep(5000);
-  // MUST be in results now
-  const delayedResults = await search("invoice");
-  expect(delayedResults.some((r) => r.id === recordId)).toBe(true);
+test("a just-stored record is searchable immediately", async () => {
+  const id = await store(record);
+  const results = await search("invoice");
+  expect(results.some((r) => r.id === id)).toBe(true); // no sleep needed
 });
 ```
-**UI Message:**
-```typescript
-{
-  isIndexing && (
-    <Banner type="info">
-      Indexing new records... search results may be incomplete.
-      <RefreshButton onClick={retrySearch} />
-    </Banner>
-  );
-}
-```
-#### 2.2.6 Vector Embeddings Index (Bounded Eventual Consistency)
+#### 2.2.6 Vector Embeddings Index (Strong Consistency¹)
 **What:**
-- Embeddings for hybrid search (future feature)
+- Embeddings backing semantic/similarity search.
 **Consistency Guarantee:**
-- After `upload_file` returns, embeddings MAY NOT exist for up to **10 seconds**.
-- After 10 seconds, embeddings MUST be available.
+- When an embedding provider is configured, the embedding is written **synchronously in the same store path** as the snapshot (see footnote ¹), so an entity is semantically searchable as soon as its store call returns — no deferred/async lag. With no provider configured, semantic ranking is skipped and search degrades to lexical matching (still strongly consistent, just not vector-ranked).
 **Implementation:**
-- Asynchronous embedding generation (background worker calls OpenAI)
-- Batching for efficiency
+- `prepareEntitySnapshotWithEmbedding` awaits `generateEmbedding` inline; every caller awaits it before the `entity_snapshots` upsert. There is **no asynchronous embedding worker**. (A historical design treated embeddings as bounded-eventual ~10s; the synchronous behavior is the current contract.)
 **UI Behavior:**
-- Show "Generating embeddings..." message
-- Hybrid search results may exclude recent records temporarily
-- Automatically refresh after 10s
+- No "Generating embeddings…" delay state; semantic results are available immediately when a provider is configured.
 **Testing:**
 ```typescript
-test("embeddings generated within 10 seconds", async () => {
-  const recordId = await uploadFile(file);
-  await sleep(10000); // Max delay
-  const record = await fetchRecord(recordId);
-  expect(record.embedding).toBeDefined();
-  expect(record.embedding.length).toBe(1536); // OpenAI ada-002 dimension
+test("a just-stored entity is semantically searchable immediately", async () => {
+  const id = await store(entity); // provider configured
+  const results = await semanticSearch("acme corp");
+  expect(results.some((e) => e.id === id)).toBe(true); // no sleep needed
 });
 ```
-#### 2.2.7 Cross-Entity Search (Bounded Eventual Consistency)
+#### 2.2.7 Cross-Entity Search (Strong Consistency)
 **What:**
-- Search across entity names (e.g., "Find all records mentioning Acme Corp")
+- Search across entity names (e.g., "find all entities mentioning Acme Corp").
 **Consistency Guarantee:**
-- After entity creation, entity search MAY NOT return it for up to **5 seconds**.
+- After entity creation, entity search reflects it immediately; there is no indexing window.
 **Implementation:**
-- Entity name indexed asynchronously (same as full-text search)
-**UI Behavior:**
-- Same as full-text search ("Indexing...")
+- Same request-time evaluation as full-text search above; no asynchronous entity-name indexer.
 **Testing:**
 ```typescript
-test("entity search returns entity within 5 seconds", async () => {
-  const recordId = await uploadFileWithEntity("Acme Corp");
-  await sleep(5000);
+test("a just-created entity is returned by entity search immediately", async () => {
+  await storeEntity("Acme Corp");
   const results = await searchEntities("Acme");
-  expect(results.some((e) => e.canonical_name === "Acme Corp")).toBe(true);
+  expect(results.some((e) => e.canonical_name === "Acme Corp")).toBe(true); // no sleep
 });
 ```
 #### 2.2.8 Provenance Metadata (Strong Consistency)
@@ -292,11 +273,11 @@ test("snapshot is immediately readable after computation", async () => {
 - Reducer execution is part of observation creation transaction
 #### 2.2.11 Auth Permissions (Strong Consistency)
 **What:**
-- User permissions, workspace access, RLS policies
+- User permissions, workspace access, per-owner data isolation
 **Consistency Guarantee:**
 - After permission change, subsequent API calls MUST enforce new permissions immediately.
 **Implementation:**
-- Row-level security (RLS) evaluated per query
+- Application-layer enforcement: every query resolves the caller via `getAuthenticatedUserId` and scopes by `user_id` (`.eq("user_id", userId)`) on each request. Database-level row-level security (RLS) is a possible future defense-in-depth layer, not the current mechanism — see [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization).
 - No caching of permissions
 **UI Behavior:**
 - Block user immediately if permission revoked
@@ -322,6 +303,9 @@ const handleUpload = async (file: File) => {
 };
 ```
 ### 3.2 Bounded Eventual Consistency (Show Delay Message)
+
+_Forward-looking: no current subsystem is bounded-eventual (see §3.3). This pattern applies only if one is introduced later._
+
 **Rules:**
 - Inform user of indexing delay
 - Provide refresh mechanism
@@ -355,22 +339,26 @@ const SearchResults = () => {
 };
 ```
 ### 3.3 UI Message Templates
-| Scenario               | Message                                                  | Action                 |
-| ---------------------- | -------------------------------------------------------- | ---------------------- |
-| Search during indexing | "Indexing new records... results may be incomplete."     | Show refresh button    |
-| Embedding generation   | "Generating embeddings for hybrid search... (up to 10s)" | Auto-refresh after 10s |
-| No delay               | None                                                     | Display immediately    |
+
+> **Note:** No Neotoma subsystem is currently bounded-eventual. Search, vector embeddings, and cross-entity search are all strongly consistent (synchronous; see §2.2.5–§2.2.7). The template below is forward-looking guidance for any bounded-eventual subsystem that may be introduced later — not a description of current behavior. Do not show an "indexing" delay banner for search today.
+
+| Scenario                      | Message                                              | Action              |
+| ----------------------------- | ---------------------------------------------------- | ------------------- |
+| (Hypothetical) async indexing | "Indexing new records... results may be incomplete." | Show refresh button |
+| No delay (current behavior)   | None                                                 | Display immediately |
 ## 4. Consistency and Determinism
 ### 4.1 Determinism Within Consistency Tiers
 **Critical Distinction:**
 - **Determinism:** Same input → same output (always)
 - **Consistency:** When output becomes visible
 **Both strong and eventual subsystems MUST be deterministic:**
-**Example (Bounded Eventual, but Deterministic):**
+**Example (Deterministic ranking — note: search itself is Strong, not eventual):**
 ```typescript
-// Search indexing is eventual, but ranking is deterministic
-const results1 = await search("invoice"); // After indexing
-const results2 = await search("invoice"); // Same query, same time
+// Ranking is deterministic: the same query at the same state returns the
+// same order. (Search is strongly consistent — this illustrates determinism,
+// not an indexing delay.)
+const results1 = await search("invoice");
+const results2 = await search("invoice"); // same query, same state
 // results1 === results2 (same order, same records)
 ```
 **Forbidden (Non-Deterministic):**
@@ -379,16 +367,19 @@ const results2 = await search("invoice"); // Same query, same time
 const results = await search("invoice").sort(() => Math.random() - 0.5);
 ```
 ### 4.2 Testing Determinism in Eventual Systems
-**Pattern:**
-1. Wait for consistency window (e.g., 5s)
-2. Issue same query multiple times
+
+This pattern applies only if a bounded-eventual subsystem is introduced (none exists today; search is strongly consistent and needs no wait — see §6.2).
+
+**Pattern (for a hypothetical bounded-eventual subsystem):**
+1. Wait for the consistency window (e.g., 5s)
+2. Issue the same query multiple times
 3. Verify results are identical
 ```typescript
-test("search is deterministic after indexing", async () => {
-  const recordId = await uploadFile(file);
-  await sleep(5000); // Wait for indexing
-  const results1 = await search("invoice");
-  const results2 = await search("invoice");
+test("eventual subsystem is deterministic after convergence", async () => {
+  await mutateEventualSubsystem(input);
+  await sleep(CONSISTENCY_WINDOW_MS); // Wait for convergence
+  const results1 = await queryEventualSubsystem(input);
+  const results2 = await queryEventualSubsystem(input);
   expect(results1).toEqual(results2); // Deterministic order
 });
 ```
@@ -399,11 +390,14 @@ test("search is deterministic after indexing", async () => {
 | `upload_file`   | Strong           | Returns only after full commit           |
 | `fetch_record`  | Strong           | Always returns latest committed state    |
 | `list_records`  | Strong           | Metadata list is strongly consistent     |
-| `search`        | Bounded Eventual | May not include records uploaded <5s ago |
+| `search`        | Strong           | Reflects a just-stored record immediately (no indexing lag); semantic ranking requires a configured embedding provider, else lexical |
 | `create_entity` | Strong           | Returns only after entity committed      |
 | `link`          | Strong           | Edge creation is transactional           |
 ### 5.2 MCP Response Metadata
-MCP actions on eventual subsystems SHOULD include consistency metadata:
+
+> **Note:** All MCP actions in §5.1 are strongly consistent, so none emit this envelope today. The shape below is reserved for any bounded-eventual action introduced later — it is forward-looking guidance, not a description of a current response.
+
+If a bounded-eventual MCP action is ever added, it SHOULD include consistency metadata:
 ```json
 {
   "results": [
@@ -416,9 +410,9 @@ MCP actions on eventual subsystems SHOULD include consistency metadata:
   }
 }
 ```
-AI agents can use this to:
-- Inform user of potential staleness
-- Retry query after delay
+AI agents could use such metadata to:
+- Inform the user of potential staleness
+- Retry the query after the delay
 - Adjust confidence in results
 ## 6. Testing Consistency-Sensitive Code
 ### 6.1 Test Categories
@@ -431,7 +425,7 @@ AI agents can use this to:
 - Verify deterministic results after convergence
 **Consistency Violation Tests:**
 - Verify system never violates consistency guarantees
-- E.g., search never returns data older than 5s after indexing completes
+- E.g., a strong subsystem never returns stale data after a committed write; a bounded-eventual subsystem (none today) never exceeds its declared delay bound
 ### 6.2 Example Test Suite
 ```typescript
 describe("Consistency guarantees", () => {
@@ -442,24 +436,22 @@ describe("Consistency guarantees", () => {
       expect(record).toBeDefined();
     });
   });
-  describe("Bounded eventual (search)", () => {
-    it("returns record within 5 seconds in search", async () => {
+  describe("Strong consistency (search)", () => {
+    it("includes a just-stored record immediately (no indexing wait)", async () => {
       const recordId = await uploadFile(file);
-      // Optional: check immediate results (may or may not include record)
-      const immediate = await search("invoice");
-      // Wait for max delay
-      await sleep(5000);
-      // MUST include record now
-      const delayed = await search("invoice");
-      expect(delayed.some((r) => r.id === recordId)).toBe(true);
+      // Search is synchronous: the record is searchable on the next query.
+      const results = await search("invoice");
+      expect(results.some((r) => r.id === recordId)).toBe(true);
     });
-    it("search results are deterministic after indexing", async () => {
-      await sleep(5000); // Ensure indexing complete
+    it("search results are deterministic at a fixed state", async () => {
       const results1 = await search("invoice");
       const results2 = await search("invoice");
       expect(results1).toEqual(results2);
     });
   });
+  // If a bounded-eventual subsystem is ever introduced, add a
+  // describe("Bounded eventual (...)") block here that waits for the declared
+  // delay bound before asserting inclusion. None exists today.
 });
 ```
 ## 7. Consistency Invariants (MUST/MUST NOT)
@@ -468,20 +460,20 @@ describe("Consistency guarantees", () => {
 2. **Graph edges MUST be strongly consistent** (transactional with records)
 3. **Timeline events MUST be strongly consistent**
 4. **Auth permissions MUST be strongly consistent** (immediate enforcement)
-5. **Eventual subsystems MUST bound their delay** (no unbounded eventual)
-6. **UI MUST inform user of indexing delays** (bounded eventual only)
+5. **Any bounded-eventual subsystem MUST bound its delay** (no unbounded eventual) — conditional; none exists today
+6. **UI MUST inform the user of indexing delays** — only if a bounded-eventual subsystem exists; there is none today, so no "indexing…" banner is shown for search
 7. **MCP MUST document consistency tier** per action
-8. **Tests MUST verify consistency guarantees** (especially bounded eventual)
+8. **Tests MUST verify consistency guarantees** (and, for any future bounded-eventual subsystem, its convergence)
 9. **All subsystems MUST be deterministic** within their tier
 10. **All writes MUST be durable** (no data loss)
 ### MUST NOT
 1. **Core records MUST NOT be eventually consistent** (always strong)
-2. **UI MUST NOT hide indexing delays** (must inform user)
-3. **Tests MUST NOT assume eventual is immediate** (must wait for max delay)
+2. **UI MUST NOT hide a real indexing delay** — applies only to a bounded-eventual subsystem (none today); do not invent an indexing banner for the strongly-consistent search
+3. **Tests MUST NOT assume a bounded-eventual subsystem is immediate** — for today's strongly-consistent subsystems (including search) tests MUST NOT add `sleep()`/indexing waits
 4. **Ranking MUST NOT be nondeterministic** (no random ordering)
-5. **Strong subsystems MUST NOT use async indexing** (defeats guarantee)
-6. **Eventual subsystems MUST NOT lose writes** (durability required)
-7. **MCP MUST NOT return inconsistent data** without metadata warning
+5. **Strong subsystems MUST NOT use async indexing** (defeats guarantee) — search and embeddings are strong and therefore synchronous
+6. **Any bounded-eventual subsystem MUST NOT lose writes** (durability required)
+7. **MCP MUST NOT return inconsistent data** without a metadata warning
 8. **Permissions MUST NOT be eventually consistent** (security risk)
 ## 8. Future Consistency Considerations
 ### 8.1 Multi-Region Consistency (Future)
@@ -515,25 +507,25 @@ Load `docs/architecture/consistency.md` when:
 - `docs/subsystems/events.md` (event emission)
 ### Constraints Agents Must Enforce
 1. **Core records, graph, timeline, auth MUST be strong consistency**
-2. **Search and embeddings MUST be bounded eventual (not unbounded)**
-3. **Max delays: search 5s, embeddings 10s** (document in code)
-4. **UI MUST show "indexing..." message for bounded eventual**
+2. **Search and embeddings ARE strongly consistent (synchronous)** — search runs at request time against committed rows; embeddings are written inline in the same store path (see §2.2.5–§2.2.7 and footnote ¹). Do NOT reintroduce async indexing or a bounded-eventual tier for them.
+3. **No current subsystem is bounded-eventual** — the bounded-eventual model in §1.2/§3/§6 is forward-looking guidance only. If a future subsystem adopts it, it MUST declare a bounded max delay in code and docs.
+4. **UI MUST NOT show an "indexing…" message for search** — results are immediate. An indexing banner is reserved for a future bounded-eventual subsystem, should one be introduced.
 5. **All subsystems MUST be deterministic** (no random ordering)
-6. **Tests MUST wait for max delay** in bounded eventual tests
-7. **MCP responses MUST include consistency metadata** for eventual actions
+6. **Read-after-write tests for strong subsystems (including search) MUST NOT add `sleep()`/indexing waits**; wait-for-convergence is only for a future bounded-eventual subsystem.
+7. **MCP responses for today's actions MUST NOT emit a consistency-delay envelope** (all §5.1 actions are Strong); that envelope is reserved for a future bounded-eventual action.
 ### Forbidden Patterns
 - Making core records eventually consistent
-- Hiding indexing delays from users
+- Reintroducing async indexing or an "indexing…" delay for search or embeddings (both are strong/synchronous)
 - Nondeterministic ranking or ordering
 - Unbounded eventual consistency (MVP)
-- Testing eventual systems without sleep()
+- Adding `sleep()` to a read-after-write test for a strongly-consistent subsystem
 - Caching auth permissions (must be fresh)
 ### Validation Checklist
 - [ ] Consistency tier documented for new subsystems
 - [ ] Strong consistency uses transactions
-- [ ] Bounded eventual has documented max delay
-- [ ] UI shows indexing messages for eventual subsystems
-- [ ] Tests wait for max delay in eventual tests
+- [ ] Any new bounded-eventual subsystem (none today) has a documented max delay
+- [ ] No "indexing…" message added for strongly-consistent subsystems (search, embeddings)
+- [ ] Read-after-write tests for strong subsystems use no `sleep()`/indexing wait
 - [ ] MCP actions document consistency guarantees
 - [ ] Determinism preserved in all ranking logic
 - [ ] No data loss in any consistency tier

@@ -317,7 +317,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
       "Your agent can read the docs, inspect the evaluation criteria, and tell you whether Neotoma fits your actual workflow before you install anything.",
     promptHint:
       "Copy this prompt into any AI agent. It reads the evaluation page, inspects your context, and judges whether Neotoma fits.",
-    homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and whether you recommend a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
+    homeEvaluatePrompt: `Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.`,
     evaluatePromptPill: "Evaluation prompt",
     evaluatePromptCardSubtitle:
       "Reads the page, then evaluates fit against your real workflow.",

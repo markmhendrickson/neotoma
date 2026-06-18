@@ -26,7 +26,7 @@ The pre-PR adversarial checklist is a sixth layer (human-driven), tracked separa
 ## G2 — Static lint (`security:lint`)
 
 **Command:** `npm run security:lint`  
-**Implementation:** `scripts/security/lint.js`  
+**Implementation:** `scripts/security/run_semgrep.js`  
 **Blocks on:** Errors only. Warnings are advisory.
 
 ### Current rules

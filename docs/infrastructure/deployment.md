@@ -1,31 +1,41 @@
 # Deployment Guide
-*(Fly.io Deployment and Production Setup)*
+
+_(Fly.io Deployment and Production Setup)_
+
 ## Scope
+
 This document covers:
+
 - Fly.io account setup and CLI installation
 - Application creation and configuration
 - Environment variable configuration
 - Deployment procedures
 - Post-deployment verification
 - Marketing site deployment to neotoma.io (GitHub Pages)
-This document does NOT cover:
+  This document does NOT cover:
 - Local development setup (see `docs/developer/getting_started.md`)
 - Infrastructure scaling (post-MVP)
 - Advanced monitoring (post-MVP)
+
 ## Marketing site (neotoma.io)
+
 The static marketing site is built with `npm run build:site:pages` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`).
 
 - **Prod:** Push to **main** (or run the workflow manually). Served at **https://neotoma.io** (root).
 - **Dev preview:** Push to **dev** and deploy to a **separate repository** via `.github/workflows/deploy-pages-dev-site.yml`. Served at **https://dev.neotoma.io**.
 
 ### One-time: Enable GitHub Pages from Actions
+
 1. In the repo on GitHub: **Settings → Pages** (under "Code and automation").
 2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not "Deploy from a branch"). Save.
 3. The prod workflow runs on push to **main** or when run manually (Actions → "Deploy site (GitHub Pages)" → Run workflow).
+
 ### Deploy
+
 No extra secrets: the prod workflow uses the repo’s GitHub Pages environment. Push to **main** (or run the workflow manually from the Actions tab) to build and deploy production at **https://neotoma.io**.
 
 ### Dev preview site (dev.neotoma.io, isolated from prod)
+
 Use a dedicated Pages repository so preview deploys never modify the prod Pages artifact.
 
 1. Create repository `markmhendrickson/neotoma-dev-site` (or adjust the workflow `external_repository` value).
@@ -38,7 +48,9 @@ Use a dedicated Pages repository so preview deploys never modify the prod Pages 
 6. Add DNS record for `dev.neotoma.io`:
    - **CNAME** `dev` -> `markmhendrickson.github.io`
 7. Enable **Enforce HTTPS** once available.
+
 ### Custom domain (neotoma.io)
+
 1. In the repo: **Settings → Pages** (under "Code and automation").
 2. Under **Custom domain**, enter **neotoma.io** and click **Save**. GitHub will add a CNAME file or show DNS instructions.
 3. At your DNS provider for neotoma.io, add **A records** for the apex (all four):
@@ -49,11 +61,13 @@ Use a dedicated Pages repository so preview deploys never modify the prod Pages 
 5. When **Enforce HTTPS** becomes available in Settings → Pages, enable it.
 
 #### If HTTPS stays unavailable (certificate for \*.github.io or "Not Secure")
+
 - **CAA records:** If the zone has CAA records, at least one must allow Let's Encrypt (GitHub uses it for custom domains). Add a CAA record: `0 issue "letsencrypt.org"`. Via script: `./scripts/cloudflare_ensure_caa_letsencrypt.sh`.
 - **Retrigger issuance:** In Settings → Pages, remove the custom domain, wait a few minutes, then re-add `neotoma.io` and Save. GitHub will run DNS check and request a new certificate.
 - **Wait:** Issuance can take up to 24 hours after DNS is correct.
 
 ### Cloudflare cutover checklist (redirect removal)
+
 1. Remove any forwarding or redirect rule that sends `https://neotoma.io` to GitHub (repo or github.io):
    - **Via script (recommended):** `CLOUDFLARE_API_TOKEN` in env, then run `./scripts/remove_cloudflare_redirect.sh`. Uses Rulesets API; removes redirect rules that point to `*github*`.
    - **Via dashboard:** Cloudflare Dashboard → Rules → Redirect Rules (or Page Rules); delete the rule that forwards neotoma.io to the repo or github.io.
@@ -61,51 +75,73 @@ Use a dedicated Pages repository so preview deploys never modify the prod Pages 
 3. Verify with browser and curl:
    - `https://neotoma.io` returns `200` and stays on `neotoma.io` (no hop to `github.io` or `github.com`).
    - `https://neotoma.io/sitemap.xml` and `https://neotoma.io/robots.txt` resolve successfully.
+
 ## Prerequisites
+
 - Fly.io account (free tier available)
 - Fly CLI installed (`brew install flyctl` or see https://fly.io/docs/hands-on/install-flyctl/)
 - Database (PostgreSQL or SQLite for local)
 - Domain name (optional, for custom domain)
+
 ## Step 1: Install Fly CLI
+
 ### macOS
+
 ```bash
 brew install flyctl
 ```
+
 ### Linux
+
 ```bash
 curl -L https://fly.io/install.sh | sh
 ```
+
 ### Windows
+
 ```bash
 powershell -Command "iwr https://fly.io/install.ps1 -useb | iex"
 ```
+
 ### Verify Installation
+
 ```bash
 flyctl version
 ```
+
 ## Step 2: Authenticate with Fly.io
+
 ```bash
 flyctl auth login
 ```
+
 This opens a browser for authentication. After login, you're ready to create apps.
+
 ## Step 3: Create Fly.io Application
+
 ### One-Time Setup
+
 ```bash
 # Navigate to project directory
 cd neotoma
 # Create app (don't deploy yet)
 flyctl launch --no-deploy --name neotoma --region <closest-region>
 ```
+
 **Region Selection:**
+
 - Choose region closest to your database
 - Common regions: `iad` (Washington DC), `sjc` (San Jose), `lhr` (London))
 - List all regions: `flyctl regions list`
-**What This Creates:**
+  **What This Creates:**
 - `fly.toml` configuration file
 - Fly.io app named "neotoma"
 - App configuration (not deployed yet)
+
 ## Step 4: Configure Environment Variables
+
 ### Set Secrets (Never Commit)
+
 ```bash
 # Set database credentials (if using remote backend)
 flyctl secrets set \
@@ -122,16 +158,23 @@ flyctl secrets set \
 flyctl secrets set \
   OPENAI_API_KEY="sk-your-api-key"
 ```
+
 **Security Notes:**
+
 - Secrets are encrypted and never exposed in logs
 - Use strong random tokens for `ACTIONS_BEARER_TOKEN`
 - Never commit secrets to git
+
 ### Verify Secrets
+
 ```bash
 flyctl secrets list
 ```
+
 ## Step 5: Review fly.toml
+
 The `fly.toml` file should look like:
+
 ```toml
 app = "neotoma"
 primary_region = "iad"
@@ -169,30 +212,40 @@ primary_region = "iad"
       restart_limit = 0
       timeout = "2s"
 ```
+
 **Key Settings:**
+
 - `internal_port = 3180`: Matches `HTTP_PORT` environment variable
 - `auto_stop_machines = true`: Saves costs (machines stop when idle)
 - `auto_start_machines = true`: Machines start on first request
 - `min_machines_running = 0`: No always-on machines (cost-effective)
+
 ## Step 6: Deploy Application
+
 ### First Deployment
+
 ```bash
 # Build and deploy
 flyctl deploy --remote-only
 ```
+
 **What This Does:**
+
 - Builds Docker image using `Dockerfile`
 - Pushes image to Fly.io registry
 - Deploys to Fly.io infrastructure
 - Starts application
-**Deployment Output:**
+  **Deployment Output:**
+
 ```
 ==> Building image
 ==> Creating release
 ==> Monitoring deployment
 v0 deployed successfully
 ```
+
 ### Verify Deployment
+
 ```bash
 # Check app status
 flyctl status
@@ -201,21 +254,28 @@ flyctl logs
 # Check app URL
 flyctl info
 ```
+
 **Expected Output:**
+
 ```
 App: neotoma
 Hostname: neotoma.fly.dev
 Region: iad
 Status: running
 ```
+
 ## Step 7: Test Deployment
+
 ### Health Check
+
 ```bash
 # Test health endpoint
 curl https://neotoma.fly.dev/health
 # Expected: {"status":"ok"}
 ```
+
 ### Test API
+
 ```bash
 # Test with bearer token
 TOKEN=your-bearer-token
@@ -223,39 +283,55 @@ curl https://neotoma.fly.dev/openapi.yaml \
   -H "Authorization: Bearer $TOKEN"
 # Should return OpenAPI spec
 ```
+
 ### Test MCP Endpoint
+
 ```bash
 curl -X POST https://neotoma.fly.dev/retrieve_records \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"type": "note", "limit": 10}'
 ```
+
 ## Step 8: Update OpenAPI Spec
+
 If your app URL changed, update `openapi.yaml`:
+
 ```yaml
 servers:
   - url: https://neotoma.fly.dev
     description: Production server
 ```
+
 Then redeploy:
+
 ```bash
 flyctl deploy --remote-only
 ```
+
 ## Continuous Deployment
+
 ### Deploy After Code Changes
+
 ```bash
 # After committing changes
 git push origin dev
 # Deploy latest code
 flyctl deploy --remote-only
 ```
+
 ### Automated Deployment (Post-MVP)
+
 Consider setting up:
+
 - GitHub Actions for CI/CD
 - Automatic deployments on merge to `main`
 - Staging environment for testing
+
 ## Monitoring and Logs
+
 ### View Logs
+
 ```bash
 # Real-time logs
 flyctl logs
@@ -264,21 +340,29 @@ flyctl logs --limit 100
 # Follow logs
 flyctl logs --follow
 ```
+
 ### Check Metrics
+
 ```bash
 # App metrics
 flyctl metrics
 # Machine status
 flyctl status
 ```
+
 ### SSH into Machine
+
 ```bash
 # SSH into running machine
 flyctl ssh console
 ```
+
 ## Troubleshooting
+
 ### Issue: "Deployment failed"
+
 **Solution:**
+
 1. **Check logs:**
    ```bash
    flyctl logs
@@ -293,8 +377,11 @@ flyctl ssh console
 4. **Check fly.toml:**
    - Verify `internal_port` matches `HTTP_PORT`
    - Check region is valid
+
 ### Issue: "Application not responding"
+
 **Solution:**
+
 1. **Check machine status:**
    ```bash
    flyctl status
@@ -311,13 +398,19 @@ flyctl ssh console
    ```bash
    flyctl secrets list
    ```
+
 ### Issue: "Port mismatch"
+
 **Solution:**
+
 - Ensure `fly.toml` has `internal_port = 3180`
 - Verify `HTTP_PORT=3180` in environment (or use default)
 - Check `Dockerfile` exposes port 3180
+
 ### Issue: "Out of memory"
+
 **Solution:**
+
 1. **Increase memory:**
    ```bash
    flyctl scale vm shared-cpu-2x  # 2GB RAM
@@ -327,13 +420,18 @@ flyctl ssh console
    [vm]
      memory_mb = 2048
    ```
+
 ## Custom Domain (Optional)
+
 ### Add Domain
+
 ```bash
 # Add custom domain
 flyctl certs add neotoma.yourdomain.com
 ```
+
 ### Update DNS
+
 1. **Get DNS records:**
    ```bash
    flyctl certs show neotoma.yourdomain.com
@@ -346,12 +444,17 @@ flyctl certs add neotoma.yourdomain.com
    ```bash
    flyctl certs check neotoma.yourdomain.com
    ```
+
 ## Cost Optimization
+
 ### Free Tier Limits
+
 - **3 shared-cpu-1x VMs** (256MB RAM each)
 - **160GB outbound data transfer/month**
 - **3GB persistent volumes**
+
 ### Cost-Saving Tips
+
 1. **Use auto-stop/start:**
    - Machines stop when idle
    - Start automatically on first request
@@ -364,6 +467,7 @@ flyctl certs add neotoma.yourdomain.com
    - Use multi-stage builds (already in `Dockerfile`)
    - Minimize image size
    - Use `.dockerignore`
+
 ## MCP host (mcp.neotoma.io)
 
 The **HTTP actions** app (same Fly app as API: `dist/actions.js`, `fly.toml` `internal_port = 3180`) serves Streamable HTTP MCP at **`/mcp`** and OAuth / server-card under **`/.well-known/`**. Use a dedicated hostname so OAuth metadata and Smithery match one origin.
@@ -457,7 +561,6 @@ Two environment variables control its behavior; both are optional:
 
 - `NEOTOMA_ROOT_LANDING_MODE` — explicit mode override. Valid values:
   `sandbox`, `personal`, `prod`, `local`. Precedence is:
-
   1. `NEOTOMA_ROOT_LANDING_MODE` (explicit).
   2. `NEOTOMA_SANDBOX_MODE=1` → `sandbox`.
   3. Loopback request (`127.0.0.1`, `::1`) → `local`.
@@ -511,36 +614,72 @@ Issue reporting uses GitHub Issues as the collaborative transport. Issues are fi
 Configuration is via `~/.config/neotoma/config.json` and `NEOTOMA_ISSUES_*` environment variables. Authentication uses the GitHub CLI (`gh auth token`). See [docs/subsystems/agent_feedback_pipeline.md](../subsystems/agent_feedback_pipeline.md) for migration details from the old feedback pipeline.
 
 ## Rollback
+
 ### Rollback to Previous Version
+
 ```bash
 # List releases
 flyctl releases list
 # Rollback to specific release
 flyctl releases rollback <release-id>
 ```
+
 ### Emergency Rollback
+
 ```bash
 # Rollback to previous release
 flyctl releases rollback
 ```
+
+## SQLite concurrency and the multi-writer model
+
+Neotoma's default storage backend is SQLite (`better-sqlite3`), configured in `src/repositories/sqlite/sqlite_client.ts`. For anyone running a single hosted instance that serves multiple users, the concurrency envelope is:
+
+**What is configured today**
+
+- **WAL mode is enabled** (`PRAGMA journal_mode = WAL`). Under WAL, readers do not block the writer and the writer does not block readers — concurrent reads proceed while a write is in flight. This is the property that makes one instance safely serve many concurrent read requests.
+- **`PRAGMA foreign_keys = ON`** for referential integrity.
+- **A single cached connection per server process** (`cachedDb` singleton). `better-sqlite3` is a synchronous, in-process driver, so all writes from the server process are **serialized through one connection** — there is no in-process write contention to tune, and no connection pool to size.
+
+**The practical envelope**
+
+- **Reads:** effectively unbounded concurrency. WAL lets many reads run against a consistent snapshot while writes continue.
+- **Writes:** serialized in-process. A web backend that fans many requests into one Neotoma server process gets correct, ordered writes without extra configuration. Throughput is bounded by single-writer SQLite write speed, which is high for the row sizes Neotoma stores (observations, snapshots, relationships) but is not horizontally scalable within one DB file.
+- **Multi-process access is the real caveat:** if a _second_ process opens the same database file concurrently with the server (e.g. a CLI `backup`, a `doctor` run, or an out-of-band migration), the two processes contend for the WAL write lock. `busy_timeout` is set (default 5000ms, `NEOTOMA_SQLITE_BUSY_TIMEOUT_MS`), so a second writer now _waits_ up to the timeout for the lock rather than seeing `SQLITE_BUSY` immediately. Guidance is still to run write-heavy maintenance (backup, vacuum, migration) against a quiesced instance or serialized with the server — the timeout bounds the contention, it does not make sustained concurrent writes performant. Read-only out-of-process access (a reporting query) is safe under WAL.
+
+**When this envelope is not enough**
+
+For a deployment that needs multiple _writer processes_ against shared state, or write throughput beyond a single SQLite file, SQLite is off its primary path. The options, in increasing order of effort, are: (1) one Neotoma instance per tenant (physical isolation — see `docs/plans/multi-tenant-operational-patterns.md`), (2) front all writes through the single server process (the current model — keep maintenance writes serialized), or (3) a Postgres-backed storage adapter (not yet implemented; tracked separately). For most single-instance multi-user web backends, option (2) with WAL is sufficient and is what ships today.
+
+> Note: the `busy_timeout` PRAGMA that makes out-of-process writers wait rather than fail fast on `SQLITE_BUSY` is now set on connection open (default 5000ms, override via `NEOTOMA_SQLITE_BUSY_TIMEOUT_MS`). It bounds contention for deployments that knowingly run concurrent maintenance processes; the single-server-process model does not depend on it, but it is a no-downside safety margin.
+
 ## Agent Instructions
+
 ### When to Load This Document
+
 Load when:
+
 - Setting up production deployment
 - Deploying code changes
 - Troubleshooting deployment issues
 - Configuring production environment
+
 ### Required Co-Loaded Documents
+
 - `docs/developer/getting_started.md` — Local setup context
 - `README.md` — Additional deployment details
 - `docs/NEOTOMA_MANIFEST.md` — Production principles
+
 ### Constraints Agents Must Enforce
+
 1. **Never commit secrets** — Use `flyctl secrets set`
 2. **Always verify deployment** — Test health endpoint after deploy
 3. **Use strong tokens** — Generate random `ACTIONS_BEARER_TOKEN`
 4. **Monitor logs** — Check for errors after deployment
 5. **Test before production** — Use staging environment if available
+
 ### Forbidden Patterns
+
 - Committing secrets to git
 - Deploying without testing locally
 - Using weak bearer tokens

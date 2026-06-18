@@ -108,7 +108,7 @@ See `docs/developer/cli_reference.md` for full syntax. Summary:
 
 ### Activation offer
 
-The mirror defaults to `enabled: false`. Activation (post-install onboarding) offers it as an opt-in step — see [**Activation step 6.6: Offer markdown mirror**](../../install.md#activation-step-66-offer-markdown-mirror-opt-in). The activation agent reads `doctor.mirror` (from `neotoma doctor --json`) for `enabled`, `inside_git_repo`, `git_repo_root`, `gitignored`, and `eligible_for_offer`; offers install only when `eligible_for_offer === true`; and, when the mirror path sits inside a git repo, follows up with a gitignore sub-prompt that runs `neotoma mirror gitignore --yes`.
+The mirror defaults to `enabled: false`. Activation (post-install onboarding) offers it as an opt-in step — see [**Activation step 6.6: Offer markdown mirror**](../../install.md#activation-step-66-offer-markdown-mirror-opt-in). The activation agent reads `doctor.mirror` (from `neotoma status --json`; the report keeps its `doctor.*` key names for payload stability) for `enabled`, `inside_git_repo`, `git_repo_root`, `gitignored`, and `eligible_for_offer`; offers install only when `eligible_for_offer === true`; and, when the mirror path sits inside a git repo, follows up with a gitignore sub-prompt that runs `neotoma mirror gitignore --yes`.
 
 The session/no-session intro banner also surfaces a one-line `Markdown mirror: disabled (enable: neotoma mirror enable --yes)` hint when mirror is off, so users who skipped activation still find the discovery surface.
 

@@ -61,22 +61,22 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **398**
-- Backend and repo Vitest files: **365**
+- Total automated test files: **472**
+- Backend and repo Vitest files: **439**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 98 |
-| Vitest service tests | 33 |
-| Source-adjacent tests | 46 |
-| Vitest integration tests | 108 |
-| Vitest CLI tests | 59 |
-| Vitest contract tests | 11 |
-| Vitest security tests | 2 |
-| Vitest subscription tests | 3 |
+| Vitest unit tests | 124 |
+| Vitest service tests | 34 |
+| Source-adjacent tests | 54 |
+| Vitest integration tests | 134 |
+| Vitest CLI tests | 65 |
+| Vitest contract tests | 14 |
+| Vitest security tests | 3 |
+| Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
@@ -84,6 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 2 |
+| Tests Performance | 1 |
 | Tests Scripts | 1 |
 
 ## Primary validation commands
@@ -99,6 +100,7 @@ flowchart TD
 - Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `validate:test-catalog`, and `validate:doc-deps`.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
+- Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.
 - Remote integration nightly runs `npm run test:remote:critical` when enabled.
 
 ## Automated test suites
@@ -107,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (98):**
+**Files (124):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -125,6 +127,7 @@ flowchart TD
 - `tests/unit/agent_capabilities.test.ts`
 - `tests/unit/agent_grants_service.test.ts`
 - `tests/unit/agent_identity.test.ts`
+- `tests/unit/agent_memory.test.ts`
 - `tests/unit/agents_grants_import.test.ts`
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
@@ -140,6 +143,8 @@ flowchart TD
 - `tests/unit/client_turn_report.test.ts`
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
+- `tests/unit/config_sqlite_path.test.ts`
+- `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/conversation_session_uuid_bridge.test.ts`
 - `tests/unit/cursor_hooks_context.test.ts`
@@ -150,6 +155,9 @@ flowchart TD
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
+- `tests/unit/entity_queries_status_projection.test.ts`
+- `tests/unit/env_contamination_audit.test.ts`
+- `tests/unit/ext_apps_widget_host.test.ts`
 - `tests/unit/external_actor_badge.test.ts`
 - `tests/unit/external_actor_builder.test.ts`
 - `tests/unit/external_actor_promoter.test.ts`
@@ -163,48 +171,68 @@ flowchart TD
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
 - `tests/unit/inspector_admin_unlock_url.test.ts`
+- `tests/unit/inspector_skin.test.ts`
 - `tests/unit/keepalive_timeout.test.ts`
 - `tests/unit/list_timeline_events_unknown_type.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
+- `tests/unit/mcp_initialize_skills.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
 - `tests/unit/mcp_server_card.test.ts`
+- `tests/unit/mcp_sse_keepalive.test.ts`
 - `tests/unit/mirror_profiles.test.ts`
+- `tests/unit/mirror_rebuild_auth.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
+- `tests/unit/observation_reducer_merge_array_correction.test.ts`
+- `tests/unit/observation_reducer_merge_array_stringified.test.ts`
 - `tests/unit/observation_reducer_observation_source.test.ts`
 - `tests/unit/observation_reducer_projection.test.ts`
 - `tests/unit/observation_reducer_provenance.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
 - `tests/unit/plan_schema_body_field.test.ts`
+- `tests/unit/preference_schema.test.ts`
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
+- `tests/unit/pull_request_schema.test.ts`
+- `tests/unit/recover_json_array_string.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
 - `tests/unit/relationship_reducer.test.ts`
+- `tests/unit/relationship_traversal_indexes.test.ts`
 - `tests/unit/request_context.test.ts`
 - `tests/unit/root_landing_harness_snippets.test.ts`
 - `tests/unit/root_landing_site_nav_drift.test.ts`
 - `tests/unit/safe_request_log_format.test.ts`
+- `tests/unit/sandbox_boot_banner.test.ts`
 - `tests/unit/sandbox_pack_registry.test.ts`
 - `tests/unit/sandbox_reset.test.ts`
 - `tests/unit/schema_agent_instructions.test.ts`
+- `tests/unit/schema_derived_entity_extraction.test.ts`
 - `tests/unit/schema_inference.test.ts`
 - `tests/unit/schema_projection_lag.test.ts`
+- `tests/unit/search_normalization.test.ts`
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
 - `tests/unit/spa_path.test.ts`
+- `tests/unit/sqlite_connection_pragmas.test.ts`
+- `tests/unit/standing_rules.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
 - `tests/unit/subscription_types.test.ts`
 - `tests/unit/substrate_event_bus.test.ts`
 - `tests/unit/timeline_events.test.ts`
+- `tests/unit/timeline_query.test.ts`
+- `tests/unit/turn_summary_widget.test.ts`
 - `tests/unit/unknown_fields_guard.test.ts`
+- `tests/unit/usage_digest_redaction.test.ts`
+- `tests/unit/usage_digest_schema.test.ts`
+- `tests/unit/usage_stats.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
@@ -212,12 +240,13 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (33):**
+**Files (34):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
 - `tests/services/encryption_service.test.ts`
+- `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
 - `tests/services/entity_submission_validation.test.ts`
@@ -252,7 +281,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (46):**
+**Files (54):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -267,6 +296,7 @@ flowchart TD
 - `src/services/__tests__/mcp_oauth.test.ts`
 - `src/services/__tests__/oauth_key_gate.test.ts`
 - `src/services/__tests__/oauth_state.test.ts`
+- `src/services/__tests__/override_validation.test.ts`
 - `src/services/__tests__/schema_icon_service.test.ts`
 - `src/services/__tests__/tunnel_oauth.test.ts`
 - `src/services/access_policy.test.ts`
@@ -280,17 +310,24 @@ flowchart TD
 - `src/services/docs/markdown_render.test.ts`
 - `src/services/docs/render.test.ts`
 - `src/services/docs/visibility.test.ts`
+- `src/services/entity_submission/submission_service.test.ts`
 - `src/services/guest_access_token.test.ts`
+- `src/services/issues/body_newline_decode.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
+- `src/services/issues/observer_import.test.ts`
 - `src/services/issues/redaction_guard.test.ts`
+- `src/services/issues/repo_discovery_resolver.test.ts`
 - `src/services/issues/seed_schema.test.ts`
+- `src/services/issues/sync_issues_push_writeback.test.ts`
 - `src/services/memory_export.test.ts`
 - `src/services/plans/capture_harness_plan.test.ts`
 - `src/services/plans/seed_schema.test.ts`
+- `src/services/rendered_page/publish.test.ts`
 - `src/services/sync/peer_health.test.ts`
 - `src/shared/action_handlers/entity_handlers.test.ts`
 - `src/shared/action_schemas.test.ts`
+- `src/shared/spawn_platform.test.ts`
 - `src/utils/__tests__/csv_summary.test.ts`
 - `src/utils/__tests__/lucide_icons.test.ts`
 - `src/utils/chat.test.ts`
@@ -305,7 +342,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (108):**
+**Files (134):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -315,6 +352,7 @@ flowchart TD
 - `tests/integration/aauth_tpm2_e2e.test.ts`
 - `tests/integration/aauth_webauthn_packed_e2e.test.ts`
 - `tests/integration/agent_capabilities_store.test.ts`
+- `tests/integration/agent_memory_turn_lifecycle.test.ts`
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`
 - `tests/integration/anonymous_write_policy.test.ts`
@@ -326,31 +364,42 @@ flowchart TD
 - `tests/integration/cli_to_mcp_stats_snapshots.test.ts`
 - `tests/integration/cli_to_mcp_store.test.ts`
 - `tests/integration/conversation_turn_accrual.test.ts`
+- `tests/integration/conversation_turn_index.test.ts`
+- `tests/integration/correct_http_mcp_parity.test.ts`
+- `tests/integration/correct_unknown_field_append.test.ts`
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/csp_local_http.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
+- `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
+- `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
+- `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`
 - `tests/integration/fixture_mcp_store_replay.test.ts`
 - `tests/integration/gdpr_deletion.test.ts`
 - `tests/integration/graph_neighborhood_pagination.test.ts`
+- `tests/integration/graph_neighborhood_source_branch.test.ts`
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
+- `tests/integration/http_related_entities_multihop.test.ts`
 - `tests/integration/idempotency_collision.test.ts`
 - `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
+- `tests/integration/inspector_content_negotiation.test.ts`
+- `tests/integration/inspector_skinning.test.ts`
 - `tests/integration/interpretation_fragment_ordering.test.ts`
 - `tests/integration/interpretation_no_schema_fallback.test.ts`
 - `tests/integration/interpretation_store.test.ts`
 - `tests/integration/issue_207_list_timeline_events_unknown_type.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
 - `tests/integration/lexical_search.test.ts`
+- `tests/integration/list_relationships_pagination.test.ts`
 - `tests/integration/live_issues_tooling.test.ts`
 - `tests/integration/mcp_actions_matrix.test.ts`
 - `tests/integration/mcp_auto_enhancement.test.ts`
@@ -379,10 +428,12 @@ flowchart TD
 - `tests/integration/mcp_store_unstructured.test.ts`
 - `tests/integration/mcp_store_variations.test.ts`
 - `tests/integration/mcp_target_id_identity_conflict.test.ts`
+- `tests/integration/merge_repoint_relationship_edges.test.ts`
 - `tests/integration/nonjson_csv_store_behavior.test.ts`
 - `tests/integration/nonjson_fixtures_mcp_replay.test.ts`
 - `tests/integration/observation_ingestion.test.ts`
 - `tests/integration/observation_source_round_trip.test.ts`
+- `tests/integration/override_policy_enforcement.test.ts`
 - `tests/integration/payload_compiler.test.ts`
 - `tests/integration/payload/payload_submission.test.ts`
 - `tests/integration/peer_sync.test.ts`
@@ -391,19 +442,28 @@ flowchart TD
 - `tests/integration/public_key_registry.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
 - `tests/integration/relationship_agent_attribution_api.test.ts`
+- `tests/integration/relationship_delete_discovery_mcp.test.ts`
+- `tests/integration/relationship_delete_discovery.test.ts`
+- `tests/integration/relationship_liveness_pagination.test.ts`
+- `tests/integration/relationship_pagination_determinism.test.ts`
+- `tests/integration/relationship_query_determinism.test.ts`
 - `tests/integration/relationship_snapshots.test.ts`
 - `tests/integration/retrieval_transport_reliability.test.ts`
+- `tests/integration/retrieve_graph_neighborhood_tenant_isolation.test.ts`
 - `tests/integration/root_landing.test.ts`
 - `tests/integration/sandbox_mode.test.ts`
 - `tests/integration/sandbox_report.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
+- `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
+- `tests/integration/store_prefix_duplicate_candidates.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
+- `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
@@ -412,7 +472,10 @@ flowchart TD
 - `tests/integration/sync_webhook_inbound.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
 - `tests/integration/tunnel_discovery.test.ts`
+- `tests/integration/turn_summary_mcp_apps.test.ts`
+- `tests/integration/turn_summary.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
+- `tests/integration/update_schema_incremental_envelope.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 
 ### Vitest CLI tests
@@ -420,7 +483,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (59):**
+**Files (65):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -434,12 +497,15 @@ flowchart TD
 - `tests/cli/cli_direct_invocation_parity.test.ts`
 - `tests/cli/cli_doctor_setup.test.ts`
 - `tests/cli/cli_edit_commands.test.ts`
+- `tests/cli/cli_entities_export.test.ts`
+- `tests/cli/cli_entities_import.test.ts`
 - `tests/cli/cli_entity_commands.test.ts`
 - `tests/cli/cli_entity_subcommands.test.ts`
 - `tests/cli/cli_infra_commands.test.ts`
 - `tests/cli/cli_ingest_remote_upload.test.ts`
 - `tests/cli/cli_init_commands.test.ts`
 - `tests/cli/cli_init_env_targeting.test.ts`
+- `tests/cli/cli_init_flags.test.ts`
 - `tests/cli/cli_init_interactive.test.ts`
 - `tests/cli/cli_issues_commands.test.ts`
 - `tests/cli/cli_mcp_commands.test.ts`
@@ -456,6 +522,7 @@ flowchart TD
 - `tests/cli/cli_smoke.test.ts`
 - `tests/cli/cli_source_commands.test.ts`
 - `tests/cli/cli_stats_commands.test.ts`
+- `tests/cli/cli_status_doctor_alias.test.ts`
 - `tests/cli/cli_store_commands.test.ts`
 - `tests/cli/cli_store_file_vs_entities_parity.test.ts`
 - `tests/cli/cli_timeline_commands.test.ts`
@@ -469,6 +536,7 @@ flowchart TD
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
+- `tests/cli/issues_import.test.ts`
 - `tests/cli/issues_message.test.ts`
 - `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`
@@ -477,6 +545,7 @@ flowchart TD
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`
 - `tests/cli/schemas_repair_plural_types.test.ts`
+- `tests/cli/skills_mirror.test.ts`
 - `tests/cli/test_command_detection.test.ts`
 - `tests/cli/test_debug_tty.test.ts`
 - `tests/cli/transcript_parser.test.ts`
@@ -486,17 +555,20 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (11):**
+**Files (14):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
+- `tests/contract/get_entities_alias.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
 - `tests/contract/legacy_payloads/replay.test.ts`
 - `tests/contract/mcp_stdio_output_safety.test.ts`
+- `tests/contract/mcp_tool_dispatch_coverage.test.ts`
 - `tests/contract/openapi_schema.test.ts`
 - `tests/contract/openclaw_plugin.test.ts`
 - `tests/contract/package_contents.test.ts`
 - `tests/contract/package_scripts.test.ts`
+- `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/vite_config.test.ts`
 
 ### Vitest security tests
@@ -504,8 +576,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (2):**
+**Files (3):**
 - `tests/security/auth_topology_matrix.test.ts`
+- `tests/security/sandbox_mode_resolver.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
 
 ### Vitest subscription tests
@@ -513,8 +586,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
-**Files (3):**
+**Files (5):**
+- `tests/subscriptions/durable_event_log.test.ts`
 - `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
+- `tests/subscriptions/sse_ring_gap_detection.test.ts`
 - `tests/subscriptions/subscription_guest_auth.test.ts`
 - `tests/subscriptions/subscription_loop_prevention.test.ts`
 
@@ -604,6 +679,14 @@ flowchart TD
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
 
+### Tests Performance
+**Directory:** `tests/performance/`
+**Runner:** `vitest`
+**Command:** `npx vitest run tests/performance`
+**Requirements:** Basic `.env` if required by the module under test.
+**Files (1):**
+- `tests/performance/graph_traversal.bench.test.ts`
+
 ### Tests Scripts
 **Directory:** `tests/scripts/`
 **Runner:** `vitest`
@@ -611,6 +694,14 @@ flowchart TD
 **Requirements:** Basic `.env` if required by the module under test.
 **Files (1):**
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
+
+### Python unit tests
+**Directory:** `packages/client-python/tests/`
+**Runner:** `pytest`
+**Command:** `pytest packages/client-python/tests/ -v`
+**Requirements:** `pip install -e packages/client-python[dev]`
+**Files (1):**
+- `packages/client-python/tests/test_memory.py` — NeotomaMemory open/close turn lifecycle, with_memory wrapper, store_chat_turn and retrieve_or_store helpers, idempotency key contract, REFERS_TO deduplication, async acall with asyncio.to_thread
 
 ## Agent instructions
 ### When to load this document

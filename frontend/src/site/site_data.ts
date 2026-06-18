@@ -634,15 +634,15 @@ export const SITE_CODE_SNIPPETS = {
   installCommands: `# 1. Install globally (required for agent harnesses — avoids per-repo PATH prompts)
 npm install -g neotoma
 
-# 2. Inspect state in one call (no shell introspection needed)
-neotoma doctor --json
+# 2. Check configuration and connectivity in one call (no shell introspection needed)
+neotoma status --json
 
 # 3. Run the full idempotent setup for the current harness
 neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --tool openclaw
 neotoma hooks install --tool opencode --yes   # optional OpenCode lifecycle hooks`,
   agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
 
-Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma doctor --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.
+Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma status --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.
 
 Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.`,
   postInstallCommands: `# Run API server (development)
@@ -695,8 +695,8 @@ docker build -t neotoma .`,
   }
 }`,
   /** Short prompt — home evaluate section + integration “Getting started” blocks. */
-  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and whether you recommend a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and whether you recommend offering a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
+  homeEvaluatePrompt: `Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.`,
   agentEvaluationShareEmail: "contact@neotoma.io",
   agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity
@@ -711,7 +711,7 @@ docker exec neotoma neotoma entities list --type task`,
    * Per-harness permissions preflight snippets.
    *
    * Each snippet adds the minimal set of allow rules so the agent never needs
-   * individual approvals for `neotoma doctor`, `neotoma setup`, `neotoma init`,
+   * individual approvals for `neotoma status`, `neotoma setup`, `neotoma init`,
    * or any other `neotoma` subcommand. Users paste these *before* asking the
    * agent to run the install prompt.
    */

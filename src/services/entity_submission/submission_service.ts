@@ -44,6 +44,20 @@ function idempotencyForSubmit(entityType: string, fields: Record<string, unknown
   return `entity-submit-${entityType}-${h}`;
 }
 
+/**
+ * If the submission config declares a mirror provider that has a dedicated
+ * submission tool, return that tool's name so callers can be steered to it.
+ * Returns null when the generic submitEntity path is appropriate.
+ */
+function specializedSubmissionToolFor(cfg: {
+  external_mirrors: Array<{ provider: string }>;
+}): string | null {
+  for (const mirror of cfg.external_mirrors) {
+    if (mirror.provider === "github") return "submit_issue";
+  }
+  return null;
+}
+
 export async function submitEntity(
   ops: Operations,
   params: { userId: string } & SubmitEntityParams
@@ -53,6 +67,24 @@ export async function submitEntity(
   if (!cfg) {
     throw new Error(
       `No active submission_config for entity_type "${entity_type}". Create an active submission_config row for this type (operator-seeded).`
+    );
+  }
+
+  // Submission-path steering: some entity types have a specialized submission
+  // tool (e.g. `issue` → `submit_issue`, which runs the GitHub-first mirror and
+  // reporter/redaction flow). The generic submitEntity path does not run those
+  // steps, so routing such a type through here produces a confusing downstream
+  // failure with no guidance. Detect the specialized path from the config's
+  // external mirrors and steer the caller explicitly. This is schema-driven
+  // (keyed off the config's declared mirror provider), not a hardcoded type
+  // branch, so any future type with a github mirror gets the same treatment.
+  const specializedTool = specializedSubmissionToolFor(cfg);
+  if (specializedTool) {
+    throw new Error(
+      `submission_path_mismatch: entity_type "${entity_type}" has a specialized ` +
+        `submission path. Use ${specializedTool} instead of submit_entity, which ` +
+        `does not run the ${specializedTool} mirror/redaction flow. ` +
+        `(redirect_to: ${specializedTool})`
     );
   }
 
@@ -115,6 +147,19 @@ export async function submitEntity(
 
   const structured = storeResult.structured?.entities ?? [];
   const entity_id = structured[0]?.entity_id ?? "";
+  // Write-integrity: an empty entity_id means the underlying store produced no
+  // primary entity. Returning it as a success is a silent write loss — the
+  // caller believes its entity was created when nothing persisted. Fail loud
+  // so the caller can recover instead of moving on against a phantom record.
+  if (!entity_id) {
+    throw new Error(
+      `submit_entity for entity_type "${entity_type}" produced no primary entity ` +
+        `(empty entity_id). The underlying store returned ${structured.length} ` +
+        `structured entit${structured.length === 1 ? "y" : "ies"}; expected the ` +
+        `primary entity at index 0. This is a write-integrity failure, not a ` +
+        `success — no record was persisted.`
+    );
+  }
   const conversation_id = cfg.enable_conversation_threading ? structured[1]?.entity_id : undefined;
 
   let guest_access_token: string | undefined;

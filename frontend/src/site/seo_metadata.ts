@@ -408,6 +408,30 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "CLI", path: "/cli" },
     ],
   },
+  "/sdk/agent": {
+    title: "TypeScript SDK (@neotoma/agent) | Neotoma",
+    description:
+      "Protocol-enforcing agent harness SDK for Neotoma. Wraps @neotoma/client with the canonical store-first turn protocol so agents using any LLM provider get correct memory behavior by construction.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "TypeScript SDK", path: "/sdk/agent" },
+    ],
+  },
+  "/sdk/python": {
+    title: "Python SDK (neotoma-client) | Neotoma",
+    description:
+      "Python client for Neotoma: transport plus the same protocol layer that @neotoma/agent provides for TypeScript. Used by Claude Code Python hook plugins, OpenAI Agents SDK adapters, and LangChain / LangGraph callbacks.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Python SDK", path: "/sdk/python" },
+    ],
+  },
   "/aauth": {
     title: "AAuth (Agent Authentication) | Neotoma",
     description:
@@ -1861,9 +1885,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/evaluate": {
-    title: "Ask Your Agent to Evaluate Neotoma for You | Neotoma",
+    title: "Evaluate Neotoma: Deterministic State Layer for AI Agents | Neotoma",
     description:
-      "Ask your AI agent to read this page, assess whether Neotoma fits your workflow, and offer a non-destructive test before any full implementation rollout.",
+      "Neotoma is a deterministic state layer for AI agents: versioned, schema-bound, replayable memory that persists across sessions and tools. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",

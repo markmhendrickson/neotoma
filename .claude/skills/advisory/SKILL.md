@@ -3,6 +3,8 @@ name: advisory
 description: File, maintain, and close security advisories. Keeps docs/security/advisories/, docs/security/practices.md, and GitHub Security Advisories (GHSA) in sync. Two modes — new (file advisory) and close (mark fixed).
 triggers:
   - /advisory
+  - /advisory new
+  - /advisory close
   - file advisory
   - create advisory
   - close advisory
@@ -35,7 +37,7 @@ Invoke with `/advisory new` or `/advisory close <slug> <version>`.
 - **MUST NOT** include attack vector specifics, exploit steps, or payload details in any repo markdown file (`docs/security/advisories/`, `practices.md`, GitHub issues). Those belong in the GHSA, which is private until coordinated disclosure.
 - Sanitized content describes: what category of bug, what prerequisites, what data is accessible, what the severity is, and what the fix entails — without explaining *how* to perform the access.
 - **MUST** commit advisory files, README update, and practices.md update atomically in a single commit.
-- **MUST** use `SKIP_TESTS=1` on commit if pre-existing test failures on the branch would block the hook.
+- **MAY** use `SKIP_TESTS=1` on commit *only* when pre-existing, unrelated test failures on the branch would otherwise block the pre-commit hook for this docs-only change. Do not skip tests when your change could plausibly affect them.
 
 ---
 
@@ -213,8 +215,8 @@ Record the GHSA URL in the advisory file's Disclosure Timeline once it's created
 git push origin <branch>
 gh pr create \
   --title "docs(security): file advisory <slug>" \
-  --base dev \
-  --body "..."
+  --base main \
+  --body "Files sanitized advisory <slug> (category: <vuln class>, affected: <versions>, severity: <level>). No attack-vector specifics, exploit steps, or payloads — those live in the private GHSA. See docs/security/advisories/<slug>.md."
 ```
 
 The PR description must not expose attack vector details either — treat it as public.
@@ -286,7 +288,7 @@ SKIP_TESTS=1 git commit -m "docs(security): close advisory <slug> — fixed in <
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 git push origin <branch>
-gh pr create --title "docs(security): close advisory <slug>" --base dev
+gh pr create --title "docs(security): close advisory <slug>" --base main
 ```
 
 ---

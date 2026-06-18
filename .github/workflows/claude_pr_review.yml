@@ -32,7 +32,14 @@ permissions:
   issues: write
 
 concurrency:
-  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  # Cancel an in-flight review when the PR is force-pushed again, so we don't burn
+  # a full review on a soon-superseded commit. The trade-off: a cancelled run can
+  # leave a stale "review in progress" checklist comment with no verdict. The
+  # review step mitigates this by submitting a FORMAL review (with state) keyed to
+  # a `Reviewed commit: <sha>` line on completion — so a completed review is always
+  # distinguishable from a cancelled stub, and GitHub associates the review state
+  # with the commit it actually ran against.
   cancel-in-progress: true
 
 jobs:
@@ -93,16 +100,35 @@ jobs:
             echo "substantial=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Comment on skipped review
+        if: steps.diff_check.outputs.substantial == 'false' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+
+          FILES=$(gh pr view $PR_NUMBER --repo $REPO --json files --jq '.files | length')
+          ADDITIONS=$(gh pr view $PR_NUMBER --repo $REPO --json additions --jq '.additions')
+          DELETIONS=$(gh pr view $PR_NUMBER --repo $REPO --json deletions --jq '.deletions')
+          LINES=$((ADDITIONS + DELETIONS))
+
+          gh pr comment $PR_NUMBER --repo $REPO --body "**Claude review skipped** — diff is below the automatic-review threshold (${FILES} file(s), ${LINES} line(s) changed).
+
+          Thresholds that trigger a review: >5 files, >150 lines, any \`packages/\` change, any auth-related path, or a simultaneous \`src/\` + \`openapi.yaml\` change.
+
+          To request a review anyway, comment \`@claude review\` on this PR."
+
       - uses: anthropics/claude-code-action@beta
         if: steps.diff_check.outputs.substantial == 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           model: claude-opus-4-7
-          timeout_minutes: 30
-          max_turns: 30
+          timeout_minutes: 60
+          max_turns: 60
           trigger_phrase: "@claude review"
-          allowed_tools: "Edit,MultiEdit,Glob,Grep,LS,Read,Write,mcp__github_comment__update_claude_comment,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git rm:*),Bash(git fetch:*)"
+          allowed_tools: "Edit,MultiEdit,Glob,Grep,LS,Read,Write,mcp__github_comment__update_claude_comment,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git rm:*),Bash(git fetch:*),Bash(gh pr review:*),Bash(gh pr view:*),Bash(gh pr diff:*)"
           direct_prompt: |
             Invoke the `/review` skill (`.claude/skills/review/SKILL.md`) against this pull request.
 
@@ -117,4 +143,28 @@ jobs:
             - Phase 5b: product/UX and principles alignment — product principles (explicit over implicit, no silent behavior, provenance), silent behavior changes, agent instruction coherence (verify referenced tools/entities/preferences actually exist), error/hint quality, API naming and semantic consistency, discoverability, supplement accuracy
             - Phase 6: emit findings in the structured `[BLOCKING|ADVISORY|NIT] <category>` format the skill defines, then a summary block with the verdict (APPROVED / APPROVED-WITH-NOTES / NEEDS-CHANGES)
 
-            Post the review as a single PR comment. Be direct and specific — cite file and line numbers; skip praise. Verdict rules are non-negotiable: any BLOCKING finding requires NEEDS-CHANGES.
+            Be direct and specific — cite file and line numbers; skip praise. Verdict rules are non-negotiable: any BLOCKING finding requires NEEDS-CHANGES.
+
+            Submit the review as a FORMAL GitHub review, not a plain PR comment, so the
+            verdict carries a trackable review state that GitHub displays and that a
+            reader can tell is complete. Write the full structured review (findings +
+            summary + verdict) to a file, then submit it with `gh pr review` mapped from
+            the verdict:
+              - APPROVED            -> `gh pr review <PR> --approve --body-file <file>`
+              - APPROVED-WITH-NOTES -> `gh pr review <PR> --approve --body-file <file>`
+              - NEEDS-CHANGES       -> `gh pr review <PR> --request-changes --body-file <file>`
+            APPROVED-WITH-NOTES is an APPROVAL (Blocking: 0, only non-blocking notes), so it
+            submits with `--approve`. This is deliberate: `--approve` DISMISSES a prior
+            `--request-changes` from this reviewer, so `reviewDecision` self-heals to
+            APPROVED once a clean re-review runs against the new head. Using `--comment`
+            here would leave a stale `CHANGES_REQUESTED` decision on the PR forever even
+            after the blocking findings were fixed. The non-blocking notes still ship in the
+            review body. (Only a true NEEDS-CHANGES verdict — i.e. at least one BLOCKING
+            finding — may request changes.)
+            Resolve `<PR>` as `${{ github.event.pull_request.number || github.event.issue.number }}`.
+            Include the line `Reviewed commit: <full head SHA>` (from `gh pr view --json headRefOid`)
+            at the top of the body, so a later force-push makes it plainly visible that the
+            review predates the current head. A formal review with an explicit state is the
+            required deliverable: do NOT finish by leaving only an in-progress checklist
+            comment — if you cannot complete the review, say so explicitly with a
+            `--request-changes` review stating it is incomplete.

@@ -40,6 +40,7 @@ import {
   structuredEntities,
   structuredEntityIdAt,
 } from "../submitted_thread/submitted_thread.js";
+import { decodeOverEscapedBody } from "./body_newline_decode.js";
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError, IssueValidationError } from "./errors.js";
 import { runRedactionGuard } from "./redaction_guard.js";
@@ -233,15 +234,34 @@ function remoteIssueEntityIdForTarget(
 /**
  * Human-facing guidance when a public issue did not get a GitHub mirror.
  * Safe for MCP tool JSON (truncated cause; no raw response bodies beyond error.message).
+ *
+ * @param cause The mirror failure (Error or arbitrary thrown value).
+ * @param effectiveRepo Optional `owner/repo` the mirror was targeting (the
+ *   `target_repo` override when set, else the configured repo). When provided it
+ *   is named in the manual-creation step so the user is pointed at the right
+ *   repo. Callers are responsible for validating the `owner/repo` shape upstream
+ *   (the HTTP/MCP Zod schemas enforce it); this function only string-interpolates
+ *   the value and does not re-validate.
  */
-export function buildGithubMirrorGuidance(cause: unknown): string {
+export function buildGithubMirrorGuidance(cause: unknown, effectiveRepo?: string): string {
   let msg = "";
   if (cause instanceof Error) msg = cause.message;
   else if (cause !== undefined && cause !== null) msg = String(cause);
   const causeLine = msg ? truncateGuidanceCause(msg) : "unknown error";
+  // Name the repo the mirror was actually targeting so the manual-creation step
+  // points at the right place. When `target_repo` overrode the destination this
+  // is the override, not the operator's configured repo.
+  const repoRef =
+    typeof effectiveRepo === "string" && effectiveRepo.trim().length > 0
+      ? `\`${effectiveRepo.trim()}\``
+      : "the configured repo";
+  const createStep =
+    typeof effectiveRepo === "string" && effectiveRepo.trim().length > 0
+      ? `(2) Create the GitHub issue on ${repoRef} (web UI or \`gh issue create --repo ${effectiveRepo.trim()}\`). `
+      : `(2) Create the GitHub issue on ${repoRef} (web UI or \`gh issue create\`). `;
   return (
     "Public issue was stored in Neotoma without a GitHub mirror. Next steps: (1) Authenticate — set NEOTOMA_ISSUES_GITHUB_TOKEN or run `gh auth login` (CLI: `neotoma issues auth`). " +
-    "(2) Create the GitHub issue on the configured repo (web UI or `gh issue create`). " +
+    createStep +
     "(3) Update the Neotoma `issue` entity's `github_number` and `github_url` (e.g. `correct` or Inspector) so `get_issue_status` and sync stay aligned. " +
     `Cause: ${causeLine}`
   );
@@ -539,6 +559,11 @@ export async function submitGuestIssue(
 ): Promise<GuestIssueSubmitResult> {
   await assertGuestWriteAllowed(["issue"], {});
 
+  // Guest submissions arriving directly at the operator endpoint are the only
+  // boundary for their body, so decode over-escaped `\n` here too. Idempotent
+  // for bodies forwarded from a remote `submitIssue` that already decoded. (#1484)
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const now =
     typeof params.submission_timestamp === "string" && params.submission_timestamp.trim().length > 0
@@ -658,6 +683,10 @@ export async function appendGuestIssueMessage(
   ops: Operations,
   params: { issue_entity_id: string; body: string }
 ): Promise<{ message_entity_id: string }> {
+  // Decode over-escaped `\n` in guest-appended message bodies at this boundary.
+  // Idempotent for already-decoded bodies forwarded from a remote append. (#1484)
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const raw = (await ops.retrieveEntitySnapshot({
     entity_id: params.issue_entity_id,
     format: "json",
@@ -788,10 +817,28 @@ export async function submitIssue(
   params: IssueCreateParams
 ): Promise<SubmitIssueResult> {
   assertSubmitIssueReporterEnvironment(params);
+
+  // Decode over-escaped bodies (literal `\n` two-char sequences) into real
+  // newlines before the body reaches the GitHub mirror or the canonical Neotoma
+  // record. Some clients double-encode the body argument; without this the issue
+  // renders as a single run-on block. Applied before redaction so the backstop
+  // scans the real text. See body_newline_decode.ts and issue #1484.
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const now = new Date().toISOString();
   const visibility = params.visibility ?? "public";
   const toolingLabels = github.mergeNeotomaToolingIssueLabels(params.labels);
+
+  // When `target_repo` overrides the GitHub mirror destination, the canonical
+  // issue identity (`github_number + repo`), the conversation thread id, the
+  // external-actor repository, and the `data_source` label must all reference
+  // the repo the issue actually lives in — not the operator's globally
+  // configured repo. Otherwise a later `syncIssuesFromGitHub` against the target
+  // repo forks a duplicate issue entity + conversation. `effectiveRepo` is the
+  // single source of truth for "which repo this issue belongs to". The Neotoma
+  // authoring home (`config.target_url`) is unaffected by the override.
+  const effectiveRepo = params.target_repo?.trim() || config.repo;
 
   // Public issues additionally pass through the redaction backstop. Even though
   // client agents are required to redact (see the REDACTION MUST clause in
@@ -804,36 +851,15 @@ export async function submitIssue(
     params = { ...params, title: guarded.title, body: guarded.body };
   }
 
-  let githubIssue: GitHubIssue | null = null;
-  let pushedToGithub = false;
-  let githubUrl = "";
-  let issueNumber = 0;
-  let githubMirrorFailure: unknown = null;
-
-  // Step 1: For public issues, optionally push to GitHub first for discoverability
-  if (visibility === "public") {
-    try {
-      githubIssue = await github.createIssue({
-        title: params.title,
-        body: params.body,
-        labels: toolingLabels,
-      });
-      pushedToGithub = true;
-      githubUrl = githubIssue.html_url;
-      issueNumber = githubIssue.number;
-    } catch (err) {
-      githubMirrorFailure = err;
-      // GitHub push failed — continue with Neotoma-only submission
-    }
-  }
-
   const authorAlias =
     typeof config.author_alias === "string" && config.author_alias.trim().length > 0
       ? config.author_alias.trim()
       : null;
-  const author = githubIssue?.user?.login ?? authorAlias ?? "local";
 
-  // Step 2: Submit to operator's Neotoma instance (canonical)
+  // Step 1: Submit to operator's Neotoma instance (canonical).
+  // Neotoma runs first so we only publish the GitHub mirror when the canonical
+  // record is already committed. This prevents the fail-open split where GitHub
+  // receives a public issue with no corresponding Neotoma record. (resolves #944)
   let submittedToNeotoma = false;
   let remoteEntityId = "";
   let remoteConversationId = "";
@@ -842,8 +868,9 @@ export async function submitIssue(
   let remoteSubmissionAttempted = false;
   let remoteSubmissionError: Error | null = null;
 
-  // Derive once so remote submission and local shadow issue share the same local thread identity.
-  const localId = issueNumber > 0 ? undefined : localIssueId(config.repo, params.title, now);
+  // localId is derived before remote submission so both the remote call and the
+  // local shadow issue share the same thread identity.
+  const localId = localIssueId(effectiveRepo, params.title, now);
 
   if (issuesTargetUrl) {
     remoteSubmissionAttempted = true;
@@ -853,13 +880,9 @@ export async function submitIssue(
         body: params.body,
         labels: toolingLabels,
         visibility,
-        githubUrl: githubUrl || undefined,
-        githubNumber: issueNumber || undefined,
-        author,
-        authorGithubId: githubIssue?.user?.id,
-        authorGithubType: githubIssue?.user?.type,
+        author: authorAlias ?? "local",
         submission_timestamp: now,
-        ...(localId ? { local_issue_id: localId } : {}),
+        local_issue_id: localId,
       });
       submittedToNeotoma = true;
       remoteEntityId = remoteResult.issue_entity_id;
@@ -870,16 +893,49 @@ export async function submitIssue(
     }
   }
 
+  let githubIssue: GitHubIssue | null = null;
+  let pushedToGithub = false;
+  let githubUrl = "";
+  let issueNumber = 0;
+  let githubMirrorFailure: unknown = null;
+
+  // Step 2: For public issues, mirror to GitHub for discoverability.
+  // Only attempt when Neotoma succeeded (or when no Neotoma instance is
+  // configured, preserving the existing behaviour for users without an operator).
+  const githubMirrorAllowed = !remoteSubmissionAttempted || submittedToNeotoma;
+  if (visibility === "public" && githubMirrorAllowed) {
+    try {
+      // Pass effectiveRepo unconditionally; when no override is set it equals
+      // config.repo and resolveOptions treats `{ repo: config.repo }` identically
+      // to undefined (opts?.repo ?? cfg.repo). Keeps the mirror destination in
+      // lockstep with the repo stamped on the entity/conversation identity.
+      githubIssue = await github.createIssue(
+        { title: params.title, body: params.body, labels: toolingLabels },
+        { repo: effectiveRepo }
+      );
+      pushedToGithub = true;
+      githubUrl = githubIssue.html_url;
+      issueNumber = githubIssue.number;
+    } catch (err) {
+      githubMirrorFailure = err;
+      // GitHub push failed — Neotoma record already exists; issue stored locally
+    }
+  }
+
+  const author = githubIssue?.user?.login ?? authorAlias ?? "local";
+
   // Step 3: Store local reference for tracking
   const threadConversationId =
     issueNumber > 0
-      ? githubIssueThreadConversationId(config.repo, issueNumber)
-      : localIssueThreadConversationId(config.repo, localId ?? "");
+      ? githubIssueThreadConversationId(effectiveRepo, issueNumber)
+      : localIssueThreadConversationId(effectiveRepo, localId ?? "");
   const bodyTurnKey =
     issueNumber > 0
-      ? githubIssueBodyTurnKey(config.repo, issueNumber)
-      : localIssueBodyTurnKey(config.repo, localId ?? "");
-  const externalActor = buildExternalActorFromGithubIssue(githubIssue, { repository: config.repo });
+      ? githubIssueBodyTurnKey(effectiveRepo, issueNumber)
+      : localIssueBodyTurnKey(effectiveRepo, localId ?? "");
+  const externalActor = buildExternalActorFromGithubIssue(githubIssue, {
+    repository: effectiveRepo,
+  });
 
   const entities: StoreInput["entities"] = [
     {
@@ -890,7 +946,7 @@ export async function submitIssue(
       labels: toolingLabels,
       github_number: issueNumber > 0 ? issueNumber : null,
       github_url: githubUrl,
-      repo: config.repo,
+      repo: effectiveRepo,
       ...(localId ? { local_issue_id: localId } : {}),
       visibility,
       author,
@@ -908,7 +964,7 @@ export async function submitIssue(
       data_source: submittedToNeotoma
         ? `neotoma-issue ${config.target_url} ${now.slice(0, 10)}`
         : pushedToGithub
-          ? `github issues api ${config.repo} #${issueNumber} ${now.slice(0, 10)}`
+          ? `github issues api ${effectiveRepo} #${issueNumber} ${now.slice(0, 10)}`
           : `local-create ${now.slice(0, 10)}`,
       ...reporterProvenanceFields(params),
     } as StoreEntityInput,
@@ -942,25 +998,34 @@ export async function submitIssue(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-create-${config.repo}-${issueNumber || Date.now()}`,
+      // Key on effectiveRepo (not config.repo) so two submissions with the same
+      // GitHub issue number but different target_repo overrides do not collide on
+      // the idempotency key — each repo's issue is a distinct create.
+      idempotency_key: `issue-create-${effectiveRepo}-${issueNumber || Date.now()}`,
     })
   )) as StoreResult;
 
   const entityId = structuredEntityIdAt(storeResult, 0);
   const conversationId = structuredEntityIdAt(storeResult, 1);
 
-  // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
+  // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs
+  // and, when present, to the originating conversation turn entity.
   const entityIdsToLink = Array.isArray(params.entity_ids_to_link)
     ? params.entity_ids_to_link.filter(
         (id): id is string => typeof id === "string" && id.trim().length > 0
       )
     : [];
-  if (entityId && entityIdsToLink.length > 0) {
+  const conversationTurnId =
+    typeof params.conversation_turn_id === "string" && params.conversation_turn_id.trim().length > 0
+      ? params.conversation_turn_id.trim()
+      : null;
+  const allTargetIds = [...entityIdsToLink, ...(conversationTurnId ? [conversationTurnId] : [])];
+  if (entityId && allTargetIds.length > 0) {
     const relationships: import("../../core/operations.js").CreateRelationshipInput[] =
-      entityIdsToLink.map((targetId) => ({
+      allTargetIds.map((targetId) => ({
         relationship_type: "REFERS_TO" as const,
         source_entity_id: entityId,
-        target_entity_id: targetId.trim(),
+        target_entity_id: targetId,
       }));
     await ops.createRelationships({ relationships });
   }
@@ -977,7 +1042,7 @@ export async function submitIssue(
 
   const githubMirrorGuidance =
     visibility === "public" && !pushedToGithub
-      ? buildGithubMirrorGuidance(githubMirrorFailure)
+      ? buildGithubMirrorGuidance(githubMirrorFailure, effectiveRepo)
       : null;
 
   return {
@@ -1007,6 +1072,11 @@ export async function addIssueMessage(
   ops: Operations,
   params: IssueMessageParams
 ): Promise<AddMessageResult> {
+  // Decode over-escaped comment bodies (literal `\n`) into real newlines before
+  // the message reaches GitHub or the canonical Neotoma record, mirroring the
+  // submitIssue boundary. See body_newline_decode.ts and issue #1484.
+  params = { ...params, body: decodeOverEscapedBody(params.body) };
+
   const config = await loadIssuesConfig();
   const resolved = await resolveIssueRow(ops, params);
   const { issue_entity_id: issueEntityId, snapshot, githubNumber, localIssueId } = resolved;

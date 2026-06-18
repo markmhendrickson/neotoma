@@ -25,3 +25,7 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 ## v0.13.0
 
 - `v0.13.x/create_relationship_extra_fields` seeded as `rejected`. `POST /create_relationship` previously declared an open schema in OpenAPI; the handler has always rejected undeclared fields via Zod. The spec now declares `additionalProperties: false` with the three required fields and three optional fields, matching handler behavior. Callers sending extra fields were already receiving 400 errors; this fixture documents that the outcome is unchanged. Release supplement: `docs/releases/in_progress/v0.13.0/github_release_supplement.md` § Breaking changes.
+
+## v0.15.1
+
+- `v0.15.x/delete_relationship_wrong_type` seeded as `rejected` (#277). `POST /delete_relationship` with a `(relationship_type, source_entity_id, target_entity_id)` triple that does not match a live edge previously returned `200` after writing a no-op deletion observation; it now returns `404 RESOURCE_NOT_FOUND` with a structured `details.hint` matching `/list_relationships/`. The prior `200` was a silent no-op (it deleted nothing), so no useful contract was narrowed, but the response status observably flipped `200` → `404`. Release supplement: `docs/releases/in_progress/v0.15.1/github_release_supplement.md` § Behavior changes / Breaking changes.

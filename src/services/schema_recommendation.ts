@@ -36,6 +36,28 @@ export interface SchemaRecommendation {
   affected_entities_count?: number;
 }
 
+/** One undeclared field key carrying stored-but-invisible raw_fragments (#1576). */
+export interface UndeclaredFieldAudit {
+  fragment_key: string;
+  /** Number of distinct entities of this type carrying a value for this key. */
+  affected_entities: number;
+  /** Sum of frequency_count across all raw_fragments rows for this key. */
+  occurrences: number;
+}
+
+/** Per-entity-type rollup of undeclared raw_fragments awaiting schema declaration (#1576). */
+export interface UndeclaredFragmentTypeAudit {
+  entity_type: string;
+  /** Undeclared field keys (not present on the active schema), sorted by impact. */
+  undeclared_fields: UndeclaredFieldAudit[];
+  /** Distinct entities of this type carrying at least one undeclared field. */
+  affected_entities: number;
+  /** Total undeclared raw_fragments occurrences for this type. */
+  total_occurrences: number;
+  /** True when no active schema was found, so EVERY fragment_key is undeclared. */
+  schema_missing: boolean;
+}
+
 export interface AutoEnhancementConfig {
   enabled: boolean; // Master switch for auto-enhancement
   threshold: 1 | 2 | 3 | "pattern"; // Occurrences before auto-enhance (or 'pattern' for pattern detection only)
@@ -1532,6 +1554,124 @@ Return your recommendations in JSON format:
     confidence += sampleScore * 0.1;
 
     return Math.min(confidence, 1.0);
+  }
+
+  /**
+   * Audit accumulated undeclared raw_fragments awaiting schema declaration (#1576).
+   *
+   * Stored data routed to `raw_fragments` (via `store`/`correct` for fields not
+   * on the active schema) is preserved on the observation but excluded from the
+   * entity snapshot until the field is declared — "stored-but-invisible" data.
+   * The per-store `unknown_fields` / `UNKNOWN_FIELD` signals (#1552) flag this at
+   * write time for the writing agent, but nothing surfaces the ACCUMULATED debt
+   * across an entity type. This audit lists, per entity_type, the fragment_keys
+   * that are NOT declared on the active schema, how many distinct entities carry
+   * each, and the total occurrences — so the backlog is auditable and can be
+   * triaged into `analyze_schema_candidates` / `register_schema` /
+   * `update_schema_incremental` work.
+   *
+   * Read-only. Reuses the same user-scoping convention as `analyzeRawFragments`.
+   */
+  async auditUndeclaredFragments(options: {
+    entity_type?: string;
+    user_id?: string;
+  }): Promise<UndeclaredFragmentTypeAudit[]> {
+    let query = db
+      .from("raw_fragments")
+      .select("entity_type, fragment_key, entity_id, frequency_count, user_id");
+
+    if (options.entity_type) {
+      query = query.eq("entity_type", options.entity_type);
+    }
+
+    // User scoping mirrors analyzeRawFragments: a provided default UUID (or no
+    // user_id) also matches legacy null-owned rows.
+    const defaultUserId = "00000000-0000-0000-0000-000000000000";
+    if (options.user_id) {
+      if (options.user_id === defaultUserId) {
+        query = query.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+      } else {
+        query = query.eq("user_id", options.user_id);
+      }
+    } else {
+      query = query.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
+    }
+
+    const { data: fragments, error } = await query;
+    if (error || !fragments) {
+      return [];
+    }
+
+    // Group raw_fragments by entity_type, then by fragment_key.
+    interface KeyAgg {
+      entityIds: Set<string>;
+      occurrences: number;
+    }
+    const byType = new Map<string, Map<string, KeyAgg>>();
+    for (const fragment of fragments) {
+      const entityType = (fragment as { entity_type?: string }).entity_type;
+      const fragmentKey = (fragment as { fragment_key?: string }).fragment_key;
+      if (!entityType || !fragmentKey) continue; // defensive
+      if (!byType.has(entityType)) byType.set(entityType, new Map());
+      const keys = byType.get(entityType)!;
+      if (!keys.has(fragmentKey)) keys.set(fragmentKey, { entityIds: new Set(), occurrences: 0 });
+      const agg = keys.get(fragmentKey)!;
+      const entityId = (fragment as { entity_id?: string }).entity_id;
+      if (entityId) agg.entityIds.add(entityId);
+      agg.occurrences += (fragment as { frequency_count?: number }).frequency_count || 1;
+    }
+
+    const results: UndeclaredFragmentTypeAudit[] = [];
+    for (const [entityType, keys] of byType.entries()) {
+      // A fragment_key is "undeclared" only if the active schema does not already
+      // declare it as a field. When no active schema exists, every key is
+      // undeclared (schema_missing).
+      const schema = await this.loadSchemaForAutoEnhance(entityType, options.user_id);
+      const declaredFields = schema?.schema_definition.fields ?? {};
+      const schemaMissing = !schema;
+
+      const undeclaredFields: UndeclaredFieldAudit[] = [];
+      const typeEntityIds = new Set<string>();
+      let totalOccurrences = 0;
+      for (const [fragmentKey, agg] of keys.entries()) {
+        if (!schemaMissing && declaredFields[fragmentKey]) continue; // already declared
+        undeclaredFields.push({
+          fragment_key: fragmentKey,
+          affected_entities: agg.entityIds.size,
+          occurrences: agg.occurrences,
+        });
+        for (const id of agg.entityIds) typeEntityIds.add(id);
+        totalOccurrences += agg.occurrences;
+      }
+
+      if (undeclaredFields.length === 0) continue; // nothing stranded for this type
+
+      // Highest-impact first: occurrences desc, then affected_entities desc, then
+      // fragment_key asc for a stable, deterministic order.
+      undeclaredFields.sort(
+        (a, b) =>
+          b.occurrences - a.occurrences ||
+          b.affected_entities - a.affected_entities ||
+          (a.fragment_key < b.fragment_key ? -1 : a.fragment_key > b.fragment_key ? 1 : 0)
+      );
+
+      results.push({
+        entity_type: entityType,
+        undeclared_fields: undeclaredFields,
+        affected_entities: typeEntityIds.size,
+        total_occurrences: totalOccurrences,
+        schema_missing: schemaMissing,
+      });
+    }
+
+    // Order entity types by total undeclared occurrences desc, then name asc.
+    results.sort(
+      (a, b) =>
+        b.total_occurrences - a.total_occurrences ||
+        (a.entity_type < b.entity_type ? -1 : a.entity_type > b.entity_type ? 1 : 0)
+    );
+
+    return results;
   }
 }
 

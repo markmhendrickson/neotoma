@@ -29,8 +29,11 @@ const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
 describe("GET /session", () => {
   let httpServer: ReturnType<typeof createServer>;
+  let originalPublicBaseUrl: string | undefined;
 
   beforeAll(async () => {
+    originalPublicBaseUrl = process.env.NEOTOMA_PUBLIC_BASE_URL;
+    delete process.env.NEOTOMA_PUBLIC_BASE_URL;
     httpServer = createServer(app);
     await new Promise<void>((resolve, reject) => {
       httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
@@ -42,6 +45,8 @@ describe("GET /session", () => {
     await new Promise<void>((resolve, reject) => {
       httpServer.close((err) => (err ? reject(err) : resolve()));
     });
+    if (originalPublicBaseUrl === undefined) delete process.env.NEOTOMA_PUBLIC_BASE_URL;
+    else process.env.NEOTOMA_PUBLIC_BASE_URL = originalPublicBaseUrl;
   });
 
   it("returns anonymous tier + allow policy for an unsigned, nameless session", async () => {
@@ -55,24 +60,46 @@ describe("GET /session", () => {
     expect(body.eligible_for_trusted_writes).toBe(true);
     expect(body.attribution.decision).toBeDefined();
     expect(body.attribution.decision.signature_present).toBe(false);
+    expect(body.origins).toEqual({
+      app_origin: API_BASE,
+      inspector_origin: API_BASE,
+      source: "request",
+    });
+  });
+
+  it("prefers NEOTOMA_PUBLIC_BASE_URL over the inbound request origin", async () => {
+    process.env.NEOTOMA_PUBLIC_BASE_URL = "https://configured.neotoma.test/root";
+    try {
+      const res = await fetch(`${API_BASE}/session?user_id=${TEST_USER_ID}`, {
+        headers: {
+          host: "request-derived.neotoma.test",
+          "x-forwarded-proto": "https",
+        },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.origins).toEqual({
+        app_origin: "https://configured.neotoma.test",
+        inspector_origin: "https://configured.neotoma.test",
+        source: "configured",
+      });
+    } finally {
+      delete process.env.NEOTOMA_PUBLIC_BASE_URL;
+    }
   });
 
   it("surfaces too_generic normalisation reason when clientInfo is a placeholder", async () => {
-    const res = await fetch(
-      `${API_BASE}/session?user_id=${TEST_USER_ID}&client_name=mcp`,
-    );
+    const res = await fetch(`${API_BASE}/session?user_id=${TEST_USER_ID}&client_name=mcp`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.attribution.tier).toBe("anonymous");
     expect(body.attribution.decision.client_info_raw_name).toBe("mcp");
-    expect(
-      body.attribution.decision.client_info_normalised_to_null_reason,
-    ).toBe("too_generic");
+    expect(body.attribution.decision.client_info_normalised_to_null_reason).toBe("too_generic");
   });
 
   it("upgrades tier to unverified_client when a real client_name is provided", async () => {
     const res = await fetch(
-      `${API_BASE}/session?user_id=${TEST_USER_ID}&client_name=Claude%20Code&client_version=0.5.0`,
+      `${API_BASE}/session?user_id=${TEST_USER_ID}&client_name=Claude%20Code&client_version=0.5.0`
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
@@ -80,9 +107,7 @@ describe("GET /session", () => {
     expect(body.attribution.client_name).toBe("Claude Code");
     expect(body.attribution.client_version).toBe("0.5.0");
     expect(body.eligible_for_trusted_writes).toBe(true);
-    expect(
-      body.attribution.decision.client_info_normalised_to_null_reason,
-    ).toBeUndefined();
+    expect(body.attribution.decision.client_info_normalised_to_null_reason).toBeUndefined();
   });
 
   it("is read-only: repeated calls do not create observations / first_seen rows", async () => {
@@ -93,9 +118,7 @@ describe("GET /session", () => {
     const beforeCount = Array.isArray(before) ? before.length : 0;
 
     for (let i = 0; i < 25; i++) {
-      const res = await fetch(
-        `${API_BASE}/session?user_id=${TEST_USER_ID}&client_name=Probe-${i}`,
-      );
+      const res = await fetch(`${API_BASE}/session?user_id=${TEST_USER_ID}&client_name=Probe-${i}`);
       expect(res.status).toBe(200);
     }
 

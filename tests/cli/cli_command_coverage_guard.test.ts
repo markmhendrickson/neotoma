@@ -15,7 +15,7 @@ describe("CLI command coverage guard", () => {
       "cli-instructions",
       "corrections",
       "dev",
-      "doctor",
+      "status", // formerly `doctor`; `doctor` retained as a deprecated alias
       "edit",
       "entities",
       "init",
@@ -36,6 +36,7 @@ describe("CLI command coverage guard", () => {
       "schemas",
       "servers",
       "setup",
+      "skills", // `skills sync` reconciler covered by tests/cli/skills_mirror.test.ts
       "snapshots",
       "sources",
       "stats",

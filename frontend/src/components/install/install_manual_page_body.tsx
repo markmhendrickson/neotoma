@@ -33,7 +33,7 @@ export function InstallManualPageBody() {
             fails after install?
           </strong>{" "}
           Your shell manager (mise, nvm, fnm) is probably not active in the agent's non-interactive
-          shell. Run <code className="bg-muted px-1 py-0.5 rounded">neotoma doctor --json</code> and
+          shell. Run <code className="bg-muted px-1 py-0.5 rounded">neotoma status --json</code> and
           read <code className="bg-muted px-1 py-0.5 rounded">.neotoma.path_fix_hint</code> for the
           exact activation line. Common fixes to add to{" "}
           <code className="bg-muted px-1 py-0.5 rounded">~/.zshenv</code> or{" "}

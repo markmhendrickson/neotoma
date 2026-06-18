@@ -6,7 +6,7 @@ Read [`../../reference/architecture/option_c_hooks_architecture.md`](../../refer
 
 ## When hooks are offered
 
-Hooks are not installed as part of `neotoma setup`. They are proposed after the first successful timeline reconstruction during activation -- see [**Activation step 6.5: Offer lifecycle hooks**](../../../install.md#activation-step-65-offer-lifecycle-hooks-opt-in) in the install guide. The activation agent reads `doctor.hooks` (from `neotoma doctor --json`), offers install only when `eligible_for_offer === true`, and never proceeds without an explicit "yes". This page is the reference for per-harness behavior; the install guide is the workflow.
+Hooks are not installed as part of `neotoma setup`. They are proposed after the first successful timeline reconstruction during activation -- see [**Activation step 6.5: Offer lifecycle hooks**](../../../install.md#activation-step-65-offer-lifecycle-hooks-opt-in) in the install guide. The activation agent reads `doctor.hooks` (from `neotoma status --json`; the report keeps its `doctor.*` key names for payload stability), offers install only when `eligible_for_offer === true`, and never proceeds without an explicit "yes". This page is the reference for per-harness behavior; the install guide is the workflow.
 
 The CLI entry point is `neotoma hooks install --tool <cursor|claude-code|codex|opencode|claude-agent-sdk>`. Run `neotoma hooks status --json` to see the same block the activation agent consults.
 

@@ -102,6 +102,11 @@ export function searchLocalEntityEmbeddings(options: {
   queryEmbedding: number[];
   userId: string;
   entityType?: string | null;
+  /**
+   * Multi-type filter, OR-combined with `entityType` (#1562). When non-empty,
+   * candidates are restricted to rows whose `entity_type` is in this list.
+   */
+  entityTypes?: string[];
   includeMerged: boolean;
   /**
    * L2 distance threshold. Results with distance >= threshold are dropped.
@@ -112,8 +117,30 @@ export function searchLocalEntityEmbeddings(options: {
   limit: number;
   offset: number;
 }): { entityIds: string[]; total: number } {
-  const { queryEmbedding, userId, entityType, includeMerged, distanceThreshold, limit, offset } =
-    options;
+  const {
+    queryEmbedding,
+    userId,
+    entityType,
+    entityTypes,
+    includeMerged,
+    distanceThreshold,
+    limit,
+    offset,
+  } = options;
+
+  // Union of singular + plural type filters. Empty → no type filter.
+  const typeFilter = (() => {
+    const types = new Set<string>();
+    if (typeof entityType === "string" && entityType.trim().length > 0) {
+      types.add(entityType);
+    }
+    for (const candidate of entityTypes ?? []) {
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        types.add(candidate);
+      }
+    }
+    return [...types].sort();
+  })();
 
   if (
     config.storageBackend !== "local" ||
@@ -156,6 +183,15 @@ export function searchLocalEntityEmbeddings(options: {
   const float32 = new Float32Array(queryEmbedding);
   const embeddingBlob = Buffer.from(float32.buffer, float32.byteOffset, float32.byteLength);
 
+  // Build the entity_type clause from the normalized union list. No filter when
+  // empty; equality for one type; an IN(...) with bound placeholders otherwise.
+  const typeClause =
+    typeFilter.length === 0
+      ? "1 = 1"
+      : typeFilter.length === 1
+        ? "r.entity_type = ?"
+        : `r.entity_type IN (${typeFilter.map(() => "?").join(", ")})`;
+
   const rows = db
     .prepare(
       `
@@ -164,7 +200,7 @@ export function searchLocalEntityEmbeddings(options: {
     INNER JOIN entity_embedding_rows r ON r.rowid = v.rowid
     WHERE v.embedding MATCH ? AND k = ?
       AND r.user_id = ?
-      AND (? IS NULL OR r.entity_type = ?)
+      AND ${typeClause}
       AND (? = 1 OR r.merged = 0)
     ORDER BY v.distance
   `
@@ -173,8 +209,7 @@ export function searchLocalEntityEmbeddings(options: {
       embeddingBlob,
       oversample,
       userId,
-      entityType ?? null,
-      entityType ?? null,
+      ...typeFilter,
       includeMerged ? 1 : 0 /* includeMerged=1: all rows; =0: only non-merged (r.merged=0) */
     ) as Array<{ entity_id: string; distance: number }>;
 

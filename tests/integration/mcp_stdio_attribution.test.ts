@@ -39,6 +39,7 @@ const ENV_KEYS = [
   "NEOTOMA_ATTRIBUTION_POLICY",
   "NEOTOMA_MIN_ATTRIBUTION_TIER",
   "NEOTOMA_ATTRIBUTION_POLICY_JSON",
+  "NEOTOMA_PUBLIC_BASE_URL",
 ] as const;
 
 describe("MCP stdio attribution parity", () => {
@@ -178,6 +179,22 @@ describe("MCP stdio attribution parity", () => {
     // Without an identity, the decision is null.
     server.setSessionAgentIdentity(null);
     expect(server.getSessionAttributionDecision()).toBeNull();
+  });
+
+  it("exposes configured Inspector origin through get_session_identity for stdio MCP", async () => {
+    process.env.NEOTOMA_PUBLIC_BASE_URL = "https://configured.neotoma.test/root";
+
+    const result = await server.executeToolForCli("get_session_identity", {}, TEST_USER_ID);
+    const text = result.content?.[0]?.type === "text" ? result.content[0].text : "{}";
+    const session = JSON.parse(text) as {
+      origins?: { app_origin?: string; inspector_origin?: string; source?: string };
+    };
+
+    expect(session.origins).toEqual({
+      app_origin: "https://configured.neotoma.test",
+      inspector_origin: "https://configured.neotoma.test",
+      source: "configured",
+    });
   });
 
   it("exposes the decision inside the async context (dry run)", async () => {

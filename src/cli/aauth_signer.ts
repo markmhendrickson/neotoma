@@ -142,6 +142,16 @@ export async function generateAndStoreKeypair(options?: {
 }
 
 /**
+ * Returns true when a CLI AAuth keypair exists on disk. Use this as a
+ * lightweight pre-check to decide whether to attempt AAuth signing at all,
+ * avoiding the silent unsigned-fallback path in contexts (e.g. Claude.ai MCP)
+ * that never have a keypair.
+ */
+export async function hasCliAAuthKeypair(): Promise<boolean> {
+  return fileExists(AAUTH_PRIVATE_JWK_PATH);
+}
+
+/**
  * Load the CLI signer configuration from disk. Returns `null` when no
  * keypair is configured — callers should treat a null return as
  * "signing disabled" and fall back to unsigned requests. Throws

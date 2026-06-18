@@ -38,14 +38,17 @@ vi.mock("../../src/services/issues/sync_issues_from_github.js", () => ({
 import { submitIssue } from "../../src/services/issues/issue_operations.js";
 
 function createOps() {
-  const store = vi.fn(async (input: StoreInput): Promise<StoreResult> => ({
-    structured: {
-      entities: (input.entities ?? []).map((entity, index) => ({
-        entity_id: ["issue-1", "conversation-1", "message-1"][index] ?? `${entity.entity_type}-${index}`,
-        entity_type: entity.entity_type,
-      })),
-    },
-  }));
+  const store = vi.fn(
+    async (input: StoreInput): Promise<StoreResult> => ({
+      structured: {
+        entities: (input.entities ?? []).map((entity, index) => ({
+          entity_id:
+            ["issue-1", "conversation-1", "message-1"][index] ?? `${entity.entity_type}-${index}`,
+          entity_type: entity.entity_type,
+        })),
+      },
+    })
+  );
 
   return {
     store,
@@ -85,7 +88,9 @@ describe("entity submission GitHub handler coverage", () => {
     mockFetchRemoteIssueThread.mockResolvedValue(null);
   });
 
-  it.todo("routes generic entity_submission external_mirrors provider=github through a dedicated GitHub mirror handler");
+  it.todo(
+    "routes generic entity_submission external_mirrors provider=github through a dedicated GitHub mirror handler"
+  );
 
   it("creates a GitHub issue with the expected public submission shape", async () => {
     const { ops } = createOps();
@@ -104,11 +109,10 @@ describe("entity submission GitHub handler coverage", () => {
       reporter_app_version: "0.12.0-test",
     });
 
-    expect(mockCreateIssue).toHaveBeenCalledWith({
-      title: "Public Bug",
-      body: "Something broke",
-      labels: ["neotoma", "bug"],
-    });
+    expect(mockCreateIssue).toHaveBeenCalledWith(
+      { title: "Public Bug", body: "Something broke", labels: ["neotoma", "bug"] },
+      { repo: "test/repo" }
+    );
   });
 
   it("stores github_number and github_url after a successful GitHub create", async () => {

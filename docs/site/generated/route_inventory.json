@@ -36,6 +36,14 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/sdk/agent",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/sdk/python",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/aauth",
     "classification": "other"
   },
@@ -68,11 +76,27 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/subscriptions-guide",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/issue-reporting",
     "classification": "static_mdx"
   },
   {
+    "path": "/issues-guide",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/security-hardening",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/plans-guide",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/mirror-guide",
     "classification": "static_mdx"
   },
   {

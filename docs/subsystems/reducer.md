@@ -143,8 +143,10 @@ function mostSpecific(
 - `location` in events (specific address > city name)
 - `entity_name` in contacts (full name > nickname)
 ### 3.4 Merge Array
-**Strategy:** Combine all values into array, deduplicate.
-**Use When:** Multiple values are all valid.
+**Strategy:** Combine values into a deduplicated array, **from the observations carrying
+the field at the maximum present `source_priority` only** (priority-gated union — see
+"Priority gating for corrections" below).
+**Use When:** Multiple same-priority values are all valid.
 **Example:**
 ```typescript
 function mergeArrays(
@@ -153,38 +155,87 @@ function mergeArrays(
 ): { value: any[]; source_observation_id: string } {
   const values = new Set();
   const observationIds = [];
-  
-  for (const obs of observations) {
+
+  // Priority gate (issue #1541): a strictly higher-priority write (notably a
+  // correction, source_priority 1000) must fully REPLACE lower-priority arrays,
+  // not union into them. Restrict the union to observations at the maximum
+  // present source_priority. When all observations share one priority (the
+  // common case) this is identical to a plain union-all.
+  const maxPriority = observations.reduce(
+    (max, obs) => (obs.source_priority > max ? obs.source_priority : max),
+    Number.NEGATIVE_INFINITY
+  );
+  const topPriority = observations.filter((obs) => obs.source_priority === maxPriority);
+
+  for (const obs of topPriority) {
     const value = obs.fields[field];
     // Skip observations that did not carry the field (undefined) and
     // null contributions (a null entry is not a meaningful array element).
-    // A field-level clear via `field: null` is handled separately by the
-    // reducer per §4.3 Null semantics and clears the snapshot key.
     if (value !== undefined && value !== null) {
       values.add(value);
       observationIds.push(obs.id);
     }
   }
-  
+
   return {
     value: Array.from(values),
-    source_observation_id: observationIds.join(',') // Multiple sources
+    source_observation_id: observationIds.join(',') // top-priority sources only
   };
 }
 ```
+
+**Priority gating for corrections (issue #1541):** only observations carrying the field
+at the **maximum present `source_priority`** participate in the union. Corrections are
+created with `source_priority: 1000` (the highest tier), so a correction fully **replaces**
+any lower-priority array contributions rather than unioning with them — consistent with the
+rule that corrections "always win" (§4.2). The gate is `source_priority`-based and applies
+to any higher-priority write (e.g. a sensor), with corrections being the motivating case.
+Two writes at the **same** top priority still union with each other. Consequence:
+`source_observation_id` / `provenance[field]` lists only the top-priority contributing
+observation IDs, not every observation that ever contributed an element.
+
+> The gate is currently implicit in the `merge_array` strategy. A planned follow-up adds
+> an explicit `merge_policy.priority_gate: "max" | "all"` knob (default `"max"`) so a
+> schema author can opt a field back into accumulate-everything behavior; tracked in
+> Neotoma issue `ent_a2ca479ed08abd2bb98a8708` (GitHub mirror pending).
+
+**JSON-array-string recovery (issue #1595):** if an observation carries a JSON-array-shaped
+*string* for a `merge_array` field (e.g. `'["a","b"]'`) — which a transport/client can
+produce by stringifying an array argument — the reducer parses it back into real elements
+before the union, rather than adding the whole blob as one literal-string element. The same
+recovery applies in `canonicalizeArray` (it parses such a string instead of dropping it to
+`[]`). The shared heuristic lives in `src/services/recover_json_array_string.ts`. A genuine
+non-JSON string (and any string that does not `JSON.parse` to an array) is left untouched as
+a single literal element; real arrays are unaffected. The Neotoma server write path itself
+preserves arrays — this is defensive tolerance of an upstream (client/transport)
+serialization bug, not a server-side cause.
+
 **Use Cases:**
 - `aliases` for entities (all known names)
 - `tags` for records (all tags from all sources)
 - `categories` for transactions (all applicable categories)
 
-**Null-clear exception:** `merge_array` does **not** honor field-level null clears. A null
-observation for a `merge_array` field is silently skipped; the strategy returns the
-accumulated array from the remaining observations rather than omitting the key from the
-snapshot. This is an intentional exception to the general null-clear invariant (which
-`last_write`, `highest_priority`, `most_specific`, and the no-schema defaults path all
-respect).
+**Null handling (conditional on priority):** `merge_array` never omits the snapshot key for
+a null observation, but its effect depends on the null observation's `source_priority`
+relative to the array contributions (see "Priority gating" above):
 
-To clear a `merge_array` field, use one of these approaches:
+- **Null at the same or lower priority than array contributions:** the null is dropped by
+  the priority gate and/or the inner null guard, and the strategy returns the accumulated
+  union of the top-priority arrays. (A null entry is never a meaningful array element.)
+- **Null at strictly higher priority than all array contributions** (e.g. a `field: null`
+  correction at `source_priority: 1000`): the gate excludes every lower-priority array, the
+  only remaining top-priority observation is the null one, which the inner guard skips — so
+  the snapshot value is `[]` (empty array). This matches §4.3, which asserts `[]` for a null
+  correction on an array-typed field.
+
+In neither case is the snapshot key omitted; this remains the documented exception to the
+general null-clear invariant that `last_write`, `highest_priority`, `most_specific`, and the
+no-schema defaults path respect (they omit the key).
+
+To clear a `merge_array` field to `[]`, the simplest path is now a **top-priority null
+correction** (`correct(entity_id, type, field, null)`): the priority gate drops the
+accumulated lower-priority arrays and the result is `[]`. The previous workarounds also
+remain valid:
 1. Submit a correction with `strategy: last_write` on the field, set the value to `null`,
    then restore `merge_array` if needed.
 2. Remove and re-add the field via `update_schema_incremental` to drop all accumulated

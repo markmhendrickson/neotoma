@@ -35,6 +35,8 @@ interface FixtureUserData {
   sourceId: string;
   relationshipKey: string;
   observationId: string;
+  fragmentKey: string;
+  fragmentEntityType: string;
 }
 
 async function seedUserData(label: string): Promise<FixtureUserData> {
@@ -91,7 +93,28 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
     user_id: userId,
   });
 
-  return { userId, entityId, sourceId, relationshipKey, observationId };
+  // Per-user undeclared raw_fragment, used by the /audit_undeclared_fragments
+  // tenant-isolation row. The fragment_key is unique per user so a cross-user
+  // leak is detectable by key presence alone.
+  const fragmentEntityType = `${TEST_PREFIX}_type_${label}_${suffix}`;
+  const fragmentKey = `${TEST_PREFIX}_frag_${label}_${suffix}`;
+  await db.from("raw_fragments").insert({
+    entity_type: fragmentEntityType,
+    fragment_key: fragmentKey,
+    fragment_value: `${label}-only`,
+    user_id: userId,
+    frequency_count: 1,
+  });
+
+  return {
+    userId,
+    entityId,
+    sourceId,
+    relationshipKey,
+    observationId,
+    fragmentKey,
+    fragmentEntityType,
+  };
 }
 
 async function cleanupUserData(data: FixtureUserData): Promise<void> {
@@ -99,6 +122,7 @@ async function cleanupUserData(data: FixtureUserData): Promise<void> {
   await db.from("relationship_snapshots").delete().eq("relationship_key", data.relationshipKey);
   await db.from("entities").delete().eq("user_id", data.userId);
   await db.from("sources").delete().eq("id", data.sourceId);
+  await db.from("raw_fragments").delete().eq("fragment_key", data.fragmentKey);
 }
 
 async function callEndpoint(
@@ -109,6 +133,19 @@ async function callEndpoint(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  return { status: res.status, json };
+}
+
+async function callGet(
+  path: string,
+  query: Record<string, string>
+): Promise<{ status: number; json: any }> {
+  const qs = new URLSearchParams(query).toString();
+  const res = await fetch(`${BASE_URL}${path}${qs ? `?${qs}` : ""}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
   });
   const json = await res.json().catch(() => ({}));
   return { status: res.status, json };
@@ -214,6 +251,33 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
     });
   });
 
+  describe("GET /entities (#1499 list alias)", () => {
+    it("user A listing entities sees their own entity, not user B's", async () => {
+      const { status, json } = await callGet("/entities", {
+        entity_type: "test",
+        user_id: userA.userId,
+        limit: "200",
+      });
+      expect(status).toBe(200);
+      const ids = (json.entities ?? []).map((e: any) => e.entity_id ?? e.id);
+      expect(ids).toContain(userA.entityId);
+      // Cross-user read MUST be blocked: user B's entity must not appear.
+      expect(ids).not.toContain(userB.entityId);
+    });
+
+    it("user B listing entities sees their own entity, not user A's", async () => {
+      const { status, json } = await callGet("/entities", {
+        entity_type: "test",
+        user_id: userB.userId,
+        limit: "200",
+      });
+      expect(status).toBe(200);
+      const ids = (json.entities ?? []).map((e: any) => e.entity_id ?? e.id);
+      expect(ids).toContain(userB.entityId);
+      expect(ids).not.toContain(userA.entityId);
+    });
+  });
+
   describe("/retrieve_related_entities", () => {
     it("user A querying their own entity_id returns scoped result", async () => {
       const { status, json } = await callEndpoint("/retrieve_related_entities", {
@@ -232,6 +296,327 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
       expect(status).toBe(200);
       expect(json.relationships).toEqual([]);
       expect(json.entities ?? []).toEqual([]);
+    });
+
+    // Vector: edge-scoping-escape via a planted cross-tenant edge.
+    //
+    // createRelationship (src/services/relationships.ts) does NOT validate
+    // that both endpoints are owned by the caller, so user A can write a
+    // relationship row (user_id=A) whose target_entity_id is user B's
+    // private entity. The risk would be that the multi-hop BFS in
+    // /retrieve_related_entities (src/actions.ts:7964-8039) uses B's id as a
+    // hop frontier and then surfaces B's edges or B's entity row.
+    //
+    // This MUST NOT happen: the per-hop relationship_snapshots queries are
+    // user-scoped INSIDE the loop body (actions.ts:7974, 8000), so they only
+    // ever return A-owned rows; and the final entities fetch is
+    // .eq("user_id", A) (actions.ts:8031), so B's entity row is dropped even
+    // though B's id appears as a frontier endpoint. The only echo is the id
+    // string A planted themselves — not disclosure of B's data.
+    //
+    // This locks isolation in: a regression that moves the user_id filter
+    // out of the loop, or drops it from the entities fetch, fails here.
+    it("planted cross-tenant edge does NOT leak user B's edges or entity via multi-hop BFS", async () => {
+      const plantedKey = `${TEST_PREFIX}_planted_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      try {
+        // As user A: write an edge A.entityId -> userB.entityId into A's scope.
+        // userB.entityId is a foreign endpoint A does not own.
+        await db.from("relationship_snapshots").insert({
+          relationship_key: plantedKey,
+          relationship_type: "REFERS_TO",
+          source_entity_id: userA.entityId,
+          target_entity_id: userB.entityId,
+          schema_version: "1",
+          snapshot: JSON.stringify({}),
+          user_id: userA.userId,
+        });
+
+        // As user A: multi-hop traversal from A's root that reaches the
+        // foreign frontier id (userB.entityId) at hop 1, then attempts hop 2.
+        const { status, json } = await callEndpoint("/retrieve_related_entities", {
+          entity_id: userA.entityId,
+          user_id: userA.userId,
+          max_hops: 2,
+          direction: "both",
+        });
+        expect(status).toBe(200);
+
+        const rels: any[] = json.relationships ?? [];
+        // Every returned relationship row MUST be owned by user A.
+        for (const rel of rels) {
+          expect(rel.user_id).toBe(userA.userId);
+        }
+        // User B's pre-seeded edge MUST NOT surface, even though hop 2
+        // queries with userB.entityId as a frontier id.
+        const relKeys = rels.map((r) => r.relationship_key);
+        expect(relKeys).not.toContain(userB.relationshipKey);
+
+        const entities: any[] = json.entities ?? [];
+        // No entity owned by user B may appear in the results.
+        for (const ent of entities) {
+          expect(ent.user_id).toBe(userA.userId);
+        }
+        // userB.entityId is an endpoint of the planted edge but is owned by
+        // user B, so it MUST be absent from the materialized entities.
+        const entityIds = entities.map((e) => e.id);
+        expect(entityIds).not.toContain(userB.entityId);
+      } finally {
+        await db.from("relationship_snapshots").delete().eq("relationship_key", plantedKey);
+      }
+    });
+  });
+
+  describe("/audit_undeclared_fragments", () => {
+    it("user A sees their own undeclared fragment", async () => {
+      const { status, json } = await callEndpoint("/audit_undeclared_fragments", {
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      const keys = (json.audit ?? []).flatMap((t: any) =>
+        (t.undeclared_fields ?? []).map((f: any) => f.fragment_key)
+      );
+      expect(keys).toContain(userA.fragmentKey);
+    });
+
+    it("user A does NOT see user B's undeclared fragment", async () => {
+      const { status, json } = await callEndpoint("/audit_undeclared_fragments", {
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      const keys = (json.audit ?? []).flatMap((t: any) =>
+        (t.undeclared_fields ?? []).map((f: any) => f.fragment_key)
+      );
+      expect(keys).not.toContain(userB.fragmentKey);
+      // User B's whole entity_type must be absent from user A's audit too.
+      const types = (json.audit ?? []).map((t: any) => t.entity_type);
+      expect(types).not.toContain(userB.fragmentEntityType);
+    });
+
+    it("scoping to user B's entity_type as user A returns no leak", async () => {
+      const { status, json } = await callEndpoint("/audit_undeclared_fragments", {
+        user_id: userA.userId,
+        entity_type: userB.fragmentEntityType,
+      });
+      expect(status).toBe(200);
+      // Querying user B's type while authenticated as user A yields nothing —
+      // user A owns no fragments under that type.
+      expect(json.audit ?? []).toEqual([]);
+    });
+  });
+
+  // Vector: bulk-import-cross-user.
+  //
+  // The bulk `entities import` CLI path (src/cli/index.ts) sends a body
+  // user_id plus an array of raw JSONL lines as entities[]. A red-team pass
+  // probed whether an attacker authenticated as user A could write into,
+  // overwrite, or read user B's tenant by:
+  //   (1) overriding the request body/flag user_id to user B, or
+  //   (2) smuggling a per-line `user_id: <userB>` inside an entity object.
+  //
+  // handleStorePost (src/actions.ts:6767) resolves a SINGLE batch userId via
+  // getAuthenticatedUserId, and the per-entity destructure
+  // (src/actions.ts:6196) only strips entity_type/intent/target_id — any
+  // stray `user_id` lands in `...fields` as inert observation data and the
+  // observation is written with `user_id: <batch userId>`
+  // (createObservation). Isolation is enforced by the `user_id` column on
+  // every row, not by the entity_id (generateEntityId is user-agnostic:
+  // type+canonical_name only), so the per-line override cannot redirect a
+  // write into another tenant's scope.
+  //
+  // These tests lock that in: a regression that lets the per-entity user_id
+  // win, or that drops the batch-level user scoping on the write, surfaces a
+  // user-B-scoped row here and fails.
+  describe("/store bulk import (bulk-import-cross-user)", () => {
+    it("per-line user_id override is inert: observation is written under the batch user only", async () => {
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const canonicalName = `${TEST_PREFIX}_bulk_${suffix}`;
+      const createdEntityIds: string[] = [];
+      const createdObservationIds: string[] = [];
+      const createdSourceIds: string[] = [];
+
+      try {
+        // As user A (batch user_id = A), smuggle a per-line user_id = B.
+        const { status, json } = await callEndpoint("/store", {
+          user_id: userA.userId,
+          idempotency_key: `${TEST_PREFIX}_bulk_${suffix}`,
+          commit: true,
+          entities: [
+            {
+              entity_type: "test",
+              canonical_name: canonicalName,
+              // Attacker-smuggled cross-tenant override. MUST be inert.
+              user_id: userB.userId,
+            },
+          ],
+        });
+        expect(status).toBe(200);
+
+        const stored = (json.entities ?? [])[0] as
+          | { entity_id?: string; observation_id?: string }
+          | undefined;
+        expect(stored?.entity_id).toBeDefined();
+        if (stored?.entity_id) createdEntityIds.push(stored.entity_id);
+        if (stored?.observation_id) createdObservationIds.push(stored.observation_id);
+        if (typeof json.source_id === "string") createdSourceIds.push(json.source_id);
+
+        const entityId = stored!.entity_id!;
+
+        // The written observation MUST belong to user A, never user B.
+        const { data: obsRows } = await db
+          .from("observations")
+          .select("*")
+          .eq("entity_id", entityId);
+        expect((obsRows ?? []).length).toBeGreaterThan(0);
+        for (const obs of obsRows ?? []) {
+          expect(obs.user_id).toBe(userA.userId);
+          expect(obs.user_id).not.toBe(userB.userId);
+        }
+
+        // The entity row itself MUST be scoped to user A.
+        const { data: entRows } = await db.from("entities").select("*").eq("id", entityId);
+        for (const ent of entRows ?? []) {
+          expect(ent.user_id).toBe(userA.userId);
+        }
+
+        // No row for this batch import may exist under user B's scope:
+        // zero entities and zero observations enumerable as user B.
+        const { data: bobEntities } = await db
+          .from("entities")
+          .select("id")
+          .eq("id", entityId)
+          .eq("user_id", userB.userId);
+        expect(bobEntities ?? []).toEqual([]);
+
+        const { data: bobObs } = await db
+          .from("observations")
+          .select("id")
+          .eq("entity_id", entityId)
+          .eq("user_id", userB.userId);
+        expect(bobObs ?? []).toEqual([]);
+      } finally {
+        for (const id of createdObservationIds) {
+          await db.from("observations").delete().eq("id", id);
+        }
+        for (const id of createdEntityIds) {
+          await db.from("observations").delete().eq("entity_id", id);
+          await db.from("entity_snapshots").delete().eq("entity_id", id);
+          await db.from("entities").delete().eq("id", id);
+        }
+        for (const id of createdSourceIds) {
+          await db.from("sources").delete().eq("id", id);
+        }
+      }
+    });
+
+    it("body user_id override does not let user A write into user B's relationship scope", async () => {
+      // A bulk batch authored as user A that references user B's entity_id as
+      // a relationship target MUST produce only a user-A-scoped
+      // relationship_snapshot. User B's relationship reads MUST NOT surface
+      // it (no enumeration oracle across the tenant boundary).
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const srcName = `${TEST_PREFIX}_bulkrel_${suffix}`;
+      // The store relationships[] schema requires target_entity_id to match
+      // the canonical Neotoma entity_id format (ent_ + 24 hex). Seed a real,
+      // user-B-owned entity with such an id to act as the cross-tenant target.
+      const bobTargetId = `ent_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+      const createdEntityIds: string[] = [];
+      const createdObservationIds: string[] = [];
+      const createdSourceIds: string[] = [];
+      const relKeysBefore = new Set<string>();
+
+      await db.from("entities").insert({
+        id: bobTargetId,
+        user_id: userB.userId,
+        entity_type: "test",
+        canonical_name: `${TEST_PREFIX}_bobtarget_${suffix}`,
+      });
+
+      // Capture user B's existing relationship keys to detect any new leak.
+      const { json: bobBefore } = await callEndpoint("/list_relationships", {
+        entity_id: bobTargetId,
+        user_id: userB.userId,
+      });
+      for (const r of bobBefore.relationships ?? []) {
+        relKeysBefore.add(r.relationship_key);
+      }
+
+      try {
+        const { status, json } = await callEndpoint("/store", {
+          user_id: userA.userId,
+          idempotency_key: `${TEST_PREFIX}_bulkrel_${suffix}`,
+          commit: true,
+          entities: [
+            {
+              entity_type: "test",
+              canonical_name: srcName,
+            },
+          ],
+          relationships: [
+            {
+              relationship_type: "REFERS_TO",
+              source_index: 0,
+              // Cross-tenant reference: user B's private entity.
+              target_entity_id: bobTargetId,
+            },
+          ],
+        });
+        expect(status).toBe(200);
+
+        const stored = (json.entities ?? [])[0] as
+          | { entity_id?: string; observation_id?: string }
+          | undefined;
+        if (stored?.entity_id) createdEntityIds.push(stored.entity_id);
+        if (stored?.observation_id) createdObservationIds.push(stored.observation_id);
+        if (typeof json.source_id === "string") createdSourceIds.push(json.source_id);
+
+        // Any relationship_snapshot pointing at user B's entity that was
+        // created by this batch MUST be scoped to user A (the batch author),
+        // never silently re-homed into user B's tenant.
+        const { data: snaps } = await db
+          .from("relationship_snapshots")
+          .select("*")
+          .eq("target_entity_id", bobTargetId);
+        expect((snaps ?? []).length).toBeGreaterThan(0);
+        for (const snap of snaps ?? []) {
+          expect(snap.user_id).toBe(userA.userId);
+          expect(snap.user_id).not.toBe(userB.userId);
+        }
+
+        // The cross-tenant reference MUST NOT appear in user B's reads.
+        const { json: bobAfter } = await callEndpoint("/list_relationships", {
+          entity_id: bobTargetId,
+          user_id: userB.userId,
+        });
+        const bobKeysAfter: string[] = (bobAfter.relationships ?? []).map(
+          (r: any) => r.relationship_key
+        );
+        for (const key of bobKeysAfter) {
+          // No NEW relationship key appeared in user B's scope as a result of
+          // user A's cross-tenant write.
+          expect(relKeysBefore.has(key)).toBe(true);
+        }
+        // Every relationship user B can read MUST be owned by user B.
+        for (const rel of bobAfter.relationships ?? []) {
+          expect(rel.user_id).toBe(userB.userId);
+        }
+      } finally {
+        for (const id of createdObservationIds) {
+          await db.from("observations").delete().eq("id", id);
+        }
+        for (const id of createdEntityIds) {
+          await db.from("relationship_snapshots").delete().eq("source_entity_id", id);
+          await db.from("observations").delete().eq("entity_id", id);
+          await db.from("entity_snapshots").delete().eq("entity_id", id);
+          await db.from("entities").delete().eq("id", id);
+        }
+        for (const id of createdSourceIds) {
+          await db.from("sources").delete().eq("id", id);
+        }
+        await db.from("relationship_snapshots").delete().eq("target_entity_id", bobTargetId);
+        await db.from("entities").delete().eq("id", bobTargetId);
+      }
     });
   });
 });

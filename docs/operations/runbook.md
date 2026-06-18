@@ -54,6 +54,8 @@ see [install.md § Production deployment (headless / systemd)](../../install.md#
 
 ## Health Checks
 
+> Two distinct tools share the word "doctor": `npm run doctor` (the dev/ops health-check script, `scripts/doctor.ts` — environment, database, RLS, storage, migrations, security) and `neotoma status` (the CLI command formerly named `neotoma doctor` — CLI path, data directory, local API, MCP entries, permissions). This runbook uses `npm run doctor` for operator health checks and `neotoma status --json` only where CLI/data-dir state is needed.
+
 - **Primary:** Run `npm run doctor` for environment, database, RLS, storage, migrations, and security checks. See [Health check](health_check.md).
 - **Manual:** Run tests (`npm test`, `npm run test:integration`), type-check (`npm run type-check`), and lint (`npm run lint`).
 - **Runtime:** Hit API health/readiness endpoints if configured; confirm MCP server starts (e.g. stdio mode).
@@ -83,7 +85,7 @@ see [install.md § Production deployment (headless / systemd)](../../install.md#
 ## Emergency Procedures
 
 - **Rollback:** Revert deployment to previous version; re-run migrations only if a migration rollback is defined (see migration docs). Restore DB/storage from backup if data corruption is suspected.
-- **SQLite corruption:** If Neotoma reports `database disk image is malformed`, `btreeInitPage`, or a failed `PRAGMA integrity_check`, run `neotoma storage recover-db` first. If it reports corruption, stop Neotoma and run `neotoma storage recover-db --recover` to write a recovered copy. Review and swap files manually; do not auto-replace the live DB. If corruption recurs on macOS, move `NEOTOMA_DATA_DIR` out of iCloud-synced `Documents`, `Desktop`, or `iCloud Drive` folders with `neotoma storage set-data-dir "~/Library/Application Support/neotoma/data" --move-db-files`, then rerun `neotoma doctor --json` and confirm `data.risks` is empty.
+- **SQLite corruption:** If Neotoma reports `database disk image is malformed`, `btreeInitPage`, or a failed `PRAGMA integrity_check`, run `neotoma storage recover-db` first. If it reports corruption, stop Neotoma and run `neotoma storage recover-db --recover` to write a recovered copy. Review and swap files manually; do not auto-replace the live DB. If corruption recurs on macOS, move `NEOTOMA_DATA_DIR` out of iCloud-synced `Documents`, `Desktop`, or `iCloud Drive` folders with `neotoma storage set-data-dir "~/Library/Application Support/neotoma/data" --move-db-files`, then rerun `neotoma status --json` and confirm `data.risks` is empty.
 - **Incident response:** Triage using [Troubleshooting](troubleshooting.md). Check logs and `npm run doctor` output. For security issues, see [SECURITY.md](../../SECURITY.md) in the source root.
 
 ---

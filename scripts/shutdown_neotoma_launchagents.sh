@@ -121,6 +121,7 @@ for label in \
   com.neotoma.prod-server \
   com.neotoma.watch-build \
   com.neotoma.issues-sync \
+  com.neotoma.skills-sync \
   com.neotoma.dev-servers \
   com.neotoma.watch-dev \
   com.neotoma.watch-full-prod \

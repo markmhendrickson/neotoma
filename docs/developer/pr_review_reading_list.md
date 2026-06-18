@@ -4,20 +4,15 @@ This document is the authoritative reading list for the automated Claude PR revi
 
 ## Always read
 
-These establish the invariants every PR must respect regardless of what changed.
+These three docs are the invariant kernel — load on every PR regardless of what changed.
 
 | Doc | What it enforces |
 |-----|-----------------|
 | `docs/NEOTOMA_MANIFEST.md` | Root invariants: State Layer, determinism, immutability, schema-first, no PII, no synthetic data |
-| `docs/foundation/core_identity.md` | What Neotoma is and is not; State Layer scope boundaries |
-| `docs/foundation/philosophy.md` | Core principles and architectural invariants |
 | `docs/foundation/layered_architecture.md` | State Layer / Operational Layer boundaries; forbidden cross-layer logic |
 | `docs/architecture/change_guardrails_rules.mdc` | Cross-cutting change constraints; touchpoint matrix; pre-PR checklist |
-| `docs/foundation/schema_agnostic_design_rules.md` | No per-type branches; schema-driven behavior only |
-| `docs/architecture/determinism.md` | Deterministic IDs, stable ordering, no nondeterminism in business logic |
-| `docs/subsystems/errors.md` | Error envelope taxonomy; tightening-change hint obligation |
-| `docs/security/threat_model.md` | Auth bypass classes; proxy trust; local-dev shortcut regression patterns |
-| `docs/vocabulary/canonical_terms.md` | Canonical terminology; use consistently in review comments |
+
+All other docs are conditional — load only when the diff touches the listed paths (see below). The previous "always read" list was too broad: loading `core_identity`, `philosophy`, `schema_agnostic_design_rules`, `determinism`, `errors`, and `threat_model` on every PR consumed 6+ turns before any diff was read, causing reviews that touch `server.ts`/`actions.ts` to run out of budget at Phase 1.
 
 ## Read when these paths changed
 
@@ -32,11 +27,12 @@ Load only when the diff touches the listed files or directories.
 | `src/services/observation*`, `src/services/sources*` | `docs/subsystems/sources.md`, `docs/subsystems/observation_architecture.md` |
 | `src/services/interpretation*` | `docs/subsystems/interpretations.md` |
 | `src/services/relationships*` | `docs/subsystems/relationships.md` |
-| `src/services/entity*`, `src/services/schema_registry*` | `docs/foundation/entity_resolution.md`, `docs/subsystems/schema_registry.md`, `docs/subsystems/schema.md` |
+| `src/services/entity*`, `src/services/schema_registry*` | `docs/foundation/entity_resolution.md`, `docs/subsystems/schema_registry.md`, `docs/subsystems/schema.md`, `docs/architecture/schema_compatibility_policy.md` |
 | `src/services/entity_merge*` | `docs/subsystems/entity_merge.md` |
 | `src/services/timeline*`, `src/services/events*` | `docs/foundation/timeline_events.md`, `docs/subsystems/timeline_events.md`, `docs/subsystems/events.md` |
 | `src/services/deletion*` | `docs/subsystems/deletion.md` |
-| `src/services/peer*` | `docs/subsystems/peer_sync.md` |
+| `src/services/peer*`, `src/services/net/private_host_guard*` | `docs/subsystems/peer_sync.md`, `docs/security/threat_model.md` |
+| `src/services/issues/repo_discovery*` | `docs/subsystems/repo_discovery_manifest.md`, `docs/subsystems/peer_sync.md` |
 | `src/services/search*` | `docs/subsystems/search/search.md` |
 
 ### API and contract surfaces
@@ -46,6 +42,7 @@ Load only when the diff touches the listed files or directories.
 | `openapi.yaml`, `src/shared/contract*`, `src/shared/openapi*` | `docs/architecture/openapi_contract_flow.md` |
 | `src/tool_definitions.ts`, `src/server.ts`, `docs/developer/mcp/` | `docs/developer/mcp/instructions.md`, `docs/developer/agent_instructions_sync_rules.mdc` |
 | `src/cli/` | `docs/developer/cli_reference.md` |
+| `src/cli/entities*` (import/export), bulk-import or export-path changes | `docs/developer/exit_rebuild_test.md` |
 | Error response shapes | `docs/reference/error_codes.md` |
 
 ### Auth and security
@@ -61,7 +58,13 @@ Load only when the diff touches the listed files or directories.
 | Changed path | Read |
 |---|---|
 | Subsystem consistency model changes | `docs/architecture/consistency.md` |
-| Any new entity type or schema field | `docs/subsystems/record_types.md`, `docs/foundation/data_models.md` |
+| New call to `registry.register()` (new entity type registered, not just schema field addition) | `docs/subsystems/record_types.md`, `docs/foundation/data_models.md` |
+| Any `if (entityType`, `switch (entity_type`, or hardcoded entity-type list in diff | `docs/foundation/schema_agnostic_design_rules.md` |
+| Any new error code, tightened validation, or changed error response shape | `docs/subsystems/errors.md` |
+| `Math.random`, `Date.now` in non-observability code paths; new sort/grouping in stored-output path | `docs/architecture/determinism.md` |
+| Any change to stored fields, observation shape, or entity snapshot output | `docs/foundation/core_identity.md`, `docs/foundation/philosophy.md` |
+| Any auth/security-adjacent change (`src/actions.ts`, `src/server.ts`, middleware, root_landing) | `docs/security/threat_model.md` |
+| Naming of new fields, parameters, or error codes | `docs/vocabulary/canonical_terms.md` |
 
 ### Observability
 

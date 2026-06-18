@@ -1,0 +1,2 @@
+# Rendered plists (machine-specific) — only .tmpl sources are tracked
+*.plist

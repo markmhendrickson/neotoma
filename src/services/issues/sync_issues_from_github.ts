@@ -36,6 +36,25 @@ import { githubIssueBodyTurnKey, githubIssueCommentTurnKey } from "./github_thre
 import { runRedactionGuard } from "./redaction_guard.js";
 import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
 
+/**
+ * One-time migration token folded into BOTH pull-leg sync idempotency keys
+ * (`issue-sync-*` and `issue-comment-sync-*`).
+ *
+ * Before the deterministic-provenance fix, the issue store payload contained a
+ * wall-clock `last_synced_at`/`data_source`, so existing `sources` rows under
+ * the sync keys carry a content_hash that no longer matches the (now
+ * deterministic) payload. Those rows can't be overwritten — the idempotency
+ * check rejects the mismatched content — so already-synced issues were frozen
+ * with ERR_IDEMPOTENCY_MISMATCH and never updated. The comment path re-stores
+ * the issue entity too, so it strands the same way under its own key.
+ *
+ * Bumping this token gives every issue/comment a brand-new key, sidestepping
+ * the stale rows without any destructive DB repair. The old rows simply go
+ * inert. Bump it again only if a future payload-shape change strands keys the
+ * same way.
+ */
+const SYNC_KEY_MIGRATION = "m2";
+
 export interface SyncResult {
   issues_synced: number;
   messages_synced: number;
@@ -163,22 +182,42 @@ async function pushUnsyncedIssues(
     }
 
     // Write github_number/url back and clear sync_pending.
-    try {
-      await ops.correct({
-        entity_id: entityId,
-        corrections: {
-          github_number: created.number,
-          github_url: created.html_url,
-          sync_pending: false,
-          last_synced_at: new Date().toISOString(),
-        },
-      });
-    } catch (err) {
-      // Push succeeded but local update failed — not fatal, but notable.
-      result.push_errors.push(
-        `GitHub issue #${created.number} created but local update failed for ${entityId}: ${(err as Error).message}`
-      );
-      // Still count as pushed since the GitHub issue exists.
+    //
+    // The `correct` tool applies ONE field per call and requires an explicit
+    // `field` + `value` + unique `idempotency_key` (see CorrectEntityRequestSchema).
+    // Passing a `corrections` map silently failed Zod validation, so the
+    // github_number was never persisted and the next sync re-pushed the same
+    // entity — creating duplicate GitHub issues on every run (#1610).
+    //
+    // Idempotency keys are deterministic per (entity, field, github number) so a
+    // replayed sync re-applies the identical correction instead of erroring.
+    const writeBacks: Array<{ field: string; value: unknown }> = [
+      { field: "github_number", value: created.number },
+      { field: "github_url", value: created.html_url },
+      { field: "sync_pending", value: false },
+      // Derive from the GitHub issue's creation timestamp (not wall-clock) so a
+      // replayed sync re-applies the identical value under the same idempotency
+      // key rather than tripping ERR_IDEMPOTENCY_MISMATCH.
+      { field: "last_synced_at", value: created.created_at },
+    ];
+
+    for (const { field, value } of writeBacks) {
+      try {
+        await ops.correct({
+          entity_id: entityId,
+          entity_type: "issue",
+          field,
+          value,
+          idempotency_key: `issue-push-writeback-${entityId}-${field}-gh${created.number}`,
+        });
+      } catch (err) {
+        // Push succeeded but local update failed — not fatal, but notable.
+        // Record once per failing field so the cause is visible.
+        result.push_errors.push(
+          `GitHub issue #${created.number} created but local ${field} write-back failed for ${entityId}: ${(err as Error).message}`
+        );
+        // Still count as pushed since the GitHub issue exists.
+      }
     }
 
     result.issues_pushed++;
@@ -204,7 +243,13 @@ async function syncSingleIssue(
   issue: GitHubIssue,
   repo: string
 ): Promise<StoreResult> {
-  const now = new Date().toISOString();
+  // Derive sync-provenance fields from the issue's own updated_at, NOT wall-clock
+  // `now`. The idempotency check hashes the full entity payload; a wall-clock
+  // last_synced_at/data_source changes every run, so an unchanged issue re-synced
+  // under the same (updated_at-keyed) idempotency_key tripped
+  // ERR_IDEMPOTENCY_MISMATCH and never synced. Deterministic provenance keeps the
+  // payload byte-stable across runs so the idempotent no-op actually holds.
+  const syncedAt = issue.updated_at;
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
   const actor = buildExternalActorFromGithubIssue(issue, { repository: repo });
 
@@ -223,9 +268,9 @@ async function syncSingleIssue(
       github_actor: actor ? { login: actor.login, id: actor.id, type: actor.type } : undefined,
       created_at: issue.created_at,
       closed_at: issue.closed_at,
-      last_synced_at: now,
+      last_synced_at: syncedAt,
       sync_pending: false,
-      data_source: `github issues api ${repo} #${issue.number} ${now.slice(0, 10)}`,
+      data_source: `github issues api ${repo} #${issue.number} ${syncedAt.slice(0, 10)}`,
     } as StoreEntityInput,
     {
       entity_type: "conversation",
@@ -251,11 +296,18 @@ async function syncSingleIssue(
     { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
   ];
 
+  // Include updated_at so each distinct version of an issue gets a unique
+  // idempotency_key. A static `issue-sync-${repo}-${number}` key is reused
+  // verbatim on every sync, so once an issue's title/body/labels change on
+  // GitHub the store fails with ERR_IDEMPOTENCY_MISMATCH (same key, different
+  // content) and the issue never updates locally. Keying on updated_at keeps a
+  // genuine no-op re-sync idempotent (same key → dedup) while letting changed
+  // content through under a fresh key.
   return runWithExternalActor(actor, () =>
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-sync-${repo}-${issue.number}`,
+      idempotency_key: `issue-sync-${repo}-${issue.number}-${issue.updated_at}-${SYNC_KEY_MIGRATION}`,
     })
   ) as Promise<StoreResult>;
 }
@@ -270,7 +322,10 @@ async function syncSingleComment(
   issue: GitHubIssue,
   repo: string
 ): Promise<StoreResult> {
-  const now = new Date().toISOString();
+  // Deterministic provenance from the issue's updated_at (see syncSingleIssue) —
+  // keeps the re-stored issue entity payload byte-stable across runs so the
+  // idempotency content-hash holds.
+  const syncedAt = issue.updated_at;
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
   const commentActor = buildExternalActorFromGithubComment(comment, issue, { repository: repo });
   const issueActor = buildExternalActorFromGithubIssue(issue, { repository: repo });
@@ -292,9 +347,9 @@ async function syncSingleComment(
         : undefined,
       created_at: issue.created_at,
       closed_at: issue.closed_at,
-      last_synced_at: now,
+      last_synced_at: syncedAt,
       sync_pending: false,
-      data_source: `github issues api ${repo} #${issue.number} ${now.slice(0, 10)}`,
+      data_source: `github issues api ${repo} #${issue.number} ${syncedAt.slice(0, 10)}`,
     } as StoreEntityInput,
     {
       entity_type: "conversation",
@@ -326,7 +381,13 @@ async function syncSingleComment(
     ops.store({
       entities,
       relationships,
-      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}`,
+      // Include the issue's updated_at: this store re-stores the issue entity
+      // (whose deterministic payload tracks issue.updated_at), so when the issue
+      // changes the comment store must re-key too — otherwise the new issue
+      // content collides with the stale row under a comment.id-only key and
+      // trips ERR_IDEMPOTENCY_MISMATCH. (Observed accumulating once the swarm
+      // began bumping issue.updated_at on synced issues.)
+      idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}-${issue.updated_at}-${SYNC_KEY_MIGRATION}`,
     })
   ) as Promise<StoreResult>;
 }

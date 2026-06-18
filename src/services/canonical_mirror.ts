@@ -45,6 +45,7 @@ import {
   renderTimelineDayMarkdown,
   renderSchemaMarkdown,
   renderIndexMarkdown,
+  renderProfileEntity,
   type RenderEntityInput,
   type RenderRelationshipInput,
   type RenderSourceInput,
@@ -637,7 +638,6 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
       const renderMode = profile.render_mode ?? "entity";
       let profileRendered: string;
       if (renderMode === "frontmatter_content" || renderMode === "content_only") {
-        const { renderProfileEntity } = await import("./canonical_markdown.js");
         profileRendered = renderProfileEntity(
           filteredSnapshot,
           {
@@ -661,6 +661,7 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
         };
         profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
           includeProvenance: false,
+          content_field: profile.content_field,
         });
       }
       const profilePath = profileEntityFilePath(
@@ -1310,6 +1311,27 @@ export async function rebuildMirror(options: RebuildOptions = {}): Promise<Rebui
 }
 
 /**
+ * Detect an authentication failure in an openapi-fetch error body. Matches the
+ * canonical error envelope (`{ error: { code: "AUTH_REQUIRED" } }`), a bare
+ * `{ code: "AUTH_REQUIRED" }`, or an HTTP 401 status surfaced on the body.
+ */
+export function isAuthError(apiError: unknown): boolean {
+  if (!apiError || typeof apiError !== "object") return false;
+  const obj = apiError as Record<string, unknown>;
+  const codeFrom = (v: unknown): string | undefined => {
+    if (v && typeof v === "object") {
+      const c = (v as Record<string, unknown>).code;
+      return typeof c === "string" ? c : undefined;
+    }
+    return undefined;
+  };
+  const code = codeFrom(obj) ?? codeFrom(obj.error);
+  if (code === "AUTH_REQUIRED" || code === "ERR_UNAUTHENTICATED") return true;
+  if (obj.status === 401 || obj.statusCode === 401) return true;
+  return false;
+}
+
+/**
  * Rebuild a single profile: query all entities of the profile's type, filter
  * by the profile's filter, render with field exclusion, and write to output_path.
  * Emits git-safety warnings (or throws when opts.strict is set).
@@ -1355,6 +1377,14 @@ async function rebuildProfile(
       },
     });
     if (apiError) {
+      // Auth failures must surface as a non-zero exit, not a silent 0-file
+      // success. The CLI catches thrown errors and sets process.exitCode = 1.
+      if (isAuthError(apiError)) {
+        throw new Error(
+          `AUTH_REQUIRED: mirror rebuild for profile ${profile.id} requires authentication. ` +
+            `Provide a bearer token (run \`neotoma auth login\` or set the API token) and retry.`
+        );
+      }
       process.stderr.write(
         `[mirror profile] API fetch failed for profile ${profile.id}: ${JSON.stringify(apiError)}\n`
       );
@@ -1426,7 +1456,6 @@ async function rebuildProfile(
     const renderMode = profile.render_mode ?? "entity";
     let rendered: string;
     if (renderMode === "frontmatter_content" || renderMode === "content_only") {
-      const { renderProfileEntity } = await import("./canonical_markdown.js");
       rendered = renderProfileEntity(
         filteredSnapshot,
         {
@@ -1456,7 +1485,7 @@ async function rebuildProfile(
           provenance: undefined,
         },
         schemaFieldOrder,
-        { includeProvenance: false }
+        { includeProvenance: false, content_field: profile.content_field }
       );
     }
 

@@ -30,6 +30,7 @@ import {
   isExpectedNetworkError,
   log,
   makeIdempotencyKey,
+  pickStoredEntityId,
   recordConversationTurn,
   runHook,
   turnContextFields,
@@ -49,13 +50,7 @@ function extractIdentifiers(prompt: string): string[] {
   return [...found];
 }
 
-function extractEntityId(result: unknown, index = 0): string | undefined {
-  if (!result || typeof result !== "object") return undefined;
-  const r = result as { structured?: { entities?: Array<{ entity_id?: string }> } };
-  const entity = r.structured?.entities?.[index];
-  if (entity && typeof entity.entity_id === "string") return entity.entity_id;
-  return undefined;
-}
+const extractEntityId = pickStoredEntityId;
 
 async function handle(
   input: Record<string, unknown>

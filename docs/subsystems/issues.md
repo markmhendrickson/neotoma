@@ -156,7 +156,7 @@ When `visibility: "public"` or when read/append paths touch the mirror, Neotoma 
 3. Configured machine agent — `IssuesConfig.github_auth = "bot"` (literal enum) plus a server-side credential resolver registered out-of-band.
 4. Otherwise, throw — public issue actions that require the mirror cannot proceed.
 
-`isGhInstalled`, `isGhAuthenticated`, `verifyGhAuth` are exposed for `neotoma doctor` so operators can diagnose mirror setup quickly.
+`isGhInstalled`, `isGhAuthenticated`, `verifyGhAuth` are exposed for `neotoma status` so operators can diagnose mirror setup quickly.
 
 ## Transports (CLI, MCP, HTTP)
 
@@ -214,4 +214,5 @@ First-class HTTP routes (see `openapi.yaml` / `contract_mappings.ts`); each `/is
 - [`feedback_neotoma_forwarder.md`](feedback_neotoma_forwarder.md) — forwarding bridge that routes legacy submissions into the new pipeline.
 - [`entity_submission.md`](entity_submission.md) — the generalized submission service that issues predates and that now defers issue-specific flows back here.
 - [`agent_attribution_integration.md`](agent_attribution_integration.md) — external actor attribution model.
+- [`repo_discovery_manifest.md`](repo_discovery_manifest.md) — `.well-known/neotoma.json` spec: repo-side discovery of where issues about a repo should route (Layer 2 / M2, builds on `target_repo`).
 - [`docs/plans/observer_wire_feedback_channel.md`](../plans/observer_wire_feedback_channel.md) — design history.

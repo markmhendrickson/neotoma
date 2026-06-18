@@ -56,6 +56,7 @@ interface ErrorEnvelope {
 | `AUTH_EXPIRED`   | 401  | No     | Bearer token has expired                        |
 | `AUTH_MALFORMED` | 401  | No     | Bearer token format is invalid                  |
 | `FORBIDDEN`      | 403  | No     | Insufficient permissions (RLS policy violation) |
+| `OVERRIDE_POLICY_VIOLATION` | 403 | No | Write to a policy-protected field on an `agent_definition` entity denied for the calling agent role (see `src/services/override_validation.ts`; details carry `field_name`, `agent_role`, `entity_id`) |
 
 **Common Causes:**
 
@@ -103,6 +104,9 @@ interface ErrorEnvelope {
 Errors raised by `update_schema_incremental` and related schema-registry tools.
 These are structured (non-throwing) responses with an actionable `hint` field
 directing the caller to the right next tool, rather than opaque internal errors.
+They use the canonical standard error envelope (`{ error: { error_code,
+message, hint, details } }`, see `docs/subsystems/errors.md`) so CLI/MCP error
+handlers can pattern-match the code uniformly.
 
 | Code                              | HTTP | Retry? | Description                                                                          |
 | --------------------------------- | ---- | ------ | ------------------------------------------------------------------------------------ |
@@ -114,15 +118,19 @@ the target `entity_type` has no schema registered in `schema_registry` and no
 code-defined fallback in `schema_definitions.ts`. Incremental update needs a
 baseline to extend, so the call cannot proceed.
 
-Response shape:
+Response shape (canonical envelope):
 
 ```json
 {
-  "success": false,
-  "entity_type": "<type>",
-  "error_code": "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
-  "no_schema_for_entity_type": true,
-  "hint": "Call register_schema first ... Use analyze_schema_candidates to get field suggestions before registering."
+  "error": {
+    "error_code": "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
+    "message": "No schema is registered for entity_type \"<type>\".",
+    "hint": "Call register_schema first ... Use analyze_schema_candidates to get field suggestions before registering.",
+    "details": {
+      "entity_type": "<type>",
+      "no_schema_for_entity_type": true
+    }
+  }
 }
 ```
 
@@ -136,14 +144,16 @@ the target `entity_type` lacks both `canonical_name_fields` and
 `identity_opt_out`. The baseline schema is present but cannot be safely
 extended without an identity rule in place.
 
-Response shape:
+Response shape (canonical envelope):
 
 ```json
 {
-  "success": false,
-  "entity_type": "<type>",
-  "error_code": "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
-  "hint": "Call register_schema with a full schema_definition that includes canonical_name_fields (or identity_opt_out: \"heuristic_canonical_name\") to establish a baseline, then retry update_schema_incremental."
+  "error": {
+    "error_code": "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
+    "message": "The SchemaDefinition for entity_type \"<type>\" is missing identity configuration.",
+    "hint": "Call register_schema with a full schema_definition that includes canonical_name_fields (or identity_opt_out: \"heuristic_canonical_name\") to establish a baseline, then retry update_schema_incremental.",
+    "details": { "entity_type": "<type>" }
+  }
 }
 ```
 
@@ -236,6 +246,50 @@ declares one of `canonical_name_fields` or `identity_opt_out`, then retry
 - `OAUTH_CONNECTION_NOT_FOUND`: Connection_id doesn't exist or was deleted
 - `OAUTH_ENCRYPTION_KEY_MISSING`: MCP_TOKEN_ENCRYPTION_KEY not set in environment
 - `OAUTH_DECRYPTION_FAILED`: Invalid encrypted token format or wrong encryption key
+
+## Store Warnings
+
+Non-fatal codes emitted in `store_warnings[]` on a successful `/store` response.
+These do not prevent the write from completing; they surface data-quality issues
+agents should address. Switch on the `code` field. All ride on a successful
+`HTTP 200` store response (the write completed); `Retry?` is always `No` — the
+caller repairs in-turn via `correct` rather than re-submitting the same payload.
+
+| Code                      | HTTP | Retry? | Description                                                                                  |
+| ------------------------- | ---- | ------ | -------------------------------------------------------------------------------------------- |
+| `MISSING_CONTENT_FIELD`   | 200  | No     | A schema declares `content_field` and the stored observation omits or empties that field.    |
+| `MISSING_IDENTITY_FIELDS` | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
+| `UNKNOWN_FIELD`           | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
+| `MISSING_REQUIRED_FIELD`  | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
+
+**`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
+`content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
+observation leaves that field absent or empty-string. For document-derived entities,
+agents MUST include the full original markdown/prose in this field. Structured fields
+(title, summary, tags, etc.) complement the body but do not replace it.
+
+**`MISSING_IDENTITY_FIELDS`** — fired when a schema declares `store_warnings` with
+identity-field rules (e.g. `product_feedback` requires at least one of `github_url`,
+`conversation_id`, `session_id`) and the stored observation supplies none of them.
+Used to surface identity-quality issues without rejecting the write.
+
+**`UNKNOWN_FIELD`** — fired once per undeclared field on a stored observation
+(issue #1552). The store path does not reject undeclared fields; the value is
+preserved on the observation but the reducer projects only declared schema fields,
+so it does not surface in the entity snapshot. The top-level `unknown_fields`,
+`unknown_fields_count`, and `hint` fields aggregate the same information. The `hint`
+is conditional on the schema's identity configuration (issue #1549): when the schema
+declares `canonical_name_fields` it points to `update_schema_incremental`; otherwise
+it points to `correct`-ing into a declared field or `register_schema`, because
+`update_schema_incremental` would dead-end on `ERR_SCHEMA_MISSING_IDENTITY_CONFIG`.
+
+**`MISSING_REQUIRED_FIELD`** — fired once per schema field declared `required: true`
+that the stored observation omits or leaves empty (issue #1559). The write is
+non-fatally accepted (mirror of the `unknown_fields` contract); the top-level
+`required_fields_missing[]` array carries the same `{ entity_type, field,
+observation_index }` tuples. Agents SHOULD repair in-turn by `correct`-ing the
+missing field. Use `describe_entity_type` before storing to learn which fields a type
+requires.
 
 ## Validation Errors
 

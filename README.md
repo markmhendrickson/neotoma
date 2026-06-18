@@ -87,7 +87,7 @@ Most AI memory systems optimize storage or retrieval. Neotoma enforces state int
 Ask your AI agent whether Neotoma fits your workflow. Paste this into Claude, Cursor, ChatGPT, or any MCP-capable tool:
 
 ```
-Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use `neotoma doctor --json` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.
+Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.
 ```
 
 The agent reads the evaluation page, checks your context, and gives you an honest assessment. If it's a fit, the agent carries you through install and activation.
@@ -97,7 +97,7 @@ The agent reads the evaluation page, checks your context, and gives you an hones
 Agents install Neotoma themselves. Paste this prompt into Claude, Cursor, ChatGPT, or Codex:
 
 ```
-Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Use `neotoma` commands for status and setup. If Neotoma is already installed, start with `neotoma doctor --json`; otherwise install it and run `neotoma setup --tool <my_tool> --yes`. Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.
+Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Use `neotoma` commands for status and setup. If Neotoma is already installed, start with `neotoma status --json`; otherwise install it and run `neotoma setup --tool <my_tool> --yes`. Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.
 ```
 
 The agent handles npm install, initialization, and MCP configuration. **Manual install:**
@@ -206,7 +206,7 @@ Neotoma stores user data and requires secure configuration.
 
 - **Authentication:** Local auth (dev stub or key-based when encryption is enabled).
 - **Authorization:** Local data isolation and explicit operation-level access controls.
-- **Data protection:** User-controlled data with full export and deletion control. Never used for training. Optional encryption at rest.
+- **Data protection:** User-controlled data with full export and deletion control. Never used for training. Optional at-rest encryption: AES-256-GCM column encryption of the sensitive content/metadata columns when enabled with a key file or mnemonic (some tables, e.g. the event log and embeddings, are not yet column-encrypted — pair with an encrypted volume for full coverage). See [architecture § 7.2](docs/architecture/architecture.md).
 - **Verify your setup:** Run `npm run doctor` for environment, database, and security checks. See [Auth](docs/subsystems/auth.md), [Privacy](docs/subsystems/privacy.md), [Compliance](docs/legal/compliance.md).
 
 ## Development

@@ -124,6 +124,7 @@ npm run lint
 - [Issues](issues_guide.md) — built-in issue tracker with optional GitHub mirror.
 - [Markdown mirror](mirror_guide.md) — read-only filesystem view of Neotoma data.
 - [Subscriptions](subscriptions_guide.md) — real-time webhooks and SSE for data changes.
+- [Skills](skills_guide.md) — store reusable agent workflows as entities, mirrored to your harness skill directory.
 
 ## First contribution checklist
 

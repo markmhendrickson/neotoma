@@ -1,0 +1,408 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+ * Inspector design tokens
+ *
+ * Canonical warm-cream palette for the Inspector app. Token registry lives in
+ * `docs/ui/design_system/color_palette.md`; the design-system validator
+ * (`scripts/validate_design_system.js`) enforces parity against that registry
+ * via `docs/ui/design_system/dependencies.yaml`.
+ *
+ * Adding a new token? Declare it here, update the canonical YAML block in
+ * `color_palette.md`, and document any new utility class below.
+ * ------------------------------------------------------------------------- */
+
+@layer base {
+  :root {
+    /* Surfaces — warm cream; higher lightness = more elevated (overlay), lower = more inset.
+       Depth ladder: sidebar (darkest) → body → cards / floating UI (lightest). */
+    --background: 38 14% 98%;             /* Main body (header + content canvas) */
+    --foreground: 28 22% 18%;             /* Warm dark brown */
+    --card: 38 10% 100%;                  /* Elevated body children (panels, dialogs) */
+    --card-foreground: 28 22% 18%;
+    --popover: 38 8% 100%;               /* Floating overlays (menus, tooltips) */
+    --popover-foreground: 28 22% 18%;
+
+    /* Action — professional blue. Red is reserved for destructive/error states. */
+    --primary: 211 100% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary / muted / accent — warm tan */
+    --secondary: 38 12% 99%;              /* Subtle wells on the body (between body and card) */
+    --secondary-foreground: 28 22% 18%;
+    --muted: 38 12% 99%;                 /* Table stripes, recessed blocks on the body */
+    --muted-foreground: 28 14% 44%;
+    --skeleton: 32 14% 84%;              /* Loading placeholders — darker than muted for contrast */
+    --inset: 32 12% 90%;                 /* Recessed bands (table header, loading wells) */
+    --accent: 35 12% 94%;                 /* Hover / pressed troughs (deepest inset) */
+    --accent-foreground: 28 22% 18%;
+
+    /* Status */
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 56% 32%;               /* Healthy / OK signals (badges, dot indicators) */
+    --success-foreground: 0 0% 100%;
+    --warning: 32 80% 38%;                /* Caution / pending signals */
+    --warning-foreground: 0 0% 100%;
+
+    /* JSON / payload syntax — used by JsonViewer and similar code-shaped surfaces. */
+    --syntax-string: 32 80% 38%;          /* Amber-leaning: string literals */
+    --syntax-number: 142 56% 32%;         /* Green-leaning: numeric literals */
+    --syntax-boolean: 211 100% 40%;       /* Primary blue: boolean literals */
+    --syntax-key: 268 50% 45%;            /* Plum: object keys */
+
+    /* Charts — shadcn-canonical categorical palette. Use sequentially: --chart-1 for the
+       first series, --chart-2 for the second, etc. Picked to read against both warm-cream
+       light surfaces and deep slate dark surfaces; the dark overrides below brighten each
+       hue so 3:1 contrast against the chart background is preserved. */
+    --chart-1: 211 100% 40%;              /* Professional blue (matches --primary in light) */
+    --chart-2: 142 56% 32%;               /* Forest green */
+    --chart-3: 32 80% 45%;                /* Warm amber */
+    --chart-4: 268 50% 50%;               /* Plum */
+    --chart-5: 0 70% 50%;                 /* Coral red */
+
+    /* Borders / inputs / focus ring */
+    --border: 32 10% 93%;
+    --input: 32 10% 93%;
+    --ring: 211 100% 40%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar rail — Tailwind config maps `--sidebar` to `bg-sidebar`. */
+    --sidebar: 35 12% 95%;               /* Darkest inset — nav rail */
+    --sidebar-foreground: 28 26% 14%;     /* Slightly darker than body text for contrast on the rail */
+    --sidebar-accent: 35 10% 92%;
+    --sidebar-accent-foreground: 28 26% 14%;
+    --sidebar-border: 32 10% 93%;
+  }
+
+  .dark {
+    /* Surfaces — deep slate; sidebar darkest → body → cards / popover lightest */
+    --background: 222 36% 16%;
+    --foreground: 210 36% 97%;
+    --card: 217 24% 22%;
+    --card-foreground: 210 36% 97%;
+    --popover: 217 22% 26%;
+    --popover-foreground: 210 40% 95%;
+
+    /* Action — brighter blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary / muted / accent */
+    --secondary: 217 24% 29%;
+    --secondary-foreground: 210 36% 97%;
+    --muted: 217 24% 29%;
+    --muted-foreground: 215 16% 70%;
+    --skeleton: 217 26% 36%;
+    --inset: 217 24% 24%;
+    --accent: 217 24% 29%;
+    --accent-foreground: 210 36% 97%;
+
+    /* Status */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 70% 60%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 90% 60%;
+    --warning-foreground: 0 0% 100%;
+
+    /* JSON / payload syntax */
+    --syntax-string: 32 90% 60%;
+    --syntax-number: 142 70% 60%;
+    --syntax-boolean: 217 91% 70%;
+    --syntax-key: 268 70% 75%;
+
+    /* Charts — brightened so series fills clear ~3:1 against the dark slate background. */
+    --chart-1: 217 91% 65%;               /* Brightened primary blue */
+    --chart-2: 142 65% 55%;               /* Brightened green */
+    --chart-3: 32 92% 60%;                /* Brightened amber */
+    --chart-4: 268 75% 72%;               /* Brightened plum */
+    --chart-5: 0 78% 65%;                 /* Brightened coral */
+
+    /* Borders / inputs / focus ring */
+    --border: 217 22% 30%;
+    --input: 217 22% 30%;
+    --ring: 217 91% 60%;
+
+    /* Sidebar */
+    --sidebar: 222 38% 13%;
+    --sidebar-foreground: 210 32% 90%;
+    --sidebar-accent: 217 24% 18%;
+    --sidebar-accent-foreground: 210 32% 90%;
+    --sidebar-border: 217 22% 30%;
+  }
+}
+
+@layer base {
+  /*
+   * Compact UI scale — match frontend design system (13px body at 16px root).
+   * Slightly bumped from pure Claude Code density: 0.875rem ≈ 14px body text.
+   * Tailwind `rem` utilities still derive from 16px root.
+   */
+  html {
+    font-size: 16px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family:
+      Inter,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: "JetBrains Mono", "Fira Code", "Roboto Mono", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+}
+
+/*
+ * Tailwind display utilities on details children (for example `grid`) can
+ * outrank the browser's closed-details UA rule. Keep collapsed content out of
+ * flow so page height tracks only visible content.
+ */
+details:not([open]) > :not(summary) {
+  display: none;
+}
+
+@layer base {
+  /* Prose palette — token family used by inline-code, callouts, step rails, and
+   * other prose chrome that ships in `/design` pattern specimens. Kept distinct
+   * from the surface tokens so prose styling can evolve without disturbing
+   * card / popover / sidebar layering. */
+  :root {
+    --prose-background: 38 22% 98%;
+    --prose-foreground: 28 22% 18%;
+    --prose-secondary: 28 14% 44%;
+    --prose-border: 32 18% 88%;
+    --prose-code-bg: 35 18% 92%;
+    --prose-primary: 12 48% 38%;
+    --prose-primary-hover: 12 48% 30%;
+    --prose-primary-foreground: 0 0% 100%;
+    --prose-radius-minimal: 2px;
+    --prose-radius-default: 4px;
+  }
+
+  .dark {
+    --prose-background: 222 47% 11%;
+    --prose-foreground: 210 40% 98%;
+    --prose-secondary: 215 16% 47%;
+    --prose-border: 217 33% 24%;
+    --prose-code-bg: 217 33% 17%;
+    --prose-primary: 217 91% 60%;
+    --prose-primary-hover: 217 91% 52%;
+    --prose-primary-foreground: 0 0% 100%;
+  }
+}
+
+/* Shared horizontal scroll UX for wide reference tables. */
+.table-scroll-outer {
+  @apply relative;
+}
+.table-scroll-outer .table-scroll-viewport {
+  @apply min-w-0 max-w-full;
+}
+.table-scroll-outer.table-scrollable .table-scroll-inner {
+  display: flex;
+  flex-direction: row;
+  width: max-content;
+  min-width: 100%;
+}
+.table-scroll-outer.table-scrollable .table-scroll-inner > table {
+  flex: 0 0 auto;
+}
+.table-scroll-outer.table-scrollable .table-scroll-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2.5rem;
+  pointer-events: none;
+}
+.table-scroll-outer.table-scrollable .table-scroll-hint {
+  @apply flex items-center gap-1 rounded-md bg-background px-2 py-1.5 text-caption text-muted-foreground;
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  white-space: nowrap;
+}
+
+@layer components {
+  /*
+   * Neutral fenced code surface used by `.inspector-prose-page pre` for
+   * markdown specimens. Matches the `CopyableCodeBlock` aesthetic — muted
+   * surface, border, foreground text, no gradient. The standalone copyable
+   * snippet primitive lives in `components/ui/copyable_code_block.tsx`; do not
+   * compose this class manually in feature code.
+   */
+  .code-block-palette {
+    @apply border-border bg-muted/40 text-foreground;
+  }
+
+  .inspector-prose-page {
+    @apply text-body leading-7 text-foreground;
+  }
+  .inspector-prose-page h2 {
+    @apply mb-3 mt-8 text-body-lg font-medium tracking-tight text-foreground;
+  }
+  .inspector-prose-page h3 {
+    @apply mb-2 mt-4 text-body-lg font-medium text-foreground;
+  }
+  .inspector-prose-page p {
+    @apply mb-4;
+  }
+  .inspector-prose-page li {
+    @apply mb-1;
+  }
+  .inspector-prose-page ul,
+  .inspector-prose-page ol {
+    @apply text-body leading-7 text-foreground;
+  }
+  .inspector-prose-page pre {
+    @apply code-block-palette mb-6 overflow-x-auto whitespace-pre-wrap break-words rounded-lg border p-4 font-mono text-base;
+  }
+
+  .doc-inline-code {
+    @apply rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-ui text-foreground;
+  }
+
+  .blockquote-callout {
+    @apply border-l-2 border-primary/45 py-1 pl-4 text-ui leading-6 text-muted-foreground;
+  }
+
+  .blockquote-muted {
+    @apply mb-0 border-l-2 border-muted-foreground/30 pl-4 text-body italic leading-7 text-muted-foreground;
+  }
+
+  .translation-banner {
+    @apply rounded-md border border-border bg-muted/40 px-3 py-2 text-ui leading-5 text-muted-foreground;
+  }
+
+  .inspector-prose-cta {
+    @apply inline-flex items-center justify-center rounded-md border border-border bg-card px-3 py-2 text-ui font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-muted;
+  }
+
+  .doc-step-rail {
+    @apply space-y-3 border-l-2 border-border pl-4;
+  }
+
+  .doc-tip-panel {
+    @apply rounded-lg border border-primary/20 bg-primary/5 p-4;
+  }
+
+  .doc-step-number {
+    @apply mr-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-ui font-medium text-primary;
+  }
+
+  .doc-section-kicker {
+    @apply text-caption font-medium uppercase tracking-wide text-primary;
+  }
+
+  .doc-arrow-accent {
+    @apply shrink-0 text-primary;
+  }
+
+  .doc-plain-table {
+    @apply w-full text-ui;
+  }
+
+  .doc-plain-table thead tr {
+    @apply border-b border-border text-left;
+  }
+
+  .doc-plain-table th {
+    @apply pb-2 font-medium text-foreground;
+  }
+
+  .doc-plain-table tbody tr {
+    @apply border-b border-border;
+  }
+
+  .doc-plain-table td {
+    @apply py-2 text-foreground;
+  }
+
+  .env-chip {
+    @apply inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-fine font-medium;
+  }
+
+  .env-chip-sandbox {
+    @apply env-chip border-secondary/30 bg-secondary/10 text-secondary;
+  }
+
+  .env-chip-preview {
+    @apply env-chip border-primary/30 bg-primary/10 text-foreground;
+  }
+
+  .env-chip-destructive {
+    @apply env-chip border-destructive/30 bg-destructive/10 text-destructive;
+  }
+
+  .gradient-hero-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.14), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.1), transparent 35%);
+  }
+  .dark .gradient-hero-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.2), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.14), transparent 35%);
+  }
+
+  .gradient-section-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.1), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.08), transparent 35%);
+  }
+  .dark .gradient-section-success {
+    background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.14), transparent 45%),
+      radial-gradient(circle at 80% 0%, hsl(var(--secondary) / 0.12), transparent 35%);
+  }
+
+  .toc-panel {
+    border-width: 1px;
+    border-color: hsl(var(--border));
+    background: linear-gradient(to bottom, hsl(var(--card) / 0.95), hsl(var(--muted) / 0.9));
+    box-shadow: none;
+  }
+
+  .dark .toc-panel {
+    border-color: hsl(var(--border));
+    background: linear-gradient(to bottom, hsl(var(--card) / 0.92), hsl(var(--muted) / 0.88));
+    box-shadow: none;
+  }
+
+  .inspector-prose a:not([data-inspector-prose-cta]):not([class*="no-underline"]) {
+    @apply text-foreground underline underline-offset-2;
+  }
+  .inspector-prose a:not([data-inspector-prose-cta]):not([class*="no-underline"]):hover {
+    @apply text-foreground no-underline;
+  }
+  .inspector-prose section[data-integration-section="getting-started"] a {
+    @apply no-underline;
+  }
+  .inspector-prose section[data-integration-section="getting-started"] a:hover {
+    @apply no-underline;
+  }
+
+  .pattern-specimen-note {
+    @apply text-caption text-muted-foreground;
+  }
+
+  .pattern-specimen-note code {
+    @apply font-mono text-ui;
+  }
+}

@@ -162,6 +162,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "entities list",
   },
   {
+    operationId: "listEntities",
+    method: "get",
+    path: "/entities",
+    adapter: "cli",
+    cliCommand: "entities list",
+    notes: "REST/GET alias of queryEntities (#1499); query-string params map to the POST body.",
+  },
+  {
     operationId: "bulkCloseIssues",
     method: "post",
     path: "/issues/bulk_close",
@@ -338,7 +346,8 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "getSchemaByEntityType",
     method: "get",
     path: "/schemas/{entity_type}",
-    adapter: "cli",
+    adapter: "both",
+    mcpTool: "describe_entity_type",
     cliCommand: "schemas get",
   },
   {
@@ -363,6 +372,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     path: "/stats",
     adapter: "cli",
     cliCommand: "stats",
+  },
+  {
+    operationId: "getUsage",
+    method: "get",
+    path: "/usage",
+    adapter: "cli",
+    cliCommand: "request --operation getUsage",
   },
   {
     operationId: "getAccessPolicies",
@@ -407,6 +423,23 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     adapter: "both",
     mcpTool: "store",
     cliCommand: "store",
+  },
+  {
+    operationId: "turnSummary",
+    method: "post",
+    path: "/turn_summary",
+    adapter: "mcp",
+    mcpTool: "neotoma_turn_summary",
+    notes:
+      "FU-2026-05-002: per-turn status line plus optional ui:// widget URI. Agents call at end of every turn after the closing assistant store.",
+  },
+  {
+    operationId: "getConversationTurnIndex",
+    method: "get",
+    path: "/conversations/{conversation_id}/turn-index",
+    adapter: "infra",
+    notes:
+      "FU-2026-05-003: per-turn index used by Inspector to render anchor sections (#msg-N, #stored-N, #retrieved-N, #issues-N) and the turn timeline sidebar. Inspector HTTP-only.",
   },
   {
     operationId: "getRecordById",
@@ -557,6 +590,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "schemas analyze-candidates",
   },
   {
+    operationId: "auditUndeclaredFragments",
+    method: "post",
+    path: "/audit_undeclared_fragments",
+    adapter: "both",
+    mcpTool: "audit_undeclared_fragments",
+    cliCommand: "schemas audit-fragments",
+  },
+  {
     operationId: "getSchemaRecommendations",
     method: "post",
     path: "/get_schema_recommendations",
@@ -611,6 +652,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     adapter: "both",
     mcpTool: "health_check_snapshots",
     cliCommand: "snapshots check",
+  },
+  {
+    operationId: "publishRenderedPage",
+    method: "post",
+    path: "/rendered-pages/publish",
+    adapter: "mcp",
+    mcpTool: "publish_rendered_page",
   },
   {
     operationId: "listAgentGrants",
@@ -782,6 +830,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   retrieve_entities: "queryEntities",
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",
+  describe_entity_type: "getSchemaByEntityType",
   merge_entities: "mergeEntities",
   split_entity: "splitEntity",
   list_potential_duplicates: "listPotentialDuplicates",
@@ -799,6 +848,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   restore_relationship: "restoreRelationship",
   get_relationship_snapshot: "getRelationshipSnapshot",
   analyze_schema_candidates: "analyzeSchemaCandidates",
+  audit_undeclared_fragments: "auditUndeclaredFragments",
   get_schema_recommendations: "getSchemaRecommendations",
   update_schema_incremental: "updateSchemaIncremental",
   register_schema: "registerSchema",
@@ -806,6 +856,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   get_authenticated_user: "getAuthenticatedUser",
   get_session_identity: "getSessionInfo",
   health_check_snapshots: "healthCheckSnapshots",
+  publish_rendered_page: "publishRenderedPage",
   list_recent_changes: "getRecordActivity",
   subscribe: "subscribe",
   unsubscribe: "unsubscribe",
@@ -817,6 +868,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   get_peer_status: "getPeerStatus",
   sync_peer: "syncPeer",
   resolve_sync_conflict: "resolveSyncConflict",
+  neotoma_turn_summary: "turnSummary",
   submit_issue: "issuesSubmit",
   add_issue_message: "issuesAddMessage",
   get_issue_status: "issuesGetStatus",
@@ -836,6 +888,7 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   get_relationship_snapshot:
     "relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>",
   analyze_schema_candidates: "schemas analyze",
+  audit_undeclared_fragments: "schemas audit-fragments",
   get_schema_recommendations: "schemas recommend <entityType>",
   update_schema_incremental: "schemas update <entityType>",
   register_schema: "schemas register <entityType>",
