@@ -150,7 +150,7 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), render `🧠 Neotoma — [<conversation name>](<origin>/inspector/conversations/<id>)` with bullet groups Created (N), Updated (N), Retrieved (N). Use `get_session_identity.origins.inspector_origin` as `<origin>` when present; if absent, do NOT guess sandbox/localhost and render labels without hyperlinks. Each bullet: emoji + label + linked entity_type to `<origin>/inspector/entities/<id>` only when an origin is known.",
+  "Display rule: when a turn creates, updates, or retrieves non-chat entities, render `🧠 Neotoma — [<conversation name>](<origin>/inspector/conversations/<id>)` with Created/Updated/Retrieved groups. Use `get_session_identity.origins.inspector_origin` as `<origin>` when present; if absent, do NOT guess sandbox/localhost; render labels without links. Each bullet: emoji + label + linked entity_type only when origin and entity_id are known.",
   "",
   "Schema/fidelity: for known entity_types (seen this session), check declared fields via get_schema_recommendations or an existing snapshot before storing; use declared fields, invent snake_case only for unfit data. unknown_fields_count > 0 = mandatory repair before closing store. FORBIDDEN: inventing all fields for a known type without checking; ignoring unknown_fields_count > 0.",
   "",
