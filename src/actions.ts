@@ -28,7 +28,7 @@ import {
 } from "./middleware/aauth_verify.js";
 import { attributionContext } from "./middleware/attribution_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
-import { buildSessionInfo } from "./services/session_info.js";
+import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import {
@@ -1504,6 +1504,24 @@ export function canonicalAauthAuthority(): string {
   }
 }
 
+function resolvePublicAppOriginFromRequest(req: express.Request): {
+  origin?: string;
+  source?: "configured" | "request";
+} {
+  const configured = normalizeSessionOrigin(process.env.NEOTOMA_PUBLIC_BASE_URL);
+  if (configured) return { origin: configured, source: "configured" };
+
+  const host = req.get("host");
+  if (!host) return {};
+
+  const forwardedProto = req.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProto || req.protocol;
+  return {
+    origin: normalizeSessionOrigin(`${protocol}://${host}`),
+    source: "request",
+  };
+}
+
 // AAuth middleware — runs before every handler so `req.aauth` is populated
 // uniformly across HTTP surfaces. Non-blocking by design (see middleware
 // docstring), so OAuth, bearer-token, and unauthenticated clients keep
@@ -1733,6 +1751,8 @@ app.all("/mcp", async (req, res) => {
       if (connectionIdFromReq) {
         serverInstance.setSessionConnectionId(connectionIdFromReq);
       }
+      const appOrigin = resolvePublicAppOriginFromRequest(req);
+      serverInstance.setSessionAppOrigin(appOrigin.origin ?? null, appOrigin.source ?? null);
 
       // Create new transport for initialization
       transport = new StreamableHTTPServerTransport({
@@ -10002,6 +10022,7 @@ app.get("/session", async (req, res) => {
       ? connectionIdHeader[0]
       : connectionIdHeader;
     const rawClientName = typeof req.query.client_name === "string" ? req.query.client_name : null;
+    const appOrigin = resolvePublicAppOriginFromRequest(req);
     const identity = getAgentIdentityFromRequest(req, {
       clientName: rawClientName,
       clientVersion: typeof req.query.client_version === "string" ? req.query.client_version : null,
@@ -10013,6 +10034,8 @@ app.get("/session", async (req, res) => {
       middlewareDecision: getAttributionDecisionFromRequest(req),
       rawClientInfoName: rawClientName,
       admission: getAAuthAdmissionFromRequest(req),
+      appOrigin: appOrigin.origin,
+      originSource: appOrigin.source,
     });
     return res.json(session);
   } catch (error) {

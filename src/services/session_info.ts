@@ -134,6 +134,23 @@ export interface SessionAAuthInfo {
   agent_label?: string;
 }
 
+/** App/Inspector origins agents may safely use for user-visible links. */
+export interface SessionOriginInfo {
+  /**
+   * Canonical origin for browser app links, e.g. `https://neotoma.example.com`.
+   * Omitted when the server cannot determine the connected instance origin.
+   */
+  app_origin?: string;
+  /**
+   * Canonical origin for Inspector/app entity pages. Currently mirrors
+   * `app_origin`, but is separate so future split deployments can expose the
+   * browser UI without changing the session contract.
+   */
+  inspector_origin?: string;
+  /** How the origin was resolved; helps agents avoid treating guesses as facts. */
+  source?: "configured" | "request";
+}
+
 /** Full `/session` payload. */
 export interface SessionInfo {
   user_id: string;
@@ -152,6 +169,11 @@ export interface SessionInfo {
    * `enforceAttributionPolicy()` would make on the default write path.
    */
   eligible_for_trusted_writes: boolean;
+  /**
+   * Browser origins for user-visible links. Agents MUST use these when present
+   * and MUST NOT guess a sandbox/localhost fallback when absent.
+   */
+  origins?: SessionOriginInfo;
 }
 
 /**
@@ -182,8 +204,24 @@ export function buildSessionInfo(params: {
    * a `not_signed` reason so the response is well-formed.
    */
   admission?: AAuthAdmissionContext | null;
+  /**
+   * Canonical app origin resolved by the transport layer. HTTP callers pass
+   * the request origin (or configured public base); stdio callers omit it
+   * unless a public origin is explicitly configured.
+   */
+  appOrigin?: string | null;
+  /** Whether appOrigin came from operator config or the inbound request. */
+  originSource?: SessionOriginInfo["source"] | null;
 }): SessionInfo {
-  const { userId, identity, middlewareDecision, rawClientInfoName, admission } = params;
+  const {
+    userId,
+    identity,
+    middlewareDecision,
+    rawClientInfoName,
+    admission,
+    appOrigin,
+    originSource,
+  } = params;
   const tier: AttributionTier = identity?.tier ?? "anonymous";
 
   const decision = mergeDecision({
@@ -213,12 +251,50 @@ export function buildSessionInfo(params: {
   const policy = getAttributionPolicySnapshot();
   const eligible = isEligibleForTrustedWrites(tier, policy);
 
+  const origins = buildOriginInfo(appOrigin ?? null, originSource ?? null);
+
   return {
     user_id: userId,
     attribution,
     aauth,
     policy,
     eligible_for_trusted_writes: eligible,
+    ...(origins ? { origins } : {}),
+  };
+}
+
+/** Normalize a user/operator supplied URL to just its origin. */
+export function normalizeSessionOrigin(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve an explicitly configured public app origin. This is the only origin
+ * stdio-only MCP sessions can safely report; without it they have no request
+ * host to ground user-visible links in.
+ */
+export function resolveConfiguredSessionOrigin(
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined {
+  return normalizeSessionOrigin(env.NEOTOMA_PUBLIC_BASE_URL);
+}
+
+function buildOriginInfo(
+  appOrigin: string | null,
+  source: SessionOriginInfo["source"] | null
+): SessionOriginInfo | undefined {
+  const origin = normalizeSessionOrigin(appOrigin);
+  if (!origin) return undefined;
+  return {
+    app_origin: origin,
+    inspector_origin: origin,
+    source: source ?? "configured",
   };
 }
 

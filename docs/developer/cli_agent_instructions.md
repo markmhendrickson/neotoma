@@ -126,6 +126,10 @@ Use narrow queries first, then expand only if needed.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
 
+## Inspector link origin (CLI backup)
+
+When rendering Neotoma Inspector links from CLI-backed memory operations, first run `neotoma auth session` (or call `GET /session`) and use `origins.inspector_origin` when it is present. If the session response has no `origins.inspector_origin`, do not guess `sandbox.neotoma.io`, localhost, or any other default host; render unlinked entity labels/ids instead. This mirrors the MCP display rule and prevents wrong-instance links.
+
 ## Install verification
 
 After running `neotoma setup --tool <harness> --yes`, two plain-text lines always appear on stdout (after the JSON report, if `--json` is active):
