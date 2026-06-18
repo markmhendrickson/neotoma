@@ -14,6 +14,36 @@ v0.16.0 ships the first-party agent SDK + memory-protocol layer, inspector skinn
 8. **Site UI salvage (#396, #395)** — remove MDX locale fallback banner; docs link in header nav + mobile FAB visibility fix.
 9. **Inspector pinned dashboard panel** — home page (`/`) shows a `PinnedDashboardPanel` grid when the API URL is configured; sidebar caps visible pins at 8 with a **Show all (N)** link back to home.
 
+## RC cycle fixes (post-rc.1)
+
+The RC smoke-test loop produced two additional merges on top of the supplement scope above. Both are user-facing and worth calling out in the GitHub release notes.
+
+### Inspector pre-merge UI audit (#1674)
+
+Operator-focused Inspector polish + design-system consistency pass landed before tagging:
+
+- **Operator home, mobile shell, drawer** — refreshed Inspector home for operators, mobile drawer + responsive polish across pages.
+- **Design-system consistency** — filters, selects, code blocks, recent feeds, and design surfaces migrated onto the canonical primitives. New reusable `EmptyState`, `ApiNotConfiguredState`, `ListSurface`, `SegmentedControl`, `FiltersCard`, `MobileFilterPopover`, `ActiveFilterBadges`, `CopyableCodeBlock` primitives wired across every index page.
+- **Catch-all 404 route** (`inspector/src/pages/not_found.tsx`) plus light/dark color audit (`chart-1..5` tokens, `success`/`warning` utilities, dark-mode entity colors).
+- **Backend `/usage` route + dashboard stats service** (`src/services/dashboard_stats.ts`, `src/services/timeline_query.ts`) backing the dashboard with a real usage service.
+- **Ops fixes** — `/me` path redaction, `dev:full:prod` token loading, chokidar-polling API watcher.
+
+### Windows `spawn EINVAL` regression fix (#1676 / #1677)
+
+Field-reported regression: on Windows with modern Node.js (post CVE-2024-27980 patch — Node ≥ 18.20.2 / 20.12.2 / 21.7.2, all v22+), `child_process.spawn('npm.cmd', ...)` and other `.cmd` shims (`npx.cmd`, `claude.cmd`, `tsx.cmd`, `neotoma.cmd`) threw `EINVAL` unless `shell: true` was set. Most user-visible consequence: `neotoma api start` failed on Windows, so the local data API never came up and CLI writes were effectively blocked.
+
+- **New helper** `src/shared/spawn_platform.ts` (`IS_WINDOWS`, `WIN_SHELL`, `shellOnWin()`) centralizes the `shell: true`-on-win32 decision with explicit security reasoning (args stay an argv array — no command-string concatenation, no shell-injection vector).
+- **Updated spawn sites** — `src/cli/index.ts`, `src/cli/hooks.ts`, `src/cli/doctor.ts`, `src/services/schema_registry.ts`, `src/mcp_dev_shim.ts` now use the helper. `doctor.ts` also maps `which` → `where` on Windows.
+- **Tests** — `src/shared/spawn_platform.test.ts` covers both platform branches and the spread-into-options shape.
+
+## Known issues (won't ship a fix this release)
+
+These were surfaced during the RC audit and are tracked for follow-up; they do not block v0.16.0 but are worth user awareness.
+
+- **#1668 — `store`: two `agent_message` rows in one request can silently merge when `message_id` is omitted.** A single `/store` request with both a user and assistant `agent_message` (or `conversation_message`) sharing one `turn_key` and no `message_id` collapses to one entity (`matched_existing` action) instead of two distinct rows. Server-side protection (`ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT`) has been in place since v0.12.0 for the standard ordering and now has additional single-batch regression coverage; if the guard does not fire in your environment, ensure you are on the latest server. **Workaround:** use the `:assistant` suffix on the closing message (`turn_key: "{conversation_id}:{turn_id}:assistant"`) — the canonical pattern the MCP turn lifecycle already documents.
+- **#1598 / #1587 — auto-enhance queue / schema drift errors in server logs** (`AUTO_ENHANCE_QUEUE`). Visible in production logs as `APIError:store` events on certain entity types (e.g. `checkpoint_brief`); does not corrupt stored data — observations are preserved, but the snapshot reducer may exclude undeclared fields. Use `audit_undeclared_fragments` (MCP) or `neotoma schemas audit-fragments` (CLI) to triage; promote high-occurrence fields via `update_schema_incremental` / `register_schema` per the per-store `unknown_fields` hint.
+- **#1667 — public endpoints returning 401 / tight CORS posture.** RC audit identified some endpoints that surface 401 where 200/anonymous would be more appropriate, and a tighter-than-needed CORS configuration for public read paths. Read paths intended for public consumption should continue to be inspected against the auth posture documented in `docs/subsystems/auth.md` before relying on them anonymously.
+
 ## What changed for npm package users
 
 ### `@neotoma/agent` protocol-enforcing harness SDK (#318)
@@ -120,6 +150,8 @@ Operators with a configured API URL see pinned primitives on the Inspector home 
 - [x] Inspector skinning unit + integration (24 tests)
 - [x] `override_validation` + graph-neighborhood tenant isolation
 - [x] `merge_repoint_relationship_edges` integration (9 tests)
+- [x] `spawn_platform` cross-platform spawn helper (`src/shared/spawn_platform.test.ts`)
+- [x] `store_conversation_message_role_conflict` — extended to cover single-batch user + assistant payloads and the `agent_message` alias (regression coverage for #1668)
 - [ ] Full CI baseline + security gates on #1634, #1534, #1585 after rebase onto latest `main`
 
 ## Related PRs
@@ -134,3 +166,5 @@ Operators with a configured API URL see pinned primitives on the Inspector home 
 | #1617 | Merged | Issues repo discovery |
 | #1560 | Merged | Peer-sync docs |
 | #396, #395 | Merged | Site UI salvage |
+| #1674 | Merged | Inspector pre-merge UI audit (mobile shell, design system, empty states, color audit, dashboard backing service) |
+| #1677 (closes #1676) | Merged | Windows `spawn EINVAL` regression fix for `.cmd` shims |
