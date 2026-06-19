@@ -302,6 +302,11 @@ const EntitiesQueryRequestBaseSchema = z
      * values specify operator and comparison value.
      */
     snapshot_filters: z.record(SnapshotFieldNameSchema, SnapshotFilterSchema).optional(),
+    /**
+     * When set to `"canonical_key"`, group entities sharing the same
+     * `canonical_key` snapshot field into one synthesized result per key (#1604).
+     */
+    collapse_by: z.enum(["canonical_key"]).optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -373,6 +378,15 @@ const RetrieveEntitiesRequestBaseSchema = z
      * Example: `{ "status": { "op": "eq", "value": "active" } }`
      */
     snapshot_filters: z.record(SnapshotFieldNameSchema, SnapshotFilterSchema).optional(),
+    /**
+     * When set to `"canonical_key"`, group entities that share the same
+     * `canonical_key` snapshot field into one synthesized result per key (#1604).
+     * The synthesized result carries `sightings` (array of per-entity source_id +
+     * entity_id + seen_at), `max_significance` (max significance across the
+     * group), and `sighting_count`. Entities without a canonical_key are returned
+     * as-is alongside the collapsed groups. Underlying rows are never merged.
+     */
+    collapse_by: z.enum(["canonical_key"]).optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -465,6 +479,19 @@ export const StoreUnstructuredRequestSchema = z.object({
   user_id: z.string().optional(),
 });
 
+/**
+ * Intake routing hint for `store()` (#1604). When `mode === "overflow"`, the
+ * store tool bypasses graph insertion and appends the raw payload to the
+ * NEOTOMA_OVERFLOW_SINK JSONL file instead. Entities, idempotency_key, and
+ * file inputs are all optional in overflow mode.
+ */
+export const IntakeHintSchema = z.object({
+  mode: z.enum(["graph", "overflow"]).default("graph"),
+  reason: z.string().optional(),
+});
+
+export type IntakeHint = z.infer<typeof IntakeHintSchema>;
+
 export const ExternalActorInputSchema = z
   .object({
     provider: z.literal("github"),
@@ -503,16 +530,24 @@ export const StoreRequestSchema = z
     commit: z.boolean().optional().default(true),
     /** Refuse merges that resolve to an existing entity without a deterministic rule. */
     strict: z.boolean().optional().default(false),
+    /**
+     * Intake routing hint (#1604). When `mode === "overflow"`, the payload is
+     * written to NEOTOMA_OVERFLOW_SINK instead of the graph. Entities and
+     * idempotency_key are optional in overflow mode.
+     */
+    intake: IntakeHintSchema.optional(),
   })
   .refine(
     (data) => {
+      if (data.intake?.mode === "overflow") return true; // overflow bypasses entity requirement
       const hasEntities = Boolean(data.entities && data.entities.length > 0);
       const hasFileContent = Boolean(data.file_content && data.mime_type);
       const hasFilePath = Boolean(data.file_path);
       return hasEntities || hasFileContent || hasFilePath;
     },
     {
-      message: "Must provide either entities, file_path, or file_content with mime_type",
+      message:
+        "Must provide either entities, file_path, or file_content with mime_type (or use intake.mode='overflow')",
     }
   );
 

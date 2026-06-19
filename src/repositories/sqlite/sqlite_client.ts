@@ -334,6 +334,17 @@ const SCHEMA_STATEMENTS = [
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`,
+  // Overflow sink audit log (#1604): records every payload written to the
+  // NEOTOMA_OVERFLOW_SINK file so callers can retrieve receipts and replay.
+  `CREATE TABLE IF NOT EXISTS overflow_events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    sink_path TEXT NOT NULL,
+    line_offset INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL
+  )`,
 ];
 
 /** Legacy tables that may exist in older neotoma.db files. Dropped on open so DB matches canonical schema. */
@@ -397,6 +408,19 @@ function ensureSchema(db: SqliteDatabase): void {
     // observations created from peer webhook replay; drives subscription
     // loop prevention on the event bus.
     addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
+    // Sighting deduplication (#1604): canonical_key groups N reports of the
+    // same event into one logical signal; sighting_source_id is the origin
+    // record (e.g. a webhook event id) that produced this observation. Together
+    // they form a stable compound key for upsert idempotency. Indexed to
+    // support fast collapse_by grouping on retrieve_entities.
+    addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
+    addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
+    ).run();
     addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
