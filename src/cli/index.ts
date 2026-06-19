@@ -9100,13 +9100,22 @@ const accessCommand = program
 accessCommand
   .command("set <entity_type> <mode>")
   .description(
-    "Set access policy for an entity type (closed, read_only, submit_only, submitter_scoped, open)"
+    "Set access policy for an entity type (closed, read_only, submit_only, submitter_scoped, open). " +
+      "Writes to schema_metadata by default (canonical, live — no restart needed). " +
+      "Use --config-file for the deprecated config-file path."
   )
-  .action(async (entityType, mode) => {
+  .option(
+    "--config-file",
+    "Write to the deprecated config-file path instead of schema_metadata (requires server restart to take effect)"
+  )
+  .action(async (entityType, mode, cmdOpts) => {
     const opts = program.opts() as { json?: boolean; baseUrl?: string; apiOnly?: boolean };
     if (rejectRemoteAccessMutationIfNeeded(opts)) return;
     const { accessSet } = await import("./access.js");
-    await accessSet(entityType, mode, { json: Boolean(opts.json) });
+    await accessSet(entityType, mode, {
+      json: Boolean(opts.json),
+      configFile: Boolean(cmdOpts.configFile),
+    });
   });
 
 accessCommand
