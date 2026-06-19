@@ -66,9 +66,7 @@ describe("writeToOverflowSink", () => {
     expect(receipt.sink_path).toMatch(/overflow-\d{4}-\d{2}-\d{2}\.jsonl$/);
     expect(existsSync(receipt.sink_path)).toBe(true);
 
-    const lines = readFileSync(receipt.sink_path, "utf8")
-      .split("\n")
-      .filter(Boolean);
+    const lines = readFileSync(receipt.sink_path, "utf8").split("\n").filter(Boolean);
     expect(lines).toHaveLength(1);
 
     const parsed = JSON.parse(lines[0]) as {
@@ -117,9 +115,7 @@ describe("writeToOverflowSink", () => {
     expect(r2.line_offset).toBe(1);
     expect(r3.line_offset).toBe(2);
 
-    const lines = readFileSync(r1.sink_path, "utf8")
-      .split("\n")
-      .filter(Boolean);
+    const lines = readFileSync(r1.sink_path, "utf8").split("\n").filter(Boolean);
     expect(lines).toHaveLength(3);
   });
 
@@ -133,9 +129,7 @@ describe("writeToOverflowSink", () => {
       sink_path: string;
       line_offset: number;
     };
-    const lines = readFileSync(receipt.sink_path, "utf8")
-      .split("\n")
-      .filter(Boolean);
+    const lines = readFileSync(receipt.sink_path, "utf8").split("\n").filter(Boolean);
 
     const firstLine = JSON.parse(lines[0]) as { reason: string };
     expect(firstLine.reason).toBe("bulk-import-2026");
@@ -148,9 +142,7 @@ describe("writeToOverflowSink", () => {
       sink_path: string;
       line_offset: number;
     };
-    const lines = readFileSync(result.sink_path, "utf8")
-      .split("\n")
-      .filter(Boolean);
+    const lines = readFileSync(result.sink_path, "utf8").split("\n").filter(Boolean);
     const parsed = JSON.parse(lines[0]) as { reason: unknown };
     expect(parsed.reason).toBeUndefined();
   });

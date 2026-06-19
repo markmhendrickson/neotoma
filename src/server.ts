@@ -3343,8 +3343,7 @@ export class NeotomaServer {
 
       for (const entity of entities) {
         const snap = entity.snapshot as Record<string, unknown> | null | undefined;
-        const ck =
-          snap && typeof snap.canonical_key === "string" ? snap.canonical_key : undefined;
+        const ck = snap && typeof snap.canonical_key === "string" ? snap.canonical_key : undefined;
         if (ck) {
           const group = groups.get(ck);
           if (group) {
@@ -3361,9 +3360,10 @@ export class NeotomaServer {
         const sightings = group.map((e) => {
           const snap = e.snapshot as Record<string, unknown> | null | undefined;
           return {
-            source_id: snap && typeof snap.sighting_source_id === "string"
-              ? snap.sighting_source_id
-              : undefined,
+            source_id:
+              snap && typeof snap.sighting_source_id === "string"
+                ? snap.sighting_source_id
+                : undefined,
             entity_id: e.entity_id,
             seen_at: e.last_observation_at ?? e.created_at,
           };
@@ -4440,10 +4440,9 @@ export class NeotomaServer {
             "Must provide either (file_content+mime_type) OR file_path OR entities array (or use intake.mode='overflow')",
         }
       )
-      .refine(
-        (data) => data.intake?.mode === "overflow" || Boolean(data.idempotency_key),
-        { message: "idempotency_key is required when intake.mode is not 'overflow'" }
-      );
+      .refine((data) => data.intake?.mode === "overflow" || Boolean(data.idempotency_key), {
+        message: "idempotency_key is required when intake.mode is not 'overflow'",
+      });
 
     const parsed = schema.parse(args);
 

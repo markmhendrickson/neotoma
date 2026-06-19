@@ -100,9 +100,7 @@ describe("RetrieveEntitiesRequestSchema — collapse_by", () => {
   });
 
   it("rejects unknown collapse_by value", () => {
-    expect(() =>
-      RetrieveEntitiesRequestSchema.parse({ collapse_by: "entity_type" })
-    ).toThrow();
+    expect(() => RetrieveEntitiesRequestSchema.parse({ collapse_by: "entity_type" })).toThrow();
   });
 
   it("accepts collapse_by alongside search and entity_type", () => {
