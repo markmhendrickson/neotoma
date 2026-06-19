@@ -100,7 +100,7 @@ export function computeCapabilityDelta(input: CapabilityDeltaInput): CapabilityD
       capability_delta_recommendation: `Upgrade from ${currentVersion} to ${latestVersion}.`,
       capability_delta_note:
         `Could not parse version strings (current="${currentVersion}", latest="${latestVersion}"); ` +
-        `capability delta unavailable.`,
+        `capability delta unavailable. Expected X.Y.Z or vX.Y.Z format (e.g. "0.16.0" or "v0.16.0").`,
     };
   }
 

@@ -83,6 +83,9 @@ jobs:
       - name: Validate automated test catalog
         run: npm run validate:test-catalog
 
+      - name: Validate capability manifest
+        run: npm run validate:capability-manifest
+
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
 
