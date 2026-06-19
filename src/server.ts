@@ -989,9 +989,16 @@ export class NeotomaServer {
       currentVersion: z.string(),
       distTag: z.string().default("latest"),
       include_release_notes: z.boolean().optional().default(false),
+      include_capability_delta: z.boolean().optional().default(false),
     });
     const parsed = schema.parse(args ?? {});
-    const { packageName, currentVersion, distTag, include_release_notes } = parsed;
+    const {
+      packageName,
+      currentVersion,
+      distTag,
+      include_release_notes,
+      include_capability_delta,
+    } = parsed;
 
     const latest = await this.getLatestCachedPackageVersion(packageName, distTag);
 
@@ -1026,6 +1033,39 @@ export class NeotomaServer {
       includeReleaseNotes: include_release_notes,
     });
 
+    // Capability delta: machine-readable list of tools added/removed between versions.
+    // Sourced from the committed capability manifest (scripts/generate-capability-manifest.ts).
+    // Gracefully degrades to empty arrays if the manifest is unavailable or versions unparseable.
+    let capabilityDeltaFields: {
+      new_tools?: string[];
+      removed_tools?: string[];
+      capability_delta_recommendation?: string;
+      capability_delta_note?: string;
+    } = {};
+    if (include_capability_delta) {
+      const { loadCapabilityManifest, computeCapabilityDelta } =
+        await import("./services/capability_delta.js");
+      const manifest = await loadCapabilityManifest(config.projectRoot);
+      if (manifest) {
+        const delta = computeCapabilityDelta({ currentVersion, latestVersion: latest, manifest });
+        capabilityDeltaFields = {
+          new_tools: delta.new_tools,
+          removed_tools: delta.removed_tools,
+          capability_delta_recommendation: delta.capability_delta_recommendation,
+          ...(delta.capability_delta_note
+            ? { capability_delta_note: delta.capability_delta_note }
+            : {}),
+        };
+      } else {
+        capabilityDeltaFields = {
+          new_tools: [],
+          removed_tools: [],
+          capability_delta_recommendation: `Upgrade from ${currentVersion} to ${latest}.`,
+          capability_delta_note: "Capability manifest unavailable; delta could not be computed.",
+        };
+      }
+    }
+
     return this.buildTextResponse({
       packageName,
       currentVersion,
@@ -1038,6 +1078,7 @@ export class NeotomaServer {
       release_notes_excerpt: enriched.release_notes_excerpt,
       breaking_changes_excerpt: enriched.breaking_changes_excerpt,
       enrichment_error: enriched.enrichment_error,
+      ...capabilityDeltaFields,
     });
   }
 

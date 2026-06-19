@@ -1,0 +1,202 @@
+{
+  "_meta": {
+    "description": "Generated manifest of MCP tool introduction versions. DO NOT edit by hand. Regenerate with: npm run generate:capability-manifest",
+    "generated_from": "git tags (vX.Y.Z release tags)",
+    "first_tracked_version": "v0.3.0"
+  },
+  "tools": {
+    "add_entity_message": {
+      "addedInVersion": "v0.12.0"
+    },
+    "add_issue_message": {
+      "addedInVersion": "v0.12.0"
+    },
+    "add_peer": {
+      "addedInVersion": "v0.12.0"
+    },
+    "analyze_schema_candidates": {
+      "addedInVersion": "v0.4.3"
+    },
+    "audit_undeclared_fragments": {
+      "addedInVersion": "v0.16.0"
+    },
+    "correct": {
+      "addedInVersion": "v0.4.3"
+    },
+    "create_interpretation": {
+      "addedInVersion": "v0.11.0"
+    },
+    "create_relationship": {
+      "addedInVersion": "v0.4.3"
+    },
+    "create_relationships": {
+      "addedInVersion": "v0.10.0"
+    },
+    "delete_entity": {
+      "addedInVersion": "v0.4.3"
+    },
+    "delete_relationship": {
+      "addedInVersion": "v0.4.3"
+    },
+    "describe_entity_type": {
+      "addedInVersion": "v0.16.0"
+    },
+    "get_authenticated_user": {
+      "addedInVersion": "v0.4.3"
+    },
+    "get_entity_submission_status": {
+      "addedInVersion": "v0.12.0"
+    },
+    "get_entity_type_counts": {
+      "addedInVersion": "v0.4.3"
+    },
+    "get_feedback_status": {
+      "addedInVersion": "v0.6.0",
+      "removedInVersion": "v0.12.0"
+    },
+    "get_issue_status": {
+      "addedInVersion": "v0.12.0"
+    },
+    "get_peer_status": {
+      "addedInVersion": "v0.12.0"
+    },
+    "get_relationship_snapshot": {
+      "addedInVersion": "v0.4.3"
+    },
+    "get_schema_recommendations": {
+      "addedInVersion": "v0.4.3"
+    },
+    "get_session_identity": {
+      "addedInVersion": "v0.6.0"
+    },
+    "get_subscription_status": {
+      "addedInVersion": "v0.12.0"
+    },
+    "health_check_snapshots": {
+      "addedInVersion": "v0.4.3"
+    },
+    "list_entity_submissions": {
+      "addedInVersion": "v0.12.0"
+    },
+    "list_entity_types": {
+      "addedInVersion": "v0.4.3"
+    },
+    "list_interpretations": {
+      "addedInVersion": "v0.11.0"
+    },
+    "list_observations": {
+      "addedInVersion": "v0.4.3"
+    },
+    "list_peers": {
+      "addedInVersion": "v0.12.0"
+    },
+    "list_potential_duplicates": {
+      "addedInVersion": "v0.5.0"
+    },
+    "list_recent_changes": {
+      "addedInVersion": "v0.5.0"
+    },
+    "list_relationships": {
+      "addedInVersion": "v0.4.3"
+    },
+    "list_subscriptions": {
+      "addedInVersion": "v0.12.0"
+    },
+    "list_timeline_events": {
+      "addedInVersion": "v0.4.3"
+    },
+    "merge_entities": {
+      "addedInVersion": "v0.4.3"
+    },
+    "neotoma_turn_summary": {
+      "addedInVersion": "v0.16.0"
+    },
+    "npm_check_update": {
+      "addedInVersion": "v0.4.3"
+    },
+    "parse_file": {
+      "addedInVersion": "v0.4.3"
+    },
+    "publish_rendered_page": {
+      "addedInVersion": "v0.16.0"
+    },
+    "register_schema": {
+      "addedInVersion": "v0.4.3"
+    },
+    "remove_peer": {
+      "addedInVersion": "v0.12.0"
+    },
+    "resolve_sync_conflict": {
+      "addedInVersion": "v0.12.0"
+    },
+    "restore_entity": {
+      "addedInVersion": "v0.4.3"
+    },
+    "restore_relationship": {
+      "addedInVersion": "v0.4.3"
+    },
+    "retrieve_entities": {
+      "addedInVersion": "v0.4.3"
+    },
+    "retrieve_entity_by_identifier": {
+      "addedInVersion": "v0.4.3"
+    },
+    "retrieve_entity_snapshot": {
+      "addedInVersion": "v0.4.3"
+    },
+    "retrieve_field_provenance": {
+      "addedInVersion": "v0.4.3"
+    },
+    "retrieve_file_url": {
+      "addedInVersion": "v0.4.3"
+    },
+    "retrieve_graph_neighborhood": {
+      "addedInVersion": "v0.4.3"
+    },
+    "retrieve_related_entities": {
+      "addedInVersion": "v0.4.3"
+    },
+    "split_entity": {
+      "addedInVersion": "v0.6.0"
+    },
+    "store": {
+      "addedInVersion": "v0.4.3"
+    },
+    "store_structured": {
+      "addedInVersion": "v0.4.3",
+      "removedInVersion": "v0.11.0"
+    },
+    "store_unstructured": {
+      "addedInVersion": "v0.4.3",
+      "removedInVersion": "v0.11.0"
+    },
+    "submit_entity": {
+      "addedInVersion": "v0.12.0"
+    },
+    "submit_feedback": {
+      "addedInVersion": "v0.6.0",
+      "removedInVersion": "v0.12.0"
+    },
+    "submit_issue": {
+      "addedInVersion": "v0.12.0"
+    },
+    "subscribe": {
+      "addedInVersion": "v0.12.0"
+    },
+    "sync_entity_submissions": {
+      "addedInVersion": "v0.12.0"
+    },
+    "sync_issues": {
+      "addedInVersion": "v0.12.0"
+    },
+    "sync_peer": {
+      "addedInVersion": "v0.12.0"
+    },
+    "unsubscribe": {
+      "addedInVersion": "v0.12.0"
+    },
+    "update_schema_incremental": {
+      "addedInVersion": "v0.4.3"
+    }
+  }
+}

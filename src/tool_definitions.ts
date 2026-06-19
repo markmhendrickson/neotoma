@@ -1378,6 +1378,12 @@ export function buildToolDefinitions(
               "When true, fetches npm version metadata and optional GitHub release body (best-effort); adds release_url and excerpts. Default false to limit registry/GitHub load.",
             default: false,
           },
+          include_capability_delta: {
+            type: "boolean",
+            description:
+              "When true, adds new_tools, removed_tools, and capability_delta_recommendation to the response — a machine-readable list of MCP tools that were added or removed between currentVersion and the latest release. Sourced from the committed capability manifest (generated, not hand-maintained). Default false.",
+            default: false,
+          },
         },
         required: ["packageName", "currentVersion"],
       },
