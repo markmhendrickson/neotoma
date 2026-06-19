@@ -317,3 +317,59 @@ export function patch<T>(path: string, body?: unknown, fetch?: FetchOptions): Pr
 export function del<T>(path: string, fetch?: FetchOptions): Promise<T> {
   return request<T>(path, { method: "DELETE", signal: fetch?.signal });
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 — apiBase-override helpers (#1606)
+//
+// These variants accept an explicit `apiBase` origin so callers that have
+// resolved the base from context (e.g. an embed route) can bypass the
+// localStorage / Vite-proxy default.  Naming mirrors the default helpers
+// with a `WithBase` suffix so the existing API surface is untouched.
+// ---------------------------------------------------------------------------
+
+async function requestWithBase<T>(
+  apiBase: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const base = apiBase.replace(/\/$/, "");
+  if (!base) {
+    throw new Error("requestWithBase: apiBase must not be empty");
+  }
+  const url = `${base}${path}`;
+  const token = getAuthToken();
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string>),
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, {
+    ...init,
+    headers,
+    credentials: "include",
+    signal: init?.signal,
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(formatHttpErrorMessage(res.status, body, path));
+  }
+  return res.json() as Promise<T>;
+}
+
+export function postWithBase<T>(
+  apiBase: string,
+  path: string,
+  body?: unknown,
+  fetchOpts?: FetchOptions,
+): Promise<T> {
+  return requestWithBase<T>(apiBase, path, {
+    method: "POST",
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: fetchOpts?.signal,
+  });
+}

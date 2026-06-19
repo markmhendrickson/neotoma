@@ -1,6 +1,7 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/layout/app_layout";
+import { PageRouteSkeleton } from "@/components/shared/query_status";
 
 const HomePage = lazy(() => import("@/pages/home"));
 const FaqPage = lazy(() => import("@/pages/faq"));
@@ -49,6 +50,10 @@ const PeerDetailPage = lazy(() => import("@/pages/peer_detail"));
 const DesignPage = lazy(() => import("@/pages/design"));
 const NotFoundPage = lazy(() => import("@/pages/not_found"));
 
+// Phase 2: chrome-less embed routes (#1606).
+// These are mounted OUTSIDE AppLayout so they render without sidebar/header.
+const EmbedGraphPage = lazy(() => import("@/pages/embed_graph"));
+
 function InspectorRedirect() {
   const location = useLocation();
   const subPath = location.pathname.replace(/^\/inspector\/?/, "/");
@@ -59,6 +64,18 @@ function InspectorRedirect() {
 export default function App() {
   return (
     <Routes>
+      {/* Phase 2: chrome-less embed routes — rendered WITHOUT the app shell.
+          Must be declared BEFORE the AppLayout catch-all so the router matches
+          /embed/* first. */}
+      <Route
+        path="/embed/graph"
+        element={
+          <Suspense fallback={<PageRouteSkeleton />}>
+            <EmbedGraphPage />
+          </Suspense>
+        }
+      />
+
       <Route element={<AppLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/faq" element={<FaqPage />} />
