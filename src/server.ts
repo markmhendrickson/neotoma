@@ -992,8 +992,13 @@ export class NeotomaServer {
       include_capability_delta: z.boolean().optional().default(false),
     });
     const parsed = schema.parse(args ?? {});
-    const { packageName, currentVersion, distTag, include_release_notes, include_capability_delta } =
-      parsed;
+    const {
+      packageName,
+      currentVersion,
+      distTag,
+      include_release_notes,
+      include_capability_delta,
+    } = parsed;
 
     const latest = await this.getLatestCachedPackageVersion(packageName, distTag);
 
@@ -1038,9 +1043,8 @@ export class NeotomaServer {
       capability_delta_note?: string;
     } = {};
     if (include_capability_delta) {
-      const { loadCapabilityManifest, computeCapabilityDelta } = await import(
-        "./services/capability_delta.js"
-      );
+      const { loadCapabilityManifest, computeCapabilityDelta } =
+        await import("./services/capability_delta.js");
       const manifest = await loadCapabilityManifest(config.projectRoot);
       if (manifest) {
         const delta = computeCapabilityDelta({ currentVersion, latestVersion: latest, manifest });
@@ -1057,8 +1061,7 @@ export class NeotomaServer {
           new_tools: [],
           removed_tools: [],
           capability_delta_recommendation: `Upgrade from ${currentVersion} to ${latest}.`,
-          capability_delta_note:
-            "Capability manifest unavailable; delta could not be computed.",
+          capability_delta_note: "Capability manifest unavailable; delta could not be computed.",
         };
       }
     }

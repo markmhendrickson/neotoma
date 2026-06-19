@@ -97,8 +97,7 @@ export function computeCapabilityDelta(input: CapabilityDeltaInput): CapabilityD
     return {
       new_tools: [],
       removed_tools: [],
-      capability_delta_recommendation:
-        `Upgrade from ${currentVersion} to ${latestVersion}.`,
+      capability_delta_recommendation: `Upgrade from ${currentVersion} to ${latestVersion}.`,
       capability_delta_note:
         `Could not parse version strings (current="${currentVersion}", latest="${latestVersion}"); ` +
         `capability delta unavailable.`,
@@ -141,7 +140,11 @@ export function computeCapabilityDelta(input: CapabilityDeltaInput): CapabilityD
 
   const recommendation = buildRecommendation(currentVersion, latestVersion, newTools, removedTools);
 
-  return { new_tools: newTools, removed_tools: removedTools, capability_delta_recommendation: recommendation };
+  return {
+    new_tools: newTools,
+    removed_tools: removedTools,
+    capability_delta_recommendation: recommendation,
+  };
 }
 
 function buildRecommendation(
