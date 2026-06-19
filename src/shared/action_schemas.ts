@@ -635,6 +635,31 @@ export const RetrieveRelatedEntitiesSchema = z.object({
   include_entities: z.boolean().optional().default(true),
 });
 
+/**
+ * Signal bag for {@link IdentifyEntityBySignalsSchema}. All fields are
+ * optional strings; the resolver accepts any combination. Fields beyond the
+ * five named ones (name/email/company/domain/phone) are treated as open-ended
+ * string signals with a default weight of 0.4.
+ */
+export const EntitySignalsSchema = z
+  .object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    company: z.string().optional(),
+    domain: z.string().optional(),
+    phone: z.string().optional(),
+  })
+  .catchall(z.string().optional());
+
+export const IdentifyEntityBySignalsSchema = z.object({
+  signals: EntitySignalsSchema,
+  entity_type: z.string().optional(),
+  entity_types: z.array(z.string()).optional(),
+  max_candidates: z.number().int().min(1).max(20).optional().default(5),
+  include_observations: z.boolean().optional().default(false),
+  user_id: z.string().optional(),
+});
+
 export const RetrieveGraphNeighborhoodSchema = z.object({
   node_id: z.string(),
   node_type: z.enum(["entity", "source"]).optional().default("entity"),

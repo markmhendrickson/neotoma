@@ -849,6 +849,51 @@ components:
           type: string
           format: date-time
           nullable: true
+    SignalCandidate:
+      type: object
+      description: A candidate entity match from identify_entity_by_signals.
+      properties:
+        entity_id:
+          type: string
+          description: The matched entity's id.
+        snapshot:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Current snapshot for the entity.
+        identity_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Normalised weighted score in [0, 1]. Rounded to 4 decimal places.
+        matched_signals:
+          type: array
+          items:
+            type: string
+          description: |
+            The input signal keys that contributed to this match
+            (e.g. ["email", "name"]).
+        match_modes:
+          type: array
+          items:
+            type: string
+            enum: [direct, snapshot_field, semantic, none]
+          description: |
+            Which resolution pass(es) were used for this candidate.
+        band:
+          type: string
+          enum: [high, medium, low, unresolved]
+          description: |
+            Resolution band for this candidate. high >= 0.85; medium >= 0.55;
+            low >= 0.30; unresolved < 0.30. Semantic-only matches capped at
+            medium.
+        scoped_entity_types:
+          type: array
+          items:
+            type: string
+          description: Entity types searched during resolution.
     EntitySnapshot:
       type: object
       properties:
@@ -5156,6 +5201,144 @@ paths:
                       the caller the input looks like an entity_id and that
                       `retrieve_entity_snapshot(entity_id=…)` is the direct
                       fetch path (#1597). Omitted for every other result.
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /identify_entity_by_signals:
+    post:
+      summary: Identify entity by multi-signal bundle
+      description: |
+        Single-call multi-signal entity resolution. Accepts a `signals` object
+        (name, email, company, domain, phone, and open-ended string props),
+        performs per-signal lookups using existing primitives, accumulates
+        weighted scores across candidates, and returns a ranked result with a
+        resolution band (high/medium/low/unresolved).
+
+        Scoring weights: email=1.0, phone=0.9, name=0.7, domain=0.6,
+        company=0.5, other=0.4. Weights are normalized over the supplied
+        signals so the maximum possible score is 1.0 (before the corroboration
+        bonus of +0.05 per additional agreeing signal, capped at +0.15).
+        Semantic-only matches are capped at the medium band. best_match is null
+        when nothing clears the unresolved floor (score < 0.30).
+
+        Entity-type scope: if entity_type / entity_types are omitted the
+        resolver uses schema query_synonyms to infer candidate types from
+        signal values (e.g. "bank account" → "financial_account"). This is
+        additive — it widens what can be found without hardcoding type names.
+      operationId: identifyEntityBySignals
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - signals
+              properties:
+                signals:
+                  type: object
+                  description: |
+                    Bundle of identity signals. All fields are optional strings.
+                    The five well-known keys (name, email, company, domain,
+                    phone) receive their canonical weights; any additional keys
+                    are treated as open-ended string signals with weight 0.4.
+                  properties:
+                    name:
+                      type: string
+                      description: Full name or display name.
+                    email:
+                      type: string
+                      description: Email address.
+                    company:
+                      type: string
+                      description: Organisation or company name.
+                    domain:
+                      type: string
+                      description: Website domain (e.g. "example.com").
+                    phone:
+                      type: string
+                      description: Phone number in any format.
+                  additionalProperties:
+                    type: string
+                    description: Open-ended string signal (weight 0.4).
+                entity_type:
+                  type: string
+                  description: |
+                    Restrict resolution to this entity type.
+                    Takes precedence over entity_types.
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Restrict resolution to these entity types. Merged with
+                    synonym-expanded types when combined with signals.
+                max_candidates:
+                  type: integer
+                  minimum: 1
+                  maximum: 20
+                  default: 5
+                  description: |
+                    Maximum candidates to return in the candidates array
+                    (best_match excluded). Default 5, max 20.
+                include_observations:
+                  type: boolean
+                  default: false
+                  description: |
+                    When true, attach recent observations to best_match and
+                    each candidate.
+                user_id:
+                  type: string
+                  description: |
+                    Optional user_id override (scoped to callers with privilege
+                    to query on behalf of another user).
+      responses:
+        "200":
+          description: Entity resolution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  best_match:
+                    nullable: true
+                    description: |
+                      Best-matching entity, or null when nothing clears the
+                      unresolved floor (score < 0.30). Never invented.
+                    allOf:
+                      - $ref: "#/components/schemas/SignalCandidate"
+                  candidates:
+                    type: array
+                    description: |
+                      Remaining candidates ranked by score desc, entity_id asc.
+                      Does not include best_match.
+                    items:
+                      $ref: "#/components/schemas/SignalCandidate"
+                  resolution_band:
+                    type: string
+                    enum: [high, medium, low, unresolved]
+                    description: |
+                      Resolution band of best_match (or "unresolved" when
+                      best_match is null). high >= 0.85; medium >= 0.55;
+                      low >= 0.30; unresolved < 0.30. Semantic-only matches
+                      are capped at medium regardless of score.
+                  match_modes:
+                    type: array
+                    items:
+                      type: string
+                      enum: [direct, snapshot_field, semantic, none]
+                    description: |
+                      Union of match modes used across all signal lookups.
+                  scoped_entity_types:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      Entity types actually searched. May be wider than the
+                      caller's input when synonym expansion fires.
         "400":
           description: Invalid request
           content:

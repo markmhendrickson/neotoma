@@ -312,6 +312,7 @@ flowchart TD
 - `src/services/docs/markdown_render.test.ts`
 - `src/services/docs/render.test.ts`
 - `src/services/docs/visibility.test.ts`
+- `src/services/entity_signal_resolver.test.ts`
 - `src/services/entity_submission/submission_service.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/body_newline_decode.test.ts`

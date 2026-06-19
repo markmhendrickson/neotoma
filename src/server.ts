@@ -46,6 +46,7 @@ import {
   RelationshipSnapshotRequestSchema,
   RetrieveEntitiesRequestSchema,
   RetrieveEntityByIdentifierSchema,
+  IdentifyEntityBySignalsSchema,
   RetrieveGraphNeighborhoodSchema,
   RetrieveRelatedEntitiesSchema,
   StoreRelationshipInputSchema,
@@ -93,6 +94,7 @@ import {
   shallowFieldsChanged,
 } from "./events/substrate_store_emit.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
+import { identifyEntityBySignals } from "./services/entity_signal_resolver.js";
 import {
   createAgentIdentity as buildAgentIdentity,
   normaliseClientName,
@@ -1889,6 +1891,8 @@ export class NeotomaServer {
         return await this.listTimelineEvents(args);
       case "retrieve_entity_by_identifier":
         return await this.retrieveEntityByIdentifier(args);
+      case "identify_entity_by_signals":
+        return await this.identifyEntityBySignals(args);
       case "retrieve_related_entities":
         return await this.retrieveRelatedEntities(args);
       case "retrieve_graph_neighborhood":
@@ -3457,6 +3461,22 @@ export class NeotomaServer {
       response.hint = hint;
     }
     return this.buildTextResponse(response);
+  }
+
+  private async identifyEntityBySignals(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = IdentifyEntityBySignalsSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const result = await identifyEntityBySignals({
+      signals: parsed.signals as Record<string, string | undefined>,
+      entity_type: parsed.entity_type,
+      entity_types: parsed.entity_types,
+      max_candidates: parsed.max_candidates,
+      include_observations: parsed.include_observations,
+      userId,
+    });
+    return this.buildTextResponse(result);
   }
 
   private async retrieveRelatedEntities(

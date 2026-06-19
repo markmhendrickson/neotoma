@@ -315,6 +315,14 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "identify_entity_by_signals",
+      description: desc(
+        "identify_entity_by_signals",
+        "Resolve an entity from a multi-signal bundle (name, email, company, domain, phone, and open-ended string props). Returns best_match with identity_score, resolution_band (high/medium/low/unresolved), ranked candidates, and matched_signals. Use when you have partial or combined identity information and want a single-call resolution with confidence scoring."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("identify_entity_by_signals"),
+    },
+    {
       name: "retrieve_related_entities",
       description: desc(
         "retrieve_related_entities",
@@ -1453,6 +1461,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "retrieve_entities",
   "list_timeline_events",
   "retrieve_entity_by_identifier",
+  "identify_entity_by_signals",
   "retrieve_related_entities",
   "retrieve_graph_neighborhood",
   "store",

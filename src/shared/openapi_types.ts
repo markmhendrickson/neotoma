@@ -1369,6 +1369,42 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/identify_entity_by_signals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Identify entity by multi-signal bundle
+     * @description Single-call multi-signal entity resolution. Accepts a `signals` object
+     *     (name, email, company, domain, phone, and open-ended string props),
+     *     performs per-signal lookups using existing primitives, accumulates
+     *     weighted scores across candidates, and returns a ranked result with a
+     *     resolution band (high/medium/low/unresolved).
+     *
+     *     Scoring weights: email=1.0, phone=0.9, name=0.7, domain=0.6,
+     *     company=0.5, other=0.4. Weights are normalized over the supplied
+     *     signals so the maximum possible score is 1.0 (before the corroboration
+     *     bonus of +0.05 per additional agreeing signal, capped at +0.15).
+     *     Semantic-only matches are capped at the medium band. best_match is null
+     *     when nothing clears the unresolved floor (score < 0.30).
+     *
+     *     Entity-type scope: if entity_type / entity_types are omitted the
+     *     resolver uses schema query_synonyms to infer candidate types from
+     *     signal values (e.g. "bank account" → "financial_account"). This is
+     *     additive — it widens what can be found without hardcoding type names.
+     */
+    post: operations["identifyEntityBySignals"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/retrieve_related_entities": {
     parameters: {
       query?: never;
@@ -2622,6 +2658,36 @@ export interface components {
       merged_to_entity_id?: string | null;
       /** Format: date-time */
       merged_at?: string | null;
+    };
+    /** @description A candidate entity match from identify_entity_by_signals. */
+    SignalCandidate: {
+      /** @description The matched entity's id. */
+      entity_id?: string;
+      /** @description Current snapshot for the entity. */
+      snapshot?: {
+        [key: string]: unknown;
+      } | null;
+      /**
+       * Format: float
+       * @description Normalised weighted score in [0, 1]. Rounded to 4 decimal places.
+       */
+      identity_score?: number;
+      /**
+       * @description The input signal keys that contributed to this match
+       *     (e.g. ["email", "name"]).
+       */
+      matched_signals?: string[];
+      /** @description Which resolution pass(es) were used for this candidate. */
+      match_modes?: ("direct" | "snapshot_field" | "semantic" | "none")[];
+      /**
+       * @description Resolution band for this candidate. high >= 0.85; medium >= 0.55;
+       *     low >= 0.30; unresolved < 0.30. Semantic-only matches capped at
+       *     medium.
+       * @enum {string}
+       */
+      band?: "high" | "medium" | "low" | "unresolved";
+      /** @description Entity types searched during resolution. */
+      scoped_entity_types?: string[];
     };
     EntitySnapshot: {
       entity_id?: string;
@@ -6248,6 +6314,113 @@ export interface operations {
              *     fetch path (#1597). Omitted for every other result.
              */
             hint?: string;
+          };
+        };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  identifyEntityBySignals: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /**
+           * @description Bundle of identity signals. All fields are optional strings.
+           *     The five well-known keys (name, email, company, domain,
+           *     phone) receive their canonical weights; any additional keys
+           *     are treated as open-ended string signals with weight 0.4.
+           */
+          signals: {
+            /** @description Full name or display name. */
+            name?: string;
+            /** @description Email address. */
+            email?: string;
+            /** @description Organisation or company name. */
+            company?: string;
+            /** @description Website domain (e.g. "example.com"). */
+            domain?: string;
+            /** @description Phone number in any format. */
+            phone?: string;
+          } & {
+            [key: string]: string;
+          };
+          /**
+           * @description Restrict resolution to this entity type.
+           *     Takes precedence over entity_types.
+           */
+          entity_type?: string;
+          /**
+           * @description Restrict resolution to these entity types. Merged with
+           *     synonym-expanded types when combined with signals.
+           */
+          entity_types?: string[];
+          /**
+           * @description Maximum candidates to return in the candidates array
+           *     (best_match excluded). Default 5, max 20.
+           * @default 5
+           */
+          max_candidates?: number;
+          /**
+           * @description When true, attach recent observations to best_match and
+           *     each candidate.
+           * @default false
+           */
+          include_observations?: boolean;
+          /**
+           * @description Optional user_id override (scoped to callers with privilege
+           *     to query on behalf of another user).
+           */
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Entity resolution result */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /**
+             * @description Best-matching entity, or null when nothing clears the
+             *     unresolved floor (score < 0.30). Never invented.
+             */
+            best_match?: components["schemas"]["SignalCandidate"] | null;
+            /**
+             * @description Remaining candidates ranked by score desc, entity_id asc.
+             *     Does not include best_match.
+             */
+            candidates?: components["schemas"]["SignalCandidate"][];
+            /**
+             * @description Resolution band of best_match (or "unresolved" when
+             *     best_match is null). high >= 0.85; medium >= 0.55;
+             *     low >= 0.30; unresolved < 0.30. Semantic-only matches
+             *     are capped at medium regardless of score.
+             * @enum {string}
+             */
+            resolution_band?: "high" | "medium" | "low" | "unresolved";
+            /** @description Union of match modes used across all signal lookups. */
+            match_modes?: ("direct" | "snapshot_field" | "semantic" | "none")[];
+            /**
+             * @description Entity types actually searched. May be wider than the
+             *     caller's input when synonym expansion fires.
+             */
+            scoped_entity_types?: string[];
           };
         };
       };
