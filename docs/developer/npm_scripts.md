@@ -99,6 +99,17 @@ Keep these aliases for one minor release, update docs and automation to the cano
 | `reload:launchd-neotoma` | Unloads then loads each installed Neotoma plist (dev-server, prod-server, watch-build, issues-sync, skills-sync); macOS only |
 | `shutdown:launchd-neotoma` | Unloads Neotoma launchagents, stops dev/prod APIs, and reaps leftover launchd-owned repo processes; macOS only |
 
+## Generated files
+
+Some committed files are generated from source and must be kept in sync. Run the generator after making the relevant source change; use `--check` in CI to fail when the file drifts.
+
+| Script | What it does | When to run | CI usage |
+|--------|-------------|-------------|----------|
+| `generate:test-catalog` | Regenerates `docs/testing/automated_test_catalog.md` from the test tree | After adding, removing, or renaming a test file | `npm run validate:test-catalog` (fails on drift) |
+| `validate:test-catalog` | Checks that `docs/testing/automated_test_catalog.md` matches the current test tree | Before every merge | Runs in baseline CI lane |
+| `generate:capability-manifest` | Regenerates `src/shared/capability_manifest.json` by walking git `vX.Y.Z` release tags and recording first/last appearance of each MCP tool in `src/tool_definitions.ts` | After adding or removing an MCP tool, or after cutting a new release tag | `npm run validate:capability-manifest` (fails on drift) |
+| `validate:capability-manifest` | Checks that `src/shared/capability_manifest.json` matches what the generator would produce | Before every merge | Runs in CI alongside `validate:test-catalog` |
+
 ## Validation
 
 After script changes, run targeted CLI tests that assert spawn target names and smoke at least:

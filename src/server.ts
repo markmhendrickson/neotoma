@@ -1063,7 +1063,8 @@ export class NeotomaServer {
           new_tools: [],
           removed_tools: [],
           capability_delta_recommendation: `Upgrade from ${currentVersion} to ${latest}.`,
-          capability_delta_note: "Capability manifest unavailable; delta could not be computed.",
+          capability_delta_note:
+            "Capability manifest unavailable (expected src/shared/capability_manifest.json — likely absent in a stripped bundle); delta could not be computed. Regenerate with: npm run generate:capability-manifest",
         };
       }
     }

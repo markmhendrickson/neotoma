@@ -135,6 +135,18 @@ Operators with a configured API URL see pinned primitives on the Inspector home 
 
 - Cloud availability peer runbook and Stop-hook documentation from salvage Wave 2.
 
+### Capability delta for `npm_check_update` (#1693, closes #1605)
+
+Machine-readable tool-change list for MCP clients that need to enumerate newly available or removed tools after a Neotoma upgrade.
+
+- **New opt-in flag** `include_capability_delta: true` on `npm_check_update`.
+- **Four new response fields** (present only when flag is set):
+  - `new_tools` — array of tool names added between `currentVersion` and the latest release.
+  - `removed_tools` — array of tool names removed in the same range.
+  - `capability_delta_recommendation` — human-readable upgrade-and-adapt guidance string.
+  - `capability_delta_note` — present **only** when delta computation degraded (unparseable versions or missing manifest); absence signals no degradation.
+- **`npm run generate:capability-manifest`** — generator script (`scripts/generate-capability-manifest.ts`) that walks git release tags and writes `src/shared/capability_manifest.json`. Run after adding/removing tools or cutting a new release tag. Use `--check` in CI to verify the committed file is up-to-date.
+
 ### Site / marketing UI (#396, #395)
 
 - Remove locale fallback banner from MDX site pages.

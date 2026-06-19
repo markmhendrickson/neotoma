@@ -83,6 +83,12 @@ jobs:
       - name: Validate automated test catalog
         run: npm run validate:test-catalog
 
+      - name: Fetch release tags (capability manifest is derived from vX.Y.Z tags)
+        run: git fetch --tags --force
+
+      - name: Validate capability manifest
+        run: npm run validate:capability-manifest
+
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
 

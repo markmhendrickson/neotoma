@@ -98,7 +98,10 @@ function main(): void {
     if (source === null) continue; // file didn't exist yet at this tag
 
     const tools = extractToolNames(source);
-    if (tools.size === 0) continue; // skip if parse yielded nothing (shouldn't happen)
+    if (tools.size === 0) {
+      console.warn(`Tag ${tag} produced 0 tools — possible parser drift`);
+      continue; // skip if parse yielded nothing (shouldn't happen)
+    }
 
     // Detect new tools at this tag
     for (const t of tools) {
@@ -136,7 +139,7 @@ function main(): void {
   > = {};
 
   for (const [tool, version] of [...toolFirstVersion.entries()].sort(([a], [b]) =>
-    a.localeCompare(b)
+    a < b ? -1 : a > b ? 1 : 0
   )) {
     const entry: { addedInVersion: string; removedInVersion?: string } = {
       addedInVersion: version,
