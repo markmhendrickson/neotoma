@@ -61,17 +61,17 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **469**
-- Backend and repo Vitest files: **436**
+- Total automated test files: **474**
+- Backend and repo Vitest files: **441**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 122 |
+| Vitest unit tests | 125 |
 | Vitest service tests | 34 |
-| Source-adjacent tests | 53 |
+| Source-adjacent tests | 55 |
 | Vitest integration tests | 134 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (122):**
+**Files (125):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -177,6 +177,7 @@ flowchart TD
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
 - `tests/unit/mcp_initialize_skills.test.ts`
+- `tests/unit/mcp_initialize_version.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
@@ -227,10 +228,12 @@ flowchart TD
 - `tests/unit/subscription_types.test.ts`
 - `tests/unit/substrate_event_bus.test.ts`
 - `tests/unit/timeline_events.test.ts`
+- `tests/unit/timeline_query.test.ts`
 - `tests/unit/turn_summary_widget.test.ts`
 - `tests/unit/unknown_fields_guard.test.ts`
 - `tests/unit/usage_digest_redaction.test.ts`
 - `tests/unit/usage_digest_schema.test.ts`
+- `tests/unit/usage_stats.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
@@ -279,7 +282,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (53):**
+**Files (55):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -308,6 +311,7 @@ flowchart TD
 - `src/services/docs/markdown_render.test.ts`
 - `src/services/docs/render.test.ts`
 - `src/services/docs/visibility.test.ts`
+- `src/services/entity_signal_resolver.test.ts`
 - `src/services/entity_submission/submission_service.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/body_newline_decode.test.ts`
@@ -325,6 +329,7 @@ flowchart TD
 - `src/services/sync/peer_health.test.ts`
 - `src/shared/action_handlers/entity_handlers.test.ts`
 - `src/shared/action_schemas.test.ts`
+- `src/shared/spawn_platform.test.ts`
 - `src/utils/__tests__/csv_summary.test.ts`
 - `src/utils/__tests__/lucide_icons.test.ts`
 - `src/utils/chat.test.ts`
