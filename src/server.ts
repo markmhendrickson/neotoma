@@ -53,6 +53,7 @@ import {
   TimelineEventsRequestSchema,
   UpdateSchemaIncrementalRequestSchema,
   RegisterSchemaRequestSchema,
+  IntakeHintSchema,
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
@@ -3333,6 +3334,70 @@ export class NeotomaServer {
         excludeBookkeeping: parsed.exclude_bookkeeping,
       });
 
+    // collapse_by=canonical_key: group entities sharing a canonical_key snapshot
+    // field into one synthesized result per key (#1604). Entities without a
+    // canonical_key are returned as-is alongside the collapsed groups.
+    if (parsed.collapse_by === "canonical_key") {
+      const groups = new Map<string, typeof entities>();
+      const noKey: typeof entities = [];
+
+      for (const entity of entities) {
+        const snap = entity.snapshot as Record<string, unknown> | null | undefined;
+        const ck =
+          snap && typeof snap.canonical_key === "string" ? snap.canonical_key : undefined;
+        if (ck) {
+          const group = groups.get(ck);
+          if (group) {
+            group.push(entity);
+          } else {
+            groups.set(ck, [entity]);
+          }
+        } else {
+          noKey.push(entity);
+        }
+      }
+
+      const collapsed = [...groups.entries()].map(([canonical_key, group]) => {
+        const sightings = group.map((e) => {
+          const snap = e.snapshot as Record<string, unknown> | null | undefined;
+          return {
+            source_id: snap && typeof snap.sighting_source_id === "string"
+              ? snap.sighting_source_id
+              : undefined,
+            entity_id: e.entity_id,
+            seen_at: e.last_observation_at ?? e.created_at,
+          };
+        });
+
+        const significances = group.map((e) => {
+          const snap = e.snapshot as Record<string, unknown> | null | undefined;
+          const sig = snap && typeof snap.significance === "number" ? snap.significance : 1.0;
+          return sig;
+        });
+        const maxSignificance = Math.max(...significances);
+
+        // Use the first entity as the base and augment with sighting metadata
+        const base = group[0];
+        return {
+          ...base,
+          canonical_key,
+          sightings,
+          max_significance: maxSignificance,
+          sighting_count: group.length,
+        };
+      });
+
+      return this.buildTextResponse({
+        entities: [...collapsed, ...noKey],
+        total,
+        excluded_merged,
+        collapsed_by: "canonical_key",
+        collapse_groups: collapsed.length,
+        ...(applied_search_strategies ? { applied_search_strategies } : {}),
+        search_mode,
+      });
+    }
+
     return this.buildTextResponse({
       entities,
       total,
@@ -4335,7 +4400,7 @@ export class NeotomaServer {
     const schema = z
       .object({
         user_id: z.string().uuid().optional(),
-        idempotency_key: z.string().min(1),
+        idempotency_key: z.string().min(1).optional(),
         file_idempotency_key: z.string().min(1).optional(),
         file_content: z.string().optional(),
         file_path: z.string().optional(),
@@ -4360,20 +4425,39 @@ export class NeotomaServer {
         source_peer_id: z.string().min(1).optional(),
         commit: z.boolean().optional(),
         strict: z.boolean().optional(),
+        intake: IntakeHintSchema.optional(),
       })
       .refine(
         (data) => {
+          if (data.intake?.mode === "overflow") return true; // overflow bypasses entity requirement
           const hasFileContent = data.file_content && data.mime_type;
           const hasFilePath = data.file_path;
           const hasEntities = data.entities && data.entities.length > 0;
           return hasFileContent || hasFilePath || hasEntities;
         },
-        { message: "Must provide either (file_content+mime_type) OR file_path OR entities array" }
+        {
+          message:
+            "Must provide either (file_content+mime_type) OR file_path OR entities array (or use intake.mode='overflow')",
+        }
+      )
+      .refine(
+        (data) => data.intake?.mode === "overflow" || Boolean(data.idempotency_key),
+        { message: "idempotency_key is required when intake.mode is not 'overflow'" }
       );
 
     const parsed = schema.parse(args);
+
+    // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
+    if (parsed.intake?.mode === "overflow") {
+      const { writeToOverflowSink } = await import("./services/overflow_sink.js");
+      const result = writeToOverflowSink(args, parsed.intake.reason);
+      return this.buildTextResponse(result);
+    }
+
     const userId = this.getAuthenticatedUserId(parsed.user_id);
-    const idempotencyKey = parsed.idempotency_key;
+    // idempotency_key is guaranteed present for non-overflow calls by the second
+    // refine in the local schema (the overflow branch returned above).
+    const idempotencyKey = parsed.idempotency_key!;
 
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
     const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
@@ -4381,7 +4465,7 @@ export class NeotomaServer {
     let structuredResponsePayload: Record<string, unknown> | undefined;
     let preloadedUnstructuredPayload: Record<string, unknown> | undefined;
     if (hasEntities && hasUnstructured && parsed.interpretation?.source_ref === "unstructured") {
-      const fileIdempotencyKey = parsed.file_idempotency_key ?? `${parsed.idempotency_key}-file`;
+      const fileIdempotencyKey = parsed.file_idempotency_key ?? `${idempotencyKey}-file`;
       const unstructuredResponse = await this.store({
         idempotency_key: fileIdempotencyKey,
         file_content: parsed.file_content,
@@ -4432,7 +4516,7 @@ export class NeotomaServer {
     if (hasEntities && hasUnstructured) {
       let unstructuredPayload = preloadedUnstructuredPayload;
       if (!unstructuredPayload) {
-        const fileIdempotencyKey = parsed.file_idempotency_key ?? `${parsed.idempotency_key}-file`;
+        const fileIdempotencyKey = parsed.file_idempotency_key ?? `${idempotencyKey}-file`;
         const unstructuredResponse = await this.store({
           idempotency_key: fileIdempotencyKey,
           file_content: parsed.file_content,
