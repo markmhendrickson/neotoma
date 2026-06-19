@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **477**
-- Backend and repo Vitest files: **444**
+- Total automated test files: **479**
+- Backend and repo Vitest files: **446**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -71,7 +71,7 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 126 |
 | Vitest service tests | 34 |
-| Source-adjacent tests | 56 |
+| Source-adjacent tests | 58 |
 | Vitest integration tests | 135 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
@@ -298,8 +298,10 @@ flowchart TD
 - `src/services/__tests__/mcp_oauth.test.ts`
 - `src/services/__tests__/oauth_key_gate.test.ts`
 - `src/services/__tests__/oauth_state.test.ts`
+- `src/services/__tests__/overflow_sink.test.ts`
 - `src/services/__tests__/override_validation.test.ts`
 - `src/services/__tests__/schema_icon_service.test.ts`
+- `src/services/__tests__/sightings_schema.test.ts`
 - `src/services/__tests__/tunnel_oauth.test.ts`
 - `src/services/access_policy.test.ts`
 - `src/services/batch_correction.test.ts`
