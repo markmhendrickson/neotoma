@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { isApiUrlConfigured } from "@/api/client";
-import { retrieveGraphNeighborhood } from "@/api/endpoints/graph";
+import { retrieveGraphNeighborhood, retrieveGraphNeighborhoodWithBase } from "@/api/endpoints/graph";
 import { retrieveRelatedEntities } from "@/api/endpoints/relationships";
 import type { GraphNeighborhoodParams, RelatedEntitiesParams } from "@/types/api";
 
@@ -9,6 +9,25 @@ export function useGraphNeighborhood(params: GraphNeighborhoodParams | null) {
     queryKey: ["graph-neighborhood", params],
     queryFn: ({ signal }) => retrieveGraphNeighborhood(params!, { signal }),
     enabled: isApiUrlConfigured() && !!params?.node_id,
+  });
+}
+
+/**
+ * Phase 1 — apiBase-override variant (#1606).
+ *
+ * Like `useGraphNeighborhood` but uses an explicit API base origin instead of
+ * reading from localStorage/proxy. Used by embed routes where the base comes
+ * from `ApiBaseContext` (injected via `?apiBase=` query param).
+ */
+export function useGraphNeighborhoodWithBase(
+  apiBase: string,
+  params: GraphNeighborhoodParams | null,
+) {
+  return useQuery({
+    queryKey: ["graph-neighborhood-embed", apiBase, params],
+    queryFn: ({ signal }) =>
+      retrieveGraphNeighborhoodWithBase(apiBase, params!, { signal }),
+    enabled: !!apiBase.trim() && !!params?.node_id,
   });
 }
 
