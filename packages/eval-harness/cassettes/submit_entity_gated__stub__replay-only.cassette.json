@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "submit_entity_gated",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Try to submit a feedback_note. First with no intake config (it should be rejected), then after an intake config exists but the type is still closed to guests (it should still be rejected by the access policy).\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. submit_entity routes a guest-style submission through the config-driven intake path; it requires an active submission_config for the target entity_type and a guest access policy that permits the store.\n",
+  "tool_calls": [
+    {
+      "name": "submit_entity",
+      "input": {
+        "entity_type": "feedback_note",
+        "fields": { "title": "Eval Submitted Note", "body": "Submitted via submit_entity" }
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "submit-cfg-seed",
+        "entities": [
+          {
+            "entity_type": "submission_config",
+            "config_key": "feedback_note_intake",
+            "target_entity_type": "feedback_note",
+            "access_policy": "open",
+            "active": true,
+            "enable_conversation_threading": false,
+            "enable_guest_read_back": false
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "submit_entity",
+      "input": {
+        "entity_type": "feedback_note",
+        "fields": { "title": "Eval Submitted Note", "body": "Submitted via submit_entity" }
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "submit_entity for feedback_note was rejected with no intake config (no active submission_config). After seeding an intake config, the submission was still rejected because the feedback_note type is closed to guest stores (access_policy_denied). No feedback_note was created — both gates failed closed, as expected."
+}

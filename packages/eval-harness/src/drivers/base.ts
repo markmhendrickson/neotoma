@@ -67,6 +67,10 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   add_peer: "/peers",
   list_peers: "/peers",
   resolve_sync_conflict: "/peers/resolve_sync_conflict",
+  // Config-driven entity submission (#1720 eval-coverage backfill). Route is
+  // POST /submit/{entity_type}; the {entity_type} placeholder is resolved from
+  // the call input by resolvePathParams below.
+  submit_entity: "/submit/{entity_type}",
 };
 
 /**
@@ -83,14 +87,31 @@ export const NEOTOMA_TOOL_NAMES = new Set<string>(Object.keys(TOOL_ENDPOINTS));
  */
 const GET_TOOLS = new Set<string>(["get_session_identity", "list_peers"]);
 
+/**
+ * Substitute `{field}` placeholders in a TOOL_ENDPOINTS path with values pulled
+ * from the call input. Lets path-parameterized routes (e.g. submit_entity at
+ * POST /submit/{entity_type}) be replayed without baking a concrete value into
+ * the static path map. Missing placeholder values are left as-is so the route
+ * 404s loudly rather than hitting the wrong endpoint.
+ */
+function resolvePathParams(path: string, input: unknown): string {
+  if (!path.includes("{")) return path;
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return path.replace(/\{(\w+)\}/g, (whole, key: string) => {
+    const v = obj[key];
+    return typeof v === "string" || typeof v === "number" ? encodeURIComponent(String(v)) : whole;
+  });
+}
+
 async function postNeotomaTool(
   baseUrl: string,
   toolName: string,
   input: unknown,
   token: string
 ): Promise<{ output?: unknown; error?: string }> {
-  const path = TOOL_ENDPOINTS[toolName];
-  if (!path) return { error: `unknown Neotoma tool ${toolName}` };
+  const rawPath = TOOL_ENDPOINTS[toolName];
+  if (!rawPath) return { error: `unknown Neotoma tool ${toolName}` };
+  const path = resolvePathParams(rawPath, input);
   const isGet = GET_TOOLS.has(toolName);
   try {
     const res = await fetch(`${baseUrl}${path}`, {

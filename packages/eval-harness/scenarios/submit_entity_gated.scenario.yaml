@@ -1,0 +1,78 @@
+meta:
+  id: submit_entity_gated
+  description: >
+    submit_entity is the config-driven, guest-facing intake path: a submission
+    is only accepted when (a) an active submission_config exists for the target
+    entity_type AND (b) the entity_type's guest access policy permits a store.
+    Both are trust-boundary gates — a regression that accepted a submission with
+    no config, or that let a guest store into a "closed" type, would open an
+    unintended write surface. This eval asserts submit_entity fails CLOSED on
+    both gates: no submission_config -> error, and config-present-but-closed
+    -> access_policy_denied. submit_entity had zero agentic coverage. Asserts via
+    #1703 tool_result.matches. Part of neotoma#1720.
+
+    Scope note: the happy path (a successful submission) is NOT covered here
+    because it requires operator-owned setup the isolated eval server cannot
+    model over HTTP — submission_config rows are operator-seeded (covered) but
+    the entity_type guest access policy can only be opened via an env override
+    (NEOTOMA_ACCESS_POLICY_<TYPE>) or the `neotoma access set` CLI / schema
+    metadata, none of which a scenario can inject. The two fail-closed guards
+    are the security-relevant contract and are fully observable; the eval covers
+    exactly those.
+  tags:
+    - tier2
+    - submission
+    - authz
+    - security
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "submit_entity had only non-agentic coverage; no eval asserted it fails closed when no submission_config exists for the target type, or when the type's guest access policy denies a store — the two gates that keep guest submission from becoming an open write surface."
+privacy_transform: "Fully synthetic submission; no PII."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. submit_entity
+  routes a guest-style submission through the config-driven intake path; it
+  requires an active submission_config for the target entity_type and a guest
+  access policy that permits the store.
+
+user_prompt: |
+  Try to submit a feedback_note. First with no intake config (it should be
+  rejected), then after an intake config exists but the type is still closed to
+  guests (it should still be rejected by the access policy).
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # submit_entity was attempted.
+  - type: mcp_tool.invocations
+    tool_name: submit_entity
+    op: gte
+    value: 2
+  # Gate 1: no submission_config -> fails closed (no silent acceptance).
+  - type: tool_result.matches
+    tool_name: submit_entity
+    which: 0
+    result_key: error
+    present: true
+  # The intake config was seeded between attempts.
+  - type: entity.exists
+    entity_type: submission_config
+    where:
+      target_entity_type: feedback_note
+  # Gate 2: config present but the type is closed to guests -> access policy
+  # still denies the store (the guest-write trust boundary holds).
+  - type: tool_result.matches
+    tool_name: submit_entity
+    which: last
+    result_key: error
+    present: true
+  # No feedback_note was ever created (both submissions failed closed).
+  - type: entity.count
+    entity_type: feedback_note
+    op: eq
+    value: 0
