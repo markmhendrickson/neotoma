@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "relationship_lifecycle",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Link Rel Alice to Rel Co (works_at), batch-add related_to and member_of, then delete and restore the works_at edge.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Use the dedicated relationship tools (create_relationship, create_relationships, delete_relationship, restore_relationship, list_relationships) to manage the graph. Check list results for liveness.\n",
+  "tool_calls": [
+    {
+      "name": "create_relationship",
+      "input": {
+        "source_entity_id": "ent_8febc48e98321f08aebb3d53",
+        "target_entity_id": "ent_643bc21ccba68c38d78fb73c",
+        "relationship_type": "works_at"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "create_relationships",
+      "input": {
+        "relationships": [
+          {
+            "source_entity_id": "ent_8febc48e98321f08aebb3d53",
+            "target_entity_id": "ent_643bc21ccba68c38d78fb73c",
+            "relationship_type": "related_to"
+          },
+          {
+            "source_entity_id": "ent_643bc21ccba68c38d78fb73c",
+            "target_entity_id": "ent_8febc48e98321f08aebb3d53",
+            "relationship_type": "member_of"
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "list_relationships",
+      "input": { "entity_id": "ent_8febc48e98321f08aebb3d53" },
+      "sequence": 2
+    },
+    {
+      "name": "delete_relationship",
+      "input": {
+        "source_entity_id": "ent_8febc48e98321f08aebb3d53",
+        "target_entity_id": "ent_643bc21ccba68c38d78fb73c",
+        "relationship_type": "works_at"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "restore_relationship",
+      "input": {
+        "source_entity_id": "ent_8febc48e98321f08aebb3d53",
+        "target_entity_id": "ent_643bc21ccba68c38d78fb73c",
+        "relationship_type": "works_at"
+      },
+      "sequence": 4
+    }
+  ],
+  "assistant_text": "Linked Rel Alice → Rel Co (works_at), batch-added related_to + member_of, then deleted and restored the works_at edge — it's live again."
+}

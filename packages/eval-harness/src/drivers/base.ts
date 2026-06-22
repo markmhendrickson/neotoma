@@ -16,21 +16,13 @@ import type {
 } from "../types.js";
 
 /**
- * MCP tool names that, when emitted by the agent in a cassette, should
- * be re-applied against the isolated Neotoma server during replay so
- * that post-turn graph state is reproduced.
+ * Map MCP tool name → HTTP endpoint we POST to on the isolated server.
+ *
+ * SINGLE SOURCE OF TRUTH: a tool listed here is both (a) executed against the
+ * isolated server during replay (via NEOTOMA_TOOL_NAMES, derived below) and
+ * (b) routed to this path. To make a new MCP tool cassette-executable, add ONE
+ * entry here — do not maintain a separate name list.
  */
-export const NEOTOMA_TOOL_NAMES = new Set<string>([
-  "store",
-  "store_structured",
-  "retrieve_entities",
-  "retrieve_entity_by_identifier",
-  "create_relationship",
-  "correct",
-  "get_session_identity",
-]);
-
-/** Map MCP tool name → HTTP endpoint we POST to on the isolated server. */
 const TOOL_ENDPOINTS: Record<string, string> = {
   store: "/store",
   store_structured: "/store",
@@ -39,7 +31,20 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   create_relationship: "/create_relationship",
   correct: "/correct",
   get_session_identity: "/session",
+  // Relationship lifecycle tools (#1708 eval-coverage backfill).
+  create_relationships: "/create_relationships",
+  delete_relationship: "/delete_relationship",
+  restore_relationship: "/restore_relationship",
+  list_relationships: "/list_relationships",
+  get_relationship_snapshot: "/relationships/snapshot",
 };
+
+/**
+ * MCP tool names that, when emitted by the agent in a cassette, are re-applied
+ * against the isolated Neotoma server during replay so post-turn graph state is
+ * reproduced. Derived from TOOL_ENDPOINTS so the two can never drift.
+ */
+export const NEOTOMA_TOOL_NAMES = new Set<string>(Object.keys(TOOL_ENDPOINTS));
 
 async function postNeotomaTool(
   baseUrl: string,
