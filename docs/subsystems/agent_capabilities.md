@@ -38,6 +38,26 @@ The canonical use is pinning the Netlify forwarder
 a compromised forwarder key cannot be used to write observations for
 unrelated entities.
 
+### Transports where capabilities are enforced
+
+Capability scoping runs on both the HTTP direct-write endpoints and the MCP
+tool path, so an AAuth-admitted agent gets the same `(op, entity_type)`
+ceiling regardless of how it reaches Neotoma:
+
+- HTTP `/store`, `/correct` (and store-time `create_relationship`) —
+  `enforceAgentCapability` in `src/actions.ts`.
+- MCP `store` / `correct` tools — `enforceAgentCapability` in the
+  `storeStructuredInternal` and `correct` paths of `src/server.ts`, mirroring
+  the HTTP gate. (Before AAuth admission could authenticate an MCP session,
+  the MCP tools ran only the protected-entity-types guard; the capability
+  gate was added alongside MCP admission so the two transports stay at
+  parity.)
+
+The protected-entity-types guard (`assertCanWriteProtected`) runs in addition
+to capability scoping on both transports, so governance state such as
+`agent_grant` is never writable via a `*` capability — `*` widens only to
+non-protected types.
+
 ## Grant shape
 
 An `agent_grant` is a normal Neotoma entity — observation history doubles

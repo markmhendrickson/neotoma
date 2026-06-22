@@ -1820,6 +1820,12 @@ app.all("/mcp", async (req, res) => {
     const aauthContext = getAAuthContextFromRequest(req);
     if (serverInstance) {
       serverInstance.setSessionAgentIdentity(aauthContext);
+      // Thread the admission (grant match) so the MCP initialize auth
+      // resolution and the per-tool capability gate can read it from the
+      // session. The transport runs inside a nested runWithRequestContext
+      // that does not re-carry the ALS admission, so the session field is the
+      // reliable channel. `aauthAdmissionForRequest` is resolved above.
+      serverInstance.setSessionAdmission(aauthAdmissionForRequest);
     }
 
     // Build the provenance attribution to propagate via AsyncLocalStorage so
