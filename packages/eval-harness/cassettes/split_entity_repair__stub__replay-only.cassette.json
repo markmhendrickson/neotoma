@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "split_entity_repair",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "The task \"Split Source Task\" accidentally absorbed a later session's data (tagged session_tag=later-session). Split that out onto a new task entity.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. To repair an over-merged entity, use split_entity with a predicate selecting the observations to move onto a new_entity, plus an idempotency_key.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "split-later-obs",
+        "entities": [
+          {
+            "entity_type": "task",
+            "title": "Split Source Task",
+            "status": "todo",
+            "session_tag": "later-session"
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "split_entity",
+      "input": {
+        "source_entity_id": "ent_7df9aa3bdd09a9ae1f8fec95",
+        "predicate": {
+          "observation_field_equals": { "field": "session_tag", "value": "later-session" }
+        },
+        "new_entity": { "entity_type": "task", "canonical_name": "split-target-task" },
+        "idempotency_key": "split-op-eval-1"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "split_entity",
+      "input": {
+        "source_entity_id": "ent_7df9aa3bdd09a9ae1f8fec95",
+        "predicate": {
+          "observation_field_equals": { "field": "session_tag", "value": "later-session" }
+        },
+        "new_entity": { "entity_type": "task", "canonical_name": "split-target-task" },
+        "idempotency_key": "split-op-eval-1"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "split_entity",
+      "input": {
+        "source_entity_id": "ent_7df9aa3bdd09a9ae1f8fec95",
+        "predicate": {
+          "observation_field_equals": { "field": "session_tag", "value": "NEVER_MATCHES" }
+        },
+        "new_entity": { "entity_type": "task", "canonical_name": "split-none-target" },
+        "idempotency_key": "split-op-eval-none"
+      },
+      "sequence": 3
+    }
+  ],
+  "assistant_text": "Split the later-session observation off \"Split Source Task\" onto a new task entity. Re-running the same split was a no-op (idempotent replay), and a predicate matching nothing returned an error, as expected."
+}

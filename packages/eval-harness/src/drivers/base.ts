@@ -36,6 +36,8 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   restore_entity: "/restore_entity",
   // Entity merge (#1706 eval-coverage backfill). Endpoint is /entities/merge.
   merge_entities: "/entities/merge",
+  // Entity split (#1707 eval-coverage backfill). Endpoint is /entities/split.
+  split_entity: "/entities/split",
   // Relationship lifecycle tools (#1708 eval-coverage backfill).
   create_relationships: "/create_relationships",
   delete_relationship: "/delete_relationship",
