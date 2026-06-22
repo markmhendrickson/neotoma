@@ -1,0 +1,69 @@
+meta:
+  id: retrieve_identifier_match_modes
+  description: >
+    A contact (name + email + company) is pre-seeded. The agent looks it up
+    three ways via retrieve_entity_by_identifier and the results must carry the
+    correct match_mode discriminator: exact name -> "direct", email ->
+    "snapshot_field", and a true non-match -> "none" with total 0 (no false
+    positive). This is the dedup gate agents use before reuse-vs-create; a wrong
+    match_mode or a silent-empty result drives duplicate creation. Exercises the
+    #1703 tool_result.matches primitive against the real
+    retrieve_entity_by_identifier result shape. Part of neotoma#1711.
+  tags:
+    - tier2
+    - retrieval
+    - dedup
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "retrieve_entity_by_identifier match_mode was never asserted; a relaxed/none fallback was indistinguishable from a direct hit, so wrong-entity or silent-empty results drove duplicate creation."
+privacy_transform: "Fully synthetic contact; no PII."
+
+seed_entities:
+  - entity_type: contact
+    name: Alice Probe
+    email: alice@probe.example
+    company: Probe Labs
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Before
+  creating an entity, look it up with retrieve_entity_by_identifier to decide
+  reuse vs create. Inspect the match_mode on the result.
+
+user_prompt: |
+  Look up the contact "Alice Probe" by name, by email, and confirm there's no
+  contact named "Zzz Nonexistent Person".
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # All three lookups were issued.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entity_by_identifier
+    op: gte
+    value: 3
+  # Exact-name lookup -> match_mode "direct", one hit, the seeded contact id.
+  - type: tool_result.matches
+    tool_name: retrieve_entity_by_identifier
+    which: 0
+    result_subset:
+      match_mode: direct
+      total: 1
+  # Email lookup -> relaxed snapshot_field match (distinguishable from direct).
+  - type: tool_result.matches
+    tool_name: retrieve_entity_by_identifier
+    which: 1
+    result_subset:
+      match_mode: snapshot_field
+      total: 1
+  # True non-match -> match_mode "none", total 0 (no false positive).
+  - type: tool_result.matches
+    tool_name: retrieve_entity_by_identifier
+    which: 2
+    result_subset:
+      match_mode: none
+      total: 0
