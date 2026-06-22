@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "schema_discovery_reads",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "List the available entity types, and describe the \"task\" type's schema.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Use list_entity_types to learn the available entity types and describe_entity_type to inspect one type's field shape before extracting entities of that type.\n",
+  "tool_calls": [
+    {
+      "name": "list_entity_types",
+      "input": {},
+      "sequence": 0
+    },
+    {
+      "name": "describe_entity_type",
+      "input": { "entity_type": "task" },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "Listed the available entity types and described the \"task\" type's schema (its schema_definition fields)."
+}
