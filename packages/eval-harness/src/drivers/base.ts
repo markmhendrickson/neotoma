@@ -71,6 +71,16 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   // POST /submit/{entity_type}; the {entity_type} placeholder is resolved from
   // the call input by resolvePathParams below.
   submit_entity: "/submit/{entity_type}",
+  // Per-turn status line (#1719 eval-coverage backfill).
+  neotoma_turn_summary: "/turn_summary",
+  // Schema discovery reads (#1718 eval-coverage backfill). list_entity_types is
+  // GET /schemas (see GET_TOOLS); describe_entity_type is GET /schemas/{entity_type}.
+  list_entity_types: "/schemas",
+  describe_entity_type: "/schemas/{entity_type}",
+  // Situational reads (#1723 eval-coverage backfill). list_recent_changes is GET
+  // /record_activity (see GET_TOOLS); list_observations is POST /list_observations.
+  list_recent_changes: "/record_activity",
+  list_observations: "/list_observations",
 };
 
 /**
@@ -85,7 +95,14 @@ export const NEOTOMA_TOOL_NAMES = new Set<string>(Object.keys(TOOL_ENDPOINTS));
  * tool input as JSON. Keep this in sync with the route methods in
  * src/shared/contract_mappings.ts.
  */
-const GET_TOOLS = new Set<string>(["get_session_identity", "list_peers"]);
+const GET_TOOLS = new Set<string>([
+  "get_session_identity",
+  "list_peers",
+  // Read tools whose HTTP route is a GET (#1718, #1723 eval-coverage backfill).
+  "list_entity_types",
+  "describe_entity_type",
+  "list_recent_changes",
+]);
 
 /**
  * Substitute `{field}` placeholders in a TOOL_ENDPOINTS path with values pulled
