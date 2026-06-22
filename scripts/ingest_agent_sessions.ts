@@ -157,7 +157,7 @@ function extractMetadata(
 
   return {
     entity_type: "agent_session",
-    harness: "claude_code",
+    harness: "claude-code",
     native_session_id: path.basename(filePath, ".jsonl"),
     kind: resolvedKind,
     cwd,
@@ -213,7 +213,7 @@ async function storeOne(rec: SessionRecord): Promise<"ok" | "failed"> {
     content_hash: _contentHash,
     file_size: _fileSize,
     mime_type: "application/jsonl",
-    harness: "claude_code",
+    harness: "claude-code",
     format: "claude_code_jsonl",
     transcript_kind: rec.kind === "subagent" ? "subagent" : "main",
     agent_session_id: rec.native_session_id,
