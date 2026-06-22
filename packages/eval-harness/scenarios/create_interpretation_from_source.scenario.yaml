@@ -1,0 +1,74 @@
+meta:
+  id: create_interpretation_from_source
+  description: >
+    An interpretation run materializes extracted entities against a stored
+    source. The agent first stores a payload (minting a source), then calls
+    create_interpretation with that source_id to turn extracted records into
+    graph entities + observations. The security-relevant contract:
+    create_interpretation is source-scoped — it only runs against a source that
+    belongs to the authenticated user; an interpretation against a source the
+    user does not own MUST 404 (SOURCE_NOT_FOUND), never silently create
+    entities under a foreign/forged source_id. create_interpretation had zero
+    agentic coverage. Asserts via #1703 tool_result.matches. Part of
+    neotoma#1714.
+  tags:
+    - tier2
+    - interpretation
+    - authz
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "create_interpretation had only non-agentic coverage; no eval asserted that an interpretation actually materializes the extracted entities/observations against a real source, or that the source-ownership guard fires (404) instead of creating entities under an unowned source_id."
+privacy_transform: "Fully synthetic source + entities; no PII."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Store the raw
+  payload first (which mints a source), then call create_interpretation with the
+  returned source_id and the extracted entities to materialize them in the
+  graph.
+
+user_prompt: |
+  Store this batch and interpret it into a task ("Interpreted Task Alpha") and a
+  contact ("Interpreted Contact Beta"). Also confirm an interpretation against a
+  source you do not own is rejected.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The source-minting store ran.
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: gte
+    value: 1
+  # The interpretation ran against the owned source and materialized entities.
+  - type: mcp_tool.invocations
+    tool_name: create_interpretation
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: create_interpretation
+    which: 0
+    result_subset:
+      success: true
+      observations_created: 2
+  - type: tool_result.matches
+    tool_name: create_interpretation
+    which: 0
+    result_key: interpretation_id
+    present: true
+  # The materialized task entity exists in the graph post-interpretation.
+  - type: entity.exists
+    entity_type: task
+    where:
+      title: Interpreted Task Alpha
+  # Source-ownership guard: an interpretation against an unowned source 404s
+  # (SOURCE_NOT_FOUND), surfaced as an error — no entities created under it.
+  - type: tool_result.matches
+    tool_name: create_interpretation
+    which: last
+    result_key: error
+    present: true

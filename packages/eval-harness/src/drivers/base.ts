@@ -55,6 +55,9 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   // Schema mutation (#1709 eval-coverage backfill).
   register_schema: "/register_schema",
   update_schema_incremental: "/update_schema_incremental",
+  // Interpretation creation (#1714 eval-coverage backfill). Endpoint is
+  // /interpretations/create.
+  create_interpretation: "/interpretations/create",
 };
 
 /**
