@@ -63,7 +63,15 @@ async function main() {
   const report = renderCombinedReport(result, opts.output);
   process.stdout.write(report + "\n");
 
+  // Fail closed: a requested WRIT run that errored out (no report) is a hard
+  // failure, not a silent pass with an empty matrix (#1738).
+  if (result.writError) {
+    process.stderr.write(
+      `[eval-combined] WRIT run failed: ${result.writError}\n`,
+    );
+  }
   const exitCode =
+    result.writError ? 1 :
     result.tier2Summary && result.tier2Summary.failed > 0 ? 1 :
     result.writReport && result.writReport.aggregate.recall_accuracy < 0.5 ? 1 :
     0;

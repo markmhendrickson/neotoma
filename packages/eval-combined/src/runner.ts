@@ -26,6 +26,12 @@ export interface CombinedResult {
   writReport: WritReportShape | null;
   tier2Summary: Tier2SummaryShape | null;
   layeredMatrix: LayeredMatrixRow[];
+  /**
+   * Set when a requested WRIT run failed to produce a report (e.g. loader/API
+   * error). The CLI treats this as a hard failure so the combined runner does
+   * NOT fail open when WRIT is broken (#1738).
+   */
+  writError?: string;
 }
 
 export interface WritReportShape {
@@ -169,6 +175,7 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
   const log = opts.log ?? (() => undefined);
   let writReport: WritReportShape | null = null;
   let tier2Summary: Tier2SummaryShape | null = null;
+  let writError: string | undefined;
 
   const evalHarnessPath = join(opts.repoRoot, "packages", "eval-harness");
   const writPath = join(opts.repoRoot, "writ");
@@ -177,8 +184,11 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
     log("[eval-combined] running WRIT benchmark...");
     try {
       const writ = await import(join(writPath, "src", "index.js"));
-      const scenarios = writ.loadAllScenarios
-        ? writ.loadAllScenarios(join(writPath, "scenarios"))
+      // loadAllScenarios is async (returns Promise<Scenario[]>) — must await,
+      // else `.filter` is called on a Promise and throws "scenarios.filter is
+      // not a function" (the WRIT integration was silently broken; #1738).
+      const scenarios: Array<{ category: string }> = writ.loadAllScenarios
+        ? await writ.loadAllScenarios(join(writPath, "scenarios"))
         : [];
 
       const filteredScenarios = opts.writCategories
@@ -209,7 +219,8 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
         log("[eval-combined] no WRIT scenarios found or all filtered out");
       }
     } catch (err) {
-      log(`[eval-combined] WRIT failed: ${(err as Error).message}`);
+      writError = (err as Error).message;
+      log(`[eval-combined] WRIT failed: ${writError}`);
     }
   }
 
@@ -233,5 +244,5 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
   }
 
   const layeredMatrix = buildLayeredMatrix(writReport, tier2Summary);
-  return { writReport, tier2Summary, layeredMatrix };
+  return { writReport, tier2Summary, layeredMatrix, writError };
 }
