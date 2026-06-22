@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "create_interpretation_from_source",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Store this batch and interpret it into a task (\"Interpreted Task Alpha\") and a contact (\"Interpreted Contact Beta\"). Also confirm an interpretation against a source you do not own is rejected.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Store the raw payload first (which mints a source), then call create_interpretation with the returned source_id and the extracted entities to materialize them in the graph.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "interp-src-seed",
+        "entities": [
+          { "entity_type": "contact", "name": "Interp Source Seed" }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "create_interpretation",
+      "input": {
+        "source_id": "71113c5e-a6e9-7620-bf3a-7b4e3830dbc9",
+        "entities": [
+          { "entity_type": "task", "title": "Interpreted Task Alpha", "status": "todo" },
+          { "entity_type": "contact", "name": "Interpreted Contact Beta" }
+        ],
+        "idempotency_key": "interp-create-1"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "create_interpretation",
+      "input": {
+        "source_id": "00000000-0000-0000-0000-000000000999",
+        "entities": [
+          { "entity_type": "task", "title": "Should Not Exist" }
+        ],
+        "idempotency_key": "interp-create-404"
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Stored the batch (minting a source), then interpreted it into the task \"Interpreted Task Alpha\" and the contact \"Interpreted Contact Beta\" (2 observations created). An interpretation against a source I don't own was rejected with SOURCE_NOT_FOUND, as expected."
+}

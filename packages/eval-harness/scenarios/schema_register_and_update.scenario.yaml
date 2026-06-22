@@ -1,0 +1,88 @@
+meta:
+  id: schema_register_and_update
+  description: >
+    The agent declares a brand-new entity type via register_schema (a strong
+    schema with a fields object + reducer_config), then incrementally adds a
+    field via update_schema_incremental. Schema mutation is a high-blast-radius
+    operation — a regression that dropped the minted schema_version, silently
+    failed to persist the new field, or returned a false success on an
+    unknown-type update would corrupt every downstream store/correct against
+    that type. register_schema and update_schema_incremental had zero agentic
+    coverage. Asserts via #1703 tool_result.matches. Part of neotoma#1709.
+
+    Scope note: the isolated eval server does NOT enforce the
+    ERR_PLURAL_ENTITY_TYPE / forbidden-core-type / same-version-conflict guards
+    (re-registering an existing version returns 200 there), so this eval does
+    not assert a register conflict. It covers what IS observable: a successful
+    register with a schema_version, a successful incremental add that surfaces
+    the new field + a bumped version, and the no-active-schema error guard on
+    update.
+  tags:
+    - tier2
+    - schema
+    - schema-mutation
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "register_schema + update_schema_incremental had only non-agentic dispatch coverage; no eval asserted that a schema is created with a returned schema_version, that an incremental field-add actually lands in the persisted schema_definition.fields (with a bumped version), or that updating a type with no active schema errors instead of falsely succeeding."
+privacy_transform: "Fully synthetic entity type; no PII."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. To declare a
+  new entity type use register_schema with a schema_definition (a fields object)
+  and a reducer_config; to add a field to an existing type use
+  update_schema_incremental with fields_to_add.
+
+user_prompt: |
+  Declare a new entity type "widget_gadget" with a required "name" and optional
+  "color", then add an optional numeric "weight_grams" field to it. Also confirm
+  that trying to add a field to an undeclared type fails.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The new schema was registered.
+  - type: mcp_tool.invocations
+    tool_name: register_schema
+    op: gte
+    value: 1
+  # register_schema returned success + a minted schema_version (the contract
+  # downstream store/correct depends on).
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 0
+    result_subset:
+      success: true
+      schema_version: "1.0"
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 0
+    result_key: schema.schema_definition.fields.name
+    present: true
+  # The incremental update added the new field to the persisted schema_definition
+  # and bumped the version (1.0 -> 1.1.0).
+  - type: mcp_tool.invocations
+    tool_name: update_schema_incremental
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: update_schema_incremental
+    which: 0
+    result_subset:
+      success: true
+      schema_version: "1.1.0"
+  - type: tool_result.matches
+    tool_name: update_schema_incremental
+    which: 0
+    result_key: schema.schema_definition.fields.weight_grams
+    present: true
+  # Updating a type with no active schema errors (no false success, no stray schema).
+  - type: tool_result.matches
+    tool_name: update_schema_incremental
+    which: last
+    result_key: error
+    present: true

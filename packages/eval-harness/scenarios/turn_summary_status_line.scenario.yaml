@@ -1,0 +1,72 @@
+meta:
+  id: turn_summary_status_line
+  description: >
+    neotoma_turn_summary is the per-turn status-line tool (FU-2026-05-002):
+    agents call it at the end of every turn to surface a compact "msg N/M,
+    stored X, retrieved Y" line plus a ui:// widget URI. This eval seeds a
+    conversation + message, then computes the turn summary and asserts the
+    status_line + widget_uri contract, plus the two request guards (missing
+    turn_key -> 400, unknown turn -> 404). neotoma_turn_summary had zero agentic
+    coverage — a regression that dropped the widget_uri or miscounted the turn
+    would silently degrade the agent status line. Asserts via #1703
+    tool_result.matches. Part of neotoma#1719.
+  tags:
+    - tier2
+    - turn-summary
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "neotoma_turn_summary had only non-agentic coverage; no eval asserted it returns a status_line + ui:// widget_uri for a real conversation turn, or that it rejects a request missing turn_key / referencing an unknown turn instead of returning a bogus summary."
+privacy_transform: "Fully synthetic conversation; no PII."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. At the end of
+  the turn, call neotoma_turn_summary with the conversation_id and turn_key to
+  produce the per-turn status line and widget URI.
+
+user_prompt: |
+  Record a short conversation turn, then produce its turn summary. Also confirm
+  a summary request missing the turn_key, and one for an unknown turn, are both
+  rejected.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The turn summary was computed for the seeded turn.
+  - type: mcp_tool.invocations
+    tool_name: neotoma_turn_summary
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: neotoma_turn_summary
+    which: 0
+    result_subset:
+      turn_number: 1
+      conversation_message_count: 1
+  # The status line + ui:// widget URI contract (FU-2026-05-002) is honored.
+  - type: tool_result.matches
+    tool_name: neotoma_turn_summary
+    which: 0
+    result_key: status_line
+    present: true
+  - type: tool_result.matches
+    tool_name: neotoma_turn_summary
+    which: 0
+    result_key: widget_uri
+    present: true
+  # Guard: a request missing turn_key is rejected (400 -> error).
+  - type: tool_result.matches
+    tool_name: neotoma_turn_summary
+    which: 1
+    result_key: error
+    present: true
+  # Guard: an unknown turn is rejected (404 -> error), not a bogus summary.
+  - type: tool_result.matches
+    tool_name: neotoma_turn_summary
+    which: last
+    result_key: error
+    present: true

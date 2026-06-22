@@ -1,0 +1,66 @@
+meta:
+  id: schema_discovery_reads
+  description: >
+    Schema-discovery reads let an agent learn the available entity types and a
+    specific type's field shape before storing — getting these wrong (e.g.
+    returning no schemas, or an empty schema_definition) would make
+    schema-aware extraction blind. The agent lists entity types
+    (list_entity_types) and describes one (describe_entity_type for "task"),
+    and the eval asserts both return real schema structure. These reads had zero
+    agentic coverage. Asserts via #1703 tool_result.matches. Part of
+    neotoma#1718.
+
+    Scope note: get_entity_type_counts is NOT covered — it has no dedicated HTTP
+    route (CLI-only `stats entities`; the data lives on /stats which the harness
+    already snapshots for other predicates), so it is not statically addressable
+    via the TOOL_ENDPOINTS replay map.
+  tags:
+    - tier2
+    - schema
+    - discovery
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "list_entity_types + describe_entity_type had only non-agentic coverage; no eval asserted list_entity_types returns the registered schema set or that describe_entity_type returns a real schema_definition for a known type."
+privacy_transform: "No PII — built-in schema metadata only."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Use
+  list_entity_types to learn the available entity types and describe_entity_type
+  to inspect one type's field shape before extracting entities of that type.
+
+user_prompt: |
+  List the available entity types, and describe the "task" type's schema.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # list_entity_types returned the registered schema set.
+  - type: mcp_tool.invocations
+    tool_name: list_entity_types
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: list_entity_types
+    which: 0
+    result_key: schemas
+    present: true
+  # describe_entity_type returned a real schema for the known "task" type.
+  - type: mcp_tool.invocations
+    tool_name: describe_entity_type
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: describe_entity_type
+    which: 0
+    result_subset:
+      entity_type: task
+  - type: tool_result.matches
+    tool_name: describe_entity_type
+    which: 0
+    result_key: schema_definition
+    present: true
