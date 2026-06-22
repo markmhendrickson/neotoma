@@ -211,14 +211,17 @@ jobs:
     steps:
       - name: Checkout (with writ submodule)
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        # NOT submodules:recursive — other submodules (e.g. foundation) use SSH
+        # URLs that fail in CI. writ is public HTTPS, so init ONLY it explicitly.
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
+
+      - name: Init writ submodule (public HTTPS)
+        run: git submodule update --init writ
 
       - name: Install dependencies
         run: npm ci
