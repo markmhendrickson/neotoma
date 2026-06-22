@@ -140,6 +140,23 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const cellLabel = `${plan.scenario.meta.id} | ${plan.model.provider}/${plan.model.model} | profile=${effectiveProfile} | hooks=${plan.hooksEnabled}`;
   log(`[runner] starting cell: ${cellLabel}`);
 
+  // Quarantined scenarios are skipped (not failed) so the CI scenario lane
+  // stays green on a clean main while a known gap is tracked + fixed.
+  if (plan.scenario.meta.quarantine) {
+    log(`[runner] QUARANTINED: ${plan.scenario.meta.id} — ${plan.scenario.meta.quarantine}`);
+    return {
+      scenario: plan.scenario.meta,
+      model: plan.model,
+      effectiveProfile,
+      mode: opts.mode,
+      assertionFailures: [],
+      startedAt,
+      endedAt: new Date().toISOString(),
+      pass: false,
+      skipped: { reason: `quarantined: ${plan.scenario.meta.quarantine}` },
+    };
+  }
+
   const driver = getDriver(plan.model.provider);
   const preflight = driver.preflight(opts.mode);
   if (!preflight.ok) {
@@ -228,6 +245,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       hostToolRegistry: registryForAssertions,
       effectiveProfile,
       assistantText: driverResult.assistantText,
+      toolCalls: driverResult.toolCalls,
     });
     pass = assertionFailures.length === 0;
     if (!pass) {

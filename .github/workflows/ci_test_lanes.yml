@@ -173,6 +173,31 @@ jobs:
       - name: Run Tier 1 agentic evals
         run: npm run eval:tier1
 
+  eval_scenarios:
+    # eval-harness SCENARIO lane (Tier 2). Runs the agent-driving scenarios in
+    # packages/eval-harness/scenarios/ against a real in-process isolated
+    # Neotoma server in REPLAY mode (committed cassettes — no API key required).
+    # This is the CI gate for tool-behavior evals (agent calls correct / merge /
+    # subscribe / …), which the hook-lifecycle agentic_evals lane cannot model.
+    # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
+    # skipped, not failed; cassette-less scenarios skip until recorded.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run eval-harness scenarios (replay)
+        run: npm run eval:scenarios
+
   python_sdk:
     runs-on: ubuntu-latest
     steps:

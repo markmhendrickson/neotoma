@@ -1,0 +1,67 @@
+meta:
+  id: correct_overrides_snapshot
+  description: >
+    A task is pre-seeded with status="todo". The agent issues a correction
+    setting status="done". Validates the highest-blast-radius write
+    (mcp__mcpsrv_neotoma__correct): the priority-1000 correction observation
+    must WIN the recomputed snapshot (status==done, and no entity still reads
+    todo), not merely append an observation. Exercises the #1703 primitives
+    mcp_tool.invocations + snapshot.field_present against a real /correct
+    execution. Closes part of neotoma#1704 (CA eval-coverage backfill).
+  tags:
+    - tier2
+    - correct
+    - eval-coverage
+    - writ:correction
+
+seed_strategy: generated
+source_pattern: "No agentic eval exercised `correct`; a regression that appended a non-winning observation (correction looks applied but the field is unchanged) would have been invisible."
+privacy_transform: "Fully synthetic task; no PII."
+
+seed_entities:
+  - entity_type: task
+    title: Backfill correct eval target
+    status: todo
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When the
+  user asks you to change a field on an existing entity, use the correct tool
+  with the entity_id, entity_type, field, and value. Persist the conversation
+  and user message via the store tool with PART_OF relationships.
+
+user_prompt: |
+  Mark the task "Backfill correct eval target" as done.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The agent actually invoked correct with the intended field/value.
+  - type: mcp_tool.invocations
+    tool_name: correct
+    op: gte
+    value: 1
+    arg_subset:
+      field: status
+      value: done
+  # The priority-1000 correction WON the snapshot — the task now reads done.
+  - type: entity.exists
+    entity_type: task
+    where:
+      status: done
+  # ...and nothing still reads the pre-correction value (override, not append).
+  - type: entity.count
+    entity_type: task
+    where:
+      status: todo
+    op: eq
+    value: 0
+  # The corrected field is present on the recomputed snapshot.
+  - type: snapshot.field_present
+    entity_type: task
+    where:
+      status: done
+    field: status

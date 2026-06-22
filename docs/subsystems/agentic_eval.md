@@ -222,9 +222,20 @@ Supported predicates (see `packages/eval-harness/src/assertions.ts`):
 `store_structured.calls`, `entity.exists`, `entity.count`,
 `observation.with_field`, `relationship.exists`, `relationship.count`,
 `reply_text.contains`, `turn_compliance.backfilled`,
-`instruction_profile.served`, `host_tool.invocations`. Each predicate
+`instruction_profile.served`, `host_tool.invocations`,
+`mcp_tool.invocations`, `tool_result.matches`, `snapshot.field_present`,
+`snapshot.field_absent`. Each predicate
 returns a structured `{ pass, expected, actual, message }` and the
 failure message is what the TTY/JUnit reporter surfaces.
+
+### CI lanes — two systems, two layers
+
+Two eval systems run in CI, testing different layers (do not conflate them):
+
+- **`agentic_evals` lane** (`npm run eval:tier1`) runs the `tests/fixtures/agentic_eval/*.json` fixtures: the **hook-lifecycle** layer (replays `beforeSubmitPrompt`/`postToolUse`/`stop` events through harness adapters against a mock server). Asserts the hook stack's turn-lifecycle compliance.
+- **`eval_scenarios` lane** (`npm run eval:scenarios`) runs `packages/eval-harness/scenarios/*` in **replay** against a real in-process isolated Neotoma server: the **agent-tool-driving** layer (an agent calls `store`/`correct`/`merge`/… and the call executes for real). This is the CI gate for tool-behavior evals — the hook-lifecycle fixtures cannot express "agent calls correct". Replay needs no API key (committed cassettes).
+
+**Quarantine.** A scenario whose `meta.quarantine` is set is *skipped* (not failed) by the runner, with the reason logged, so the `eval_scenarios` lane stays green on a clean main while a known gap is tracked + fixed. The value references the tracking issue (e.g. `neotoma#1726: …`). Un-quarantine as the underlying support lands.
 
 ### Cassettes
 
@@ -327,6 +338,17 @@ Supported predicates in `packages/eval-harness/src/assertions.ts`:
 | `turn_compliance.backfilled` | Whether the stop hook backfilled compliance |
 | `instruction_profile.served` | Whether the requested profile was served |
 | `host_tool.invocations` | Host tool invocation count |
+| `mcp_tool.invocations` | Count invocations of a named neotoma MCP tool, with optional `arg_subset` structural match on the call's input (#1703) |
+| `tool_result.matches` | Inspect the JSON result the agent received from a named tool: `result_subset` (deep subset), or `result_key` + `present` (dotted-path key present/absent, incl. `error.code` envelopes); `which` picks first/last/index (#1703) |
+| `snapshot.field_present` | A `field` is present on a retrieved entity snapshot (resolved by `entity_id` or `entity_type`+`where`) (#1703) |
+| `snapshot.field_absent` | A `field` is absent from a retrieved entity snapshot — e.g. an unknown field landed in raw_fragments, stored-but-invisible (#1703) |
+
+These four `#1703` primitives close the audit gap where wrong-tool / silent-no-op
+behavior was invisible: the older predicates could only observe store-side entity
+state, so an agent that never called the intended tool passed as long as the
+state happened to be right. `mcp_tool.invocations` + `tool_result.matches` assert
+the tool was actually called and returned the expected shape (including error
+envelopes); `snapshot.field_present/absent` assert schema-projection effects.
 
 ### Combined runner (WRIT + Tier 2)
 

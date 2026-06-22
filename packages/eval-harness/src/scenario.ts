@@ -69,6 +69,7 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
       id: meta!.id as string,
       description: meta!.description as string,
       tags: Array.isArray(meta!.tags) ? (meta!.tags as string[]) : undefined,
+      quarantine: typeof meta!.quarantine === "string" ? (meta!.quarantine as string) : undefined,
     },
     system_prompt: typeof o.system_prompt === "string" ? o.system_prompt : undefined,
     user_prompt: o.user_prompt as string,

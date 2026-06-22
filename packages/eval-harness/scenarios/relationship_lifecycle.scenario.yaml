@@ -1,0 +1,82 @@
+meta:
+  id: relationship_lifecycle
+  description: >
+    Exercises the dedicated relationship MCP tools' own contracts (not the
+    store side-effect): create_relationship, create_relationships (batch),
+    delete_relationship (soft-delete + liveness), restore_relationship, and
+    list_relationships (default is_live filter vs include_deleted). Two entities
+    are seeded; the agent builds, batch-adds, deletes, and restores edges. The
+    graph-mutation tools are data-corruption class (wrong-type acceptance,
+    silent batch loss, liveness drift) and were unexercised at the tool level —
+    only the read-side relationship.exists was incidentally covered. Uses the
+    #1703 tool_result.matches primitive for the batch result shape. Part of
+    neotoma#1708.
+  tags:
+    - tier2
+    - relationships
+    - graph
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "Relationship tools' own contracts (batch partial/whole-reject, soft-delete liveness, restore priority ladder, list is_live filter) were never asserted — only edges-as-store-side-effect via read-side relationship.exists."
+privacy_transform: "Fully synthetic contact + company; no PII."
+
+seed_entities:
+  - entity_type: contact
+    name: Rel Alice
+  - entity_type: company
+    name: Rel Co
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Use the
+  dedicated relationship tools (create_relationship, create_relationships,
+  delete_relationship, restore_relationship, list_relationships) to manage the
+  graph. Check list results for liveness.
+
+user_prompt: |
+  Link Rel Alice to Rel Co (works_at), batch-add related_to and member_of, then
+  delete and restore the works_at edge.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # 1. Single create issued.
+  - type: mcp_tool.invocations
+    tool_name: create_relationship
+    op: gte
+    value: 1
+  # 2. All-valid batch -> success, both created (the partial-success contract).
+  - type: tool_result.matches
+    tool_name: create_relationships
+    result_subset:
+      success: true
+      created_count: 2
+      error_count: 0
+  # 3. After create + batch, three live edges exist for the pair.
+  - type: relationship.exists
+    relationship_type: works_at
+  - type: relationship.exists
+    relationship_type: related_to
+  # 4. delete then restore were both issued (soft-delete + revive).
+  - type: mcp_tool.invocations
+    tool_name: delete_relationship
+    arg_subset:
+      relationship_type: works_at
+    op: gte
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: restore_relationship
+    arg_subset:
+      relationship_type: works_at
+    op: gte
+    value: 1
+  # 5. The restore succeeded (works_at is live again at the end).
+  - type: tool_result.matches
+    tool_name: restore_relationship
+    which: last
+    result_subset:
+      success: true

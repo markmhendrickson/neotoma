@@ -1,5 +1,6 @@
 meta:
   id: closing_assistant_store
+  quarantine: "neotoma#1726: store_structured.calls reads the /stats counter, under-reported by the isolated replay server."
   description: >
     Agent must produce a closing assistant store even for simple factual
     answers. Tests Turn Lifecycle Step 5a/5b — the assistant reply must be

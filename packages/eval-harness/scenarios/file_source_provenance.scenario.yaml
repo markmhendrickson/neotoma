@@ -1,5 +1,6 @@
 meta:
   id: file_source_provenance
+  quarantine: "neotoma#1726: observation.with_field + EMBEDS read /observations, which the isolated replay server does not populate for file-sourced provenance."
   description: >
     User provides a CSV file of transactions. Agent must extract
     transaction entities with source_file provenance and create an EMBEDS

@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "merge_entities_dedup",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "\"Dup Person A\" and \"Dup Person B\" are the same person. Merge B into A. Then confirm you cannot merge B again, and that merging a non-existent record errors.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When two records are the same entity, merge them with merge_entities using from_entity_id (the duplicate to absorb) and to_entity_id (the survivor).\n",
+  "tool_calls": [
+    {
+      "name": "merge_entities",
+      "input": {
+        "from_entity_id": "ent_bdc757e97ec2eee216712c6d",
+        "to_entity_id": "ent_c9af1e64adc6c96fd53e3ff1"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "merge_entities",
+      "input": {
+        "from_entity_id": "ent_bdc757e97ec2eee216712c6d",
+        "to_entity_id": "ent_c9af1e64adc6c96fd53e3ff1"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "merge_entities",
+      "input": {
+        "from_entity_id": "ent_nope000000000000000000",
+        "to_entity_id": "ent_c9af1e64adc6c96fd53e3ff1"
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Merged Dup Person B into Dup Person A — one contact remains. Re-merging B failed (already merged), and merging a non-existent record returned a not-found error, as expected."
+}

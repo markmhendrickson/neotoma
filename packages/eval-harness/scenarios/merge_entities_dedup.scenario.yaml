@@ -1,0 +1,76 @@
+meta:
+  id: merge_entities_dedup
+  description: >
+    Two near-duplicate contacts (same email) are pre-seeded. The agent merges
+    one into the other; the source must be excluded from the active set
+    (merged_to), its observations moved onto the survivor, and the merge is
+    irreversible-feeling, so guard cases matter: re-merging an already-merged
+    source errors, and merging a non-existent id 404s — neither performs a
+    second merge. Validates merge_entities (data-corruption class) which had
+    zero agentic coverage. Asserts via #1703 tool_result.matches. Part of
+    neotoma#1706.
+  tags:
+    - tier2
+    - merge
+    - dedup
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "merge_entities had only non-agentic integration tests; no eval asserted the source is excluded post-merge (merged_to) or that already-merged/not-found guards prevent a second merge."
+privacy_transform: "Fully synthetic duplicate contacts; no PII."
+
+seed_entities:
+  - entity_type: contact
+    name: Dup Person A
+    email: dup@example.com
+  - entity_type: contact
+    name: Dup Person B
+    email: dup@example.com
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When two
+  records are the same entity, merge them with merge_entities using
+  from_entity_id (the duplicate to absorb) and to_entity_id (the survivor).
+
+user_prompt: |
+  "Dup Person A" and "Dup Person B" are the same person. Merge B into A. Then
+  confirm you cannot merge B again, and that merging a non-existent record errors.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The merge was issued and moved observations onto the survivor.
+  - type: mcp_tool.invocations
+    tool_name: merge_entities
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: merge_entities
+    which: 0
+    result_key: observations_moved
+    present: true
+  # Post-merge, exactly one active contact remains (source excluded via merged_to).
+  - type: entity.count
+    entity_type: contact
+    op: eq
+    value: 1
+  - type: entity.exists
+    entity_type: contact
+    where:
+      name: Dup Person A
+  # Re-merging the already-merged source errors (no second merge).
+  - type: tool_result.matches
+    tool_name: merge_entities
+    which: 1
+    result_key: error
+    present: true
+  # Merging a non-existent id errors (404), not a false success.
+  - type: tool_result.matches
+    tool_name: merge_entities
+    which: 2
+    result_key: error
+    present: true
