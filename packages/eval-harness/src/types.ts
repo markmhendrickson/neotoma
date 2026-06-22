@@ -268,11 +268,20 @@ export interface CellReport {
   assertionFailures: AssertionFailure[];
   startedAt: string;
   endedAt: string;
-  /** True when the cell ran without skip and assertions passed. */
+  /**
+   * True when the cell ran without skip and assertions passed.
+   *
+   * IMPORTANT: `pass` is only meaningful when `skipped` is unset. Skipped cells
+   * (missing cassette, failed preflight, budget guard, or `meta.quarantine`)
+   * carry `pass: false` even though they did not "fail" — they never ran.
+   * Any consumer classifying outcomes MUST check `skipped` first:
+   * passed = `pass && !skipped`; failed = `!pass && !skipped`; skipped = `!!skipped`.
+   * (The RunSummary aggregator does exactly this.)
+   */
   pass: boolean;
   /** Human-readable failure summary; empty when `pass`. */
   errorMessage?: string;
-  /** Set when the cell was skipped (e.g. driver lacks live capability + no cassette). */
+  /** Set when the cell was skipped (missing cassette, preflight, budget, or quarantine). */
   skipped?: { reason: string };
 }
 
