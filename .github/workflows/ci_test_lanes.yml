@@ -198,6 +198,42 @@ jobs:
       - name: Run eval-harness scenarios (replay)
         run: npm run eval:scenarios
 
+  eval_combined:
+    # COMBINED layered-matrix lane (WRIT state layer + Tier-2 agent layer).
+    # Runs packages/eval-combined against a real isolated Neotoma server and
+    # emits the per-category WRIT×Tier-2 coverage matrix — the qa-gate surface
+    # for the QA-evals reframe (QE2): a regression in EITHER layer fails the
+    # lane. Needs the writ submodule checked out + built; runs without an API
+    # key (WRIT degrades to a substring judge; OPENAI_API_KEY/WRIT_JUDGE_API_KEY
+    # gives higher-fidelity llm_judge scoring). The runner fails closed if a
+    # requested WRIT run errors (neotoma#1738/#1739).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with writ submodule)
+        uses: actions/checkout@v4
+        # NOT submodules:recursive — other submodules (e.g. foundation) use SSH
+        # URLs that fail in CI. writ is public HTTPS, so init ONLY it explicitly.
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Init writ submodule (public HTTPS)
+        run: git submodule update --init writ
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build writ (eval-combined imports writ/dist)
+        run: |
+          npm ci --prefix writ
+          npm run build --prefix writ
+
+      - name: Run combined WRIT + Tier-2 matrix
+        run: npm run eval:combined
+
   python_sdk:
     runs-on: ubuntu-latest
     steps:
