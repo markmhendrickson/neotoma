@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "retrieve_identifier_match_modes",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Look up the contact \"Alice Probe\" by name, by email, and confirm there's no contact named \"Zzz Nonexistent Person\".\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before creating an entity, look it up with retrieve_entity_by_identifier to decide reuse vs create. Inspect the match_mode on the result.\n",
+  "tool_calls": [
+    {
+      "name": "retrieve_entity_by_identifier",
+      "input": { "identifier": "Alice Probe" },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entity_by_identifier",
+      "input": { "identifier": "alice@probe.example" },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entity_by_identifier",
+      "input": { "identifier": "Zzz Nonexistent Person" },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Found \"Alice Probe\" by name (direct match) and by email (snapshot-field match) — same contact, no duplicate needed. No contact named \"Zzz Nonexistent Person\" exists."
+}
