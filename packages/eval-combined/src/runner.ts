@@ -205,7 +205,14 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
         const { startIsolatedNeotomaServer } = await import(
           join(evalHarnessPath, "src", "isolated_server.js")
         );
-        const server = await startIsolatedNeotomaServer({ hooksEnabled: true });
+        // WRIT replays 5-20 sessions/scenario across 77 scenarios = bursty
+        // back-to-back writes that trip the default write rate limit (HTTP 429),
+        // which silently drops facts and tanks recall. Raise the limit on the
+        // isolated server (this is a benchmark harness, not production traffic).
+        const server = await startIsolatedNeotomaServer({
+          hooksEnabled: true,
+          env: { NEOTOMA_WRITE_RATE_LIMIT_PER_MIN: "1000000" },
+        });
         try {
           const adapter = new writ.NeotomaAdapter(server.baseUrl, {
             token: server.token,
