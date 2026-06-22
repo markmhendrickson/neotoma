@@ -1,5 +1,6 @@
 meta:
   id: compact_profile_still_stores
+  quarantine: "neotoma#1726: instruction_profile.served reads profile counters the isolated replay server does not emit."
   description: >
     Even under the compact instruction profile, the agent must still
     perform store-first. Tests that profile reduction does not skip

@@ -12,6 +12,13 @@ export interface ScenarioMeta {
   id: string;
   description: string;
   tags?: string[];
+  /**
+   * When set, the scenario is skipped by the runner (not counted as a failure)
+   * and the reason is logged. Use for known-failing scenarios tracked by an
+   * issue so the CI scenario lane stays green on a clean main while the gap is
+   * fixed. The value SHOULD reference the tracking issue (e.g. "neotoma#NNNN: …").
+   */
+  quarantine?: string;
 }
 
 export interface HostToolStubResponse {
