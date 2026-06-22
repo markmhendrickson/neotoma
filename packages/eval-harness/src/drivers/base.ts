@@ -34,6 +34,8 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   // Entity soft-delete lifecycle (#1705 eval-coverage backfill).
   delete_entity: "/delete_entity",
   restore_entity: "/restore_entity",
+  // Entity merge (#1706 eval-coverage backfill). Endpoint is /entities/merge.
+  merge_entities: "/entities/merge",
   // Relationship lifecycle tools (#1708 eval-coverage backfill).
   create_relationships: "/create_relationships",
   delete_relationship: "/delete_relationship",
