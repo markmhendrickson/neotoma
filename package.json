@@ -84,6 +84,7 @@
     "test:remote:critical:report": "cross-env RUN_REMOTE_TESTS=1 WRITE_TEST_RUN_REPORT=1 npm run test:remote:critical",
     "eval:tier1": "vitest run tests/integration/agentic_eval_matrix.test.ts",
     "eval:tier1:update": "cross-env UPDATE_AGENTIC_EVAL_SNAPSHOTS=1 vitest run tests/integration/agentic_eval_matrix.test.ts",
+    "eval:scenarios": "tsx packages/eval-harness/src/cli.ts run --mode replay --provider stub --reporter tty",
     "test:remote:critical": "cross-env RUN_REMOTE_TESTS=1 vitest run tests/integration/mcp_actions_matrix.test.ts tests/integration/mcp_resources.test.ts tests/integration/mcp_store_unstructured.test.ts tests/integration/mcp_store_parquet.test.ts tests/integration/mcp_schema_actions.test.ts tests/integration/schema_recommendation_integration.test.ts tests/integration/observation_ingestion.test.ts tests/integration/relationship_snapshots.test.ts tests/services/auto_enhancement_converter_detection.test.ts tests/services/auto_enhancement_processor.test.ts",
     "test:contract": "vitest run tests/contract",
     "test:bench": "cross-env RUN_BENCH=1 vitest run tests/performance",

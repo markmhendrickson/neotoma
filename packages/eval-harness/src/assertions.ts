@@ -342,7 +342,14 @@ export async function evaluatePredicate(
       };
     }
     case "entity.count": {
-      const entities = await fetchEntities(ctx, predicate.entity_type, predicate.where);
+      // Re-filter client-side with whereMatches: the isolated server's
+      // /entities/query does not honor the `filters` body param, so a `where`
+      // clause must be applied here (mirroring entity.exists). Without this,
+      // entity.count(where: {...}) silently counts ALL entities of the type.
+      const fetched = await fetchEntities(ctx, predicate.entity_type, predicate.where);
+      const entities = predicate.where
+        ? fetched.filter((e) => whereMatches(e, predicate.where))
+        : fetched;
       const expected = typeof predicate.value === "number" ? predicate.value : 0;
       const op = predicate.op ?? "eq";
       if (compareNumber(entities.length, op, expected)) return null;
