@@ -56,7 +56,16 @@ export interface ExpectedAssertion {
     | "reply_text.contains"
     | "turn_compliance.backfilled"
     | "instruction_profile.served"
-    | "host_tool.invocations";
+    | "host_tool.invocations"
+    // ── #1703 eval-coverage primitives ──
+    /** Count invocations of a named neotoma MCP tool (optional arg-subset match). */
+    | "mcp_tool.invocations"
+    /** Inspect the JSON result the agent received from a named MCP tool. */
+    | "tool_result.matches"
+    /** Assert a field is present on a retrieved entity snapshot. */
+    | "snapshot.field_present"
+    /** Assert a field is absent from a retrieved entity snapshot. */
+    | "snapshot.field_absent";
   /** Numeric comparison op for count-shaped predicates. */
   op?: "eq" | "gte" | "lte";
   value?: number | string | boolean;
@@ -82,6 +91,40 @@ export interface ExpectedAssertion {
   substring?: string;
   /** Regex pattern to match in `reply_text.contains`. */
   pattern?: string;
+  // ── #1703 eval-coverage primitive fields ──
+  /**
+   * For `mcp_tool.invocations`: a structural (subset) match on the tool's
+   * input args. The call counts only if every key here is present in the
+   * call's input with a deep-equal value. Omit to count all invocations of
+   * `tool_name`.
+   */
+  arg_subset?: Record<string, unknown>;
+  /**
+   * For `tool_result.matches`: which invocation of `tool_name` to inspect.
+   * `"last"` (default) or `"first"`, or a 0-based index.
+   */
+  which?: "first" | "last" | number;
+  /**
+   * For `tool_result.matches`: a deep structural subset match against the
+   * tool's JSON RESULT (output). Nesting is expressed by nested objects, NOT
+   * dotted paths — e.g. `{ error: { code: "ERR_X" } }`, not `{ "error.code": … }`.
+   * (Dotted paths are a `result_key` feature.) Every leaf must deep-equal.
+   */
+  result_subset?: Record<string, unknown>;
+  /**
+   * For `tool_result.matches`: assert the result contains (or, when false,
+   * does NOT contain) a key. Dotted paths allowed (e.g. "webhook_secret",
+   * "error.code"). Use with `present`.
+   */
+  result_key?: string;
+  /** For `tool_result.matches` with `result_key`: expect present (default true) or absent. */
+  present?: boolean;
+  /**
+   * For `snapshot.field_present` / `snapshot.field_absent`: the entity to
+   * project. Either an explicit id, or resolved from `entity_type` + `where`
+   * (first match). The `field` (above) is the snapshot key checked.
+   */
+  entity_id?: string;
 }
 
 export type SeedStrategy = "generated" | "real_derived" | "hybrid_amplified";

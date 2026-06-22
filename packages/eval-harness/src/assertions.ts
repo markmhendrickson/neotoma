@@ -12,6 +12,7 @@ import type {
   AssertionFailure,
   ExpectedAssertion,
   InstructionProfile,
+  ToolCall,
 } from "./types.js";
 import type { HostToolInvocation, HostToolRegistry } from "./host_tools.js";
 
@@ -25,6 +26,12 @@ export interface AssertionContext {
   effectiveProfile: InstructionProfile;
   /** Final assistant reply text (used by reply_text.contains). */
   assistantText?: string;
+  /**
+   * Every MCP/tool call the agent issued this turn, in order (#1703). Carries
+   * name, input, output, and error — the substrate for mcp_tool.invocations
+   * and tool_result.matches.
+   */
+  toolCalls?: ToolCall[];
 }
 
 interface EntitiesQueryResponse {
@@ -188,6 +195,102 @@ function countHostToolInvocations(
 ): number {
   if (!toolName) return invocations.length;
   return invocations.filter((i) => i.name === toolName).length;
+}
+
+// ── #1703 helpers ────────────────────────────────────────────────────────────
+
+/** Deep structural subset match: every key in `subset` exists in `value` with a
+ * deep-equal value. Arrays match element-wise as subsets by index. */
+function isSubset(value: unknown, subset: unknown): boolean {
+  if (subset === null || typeof subset !== "object") {
+    return deepEqual(value, subset);
+  }
+  if (Array.isArray(subset)) {
+    if (!Array.isArray(value)) return false;
+    return subset.every((s, i) => isSubset(value[i], s));
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  for (const [k, s] of Object.entries(subset as Record<string, unknown>)) {
+    if (!Object.prototype.hasOwnProperty.call(v, k)) return false;
+    if (!isSubset(v[k], s)) return false;
+  }
+  return true;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ae = Object.entries(a as Record<string, unknown>);
+  const be = Object.entries(b as Record<string, unknown>);
+  if (ae.length !== be.length) return false;
+  return ae.every(([k, av]) => deepEqual(av, (b as Record<string, unknown>)[k]));
+}
+
+/** Resolve a dotted path (e.g. "error.code") against a nested object. Returns
+ * { found, value }; found=false distinguishes a missing key from a null value. */
+function getPath(obj: unknown, path: string): { found: boolean; value: unknown } {
+  const parts = path.split(".");
+  let cur: unknown = obj;
+  for (const p of parts) {
+    if (cur === null || typeof cur !== "object") return { found: false, value: undefined };
+    if (!Object.prototype.hasOwnProperty.call(cur, p)) return { found: false, value: undefined };
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return { found: true, value: cur };
+}
+
+/** Tool calls matching a name (or all when name omitted). */
+function toolCallsNamed(calls: ToolCall[], name: string | undefined): ToolCall[] {
+  if (!name) return calls;
+  return calls.filter((c) => c.name === name);
+}
+
+/** Pick one tool call by `which` (default last). */
+function pickToolCall(calls: ToolCall[], which: "first" | "last" | number | undefined): ToolCall | undefined {
+  if (calls.length === 0) return undefined;
+  if (which === "first") return calls[0];
+  if (typeof which === "number") return calls[which];
+  return calls[calls.length - 1]; // "last" / default
+}
+
+/** Fetch a single entity snapshot, resolving by id or by entity_type+where. */
+async function fetchSnapshot(
+  ctx: AssertionContext,
+  entityId: string | undefined,
+  entityType: string | undefined,
+  where: Record<string, unknown> | undefined
+): Promise<Record<string, unknown> | null> {
+  let id = entityId;
+  if (!id) {
+    const matches = (await fetchEntities(ctx, entityType, where)).filter((e) =>
+      whereMatches(e, where)
+    );
+    if (matches.length === 0) return null;
+    // Determinism: when more than one entity matches, pick the first by a
+    // STABLE ordering (entity_id ascending) so the assertion is reproducible
+    // regardless of server return order. (docs/architecture/determinism.md)
+    matches.sort((a, b) =>
+      String(a.entity_id ?? a.id ?? "").localeCompare(String(b.entity_id ?? b.id ?? ""))
+    );
+    id = (matches[0].entity_id ?? matches[0].id) as string | undefined;
+    // If the listing already carries the snapshot, use it directly.
+    const snap = matches[0].snapshot as Record<string, unknown> | undefined;
+    if (snap && typeof snap === "object") return snap;
+  }
+  if (!id) return null;
+  try {
+    const res = await fetch(`${ctx.baseUrl}/entities/${encodeURIComponent(id)}`, {
+      method: "GET",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as Record<string, unknown>;
+    const snap = (json.snapshot ?? json) as Record<string, unknown>;
+    return snap;
+  } catch {
+    return null;
+  }
 }
 
 export async function evaluatePredicate(
@@ -377,6 +480,122 @@ export async function evaluatePredicate(
         message: `Expected relationship.count of "${label}" ${op} ${expected}, got ${rels.length}.`,
         expected: { op, value: expected },
         actual: rels.length,
+      };
+    }
+    // ── #1703 eval-coverage primitives ──
+    case "mcp_tool.invocations": {
+      const calls = ctx.toolCalls ?? [];
+      let matching = toolCallsNamed(calls, predicate.tool_name);
+      if (predicate.arg_subset) {
+        matching = matching.filter((c) => isSubset(c.input, predicate.arg_subset));
+      }
+      const actual = matching.length;
+      const expected = typeof predicate.value === "number" ? predicate.value : 1;
+      const op = predicate.op ?? "gte";
+      if (compareNumber(actual, op, expected)) return null;
+      return {
+        predicate,
+        message: `Expected mcp_tool[${predicate.tool_name ?? "*"}]${
+          predicate.arg_subset ? ` with args ⊇ ${JSON.stringify(predicate.arg_subset)}` : ""
+        } invocations ${op} ${expected}, got ${actual}.`,
+        expected: { op, value: expected, tool_name: predicate.tool_name, arg_subset: predicate.arg_subset },
+        actual: calls.map((c) => ({ name: c.name, input: c.input })),
+      };
+    }
+    case "tool_result.matches": {
+      const calls = toolCallsNamed(ctx.toolCalls ?? [], predicate.tool_name);
+      const call = pickToolCall(calls, predicate.which);
+      if (!call) {
+        // Distinguish "tool never called" from "called, but `which` index is
+        // out of range" — the latter is a scenario-authoring bug with a
+        // concrete fix (docs/subsystems/errors.md — actionable hints).
+        const outOfRange =
+          typeof predicate.which === "number" && calls.length > 0;
+        const message = outOfRange
+          ? `tool_result.matches: "${predicate.tool_name ?? "(any)"}" was invoked ${calls.length} time(s), but which=${predicate.which} is out of range (valid 0..${calls.length - 1}).`
+          : `tool_result.matches: no invocation of "${predicate.tool_name ?? "(any)"}" was captured.`;
+        return {
+          predicate,
+          message,
+          expected: predicate,
+          actual: (ctx.toolCalls ?? []).map((c) => c.name),
+        };
+      }
+      // The result is the tool's output; failed calls expose {error:{...}} so
+      // error-surface assertions work. Prefer output, fall back to a synthesized
+      // error envelope when the call recorded an error string.
+      const result: unknown =
+        call.output !== undefined
+          ? call.output
+          : call.error !== undefined
+            ? { error: { message: call.error } }
+            : undefined;
+      // result_key and result_subset are ANDed when both are supplied: the
+      // key check must pass AND the subset must match. Either may be omitted.
+      // (a) result_key present/absent check (dotted path).
+      if (predicate.result_key) {
+        const { found } = getPath(result, predicate.result_key);
+        const wantPresent = predicate.present !== false;
+        if (found === wantPresent) {
+          // key check satisfied; fall through to the result_subset check below.
+        } else {
+          return {
+            predicate,
+            message: `Expected tool_result["${predicate.tool_name}"].${predicate.result_key} to be ${
+              wantPresent ? "present" : "absent"
+            }, but it was ${found ? "present" : "absent"}.`,
+            expected: { result_key: predicate.result_key, present: wantPresent },
+            actual: result,
+          };
+        }
+      }
+      // (b) result_subset structural match.
+      if (predicate.result_subset) {
+        if (!isSubset(result, predicate.result_subset)) {
+          return {
+            predicate,
+            message: `Expected tool_result["${predicate.tool_name}"] to match subset ${JSON.stringify(
+              predicate.result_subset
+            )}, but it did not.`,
+            expected: { result_subset: predicate.result_subset },
+            actual: result,
+          };
+        }
+      }
+      return null;
+    }
+    case "snapshot.field_present":
+    case "snapshot.field_absent": {
+      const field = predicate.field ?? "";
+      if (!field) {
+        return {
+          predicate,
+          message: `${predicate.type} requires a "field" to check.`,
+          expected: predicate,
+          actual: null,
+        };
+      }
+      const snap = await fetchSnapshot(ctx, predicate.entity_id, predicate.entity_type, predicate.where);
+      if (!snap) {
+        return {
+          predicate,
+          message: `${predicate.type}: could not resolve an entity snapshot (id=${
+            predicate.entity_id ?? "—"
+          }, type=${predicate.entity_type ?? "—"}, where=${JSON.stringify(predicate.where ?? {})}).`,
+          expected: predicate,
+          actual: null,
+        };
+      }
+      const { found } = getPath(snap, field);
+      const wantPresent = predicate.type === "snapshot.field_present";
+      if (found === wantPresent) return null;
+      return {
+        predicate,
+        message: `Expected snapshot field "${field}" to be ${
+          wantPresent ? "present" : "absent"
+        }, but it was ${found ? "present" : "absent"}.`,
+        expected: predicate,
+        actual: Object.keys(snap),
       };
     }
   }
