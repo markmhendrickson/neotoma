@@ -183,7 +183,11 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
   if (!opts.tier2Only) {
     log("[eval-combined] running WRIT benchmark...");
     try {
-      const writ = await import(join(writPath, "src", "index.js"));
+      // Import WRIT's BUILT entry (dist/, the package "main"), not src/*.js —
+      // those are stale untracked CommonJS artifacts that throw "exports is not
+      // defined in ES module scope" under writ's "type":"module" (#1738
+      // follow-up). The CI lane runs `npm run build --prefix writ` first.
+      const writ = await import(join(writPath, "dist", "index.js"));
       // loadAllScenarios is async (returns Promise<Scenario[]>) — must await,
       // else `.filter` is called on a Promise and throws "scenarios.filter is
       // not a function" (the WRIT integration was silently broken; #1738).
