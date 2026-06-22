@@ -1,0 +1,81 @@
+meta:
+  id: entity_delete_restore
+  description: >
+    A task is pre-seeded. The agent deletes it (soft-delete observation hides it
+    from live snapshots), then restores it (priority-1001 observation overrides
+    the priority-1000 deletion so it reappears), and also attempts to delete a
+    non-existent id. Validates the entity soft-delete lifecycle — a priority-
+    ladder regression would silently lose data (delete fails to hide, or restore
+    fails to revive). Asserts via #1703 tool_result.matches that both ops
+    succeed, the bad delete surfaces a 404, and the entity is live again at the
+    end. Part of neotoma#1705.
+  tags:
+    - tier2
+    - lifecycle
+    - delete-restore
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "delete_entity / restore_entity had zero agentic coverage; a soft-delete-liveness or priority-ladder regression (delete doesn't hide, or restore doesn't revive) would silently lose or orphan data."
+privacy_transform: "Fully synthetic task; no PII."
+
+seed_entities:
+  - entity_type: task
+    title: Delete Me Task
+    status: todo
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Use
+  delete_entity to soft-delete and restore_entity to revive entities, passing
+  entity_id, entity_type, and a reason.
+
+user_prompt: |
+  Delete the task "Delete Me Task", then restore it. Also try to delete a
+  task that doesn't exist to confirm it errors.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # Delete + restore were both issued for the seeded task.
+  - type: mcp_tool.invocations
+    tool_name: delete_entity
+    op: gte
+    value: 2
+  - type: mcp_tool.invocations
+    tool_name: restore_entity
+    op: gte
+    value: 1
+  # The real delete (call 0) succeeded.
+  - type: tool_result.matches
+    tool_name: delete_entity
+    which: 0
+    result_subset:
+      success: true
+  # The restore succeeded — priority-1001 override revives the entity.
+  - type: tool_result.matches
+    tool_name: restore_entity
+    which: last
+    result_subset:
+      success: true
+  # Deleting a non-existent id surfaces an error (the harness captures a non-2xx
+  # as {error: "<tool> returned status 404: …"}), not a false success.
+  - type: tool_result.matches
+    tool_name: delete_entity
+    which: last
+    result_key: error
+    present: true
+  # End state: the task is live again (restore won the priority ladder).
+  - type: entity.exists
+    entity_type: task
+    where:
+      status: todo
+  - type: entity.count
+    entity_type: task
+    where:
+      status: todo
+    op: eq
+    value: 1
