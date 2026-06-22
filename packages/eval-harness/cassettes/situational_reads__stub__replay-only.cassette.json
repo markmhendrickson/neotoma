@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "situational_reads",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Record a task \"Reads Eval Task\", then show me what changed recently and the observations backing that task.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Use list_recent_changes to see what was recently written and list_observations to inspect the observations backing a specific entity.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "reads-seed",
+        "entities": [
+          { "entity_type": "task", "title": "Reads Eval Task", "status": "todo" }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "list_recent_changes",
+      "input": {},
+      "sequence": 1
+    },
+    {
+      "name": "list_observations",
+      "input": { "entity_id": "ent_d2e8504345f1aa741b93f09f" },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Recorded the task \"Reads Eval Task\". The recent-changes feed reflects the write, and list_observations returns the observations backing that task."
+}

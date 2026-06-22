@@ -1,0 +1,65 @@
+meta:
+  id: situational_reads
+  description: >
+    Situational reads let an agent re-orient at the start of a turn: what changed
+    recently (list_recent_changes) and what observations back a given entity
+    (list_observations). The agent stores a task, then reads the recent-changes
+    feed and the task's observations. A regression that returned an empty
+    recent-changes feed, or dropped an entity's observations, would blind the
+    agent to its own prior writes. Both reads had zero agentic coverage. Asserts
+    via #1703 tool_result.matches. Part of neotoma#1723.
+  tags:
+    - tier2
+    - situational
+    - reads
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "list_recent_changes + list_observations had only non-agentic coverage; no eval asserted the recent-changes feed reflects a just-written entity or that list_observations returns the observations backing a specific entity."
+privacy_transform: "Fully synthetic task; no PII."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Use
+  list_recent_changes to see what was recently written and list_observations to
+  inspect the observations backing a specific entity.
+
+user_prompt: |
+  Record a task "Reads Eval Task", then show me what changed recently and the
+  observations backing that task.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The task was stored (and so should appear in the recent-changes feed).
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: task
+    where:
+      title: Reads Eval Task
+  # list_recent_changes returns an activity feed reflecting the write.
+  - type: mcp_tool.invocations
+    tool_name: list_recent_changes
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: list_recent_changes
+    which: 0
+    result_key: items
+    present: true
+  # list_observations returns the observations backing the stored task.
+  - type: mcp_tool.invocations
+    tool_name: list_observations
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 0
+    result_key: observations
+    present: true
