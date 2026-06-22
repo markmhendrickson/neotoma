@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "retrieve_filters_snapshot_provenance",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Find the active tasks, then show the snapshot and the provenance of the status field for the active one.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Use retrieve_entities with snapshot_filters to filter, retrieve_entity_snapshot to fetch one entity, and retrieve_field_provenance to inspect where a field came from.\n",
+  "tool_calls": [
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "task",
+        "snapshot_filters": { "status": { "op": "eq", "value": "active" } }
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": { "entity_id": "ent_65984c3dc800e102f705defc" },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_field_provenance",
+      "input": { "entity_id": "ent_65984c3dc800e102f705defc", "field": "status" },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "The active task is \"Ret Active Task\". Its snapshot shows status=active, and the status field's provenance traces to the store observation that set it."
+}
