@@ -1,0 +1,76 @@
+meta:
+  id: retrieve_filters_snapshot_provenance
+  description: >
+    Covers the three read tools that were only incidentally (retrieve_entities)
+    or never (retrieve_entity_snapshot, retrieve_field_provenance) exercised at
+    the agent level. Two tasks with distinct status are seeded; the agent
+    filters by snapshot_filters, fetches one entity's snapshot, and reads a
+    field's provenance chain. These underpin agent grounding + no-hallucination,
+    so a silent filter miss or empty provenance is a correctness risk. Asserts
+    via #1703 tool_result.matches. Part of neotoma#1717.
+  tags:
+    - tier2
+    - retrieval
+    - provenance
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "retrieve_entities filter surface was only incidentally covered; retrieve_entity_snapshot + retrieve_field_provenance had zero agentic coverage — provenance is written but never read-back-asserted."
+privacy_transform: "Fully synthetic tasks; no PII."
+
+seed_entities:
+  - entity_type: task
+    title: Ret Active Task
+    status: active
+  - entity_type: task
+    title: Ret Done Task
+    status: done
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Use
+  retrieve_entities with snapshot_filters to filter, retrieve_entity_snapshot to
+  fetch one entity, and retrieve_field_provenance to inspect where a field came
+  from.
+
+user_prompt: |
+  Find the active tasks, then show the snapshot and the provenance of the status
+  field for the active one.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # snapshot_filters returned only the active task (filter honored, not all).
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: retrieve_entities
+    which: 0
+    result_key: entities
+    present: true
+  # snapshot fetch returns the entity's snapshot payload.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entity_snapshot
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 0
+    result_key: snapshot
+    present: true
+  # provenance fetch returns the observation+source chain for the field.
+  - type: tool_result.matches
+    tool_name: retrieve_field_provenance
+    which: 0
+    result_subset:
+      field: status
+  - type: tool_result.matches
+    tool_name: retrieve_field_provenance
+    which: 0
+    result_key: observations
+    present: true

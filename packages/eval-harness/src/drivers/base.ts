@@ -26,8 +26,14 @@ import type {
 const TOOL_ENDPOINTS: Record<string, string> = {
   store: "/store",
   store_structured: "/store",
-  retrieve_entities: "/retrieve_entities",
+  // retrieve_entities maps to /entities/query (the MCP tool's operationId is
+  // queryEntities); there is no /retrieve_entities route (#1717 fix — the prior
+  // mapping would 404 in replay; no scenario had exercised it).
+  retrieve_entities: "/entities/query",
   retrieve_entity_by_identifier: "/retrieve_entity_by_identifier",
+  // Snapshot + provenance reads (#1717 eval-coverage backfill).
+  retrieve_entity_snapshot: "/get_entity_snapshot",
+  retrieve_field_provenance: "/get_field_provenance",
   create_relationship: "/create_relationship",
   correct: "/correct",
   get_session_identity: "/session",
