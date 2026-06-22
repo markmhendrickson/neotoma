@@ -52,6 +52,9 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   get_relationship_snapshot: "/relationships/snapshot",
   // Subscriptions (#1715 eval-coverage backfill).
   subscribe: "/subscribe",
+  // Schema mutation (#1709 eval-coverage backfill).
+  register_schema: "/register_schema",
+  update_schema_incremental: "/update_schema_incremental",
 };
 
 /**

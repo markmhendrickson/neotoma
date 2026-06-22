@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "schema_register_and_update",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Declare a new entity type \"widget_gadget\" with a required \"name\" and optional \"color\", then add an optional numeric \"weight_grams\" field to it. Also confirm that trying to add a field to an undeclared type fails.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. To declare a new entity type use register_schema with a schema_definition (a fields object) and a reducer_config; to add a field to an existing type use update_schema_incremental with fields_to_add.\n",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "widget_gadget",
+        "schema_definition": {
+          "fields": {
+            "name": { "type": "string", "required": true },
+            "color": { "type": "string", "required": false }
+          },
+          "canonical_name_fields": ["name"]
+        },
+        "reducer_config": { "merge_policies": {} },
+        "schema_version": "1.0",
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "update_schema_incremental",
+      "input": {
+        "entity_type": "widget_gadget",
+        "fields_to_add": [
+          { "field_name": "weight_grams", "field_type": "number", "required": false }
+        ],
+        "activate": true
+      },
+      "sequence": 1
+    },
+    {
+      "name": "update_schema_incremental",
+      "input": {
+        "entity_type": "undeclared_type_xyz",
+        "fields_to_add": [
+          { "field_name": "anything", "field_type": "string", "required": false }
+        ],
+        "activate": true
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Registered the new \"widget_gadget\" entity type (schema_version 1.0) with name + color, then added an optional numeric weight_grams field (version bumped to 1.1.0). Adding a field to an undeclared type returned an error, as expected."
+}
