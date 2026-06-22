@@ -268,6 +268,12 @@ async function fetchSnapshot(
       whereMatches(e, where)
     );
     if (matches.length === 0) return null;
+    // Determinism: when more than one entity matches, pick the first by a
+    // STABLE ordering (entity_id ascending) so the assertion is reproducible
+    // regardless of server return order. (docs/architecture/determinism.md)
+    matches.sort((a, b) =>
+      String(a.entity_id ?? a.id ?? "").localeCompare(String(b.entity_id ?? b.id ?? ""))
+    );
     id = (matches[0].entity_id ?? matches[0].id) as string | undefined;
     // If the listing already carries the snapshot, use it directly.
     const snap = matches[0].snapshot as Record<string, unknown> | undefined;
@@ -500,9 +506,17 @@ export async function evaluatePredicate(
       const calls = toolCallsNamed(ctx.toolCalls ?? [], predicate.tool_name);
       const call = pickToolCall(calls, predicate.which);
       if (!call) {
+        // Distinguish "tool never called" from "called, but `which` index is
+        // out of range" — the latter is a scenario-authoring bug with a
+        // concrete fix (docs/subsystems/errors.md — actionable hints).
+        const outOfRange =
+          typeof predicate.which === "number" && calls.length > 0;
+        const message = outOfRange
+          ? `tool_result.matches: "${predicate.tool_name ?? "(any)"}" was invoked ${calls.length} time(s), but which=${predicate.which} is out of range (valid 0..${calls.length - 1}).`
+          : `tool_result.matches: no invocation of "${predicate.tool_name ?? "(any)"}" was captured.`;
         return {
           predicate,
-          message: `tool_result.matches: no invocation of "${predicate.tool_name ?? "(any)"}" was captured.`,
+          message,
           expected: predicate,
           actual: (ctx.toolCalls ?? []).map((c) => c.name),
         };
@@ -516,12 +530,14 @@ export async function evaluatePredicate(
           : call.error !== undefined
             ? { error: { message: call.error } }
             : undefined;
+      // result_key and result_subset are ANDed when both are supplied: the
+      // key check must pass AND the subset must match. Either may be omitted.
       // (a) result_key present/absent check (dotted path).
       if (predicate.result_key) {
         const { found } = getPath(result, predicate.result_key);
         const wantPresent = predicate.present !== false;
         if (found === wantPresent) {
-          // key check satisfied; fall through to result_subset if also given.
+          // key check satisfied; fall through to the result_subset check below.
         } else {
           return {
             predicate,

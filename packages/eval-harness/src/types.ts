@@ -105,9 +105,10 @@ export interface ExpectedAssertion {
    */
   which?: "first" | "last" | number;
   /**
-   * For `tool_result.matches`: a subset match against the tool's JSON
-   * RESULT (output). Every key must be present with a deep-equal value.
-   * Supports dotted paths for nesting (e.g. "error.code").
+   * For `tool_result.matches`: a deep structural subset match against the
+   * tool's JSON RESULT (output). Nesting is expressed by nested objects, NOT
+   * dotted paths — e.g. `{ error: { code: "ERR_X" } }`, not `{ "error.code": … }`.
+   * (Dotted paths are a `result_key` feature.) Every leaf must deep-equal.
    */
   result_subset?: Record<string, unknown>;
   /**

@@ -141,6 +141,49 @@ describe("#1703 tool_result.matches", () => {
     expect(fail).not.toBeNull();
     expect(fail!.message).toContain("no invocation");
   });
+
+  it("gives an out-of-range hint when which exceeds the call count", async () => {
+    const c = ctx({ toolCalls: [call("store", {}, { ok: true })] });
+    const p: ExpectedAssertion = {
+      type: "tool_result.matches",
+      tool_name: "store",
+      which: 5,
+      result_key: "ok",
+    };
+    const fail = await evaluatePredicate(p, c);
+    expect(fail).not.toBeNull();
+    expect(fail!.message).toContain("out of range");
+  });
+
+  it("ANDs result_key and result_subset when both are supplied (both must pass)", async () => {
+    const c = ctx({
+      toolCalls: [call("subscribe", {}, { webhook_secret: "wh", active: true })],
+    });
+    // key present AND subset matches → pass
+    expect(
+      await evaluatePredicate(
+        { type: "tool_result.matches", tool_name: "subscribe", result_key: "webhook_secret", result_subset: { active: true } },
+        c
+      )
+    ).toBeNull();
+    // key present but subset mismatches → fail
+    expect(
+      await evaluatePredicate(
+        { type: "tool_result.matches", tool_name: "subscribe", result_key: "webhook_secret", result_subset: { active: false } },
+        c
+      )
+    ).not.toBeNull();
+  });
+
+  it("result_subset matches nested objects structurally (not dotted paths)", async () => {
+    const c = ctx({ toolCalls: [call("correct", {}, { error: { code: "ERR_NO_SCHEMA" } })] });
+    expect(
+      await evaluatePredicate(
+        { type: "tool_result.matches", tool_name: "correct", result_subset: { error: { code: "ERR_NO_SCHEMA" } } },
+        c
+      )
+    ).toBeNull();
+  });
 });
 
 describe("#1703 snapshot.field_present / field_absent", () => {
@@ -184,5 +227,30 @@ describe("#1703 snapshot.field_present / field_absent", () => {
     const fail = await evaluatePredicate(p, ctx());
     expect(fail).not.toBeNull();
     expect(fail!.message).toContain("could not resolve");
+  });
+
+  it("resolves multiple where-matches deterministically (lowest entity_id wins)", async () => {
+    // /entities/query returns out-of-order; the helper must sort by entity_id
+    // so the assertion is reproducible. ent_a carries the field, ent_b does not.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          entities: [
+            { entity_id: "ent_b", snapshot: { status: "x" } },
+            { entity_id: "ent_a", snapshot: { status: "x", chosen: true } },
+          ],
+        }),
+      })) as never
+    );
+    // field_present "chosen" passes only if ent_a (lowest id) is chosen.
+    const p: ExpectedAssertion = {
+      type: "snapshot.field_present",
+      entity_type: "task",
+      where: { status: "x" },
+      field: "chosen",
+    };
+    expect(await evaluatePredicate(p, ctx())).toBeNull();
   });
 });
