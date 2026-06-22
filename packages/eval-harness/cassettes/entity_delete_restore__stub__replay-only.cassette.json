@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "entity_delete_restore",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Delete the task \"Delete Me Task\", then restore it. Also try to delete a task that doesn't exist to confirm it errors.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Use delete_entity to soft-delete and restore_entity to revive entities, passing entity_id, entity_type, and a reason.\n",
+  "tool_calls": [
+    {
+      "name": "delete_entity",
+      "input": {
+        "entity_id": "ent_ff73925e556986d623c5aff8",
+        "entity_type": "task",
+        "reason": "eval: soft-delete the seeded task"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "restore_entity",
+      "input": {
+        "entity_id": "ent_ff73925e556986d623c5aff8",
+        "entity_type": "task",
+        "reason": "eval: revive the task"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "delete_entity",
+      "input": {
+        "entity_id": "ent_nonexistent000000000000",
+        "entity_type": "task",
+        "reason": "eval: expect 404"
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Deleted \"Delete Me Task\" then restored it — it's live again. Deleting a non-existent task returned a 404 not-found error, as expected."
+}
