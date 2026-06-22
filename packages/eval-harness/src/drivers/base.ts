@@ -50,6 +50,8 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   restore_relationship: "/restore_relationship",
   list_relationships: "/list_relationships",
   get_relationship_snapshot: "/relationships/snapshot",
+  // Subscriptions (#1715 eval-coverage backfill).
+  subscribe: "/subscribe",
 };
 
 /**
