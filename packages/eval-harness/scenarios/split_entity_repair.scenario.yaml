@@ -1,0 +1,71 @@
+meta:
+  id: split_entity_repair
+  description: >
+    An over-merged task (one entity carrying observations from two sessions) is
+    repaired: the agent splits the later-session observations onto a new entity
+    via a field predicate. Validates split_entity (data-corruption class — a
+    mis-split silently strands observations on the wrong entity) which had zero
+    agentic coverage. Covers the happy path, idempotent replay (same key+
+    predicate -> same new_entity_id, replayed:true, no double-split), and the
+    matched-nothing guard. Asserts via #1703 tool_result.matches. Part of
+    neotoma#1707.
+  tags:
+    - tier2
+    - split
+    - lifecycle
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "split_entity had only non-agentic dispatch coverage; no eval asserted observations actually move to the new entity, that replay is idempotent (replayed:true), or that matched-nothing/all guards fire."
+privacy_transform: "Fully synthetic task; no PII."
+
+seed_entities:
+  - entity_type: task
+    title: Split Source Task
+    status: todo
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. To repair an
+  over-merged entity, use split_entity with a predicate selecting the
+  observations to move onto a new_entity, plus an idempotency_key.
+
+user_prompt: |
+  The task "Split Source Task" accidentally absorbed a later session's data
+  (tagged session_tag=later-session). Split that out onto a new task entity.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The split was issued and moved observations onto a new entity.
+  - type: mcp_tool.invocations
+    tool_name: split_entity
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: split_entity
+    which: 0
+    result_subset:
+      observations_moved: 1
+      replayed: false
+  # Replay with the same key+predicate is idempotent (same new entity, no re-split).
+  - type: tool_result.matches
+    tool_name: split_entity
+    which: 1
+    result_subset:
+      replayed: true
+  # The matched-nothing guard surfaces an error (no stray new entity).
+  - type: tool_result.matches
+    tool_name: split_entity
+    which: last
+    result_key: error
+    present: true
+  # The split returned a distinct new_entity_id (the repair target was created).
+  - type: tool_result.matches
+    tool_name: split_entity
+    which: 0
+    result_key: new_entity_id
+    present: true
