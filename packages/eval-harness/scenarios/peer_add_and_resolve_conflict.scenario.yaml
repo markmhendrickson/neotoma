@@ -1,0 +1,88 @@
+meta:
+  id: peer_add_and_resolve_conflict
+  description: >
+    The agent configures a cross-instance sync peer (add_peer), lists peers to
+    confirm the config landed, and resolves a sync conflict with a chosen
+    strategy. Peer-sync is a trust-boundary surface: add_peer persists auth
+    material (shared_secret) and a conflict_strategy, and a regression that
+    dropped the peer config, silently accepted an invalid config, or mishandled
+    the conflict strategy would corrupt cross-instance state. add_peer,
+    list_peers, and resolve_sync_conflict had zero agentic coverage. Asserts via
+    #1703 tool_result.matches. Part of neotoma#1713.
+
+    Scope note: the per-peer tools (sync_peer, get_peer_status, remove_peer)
+    take a :peer_id path parameter and are not statically addressable via the
+    harness's TOOL_ENDPOINTS replay map, so they are not covered here. The
+    isolated eval server also does not model a second live Neotoma instance, so
+    actual bilateral sync (pull/push deltas) is not exercised —
+    resolve_sync_conflict is covered as a strategy-dispatch + validation guard.
+  tags:
+    - tier2
+    - peers
+    - sync
+    - security
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "add_peer / list_peers / resolve_sync_conflict had only non-agentic coverage; no eval asserted the peer config (auth_method, conflict_strategy) actually persists as a peer_config entity, that an invalid peer config is rejected (400), or that resolve_sync_conflict dispatches a chosen strategy / rejects an unknown one."
+privacy_transform: "Synthetic peer URL + secret; no PII."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. To configure
+  cross-instance sync, use add_peer with the peer's id/name/url, direction,
+  entity_types, sync_scope, auth_method, and conflict_strategy. Use list_peers
+  to confirm, and resolve_sync_conflict to settle a conflicting entity.
+
+user_prompt: |
+  Add a bidirectional sync peer "Eval Peer One" (id peer-eval-1) at
+  https://peer.example/neotoma syncing task entities with last_write_wins, then
+  list peers to confirm. Also resolve a conflicting entity preferring the local
+  copy, and confirm an invalid peer config and an unknown conflict strategy are
+  both rejected.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The peer was added and returned an entity_id (the persisted peer_config).
+  - type: mcp_tool.invocations
+    tool_name: add_peer
+    op: gte
+    value: 1
+  - type: tool_result.matches
+    tool_name: add_peer
+    which: 0
+    result_key: entity_id
+    present: true
+  # The peer_config entity persisted with the requested id (queryable post-turn).
+  - type: entity.exists
+    entity_type: peer_config
+    where:
+      peer_id: peer-eval-1
+  # list_peers reflects the configured peer.
+  - type: tool_result.matches
+    tool_name: list_peers
+    which: 0
+    result_key: peers
+    present: true
+  # resolve_sync_conflict dispatched the chosen strategy (ok:true).
+  - type: tool_result.matches
+    tool_name: resolve_sync_conflict
+    which: 0
+    result_subset:
+      ok: true
+  # Invalid peer config (missing required fields) is rejected (400 -> error).
+  - type: tool_result.matches
+    tool_name: add_peer
+    which: last
+    result_key: error
+    present: true
+  # Unknown conflict strategy is rejected (400 -> error).
+  - type: tool_result.matches
+    tool_name: resolve_sync_conflict
+    which: last
+    result_key: error
+    present: true

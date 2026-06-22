@@ -58,6 +58,15 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   // Interpretation creation (#1714 eval-coverage backfill). Endpoint is
   // /interpretations/create.
   create_interpretation: "/interpretations/create",
+  // Peer-sync (#1713 eval-coverage backfill). add_peer + list_peers share the
+  // /peers collection (POST vs GET — list_peers is in GET_TOOLS below);
+  // resolve_sync_conflict has a static /peers/resolve_sync_conflict path. The
+  // per-peer tools (get_peer_status, remove_peer, sync_peer) take a :peer_id
+  // path param and are NOT statically addressable via this map, so they're not
+  // covered here (scope-noted in the scenario).
+  add_peer: "/peers",
+  list_peers: "/peers",
+  resolve_sync_conflict: "/peers/resolve_sync_conflict",
 };
 
 /**
@@ -67,6 +76,13 @@ const TOOL_ENDPOINTS: Record<string, string> = {
  */
 export const NEOTOMA_TOOL_NAMES = new Set<string>(Object.keys(TOOL_ENDPOINTS));
 
+/**
+ * Tools whose HTTP route is a GET (no request body). Everything else POSTs the
+ * tool input as JSON. Keep this in sync with the route methods in
+ * src/shared/contract_mappings.ts.
+ */
+const GET_TOOLS = new Set<string>(["get_session_identity", "list_peers"]);
+
 async function postNeotomaTool(
   baseUrl: string,
   toolName: string,
@@ -75,14 +91,15 @@ async function postNeotomaTool(
 ): Promise<{ output?: unknown; error?: string }> {
   const path = TOOL_ENDPOINTS[toolName];
   if (!path) return { error: `unknown Neotoma tool ${toolName}` };
+  const isGet = GET_TOOLS.has(toolName);
   try {
     const res = await fetch(`${baseUrl}${path}`, {
-      method: toolName === "get_session_identity" ? "GET" : "POST",
+      method: isGet ? "GET" : "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
       },
-      body: toolName === "get_session_identity" ? undefined : JSON.stringify(input ?? {}),
+      body: isGet ? undefined : JSON.stringify(input ?? {}),
     });
     const text = await res.text();
     let parsed: unknown = text;

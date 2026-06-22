@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "peer_add_and_resolve_conflict",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-06-22T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Add a bidirectional sync peer \"Eval Peer One\" (id peer-eval-1) at https://peer.example/neotoma syncing task entities with last_write_wins, then list peers to confirm. Also resolve a conflicting entity preferring the local copy, and confirm an invalid peer config and an unknown conflict strategy are both rejected.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. To configure cross-instance sync, use add_peer with the peer's id/name/url, direction, entity_types, sync_scope, auth_method, and conflict_strategy. Use list_peers to confirm, and resolve_sync_conflict to settle a conflicting entity.\n",
+  "tool_calls": [
+    {
+      "name": "add_peer",
+      "input": {
+        "peer_id": "peer-eval-1",
+        "peer_name": "Eval Peer One",
+        "peer_url": "https://peer.example/neotoma",
+        "direction": "bidirectional",
+        "entity_types": ["task"],
+        "sync_scope": "all",
+        "auth_method": "shared_secret",
+        "conflict_strategy": "last_write_wins",
+        "shared_secret": "s3cr3t-eval"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "list_peers",
+      "input": {},
+      "sequence": 1
+    },
+    {
+      "name": "resolve_sync_conflict",
+      "input": {
+        "entity_id": "ent_000000000000000000000000",
+        "strategy": "prefer_local"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "add_peer",
+      "input": {
+        "peer_id": "peer-eval-bad"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "resolve_sync_conflict",
+      "input": {
+        "entity_id": "ent_000000000000000000000000",
+        "strategy": "bogus_strategy"
+      },
+      "sequence": 4
+    }
+  ],
+  "assistant_text": "Added the bidirectional sync peer \"Eval Peer One\" (peer-eval-1) and confirmed it via list_peers. Resolved a conflicting entity preferring the local copy. An invalid peer config (missing required fields) and an unknown conflict strategy were both rejected, as expected."
+}
