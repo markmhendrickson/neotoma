@@ -89,6 +89,7 @@ import {
   getCurrentAttributionDecision,
   runWithRequestContext,
 } from "./services/request_context.js";
+import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
 import {
   emitEntitySnapshotChange,
   emitObservationCreated,
@@ -205,6 +206,7 @@ export class NeotomaServer {
   private sessionConnectionId: string | null = null;
   /** AAuth-verified agent context propagated from the HTTP middleware (Phase 1). */
   private sessionAAuth: AAuthRequestContext | null = null;
+  private sessionAdmission: AAuthAdmissionContext | null = null;
   /** Client self-report from MCP initialize `clientInfo` (fallback attribution). */
   private sessionClientInfo: { name?: string; version?: string } | null = null;
   /** Browser app origin resolved by HTTP transport or explicit public URL config. */
@@ -488,6 +490,39 @@ export class NeotomaServer {
         }
       }
 
+      // Stronger AAuth Admission: a verified AAuth identity resolved to an
+      // active `agent_grant` authenticates the MCP session as the grant
+      // owner. Consulted only here — after OAuth connection-id / Bearer have
+      // had their chance above — so those credentials keep precedence and
+      // this is purely the no-OAuth fallback. Brings the MCP transport to
+      // parity with the REST direct-write endpoints, which already honour
+      // `req.aauthAdmission` (see `aauthAdmission()` middleware in actions.ts).
+      //
+      // Fail-safe by construction: `admitFromAAuthContext` only returns
+      // `admitted: true` for a verified signature matched to an `active`
+      // grant, and `user_id` is always the grant owner — never a
+      // request-supplied id — so an AAuth caller cannot pivot owners.
+      // Per-(op, entity_type) capability scope is enforced on each tool call,
+      // identical to the REST path.
+      //
+      // Read from `this.sessionAdmission` (threaded by actions.ts per request)
+      // rather than `getCurrentAAuthAdmission()`: the `/mcp` handler runs the
+      // transport inside a nested `runWithRequestContext` that does not
+      // re-carry the admission, so the ALS value is shadowed to null by the
+      // time initialize runs. The session field is the reliable source.
+      const admission = this.sessionAdmission;
+      if (admission?.admitted && admission.user_id) {
+        this.authenticatedUserId = admission.user_id;
+        this.requestAuth.set(requestId, {
+          userId: admission.user_id,
+          token: `aauth:${admission.grant_id ?? "admitted"}`,
+        });
+        logger.info(
+          `[MCP Server] Authenticated via AAuth admission (user: ${admission.user_id}, grant: ${admission.grant_id ?? "unknown"})`
+        );
+        return await this.buildAuthenticatedInitializeResponse(updateNotice);
+      }
+
       // No authentication method provided - return with OAuth capabilities
       // This allows Cursor to show "Connect" button for OAuth
       return this.getUnauthenticatedResponse();
@@ -570,6 +605,20 @@ export class NeotomaServer {
    */
   setSessionAgentIdentity(ctx: AAuthRequestContext | null): void {
     this.sessionAAuth = ctx;
+  }
+
+  /**
+   * Stash the AAuth *admission* result (grant match) from the HTTP middleware
+   * so both the initialize auth resolution and the per-tool capability gate
+   * can read it without depending on `getCurrentAAuthAdmission()` surviving
+   * the nested `runWithRequestContext` scopes the `/mcp` handler and tool
+   * dispatch establish. Mirrors `setSessionAgentIdentity`; set per request by
+   * actions.ts before the transport handles the MCP request. `null` clears it
+   * (unsigned / unmatched requests). Not set on stdio / CLI-local paths, which
+   * fall back to `dev-local`.
+   */
+  setSessionAdmission(ctx: AAuthAdmissionContext | null): void {
+    this.sessionAdmission = ctx;
   }
 
   /**
@@ -1794,8 +1843,13 @@ export class NeotomaServer {
         // this scope — nested AsyncLocalStorage scopes shadow outer ones.
         const identity = this.getAgentIdentity();
         const attributionDecision = this.getSessionAttributionDecision();
+        // Carry the admission into the tool-dispatch ALS scope so the
+        // per-tool capability gate (`enforceAgentCapability`, which reads
+        // `getCurrentAAuthAdmission()`) binds for AAuth-admitted MCP sessions.
+        // Without this the nested scope shadows the admission to null and the
+        // gate silently no-ops.
         const result = await runWithRequestContext(
-          { agentIdentity: identity, attributionDecision },
+          { agentIdentity: identity, attributionDecision, aauthAdmission: this.sessionAdmission },
           () => this.executeTool(name, args)
         );
         const runtimeUpdateNotice =
@@ -1861,8 +1915,9 @@ export class NeotomaServer {
     // that exercise local CLI writes as `anonymous`.
     const identity = this.getAgentIdentity();
     const attributionDecision = this.getSessionAttributionDecision();
-    return runWithRequestContext({ agentIdentity: identity, attributionDecision }, () =>
-      this.executeTool(name, args)
+    return runWithRequestContext(
+      { agentIdentity: identity, attributionDecision, aauthAdmission: this.sessionAdmission },
+      () => this.executeTool(name, args)
     );
   }
 
@@ -5310,6 +5365,23 @@ export class NeotomaServer {
         );
       }
 
+      // Capability scoping: an AAuth-admitted agent is limited to the
+      // (op, entity_type) pairs declared on its grant. Mirrors the HTTP
+      // `/store` gate in actions.ts (`enforceAgentCapability("store", …)`)
+      // so an AAuth-authenticated MCP session gets exactly the REST scope —
+      // never broader. No-op for non-admitted callers (`enforceAgentCapability`
+      // only enforces when `ctx.admitted`), so plain OAuth/Bearer users and
+      // anonymous callers are unaffected.
+      {
+        const { enforceAgentCapability, contextFromAgentIdentity } =
+          await import("./services/agent_capabilities.js");
+        const { getCurrentAgentIdentity } = await import("./services/request_context.js");
+        const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+        if (capabilityCtx) {
+          enforceAgentCapability("store", [entityType], capabilityCtx);
+        }
+      }
+
       // Protected-entity-types guard: reject agent-authored writes to
       // governance state (e.g. `agent_grant`) unless the caller's grant
       // explicitly authorises them. Runs here so the MCP path matches
@@ -6029,6 +6101,29 @@ export class NeotomaServer {
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    // Capability scoping + governance guard for the correct op. Mirrors the
+    // HTTP `/correct` handler in actions.ts so an AAuth-admitted MCP session
+    // is limited to the (correct, entity_type) pairs on its grant and cannot
+    // correct protected governance state it was not granted. No-op for
+    // non-admitted callers.
+    {
+      const { enforceAgentCapability, contextFromAgentIdentity } =
+        await import("./services/agent_capabilities.js");
+      const { assertCanWriteProtectedBatch } = await import("./services/protected_entity_types.js");
+      const { getCurrentAgentIdentity, getCurrentAAuthAdmission } =
+        await import("./services/request_context.js");
+      const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+      if (correctCtx) {
+        enforceAgentCapability("correct", [parsed.entity_type], correctCtx);
+      }
+      assertCanWriteProtectedBatch({
+        entity_types: [parsed.entity_type],
+        op: "correct",
+        identity: getCurrentAgentIdentity(),
+        admission: getCurrentAAuthAdmission(),
+      });
+    }
 
     const { data: existingObservation, error: existingObservationError } = await db
       .from("observations")

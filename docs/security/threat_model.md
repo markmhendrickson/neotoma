@@ -131,6 +131,16 @@ Pre-v0.12, an unrecognized OAuth `Bearer` token on `/mcp` could fall through to 
 
 Operators running hosted / tunnelled MCP proxies should also set **`MCP_PROXY_FAIL_CLOSED=1`** (or `failClosed: true` on the proxy options) so unsigned downstream requests are refused when AAuth signing is required; see [`docs/developer/mcp/proxy.md`](../developer/mcp/proxy.md).
 
+### AAuth admission as an `/mcp` authentication path
+
+An AAuth-signed request that resolves to an **active** `agent_grant` authenticates the MCP session as the grant owner, with no OAuth connection-id or Bearer token — parity with the REST direct-write endpoints, which already honour admission. This is an *added* authentication path on the surface § 1 watches ("an MCP transport that re-uses a session token"), so it is constrained to be fail-safe by construction:
+
+- **Verified + matched only.** The session user is set only when `getCurrentAAuthAdmission().admitted === true`, which `admitFromAAuthContext` returns exclusively for a signature whose `signature_verified === true` *and* which matches an `active` grant. A verified-but-unmatched signature, a `suspended`/`revoked` grant, or an unsigned request never authenticates the session.
+- **No owner pivot.** The session `user_id` is taken from the matched grant's owner, never from a request-supplied `user_id`; the grant's identity match (`match_sub` / `match_iss` / `match_thumbprint`) is owner-bound at creation, so a signer cannot select another user's data.
+- **OAuth/Bearer keep precedence.** Admission is consulted only after connection-id / Bearer resolution fails to produce a user; it is a fallback, not an override.
+- **Capability + governance scope still apply.** Each MCP tool call runs `enforceAgentCapability` (the grant's `(op, entity_type)` ceiling) and `assertCanWriteProtected` (governance types), identical to the REST path — so an admitted MCP session can never exceed its grant or touch `agent_grant` without an explicit capability.
+- **Regression coverage:** `tests/integration/aauth_mcp_initialize_admission.test.ts` (initialize authenticates from admission; unadmitted stays unauthenticated) and `tests/integration/aauth_mcp_capability_parity.test.ts` (per-tool capability scope), plus the existing `tests/unit/aauth_admission.test.ts` matching matrix.
+
 ### Inbound peer-sync hostname enforcement
 
 When `NEOTOMA_HOSTED_MODE=1`, `sync_webhook_inbound` rejects any `sender_peer_url` whose hostname is private, loopback, or link-local. See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) `## Concepts`. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback interface.

@@ -235,6 +235,22 @@ stays attribution-only — the caller can still write under existing
 Bearer/OAuth flows but cannot use AAuth alone for admission. The
 `admission_reason` field reports the resolver outcome:
 
+Admission authenticates uniformly across transports. The REST direct-write
+endpoints (`/store`, `/correct`, `/create_relationship`, …) and the MCP
+transport (`POST /mcp` tool calls) both authenticate the session as the
+matched grant's owner when no OAuth connection-id / Bearer resolved a user —
+those credentials keep precedence, and admission is the no-OAuth fallback.
+The `/mcp` handler threads the request's admission onto the server
+(`setSessionAdmission`, parallel to `setSessionAgentIdentity`); the
+`initialize` handler reads it to authenticate the session, and the
+tool-dispatch scope re-injects it so each MCP tool call enforces the grant's
+`(op, entity_type)` capabilities exactly as the REST handlers do. (The
+session field is used rather than ambient request-context state because the
+`/mcp` handler and tool dispatch each open a fresh `runWithRequestContext`
+scope that would otherwise shadow it.) An admitted MCP session therefore gets
+the same access — and the same scope ceiling — as the equivalent REST call,
+never broader.
+
 | Reason                 | Meaning                                                                    |
 | ---------------------- | -------------------------------------------------------------------------- |
 | `admitted`             | Active grant matched. AAuth alone is sufficient on this request.           |
