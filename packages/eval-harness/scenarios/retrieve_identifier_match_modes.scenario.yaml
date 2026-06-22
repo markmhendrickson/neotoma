@@ -46,21 +46,42 @@ expected:
     tool_name: retrieve_entity_by_identifier
     op: gte
     value: 3
-  # Exact-name lookup -> match_mode "direct", one hit, the seeded contact id.
+  # Bind each positional lookup to its identifier (arg_subset) so the which:N
+  # tool_result assertions below are anchored to a specific call, not just an
+  # index — order-intent is explicit and a reordering refactor surfaces here.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entity_by_identifier
+    arg_subset:
+      identifier: Alice Probe
+    op: gte
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entity_by_identifier
+    arg_subset:
+      identifier: alice@probe.example
+    op: gte
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entity_by_identifier
+    arg_subset:
+      identifier: Zzz Nonexistent Person
+    op: gte
+    value: 1
+  # Exact-name lookup (call 0) -> match_mode "direct", one hit.
   - type: tool_result.matches
     tool_name: retrieve_entity_by_identifier
     which: 0
     result_subset:
       match_mode: direct
       total: 1
-  # Email lookup -> relaxed snapshot_field match (distinguishable from direct).
+  # Email lookup (call 1) -> relaxed snapshot_field match (distinguishable from direct).
   - type: tool_result.matches
     tool_name: retrieve_entity_by_identifier
     which: 1
     result_subset:
       match_mode: snapshot_field
       total: 1
-  # True non-match -> match_mode "none", total 0 (no false positive).
+  # True non-match (call 2) -> match_mode "none", total 0 (no false positive).
   - type: tool_result.matches
     tool_name: retrieve_entity_by_identifier
     which: 2
