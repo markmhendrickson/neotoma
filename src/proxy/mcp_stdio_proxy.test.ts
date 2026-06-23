@@ -21,10 +21,7 @@ const baseConfig: ProxyConfig = {
   autostart: false,
 };
 
-function jsonResponse(
-  obj: unknown,
-  opts: { status?: number; sessionId?: string } = {}
-): Response {
+function jsonResponse(obj: unknown, opts: { status?: number; sessionId?: string } = {}): Response {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (opts.sessionId) headers["mcp-session-id"] = opts.sessionId;
   return new Response(JSON.stringify(obj), { status: opts.status ?? 200, headers });
@@ -84,7 +81,10 @@ describe("isRecoverableMcpSessionLostError", () => {
       isRecoverableMcpSessionLostError(503, "MCP session is unknown on this API instance")
     ).toBe(true);
     expect(
-      isRecoverableMcpSessionLostError(503, "service unavailable: session is unknown on this api instance")
+      isRecoverableMcpSessionLostError(
+        503,
+        "service unavailable: session is unknown on this api instance"
+      )
     ).toBe(true);
   });
   it("ignores non-503 statuses and unrelated bodies", () => {
