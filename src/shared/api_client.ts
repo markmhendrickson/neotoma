@@ -14,6 +14,14 @@ export interface ApiClientOptions {
    * contexts and false in test / offline contexts.
    */
   signWithCliAAuth?: boolean;
+  /**
+   * Force the HTTP transport even when `NEOTOMA_FORCE_LOCAL_TRANSPORT=true`.
+   * The in-process local transport never makes an HTTP request, so RFC 9421
+   * request signing has nothing to sign — AAuth-attributed calls MUST go over
+   * HTTP. Setting this also disables the offline→local fallback (which would
+   * likewise bypass signing). Pairs with `signWithCliAAuth`.
+   */
+  forceHttpTransport?: boolean;
 }
 
 /**
@@ -90,8 +98,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       ? false
       : process.env.NEOTOMA_ENABLE_OFFLINE_FALLBACK === "true" &&
         process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK !== "true";
-  const shouldFallback = options.useOfflineFallback ?? defaultFallback;
-  const forceLocal = process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true";
+  const shouldFallback = options.forceHttpTransport
+    ? false
+    : (options.useOfflineFallback ?? defaultFallback);
+  const forceLocal =
+    !options.forceHttpTransport && process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true";
 
   const canFallbackForPath = (path: string): boolean => path !== "/health";
   const isNetworkError = (err: unknown): boolean => {
