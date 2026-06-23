@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# Run Neotoma production HTTP API for LaunchAgent with hot-reload from source.
-# Used by com.neotoma.prod-server.plist so the server starts at login, restarts
-# after reboot, and picks up source changes automatically via node --watch + tsx.
+# Run Neotoma production HTTP API for LaunchAgent.
+# Used by com.neotoma.prod-server.plist so the server starts at login and
+# restarts after reboot (crash-restart is handled by the while-loop below).
+#
+# By default this runs a DIRECT (non-watch) process: the public /mcp backend
+# must NOT restart on incidental source-file changes, because a restart drops
+# the in-memory MCP session maps and every connected client gets
+# "session is unknown on this API instance" (neotoma#1667 / neotoma#1472).
+# Release rollouts restart the server explicitly via com.neotoma.rc-autodeploy,
+# so hot-reload is unnecessary here. Set NEOTOMA_PROD_SERVER_WATCH=1 to restore
+# the node --watch dev runner for local iteration on this host.
 #
 # Calls `dev:server` directly (not `dev:server:prod`) to bypass pick-port.js /
 # with-branch-ports.js, which would assign a branch-hash-derived port instead of
@@ -68,14 +76,24 @@ export NEOTOMA_TRUST_PROD_LOOPBACK=1
 
 RESTART_DELAY=5
 while true; do
-  # Invoke dev:server directly with explicit port env vars so we bypass
-  # pick-port.js / with-branch-ports.js entirely.  Those scripts scan upward
-  # from 3180 and assign a branch-hash-derived port, which is wrong for a
-  # deterministic production launchagent that must always bind 3180.
-  HTTP_PORT="$PROD_HTTP_PORT" \
-  NEOTOMA_HTTP_PORT="$PROD_HTTP_PORT" \
-  NEOTOMA_ENV=production \
-    run_npm run dev:server || true
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] dev:server exited, restarting in ${RESTART_DELAY}s..."
+  # Invoke the server with explicit port env vars so we bypass pick-port.js /
+  # with-branch-ports.js entirely.  Those scripts scan upward from 3180 and
+  # assign a branch-hash-derived port, which is wrong for a deterministic
+  # production launchagent that must always bind 3180.
+  if [ "${NEOTOMA_PROD_SERVER_WATCH:-0}" = "1" ]; then
+    # Opt-in hot-reload for local iteration (restarts on file changes).
+    HTTP_PORT="$PROD_HTTP_PORT" \
+    NEOTOMA_HTTP_PORT="$PROD_HTTP_PORT" \
+    NEOTOMA_ENV=production \
+      run_npm run dev:server || true
+  else
+    # Default: direct, non-watch process. Survives incidental file changes so
+    # the public /mcp backend does not cycle and drop MCP sessions.
+    HTTP_PORT="$PROD_HTTP_PORT" \
+    NEOTOMA_HTTP_PORT="$PROD_HTTP_PORT" \
+    NEOTOMA_ENV=production \
+      "${NEOTOMA_LAUNCHD_NODE:-node}" --import tsx src/actions.ts || true
+  fi
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] server exited, restarting in ${RESTART_DELAY}s..."
   sleep "$RESTART_DELAY"
 done
