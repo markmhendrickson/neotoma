@@ -40,6 +40,21 @@ export const AAUTH_PRIVATE_JWK_PATH = path.join(AAUTH_CONFIG_DIR, "private.jwk")
 export const AAUTH_PUBLIC_JWK_PATH = path.join(AAUTH_CONFIG_DIR, "public.jwk");
 export const AAUTH_CONFIG_PATH = path.join(AAUTH_CONFIG_DIR, "config.json");
 
+/**
+ * Resolve the private JWK path for CLI signing.
+ *
+ * Honors `NEOTOMA_AAUTH_PRIVATE_JWK_PATH` so a per-agent caller (e.g. a daemon
+ * signing as its own swarm identity) can point at its own key instead of the
+ * shared `~/.neotoma/aauth/private.jwk`. This matches the override the proxy
+ * signer already supports (`src/proxy/aauth_client_signer.ts`). Pair it with the
+ * `NEOTOMA_AAUTH_SUB` / `NEOTOMA_AAUTH_KID` claim overrides to fully assume a
+ * per-agent identity. Relative paths resolve against the current working dir.
+ */
+export function resolveCliPrivateJwkPath(): string {
+  const explicit = process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH;
+  return explicit ? path.resolve(explicit) : AAUTH_PRIVATE_JWK_PATH;
+}
+
 export type SupportedAlg = "ES256" | "EdDSA";
 
 export interface SignerFileConfig {
@@ -148,7 +163,7 @@ export async function generateAndStoreKeypair(options?: {
  * that never have a keypair.
  */
 export async function hasCliAAuthKeypair(): Promise<boolean> {
-  return fileExists(AAUTH_PRIVATE_JWK_PATH);
+  return fileExists(resolveCliPrivateJwkPath());
 }
 
 /**
@@ -159,16 +174,17 @@ export async function hasCliAAuthKeypair(): Promise<boolean> {
  * configuration is corrupt (e.g. malformed JSON).
  */
 export async function loadCliSignerConfig(): Promise<LoadedSignerConfig | null> {
-  if (!(await fileExists(AAUTH_PRIVATE_JWK_PATH))) {
+  const privateJwkPath = resolveCliPrivateJwkPath();
+  if (!(await fileExists(privateJwkPath))) {
     return null;
   }
   let privateJwk: Record<string, unknown>;
   try {
-    const raw = await fs.readFile(AAUTH_PRIVATE_JWK_PATH, "utf-8");
+    const raw = await fs.readFile(privateJwkPath, "utf-8");
     privateJwk = JSON.parse(raw) as Record<string, unknown>;
   } catch (err) {
     throw new CliSignerConfigError(
-      `Failed to read AAuth private key at ${AAUTH_PRIVATE_JWK_PATH}: ${(err as Error).message}`
+      `Failed to read AAuth private key at ${privateJwkPath}: ${(err as Error).message}`
     );
   }
 
