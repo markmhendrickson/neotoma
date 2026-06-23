@@ -15840,6 +15840,13 @@ program
   .option("--query <json>", "JSON query override")
   .option("--path <json>", "JSON path override")
   .option("--skip-auth", "Skip auth token for public endpoints")
+  .option(
+    "--aauth",
+    "Authenticate via AAuth request signature instead of a bearer token. " +
+      "Sends no Authorization header so the per-agent signature (configured via " +
+      "NEOTOMA_AAUTH_PRIVATE_JWK_PATH + NEOTOMA_AAUTH_SUB/KID) is the credential, " +
+      "letting the server attribute the request to that agent."
+  )
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -15849,8 +15856,17 @@ program
     }
 
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
-    const token = opts.skipAuth ? undefined : await getCliToken();
-    const api = createApiClient({ baseUrl, token });
+    // --aauth: drop the bearer so the AAuth request signature is the sole
+    // credential. A bearer Authorization header otherwise takes precedence and
+    // the request lands under the bearer's identity rather than the agent's.
+    const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
+    const api = createApiClient({
+      baseUrl,
+      token,
+      // AAuth signing rides the HTTP transport, so force it over the in-process
+      // local transport (which would bypass the signature).
+      ...(opts.aauth ? { signWithCliAAuth: true, forceHttpTransport: true } : {}),
+    });
 
     const params = parseOptionalJson(opts.params);
     const body = parseOptionalJson(opts.body);

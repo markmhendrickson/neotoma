@@ -124,4 +124,35 @@ describe("api_client transport modes", () => {
     expect(remoteClient.POST).not.toHaveBeenCalled();
     delete process.env.NEOTOMA_ENV;
   });
+
+  it("forceHttpTransport overrides NEOTOMA_FORCE_LOCAL_TRANSPORT so AAuth signing applies", async () => {
+    // The in-process local transport makes no HTTP request, so RFC 9421 request
+    // signing has nothing to sign. AAuth-attributed calls must ride HTTP even
+    // when the env forces local transport.
+    process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "true";
+    remoteClient.GET.mockResolvedValueOnce({ data: { status: "ok" }, error: undefined });
+
+    const { createApiClient } = await import("../../src/shared/api_client.ts");
+    const api = createApiClient({ baseUrl: "http://localhost:3080", forceHttpTransport: true });
+    const result = await api.GET("/session", {} as never);
+
+    expect(result).toEqual({ data: { status: "ok" }, error: undefined });
+    expect(remoteClient.GET).toHaveBeenCalledWith("/session", {} as never);
+    expect(getLocalTransportClientMock).not.toHaveBeenCalled();
+  });
+
+  it("forceHttpTransport disables the offline->local fallback (which would bypass signing)", async () => {
+    const networkErr = new Error("fetch failed", { cause: { code: "ECONNREFUSED" } as Error });
+    remoteClient.POST.mockRejectedValueOnce(networkErr);
+
+    const { createApiClient } = await import("../../src/shared/api_client.ts");
+    const api = createApiClient({
+      baseUrl: "http://localhost:3080",
+      forceHttpTransport: true,
+      useOfflineFallback: true, // would normally fall back, but forceHttpTransport wins
+    });
+
+    await expect(api.POST("/store", { body: {} as never })).rejects.toThrow("fetch failed");
+    expect(getLocalTransportClientMock).not.toHaveBeenCalled();
+  });
 });
