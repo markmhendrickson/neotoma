@@ -12,74 +12,89 @@ triggers:
   - import google calendar
 ---
 
-# Remember Calendar
+# remember-calendar — Neotoma ↔ Google Calendar Sync
 
-Import calendar events into Neotoma memory — either from a live calendar MCP or from ICS file exports. Extracts scheduling commitments, attendees, and recurring patterns.
+## Purpose
 
-## When to use
+Keep Neotoma `event` entities and Google Calendar in sync. The canonical record is Neotoma; Google Calendar is the display layer. Each event routes to a calendar based on its type, following the operator's routing config (retrieved at runtime — see below).
 
-When the user wants to persist calendar events, scheduling commitments, and associated contacts into durable memory.
+## Calendar routing (retrieve at runtime, never hardcode)
 
-## Prerequisites
+Calendar IDs and the personal routing rules are operator-specific, so they are **not** in this skill. At runtime, retrieve the `calendar_routing_config` entity named `operator-calendar-routing` from Neotoma and follow its `routing` table: each entry gives a `calendar_id` and the `use_when` conditions that select it, with one entry flagged `is_default` for the uncertain case. Use the `is_default` calendar when classification is ambiguous. After creating or updating an event, write back the fields named in the config's `writeback_fields` using its `writeback_idempotency_pattern`.
 
-Run the `ensure-neotoma` skill first if Neotoma is not yet installed or configured in your current harness.
+If the config entity is missing, stop and surface that rather than guessing a calendar.
 
-## Supported sources
+## Trigger conditions (proactive)
 
-| Source | Format | Method |
-|--------|--------|--------|
-| Google Calendar | Live API | Google Calendar MCP |
-| Apple Calendar | ICS export | File read |
-| Outlook | ICS export | File read |
-| Any calendar | `.ics` files | File read |
+Apply this skill **without being asked** whenever:
 
-## Workflow
+1. A new `event` entity is stored in Neotoma and it lacks a `google_event_id` field
+2. An event entity is corrected (date/time/location changed) and it has a `google_event_id` — update the GCal event
+3. The user shares a message, screenshot, or invitation containing event details
+4. A task is created with a due_date and a clear venue/meeting (create a calendar block)
 
-### Phase 0: Verify Neotoma
+## Execution steps
 
-Confirm Neotoma MCP is connected (call `get_session_identity`).
+### Step 1 — Classify the event
 
-### Phase 1: Identify source
+Read the event `name`, `description`, `location`, and any linked `contact` entities. Match them against the `use_when` conditions in the routing config to select the target calendar. When no entry clearly matches, use the `is_default` calendar.
 
-1. Check if a calendar MCP is configured (e.g. `list_events` tool available).
-2. If no MCP, ask the user for an ICS file path.
-3. For MCP: ask for a time range (default: past 30 days + next 30 days).
-4. For ICS: read the file to determine the date range available.
+### Step 2 — Determine status
 
-### Phase 2: Retrieve and preview
+- If the event is confirmed: `status: confirmed`
+- If pending an RSVP, decision, or discussion: `status: tentative`
+- Default to `tentative` when uncertain
 
-1. **Calendar MCP**: use `list_events` to retrieve events in the specified range.
-2. **ICS file**: parse the iCalendar format to extract events.
-3. Present a preview: event count, date range, recurring vs one-time, top attendees.
-4. Ask for confirmation.
+### Step 3 — Create or update the GCal event
 
-### Phase 3: Extract entities
+**Create:**
+```bash
+gws calendar events insert \
+  --params '{"calendarId":"<calendar_id>"}' \
+  --json '{
+    "summary": "<event name>",
+    "description": "<full description with price, RSVP info, contacts>",
+    "location": "<venue>",
+    "start": {"dateTime": "<ISO8601>", "timeZone": "Europe/Madrid"},
+    "end": {"dateTime": "<ISO8601>", "timeZone": "Europe/Madrid"},
+    "status": "<confirmed|tentative>"
+  }'
+```
 
-For each event:
+If only a date is known (no time): use `"date": "YYYY-MM-DD"` instead of `dateTime`.
 
-1. **Event**: create an `event` entity with `title`, `start_time`, `end_time`, `location`, `description`, `recurrence`.
-2. **Contacts**: extract attendees as `contact` entities (deduplicate against existing contacts).
-3. **Tasks**: for events with action-oriented titles or descriptions, create associated tasks.
-4. **Places**: extract locations as `place` entities when they are specific venues.
+**Update existing event:**
+```bash
+gws calendar events patch \
+  --params '{"calendarId":"<calendar_id>","eventId":"<google_event_id>"}' \
+  --json '{ ...changed fields only... }'
+```
 
-For MCP sources, hydrate via the detail endpoint (`get_event`) before persisting, and set `data_source` per event with the event ID.
+**Default time estimates when not specified:**
+- Lunch/dinner event with no end time → add 3 hours
+- Conference/talk → add 2 hours
+- All-day cultural event → use `date` (all-day)
 
-### Phase 4: Store with provenance
+### Step 4 — Store GCal IDs back to Neotoma
 
-- For MCP-sourced events: set `data_source` per entity with the calendar event ID.
-- For ICS files: use the combined store path (entities + file_path) to preserve the raw ICS.
-- Batch REFERS_TO relationships from events to attendee contacts.
+After creating the event, correct the Neotoma entity with the config's `writeback_fields` (typically `google_event_id`, `google_calendar_id` used, and `google_event_url` from the GCal `htmlLink`). Use the config's `writeback_idempotency_pattern` (e.g. `gcal-link-<entity_id>-<YYYY-MM-DD>`).
 
-### Phase 5: Report results
+### Step 5 — Report
 
-Summarize:
-- Events imported (count, date range)
-- Contacts extracted
-- Upcoming commitments highlighted
-- Offer to set up recurring sync or import a different date range.
+> 📅 Added to **<calendar>**: *[Event name]* — [Date], [Time], [Location] ([confirmed|tentative])
 
-## Do not
+## Idempotency
 
-- Import without user confirmation.
-- Create duplicate events — check by title + start_time before storing.
-- Create duplicate contacts — deduplicate by email first.
+Before creating a new GCal event, check whether the Neotoma event entity already has a `google_event_id`. If it does, skip creation and offer to update instead.
+
+## Timezone
+
+Always use `Europe/Madrid`. Never UTC.
+
+## Joint-decision events
+
+When an event requires a joint decision with another person, set status to `tentative` and note in the GCal description that it needs confirmation before it is final.
+
+## Bulk sync
+
+When invoked as `/remember-calendar` with no arguments, scan Neotoma for `event` entities missing `google_event_id` created in the last 30 days and process each in order. Report a summary table at the end.

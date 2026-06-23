@@ -17,101 +17,56 @@ supported_harnesses:
 
 ## Purpose
 
-Give the user a quick, readable read-out of the session so far: what's been accomplished and what's still outstanding. This is a **stock-taking** skill, not a closing skill. It is the lightweight counterpart to `/end`.
+Give the user a quick, readable read-out of the session so far: what's been accomplished and what's still outstanding. A stock-taking skill, not a closing skill — the lightweight counterpart to `/end`. User-level (`~/.claude/skills/status/`), available in every repo.
 
-This skill is **user-level** (`~/.claude/skills/status/`), so it is available in every repo automatically.
+## How it differs from /end
 
-## How it differs from `/end`
+`/status` is READ-ONLY: it does NOT store entities, file tasks, write memory, invoke store-neotoma, or render the 🧠 Neotoma turn report. It just reports. (Read-only retrieval of an existing plan is allowed in project mode, but it never writes.) `/end` is the closing audit that files and persists. Use /status any time mid-session; use /end at the natural close.
 
-- **`/status` is read-only.** It does NOT store entities, file tasks, write memory, invoke `store-neotoma`, or render the `🧠 Neotoma` turn report. It just reports. (Read-only retrieval of an existing plan is allowed — see Project-aware mode — but it never writes.)
-- **`/end` is the closing audit** — it files and persists. Reach for `/end` at the natural close of a session; reach for `/status` any time mid-session to check in.
+## Whole-session coverage (read the transcript when context is partial)
 
-## Modes
+`/status` must report on the WHOLE session, not just the portion currently in context. Long sessions get compacted: the active context window may hold only a recent slice (e.g. a pre-compaction summary plus the last few turns), so reporting from context alone silently under-represents earlier work.
 
-`/status` has one default behavior and two optional modifiers, which compose:
+Before composing the report, decide whether context is whole-session or partial. Treat it as PARTIAL whenever any of these hold: a compaction/summary boundary is present in context (a "This session is being continued…" summary block, or an injected session-summary), the session spans multiple days or many turns, or the user signals the read-out missed earlier work. When partial, reconstruct the full arc from the transcript BEFORE reporting:
 
-- **`/status`** — the default: a quick, session-only read-out (the lightweight version below).
-- **`/status verbose`** (also `--full`, `full`, `detailed`) — a longer read-out with more detail per item. See *Verbose variant*.
-- **`/status project`** (also `plan`) — fold in the active plan's remaining work. See *Project-aware mode*. This is also applied automatically when an active plan is obvious from context (see that section), unless the user passed `session` / `--session-only`.
+1. Locate the session transcript JSONL. It lives under `~/.claude/projects/<project-slug>/<session-id>.jsonl` (the compaction summary names the exact path; otherwise pick the most recently modified `.jsonl` in that project dir).
+2. Do NOT read the whole file into context — it can be multiple MB. Instead extract a skeleton with a small script: pull genuine user messages (filter out tool_result payloads, `<system-reminder>`/`<command-*>`/`<local-command-*>` blocks, and "Continue from where you left off."), and optionally the assistant's short summary lines. This yields the session's request arc cheaply.
+3. Compose Achieved/Remaining from that whole-session skeleton, not just the in-context tail.
 
-Modifiers stack: `/status verbose project` gives the detailed, plan-aware read-out.
+If the transcript can't be found or read, say so in one line and report from context with an explicit caveat that coverage may be tail-only — don't present a partial read-out as complete. When context is already whole-session (short, no compaction boundary), skip the transcript read.
+
+## Modes (compose)
+
+- `/status` — default: quick read-out (whole-session per above).
+- `/status verbose` (also `--full`, `full`, `detailed`) — longer read-out with more context per item. See Verbose variant.
+- `/status project` (also `plan`) — fold in the active plan's remaining work (read-only). Also applied automatically when an active plan is obvious from context, unless the user passed `session` / `--session-only`.
+- Modifiers stack: `/status verbose project`.
 
 ## What to report
 
-Scan the conversation so far and produce a tight report with two parts.
-
-### Achieved this session
-
-A short qualitative summary of what's actually been completed and verified — framed in plain outcomes, not a tool-by-tool log. Lead with a one- or two-sentence prose overview of the session's arc, then a bullet list of concrete wins. Each bullet is one outcome in plain language (e.g. "Made `/end` a user-level skill available in every repo"), with at most a light technical anchor (a file path, entity ID, or PR number) where it genuinely helps the user locate the work. Only count things that are done — not things attempted or in flight.
-
-### Remaining
-
-What's still open, as the user would think about it — not an exhaustive TODO dump. Bullet list, each item phrased as the outstanding outcome, optionally tagged with where it stands:
-
-- **In progress** — started but not finished this session.
-- **Next up** — agreed/obvious next steps not yet begun.
-- **Blocked / waiting** — anything depending on CI, a remote agent, a scheduled task, the operator, or a third party (name the blocker in a few words).
-
-If something was explicitly dropped or deferred, note it in one line so the user knows it wasn't forgotten.
+Two parts. ACHIEVED THIS SESSION: a short qualitative summary of what's actually completed and verified, framed as plain outcomes not a tool-by-tool log. Lead with a 1–2 sentence overview, then outcome bullets — one win each in plain language, with at most a light technical anchor (file path, entity ID, PR number) where it helps locate the work. Only count things that are done. REMAINING: what's still open as the user would think about it (not an exhaustive TODO dump). Bullets tagged where they stand: in progress / next up / blocked-or-waiting (name the blocker). Note anything explicitly dropped in one line.
 
 ## Format and tone rules
 
-- **Succinct.** Aim for something scannable in well under a minute. Prefer fewer, higher-signal bullets over completeness.
-- **Qualitative prose and/or bullets.** A short lead paragraph per section is welcome; long nested checklists are not.
-- **Light technical detail only.** Include a file path, entity ID, or PR number only when it helps the user *find* the work — never raw tool output, diffs, command logs, or schema chatter.
-- **Outcomes, not mechanics.** Describe what changed for the user, not which tools were called to do it.
-- **No new work.** Do not start tasks, store data, or propose a long plan; if the user wants to close out and persist, point them at `/end`.
-
-## Suggested shape
-
-```
-**Session so far**
-
-<1–2 sentence overview of what this session has been about.>
-
-Achieved
-- <outcome> (<optional light anchor>)
-- <outcome>
-
-Remaining
-- <outcome> — in progress
-- <outcome> — next up
-- <outcome> — blocked on <thing>
-```
-
-Adapt freely: if the session has achieved a lot and has little remaining (or vice versa), let the sections breathe accordingly. If almost nothing has happened yet, say so in a sentence rather than padding.
+- Succinct: scannable in well under a minute; fewer high-signal bullets over completeness.
+- Qualitative prose and/or bullets; short lead paragraph per section welcome, long nested checklists not.
+- Light technical detail only — anchors for navigation only, never raw tool output, diffs, command logs, or schema chatter.
+- Outcomes, not mechanics.
+- No new work: don't start tasks, store data, or propose a long plan; point at /end to close out and persist.
 
 ## Project-aware mode
 
-When the session is tied to a tracked plan, `/status` can cross-reference it so "Remaining" reflects not just this session but where the broader project stands.
-
-**When to engage it:**
-
-- The user passed `project` / `plan`, OR
-- An active plan is obvious from context — e.g. CLAUDE.md names a plan entity (the Ateles plan is `ent_99ace4dd6673aa36ed08b1fe`), or the session has been working against one. When obvious, engage it by default; skip if the user passed `session` / `--session-only`.
-
-**How (read-only):**
-
-1. Retrieve the plan entity via `retrieve_entity_by_identifier` / `retrieve_entity_snapshot` (Neotoma prod). Read its `todos`, `next_steps`, `decisions`, and `body`. **Never correct or write the plan** — that's `/update-plan`'s job; `/status` only reads.
-2. In **Achieved**, mark any session outcomes that close a plan todo, e.g. "Made `/end` user-level — closes plan todo *distribute end skill*."
-3. In **Remaining**, add a short **Plan** sub-group: the plan's still-open todos and `next_steps` not touched this session, each one line. Surface current `next_steps` blockers verbatim-ish but trimmed.
-4. Keep it light: summarize the plan's open items, don't dump the whole todo array. If the plan has many open todos, show the top few by priority and note the count of the rest (e.g. "+6 more open todos").
-
-If no plan is found, silently fall back to the session-only report — do not announce the absence unless the user explicitly asked for `project` mode.
+When the session is tied to a tracked plan, cross-reference it so Remaining reflects where the broader project stands, not just this session. Engage when the user passed `project`/`plan`, OR an active plan is obvious from context (e.g. CLAUDE.md names a plan entity — the Ateles plan is ent_99ace4dd6673aa36ed08b1fe); skip if the user passed `session`/`--session-only`. How (read-only): (1) retrieve the plan via retrieve_entity_by_identifier / retrieve_entity_snapshot (Neotoma prod); read todos, next_steps, decisions, body — NEVER correct or write it (that's /update-plan). (2) In Achieved, mark session outcomes that close a plan todo. (3) In Remaining, add a short Plan sub-group: still-open todos and next_steps not touched this session, one line each. (4) Keep it light — summarize open items, show top few by priority and note the count of the rest; don't dump the whole array. If no plan is found, silently fall back to session-only unless the user explicitly asked for project mode.
 
 ## Verbose variant
 
-`/status verbose` produces a fuller read-out while keeping the same structure and the same read-only, outcomes-first discipline. Relative to the default:
-
-- Each **Achieved** bullet may carry a second clause of context — *why* it mattered or what it unblocks — and may include the navigation anchor inline.
-- **Remaining** items may note the dependency or the reason they're still open, not just the tag.
-- Add a brief **Decisions made this session** sub-section (one line each) when the session settled anything worth recording — so the user can eyeball what might warrant `/end` persistence.
-- Still no raw logs, diffs, or tool-by-tool narration. "Verbose" means more *context*, not more *mechanics*. Target a comfortable read in a couple of minutes, not an exhaustive audit.
+`/status verbose` is a fuller read-out, same structure and same read-only outcomes-first discipline. Each Achieved bullet may carry a second clause of context (why it mattered / what it unblocks) and an inline anchor; Remaining items may note the dependency or reason they're open; add a brief 'Decisions made this session' sub-section (one line each) when the session settled anything worth recording. Still no raw logs, diffs, or tool-by-tool narration — verbose means more context, not more mechanics. Target a couple-minute read, not an audit.
 
 ## Constraints
 
-- MUST be read-only: no `store`, no task filing, no memory writes, no `store-neotoma`, no `🧠 Neotoma` turn report. Project-aware mode may *read* a plan but MUST NOT correct or write it (that's `/update-plan`).
-- MUST keep technical detail light — anchors for navigation only, never logs or diffs — in both default and verbose modes.
+- MUST report on the whole session: when context is partial (compaction boundary present, multi-day/many-turn session, or the user flags missed work), reconstruct the full arc from the transcript JSONL before reporting; never present a tail-only read-out as complete. If the transcript is unreadable, report from context with an explicit coverage caveat.
+- MUST be read-only: no store, no task filing, no memory writes, no store-neotoma, no 🧠 Neotoma turn report. Project-aware mode may read a plan but MUST NOT write it (that's /update-plan). Reading the transcript JSONL is a read and is allowed.
+- MUST keep technical detail light — navigation anchors only, never logs or diffs — in both default and verbose modes.
 - MUST separate genuinely-completed work from outstanding/in-progress work; do not report attempts as achievements.
-- Default `/status` MUST stay succinct; resist turning the report into a full audit (that's `/end`). `verbose` adds context, never mechanics.
+- Default /status MUST stay succinct; resist turning into a full audit (that's /end). verbose adds context, never mechanics.
 - Project-aware mode MUST summarize the plan's open items, not dump the full todo array.
