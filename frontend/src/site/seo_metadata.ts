@@ -777,7 +777,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/capability-delta": {
     title: "Capability delta | Neotoma",
     description:
-      "Machine-readable per-release tool diff via npm_check_update with include_capability_delta: true. Returns new_tools, removed_tools, and a one-line recommendation — so agents enumerate newly available MCP tools after an upgrade in one call.",
+      "Machine-readable per-release tool diff via npm_check_update with include_capability_delta: true. Returns new_tools, removed_tools, and a one-line recommendation, so agents enumerate newly available MCP tools after an upgrade in one call.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -789,7 +789,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/high-velocity-intake": {
     title: "High-velocity intake | Neotoma",
     description:
-      "Discard-by-default overflow sink for firehose sources (NEOTOMA_OVERFLOW_SINK, intake.mode='overflow') and canonical_key sightings with read-time collapse_by aggregation — keep the graph clean while preserving the full audit trail on disk.",
+      "Discard-by-default overflow sink for firehose sources (NEOTOMA_OVERFLOW_SINK, intake.mode='overflow') and canonical_key sightings with read-time collapse_by aggregation, keeping the graph clean while preserving the full audit trail on disk.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
