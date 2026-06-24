@@ -285,6 +285,16 @@ These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for out
 
 `GET /peers/{peer_id}` returns `remote_health` from probing `{peer_url}/health` and semver compat vs the local package version (same rules as `neotoma compat`). See `docs/subsystems/peer_sync.md`.
 
+### Sandbox (server process)
+
+Read by the Neotoma HTTP server when running the public-sandbox profile; no paired CLI flag. Full runbook: [`docs/subsystems/sandbox_deployment.md`](../subsystems/sandbox_deployment.md).
+
+| Environment variable               | Default                       | Purpose                                                                                                                                                                                                                                                                                |
+| ---------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEOTOMA_SANDBOX_MODE`             | unset                         | Truthy (`1`/`true`/`yes`) enables all sandbox-only behaviors (ephemeral sessions, anon writes, tighter limits). Also auto-enables tenant-scoped entity ids.                                                                                                                              |
+| `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` | follows `NEOTOMA_SANDBOX_MODE` | Truthy forces tenant-scoped deterministic entity ids (salt `generateEntityId` with `user_id`) independent of sandbox mode. Without it (and outside sandbox mode) entity ids are global `hash(entity_type, canonical_name)`, so per-tenant same-named entities collide on one row.        |
+| `NEOTOMA_SANDBOX_BASE_URL`         | `http://127.0.0.1:$HTTP_PORT` | Base URL the per-session pack seeder calls back into (`/sandbox/session/new` seeds over HTTP as the new bearer). Defaults to loopback on the server's own port.                                                                                                                          |
+
 ### MCP / SSE transport tuning (server process)
 
 These are read by the Neotoma HTTP server when it serves the MCP StreamableHTTP transport at `/mcp`. They keep the long-lived SSE stream alive behind reverse proxies (Cloudflare Tunnel, nginx, ngrok) and clients with idle timeouts. This is a reliability/transport concern; see issue #1483 and the [v0.15.1 release supplement](../releases/in_progress/v0.15.1/github_release_supplement.md).

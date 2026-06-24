@@ -108,6 +108,7 @@ import {
   type SandboxSession,
 } from "./services/sandbox/sessions.js";
 import { seedForSession } from "./services/sandbox/seeder.js";
+import { getSandboxPack } from "./services/sandbox/pack_registry.js";
 import {
   buildEndpointsMap,
   buildLandingContext,
@@ -340,31 +341,43 @@ if (isSandboxMode()) {
   // seed entrypoint against this server over HTTP authenticated as the new
   // session's bearer, so the chosen pack's entities land in the visitor's
   // workspace. Seeding failures are non-fatal (the session is still usable,
-  // just empty) — they are logged so a broken pack is visible in ops logs.
-  const createAndSeedSession = async (packId: string): Promise<SandboxSession> => {
+  // just empty) — they are logged so a broken pack is visible in ops logs, and
+  // surfaced to the caller via `seed_status` so the picker can distinguish a
+  // legitimately empty pack from a seeding failure (explicit-over-implicit).
+  type SeedStatus = "seeded" | "skipped" | "failed";
+  const createAndSeedSession = async (
+    packId: string
+  ): Promise<{ session: SandboxSession; seedStatus: SeedStatus }> => {
     const session = createSandboxSession(packId);
+    const pack = getSandboxPack(session.packId);
+    // Packs with seedPolicy "none" (e.g. the empty pack) legitimately seed
+    // nothing — that is "skipped", not a failure.
+    if (!pack || pack.seedPolicy === "none" || !pack.manifestPath) {
+      return { session, seedStatus: "skipped" };
+    }
     try {
       const baseUrl =
         process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() ||
         `http://127.0.0.1:${process.env.HTTP_PORT?.trim() || "3180"}`;
-      await seedForSession({
+      const seeded = await seedForSession({
         packId: session.packId,
         baseUrl,
         bearer: session.bearerToken,
         logger: (msg) => logger.info(`[Sandbox][seed] ${msg}`),
       });
+      return { session, seedStatus: seeded ? "seeded" : "failed" };
     } catch (err) {
       logger.error(
         `[Sandbox] seeding failed for session ${session.userId} (pack ${session.packId}): ${(err as Error).message}`
       );
+      return { session, seedStatus: "failed" };
     }
-    return session;
   };
 
   app.post("/sandbox/session/new", sessionRateLimit, async (req, res) => {
     try {
       const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : "generic";
-      const session = await createAndSeedSession(packId);
+      const { session, seedStatus } = await createAndSeedSession(packId);
       res.cookie(SESSION_COOKIE_NAME, session.bearerToken, {
         httpOnly: true,
         sameSite: "lax",
@@ -375,6 +388,7 @@ if (isSandboxMode()) {
         one_time_code: session.oneTimeCode,
         expires_at: session.expiresAt,
         pack_id: session.packId,
+        seed_status: seedStatus,
       });
     } catch (err) {
       logger.error(`[Sandbox] session/new failed: ${(err as Error).message}`);
@@ -440,7 +454,9 @@ if (isSandboxMode()) {
     }
     const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : undefined;
     purgeSessionUserData(session.userId);
-    const newSession = await createAndSeedSession(packId ?? session.packId);
+    const { session: newSession, seedStatus } = await createAndSeedSession(
+      packId ?? session.packId
+    );
     res.cookie(SESSION_COOKIE_NAME, newSession.bearerToken, {
       httpOnly: true,
       sameSite: "lax",
@@ -451,6 +467,7 @@ if (isSandboxMode()) {
       user_id: newSession.userId,
       pack_id: newSession.packId,
       expires_at: newSession.expiresAt,
+      seed_status: seedStatus,
     });
   });
 

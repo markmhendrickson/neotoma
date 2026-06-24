@@ -24,7 +24,6 @@ export interface SeedForSessionOptions {
   packId?: string;
   baseUrl: string;
   bearer?: string;
-  targetUserId?: string;
   logger?: (message: string) => void;
 }
 
