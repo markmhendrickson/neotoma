@@ -158,7 +158,7 @@ function inlineConversation(key: string): Record<string, unknown>[] {
 
 async function resolveFixtureEntities(
   batch: SandboxEntityBatch,
-  repoRoot: string,
+  repoRoot: string
 ): Promise<Record<string, unknown>[]> {
   if (batch.fixture.startsWith("inline://")) {
     const key = batch.fixture.slice("inline://".length);
@@ -231,7 +231,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
     const agent = manifest.agent_identities[batch.agent_index];
     if (!agent) {
       throw new Error(
-        `Batch ${i} (${batch.idempotency_prefix}) references agent_index ${batch.agent_index}, which is out of range`,
+        `Batch ${i} (${batch.idempotency_prefix}) references agent_index ${batch.agent_index}, which is out of range`
       );
     }
     const entities = await resolveFixtureEntities(batch, repoRoot);
@@ -239,7 +239,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
 
     if (options.dryRun) {
       logger(
-        `[dry-run] batch ${batch.idempotency_prefix} — ${entities.length} entities as ${agent.client_name}`,
+        `[dry-run] batch ${batch.idempotency_prefix} — ${entities.length} entities as ${agent.client_name}`
       );
       entityBatchesSubmitted++;
       continue;
@@ -260,7 +260,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `seed batch ${batch.idempotency_prefix} failed: ${res.status} ${text.slice(0, 200)}`,
+        `seed batch ${batch.idempotency_prefix} failed: ${res.status} ${text.slice(0, 200)}`
       );
     }
     entityBatchesSubmitted++;
@@ -271,7 +271,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
     const agent = manifest.agent_identities[source.agent_index];
     if (!agent) {
       throw new Error(
-        `Unstructured source for ${source.fixture_path} references agent_index ${source.agent_index} (out of range)`,
+        `Unstructured source for ${source.fixture_path} references agent_index ${source.agent_index} (out of range)`
       );
     }
 
@@ -290,7 +290,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
       original_filename: source.original_filename,
       idempotency_key: stableIdempotencyKey(
         `sandbox-seed-unstructured-${source.original_filename}`,
-        0,
+        0
       ),
     });
 
@@ -304,7 +304,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
       // Non-fatal for seeding — we log and continue so one bad fixture
       // doesn't blow up the whole reset.
       logger(
-        `WARN: unstructured source ${source.fixture_path} failed (${res.status}): ${text.slice(0, 200)}`,
+        `WARN: unstructured source ${source.fixture_path} failed (${res.status}): ${text.slice(0, 200)}`
       );
       continue;
     }
@@ -325,8 +325,7 @@ function parseArgs(argv: string[]): {
   dryRun: boolean;
   manifestPath?: string;
 } {
-  let baseUrl =
-    process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() || "http://localhost:3180";
+  let baseUrl = process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() || "http://localhost:3180";
   let dryRun = false;
   let manifestPath: string | undefined;
   for (let i = 0; i < argv.length; i++) {
@@ -349,9 +348,7 @@ async function main(): Promise<void> {
   const { baseUrl, dryRun, manifestPath } = parseArgs(process.argv.slice(2));
   const bearer = process.env.NEOTOMA_SANDBOX_BEARER?.trim() || undefined;
   const result = await seedSandbox({ baseUrl, bearer, dryRun, manifestPath });
-  process.stdout.write(
-    JSON.stringify({ ok: true, base_url: baseUrl, ...result }, null, 2) + "\n",
-  );
+  process.stdout.write(JSON.stringify({ ok: true, base_url: baseUrl, ...result }, null, 2) + "\n");
 }
 
 const isMain =

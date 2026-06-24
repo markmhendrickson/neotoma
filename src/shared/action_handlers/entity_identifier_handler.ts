@@ -1,7 +1,11 @@
 import { db } from "../../db.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import { queryEntities } from "../../services/entity_queries.js";
-import { generateEntityId, normalizeEntityValue } from "../../services/entity_resolution.js";
+import {
+  entityIdTenantSalt,
+  generateEntityId,
+  normalizeEntityValue,
+} from "../../services/entity_resolution.js";
 import { resolveIdentitySearchFields } from "../../services/schema_registry.js";
 import { logger } from "../../utils/logger.js";
 
@@ -281,7 +285,7 @@ export async function retrieveEntityByIdentifierWithFallback(
 
   let directEntities = entities || [];
   if (directEntities.length === 0 && entityType) {
-    const possibleId = generateEntityId(entityType, identifier);
+    const possibleId = generateEntityId(entityType, identifier, entityIdTenantSalt(userId));
     const { data: entityById, error: idError } = await db
       .from("entities")
       .select("*")

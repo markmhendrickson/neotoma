@@ -19,9 +19,7 @@ describe("buildSeedCommand", () => {
     expect(args[0]).toBe(path.join(REPO, "dist", "scripts", "seed_sandbox.js"));
     // No tsx loader for the compiled path.
     expect(args).not.toContain("tsx");
-    expect(args).toEqual(
-      expect.arrayContaining(["--base-url", "http://127.0.0.1:3180"]),
-    );
+    expect(args).toEqual(expect.arrayContaining(["--base-url", "http://127.0.0.1:3180"]));
   });
 
   it("falls back to the tsx-loaded TS source when dist is absent (dev)", () => {
