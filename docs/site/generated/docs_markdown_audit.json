@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-06-24T09:36:05.878Z",
-  "total_files": 691,
+  "generated_at": "2026-06-24T15:07:35.883Z",
+  "total_files": 693,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -28,7 +28,7 @@
     "reports": 48,
     "research": 1,
     "security": 6,
-    "site": 175,
+    "site": 176,
     "skills": 1,
     "specs": 14,
     "subsystems": 48,
@@ -36,7 +36,7 @@
     "testing": 10,
     "ui": 42,
     "use_cases": 17,
-    "vocabulary": 1
+    "vocabulary": 2
   },
   "files": [
     {
@@ -1704,6 +1704,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/pages/en/inspector-skinning.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/pages/en/install-docker.md",
       "top": "site"
     },
@@ -2801,6 +2805,10 @@
     },
     {
       "rel": "docs/vocabulary/canonical_terms.md",
+      "top": "vocabulary"
+    },
+    {
+      "rel": "docs/vocabulary/plain_language.md",
       "top": "vocabulary"
     }
   ]

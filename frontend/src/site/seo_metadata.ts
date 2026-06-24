@@ -762,6 +762,19 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Retention", path: "/inspector/settings/retention" },
     ],
   },
+  "/inspector-skinning": {
+    title: "Inspector skinning | Neotoma",
+    description:
+      "Theme the Neotoma Inspector with a custom colour palette and brand text. Covers NEOTOMA_INSPECTOR_SKIN, NEOTOMA_INSPECTOR_SKIN_CONFIG, bundled presets, the skin JSON shape, HSL token constraints, and local smoke commands.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Skinning", path: "/inspector-skinning" },
+    ],
+  },
   "/identify-entity-by-signals": {
     title: "Identity resolver | Neotoma",
     description:
@@ -807,7 +820,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
-      { name: "Inspector", path: "/inspector" },
       { name: "Embeddable graph", path: "/embed-graph" },
     ],
   },
