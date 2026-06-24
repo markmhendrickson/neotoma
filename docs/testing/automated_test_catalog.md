@@ -229,6 +229,7 @@ flowchart TD
 - `tests/unit/sqlite_connection_pragmas.test.ts`
 - `tests/unit/standing_rules.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
+- `tests/unit/store_strict_and_consistency.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
 - `tests/unit/subscription_types.test.ts`
 - `tests/unit/substrate_event_bus.test.ts`
