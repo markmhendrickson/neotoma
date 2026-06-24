@@ -48,6 +48,10 @@ table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
 th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e3ddd2; }
 th { background: #f4f1ec; font-weight: 600; }
 .footer-meta { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e3ddd2; font-size: 0.85rem; color: #777; }
+h1, h2, h3, h4, h5, h6 { scroll-margin-top: 1.5rem; }
+a.hanchor { margin-left: 0.4em; font-weight: 400; font-size: 0.85em; text-decoration: none; opacity: 0; transition: opacity 0.12s ease; }
+h1:hover > a.hanchor, h2:hover > a.hanchor, h3:hover > a.hanchor, h4:hover > a.hanchor, h5:hover > a.hanchor, h6:hover > a.hanchor { opacity: 0.4; }
+a.hanchor:hover { opacity: 1; }
 `;
 
 function escapeHtmlAttribute(s: string): string {
@@ -90,6 +94,36 @@ ${customStyleTag}
 <main>
 ${input.htmlBody}
 </main>
+<script>
+(function () {
+  function slugify(t) {
+    return ((t || "").toLowerCase().trim()
+      .replace(/[^a-z0-9\\s-]/g, "")
+      .replace(/\\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "")) || "section";
+  }
+  var heads = document.querySelectorAll("main h1, main h2, main h3, main h4, main h5, main h6");
+  for (var i = 0; i < heads.length; i++) {
+    var h = heads[i];
+    var id = h.id;
+    if (!id) {
+      var base = slugify(h.textContent), cand = base, n = 2;
+      while (document.getElementById(cand)) { cand = base + "-" + n++; }
+      id = cand;
+      h.id = id;
+    }
+    if (!h.querySelector("a.hanchor")) {
+      var a = document.createElement("a");
+      a.className = "hanchor";
+      a.href = "#" + id;
+      a.setAttribute("aria-label", "Permalink to this section");
+      a.textContent = "#";
+      h.appendChild(a);
+    }
+  }
+})();
+</script>
 </body>
 </html>`;
 }
