@@ -7231,6 +7231,39 @@ export async function storeStructuredForApi(params: {
           anyUnknownFieldSchemaHasIdentityConfig = true;
         }
       }
+
+      // Issue #1755: SOURCE_PRIORITY_IGNORED — non-blocking advisory warning
+      // when the caller sets a non-default source_priority but none of the
+      // fields being written will actually honour it. This happens when every
+      // field's merge policy is `last_write` (the auto-discovered-schema
+      // default) or `merge_array` — both ignore source_priority entirely.
+      // The warning is emitted regardless of whether the entity has a
+      // registered schema (no schema → all fields effectively last_write).
+      {
+        const { sourcePriorityWillBeIgnored } =
+          await import("./services/source_priority_warning.js");
+        if (
+          sourcePriorityWillBeIgnored({
+            sourcePriority,
+            writtenFields: r.fields,
+            mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          })
+        ) {
+          schemaStoreWarnings.push({
+            code: "SOURCE_PRIORITY_IGNORED",
+            message:
+              `${r.entity_type} stored with source_priority ${sourcePriority} but no field ` +
+              "on this entity type uses a merge strategy that honours it. " +
+              "source_priority is only effective when a field's reducer policy is " +
+              "`highest_priority` (or `most_specific` with `tie_breaker: \"source_priority\"`). " +
+              "To fix: register a schema whose reducer_config sets the relevant field(s) to " +
+              "`highest_priority` so source_priority is honoured during reduction.",
+            observation_index: r.observation_index,
+            entity_type: r.entity_type,
+            entity_id: r.entity_id,
+          });
+        }
+      }
     }
   }
 
