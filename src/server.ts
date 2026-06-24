@@ -5999,7 +5999,7 @@ export class NeotomaServer {
               `${e.entityType} stored with source_priority ${sourcePriority} but no field ` +
               "on this entity type uses a merge strategy that honours it. " +
               "source_priority is only effective when a field's reducer policy is " +
-              "`highest_priority` (or `most_specific` with `tie_breaker: \"source_priority\"`). " +
+              '`highest_priority` (or `most_specific` with `tie_breaker: "source_priority"`). ' +
               "To fix: register a schema whose reducer_config sets the relevant field(s) to " +
               "`highest_priority` so source_priority is honoured during reduction.",
             observation_index: i,
