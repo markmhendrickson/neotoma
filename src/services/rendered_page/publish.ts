@@ -19,6 +19,35 @@
 import { config } from "../../config.js";
 import { db } from "../../db.js";
 import { generateGuestAccessToken } from "../guest_access_token.js";
+import { checkRenderedPageConformance } from "./conformance.js";
+import type { ConformancePolicy, RenderedPageWarning } from "./conformance.js";
+
+/**
+ * Best-effort resolve the caller's active `conformance_policy` entity (its
+ * `rules` array). Tenant-owned quality policy lives in DATA, not in core, so a
+ * tenant with no policy gets only the universal invariants. Fail-open: any
+ * lookup/shape problem yields `undefined` and never blocks publishing.
+ */
+async function resolveConformancePolicy(userId: string): Promise<ConformancePolicy | undefined> {
+  try {
+    const { data } = await db
+      .from("entities")
+      .select("id")
+      .eq("entity_type", "conformance_policy")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data?.id) return undefined;
+    const { getEntityWithProvenance } = await import("../entity_queries.js");
+    const current = await getEntityWithProvenance(data.id as string);
+    const snap = (current?.snapshot ?? {}) as Record<string, unknown>;
+    const rules = snap.rules;
+    return Array.isArray(rules) ? { rules: rules as ConformancePolicy["rules"] } : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface PublishRenderedPageParams {
   /** Existing rendered_page entity id to publish. Mutually exclusive with inline fields. */
@@ -43,6 +72,12 @@ export interface PublishRenderedPageResult {
   access_token: string;
   ttl_seconds: number;
   created: boolean;
+  /**
+   * Non-fatal conformance warnings (theming, tokenless cross-links). Present
+   * only when the page tripped at least one check; omitted otherwise. Publishing
+   * never fails on these — they are advisory, like `store_warnings`.
+   */
+  conformance_warnings?: RenderedPageWarning[];
 }
 
 /**
@@ -87,6 +122,11 @@ export async function publishRenderedPage(
 ): Promise<PublishRenderedPageResult> {
   let entityId = params.entityId;
   let created = false;
+  // Content used for the warn-first conformance check. Sourced inline on create,
+  // or from the stored snapshot when publishing an existing page. Best-effort:
+  // if it can't be resolved, the check is simply skipped (fail-open).
+  let checkHtml: string | undefined;
+  let checkCss: string | undefined;
 
   if (!entityId) {
     if (!params.title && !params.htmlBody) {
@@ -107,6 +147,8 @@ export async function publishRenderedPage(
       idempotencyKey: params.idempotencyKey,
     });
     created = true;
+    checkHtml = params.htmlBody;
+    checkCss = params.customCss;
   } else {
     // Validate the target exists, is owned by the caller, and is a rendered_page
     // before minting a token. Owner-scoping is REQUIRED (tenant isolation,
@@ -144,6 +186,18 @@ export async function publishRenderedPage(
         }
       );
     }
+
+    // Best-effort load of the stored content for the conformance check. Never
+    // blocks publishing: any failure leaves checkHtml/checkCss undefined.
+    try {
+      const { getEntityWithProvenance } = await import("../entity_queries.js");
+      const current = await getEntityWithProvenance(entityId);
+      const snap = (current?.snapshot ?? {}) as Record<string, unknown>;
+      if (typeof snap.html_body === "string") checkHtml = snap.html_body;
+      if (typeof snap.custom_css === "string") checkCss = snap.custom_css;
+    } catch {
+      // fail-open: skip conformance when content can't be resolved
+    }
   }
 
   const token = await generateGuestAccessToken({
@@ -159,11 +213,23 @@ export async function publishRenderedPage(
   const base = resolveShareBaseUrl();
   const share_url = `${base}/entities/${encodeURIComponent(entityId)}/html?access_token=${token}`;
 
+  // Warn-first conformance pass: universal invariants + the tenant's own
+  // conformance_policy rules. Pure + total, but guard anyway so a checker or
+  // policy-lookup bug can never break publishing.
+  let conformanceWarnings: RenderedPageWarning[] = [];
+  try {
+    const policy = await resolveConformancePolicy(params.userId);
+    conformanceWarnings = checkRenderedPageConformance(checkHtml, checkCss, policy);
+  } catch {
+    conformanceWarnings = [];
+  }
+
   return {
     entity_id: entityId,
     share_url,
     access_token: token,
     ttl_seconds: ttlSeconds,
     created,
+    ...(conformanceWarnings.length > 0 ? { conformance_warnings: conformanceWarnings } : {}),
   };
 }

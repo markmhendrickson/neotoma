@@ -2,11 +2,11 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **687**
+Total files: **693**
 
 ## By top-level folder under docs/
 
-- **site**: 171
+- **site**: 176
 - **developer**: 122
 - **plans**: 68
 - **reports**: 48
@@ -31,6 +31,7 @@ Total files: **687**
 - **migration**: 2
 - **prototypes**: 2
 - **templates**: 2
+- **vocabulary**: 2
 - **api**: 1
 - **coverage_manifest.md**: 1
 - **examples**: 1
@@ -40,4 +41,3 @@ Total files: **687**
 - **rendered_page.md**: 1
 - **research**: 1
 - **skills**: 1
-- **vocabulary**: 1

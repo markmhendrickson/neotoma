@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-06-24T09:42:55.896Z",
-  "total_files": 687,
+  "generated_at": "2026-06-24T15:09:52.380Z",
+  "total_files": 693,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -28,7 +28,7 @@
     "reports": 48,
     "research": 1,
     "security": 6,
-    "site": 171,
+    "site": 176,
     "skills": 1,
     "specs": 14,
     "subsystems": 48,
@@ -36,7 +36,7 @@
     "testing": 10,
     "ui": 42,
     "use_cases": 17,
-    "vocabulary": 1
+    "vocabulary": 2
   },
   "files": [
     {
@@ -1600,6 +1600,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/pages/en/capability-delta.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/pages/en/cases.md",
       "top": "site"
     },
@@ -1652,6 +1656,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/pages/en/embed-graph.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/pages/en/false-closure-risk.md",
       "top": "site"
     },
@@ -1676,6 +1684,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/pages/en/high-velocity-intake.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/pages/en/home.md",
       "top": "site"
     },
@@ -1685,6 +1697,14 @@
     },
     {
       "rel": "docs/site/pages/en/human-inspectability.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/identify-entity-by-signals.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/inspector-skinning.md",
       "top": "site"
     },
     {
@@ -2785,6 +2805,10 @@
     },
     {
       "rel": "docs/vocabulary/canonical_terms.md",
+      "top": "vocabulary"
+    },
+    {
+      "rel": "docs/vocabulary/plain_language.md",
       "top": "vocabulary"
     }
   ]
