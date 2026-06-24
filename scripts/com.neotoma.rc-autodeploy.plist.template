@@ -11,6 +11,7 @@
   Install via: node scripts/install_launchd_rc_autodeploy.js
   Placeholders (REPO_ROOT_PLACEHOLDER etc.) are substituted by the installer.
 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
