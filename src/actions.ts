@@ -105,7 +105,9 @@ import {
   purgeSessionUserData,
   sweepExpiredSessions,
   SESSION_COOKIE_NAME,
+  type SandboxSession,
 } from "./services/sandbox/sessions.js";
+import { seedForSession } from "./services/sandbox/seeder.js";
 import {
   buildEndpointsMap,
   buildLandingContext,
@@ -334,10 +336,35 @@ if (isSandboxMode()) {
     validate: { trustProxy: false } as never,
   });
 
-  app.post("/sandbox/session/new", sessionRateLimit, (req, res) => {
+  // Create an ephemeral session AND seed its pack fixtures. Seeding runs the
+  // seed entrypoint against this server over HTTP authenticated as the new
+  // session's bearer, so the chosen pack's entities land in the visitor's
+  // workspace. Seeding failures are non-fatal (the session is still usable,
+  // just empty) — they are logged so a broken pack is visible in ops logs.
+  const createAndSeedSession = async (packId: string): Promise<SandboxSession> => {
+    const session = createSandboxSession(packId);
+    try {
+      const baseUrl =
+        process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() ||
+        `http://127.0.0.1:${process.env.HTTP_PORT?.trim() || "3180"}`;
+      await seedForSession({
+        packId: session.packId,
+        baseUrl,
+        bearer: session.bearerToken,
+        logger: (msg) => logger.info(`[Sandbox][seed] ${msg}`),
+      });
+    } catch (err) {
+      logger.error(
+        `[Sandbox] seeding failed for session ${session.userId} (pack ${session.packId}): ${(err as Error).message}`
+      );
+    }
+    return session;
+  };
+
+  app.post("/sandbox/session/new", sessionRateLimit, async (req, res) => {
     try {
       const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : "generic";
-      const session = createSandboxSession(packId);
+      const session = await createAndSeedSession(packId);
       res.cookie(SESSION_COOKIE_NAME, session.bearerToken, {
         httpOnly: true,
         sameSite: "lax",
@@ -405,7 +432,7 @@ if (isSandboxMode()) {
     });
   });
 
-  app.post("/sandbox/session/reset", (req, res) => {
+  app.post("/sandbox/session/reset", async (req, res) => {
     const session = resolveSessionFromRequest(req);
     if (!session) {
       res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
@@ -413,7 +440,7 @@ if (isSandboxMode()) {
     }
     const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : undefined;
     purgeSessionUserData(session.userId);
-    const newSession = createSandboxSession(packId ?? session.packId);
+    const newSession = await createAndSeedSession(packId ?? session.packId);
     res.cookie(SESSION_COOKIE_NAME, newSession.bearerToken, {
       httpOnly: true,
       sameSite: "lax",

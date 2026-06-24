@@ -320,26 +320,35 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
   };
 }
 
-function parseArgs(argv: string[]): { baseUrl: string; dryRun: boolean } {
+function parseArgs(argv: string[]): {
+  baseUrl: string;
+  dryRun: boolean;
+  manifestPath?: string;
+} {
   let baseUrl =
     process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() || "http://localhost:3180";
   let dryRun = false;
+  let manifestPath: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--base-url" && argv[i + 1]) {
       baseUrl = argv[i + 1];
       i++;
+    } else if (arg === "--manifest" && argv[i + 1]) {
+      // Per-pack manifest (use-case packs); defaults to the generic manifest.
+      manifestPath = argv[i + 1];
+      i++;
     } else if (arg === "--dry-run") {
       dryRun = true;
     }
   }
-  return { baseUrl, dryRun };
+  return { baseUrl, dryRun, manifestPath };
 }
 
 async function main(): Promise<void> {
-  const { baseUrl, dryRun } = parseArgs(process.argv.slice(2));
+  const { baseUrl, dryRun, manifestPath } = parseArgs(process.argv.slice(2));
   const bearer = process.env.NEOTOMA_SANDBOX_BEARER?.trim() || undefined;
-  const result = await seedSandbox({ baseUrl, bearer, dryRun });
+  const result = await seedSandbox({ baseUrl, bearer, dryRun, manifestPath });
   process.stdout.write(
     JSON.stringify({ ok: true, base_url: baseUrl, ...result }, null, 2) + "\n",
   );
