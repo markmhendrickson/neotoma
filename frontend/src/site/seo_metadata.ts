@@ -762,6 +762,55 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Retention", path: "/inspector/settings/retention" },
     ],
   },
+  "/identify-entity-by-signals": {
+    title: "Identity resolver | Neotoma",
+    description:
+      "Single-call multi-signal entity resolution. Supply name, email, company, domain, phone, or any string signals; get a scored best match with resolution_band (high/medium/low/unresolved), ranked candidates, and matched_signals in one MCP call.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Identity resolver", path: "/identify-entity-by-signals" },
+    ],
+  },
+  "/capability-delta": {
+    title: "Capability delta | Neotoma",
+    description:
+      "Machine-readable per-release tool diff via npm_check_update with include_capability_delta: true. Returns new_tools, removed_tools, and a one-line recommendation, so agents enumerate newly available MCP tools after an upgrade in one call.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Capability delta", path: "/capability-delta" },
+    ],
+  },
+  "/high-velocity-intake": {
+    title: "High-velocity intake | Neotoma",
+    description:
+      "Discard-by-default overflow sink for firehose sources (NEOTOMA_OVERFLOW_SINK, intake.mode='overflow') and canonical_key sightings with read-time collapse_by aggregation, keeping the graph clean while preserving the full audit trail on disk.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "High-velocity intake", path: "/high-velocity-intake" },
+    ],
+  },
+  "/embed-graph": {
+    title: "Embeddable graph | Neotoma",
+    description:
+      "Chrome-less /embed/graph iframe route for white-labelling the Neotoma Inspector graph. Accepts ?apiBase= and ?node=, inherits Inspector skin tokens, and emits postMessage on node double-click for host-frame integration.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Embeddable graph", path: "/embed-graph" },
+    ],
+  },
   "/aauth/spec": {
     title: "AAuth wire format and verification | Neotoma",
     description:
