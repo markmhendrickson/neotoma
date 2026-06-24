@@ -5586,10 +5586,16 @@ export class NeotomaServer {
         entityId,
         fieldsForObservation
       );
+      // Consistency fix: scope the existing-observation check to (id, user_id).
+      // Without the user_id filter, a same-content observation written by a
+      // different user (same observationId due to content-addressed hashing)
+      // would cause this insert to be skipped, leaving the current user with
+      // no observation despite store returning success (write/read gap).
       const { data: existingObservation, error: existingObservationError } = await db
         .from("observations")
         .select("id")
         .eq("id", observationId)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (existingObservationError) {
@@ -5665,11 +5671,13 @@ export class NeotomaServer {
         const priorSnapshot =
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
 
-        // Get all observations for entity
+        // Get all observations for entity, scoped to the current user so
+        // cross-user data does not bleed into this user's snapshot.
         const { data: allObservations, error: obsError } = await db
           .from("observations")
           .select("*")
           .eq("entity_id", createdEntity.entityId)
+          .eq("user_id", userId)
           .order("observed_at", { ascending: false });
 
         if (obsError) {
