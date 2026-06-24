@@ -154,8 +154,14 @@ The `/release` skill ([`.cursor/skills/release/SKILL.md`](../../.cursor/skills/r
 A normal `/release` is also **not finished** until the public sandbox host is redeployed and verified. After npm publish succeeds and the registry reports the new version, deploy the Fly sandbox app:
 
 ```bash
-flyctl deploy -c fly.sandbox.toml --remote-only
+flyctl deploy -c fly.sandbox.toml --remote-only \
+  --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)"
 ```
+
+The `--build-arg NEOTOMA_GIT_SHA=…` stamps the real commit into the image so
+the deployed build is verifiable. Without it, the root JSON `git_sha` falls
+back to the opaque Fly machine-version ULID (`FLY_MACHINE_VERSION`), and you
+cannot tell from the live site which commit is actually running.
 
 Then verify:
 
@@ -164,4 +170,6 @@ curl -fsS -H "Accept: application/json" https://sandbox.neotoma.io/
 curl -fsSI https://sandbox.neotoma.io/health | grep -i '^x-neotoma-sandbox: 1'
 ```
 
-The root JSON must report the release version and `mode: "sandbox"`. Skip this only when the user explicitly confirmed a no-sandbox release scope. If the sandbox deploy fails after npm publish, treat the release as partially shipped and continue debugging the sandbox deployment rather than reporting completion.
+The root JSON must report the release version, `mode: "sandbox"`, and a
+`git_sha` equal to the released commit (a 40-char hex SHA — **not** a 26-char
+ULID). Skip this only when the user explicitly confirmed a no-sandbox release scope. If the sandbox deploy fails after npm publish, treat the release as partially shipped and continue debugging the sandbox deployment rather than reporting completion.
