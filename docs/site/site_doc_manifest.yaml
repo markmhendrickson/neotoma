@@ -35,6 +35,17 @@ entries:
     status: canonical_site_page
     canonical_site_path: /cli
 
+  - repo_path: docs/site/pages/en/inspector-skinning.mdx
+    status: canonical_site_page
+    canonical_site_path: /inspector-skinning
+    supporting_source: inspector/README.md
+    notes: "Operator/developer guide for Inspector skinning via NEOTOMA_INSPECTOR_SKIN and NEOTOMA_INSPECTOR_SKIN_CONFIG. Adapts the Skinning section of inspector/README.md; closes #1680."
+
+  - repo_path: inspector/README.md
+    status: supporting_source
+    canonical_site_path: /inspector-skinning
+    notes: "Upstream source for the skinning section (lines ~61-113). Site MDX is the durable operator-facing surface; README is the developer reference."
+
   - repo_path: docs/site/pages/en/sdk-agent.mdx
     status: canonical_site_page
     canonical_site_path: /sdk/agent

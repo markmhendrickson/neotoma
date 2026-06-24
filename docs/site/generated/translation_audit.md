@@ -29,6 +29,7 @@
 | `/healthcare` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/hosted` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/human-inspectability` | en | 2026-05-07 | canonical |
+| `/inspector-skinning` | en | 2026-06-24 | canonical |
 | `/install` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/install/docker` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/install/manual` | en, es | 2026-05-07 | canonical, machine_draft |

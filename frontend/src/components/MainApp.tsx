@@ -186,6 +186,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/security-hardening", element: <MdxSitePage canonicalPath="/security-hardening" /> },
   { path: "/plans-guide", element: <MdxSitePage canonicalPath="/plans-guide" /> },
   { path: "/mirror-guide", element: <MdxSitePage canonicalPath="/mirror-guide" /> },
+  { path: "/inspector-skinning", element: <MdxSitePage canonicalPath="/inspector-skinning" /> },
   { path: "/inspector", element: <InspectorReferencePage /> },
   { path: "/inspector/dashboard", element: <InspectorDashboardPage /> },
   { path: "/inspector/entities", element: <InspectorEntitiesPage /> },
