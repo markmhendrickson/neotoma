@@ -107,3 +107,49 @@ describe("fleet-general agent_* schemas v0.1", () => {
     }
   });
 });
+
+describe("agent_session + session_transcript schemas v0.1", () => {
+  it("registers agent_session and session_transcript", () => {
+    const registered = getRegisteredEntityTypes();
+    expect(registered).toContain("agent_session");
+    expect(registered).toContain("session_transcript");
+  });
+
+  it("agent_session uses joint identity on harness + native_session_id with reject collision policy", () => {
+    const s = getSchemaDefinition("agent_session");
+    expect(s, "agent_session schema missing").not.toBeNull();
+    expect(s!.entity_type).toBe("agent_session");
+    expect(s!.schema_version).toBe("0.1.0");
+    expect(s!.metadata?.category).toBe("agent_runtime");
+    expect(s!.schema_definition.fields.harness?.required).toBe(true);
+    expect(s!.schema_definition.fields.native_session_id?.required).toBe(true);
+    expect(s!.schema_definition.canonical_name_fields).toEqual([
+      "harness",
+      "native_session_id",
+    ]);
+    expect(s!.schema_definition.name_collision_policy).toBe("reject");
+  });
+
+  it("session_transcript is content-addressed (identity on content_hash)", () => {
+    const s = getSchemaDefinition("session_transcript");
+    expect(s, "session_transcript schema missing").not.toBeNull();
+    expect(s!.entity_type).toBe("session_transcript");
+    expect(s!.schema_version).toBe("0.1.0");
+    expect(s!.metadata?.category).toBe("agent_runtime");
+    expect(s!.schema_definition.fields.content_hash?.required).toBe(true);
+    expect(s!.schema_definition.canonical_name_fields).toEqual(["content_hash"]);
+  });
+
+  it("agent_session DOES carry denormalized aauth_sub + trigger provenance, unlike the fleet LCD types", () => {
+    // The fleet types (agent_task/attempt/outcome) keep agent identity in
+    // provenance via AAuth and forbid an agent_sub field. agent_session is a
+    // session-level record where aauth_sub is a denormalized *content* field
+    // (which agent produced the session) used for discovery/filtering; the
+    // authoritative provenance still lives in the linked harness_event /
+    // participation_record / agent_attempt entities.
+    const fields = getSchemaDefinition("agent_session")!.schema_definition.fields;
+    expect(Object.keys(fields)).toContain("aauth_sub");
+    expect(Object.keys(fields)).toContain("trigger_kind");
+    expect(Object.keys(fields)).toContain("kind");
+  });
+});
