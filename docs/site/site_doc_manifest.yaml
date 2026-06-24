@@ -472,6 +472,30 @@ entries:
     canonical_site_path: /neotoma-with-openclaw
     notes: "Native plugin entry reference: src/openclaw_entry.ts, kind: memory, plugins.slots.memory wiring, session lifecycle hooks. The site /neotoma-with-openclaw page covers end-user setup; this doc covers the plugin contract."
 
+  - repo_path: docs/site/pages/en/identify-entity-by-signals.mdx
+    status: canonical_site_page
+    canonical_site_path: /identify-entity-by-signals
+    supporting_source: src/tool_definitions.ts
+    notes: "Operator/agent guide for the identify_entity_by_signals MCP tool (multi-signal entity resolver). Sources: tool_definitions.ts:318, openapi.yaml /identify_entity_by_signals, and the v0.17.0 release supplement. Closes #1760 doc-coverage gap for this tool."
+
+  - repo_path: docs/site/pages/en/capability-delta.mdx
+    status: canonical_site_page
+    canonical_site_path: /capability-delta
+    supporting_source: src/tool_definitions.ts
+    notes: "Agent guide for npm_check_update include_capability_delta feature. Sources: tool_definitions.ts:1389, src/services/capability_delta.ts, and the v0.17.0 release supplement. Closes #1760 doc-coverage gap for this feature."
+
+  - repo_path: docs/site/pages/en/high-velocity-intake.mdx
+    status: canonical_site_page
+    canonical_site_path: /high-velocity-intake
+    supporting_source: src/services/overflow_sink.ts
+    notes: "Operator guide for high-velocity intake: overflow sink (NEOTOMA_OVERFLOW_SINK, intake.mode='overflow') and canonical_key sightings with collapse_by read-time aggregation. Sources: src/services/overflow_sink.ts, src/server.ts overflow and collapse_by sections, v0.17.0 release supplement. Closes #1760 doc-coverage gap."
+
+  - repo_path: docs/site/pages/en/embed-graph.mdx
+    status: canonical_site_page
+    canonical_site_path: /embed-graph
+    supporting_source: inspector/src/pages/embed_graph.tsx
+    notes: "Developer/embedder guide for the chrome-less /embed/graph iframe route (phases 1-2 of #1606). Sources: inspector/src/pages/embed_graph.tsx, inspector/src/contexts/api_base_context.tsx, v0.17.0 release supplement. Closes #1760 doc-coverage gap."
+
 # ============================================================================
 # /docs index — category tree and featured list
 # ============================================================================

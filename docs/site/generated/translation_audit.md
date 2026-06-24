@@ -8,6 +8,7 @@
 | `/auditable-change-log` | en | 2026-05-07 | canonical |
 | `/build-vs-buy` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/building-pipelines` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/capability-delta` | en | 2026-06-24 | canonical |
 | `/cases` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/changelog` | en, es | 2026-05-07 | canonical, human_draft |
 | `/cli` | en | 2026-05-07 | canonical |
@@ -21,14 +22,17 @@
 | `/deterministic-state-evolution` | en | 2026-05-07 | canonical |
 | `/diligence` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/direct-human-editability` | en | 2026-05-07 | canonical |
+| `/embed-graph` | en | 2026-06-24 | canonical |
 | `/false-closure-risk` | en | 2026-05-07 | canonical |
 | `/faq` | en, es | 2026-05-07 | canonical, human_draft |
 | `/financial-ops` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/foundation/problem-statement` | en | 2026-05-07 | canonical |
 | `/government` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/healthcare` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/high-velocity-intake` | en | 2026-06-24 | canonical |
 | `/hosted` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/human-inspectability` | en | 2026-05-07 | canonical |
+| `/identify-entity-by-signals` | en | 2026-06-24 | canonical |
 | `/inspector-skinning` | en | 2026-06-24 | canonical |
 | `/install` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/install/docker` | en, es | 2026-05-07 | canonical, machine_draft |
