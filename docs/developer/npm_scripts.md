@@ -91,6 +91,7 @@ Keep these aliases for one minor release, update docs and automation to the cano
 |------------|----------|
 | `setup:launchd-dev` / `setup:launchd-dev-server` | `com.neotoma.dev-server` → `npm run dev:server` ([`launchd_dev_servers.md`](launchd_dev_servers.md)) |
 | `setup:launchd-prod-server` | `com.neotoma.prod-server` → `npm run start:server:prod` ([`launchd_prod_server.md`](launchd_prod_server.md)) |
+| `setup:launchd-rc-autodeploy` | `com.neotoma.rc-autodeploy` → polls `origin/main` every 120s and, when the RC checkout is behind, fast-forwards it, rebuilds dist (server + Inspector), and hard-restarts `com.neotoma.prod-server` ("rolling main = RC"; mechanical deploy only — Struthio still owns tagged releases) ([`launchd_dev_servers.md`](launchd_dev_servers.md)) |
 | `setup:launchd-cli-sync` | `com.neotoma.watch-build` → `npm link`, one `build:server`, then `dev:types` using the captured setup-time Node/npm toolchain (keeps global `neotoma` pointed at the checkout and aligned with `dist/`) |
 | `setup:launchd-watch-build` | Alias → `setup:launchd-cli-sync` |
 | `setup:launchd-watch-stacks` | Dev server agent + `setup:launchd-cli-sync` (compatibility wrapper) |

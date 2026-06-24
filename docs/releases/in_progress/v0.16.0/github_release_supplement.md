@@ -100,7 +100,7 @@ result = wrapped("Tell me about Acme Corp")
 
 ### Inspector skinning via `NEOTOMA_INSPECTOR_SKIN` (#1585)
 
-Embedders and operators can theme the bundled Inspector SPA without forking the React app.
+Embedders and operators can theme the bundled Inspector SPA without forking the React app. See the **[Inspector skinning guide](https://neotoma.io/inspector-skinning)** for full documentation (env vars, precedence, JSON shape, sanitization constraints, and smoke commands).
 
 - **`NEOTOMA_INSPECTOR_SKIN=<name>`** — load a bundled preset from `dist/inspector/skins/<name>.json` (source: `inspector/public/skins/`). Ships with a neutral `sample` preset for verification.
 - **`NEOTOMA_INSPECTOR_SKIN_CONFIG=/abs/path/custom.json`** — load arbitrary skin JSON from disk.

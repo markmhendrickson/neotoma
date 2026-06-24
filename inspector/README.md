@@ -96,7 +96,7 @@ Inspector renders the default Neotoma palette unchanged.
     "foreground": "300 80% 10%",
     "primary":    "315 90% 50%",
     "sidebar":    "315 70% 90%"
-    // ... see inspector/public/skins/sample.json for the full token list
+    // ... see sample.json for the full token list
   },
 
   "dark": {                        // optional dark-mode overrides
@@ -106,6 +106,8 @@ Inspector renders the default Neotoma palette unchanged.
   }
 }
 ```
+
+See [`inspector/public/skins/sample.json`](https://github.com/markmhendrickson/neotoma/blob/main/inspector/public/skins/sample.json) for the full token list.
 
 Token values use the shadcn / Tailwind HSL triplet format
 (`"<hue> <saturation>% <lightness>%"`, optionally followed by `/ <alpha>`).

@@ -22,7 +22,17 @@
 
 set -uo pipefail
 
-RC_DIR="${RC_DIR:-/Users/markmhendrickson/neotoma-rc-src}"
+# Default RC_DIR to this script's own repo root (scripts/..), so the script is
+# portable to any RC checkout; the installer still sets RC_DIR explicitly in the
+# LaunchAgent env. Resolve the real path of the script even if symlinked.
+_SCRIPT_SRC="${BASH_SOURCE[0]}"
+while [ -h "$_SCRIPT_SRC" ]; do
+  _SCRIPT_DIR="$(cd -P "$(dirname "$_SCRIPT_SRC")" >/dev/null 2>&1 && pwd)"
+  _SCRIPT_SRC="$(readlink "$_SCRIPT_SRC")"
+  [ "${_SCRIPT_SRC#/}" = "$_SCRIPT_SRC" ] && _SCRIPT_SRC="$_SCRIPT_DIR/$_SCRIPT_SRC"
+done
+_SCRIPT_DIR="$(cd -P "$(dirname "$_SCRIPT_SRC")" >/dev/null 2>&1 && pwd)"
+RC_DIR="${RC_DIR:-$(cd "$_SCRIPT_DIR/.." && pwd)}"
 PROD_LABEL="${PROD_LABEL:-com.neotoma.prod-server}"
 HEALTH_URL="${HEALTH_URL:-https://neotoma.markmhendrickson.com/health}"
 BRANCH="${BRANCH:-main}"
@@ -90,15 +100,20 @@ fi
 if [ "$STASHED" -eq 1 ]; then
   if ! git stash pop --quiet; then
     log "WARNING: stash pop conflicted (likely main changed package.json vs the RC version bump)."
-    log "         Resolve manually in $RC_DIR; server NOT restarted to avoid shipping a conflicted tree."
+    log "         Resolve manually in $RC_DIR (git status / git checkout --theirs the version bump),"
+    log "         then run 'git stash drop'. The next poll (≤120s) will retry the deploy automatically."
+    log "         Only remove $LOCK_DIR by hand if a prior run crashed mid-deploy and left it behind."
+    log "         Server NOT restarted to avoid shipping a conflicted tree."
     exit 1
   fi
   log "restored local RC changes after fast-forward"
 fi
 
 log "RC now at $(git rev-parse --short HEAD); rebuilding dist…"
-if ! npm run build:server >/dev/null 2>&1; then
-  log "ERROR: build:server failed; server left on prior build."
+# Let stdout/stderr flow to launchd's StandardOut/ErrorPath so a build failure is
+# diagnosable from the log without re-running the build by hand.
+if ! npm run build:server; then
+  log "ERROR: build:server failed; server left on prior build. See the build output above."
   exit 1
 fi
 log "build:server complete."
@@ -109,8 +124,8 @@ log "build:server complete."
 # v0.16 RC, where the git pointer advanced but the served Inspector was 10
 # days stale because this step was missing. build:inspector:prod-target emits
 # the prod-targeted bundle into dist/inspector.
-if ! npm run build:inspector:prod-target >/dev/null 2>&1; then
-  log "ERROR: build:inspector:prod-target failed; server left on prior build."
+if ! npm run build:inspector:prod-target; then
+  log "ERROR: build:inspector:prod-target failed; server left on prior build. See the build output above."
   exit 1
 fi
 log "build:inspector complete."
