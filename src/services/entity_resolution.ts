@@ -867,10 +867,11 @@ export class MergeRefusedError extends Error {
             `deterministically, or pass target_id to extend the existing entity.`
           : `Strict mode: resolution for "${params.entityType}" landed on existing ` +
             `entity ${params.entityId} (canonical_name "${params.canonicalName}") ` +
-            `without an explicit target_id or a schema canonical_name_fields ` +
-            `match. Pass target_id to extend the existing entity, declare ` +
-            `canonical_name_fields on the schema, or drop --strict / ` +
-            `intent: "create_new" to allow the merge.`;
+            `via a heuristic path (not a schema canonical_name_fields match or ` +
+            `natural-key match via canonical_name/email/id field). ` +
+            `To allow the merge, pass target_id to extend the existing entity, ` +
+            `declare canonical_name_fields on the schema, supply an email or ` +
+            `canonical_name field, or drop --strict / intent: "create_new".`;
     super(message);
     this.name = "MergeRefusedError";
     this.entityType = params.entityType;
@@ -992,11 +993,29 @@ export async function resolveEntityWithTrace(
 
   if (existing) {
     // Strict mode refuses to merge into an existing entity unless the
-    // resolution came from a schema-declared composite identity rule.
+    // resolution came from a schema-declared canonical_name_fields rule OR a
+    // deterministic "natural key" match:
+    //   - schema:canonical_name_fields:* — explicit schema-driven identity
+    //   - name_key:canonical_name — caller supplied an explicit canonical_name
+    //   - name_key:email — email is globally unique per entity
+    //   - id_key:* — stable internal/external IDs (message_id, turn_key, etc.)
+    //
+    // Heuristic fallbacks (name_key:name, name_key:title, heuristic:*) are
+    // not deterministically unique and are refused in strict mode so callers
+    // must either supply target_id or declare canonical_name_fields on the
+    // schema to make the identity rule explicit.
     const schemaDeterministic = path.some((step) =>
       step.startsWith("schema:canonical_name_fields")
     );
-    if (strict && !schemaDeterministic) {
+    const naturalKeyMatch =
+      !schemaDeterministic &&
+      path.some(
+        (step) =>
+          step === "name_key:canonical_name" ||
+          step === "name_key:email" ||
+          step.startsWith("id_key:")
+      );
+    if (strict && !schemaDeterministic && !naturalKeyMatch) {
       throw new MergeRefusedError({
         entityType,
         entityId,
