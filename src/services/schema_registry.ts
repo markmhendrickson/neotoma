@@ -76,6 +76,47 @@ export interface ConverterDefinition {
   deterministic: boolean; // Must be true for MVP
 }
 
+/**
+ * Declarative value constraints for a schema field (#1756).
+ *
+ * All constraint properties are optional and independent. When multiple
+ * properties are declared they are all evaluated; a value only passes when
+ * every applicable constraint is satisfied.
+ *
+ * Enforcement is controlled by {@link SchemaDefinition.constraint_violation_policy}.
+ */
+export interface FieldConstraints {
+  /**
+   * Inclusive lower bound for numeric fields (`type: "number"`).
+   * Values strictly less than `min` are violations.
+   */
+  min?: number;
+  /**
+   * Inclusive upper bound for numeric fields (`type: "number"`).
+   * Values strictly greater than `max` are violations.
+   */
+  max?: number;
+  /**
+   * Exhaustive list of allowed values. A stored value that does not appear in
+   * this list is a violation. Applies to both `string` and `number` fields;
+   * comparison is strict-typed (string `"1"` ≠ number `1`).
+   */
+  enum?: Array<string | number>;
+  /**
+   * Regular-expression string (passed to `new RegExp(pattern)`) that the
+   * stored value must match. Only applied to `string` fields; ignored for
+   * other types. The pattern is anchored only if the caller includes `^`/`$`.
+   */
+  pattern?: string;
+  /**
+   * Explicit set of disallowed (sentinel) values. A stored value that matches
+   * any entry is a violation. Useful for banning sentinel defaults such as
+   * `0`, `-1`, or `"N/A"` without specifying a full allow-list.
+   * Comparison is strict-typed.
+   */
+  banned?: Array<string | number>;
+}
+
 export interface FieldDefinition {
   type: "string" | "number" | "date" | "boolean" | "array" | "object";
   required?: boolean;
@@ -83,6 +124,8 @@ export interface FieldDefinition {
   preserveCase?: boolean; // Preserve case for this field during canonicalization
   description?: string; // Field description
   converters?: ConverterDefinition[]; // Field type converters
+  /** Declarative write-time value constraints for this field. See {@link FieldConstraints}. */
+  constraints?: FieldConstraints;
 }
 
 /**
@@ -237,6 +280,33 @@ export interface SchemaDefinition {
    * document the rationale in the schema snapshot README.
    */
   name_collision_policy?: "merge" | "warn" | "reject";
+
+  /**
+   * Controls how the store path handles a field-level constraint violation
+   * declared via {@link FieldConstraints} on one or more field definitions
+   * (#1756).
+   *
+   * - `"reject"` (default when constraints are declared) — the store is
+   *   aborted and a structured `ERR_CONSTRAINT_VIOLATION` error is returned to
+   *   the caller. Declaring at least one `constraints` block on a field is
+   *   itself the opt-in to enforcement; this policy makes rejection the
+   *   default so schemas that care about data quality get hard guards without
+   *   extra ceremony.
+   * - `"warn"` — constraint violations are surfaced as non-blocking
+   *   `CONSTRAINT_VIOLATION` entries in `store_warnings`. The write proceeds.
+   *   Use this during rollout or for fields where bad data is preferable to a
+   *   dropped write.
+   *
+   * Back-compat: a schema that declares NO `constraints` on any field is
+   * completely unaffected by this policy regardless of its value. The
+   * enforcement gate short-circuits before the constraint check when no
+   * constraints are declared.
+   *
+   * When omitted, the effective default is `"reject"` for schemas that do
+   * declare constraints, preserving the intuition that "declaring a constraint
+   * means enforcing it."
+   */
+  constraint_violation_policy?: "reject" | "warn";
 
   /**
    * Fields compared by the post-hoc duplicate detector (R5). When omitted,
@@ -2267,6 +2337,91 @@ export class SchemaRegistryService {
             throw new Error(`Converter function name for ${fieldName} must be a non-empty string`);
           }
         }
+      }
+
+      // Validate field-level constraints (#1756)
+      if (fieldDef.constraints !== undefined) {
+        const c = fieldDef.constraints;
+        if (c === null || typeof c !== "object") {
+          throw new Error(`constraints for ${fieldName} must be an object`);
+        }
+
+        // min / max — numeric; require min <= max when both declared
+        if (c.min !== undefined && typeof c.min !== "number") {
+          throw new Error(`constraints.min for ${fieldName} must be a number`);
+        }
+        if (c.max !== undefined && typeof c.max !== "number") {
+          throw new Error(`constraints.max for ${fieldName} must be a number`);
+        }
+        if (c.min !== undefined && c.max !== undefined && c.min > c.max) {
+          throw new Error(`constraints for ${fieldName}: min (${c.min}) must be <= max (${c.max})`);
+        }
+        // min / max are nonsensical on non-numeric types
+        if ((c.min !== undefined || c.max !== undefined) && fieldDef.type !== "number") {
+          throw new Error(
+            `constraints.min / constraints.max on field "${fieldName}" require type "number" ` +
+              `(field declares type "${fieldDef.type}")`
+          );
+        }
+
+        // enum — non-empty array of string|number
+        if (c.enum !== undefined) {
+          if (!Array.isArray(c.enum) || c.enum.length === 0) {
+            throw new Error(`constraints.enum for ${fieldName} must be a non-empty array`);
+          }
+          for (const v of c.enum) {
+            if (typeof v !== "string" && typeof v !== "number") {
+              throw new Error(
+                `constraints.enum for ${fieldName} entries must be strings or numbers`
+              );
+            }
+          }
+        }
+
+        // banned — non-empty array of string|number
+        if (c.banned !== undefined) {
+          if (!Array.isArray(c.banned) || c.banned.length === 0) {
+            throw new Error(`constraints.banned for ${fieldName} must be a non-empty array`);
+          }
+          for (const v of c.banned) {
+            if (typeof v !== "string" && typeof v !== "number") {
+              throw new Error(
+                `constraints.banned for ${fieldName} entries must be strings or numbers`
+              );
+            }
+          }
+        }
+
+        // pattern — string; must compile; only valid on string fields
+        if (c.pattern !== undefined) {
+          if (typeof c.pattern !== "string") {
+            throw new Error(`constraints.pattern for ${fieldName} must be a string`);
+          }
+          try {
+            // eslint-disable-next-line no-new
+            new RegExp(c.pattern);
+          } catch {
+            throw new Error(
+              `constraints.pattern for ${fieldName} is not a valid regular expression: "${c.pattern}"`
+            );
+          }
+          if (fieldDef.type !== "string") {
+            throw new Error(
+              `constraints.pattern on field "${fieldName}" requires type "string" ` +
+                `(field declares type "${fieldDef.type}")`
+            );
+          }
+        }
+      }
+    }
+
+    // Validate constraint_violation_policy (#1756)
+    if (definition.constraint_violation_policy !== undefined) {
+      const cvp = definition.constraint_violation_policy;
+      if (cvp !== "reject" && cvp !== "warn") {
+        throw new Error(
+          `constraint_violation_policy has unknown value: ${String(cvp)}. Allowed: reject | warn.`
+        );
       }
     }
 
