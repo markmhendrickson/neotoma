@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-06-17T14:44:40.468Z",
-  "total_files": 686,
+  "generated_at": "2026-06-24T09:42:55.896Z",
+  "total_files": 687,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -31,7 +31,7 @@
     "site": 171,
     "skills": 1,
     "specs": 14,
-    "subsystems": 47,
+    "subsystems": 48,
     "templates": 2,
     "testing": 10,
     "ui": 42,
@@ -2381,6 +2381,10 @@
     },
     {
       "rel": "docs/subsystems/feedback_neotoma_forwarder.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/github_entities.md",
       "top": "subsystems"
     },
     {
