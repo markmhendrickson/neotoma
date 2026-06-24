@@ -62,7 +62,11 @@ describe("issue identity (#1761)", () => {
     // A write carrying only a title (no composite, no local_issue_id) must throw
     // rather than silently create a divergent title-hashed `issue` entity.
     expect(() =>
-      deriveCanonicalNameFromFields("issue", { title: "orphan triage write", status: "open" }, schema)
+      deriveCanonicalNameFromFields(
+        "issue",
+        { title: "orphan triage write", status: "open" },
+        schema
+      )
     ).toThrow(CanonicalNameUnresolvedError);
   });
 
