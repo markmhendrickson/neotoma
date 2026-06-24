@@ -45,7 +45,7 @@ To add a preset, drop a valid skin JSON file under `inspector/public/skins/<name
     "foreground": "220 20% 10%",
     "primary":    "210 90% 45%",
     "sidebar":    "210 60% 92%"
-    // ... see full token list below
+    // ... see sample.json for the full token list
   },
 
   "dark": {                      // optional: dark-mode overrides; missing tokens inherit defaults
@@ -54,6 +54,8 @@ To add a preset, drop a valid skin JSON file under `inspector/public/skins/<name
   }
 }
 ```
+
+See the full token list in [`sample.json`](https://github.com/markmhendrickson/neotoma/blob/main/inspector/public/skins/sample.json).
 
 All four top-level keys are optional except `name`. Omitted palette tokens inherit the Inspector's default values. Brand fields that are missing or empty are ignored.
 
