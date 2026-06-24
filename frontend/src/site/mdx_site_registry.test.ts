@@ -116,6 +116,10 @@ describe("mdx_site_registry", () => {
     expect(hasMdxSitePage("/privacy")).toBe(true);
     expect(hasMdxSitePage("/terms")).toBe(true);
     expect(hasMdxSitePage("/")).toBe(true);
+    expect(hasMdxSitePage("/identify-entity-by-signals")).toBe(true);
+    expect(hasMdxSitePage("/capability-delta")).toBe(true);
+    expect(hasMdxSitePage("/high-velocity-intake")).toBe(true);
+    expect(hasMdxSitePage("/embed-graph")).toBe(true);
     expect(hasMdxSitePage("/not-a-real-route")).toBe(false);
   });
 

@@ -35,6 +35,19 @@ export interface ProxyConfig {
   aauthEnabled: boolean;
   aauthSigner?: AAuthSignerConfig;
   autostart: boolean;
+  /**
+   * Per-request downstream timeout (ms). A hung request rejects after this
+   * and enters the retry path instead of stalling until the harness's own
+   * MCP timeout. 0 disables. Falls back to NEOTOMA_MCP_PROXY_TIMEOUT_MS env,
+   * then DEFAULT_REQUEST_TIMEOUT_MS.
+   */
+  requestTimeoutMs?: number;
+  /**
+   * Max attempts (initial + retries) for recovering a lost MCP session.
+   * Falls back to NEOTOMA_MCP_PROXY_MAX_ATTEMPTS env, then
+   * DEFAULT_MAX_ATTEMPTS.
+   */
+  maxRetries?: number;
 }
 
 function effectiveClientName(config: ProxyConfig): string {
@@ -99,7 +112,7 @@ function injectClientInfo(message: Record<string, unknown>, config: ProxyConfig)
   );
 }
 
-class SessionState {
+export class SessionState {
   sessionId: string | null = null;
 
   attach(headers: Record<string, string>): void {
@@ -128,10 +141,15 @@ export function isRecoverableMcpSessionLostError(status: number, bodyText: strin
   );
 }
 
-interface ProxyLoopState {
+export interface ProxyLoopState {
   session: SessionState;
   /** Last downstream initialize body (JSON), after clientInfo injection — replayed on session loss. */
   lastInitializeBody: string | null;
+}
+
+/** Fresh proxy loop state — exported so callers/tests construct a clean session. */
+export function createLoopState(): ProxyLoopState {
+  return { session: new SessionState(), lastInitializeBody: null };
 }
 
 async function sendDownstream(
@@ -178,14 +196,17 @@ export function formatDownstreamErrorMessage(status: number, detail: string): st
   return `neotoma-mcp-proxy downstream error (${status}): ${trimmed.slice(0, 200)}`;
 }
 
+type EmitFn = (payload: unknown) => void;
+
 function emitErrorResponse(
   originalMessage: Record<string, unknown>,
   status: number,
-  detail: string
+  detail: string,
+  emit: EmitFn = emitJson
 ): void {
   const requestId = originalMessage.id;
   if (requestId === undefined) return;
-  emitJson({
+  emit({
     jsonrpc: "2.0",
     id: requestId,
     error: {
@@ -196,18 +217,18 @@ function emitErrorResponse(
   });
 }
 
-async function forwardJsonResponse(response: Response): Promise<void> {
+async function forwardJsonResponse(response: Response, emit: EmitFn = emitJson): Promise<void> {
   const body = await response.text();
   if (!body) return;
   try {
     const payload = JSON.parse(body);
-    emitJson(payload);
+    emit(payload);
   } catch (err) {
     log(`Failed to decode JSON response: ${String(err)}`);
   }
 }
 
-async function forwardSseResponse(response: Response): Promise<void> {
+async function forwardSseResponse(response: Response, emit: EmitFn = emitJson): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
@@ -237,7 +258,7 @@ async function forwardSseResponse(response: Response): Promise<void> {
           if (currentEvent !== "message") continue;
           try {
             const payload = JSON.parse(data);
-            emitJson(payload);
+            emit(payload);
           } catch {
             log(`SSE data frame is not JSON: ${data.slice(0, 200)}`);
           }
@@ -249,83 +270,211 @@ async function forwardSseResponse(response: Response): Promise<void> {
   }
 }
 
-async function dispatchMessage(
+async function forwardResponse(response: Response, emit: EmitFn): Promise<void> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("text/event-stream")) {
+    await forwardSseResponse(response, emit);
+  } else {
+    await forwardJsonResponse(response, emit);
+  }
+}
+
+/** Default per-request downstream timeout (ms) — below typical harness MCP timeouts so a hang retries rather than surfacing as "unavailable". */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+/** Default total attempts (initial + retries) to recover a lost MCP session. */
+export const DEFAULT_MAX_ATTEMPTS = 4;
+
+function envPositiveInt(name: string): number | undefined {
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
+}
+
+function resolveTimeoutMs(config: ProxyConfig): number {
+  return (
+    config.requestTimeoutMs ??
+    envPositiveInt("NEOTOMA_MCP_PROXY_TIMEOUT_MS") ??
+    DEFAULT_REQUEST_TIMEOUT_MS
+  );
+}
+
+function resolveMaxAttempts(config: ProxyConfig): number {
+  return (
+    config.maxRetries ?? envPositiveInt("NEOTOMA_MCP_PROXY_MAX_ATTEMPTS") ?? DEFAULT_MAX_ATTEMPTS
+  );
+}
+
+/** Exponential backoff capped at 2s: 300, 600, 1200, 2000, … ms. */
+export function backoffMs(attempt: number): number {
+  return Math.min(300 * 2 ** (attempt - 1), 2000);
+}
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    if (typeof timer.unref === "function") timer.unref();
+  });
+}
+
+/**
+ * Reject if `p` does not settle within `ms` (0/negative disables). The
+ * underlying fetch is left to settle on its own — the caller has already
+ * moved on to a retry, and a late success is harmless.
+ */
+export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  if (!ms || ms <= 0) return p;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`downstream timeout after ${ms}ms`)), ms);
+    if (typeof timer.unref === "function") timer.unref();
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
+/** Injected transport for {@link dispatchCore}: real impl wraps sendDownstream; tests pass a fake. */
+export interface DispatchDeps {
+  send: (headers: Record<string, string>, body: string) => Promise<Response>;
+  emit: EmitFn;
+  sleep: (ms: number) => Promise<void>;
+  timeoutMs: number;
+  maxAttempts: number;
+}
+
+/**
+ * Forward one JSON-RPC message downstream, recovering automatically from a
+ * lost/expired MCP session — the failure mode behind neotoma#1472/#1667,
+ * where a single-instance restart (or a non-sticky replica) drops the
+ * in-memory session and the server replies `503 … session is unknown on
+ * this API instance`, or the request hangs through the restart window.
+ *
+ * On that 503 OR a transport error/timeout for a non-initialize method, the
+ * cached `initialize` is replayed downstream and the message retried, up to
+ * `maxAttempts` with exponential backoff. The client's stdout only ever sees
+ * the final result, so backend restarts become invisible instead of failing
+ * the whole session. `initialize` itself is never retried here — the client
+ * owns the handshake.
+ */
+export async function dispatchCore(
+  deps: DispatchDeps,
   loopState: ProxyLoopState,
   config: ProxyConfig,
   message: Record<string, unknown>
 ): Promise<void> {
   injectClientInfo(message, config);
   const body = JSON.stringify(message);
-  if (message.method === "initialize") {
-    loopState.lastInitializeBody = body;
-  }
+  const isInit = message.method === "initialize";
+  if (isInit) loopState.lastInitializeBody = body;
 
-  const postOriginal = async (): Promise<Response> => {
+  const post = (payload: string): Promise<Response> => {
     const headers = buildBaseHeaders(config);
     loopState.session.attach(headers);
-    return sendDownstream(config, headers, body);
+    return withTimeout(deps.send(headers, payload), deps.timeoutMs);
   };
 
-  try {
-    let resp = await postOriginal();
+  const reinitialize = async (): Promise<void> => {
+    const initBody = loopState.lastInitializeBody;
+    if (!initBody) throw new Error("no cached initialize body to replay");
+    loopState.session.clearSession();
+    const headers = buildBaseHeaders(config);
+    const resp = await withTimeout(deps.send(headers, initBody), deps.timeoutMs);
     loopState.session.capture(resp.headers);
-
+    const text = await resp.text();
     if (resp.status >= 400) {
+      throw new Error(`re-initialize failed status=${resp.status} body=${text.slice(0, 300)}`);
+    }
+  };
+
+  let lastDetail = "";
+  for (let attempt = 1; attempt <= deps.maxAttempts; attempt++) {
+    try {
+      // A non-initialize message with no live session (lost on a prior
+      // attempt, or the downstream restarted) must re-handshake first.
+      if (!isInit && !loopState.session.sessionId && loopState.lastInitializeBody) {
+        await reinitialize();
+      }
+
+      const resp = await post(body);
+      loopState.session.capture(resp.headers);
+
+      if (resp.status < 400) {
+        await forwardResponse(resp, deps.emit);
+        return;
+      }
+
       const errText = await resp.text();
-      const method = message.method;
       if (
         isRecoverableMcpSessionLostError(resp.status, errText) &&
-        method !== "initialize" &&
+        !isInit &&
         loopState.lastInitializeBody
       ) {
-        log(
-          "Downstream MCP session unknown on this instance — replaying initialize to downstream, then retrying this JSON-RPC message once (client stdout unchanged)"
-        );
+        lastDetail = errText;
         loopState.session.clearSession();
-        const reinitHeaders = buildBaseHeaders(config);
-        const reinitResp = await sendDownstream(
-          config,
-          reinitHeaders,
-          loopState.lastInitializeBody
-        );
-        loopState.session.capture(reinitResp.headers);
-        const reinitBodyText = await reinitResp.text();
-        if (reinitResp.status >= 400) {
+        if (attempt < deps.maxAttempts) {
           log(
-            `Re-initialize after session loss failed: status=${reinitResp.status} body=${reinitBodyText.slice(0, 500)}`
+            `Downstream MCP session unknown (attempt ${attempt}/${deps.maxAttempts}) — re-initializing and retrying`
           );
-          emitErrorResponse(message, reinitResp.status, reinitBodyText);
-          return;
-        }
-        resp = await postOriginal();
-        loopState.session.capture(resp.headers);
-        if (resp.status >= 400) {
-          const retryErr = await resp.text();
-          log(
-            `Downstream error after session recovery: status=${resp.status} body=${retryErr.slice(0, 500)}`
-          );
-          emitErrorResponse(message, resp.status, retryErr);
-          return;
+          await deps.sleep(backoffMs(attempt));
+          continue;
         }
       } else {
         log(
           `Downstream error status=${resp.status} content_type=${resp.headers.get("content-type") ?? ""} body=${errText.slice(0, 500)}`
         );
-        emitErrorResponse(message, resp.status, errText);
+        emitErrorResponse(message, resp.status, errText, deps.emit);
         return;
       }
+    } catch (err) {
+      lastDetail = describeNetworkError(err);
+      // A transport error or timeout on a non-initialize call is treated as
+      // a downstream restart window: drop the session, back off, re-handshake.
+      if (!isInit && attempt < deps.maxAttempts) {
+        log(
+          `Downstream transport error (attempt ${attempt}/${deps.maxAttempts}): ${lastDetail} — clearing session and retrying`
+        );
+        loopState.session.clearSession();
+        await deps.sleep(backoffMs(attempt));
+        continue;
+      }
+      emitErrorResponse(message, 502, lastDetail, deps.emit);
+      return;
     }
-
-    const contentType = resp.headers.get("content-type") ?? "";
-    if (contentType.includes("text/event-stream")) {
-      await forwardSseResponse(resp);
-    } else {
-      await forwardJsonResponse(resp);
-    }
-  } catch (err) {
-    log(`Downstream transport error: ${describeNetworkError(err)}`);
-    emitErrorResponse(message, 502, describeNetworkError(err));
   }
+
+  emitErrorResponse(
+    message,
+    503,
+    `MCP session recovery exhausted after ${deps.maxAttempts} attempts: ${lastDetail}`,
+    deps.emit
+  );
+}
+
+async function dispatchMessage(
+  loopState: ProxyLoopState,
+  config: ProxyConfig,
+  message: Record<string, unknown>
+): Promise<void> {
+  await dispatchCore(
+    {
+      send: (headers, b) => sendDownstream(config, headers, b),
+      emit: emitJson,
+      sleep,
+      timeoutMs: resolveTimeoutMs(config),
+      maxAttempts: resolveMaxAttempts(config),
+    },
+    loopState,
+    config,
+    message
+  );
 }
 
 export async function runProxy(config: ProxyConfig): Promise<void> {
@@ -337,10 +486,7 @@ export async function runProxy(config: ProxyConfig): Promise<void> {
     await runPreflight(config);
   }
 
-  const loopState: ProxyLoopState = {
-    session: new SessionState(),
-    lastInitializeBody: null,
-  };
+  const loopState = createLoopState();
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 
   for await (const rawLine of rl) {
