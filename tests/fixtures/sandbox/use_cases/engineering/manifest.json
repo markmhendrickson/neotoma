@@ -1,15 +1,284 @@
 {
-  "schema_version": "1.0",
-  "description": "Product engineering use case sandbox seed.",
+  "schema_version": "2.0",
+  "description": "Product-engineering showcase: repositories, services, PRs, issues, commits, a review, an incident, and a deployment — a connected delivery graph with provenance.",
   "agent_identities": [
     {
-      "agent_sub": "sandbox-agent-engineering@neotoma.sandbox",
-      "client_name": "sandbox-seed-engineering",
+      "agent_sub": "sandbox-agent-chatgpt@neotoma.sandbox",
+      "client_name": "sandbox-seed-chatgpt",
       "client_version": "0.1.0",
-      "label": "Engineering seed runner"
+      "label": "ChatGPT seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-claude@neotoma.sandbox",
+      "client_name": "sandbox-seed-claude",
+      "client_version": "0.1.0",
+      "label": "Claude seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cursor@neotoma.sandbox",
+      "client_name": "sandbox-seed-cursor",
+      "client_version": "0.1.0",
+      "label": "Cursor seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cli@neotoma.sandbox",
+      "client_name": "sandbox-seed-cli",
+      "client_version": "0.1.0",
+      "label": "Neotoma CLI seed runner"
     }
   ],
-  "entity_batches": [],
+  "entity_batches": [
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "eng-repos",
+      "entities": [
+        {
+          "_ref": "r_api",
+          "entity_type": "repository",
+          "name": "neotoma",
+          "language": "TypeScript",
+          "visibility": "public"
+        },
+        {
+          "_ref": "r_insp",
+          "entity_type": "repository",
+          "name": "inspector",
+          "language": "TypeScript",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "eng-services",
+      "entities": [
+        {
+          "_ref": "s_api",
+          "entity_type": "service",
+          "name": "neotoma-api",
+          "tier": "backend"
+        },
+        {
+          "_ref": "s_web",
+          "entity_type": "service",
+          "name": "inspector-web",
+          "tier": "frontend"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "eng-engineers",
+      "entities": [
+        {
+          "_ref": "g_maya",
+          "entity_type": "contact",
+          "name": "Maya Chen",
+          "role": "Staff Engineer"
+        },
+        {
+          "_ref": "g_priya",
+          "entity_type": "contact",
+          "name": "Priya Nair",
+          "role": "Frontend Lead"
+        },
+        {
+          "_ref": "g_dev",
+          "entity_type": "contact",
+          "name": "Dev Patel",
+          "role": "SRE"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "eng-prs",
+      "entities": [
+        {
+          "_ref": "pr_seed",
+          "entity_type": "pull_request",
+          "title": "fix(sandbox): per-session pack seeding",
+          "number": 1766,
+          "status": "merged"
+        },
+        {
+          "_ref": "pr_root",
+          "entity_type": "pull_request",
+          "title": "feat(sandbox): Inspector at root + picker",
+          "number": 1768,
+          "status": "merged"
+        },
+        {
+          "_ref": "pr_auth",
+          "entity_type": "pull_request",
+          "title": "fix(sandbox): anon fallback for stale bearer",
+          "number": 1790,
+          "status": "open"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "eng-issues",
+      "entities": [
+        {
+          "_ref": "is_blank",
+          "entity_type": "issue",
+          "title": "Sandbox renders blank at root",
+          "severity": "high",
+          "status": "closed"
+        },
+        {
+          "_ref": "is_lockout",
+          "entity_type": "issue",
+          "title": "Returning visitors 401-walled",
+          "severity": "high",
+          "status": "open"
+        }
+      ]
+    },
+    {
+      "agent_index": 3,
+      "idempotency_prefix": "eng-commits",
+      "entities": [
+        {
+          "_ref": "cm_seed",
+          "entity_type": "commit",
+          "name": "wire seedForSession",
+          "sha": "34d5ccd"
+        },
+        {
+          "_ref": "cm_salt",
+          "entity_type": "commit",
+          "name": "tenant-scope entity ids",
+          "sha": "aa5469a"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "eng-reviews",
+      "entities": [
+        {
+          "_ref": "rv_seed",
+          "entity_type": "review",
+          "name": "arch review of #1766",
+          "verdict": "approve"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "eng-incidents",
+      "entities": [
+        {
+          "_ref": "in_blank",
+          "entity_type": "incident",
+          "name": "Sandbox blank-page incident",
+          "severity": "sev2",
+          "status": "resolved"
+        }
+      ]
+    },
+    {
+      "agent_index": 3,
+      "idempotency_prefix": "eng-deploys",
+      "entities": [
+        {
+          "_ref": "dp_v017",
+          "entity_type": "deployment",
+          "name": "sandbox v0.17.0-dev deploy",
+          "environment": "sandbox",
+          "status": "success"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "eng-prov",
+      "entities": [
+        {
+          "_ref": "r_api2",
+          "entity_type": "repository",
+          "name": "neotoma",
+          "stars": 1240,
+          "default_branch": "main"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_ref": "pr_seed",
+      "target_ref": "r_api",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "pr_root",
+      "target_ref": "r_insp",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "pr_auth",
+      "target_ref": "r_api",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "cm_seed",
+      "target_ref": "r_api",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "cm_salt",
+      "target_ref": "r_api",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "rv_seed",
+      "target_ref": "pr_seed",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "is_blank",
+      "target_ref": "s_web",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "is_lockout",
+      "target_ref": "s_api",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pr_root",
+      "target_ref": "is_blank",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "in_blank",
+      "target_ref": "dp_v017",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "dp_v017",
+      "target_ref": "s_web",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "g_maya",
+      "target_ref": "pr_seed",
+      "relationship_type": "manages"
+    },
+    {
+      "source_ref": "g_priya",
+      "target_ref": "pr_root",
+      "relationship_type": "manages"
+    },
+    {
+      "source_ref": "g_dev",
+      "target_ref": "dp_v017",
+      "relationship_type": "manages"
+    }
+  ],
   "unstructured_sources": [],
   "excluded_fixtures": []
 }

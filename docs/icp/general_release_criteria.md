@@ -1,3 +1,12 @@
+---
+title: "General Release Readiness Criteria"
+summary: Internal readiness criteria tied to ICP adoption milestones.
+category: use_cases
+subcategory: icp
+audience: developer
+visibility: internal
+---
+
 # General Release Readiness Criteria
 
 Criteria for exiting the developer release and entering general release. The developer release exists to validate architecture, ICP, and activation path. General release means Neotoma can sustain unassisted discovery, adoption, and retention at scale.

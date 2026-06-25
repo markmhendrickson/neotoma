@@ -75,6 +75,9 @@
     "health_check_snapshots": {
       "addedInVersion": "v0.4.3"
     },
+    "identify_entity_by_signals": {
+      "addedInVersion": "v0.17.0"
+    },
     "list_entity_submissions": {
       "addedInVersion": "v0.12.0"
     },

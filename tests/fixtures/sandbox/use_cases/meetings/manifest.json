@@ -1,15 +1,212 @@
 {
-  "schema_version": "1.0",
-  "description": "Meetings use case sandbox seed.",
+  "schema_version": "2.0",
+  "description": "Meetings showcase: meetings with attendees, transcripts, action items, and recaps — the full meeting-prep loop wired together.",
   "agent_identities": [
     {
-      "agent_sub": "sandbox-agent-meetings@neotoma.sandbox",
-      "client_name": "sandbox-seed-meetings",
+      "agent_sub": "sandbox-agent-chatgpt@neotoma.sandbox",
+      "client_name": "sandbox-seed-chatgpt",
       "client_version": "0.1.0",
-      "label": "Meetings seed runner"
+      "label": "ChatGPT seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-claude@neotoma.sandbox",
+      "client_name": "sandbox-seed-claude",
+      "client_version": "0.1.0",
+      "label": "Claude seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cursor@neotoma.sandbox",
+      "client_name": "sandbox-seed-cursor",
+      "client_version": "0.1.0",
+      "label": "Cursor seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cli@neotoma.sandbox",
+      "client_name": "sandbox-seed-cli",
+      "client_version": "0.1.0",
+      "label": "Neotoma CLI seed runner"
     }
   ],
-  "entity_batches": [],
+  "entity_batches": [
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "meet-meetings",
+      "entities": [
+        {
+          "_ref": "mt_intro",
+          "entity_type": "meeting",
+          "title": "Cedar Labs ↔ Northwind intro",
+          "date": "2026-06-18T15:00:00Z"
+        },
+        {
+          "_ref": "mt_design",
+          "entity_type": "meeting",
+          "title": "Launch design review",
+          "date": "2026-06-22T10:00:00Z"
+        },
+        {
+          "_ref": "mt_retro",
+          "entity_type": "meeting",
+          "title": "Launch retro",
+          "date": "2026-06-26T16:00:00Z"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "meet-contacts",
+      "entities": [
+        {
+          "_ref": "a_maya",
+          "entity_type": "contact",
+          "name": "Maya Chen",
+          "role": "CEO"
+        },
+        {
+          "_ref": "a_tom",
+          "entity_type": "contact",
+          "name": "Tom Okafor",
+          "role": "Investor"
+        },
+        {
+          "_ref": "a_priya",
+          "entity_type": "contact",
+          "name": "Priya Nair",
+          "role": "Design"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "meet-transcripts",
+      "entities": [
+        {
+          "_ref": "tr_intro",
+          "entity_type": "transcript",
+          "name": "Intro call transcript",
+          "platform": "zoom",
+          "words": 2100
+        },
+        {
+          "_ref": "tr_design",
+          "entity_type": "transcript",
+          "name": "Design review transcript",
+          "platform": "meet",
+          "words": 3400
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "meet-actions",
+      "entities": [
+        {
+          "_ref": "ai_deck",
+          "entity_type": "task",
+          "title": "Send investor deck",
+          "status": "todo",
+          "due_date": "2026-06-20"
+        },
+        {
+          "_ref": "ai_specs",
+          "entity_type": "task",
+          "title": "Finalize picker specs",
+          "status": "done",
+          "due_date": "2026-06-21"
+        },
+        {
+          "_ref": "ai_qa",
+          "entity_type": "task",
+          "title": "Add auth-path QA",
+          "status": "todo",
+          "due_date": "2026-06-30"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "meet-recaps",
+      "entities": [
+        {
+          "_ref": "rc_intro",
+          "entity_type": "note",
+          "title": "Intro call recap",
+          "content": "Warm; Northwind interested at seed; follow up with deck."
+        },
+        {
+          "_ref": "rc_design",
+          "entity_type": "note",
+          "title": "Design review recap",
+          "content": "Picker approved; tighten empty states."
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "meet-prov",
+      "entities": [
+        {
+          "_ref": "a_maya2",
+          "entity_type": "contact",
+          "name": "Maya Chen",
+          "email": "maya@cedarlabs.example",
+          "timezone": "Europe/Madrid"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_ref": "mt_intro",
+      "target_ref": "a_maya",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "mt_intro",
+      "target_ref": "a_tom",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "mt_design",
+      "target_ref": "a_priya",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "tr_intro",
+      "target_ref": "mt_intro",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "tr_design",
+      "target_ref": "mt_design",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "ai_deck",
+      "target_ref": "mt_intro",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "ai_specs",
+      "target_ref": "mt_design",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "ai_qa",
+      "target_ref": "mt_retro",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "rc_intro",
+      "target_ref": "mt_intro",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "rc_design",
+      "target_ref": "mt_design",
+      "relationship_type": "references"
+    }
+  ],
   "unstructured_sources": [],
   "excluded_fixtures": []
 }

@@ -514,6 +514,29 @@ function safeCompareTokens(a: string, b: string): boolean {
   return timingSafeEqual(aBuf, bBuf);
 }
 
+// SECURITY: internal-seeding bypass for the sandbox write rate limit.
+//
+// Per-session pack seeding (createAndSeedSession -> seedForSession) spawns a
+// child process that POSTs many /store + /create_relationships writes back to
+// this server over loopback. Those writes share one IP (the server's own), so
+// the per-IP sandbox write limit throttles seeding — worst under concurrent
+// visitors. We mint a random token at boot, export it into the environment the
+// seed child inherits, and let requests carrying it skip the write rate limit.
+//
+// This does NOT open a bypass for visitors: the token is random per boot and
+// only ever reaches the spawned seed child (never the public surface), and the
+// header is compared in constant time. Destructive-route gating is unaffected
+// (seeding never calls destructive routes), and per-user write limits remain.
+const SANDBOX_SEED_TOKEN_HEADER = "x-neotoma-seed-token";
+const SANDBOX_SEED_TOKEN = process.env.NEOTOMA_SANDBOX_SEED_TOKEN?.trim() || randomUUID();
+process.env.NEOTOMA_SANDBOX_SEED_TOKEN = SANDBOX_SEED_TOKEN;
+function isInternalSeedRequest(req: express.Request): boolean {
+  const token = req.header(SANDBOX_SEED_TOKEN_HEADER);
+  return (
+    typeof token === "string" && token.length > 0 && safeCompareTokens(token, SANDBOX_SEED_TOKEN)
+  );
+}
+
 // SECURITY: write-path rate limiting (docs/reports/
 // security_audit_2026_04_22.md S-8). Keyed by authenticated user when
 // available so a single abusive client does not starve others. Operators
@@ -535,6 +558,7 @@ const writeRateLimit = rateLimit({
     // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
     return `ip:${ipKeyGenerator(req.ip || "")}`;
   },
+  skip: isInternalSeedRequest,
   message: "Write rate limit exceeded, please slow down",
   ...rateLimitOptions,
 });
@@ -559,6 +583,7 @@ const sandboxWriteRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: SANDBOX_WRITE_RATE_LIMIT_PER_MIN,
   keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip || "")}`,
+  skip: isInternalSeedRequest,
   message: "Sandbox write rate limit exceeded. Install Neotoma locally for unlimited use.",
   ...rateLimitOptions,
 });
@@ -3629,6 +3654,26 @@ app.use(async (req, res, next) => {
     } catch (authError) {
       if (await maybeStampGuestPrincipal(req)) {
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+        return next();
+      }
+      // Sandbox: a Bearer that resolves to no valid identity is almost always a
+      // returning visitor whose ephemeral sandbox session expired or was wiped
+      // by the weekly reset — the Inspector SPA keeps replaying the stale
+      // localStorage bearer. 401-walling it leaves the visitor stuck: the home,
+      // /me, and even DELETE /sandbox/session all 401, and the HttpOnly cookie
+      // can't be cleared client-side. Degrade to the anonymous public user
+      // (the same floor unauthenticated sandbox requests already get above) and
+      // clear the stale cookie so the Inspector loads and the pack picker lets
+      // them start fresh. This does NOT widen the trust boundary: anonymous is
+      // already the sandbox floor, writes stay gated by sandboxWriteGate /
+      // sandboxDestructiveGuard, and AAuth-only routes by aauthRequired.
+      if (isSandboxMode()) {
+        res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+        const sandboxUser = ensureSandboxPublicUser();
+        stampUserPrincipal(req, sandboxUser.id);
+        logger.info(
+          `[Auth] ${req.method} ${req.path} auth_method=sandbox_public_stale_bearer user_id=${sandboxUser.id}`
+        );
         return next();
       }
       // Not a valid token
