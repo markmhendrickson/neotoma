@@ -201,6 +201,7 @@ import { listBundles, getBundleInfo } from "./services/bundles/index.js";
 import { getTimelineEventForUser, listTimelineEventsForUser } from "./services/timeline_query.js";
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
+import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -8464,8 +8465,34 @@ app.post("/get_entity_snapshot", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id } = parsed.data;
+  const { entity_id, at, at_ingested } = parsed.data;
 
+  // When at/at_ingested cutoffs are requested, use the shared observation-replay
+  // helper so the offline path honours them with the same semantics as the MCP
+  // path in server.ts. Without cutoffs, fall through to the fast materialized
+  // entity_snapshots table read (unchanged behaviour).
+  if (at || at_ingested) {
+    let userId: string;
+    try {
+      userId = await getAuthenticatedUserId(req);
+    } catch (err) {
+      return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+    }
+
+    try {
+      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested);
+      if (result === null) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      logDebug("Success:get_entity_snapshot:at_time", req, { entity_id, at, at_ingested });
+      return res.json(result);
+    } catch (err) {
+      logError("Error:get_entity_snapshot:at_time", req, err);
+      return sendError(res, 500, "DB_QUERY_FAILED", (err as Error).message);
+    }
+  }
+
+  // Fast path: no cutoffs — read the materialized snapshot directly.
   const { data, error } = await db
     .from("entity_snapshots")
     .select("*")

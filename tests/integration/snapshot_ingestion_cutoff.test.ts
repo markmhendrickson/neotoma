@@ -1,5 +1,5 @@
 /**
- * Tests for retrieve_entity_snapshot at_ingested cutoff (#1757)
+ * Tests for retrieve_entity_snapshot at_ingested cutoff (#1757, #1819)
  *
  * Verifies that the `at_ingested` parameter (ingestion-time cutoff) correctly
  * excludes observations that have a past `observed_at` but arrived after the
@@ -8,12 +8,21 @@
  * The distinction:
  *   - `at`          filters on `observed_at` (event time):    "what had happened by T"
  *   - `at_ingested` filters on `created_at`  (ingestion time): "what did we know by T"
+ *
+ * #1819: the at/at_ingested cutoffs were ONLY applied on the MCP (server.ts) path;
+ * the offline/HTTP path (actions.ts › POST /get_entity_snapshot) silently ignored
+ * them and always returned the materialized snapshot. The shared helper
+ * `computeEntitySnapshotAtTime` fixes both paths — the suites below cover both.
  */
 
-import { describe, it, expect, afterAll } from "vitest";
+import { createServer } from "node:http";
+import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { randomUUID } from "crypto";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
+import { app } from "../../src/actions.js";
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { computeEntitySnapshotAtTime } from "../../src/services/entity_snapshot_at_time.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -259,5 +268,249 @@ describe("retrieve_entity_snapshot — at_ingested ingestion-time cutoff (#1757)
 
     expect(caughtError).toBeDefined();
     expect((caughtError as Error).message).toMatch(/at_ingested/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1819 — offline/HTTP path (actions.ts) must honour at/at_ingested
+// ---------------------------------------------------------------------------
+// These tests exercise the shared `computeEntitySnapshotAtTime` helper and the
+// actions.ts HTTP handler directly so the offline transport cannot silently
+// regress to reading only the materialized entity_snapshots table.
+// ---------------------------------------------------------------------------
+
+describe("retrieve_entity_snapshot — offline/HTTP path honours at_ingested (#1819)", () => {
+  const tracker = new TestIdTracker();
+  // The offline path uses LOCAL_DEV_USER_ID when called from localhost without
+  // a Bearer token. The direct-helper tests pass this userId explicitly.
+  const testUserId = LOCAL_DEV_USER_ID;
+
+  // HTTP server for the actions.ts handler tests
+  let httpServer: ReturnType<typeof createServer>;
+  const httpPort = 18267; // avoid collision with other test suites
+  const httpBase = `http://127.0.0.1:${httpPort}`;
+
+  beforeAll(async () => {
+    httpServer = createServer(app);
+    await new Promise<void>((resolve, reject) => {
+      httpServer.listen(httpPort, "127.0.0.1", () => resolve());
+      httpServer.once("error", reject);
+    });
+  });
+
+  afterAll(async () => {
+    await tracker.cleanup();
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
+
+  /** Insert a source row and return its id. */
+  async function insertSource(tag: string): Promise<string> {
+    const { data: source, error } = await db
+      .from("sources")
+      .insert({
+        user_id: testUserId,
+        content_hash: `hash_1819_${tag}_${randomUUID()}`,
+        storage_url: `file:///test/1819_${tag}.txt`,
+        mime_type: "text/plain",
+        file_size: 0,
+      })
+      .select()
+      .single();
+    if (error || !source) throw new Error(`insertSource failed: ${error?.message}`);
+    tracker.trackSource(source.id);
+    return source.id;
+  }
+
+  /** Insert an observation row with explicit created_at (simulates backfill). */
+  async function insertObservation(opts: {
+    entityId: string;
+    sourceId: string;
+    observedAt: string;
+    createdAt: string;
+    fields: Record<string, unknown>;
+  }): Promise<void> {
+    const { error } = await db.from("observations").insert({
+      entity_id: opts.entityId,
+      entity_type: "task",
+      schema_version: "1.0",
+      source_id: opts.sourceId,
+      user_id: testUserId,
+      observed_at: opts.observedAt,
+      created_at: opts.createdAt,
+      fields: opts.fields,
+    });
+    if (error) throw new Error(`insertObservation failed: ${error.message}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 1: computeEntitySnapshotAtTime — the shared helper
+  // -------------------------------------------------------------------------
+
+  it("computeEntitySnapshotAtTime: at_ingested excludes backfilled observation", async () => {
+    const entityId = `ent_test_1819_helper_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    tracker.trackEntity(entityId);
+    const sourceId = await insertSource("helper");
+
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const oneDayAgo = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+
+    // obs_early: genuinely historical
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: threeDaysAgo,
+      createdAt: threeDaysAgo,
+      fields: { title: "Early", status: "pending" },
+    });
+
+    // obs_backfill: describes the past (observed_at T-2) but ingested NOW
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: twoDaysAgo,
+      createdAt: now,
+      fields: { title: "Backfill", status: "done" },
+    });
+
+    // --- no cutoff: both observations → reducer picks backfill (observed_at T-2 > T-3)
+    const noCutoff = await computeEntitySnapshotAtTime(entityId, testUserId);
+    expect(noCutoff).not.toBeNull();
+    expect(noCutoff!.observation_count).toBe(2);
+    expect(noCutoff!.snapshot.status).toBe("done");
+
+    // --- at_ingested = oneDayAgo: backfill (created_at = now) is EXCLUDED
+    const cutoff = await computeEntitySnapshotAtTime(entityId, testUserId, undefined, oneDayAgo);
+    expect(cutoff).not.toBeNull();
+    expect(cutoff!.observation_count).toBe(1);
+    expect(cutoff!.snapshot.status).toBe("pending");
+
+    // --- at_ingested before any ingestion: empty snapshot
+    const tooEarly = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const empty = await computeEntitySnapshotAtTime(entityId, testUserId, undefined, tooEarly);
+    expect(empty).not.toBeNull();
+    expect(empty!.observation_count).toBe(0);
+    expect(empty!.snapshot).toEqual({});
+  });
+
+  it("computeEntitySnapshotAtTime: at (event-time) excludes future-observed observations", async () => {
+    const entityId = `ent_test_1819_at_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    tracker.trackEntity(entityId);
+    const sourceId = await insertSource("at");
+
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const yesterday = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+    const tomorrow = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString();
+
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: threeDaysAgo,
+      createdAt: threeDaysAgo,
+      fields: { title: "Old", status: "pending" },
+    });
+    // future-dated observation
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: tomorrow,
+      createdAt: threeDaysAgo,
+      fields: { title: "Future", status: "done" },
+    });
+
+    // at = yesterday: future obs excluded → status remains "pending"
+    const result = await computeEntitySnapshotAtTime(entityId, testUserId, yesterday);
+    expect(result).not.toBeNull();
+    expect(result!.observation_count).toBe(1);
+    expect(result!.snapshot.status).toBe("pending");
+  });
+
+  it("computeEntitySnapshotAtTime: returns null for unknown entity", async () => {
+    const result = await computeEntitySnapshotAtTime(
+      "ent_does_not_exist_1819",
+      testUserId,
+      undefined,
+      new Date().toISOString()
+    );
+    expect(result).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 2: HTTP handler (actions.ts POST /get_entity_snapshot)
+  // -------------------------------------------------------------------------
+
+  it("HTTP /get_entity_snapshot: at_ingested cutoff is honoured (offline path)", async () => {
+    const entityId = `ent_test_1819_http_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    tracker.trackEntity(entityId);
+    const sourceId = await insertSource("http");
+
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const oneDayAgo = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: threeDaysAgo,
+      createdAt: threeDaysAgo,
+      fields: { title: "Early HTTP", status: "pending" },
+    });
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: twoDaysAgo,
+      createdAt: now,
+      fields: { title: "Backfill HTTP", status: "done" },
+    });
+
+    // POST without cutoff — returns the materialized snapshot (or empty if not yet
+    // computed). We don't assert specific values here as the entity_snapshots table
+    // may not be populated yet; the key assertion is that at_ingested is applied.
+
+    // POST with at_ingested = oneDayAgo should EXCLUDE the backfill (created_at = now)
+    // and return observation_count=1 with status="pending"
+    const resp = await fetch(`${httpBase}/get_entity_snapshot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity_id: entityId, at_ingested: oneDayAgo }),
+    });
+
+    expect(resp.ok).toBe(true);
+    const data = await resp.json() as Record<string, unknown>;
+
+    // The response must reflect only the early observation
+    expect(data.observation_count).toBe(1);
+    expect((data.snapshot as Record<string, unknown>).status).toBe("pending");
+  });
+
+  it("HTTP /get_entity_snapshot: invalid at_ingested returns 500 with message", async () => {
+    const entityId = `ent_test_1819_http_invalid_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    tracker.trackEntity(entityId);
+    const sourceId = await insertSource("http-invalid");
+
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      fields: { title: "Validation", status: "pending" },
+    });
+
+    const resp = await fetch(`${httpBase}/get_entity_snapshot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity_id: entityId, at_ingested: "not-a-valid-iso-timestamp" }),
+    });
+
+    // The handler wraps errors from computeEntitySnapshotAtTime as 500
+    expect(resp.status).toBe(500);
+    const body = await resp.json() as Record<string, unknown>;
+    expect((body.message as string | undefined)?.toLowerCase()).toMatch(/at_ingested/i);
   });
 });
