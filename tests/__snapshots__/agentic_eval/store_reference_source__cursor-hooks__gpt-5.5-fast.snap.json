@@ -1,0 +1,339 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_12",
+        "target_entity_id": "ent_mock_9"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_19",
+        "target_entity_id": "ent_mock_16"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_26",
+        "target_entity_id": "ent_mock_23"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "client_name": "Cursor",
+            "conversation_id": "<id:1>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation",
+            "harness": "cursor-hook",
+            "hook_event": "beforeSubmitPrompt",
+            "repository_name": "<env>",
+            "repository_remote": "<env>",
+            "repository_root": "<env>",
+            "scope_summary": "<env>",
+            "thread_kind": "human_agent",
+            "title": "<env>",
+            "workspace_kind": "<env>"
+          },
+          {
+            "content": "Ingest /tmp/large-report.pdf by reference — do not copy the bytes. Then check whether the source is still accessible and show me what happens when the file is missing.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "beforeSubmitPrompt",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:2>",
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "before_submit_prompt",
+            "hook_events": ["before_submit_prompt"],
+            "model": "gpt-5.5-fast",
+            "session_id": "<id:1>",
+            "started_at": "<ts>",
+            "stored_entity_ids": ["ent_mock_3"],
+            "turn_id": "<id:4>",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"file_path\":\"/tmp/large-report.pdf\",\"source_storage\":\"reference\",\"idempotency_key\":\"ref-store-eval-001\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"source_id\":\"src_ref_abc123\",\"storage_mode\":\"reference\",\"path\":\"/tmp/large-report.pdf\",\"content_hash\":\"a3f9c1b2d4e5f6078901234567890abcdef1234567890abcdef1234567890ab12\",\"size_bytes\":204800}",
+            "status": null,
+            "tool_name": "mcp_neotoma_store",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": ["post_tool_use"],
+            "model": "gpt-5.5-fast",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": ["ent_mock_9"],
+            "tool_invocation_count": 1,
+            "turn_id": "<id:4>",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"source_id\":\"src_ref_abc123\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"storage_mode\":\"reference\",\"path\":\"/tmp/large-report.pdf\",\"content_hash\":\"a3f9c1b2d4e5f6078901234567890abcdef1234567890abcdef1234567890ab12\",\"size_bytes\":204800}",
+            "status": null,
+            "tool_name": "mcp_neotoma_retrieve_file_url",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": ["post_tool_use"],
+            "model": "gpt-5.5-fast",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": ["ent_mock_16"],
+            "tool_invocation_count": 2,
+            "turn_id": "<id:4>",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": true,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"source_id\":\"src_ref_abc123\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"error\":\"SOURCE_UNAVAILABLE\",\"path\":\"/tmp/large-report.pdf\",\"reason\":\"File not found at reference path\"}",
+            "status": null,
+            "tool_name": "mcp_neotoma_retrieve_file_url",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:8>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": ["post_tool_use"],
+            "model": "gpt-5.5-fast",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": ["ent_mock_23"],
+            "tool_invocation_count": 3,
+            "turn_id": "<id:4>",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Done. I stored /tmp/large-report.pdf by reference (src_ref_abc123, 200 KB, SHA-256 verified). The first retrieve confirmed storage_mode=reference with no bytes transferred. The second retrieve — after the file was removed — returned a structured SOURCE_UNAVAILABLE error with the original path, as expected.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "stop",
+            "observed_at": "<ts>",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1:assistant"
+          }
+        ],
+        "idempotency_key": "<id:9>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "ended_at": "<ts>",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "harness_loop_count": 0,
+            "hook_event": "stop",
+            "hook_events": ["stop"],
+            "model": "gpt-5.5-fast",
+            "neotoma_tool_failures": 0,
+            "reminder_injected": false,
+            "retrieve_calls": 0,
+            "safety_net_used": false,
+            "session_id": "<id:1>",
+            "status": "completed",
+            "store_structured_calls": 1,
+            "tool_invocation_count": 3,
+            "turn_id": "<id:4>",
+            "turn_key": "store_reference_source__cursor-hooks__gpt-5.5-fast:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {}
+    }
+  ]
+}
