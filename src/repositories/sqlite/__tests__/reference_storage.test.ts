@@ -14,7 +14,7 @@
  */
 
 import path from "path";
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { describe, it, expect } from "vitest";
 import { computeContentHash, resolveReferenceSource } from "../../../services/raw_storage.js";
