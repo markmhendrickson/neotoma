@@ -84,11 +84,15 @@
             "git_branch": "<env>",
             "harness": "cursor",
             "hook_event": "before_submit_prompt",
-            "hook_events": ["before_submit_prompt"],
+            "hook_events": [
+              "before_submit_prompt"
+            ],
             "model": "claude-sonnet-4.5",
             "session_id": "<id:1>",
             "started_at": "<ts>",
-            "stored_entity_ids": ["ent_mock_3"],
+            "stored_entity_ids": [
+              "ent_mock_3"
+            ],
             "turn_id": "<id:4>",
             "turn_key": "store_reference_source__cursor-hooks__claude-sonnet-4.5:turn-1",
             "working_directory": "<env>"
@@ -133,13 +137,17 @@
             "git_branch": "<env>",
             "harness": "cursor",
             "hook_event": "post_tool_use",
-            "hook_events": ["post_tool_use"],
+            "hook_events": [
+              "post_tool_use"
+            ],
             "model": "claude-sonnet-4.5",
             "neotoma_tool_failures": 0,
             "retrieve_calls": 0,
             "session_id": "<id:1>",
             "store_structured_calls": 1,
-            "stored_entity_ids": ["ent_mock_9"],
+            "stored_entity_ids": [
+              "ent_mock_9"
+            ],
             "tool_invocation_count": 1,
             "turn_id": "<id:4>",
             "turn_key": "store_reference_source__cursor-hooks__claude-sonnet-4.5:turn-1",
@@ -185,13 +193,17 @@
             "git_branch": "<env>",
             "harness": "cursor",
             "hook_event": "post_tool_use",
-            "hook_events": ["post_tool_use"],
+            "hook_events": [
+              "post_tool_use"
+            ],
             "model": "claude-sonnet-4.5",
             "neotoma_tool_failures": 0,
             "retrieve_calls": 0,
             "session_id": "<id:1>",
             "store_structured_calls": 1,
-            "stored_entity_ids": ["ent_mock_16"],
+            "stored_entity_ids": [
+              "ent_mock_16"
+            ],
             "tool_invocation_count": 2,
             "turn_id": "<id:4>",
             "turn_key": "store_reference_source__cursor-hooks__claude-sonnet-4.5:turn-1",
@@ -237,13 +249,17 @@
             "git_branch": "<env>",
             "harness": "cursor",
             "hook_event": "post_tool_use",
-            "hook_events": ["post_tool_use"],
+            "hook_events": [
+              "post_tool_use"
+            ],
             "model": "claude-sonnet-4.5",
             "neotoma_tool_failures": 0,
             "retrieve_calls": 0,
             "session_id": "<id:1>",
             "store_structured_calls": 1,
-            "stored_entity_ids": ["ent_mock_23"],
+            "stored_entity_ids": [
+              "ent_mock_23"
+            ],
             "tool_invocation_count": 3,
             "turn_id": "<id:4>",
             "turn_key": "store_reference_source__cursor-hooks__claude-sonnet-4.5:turn-1",
@@ -290,7 +306,9 @@
             "harness": "cursor",
             "harness_loop_count": 0,
             "hook_event": "stop",
-            "hook_events": ["stop"],
+            "hook_events": [
+              "stop"
+            ],
             "model": "claude-sonnet-4.5",
             "neotoma_tool_failures": 0,
             "reminder_injected": false,
