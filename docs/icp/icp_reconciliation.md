@@ -20,11 +20,11 @@ The two views were produced from different inputs and they agree on the core. Th
 
 ## Agreement on the primary ICP
 
-Both views name the same primary user:
+Both views name the same primary archetype, the person who builds and operates agents:
 
 | Aspect | Functional view | Market view (`primary_icp.md`) |
 | --- | --- | --- |
-| Who | A technically proficient individual who runs multiple AI agents and wants one private, owned, shared memory | "Personal Agentic OS Builders/Operators" constructing an OS for their own agents across life and work |
+| Who | Developers building and operating AI agents who need a shared, deterministic, auditable memory layer (at personal scale, one individual) | "Personal Agentic OS Builders/Operators" constructing an OS for their own agents across life and work |
 | Modes | Operator, builder, and debugger are modes of one person | "Three modes, not separate personas": infrastructure engineering, building agent systems, operating across tools |
 | Tools | Claude Code, Cursor, ChatGPT, Codex, and others, wired together | Same multi-agent stack |
 | Core pain | Memory does not carry over; facts conflict; corrections do not stick; no audit trail | Chronic "sync tax" plus acute "agent acted on bad state" |

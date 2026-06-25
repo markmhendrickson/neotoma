@@ -31,9 +31,9 @@ The ICP below is inferred from what that functionality optimizes for and from th
 
 ## Primary ICP
 
-**A technically proficient individual who runs multiple AI agents and wants one private, self-hosted, deterministic memory those agents share, read from, and write to, and which the person fully owns, inspects, and controls.**
+**Developers building and operating AI agents who need a persistent, deterministic, auditable memory layer shared across the tools they run.**
 
-This person is, at the same time, the operator who runs the service, the subject whose personal and work data it holds, and frequently the builder who wires it into tools and scripts. These are operating modes of one person, not three separate buyers.
+Neotoma ships as an MCP server and REST API with drop-in hook packages (Claude Code, Cursor, Codex, OpenCode), a Claude Agent SDK adapter, and TypeScript and Python clients. Its core value (versioned observations, deterministic snapshots, field-level provenance, idempotency, corrections-win) is memory-engine infrastructure for agent loops, not an end-user app. At personal scale this developer-operator is one individual who is at once the operator who runs the service, the subject whose data it holds, and the builder who wires it into tools; the audience does not fragment into separate buyers.
 
 ### Why the functionality points here
 
@@ -58,7 +58,7 @@ This person is, at the same time, the operator who runs the service, the subject
 
 ## Secondary ICPs
 
-These are strongly supported by the functionality but are narrower or downstream of the primary user.
+These are strongly supported by the functionality but are narrower than, or downstream of, the primary developer-operator. The two most common adjacent users are the individual running a personal cross-assistant memory (a single-user instance of the primary) and the operator of a shared or hosted instance (profiles 1 and 2 below).
 
 ### 1. Developers building agentic applications on a state layer
 
@@ -101,7 +101,7 @@ Someone is in the primary ICP if most of these are true:
 
 | Profile | Core motivation | Decisive functional evidence |
 | --- | --- | --- |
-| **Primary: agent-running owner-operator** | One private, shared, owned memory across all their agents | MCP-first, CLI-driven, local-first, full export, per-agent control |
+| **Primary: agent developer/operator** | A persistent, deterministic, shared memory layer for the agents they build and run | MCP server + REST API, hook/SDK packages, deterministic snapshots, provenance, idempotency |
 | **Secondary: app/agent developer** | A deterministic state layer to build on | State-Layer boundary, OpenAPI contract, SDKs, subscriptions, idempotency |
 | **Secondary: fleet security operator** | Constrain and audit untrusted agents | Hardware attestation, grants/capabilities, provenance, tenant scoping |
 | **Secondary: privacy-focused individual** | Own a structured personal corpus for AI | Local storage, document ingestion, encryption, no training |

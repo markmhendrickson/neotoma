@@ -1,8 +1,8 @@
 # Neotoma
 
-Neotoma is a local-first, deterministic memory layer for AI agents. Your agents store structured records (contacts, tasks, transactions, decisions, events, and any other type) once, and read them back across every tool and session. You own the data, you can inspect every change, and the same observations always reduce to the same state.
+Neotoma is a deterministic, versioned state layer for AI agents. It ingests sources into immutable observations and computes reproducible entity snapshots with full provenance, exposed over an MCP server, a REST API, a CLI, and a bundled web Inspector.
 
-It runs on your machine as a single SQLite-backed service and exposes the same state through an MCP server, a REST API, a command-line interface, and a bundled web Inspector.
+It is built for developers building and operating AI agents who need a persistent, deterministic, auditable memory layer shared across tools. The same engine serves two further groups: individuals running a personal cross-assistant memory on a single-user install, and operators running a shared, multi-user instance with agent access control. Agents store structured records (contacts, tasks, transactions, decisions, events, and any other type) once and read them back across every tool and session, and the same observations always reduce to the same state.
 
 **[neotoma.io](https://neotoma.io)** · **[Install](https://neotoma.io/install)** · **[Documentation](https://neotoma.io/docs)** (also served in-app at `/docs`)
 
@@ -14,7 +14,7 @@ Three properties hold across every interface:
 
 - **Deterministic.** Entity IDs, observation IDs, event IDs, and reducer output are all derived from the inputs by hashing. The same observations produce the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
 - **Immutable and auditable.** Sources and observations are append-only. Every field in a snapshot traces back to the observation that set it, and through that observation to its source, interpretation, agent, and timestamp.
-- **Local-first and yours.** Data lives in a SQLite file and content-addressed file storage under a directory you control. Optional AES-256-GCM at-rest encryption protects sensitive columns. Nothing is sent anywhere for training. You can export everything.
+- **Self-hosted and portable.** The engine is embedded SQLite plus content-addressed file storage under a directory you control, with optional AES-256-GCM at-rest encryption. Nothing is used for training, and you can export everything. In single-user mode the data stays entirely local; multi-user, peer-sync, and hosted modes are opt-in (see Deployment modes).
 
 ## How it works
 
@@ -53,7 +53,7 @@ Neotoma exposes roughly 60 MCP tools and about 100 REST endpoints, all backed by
 
 **Control multi-agent access.** Every write is attributed to an agent identity (verified key thumbprint, JWT subject, or client name). Agent grants express least-privilege capabilities (which operations on which entity types). Optional hardware-attested authentication (Apple Secure Enclave, TPM 2.0, WebAuthn/FIDO2, YubiKey, Windows TBS) raises an agent's trust tier. Guest access tokens grant scoped read-back without full credentials.
 
-**Federate and sync.** Register peer instances and sync entities between them with configurable scope and conflict resolution (last-write-wins, source priority, or manual). Subscribe to entity or event changes over webhooks (HMAC-signed) or Server-Sent Events. Mirror your data to deterministic, git-trackable canonical Markdown.
+**Federate, sync, and intake.** Register peer instances and sync entities between them with configurable scope and conflict resolution (last-write-wins, source priority, or manual). Subscribe to entity or event changes over webhooks (HMAC-signed) or Server-Sent Events. Accept guest entity submissions, mirror GitHub issues into conversation threads, and mirror your data to deterministic, git-trackable canonical Markdown.
 
 **Export and own your data.** Produce a bounded `MEMORY.md` summary, a JSON snapshot export with full provenance and attribution metadata, or a complete Markdown mirror of every entity, relationship, source, and timeline day.
 
@@ -65,7 +65,7 @@ The same state and the same guarantees are reachable four ways. All map to one O
 | --- | --- | --- |
 | **MCP server** | Model Context Protocol tools for agents to store and retrieve state | stdio, WebSocket, streamable HTTP |
 | **REST API** | Full HTTP interface for application integration | HTTP/HTTPS, OAuth or key-based auth |
-| **CLI** | The `neotoma` command for setup, scripting, and direct access | local process |
+| **CLI** | The `neotoma` command, around 170 commands for setup, scripting, and direct access | local process |
 | **Inspector** | Bundled web app for browsing and managing the store | served by the API server |
 
 ### The Inspector
@@ -160,13 +160,24 @@ Neotoma stores typed entities with versioned history and provenance. The schema 
 ## Storage, privacy, and security
 
 - **Storage:** Local SQLite (`better-sqlite3`, WAL mode) plus content-addressed file storage, under `NEOTOMA_DATA_DIR`. Separate dev and prod profiles. Semantic search uses sqlite-vec locally.
-- **Privacy:** Your data stays local and is never used for training. Logs and event payloads carry IDs, not PII.
+- **Privacy:** Your data is never used for training, and logs and event payloads carry IDs, not PII. In single-user mode the data stays entirely local; once you enable MCP OAuth, peer sync, or a hosted multi-user instance, data is shared per those configurations rather than staying purely local (see Deployment modes).
 - **Encryption:** Optional AES-256-GCM column encryption of sensitive content and metadata, keyed by a key file or BIP-39 mnemonic. Some tables (for example the event log) are not yet column-encrypted; pair with an encrypted volume for full coverage. See [architecture](docs/architecture/architecture.md).
 - **Auth:** Local auth for single-user installs, MCP OAuth for hosted use, optional hardware attestation for agents, and explicit per-operation access controls. Run `neotoma doctor` to verify your setup. See [Auth](docs/subsystems/auth.md) and [Privacy](docs/subsystems/privacy.md).
 
+## Deployment modes
+
+The same SQLite-backed engine runs in two modes:
+
+- **Local single-user.** Run it on your machine for your own cross-assistant memory. Local auth (or key-based auth when encryption is enabled), data stays local, no network exposure required.
+- **Hosted multi-user.** Run a shared instance with MCP OAuth, per-agent hardware-attested identity (AAuth) and capability grants, guest submission tokens, peer federation, and a sandbox demo user. Deploy targets include Docker and Fly. Tenancy is enforced by `user_id` scoping over the same local SQLite engine.
+
+The "stays local" and privacy claims above apply to the local single-user mode. Hosted, OAuth, and peer-sync modes share data per their configuration.
+
 ## Who this is for
 
-Neotoma is for a technically proficient individual who runs several AI agents and wants one private, self-hosted memory those agents share, that the person owns, inspects, and controls. The same person typically operates the agents, builds new pipelines on top of the API, and debugs state drift. Secondary audiences are developers building agentic applications on Neotoma as a deterministic state layer, and security-conscious operators of multi-agent fleets who need attested agent identity, least-privilege grants, and a full audit trail.
+Neotoma is primarily for developers building and operating AI agents who need a persistent, deterministic, auditable memory layer shared across tools. The product ships as an MCP server and REST API with drop-in hook packages (Claude Code, Cursor, Codex, OpenCode), a Claude Agent SDK adapter, and TypeScript and Python clients. Its core value (versioned observations, deterministic snapshots, field-level provenance, idempotency, corrections-win) is memory-engine infrastructure for agent loops, not an end-user app.
+
+Two further audiences follow from the same code: individuals running a personal cross-assistant memory (the built-in types are personal-information shaped, and the single-user SQLite plus Inspector path serves one person across assistants), and operators of a shared or hosted instance (OAuth, hardware-attested agent identity, per-agent grants, guest submission, peer federation, and Docker or Fly deploy targets).
 
 It is not aimed at casual note-taking, PKM/Obsidian-style human-driven knowledge bases, or users who need a zero-install hosted product (Neotoma requires npm and the CLI today).
 
