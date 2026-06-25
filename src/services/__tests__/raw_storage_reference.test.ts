@@ -177,13 +177,11 @@ describe("storeRawReference — with mocked db", () => {
     // Mock the db module at the module level
     const mockSingle = vi.fn().mockResolvedValue({ data: null, error: null });
     const mockMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    const mockSelect = vi
-      .fn()
-      .mockReturnValue({
-        eq: vi
-          .fn()
-          .mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle }) }),
-      });
+    const mockSelect = vi.fn().mockReturnValue({
+      eq: vi
+        .fn()
+        .mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle }) }),
+    });
     const mockInsertSelect = vi.fn().mockReturnValue({
       single: mockSingle.mockResolvedValue({
         data: {
