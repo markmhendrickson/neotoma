@@ -205,9 +205,173 @@
           "default_branch": "main"
         }
       ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "eng-conv",
+      "entities": [
+        {
+          "_ref": "conv_eng",
+          "entity_type": "conversation",
+          "canonical_name": "Sandbox blank-page incident postmortem",
+          "title": "Sandbox blank-page incident postmortem",
+          "platform": "claude",
+          "started_at": "2026-06-20T16:00:00Z",
+          "ended_at": "2026-06-20T16:24:00Z",
+          "turn_count": 6,
+          "idempotency_hint": "conv-sandbox-engineering-1",
+          "conversation_id": "conv-sandbox-engineering-1"
+        },
+        {
+          "_ref": "conv_eng_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "engineering-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "The sandbox is rendering blank at root in inspector-web. Open a high-severity issue and an incident.",
+          "turn_key": "conv-sandbox-engineering-1:turn:1",
+          "timestamp": "2026-06-20T16:00:00Z",
+          "conversation_id": "conv-sandbox-engineering-1"
+        },
+        {
+          "_ref": "conv_eng_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "engineering-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Opened high-severity issue \"Sandbox renders blank at root\" against the inspector-web service and a sev2 incident \"Sandbox blank-page incident\". Both are in the neotoma/inspector delivery graph.",
+          "turn_key": "conv-sandbox-engineering-1:turn:2",
+          "timestamp": "2026-06-20T16:05:00Z",
+          "conversation_id": "conv-sandbox-engineering-1"
+        },
+        {
+          "_ref": "conv_eng_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "engineering-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Maya Chen has the fix on PR #1768 \"feat(sandbox): Inspector at root + picker\" — it closes that blank-root issue. PR #1766 \"fix(sandbox): per-session pack seeding\" already merged with commits 34d5ccd and aa5469a. Priya Nair reviewed #1766.",
+          "turn_key": "conv-sandbox-engineering-1:turn:3",
+          "timestamp": "2026-06-20T16:12:00Z",
+          "conversation_id": "conv-sandbox-engineering-1"
+        },
+        {
+          "_ref": "conv_eng_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "engineering-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged merged PR #1768 against the inspector repo and linked it to the blank-root issue. PR #1766 is recorded against neotoma with commits 34d5ccd (wire seedForSession) and aa5469a (tenant-scope entity ids), plus an approve review of #1766. Maya manages #1768 and Priya manages the seeding work.",
+          "turn_key": "conv-sandbox-engineering-1:turn:4",
+          "timestamp": "2026-06-20T16:17:00Z",
+          "conversation_id": "conv-sandbox-engineering-1"
+        },
+        {
+          "_ref": "conv_eng_m5",
+          "entity_type": "conversation_message",
+          "canonical_name": "engineering-msg-5",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Dev Patel is deploying v0.17.0-dev to sandbox to resolve the incident. There's still an open issue about returning visitors getting 401-walled and an open PR #1790 for the anon fallback.",
+          "turn_key": "conv-sandbox-engineering-1:turn:5",
+          "timestamp": "2026-06-20T16:21:00Z",
+          "conversation_id": "conv-sandbox-engineering-1"
+        },
+        {
+          "_ref": "conv_eng_m6",
+          "entity_type": "conversation_message",
+          "canonical_name": "engineering-msg-6",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Recorded the successful \"sandbox v0.17.0-dev deploy\" to the sandbox environment (managed by Dev Patel), which resolves the blank-page incident. I also left open the \"Returning visitors 401-walled\" issue on neotoma-api and PR #1790 \"fix(sandbox): anon fallback for stale bearer\".",
+          "turn_key": "conv-sandbox-engineering-1:turn:6",
+          "timestamp": "2026-06-20T16:24:00Z",
+          "conversation_id": "conv-sandbox-engineering-1"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_eng_m1",
+      "target_ref": "conv_eng",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_eng_m2",
+      "target_ref": "conv_eng",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_eng_m3",
+      "target_ref": "conv_eng",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_eng_m4",
+      "target_ref": "conv_eng",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_eng_m5",
+      "target_ref": "conv_eng",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_eng_m6",
+      "target_ref": "conv_eng",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "is_blank",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "is_lockout",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "in_blank",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "pr_seed",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "pr_root",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "pr_auth",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "cm_seed",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "cm_salt",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "rv_seed",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_eng",
+      "target_ref": "dp_v017",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "pr_seed",
       "target_ref": "r_api",

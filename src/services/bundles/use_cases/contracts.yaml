@@ -1,0 +1,4 @@
+use_case: contracts
+description: Contract lifecycle management.
+schema_bundles: [contracts]
+skill_bundles: [core_workflows]

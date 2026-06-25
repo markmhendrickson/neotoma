@@ -1450,6 +1450,30 @@ export function buildToolDefinitions(
         additionalProperties: false,
       },
     },
+    {
+      name: "manage_bundles",
+      description: desc(
+        "manage_bundles",
+        "Inspect and manage Neotoma bundles (the deliverable unit shipping schemas, record-type docs, and skills). action=list returns all bundles with type/version/enabled/always_active/provides count; action=info (with bundle) returns full manifest detail; action=install/enable/disable (with bundle) toggle persisted enable state. Default-install bundles (core, infrastructure, core_workflows) are always active and cannot be disabled. Disabling a schema bundle stops its types from auto-creating under guided/locked while preserving existing data. Returns structured JSON."
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["list", "info", "install", "enable", "disable"],
+            description: "The bundle management action to perform.",
+          },
+          bundle: {
+            type: "string",
+            description:
+              "Bundle name. Required for info, install, enable, and disable; ignored for list.",
+          },
+        },
+        required: ["action"],
+        additionalProperties: false,
+      },
+    },
   ];
 
   return tools;
@@ -1517,6 +1541,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "npm_check_update",
   "neotoma_turn_summary",
   "publish_rendered_page",
+  "manage_bundles",
 ] as const;
 
 export type NeotomaToolName = (typeof NEOTOMA_TOOL_NAMES)[number];

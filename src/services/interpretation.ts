@@ -471,17 +471,35 @@ export async function runInterpretation(
 
       // When no known schema at all (neither DB nor code): optionally create a user-scoped schema from extracted fields
       let schemaCreationAttempted = false;
+      // Bundles m2: gate extracted-entity auto-create on the schema mode. Default
+      // `evolving` always allows (parity). `guided` permits only bundle-provided
+      // types; `locked` blocks all auto-create. When blocked, we skip creation
+      // and let the payload fall through to the raw_fragment preservation path
+      // below with a distinct reason.
+      let schemaModeBlock:
+        | Extract<import("./bundles/index.js").AutoCreateDecision, { allowed: false }>
+        | undefined;
       if (!schema && !codeSchema && config.create_schema_for_unknown !== false) {
-        schemaCreationAttempted = true;
-        schema = await schemaRegistry.ensureSchemaForExtractedEntity(
-          entityType,
-          entityData,
-          userId,
-          { create_if_missing: true }
-        );
-        if (schema) {
-          entityType = schema.entity_type;
-          currentEntityData = { ...entityData, entity_type: entityType };
+        const { checkAutoCreateAllowed } = await import("./bundles/index.js");
+        const decision = checkAutoCreateAllowed(entityType);
+        if (!decision.allowed) {
+          schemaModeBlock = decision;
+          logger.warn(
+            `[Interpretation] Schema mode "${decision.mode}" blocks auto-create of ` +
+              `entity_type "${entityType}"; preserving as raw_fragment. ${decision.message}`
+          );
+        } else {
+          schemaCreationAttempted = true;
+          schema = await schemaRegistry.ensureSchemaForExtractedEntity(
+            entityType,
+            entityData,
+            userId,
+            { create_if_missing: true }
+          );
+          if (schema) {
+            entityType = schema.entity_type;
+            currentEntityData = { ...entityData, entity_type: entityType };
+          }
         }
       }
 
@@ -498,9 +516,11 @@ export async function runInterpretation(
         // raw_fragment so the payload is preserved. Use a distinct reason so callers can tell
         // whether creation was attempted ("no_schema_registration_failed") or never tried
         // ("no_schema" — creation disabled via config.create_schema_for_unknown=false).
-        const noSchemaReason = schemaCreationAttempted
-          ? "no_schema_registration_failed"
-          : "no_schema";
+        const noSchemaReason = schemaModeBlock
+          ? `schema_mode_${schemaModeBlock.reason}`
+          : schemaCreationAttempted
+            ? "no_schema_registration_failed"
+            : "no_schema";
         logger.warn(
           `[Interpretation] No schema for entity_type "${entityType}" (resolved from extracted data); ` +
             `reason=${noSchemaReason}. Register a schema via register_schema to enable observations.`

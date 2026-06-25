@@ -22,6 +22,8 @@ When a Neotoma CLI session starts (dev or prod), applied rule files (e.g. `.curs
 | MCP not available                   | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout.                                                                                                                                                                      |
 | Install / MCP / configuration tasks | Read `install.md` (repo root) **first**. It is the canonical CLI-driven setup sequence covering `neotoma auth keygen`, `neotoma mcp config`, LaunchAgent install, transport presets, and data-directory configuration. Do not substitute shell introspection or manual JSON/plist edits for the CLI commands it documents. |
 
+Skill auto-loading at session start: on every MCP `initialize`, the harness detects and registers available workspace skills (`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`); this is idempotent and applies every session. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md`); this is a transport-layer pointer only.
+
 Index and dual-host notes: `docs/developer/agent_instructions.md`.
 
 Peer sync (peers, `/sync/webhook`, env `NEOTOMA_PUBLIC_BASE_URL` / `NEOTOMA_LOCAL_PEER_ID`, `get_peer_status` remote_health): `docs/subsystems/peer_sync.md`. CLI `neotoma compat` uses the same semver rules as `remote_health.compatible`.

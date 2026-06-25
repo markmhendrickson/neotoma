@@ -68,6 +68,7 @@ import {
 } from "../mcp_instruction_doc.js";
 import { registerProcessesCommands } from "./commands/processes.js";
 import { registerDbCommand } from "./commands/db.js";
+import { registerBundlesCommand } from "./commands/bundles.js";
 import { registerPeersCommand } from "./peers.js";
 import { buildInspectorFeedbackAdminUnlockPageUrl } from "./inspector_admin_unlock_url.js";
 import {
@@ -11222,6 +11223,8 @@ registerDbCommand(program, {
     return path.resolve(dataDir, dbFile);
   },
 });
+
+registerBundlesCommand(program);
 
 // ── Logs ──────────────────────────────────────────────────────────────────
 

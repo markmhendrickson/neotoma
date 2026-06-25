@@ -24,6 +24,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveFrontmatter } from "../src/services/docs/doc_frontmatter.js";
 import { loadManifest } from "../src/services/docs/manifest_loader.js";
+import { isIndexExcludedTopFolder } from "../src/services/docs/visibility.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
@@ -31,22 +32,12 @@ const docsRoot = path.join(repoRoot, "docs");
 const manifestPath = path.join(docsRoot, "site", "site_doc_manifest.yaml");
 const outRoot = path.join(repoRoot, "dist", "docs");
 
-// Top-level `docs/` folders excluded from the bundle. Visibility filtering
-// handles per-file internal docs inside kept folders.
-const EXCLUDED_TOP = new Set([
-  "site", // marketing-site MDX; the .md-only index does not serve it
-  "releases",
-  "feature_units",
-  "plans",
-  "proposals",
-  "prototypes",
-  "reports",
-  "implementation",
-  "private",
-  "assets",
-  "templates",
-  "research",
-]);
+// Top-level `docs/` folders excluded from the bundle are defined once in
+// `src/services/docs/visibility.ts` (`INDEX_EXCLUDED_TOP_FOLDERS` = the
+// non-public surface plus `site`) and shared with the runtime browsable index
+// via `isIndexExcludedTopFolder`. The bundle applies the exclusion
+// unconditionally; per-file `visibility` filtering (below) handles internal
+// docs inside kept folders.
 const SKIP_DIRS = new Set(["node_modules", ".git", "archived", "private"]);
 
 function collectMarkdown(root: string): string[] {
@@ -62,7 +53,7 @@ function collectMarkdown(root: string): string[] {
       if (ent.isDirectory()) {
         if (SKIP_DIRS.has(ent.name)) continue;
         const childRel = rel ? `${rel}/${ent.name}` : ent.name;
-        if (EXCLUDED_TOP.has(childRel.split("/")[0])) continue;
+        if (isIndexExcludedTopFolder(childRel)) continue;
         walk(path.join(absDir, ent.name), childRel);
       } else if (ent.isFile() && ent.name.endsWith(".md")) {
         out.push(rel ? `${rel}/${ent.name}` : ent.name);

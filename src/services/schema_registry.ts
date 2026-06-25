@@ -562,6 +562,14 @@ export interface SchemaMetadata {
   test?: boolean; // Mark schemas created for testing
   test_marked_at?: string; // ISO timestamp when test schema was marked
   guest_access_policy?: GuestAccessPolicyMode;
+  /**
+   * Bundle that originated this schema, e.g. `core` or `crm`. Added in Bundles m2.
+   * Optional/inert until the seed-ownership migration (m3) populates it; carried
+   * now so the registry interface is forward-compatible. (From PR #363, castor-agent.)
+   */
+  bundle?: string;
+  /** Version of the originating bundle at registration time, e.g. `1.0.0`. */
+  bundle_version?: string;
 }
 
 export interface SchemaRegistryEntry {
@@ -1903,7 +1911,10 @@ export class SchemaRegistryService {
   /**
    * List all active entity types, optionally filtered by keyword with vector search fallback
    */
-  async listEntityTypes(keyword?: string): Promise<
+  async listEntityTypes(
+    keyword?: string,
+    userId?: string
+  ): Promise<
     Array<{
       entity_type: string;
       schema_version: string;
@@ -1913,11 +1924,16 @@ export class SchemaRegistryService {
       match_type?: "keyword" | "vector";
     }>
   > {
-    // Get all active schemas from database
-    const query = db
+    // Get all active schemas from database. When a userId is supplied, return
+    // only global schemas (user_id IS NULL) plus that user's own schemas, so a
+    // user's private entity-type names/shapes are not disclosed cross-user.
+    let query = db
       .from("schema_registry")
       .select("entity_type, schema_version, schema_definition")
       .eq("active", true);
+    if (userId) {
+      query = query.or(`user_id.is.null,user_id.eq.${userId}`);
+    }
 
     const { data: dbSchemas } = await query;
 

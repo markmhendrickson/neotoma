@@ -38,6 +38,7 @@ import { renderLandingMarkdown } from "./md_template.js";
 import {
   buildBundledDocsNavCategories,
   buildBundledDocsFooterColumns,
+  resolveExtraKnownFooterSlugs,
 } from "../docs/bundled_nav.js";
 import { getBundledDocsIndex } from "../docs/index.js";
 
@@ -274,7 +275,14 @@ export function buildLandingContext(
         envSource: env as Record<string, string | undefined>,
       });
       landingIndex = buildBundledDocsNavCategories(docsIndex);
-      footerNav = buildBundledDocsFooterColumns(docsIndex, base);
+      // site/ is excluded from the browsable index but its pages remain
+      // deep-linkable; validate footer site-links via direct lookup so the
+      // landing footer keeps Install/Privacy/Terms/etc. on from-source hosts.
+      const extraKnownFooterSlugs = resolveExtraKnownFooterSlugs({
+        docsRoot,
+        env: env as Record<string, string | undefined>,
+      });
+      footerNav = buildBundledDocsFooterColumns(docsIndex, base, extraKnownFooterSlugs);
     } catch {
       // Fall back to the static nav if the docs tree can't be loaded.
     }

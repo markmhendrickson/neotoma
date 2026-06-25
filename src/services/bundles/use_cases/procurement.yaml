@@ -1,0 +1,4 @@
+use_case: procurement
+description: Procurement and sourcing.
+schema_bundles: [financial_ops, contracts, procurement]
+skill_bundles: [core_workflows]
