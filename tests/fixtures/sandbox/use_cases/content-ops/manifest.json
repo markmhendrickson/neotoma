@@ -1,15 +1,204 @@
 {
-  "schema_version": "1.0",
-  "description": "Content ops use case sandbox seed.",
+  "schema_version": "2.0",
+  "description": "Content-ops showcase: channels, campaigns, ideas turning into content pieces and publications — with engagement provenance from a second source.",
   "agent_identities": [
     {
-      "agent_sub": "sandbox-agent-content@neotoma.sandbox",
-      "client_name": "sandbox-seed-content",
+      "agent_sub": "sandbox-agent-chatgpt@neotoma.sandbox",
+      "client_name": "sandbox-seed-chatgpt",
       "client_version": "0.1.0",
-      "label": "Content ops seed runner"
+      "label": "ChatGPT seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-claude@neotoma.sandbox",
+      "client_name": "sandbox-seed-claude",
+      "client_version": "0.1.0",
+      "label": "Claude seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cursor@neotoma.sandbox",
+      "client_name": "sandbox-seed-cursor",
+      "client_version": "0.1.0",
+      "label": "Cursor seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cli@neotoma.sandbox",
+      "client_name": "sandbox-seed-cli",
+      "client_version": "0.1.0",
+      "label": "Neotoma CLI seed runner"
     }
   ],
-  "entity_batches": [],
+  "entity_batches": [
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "content-channels",
+      "entities": [
+        {
+          "_ref": "ch_x",
+          "entity_type": "channel",
+          "name": "X (Twitter)",
+          "kind": "social"
+        },
+        {
+          "_ref": "ch_li",
+          "entity_type": "channel",
+          "name": "LinkedIn",
+          "kind": "social"
+        },
+        {
+          "_ref": "ch_blog",
+          "entity_type": "channel",
+          "name": "Neotoma Blog",
+          "kind": "owned"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "content-campaigns",
+      "entities": [
+        {
+          "_ref": "cp_launch",
+          "entity_type": "campaign",
+          "name": "Sandbox launch",
+          "status": "active"
+        },
+        {
+          "_ref": "cp_series",
+          "entity_type": "campaign",
+          "name": "Memory vs truth-layer series",
+          "status": "planning"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "content-ideas",
+      "entities": [
+        {
+          "_ref": "id_graph",
+          "entity_type": "idea",
+          "name": "Show the graph, not the chat",
+          "status": "approved"
+        },
+        {
+          "_ref": "id_prov",
+          "entity_type": "idea",
+          "name": "Provenance you can click",
+          "status": "backlog"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "content-pieces",
+      "entities": [
+        {
+          "_ref": "co_thread",
+          "entity_type": "content_piece",
+          "title": "A sandbox you can actually click",
+          "format": "thread",
+          "status": "published"
+        },
+        {
+          "_ref": "co_post",
+          "entity_type": "content_piece",
+          "title": "Why memory needs a truth layer",
+          "format": "post",
+          "status": "draft"
+        },
+        {
+          "_ref": "co_blog",
+          "entity_type": "content_piece",
+          "title": "Per-visitor sandbox seeding",
+          "format": "article",
+          "status": "published"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "content-pubs",
+      "entities": [
+        {
+          "_ref": "pb_thread",
+          "entity_type": "publication",
+          "name": "X thread — launch",
+          "published_at": "2026-06-24"
+        },
+        {
+          "_ref": "pb_blog",
+          "entity_type": "publication",
+          "name": "Blog — seeding",
+          "published_at": "2026-06-23"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "content-prov",
+      "entities": [
+        {
+          "_ref": "co_thread2",
+          "entity_type": "content_piece",
+          "title": "A sandbox you can actually click",
+          "impressions": 18400,
+          "engagement_rate": 0.041
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_ref": "co_thread",
+      "target_ref": "cp_launch",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "co_blog",
+      "target_ref": "cp_launch",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "co_post",
+      "target_ref": "cp_series",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "co_thread",
+      "target_ref": "ch_x",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "co_post",
+      "target_ref": "ch_li",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "co_blog",
+      "target_ref": "ch_blog",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "co_thread",
+      "target_ref": "id_graph",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "co_post",
+      "target_ref": "id_prov",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pb_thread",
+      "target_ref": "co_thread",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pb_blog",
+      "target_ref": "co_blog",
+      "relationship_type": "references"
+    }
+  ],
   "unstructured_sources": [],
   "excluded_fixtures": []
 }
