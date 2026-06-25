@@ -15,6 +15,7 @@ This document does NOT cover:
 - Database schema details (see `docs/subsystems/schema.md`)
 - Automated schema promotion (see `docs/architecture/schema_expansion.md`)
 - [Reducer](../vocabulary/canonical_terms.md#reducer) implementation (see `docs/subsystems/reducer.md`)
+- User-facing guidance on choosing a merge strategy, "omit don't zero" semantics, and the LWW-default footgun (see `docs/subsystems/conflict_resolution.md`)
 ## 1. Schema Registry Overview
 
 ### 1.1 Purpose

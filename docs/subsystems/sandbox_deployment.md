@@ -241,7 +241,9 @@ criteria in the previous version of this document).
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `NEOTOMA_SANDBOX_MODE` | Fly (`fly.sandbox.toml`) | Enable all sandbox-only behaviors. |
+| `NEOTOMA_SANDBOX_MODE` | Fly (`fly.sandbox.toml`) | Enable all sandbox-only behaviors. Also auto-enables tenant-scoped entity ids (see below). |
+| `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` | Fly (optional) | Force tenant-scoped deterministic entity ids (salt `generateEntityId` with `user_id`) independent of sandbox mode. Auto-on when `NEOTOMA_SANDBOX_MODE=1`. Without it, entity ids are a global `hash(entity_type, canonical_name)` and two ephemeral visitors seeding the same name collide on one row — so only the first visitor's pack materializes. |
+| `NEOTOMA_GIT_SHA` | Docker build arg (deploy time) | Real commit SHA of the deployed build, stamped via `flyctl deploy --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)"`. Surfaced in the root JSON `git_sha` / footer so deploy freshness is verifiable; without it the value falls back to the opaque `FLY_MACHINE_VERSION` ULID. |
 | `NEOTOMA_DATA_DIR` | Fly | Persisted volume path; used by reset script. |
 | `NEOTOMA_SANDBOX_REPORT_FORWARD_URL` | Fly | Target for `HttpSandboxReportTransport` (Netlify). |
 | `NEOTOMA_SANDBOX_REPORT_FORWARD_BEARER` | Fly | Bearer sent to Netlify with each forwarded report. |

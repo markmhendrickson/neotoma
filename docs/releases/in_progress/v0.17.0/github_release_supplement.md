@@ -21,7 +21,27 @@ v0.17.0 ships four agent-facing capabilities surfaced from a high-volume product
 - **Fully backward-compatible.** Every new surface is opt-in: `include_capability_delta`, `intake`, `canonical_key`/`sighting_source_id`, and `collapse_by` all default to prior behavior when omitted. The `canonical_key` columns are nullable additive columns — existing rows stay `NULL`.
 - **New env var:** `NEOTOMA_OVERFLOW_SINK` (absolute path or directory). Only consulted when a `store` call passes `intake.mode: "overflow"`; unset = overflow disabled (a hint is returned if overflow is requested without it).
 - **Embedders:** point an iframe at `/embed/graph?apiBase=<your-api-origin>`; theme via the existing `NEOTOMA_INSPECTOR_SKIN` / `NEOTOMA_INSPECTOR_SKIN_CONFIG` mechanism from v0.16.0.
+- **New env var:** `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` (truthy `1`/`true`/`yes`) — see the Sandbox section below. Auto-enabled in sandbox mode; off in single-tenant prod (no behavior change).
+
+## Sandbox (sandbox.neotoma.io)
+
+Operator-facing fixes to the public sandbox; none affect single-tenant installs.
+
+- **Fixture packs now seed per visitor.** Picking a pack on the sandbox actually populates the workspace. Two root causes were fixed: the per-session seeder was never invoked, and (the deeper one) deterministic entity ids were global — `entities.id` is a global primary key and `generateEntityId` hashed only `(entity_type, canonical_name)`, so the 2nd+ visitor to seed a given name `matched_existing` against the 1st visitor's row and got an empty workspace.
+- **Opt-in tenant-scoped entity ids.** `generateEntityId` now accepts an optional tenant salt applied via `entityIdTenantSalt(userId)`, gated on `isSandboxMode()` **or** the new `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` flag (truthy `1`/`true`/`yes`). **Single-tenant prod is unchanged** — no salt → identical global ids → no migration, no id churn. The gate is intended to be set once per deployment (toggling it on a persistent store would strand existing rows). Latent note: the global-identity behavior means any multi-tenant deployment (e.g. shared `mcp.neotoma.io`) should enable this flag deliberately.
+- **`seed_status` on session responses.** `POST /sandbox/session/{new,reset}` now return `seed_status: "seeded" | "skipped" | "failed"` so the UI can tell a legitimately-empty pack from a seeding failure.
+- **Inspector served at the sandbox root.** `GET /` (HTML) now serves the Inspector SPA in sandbox mode too (as it already did in local/personal/prod); the pack picker moved into the Inspector home. Agents/`curl` still get the JSON/Markdown discovery payload at `/`. The legacy `/inspector#session=<code>` hash handoff still works.
+- **CI-driven sandbox deploy.** Publishing a GitHub Release now deploys `neotoma-sandbox` via `.github/workflows/deploy-sandbox.yml` (was a manual, easy-to-skip `flyctl` step), and the build stamps the real commit SHA so the root JSON `git_sha` is a verifiable 40-char commit instead of a Fly machine-version ULID.
 
 ## Breaking changes
 
 None. This release is additive.
+
+## Documentation
+
+Pre-staged site pages for each feature (discharges #1760 coverage for these tools):
+
+- [Identity resolver](/identify-entity-by-signals) — `identify_entity_by_signals` multi-signal bundle, scoring, resolution bands, example call
+- [Capability delta](/capability-delta) — `npm_check_update` with `include_capability_delta`, `new_tools`/`removed_tools` response, agent integration pattern
+- [High-velocity intake](/high-velocity-intake) — overflow sink (`intake.mode='overflow'`, `NEOTOMA_OVERFLOW_SINK`), `canonical_key` sightings, `collapse_by` read-time aggregation
+- [Embeddable graph](/embed-graph) — chrome-less `/embed/graph` iframe route, `?apiBase=`/`?node=` params, `postMessage` on node double-click

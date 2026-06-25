@@ -1,5 +1,19 @@
 # What to store in Neotoma
 
+## You don't keep Neotoma clean — Neotoma keeps your state clean for you
+
+The most common first-week worry is "I have to keep it clean," and it leads people to build their own gatekeeping *outside* Neotoma — tiers, rules, a staging area — to decide what's allowed in. Don't. That inverts the model and recreates by hand exactly what the substrate already does.
+
+**You do not keep Neotoma clean. Neotoma keeps your state clean for you.** Determinism, versioning, provenance, and corrections are the substrate's job, not yours.
+
+So when you're unsure whether a messy transcript, a half-formed decision, or an offhand note "belongs" — store it:
+
+- A later **correction** supersedes a wrong value at priority, without losing the history.
+- An **unknown field** lands in `raw_fragments` instead of being dropped, and gets promoted as the schema matures.
+- A **duplicate** resolves to one canonical record rather than fragmenting.
+
+Curating *before* you store is the anti-pattern — you'd be doing manually, and imperfectly, what the substrate does deterministically. The tiers below are a guide to what tends to be high-value, **not a gate every fact must pass through.**
+
 ## Principle
 
 Neotoma stores any structured fact that benefits from deterministic state evolution, versioning, and provenance. The deciding question is not "is this personal data?" but **"does this fact benefit from being versioned, auditable, and reproducible?"**

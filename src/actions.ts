@@ -105,7 +105,10 @@ import {
   purgeSessionUserData,
   sweepExpiredSessions,
   SESSION_COOKIE_NAME,
+  type SandboxSession,
 } from "./services/sandbox/sessions.js";
+import { seedForSession } from "./services/sandbox/seeder.js";
+import { getSandboxPack } from "./services/sandbox/pack_registry.js";
 import {
   buildEndpointsMap,
   buildLandingContext,
@@ -333,10 +336,47 @@ if (isSandboxMode()) {
     validate: { trustProxy: false } as never,
   });
 
-  app.post("/sandbox/session/new", sessionRateLimit, (req, res) => {
+  // Create an ephemeral session AND seed its pack fixtures. Seeding runs the
+  // seed entrypoint against this server over HTTP authenticated as the new
+  // session's bearer, so the chosen pack's entities land in the visitor's
+  // workspace. Seeding failures are non-fatal (the session is still usable,
+  // just empty) — they are logged so a broken pack is visible in ops logs, and
+  // surfaced to the caller via `seed_status` so the picker can distinguish a
+  // legitimately empty pack from a seeding failure (explicit-over-implicit).
+  type SeedStatus = "seeded" | "skipped" | "failed";
+  const createAndSeedSession = async (
+    packId: string
+  ): Promise<{ session: SandboxSession; seedStatus: SeedStatus }> => {
+    const session = createSandboxSession(packId);
+    const pack = getSandboxPack(session.packId);
+    // Packs with seedPolicy "none" (e.g. the empty pack) legitimately seed
+    // nothing — that is "skipped", not a failure.
+    if (!pack || pack.seedPolicy === "none" || !pack.manifestPath) {
+      return { session, seedStatus: "skipped" };
+    }
+    try {
+      const baseUrl =
+        process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() ||
+        `http://127.0.0.1:${process.env.HTTP_PORT?.trim() || "3180"}`;
+      const seeded = await seedForSession({
+        packId: session.packId,
+        baseUrl,
+        bearer: session.bearerToken,
+        logger: (msg) => logger.info(`[Sandbox][seed] ${msg}`),
+      });
+      return { session, seedStatus: seeded ? "seeded" : "failed" };
+    } catch (err) {
+      logger.error(
+        `[Sandbox] seeding failed for session ${session.userId} (pack ${session.packId}): ${(err as Error).message}`
+      );
+      return { session, seedStatus: "failed" };
+    }
+  };
+
+  app.post("/sandbox/session/new", sessionRateLimit, async (req, res) => {
     try {
       const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : "generic";
-      const session = createSandboxSession(packId);
+      const { session, seedStatus } = await createAndSeedSession(packId);
       res.cookie(SESSION_COOKIE_NAME, session.bearerToken, {
         httpOnly: true,
         sameSite: "lax",
@@ -347,6 +387,7 @@ if (isSandboxMode()) {
         one_time_code: session.oneTimeCode,
         expires_at: session.expiresAt,
         pack_id: session.packId,
+        seed_status: seedStatus,
       });
     } catch (err) {
       logger.error(`[Sandbox] session/new failed: ${(err as Error).message}`);
@@ -404,7 +445,7 @@ if (isSandboxMode()) {
     });
   });
 
-  app.post("/sandbox/session/reset", (req, res) => {
+  app.post("/sandbox/session/reset", async (req, res) => {
     const session = resolveSessionFromRequest(req);
     if (!session) {
       res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
@@ -412,7 +453,9 @@ if (isSandboxMode()) {
     }
     const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : undefined;
     purgeSessionUserData(session.userId);
-    const newSession = createSandboxSession(packId ?? session.packId);
+    const { session: newSession, seedStatus } = await createAndSeedSession(
+      packId ?? session.packId
+    );
     res.cookie(SESSION_COOKIE_NAME, newSession.bearerToken, {
       httpOnly: true,
       sameSite: "lax",
@@ -423,6 +466,7 @@ if (isSandboxMode()) {
       user_id: newSession.userId,
       pack_id: newSession.packId,
       expires_at: newSession.expiresAt,
+      seed_status: seedStatus,
     });
   });
 
@@ -6819,6 +6863,61 @@ export async function storeStructuredForApi(params: {
     throw aggregate;
   }
 
+  // Write-time value constraint enforcement (#1756).
+  // Run before any observation writes so a "reject" policy aborts the whole
+  // batch cleanly (mirrors the ERR_STORE_RESOLUTION_FAILED aggregate pattern).
+  // Constraint violations in "warn" mode are deferred to the schemaStoreWarnings
+  // pass below where the schema is re-loaded alongside the other warnings.
+  {
+    const { schemaRegistry: cvSchemaRegistry } = await import("./services/schema_registry.js");
+    const { collectConstraintViolations, ConstraintViolationError } =
+      await import("./services/field_constraints.js");
+
+    const constraintIssues: Array<{
+      observation_index: number;
+      entity_type: string;
+      message: string;
+    }> = [];
+
+    for (const r of resolved) {
+      let cvSchemaEntry;
+      try {
+        cvSchemaEntry = await cvSchemaRegistry.loadActiveSchema(r.entity_type, userId);
+      } catch {
+        // Best-effort; never block store on registry IO failure.
+      }
+      if (!cvSchemaEntry?.schema_definition?.fields) continue;
+      const cvPolicy = cvSchemaEntry.schema_definition.constraint_violation_policy ?? "reject";
+      const violations = collectConstraintViolations(
+        r.fields,
+        cvSchemaEntry.schema_definition.fields
+      );
+      if (violations.length === 0) continue;
+
+      if (cvPolicy === "reject") {
+        const cvErr = new ConstraintViolationError(violations);
+        constraintIssues.push({
+          observation_index: r.observation_index,
+          entity_type: r.entity_type,
+          message: cvErr.message,
+        });
+      }
+      // "warn" mode violations are surfaced in the schemaStoreWarnings pass below.
+    }
+
+    if (constraintIssues.length > 0) {
+      const cvAggregate = new Error(
+        `Structured store refused: ${constraintIssues.length} observation(s) failed constraint validation.`
+      ) as Error & {
+        code: string;
+        issues: Array<{ observation_index: number; entity_type: string; message: string }>;
+      };
+      cvAggregate.code = "ERR_CONSTRAINT_VIOLATION";
+      cvAggregate.issues = constraintIssues;
+      throw cvAggregate;
+    }
+  }
+
   const createdEntities: Array<{
     entity_id: string;
     entity_type: string;
@@ -7228,6 +7327,48 @@ export async function storeStructuredForApi(params: {
           anyUnknownFieldSchemaHasIdentityConfig = true;
         }
       }
+
+      // Write-time constraint violations in "warn" mode (#1756).
+      // "reject" violations were already handled before the observation write
+      // loop; only "warn" policies reach this point.
+      if (schemaDef?.fields) {
+        const cvPolicy = schemaDef.constraint_violation_policy ?? "reject";
+        if (cvPolicy === "warn") {
+          const { collectConstraintViolations: _cvCollect } =
+            await import("./services/field_constraints.js");
+          const warnViolations = _cvCollect(r.fields, schemaDef.fields);
+          for (const v of warnViolations) {
+            schemaStoreWarnings.push({
+              code: "CONSTRAINT_VIOLATION",
+              message: `${r.entity_type} field "${v.field}" failed constraint "${v.constraint}": ${v.message}`,
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+          }
+        }
+      }
+
+      // Issue #1755: SOURCE_PRIORITY_IGNORED — non-blocking advisory warning
+      // when the caller sets a non-default source_priority but none of the
+      // fields being written will actually honour it. This happens when every
+      // field's merge policy is `last_write` (the auto-discovered-schema
+      // default) or `merge_array` — both ignore source_priority entirely.
+      // The warning is emitted regardless of whether the entity has a
+      // registered schema (no schema → all fields effectively last_write).
+      {
+        const { buildSourcePriorityIgnoredWarning } =
+          await import("./services/source_priority_warning.js");
+        const spWarn = buildSourcePriorityIgnoredWarning({
+          sourcePriority,
+          writtenFields: r.fields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: r.observation_index,
+          entityType: r.entity_type,
+          entityId: r.entity_id,
+        });
+        if (spWarn) schemaStoreWarnings.push(spWarn);
+      }
     }
   }
 
@@ -7584,6 +7725,26 @@ async function handleStorePost(
       return res.status(400).json({
         error: {
           code: "ERR_STORE_RESOLUTION_FAILED",
+          message: err.message,
+          issues: err.issues ?? [],
+        },
+      });
+    }
+    if (error && typeof error === "object" && errCode === "ERR_CONSTRAINT_VIOLATION") {
+      const err = error as {
+        message: string;
+        issues: Array<{
+          observation_index: number;
+          entity_type: string;
+          message: string;
+        }>;
+      };
+      logWarn("ConstraintViolationError:store", req, {
+        issue_count: err.issues?.length ?? 0,
+      });
+      return res.status(400).json({
+        error: {
+          code: "ERR_CONSTRAINT_VIOLATION",
           message: err.message,
           issues: err.issues ?? [],
         },

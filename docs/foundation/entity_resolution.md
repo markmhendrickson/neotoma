@@ -1,9 +1,16 @@
 # Entity Resolution Doctrine
 ## 15.1 Entity ID Generation (Deterministic)
 ```typescript
-function generateEntityId(entityType: string, canonicalName: string): string {
+function generateEntityId(
+  entityType: string,
+  canonicalName: string,
+  tenantSalt?: string, // optional — see tenant-scoping below
+): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
-  const hash = sha256(`${entityType}:${normalized}`);
+  const basis = tenantSalt
+    ? `tenant:${tenantSalt}:${entityType}:${normalized}`
+    : `${entityType}:${normalized}`;
+  const hash = sha256(basis);
   return `ent_${hash.substring(0, 24)}`;
 }
 function normalizeEntityValue(entityType: string, raw: string): string {
@@ -18,7 +25,9 @@ function normalizeEntityValue(entityType: string, raw: string): string {
   return normalized;
 }
 ```
-**Same name → same ID, globally. No duplicates.** Persisted `canonical_name` is produced by `formatCanonicalNameForStorage` in `src/services/entity_resolution.ts` (same structural rules as `normalizeEntityValue`, casing preserved); entity IDs still hash `normalizeEntityValue` only.
+**Default (single-tenant): same name → same ID, globally. No duplicates.** Persisted `canonical_name` is produced by `formatCanonicalNameForStorage` in `src/services/entity_resolution.ts` (same structural rules as `normalizeEntityValue`, casing preserved); entity IDs still hash `normalizeEntityValue` only.
+
+**Tenant-scoped ids (opt-in).** `entities.id` is a global primary key, so without a salt two tenants writing the same `(entity_type, canonical_name)` collide on one row. For multi-tenant deployments (the public sandbox) `generateEntityId` accepts an optional `tenantSalt`, supplied by `entityIdTenantSalt(userId)` at every recompute site (resolver, identifier lookup, snapshot collision guard, entity split). The salt is applied when `isSandboxMode()` is true **or** `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` is truthy (`1`/`true`/`yes`), and omitted otherwise — so single-tenant prod ids are unchanged (no migration, no id churn). Toggling the gate on a persistent store would strand existing rows, so it is intended to be set once per deployment. See [`docs/subsystems/sandbox_deployment.md`](../subsystems/sandbox_deployment.md).
 ## 15.2 Entity Rules
 Entity IDs MUST be:
 - Canonical (globally unique representation)

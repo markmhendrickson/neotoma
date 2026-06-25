@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **485**
-- Backend and repo Vitest files: **452**
+- Total automated test files: **496**
+- Backend and repo Vitest files: **463**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 129 |
-| Vitest service tests | 34 |
-| Source-adjacent tests | 59 |
-| Vitest integration tests | 137 |
+| Vitest unit tests | 135 |
+| Vitest service tests | 35 |
+| Source-adjacent tests | 61 |
+| Vitest integration tests | 139 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 3 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (129):**
+**Files (135):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -157,6 +157,7 @@ flowchart TD
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
+- `tests/unit/entity_id_tenant_scope.test.ts`
 - `tests/unit/entity_queries_status_projection.test.ts`
 - `tests/unit/env_contamination_audit.test.ts`
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
@@ -167,6 +168,7 @@ flowchart TD
 - `tests/unit/external_actor_promoter.test.ts`
 - `tests/unit/external_actor_provenance.test.ts`
 - `tests/unit/features/FU-2026-Q3-aauth-inspector-attestation-viz/agent_badge_tier_icon.test.ts`
+- `tests/unit/field_constraints.test.ts`
 - `tests/unit/github_issue_thread.test.ts`
 - `tests/unit/github_mirror_guidance.test.ts`
 - `tests/unit/github_pages_asset_paths.test.ts`
@@ -209,12 +211,14 @@ flowchart TD
 - `tests/unit/relationship_reducer.test.ts`
 - `tests/unit/relationship_traversal_indexes.test.ts`
 - `tests/unit/request_context.test.ts`
+- `tests/unit/root_landing_git_sha.test.ts`
 - `tests/unit/root_landing_harness_snippets.test.ts`
 - `tests/unit/root_landing_site_nav_drift.test.ts`
 - `tests/unit/safe_request_log_format.test.ts`
 - `tests/unit/sandbox_boot_banner.test.ts`
 - `tests/unit/sandbox_pack_registry.test.ts`
 - `tests/unit/sandbox_reset.test.ts`
+- `tests/unit/sandbox_seeder_command.test.ts`
 - `tests/unit/schema_agent_instructions.test.ts`
 - `tests/unit/schema_derived_entity_extraction.test.ts`
 - `tests/unit/schema_inference.test.ts`
@@ -224,10 +228,12 @@ flowchart TD
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
+- `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
 - `tests/unit/sqlite_connection_pragmas.test.ts`
 - `tests/unit/standing_rules.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
+- `tests/unit/store_strict_and_consistency.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
 - `tests/unit/subscription_types.test.ts`
 - `tests/unit/substrate_event_bus.test.ts`
@@ -245,12 +251,13 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (34):**
+**Files (35):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
 - `tests/services/encryption_service.test.ts`
+- `tests/services/entity_id_tenant_scope_resolution.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
@@ -286,7 +293,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (59):**
+**Files (61):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -323,6 +330,7 @@ flowchart TD
 - `src/services/entity_submission/submission_service.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/body_newline_decode.test.ts`
+- `src/services/issues/issue_identity.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
 - `src/services/issues/observer_import.test.ts`
@@ -333,6 +341,7 @@ flowchart TD
 - `src/services/memory_export.test.ts`
 - `src/services/plans/capture_harness_plan.test.ts`
 - `src/services/plans/seed_schema.test.ts`
+- `src/services/rendered_page/conformance.test.ts`
 - `src/services/rendered_page/publish.test.ts`
 - `src/services/sync/peer_health.test.ts`
 - `src/shared/action_handlers/entity_handlers.test.ts`
@@ -352,7 +361,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (137):**
+**Files (139):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -468,6 +477,7 @@ flowchart TD
 - `tests/integration/sandbox_report.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
+- `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
@@ -478,6 +488,7 @@ flowchart TD
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
+- `tests/integration/store_source_priority_ignored_warning.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
 - `tests/integration/subscription_list.test.ts`

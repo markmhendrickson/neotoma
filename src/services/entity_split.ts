@@ -19,7 +19,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { deleteSnapshot, recomputeSnapshot } from "./snapshot_computation.js";
-import { generateEntityId } from "./entity_resolution.js";
+import { entityIdTenantSalt, generateEntityId } from "./entity_resolution.js";
 import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 /**
@@ -238,7 +238,8 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   // target_entity_id support lets operators split INTO an existing entity
   // when the over-merge can be repaired by re-pointing to a pre-existing row.
   const newEntityId =
-    newEntity.target_entity_id ?? generateEntityId(newEntity.entity_type, newEntity.canonical_name);
+    newEntity.target_entity_id ??
+    generateEntityId(newEntity.entity_type, newEntity.canonical_name, entityIdTenantSalt(userId));
   if (newEntityId === sourceEntityId) {
     throw new Error(
       "split_entity: new_entity_id is identical to source_entity_id; split would be a no-op."
