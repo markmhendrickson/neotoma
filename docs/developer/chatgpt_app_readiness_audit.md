@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # ChatGPT App Readiness Audit
 
 This audit maps Neotoma's current MCP/Actions implementation to ChatGPT App requirements and defines a practical MVP scope.

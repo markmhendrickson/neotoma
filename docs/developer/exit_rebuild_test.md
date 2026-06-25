@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # Exit / Rebuild Test Protocol
 
 ## Purpose

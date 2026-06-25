@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # Remaining fix: CLI banner in session/REPL (user data dir, no repo root)
 
 Apply this in the **Neotoma CLI** source. The no-session path is already fixed; this is the **remaining** change so the banner shows Prod/Dev counts in the REPL when the user has no project root but has `NEOTOMA_DATA_DIR` set (e.g. in `~/.config/neotoma/.env`).

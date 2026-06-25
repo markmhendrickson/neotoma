@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # PR Review Reading List
 
 This document is the authoritative reading list for the automated Claude PR reviewer. It tells the reviewer which docs to read and when.

@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # MCP HTTPS Testing Status
 
 **Date:** 2026-01-27

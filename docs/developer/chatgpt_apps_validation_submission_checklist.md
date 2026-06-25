@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # ChatGPT Apps Validation and Submission Checklist
 
 Use this checklist for release gating before app submission.

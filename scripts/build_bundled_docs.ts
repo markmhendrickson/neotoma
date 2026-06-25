@@ -7,13 +7,9 @@
  * The `/docs` route falls back to `dist/docs` when the source checkout is absent
  * (see `src/services/docs/docs_root.ts`).
  *
- * Excluded from the bundle:
- *   - Docs whose resolved frontmatter visibility is `internal` (never ship
- *     internal content in the package).
- *   - Deprecated docs.
- *   - High-volume or non-in-app top-level folders: the marketing-site MDX
- *     (`site/`, which the .md-only index never serves anyway), release history,
- *     feature units, and the internal process folders.
+ * The filtering (visibility, deprecation, excluded folders) lives in the pure,
+ * unit-tested `src/services/docs/bundle_plan.ts`; this script only performs the
+ * filesystem copy and manifest export.
  *
  * Deterministic: a pure function of the docs tree + manifest. No `Date.now()`
  * or `Math.random()`.
@@ -22,7 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveFrontmatter } from "../src/services/docs/doc_frontmatter.js";
+import { planBundledDocs } from "../src/services/docs/bundle_plan.js";
 import { loadManifest } from "../src/services/docs/manifest_loader.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -31,78 +27,19 @@ const docsRoot = path.join(repoRoot, "docs");
 const manifestPath = path.join(docsRoot, "site", "site_doc_manifest.yaml");
 const outRoot = path.join(repoRoot, "dist", "docs");
 
-// Top-level `docs/` folders excluded from the bundle. Visibility filtering
-// handles per-file internal docs inside kept folders.
-const EXCLUDED_TOP = new Set([
-  "site", // marketing-site MDX; the .md-only index does not serve it
-  "releases",
-  "feature_units",
-  "plans",
-  "proposals",
-  "prototypes",
-  "reports",
-  "implementation",
-  "private",
-  "assets",
-  "templates",
-  "research",
-]);
-const SKIP_DIRS = new Set(["node_modules", ".git", "archived", "private"]);
-
-function collectMarkdown(root: string): string[] {
-  const out: string[] = [];
-  const walk = (absDir: string, rel: string): void => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(absDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const ent of entries) {
-      if (ent.isDirectory()) {
-        if (SKIP_DIRS.has(ent.name)) continue;
-        const childRel = rel ? `${rel}/${ent.name}` : ent.name;
-        if (EXCLUDED_TOP.has(childRel.split("/")[0])) continue;
-        walk(path.join(absDir, ent.name), childRel);
-      } else if (ent.isFile() && ent.name.endsWith(".md")) {
-        out.push(rel ? `${rel}/${ent.name}` : ent.name);
-      }
-    }
-  };
-  walk(root, "");
-  return out;
-}
-
 function main(): void {
   if (!fs.existsSync(docsRoot)) {
     console.log(`[bundle-docs] no docs/ tree at ${docsRoot}; skipping`);
     return;
   }
   const manifest = loadManifest(manifestPath);
-  const files = collectMarkdown(docsRoot);
+  const plan = planBundledDocs(docsRoot, manifest.entries);
 
   fs.rmSync(outRoot, { recursive: true, force: true });
-
-  let copied = 0;
-  let skippedInternal = 0;
-  let skippedDeprecated = 0;
-  for (const rel of files) {
-    const abs = path.join(docsRoot, rel);
-    const source = fs.readFileSync(abs, "utf-8");
-    const entry = manifest.entries.get(`docs/${rel}`);
-    const fm = resolveFrontmatter(rel, source, entry);
-    if (fm.visibility !== "public") {
-      skippedInternal += 1;
-      continue;
-    }
-    if (fm.deprecated) {
-      skippedDeprecated += 1;
-      continue;
-    }
+  for (const rel of plan.include) {
     const dest = path.join(outRoot, rel);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(abs, dest);
-    copied += 1;
+    fs.copyFileSync(path.join(docsRoot, rel), dest);
   }
 
   // Ship the manifest so categories and the featured list resolve from the bundle.
@@ -113,8 +50,8 @@ function main(): void {
   }
 
   console.log(
-    `[bundle-docs] copied ${copied} public docs to dist/docs ` +
-      `(skipped ${skippedInternal} internal, ${skippedDeprecated} deprecated)`
+    `[bundle-docs] copied ${plan.include.length} public docs to dist/docs ` +
+      `(skipped ${plan.skippedInternal.length} internal, ${plan.skippedDeprecated.length} deprecated)`
   );
 }
 

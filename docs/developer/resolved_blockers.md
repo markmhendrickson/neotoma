@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # Resolved Blockers for Release Build
 This document tracks blockers that have been resolved for cloud agent execution.
 ## Blocker 1: CSV Fixture Loader ✅ RESOLVED

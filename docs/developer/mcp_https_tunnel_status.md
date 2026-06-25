@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # MCP HTTPS Tunnel Status
 
 **Date:** 2026-01-27
