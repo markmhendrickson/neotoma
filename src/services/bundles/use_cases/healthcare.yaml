@@ -1,0 +1,4 @@
+use_case: healthcare
+description: Healthcare operations.
+schema_bundles: [healthcare, personal_data]
+skill_bundles: [core_workflows]

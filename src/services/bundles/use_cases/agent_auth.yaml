@@ -1,0 +1,4 @@
+use_case: agent_auth
+description: Agent authorization and capability scoping.
+schema_bundles: [infrastructure, agent_auth]
+skill_bundles: [core_workflows]

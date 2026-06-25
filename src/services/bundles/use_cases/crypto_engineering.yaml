@@ -1,0 +1,4 @@
+use_case: crypto_engineering
+description: Crypto and security engineering.
+schema_bundles: [crypto_engineering]
+skill_bundles: [core_workflows]

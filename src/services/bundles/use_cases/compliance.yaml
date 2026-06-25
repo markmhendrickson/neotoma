@@ -1,0 +1,4 @@
+use_case: compliance
+description: Vendor risk and regulatory compliance.
+schema_bundles: [contracts, compliance]
+skill_bundles: [core_workflows]

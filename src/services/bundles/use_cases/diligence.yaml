@@ -1,0 +1,4 @@
+use_case: diligence
+description: M&A and investment diligence.
+schema_bundles: [crm, financial_ops, contracts, diligence]
+skill_bundles: [core_workflows]

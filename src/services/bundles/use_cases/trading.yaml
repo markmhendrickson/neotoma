@@ -1,0 +1,4 @@
+use_case: trading
+description: Autonomous trading agents.
+schema_bundles: [financial_ops, trading]
+skill_bundles: [core_workflows]

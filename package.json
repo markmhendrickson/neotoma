@@ -18,7 +18,8 @@
   "scripts": {
     "pretest": "npm run build:server",
     "build": "npm run build:server && npm run build:inspector",
-    "build:server": "tsc && node scripts/copy_pdf_worker_wrapper.js && npm run build:scripts && npm run build:bundled-docs",
+    "build:server": "tsc && node scripts/copy_pdf_worker_wrapper.js && node scripts/copy_bundle_assets.js && npm run build:scripts && npm run build:bundled-docs",
+    "bundles:check": "tsx scripts/bundles_check.ts",
     "build:bundled-docs": "tsx scripts/build_bundled_docs.ts",
     "build:scripts": "tsc -p tsconfig.scripts.json",
     "build:inspector": "node scripts/build_inspector.js",

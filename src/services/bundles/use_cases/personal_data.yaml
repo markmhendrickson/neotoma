@@ -1,0 +1,4 @@
+use_case: personal_data
+description: Personal agent state.
+schema_bundles: [personal_data]
+skill_bundles: [core_workflows]
