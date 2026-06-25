@@ -230,6 +230,10 @@ function headersForAgent(agent: SandboxAgentIdentity, bearer?: string): Record<s
     "user-agent": `neotoma-sandbox-seed/1.0 (${agent.label})`,
   };
   if (bearer) headers["authorization"] = `Bearer ${bearer}`;
+  // Internal seed token (inherited from the server that spawned this process)
+  // lets seeding bypass the sandbox write rate limit. Absent for manual runs.
+  const seedToken = process.env.NEOTOMA_SANDBOX_SEED_TOKEN?.trim();
+  if (seedToken) headers["x-neotoma-seed-token"] = seedToken;
   return headers;
 }
 
