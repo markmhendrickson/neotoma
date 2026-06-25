@@ -3631,6 +3631,26 @@ app.use(async (req, res, next) => {
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
       }
+      // Sandbox: a Bearer that resolves to no valid identity is almost always a
+      // returning visitor whose ephemeral sandbox session expired or was wiped
+      // by the weekly reset — the Inspector SPA keeps replaying the stale
+      // localStorage bearer. 401-walling it leaves the visitor stuck: the home,
+      // /me, and even DELETE /sandbox/session all 401, and the HttpOnly cookie
+      // can't be cleared client-side. Degrade to the anonymous public user
+      // (the same floor unauthenticated sandbox requests already get above) and
+      // clear the stale cookie so the Inspector loads and the pack picker lets
+      // them start fresh. This does NOT widen the trust boundary: anonymous is
+      // already the sandbox floor, writes stay gated by sandboxWriteGate /
+      // sandboxDestructiveGuard, and AAuth-only routes by aauthRequired.
+      if (isSandboxMode()) {
+        res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+        const sandboxUser = ensureSandboxPublicUser();
+        stampUserPrincipal(req, sandboxUser.id);
+        logger.info(
+          `[Auth] ${req.method} ${req.path} auth_method=sandbox_public_stale_bearer user_id=${sandboxUser.id}`
+        );
+        return next();
+      }
       // Not a valid token
       logWarn("AuthInvalidToken", req, {
         error: authError instanceof Error ? authError.message : String(authError),
