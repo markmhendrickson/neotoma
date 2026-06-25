@@ -1905,9 +1905,22 @@ app.all("/mcp", async (req, res) => {
     }
 
     // Handle request with the transport inside the attribution context.
+    // Include aauthAdmission in the outer context so the per-async-chain ALS
+    // isolation carries the correct per-request admission into the transport
+    // handler and all nested runWithRequestContext scopes (initialize,
+    // callTool). This replaces the previous single-field
+    // serverInstance.setSessionAdmission() pattern, which had a cross-request
+    // race: concurrent requests from different grant owners shared one mutable
+    // field on the NeotomaServer instance (one per MCP session), so request B's
+    // setSessionAdmission() could overwrite the field before request A read it,
+    // causing A to authenticate / dispatch as B's user_id. The ALS is
+    // per-async-chain: each HTTP POST to /mcp runs in its own chain and sees
+    // only its own aauthAdmission value. `aauthAdmissionForRequest` was already
+    // resolved above (from the aauthAdmission() middleware on req).
     const attributionDecision = getAttributionDecisionFromRequest(req);
-    await runWithRequestContext({ agentIdentity: fallbackIdentity, attributionDecision }, () =>
-      transport!.handleRequest(req, res, req.body)
+    await runWithRequestContext(
+      { agentIdentity: fallbackIdentity, attributionDecision, aauthAdmission: aauthAdmissionForRequest },
+      () => transport!.handleRequest(req, res, req.body)
     );
   } catch (error: any) {
     logger.error("[MCP HTTP] Request error:", error);

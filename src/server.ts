@@ -206,7 +206,6 @@ export class NeotomaServer {
   private sessionConnectionId: string | null = null;
   /** AAuth-verified agent context propagated from the HTTP middleware (Phase 1). */
   private sessionAAuth: AAuthRequestContext | null = null;
-  private sessionAdmission: AAuthAdmissionContext | null = null;
   /** Client self-report from MCP initialize `clientInfo` (fallback attribution). */
   private sessionClientInfo: { name?: string; version?: string } | null = null;
   /** Browser app origin resolved by HTTP transport or explicit public URL config. */
@@ -505,12 +504,16 @@ export class NeotomaServer {
       // Per-(op, entity_type) capability scope is enforced on each tool call,
       // identical to the REST path.
       //
-      // Read from `this.sessionAdmission` (threaded by actions.ts per request)
-      // rather than `getCurrentAAuthAdmission()`: the `/mcp` handler runs the
-      // transport inside a nested `runWithRequestContext` that does not
-      // re-carry the admission, so the ALS value is shadowed to null by the
-      // time initialize runs. The session field is the reliable source.
-      const admission = this.sessionAdmission;
+      // Read from the request-scoped AsyncLocalStorage context (threaded by
+      // actions.ts into the outer runWithRequestContext before transport
+      // handling) rather than a shared session field. The outer context is
+      // per-async-chain (per HTTP request), so concurrent admitted requests
+      // from different grant owners cannot contaminate each other's admission.
+      // The previous `this.sessionAdmission` single-field approach had a
+      // cross-request race: request B's setSessionAdmission() could overwrite
+      // the field in the window before request A read it, causing A to
+      // authenticate as B's user_id (owner pivot).
+      const admission = getCurrentAAuthAdmission();
       if (admission?.admitted && admission.user_id) {
         this.authenticatedUserId = admission.user_id;
         this.requestAuth.set(requestId, {
@@ -608,17 +611,20 @@ export class NeotomaServer {
   }
 
   /**
-   * Stash the AAuth *admission* result (grant match) from the HTTP middleware
-   * so both the initialize auth resolution and the per-tool capability gate
-   * can read it without depending on `getCurrentAAuthAdmission()` surviving
-   * the nested `runWithRequestContext` scopes the `/mcp` handler and tool
-   * dispatch establish. Mirrors `setSessionAgentIdentity`; set per request by
-   * actions.ts before the transport handles the MCP request. `null` clears it
-   * (unsigned / unmatched requests). Not set on stdio / CLI-local paths, which
-   * fall back to `dev-local`.
+   * @deprecated No-op. Admission is now threaded via the per-request
+   * AsyncLocalStorage context (see `runWithRequestContext` in actions.ts)
+   * instead of a shared mutable instance field. The old single-field approach
+   * had a cross-request race: concurrent requests from different grant owners
+   * shared one field per NeotomaServer session instance, so request B's
+   * setSessionAdmission() could overwrite the field before request A read it,
+   * causing A to authenticate as B's user_id (owner pivot). Read sites in
+   * initialize and callTool now call `getCurrentAAuthAdmission()` instead.
+   * This method is retained only so callers that haven't been updated yet
+   * do not fail to compile; it will be removed in a subsequent cleanup.
    */
-  setSessionAdmission(ctx: AAuthAdmissionContext | null): void {
-    this.sessionAdmission = ctx;
+  setSessionAdmission(_ctx: AAuthAdmissionContext | null): void {
+    // No-op: admission is now read from the per-request AsyncLocalStorage
+    // context set by actions.ts in the outer runWithRequestContext call.
   }
 
   /**
@@ -1843,13 +1849,21 @@ export class NeotomaServer {
         // this scope — nested AsyncLocalStorage scopes shadow outer ones.
         const identity = this.getAgentIdentity();
         const attributionDecision = this.getSessionAttributionDecision();
+        // Capture the per-request admission from the outer ALS context (set by
+        // actions.ts in its runWithRequestContext before transport handling)
+        // before we nest a new scope. Reading from ALS here is safe because
+        // each HTTP POST to /mcp runs inside its own async chain — the ALS
+        // guarantees isolation between concurrent requests from different grant
+        // owners. The old `this.sessionAdmission` single-field was a race:
+        // concurrent request B could overwrite the field before A read it here.
+        const admissionForThisRequest = getCurrentAAuthAdmission();
         // Carry the admission into the tool-dispatch ALS scope so the
         // per-tool capability gate (`enforceAgentCapability`, which reads
         // `getCurrentAAuthAdmission()`) binds for AAuth-admitted MCP sessions.
         // Without this the nested scope shadows the admission to null and the
         // gate silently no-ops.
         const result = await runWithRequestContext(
-          { agentIdentity: identity, attributionDecision, aauthAdmission: this.sessionAdmission },
+          { agentIdentity: identity, attributionDecision, aauthAdmission: admissionForThisRequest },
           () => this.executeTool(name, args)
         );
         const runtimeUpdateNotice =
@@ -1915,8 +1929,11 @@ export class NeotomaServer {
     // that exercise local CLI writes as `anonymous`.
     const identity = this.getAgentIdentity();
     const attributionDecision = this.getSessionAttributionDecision();
+    // CLI path: no AAuth admission applies (CLI-over-MCP uses local auth,
+    // not grant-based AAuth). Pass null so the capability gate is a no-op
+    // for CLI callers, matching prior behaviour.
     return runWithRequestContext(
-      { agentIdentity: identity, attributionDecision, aauthAdmission: this.sessionAdmission },
+      { agentIdentity: identity, attributionDecision, aauthAdmission: null },
       () => this.executeTool(name, args)
     );
   }
