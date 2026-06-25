@@ -23,6 +23,10 @@ primary_region = 'lhr'
 
 [build.args]
   VITE_NEOTOMA_SANDBOX_UI = "1"
+  # The sandbox serves the Inspector SPA at the site root, so build it with a
+  # root base path → router basename "/" matches "/". (Default "/inspector/"
+  # would render blank at root.)
+  VITE_PUBLIC_BASE_PATH = "/"
 
 [env]
   NODE_ENV = "production"
