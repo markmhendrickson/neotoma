@@ -514,6 +514,29 @@ function safeCompareTokens(a: string, b: string): boolean {
   return timingSafeEqual(aBuf, bBuf);
 }
 
+// SECURITY: internal-seeding bypass for the sandbox write rate limit.
+//
+// Per-session pack seeding (createAndSeedSession -> seedForSession) spawns a
+// child process that POSTs many /store + /create_relationships writes back to
+// this server over loopback. Those writes share one IP (the server's own), so
+// the per-IP sandbox write limit throttles seeding — worst under concurrent
+// visitors. We mint a random token at boot, export it into the environment the
+// seed child inherits, and let requests carrying it skip the write rate limit.
+//
+// This does NOT open a bypass for visitors: the token is random per boot and
+// only ever reaches the spawned seed child (never the public surface), and the
+// header is compared in constant time. Destructive-route gating is unaffected
+// (seeding never calls destructive routes), and per-user write limits remain.
+const SANDBOX_SEED_TOKEN_HEADER = "x-neotoma-seed-token";
+const SANDBOX_SEED_TOKEN = process.env.NEOTOMA_SANDBOX_SEED_TOKEN?.trim() || randomUUID();
+process.env.NEOTOMA_SANDBOX_SEED_TOKEN = SANDBOX_SEED_TOKEN;
+function isInternalSeedRequest(req: express.Request): boolean {
+  const token = req.header(SANDBOX_SEED_TOKEN_HEADER);
+  return (
+    typeof token === "string" && token.length > 0 && safeCompareTokens(token, SANDBOX_SEED_TOKEN)
+  );
+}
+
 // SECURITY: write-path rate limiting (docs/reports/
 // security_audit_2026_04_22.md S-8). Keyed by authenticated user when
 // available so a single abusive client does not starve others. Operators
@@ -535,6 +558,7 @@ const writeRateLimit = rateLimit({
     // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
     return `ip:${ipKeyGenerator(req.ip || "")}`;
   },
+  skip: isInternalSeedRequest,
   message: "Write rate limit exceeded, please slow down",
   ...rateLimitOptions,
 });
@@ -559,6 +583,7 @@ const sandboxWriteRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: SANDBOX_WRITE_RATE_LIMIT_PER_MIN,
   keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip || "")}`,
+  skip: isInternalSeedRequest,
   message: "Sandbox write rate limit exceeded. Install Neotoma locally for unlimited use.",
   ...rateLimitOptions,
 });
