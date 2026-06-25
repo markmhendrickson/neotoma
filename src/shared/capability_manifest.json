@@ -108,6 +108,9 @@
     "list_timeline_events": {
       "addedInVersion": "v0.4.3"
     },
+    "manage_bundles": {
+      "addedInVersion": "v0.18.0"
+    },
     "merge_entities": {
       "addedInVersion": "v0.4.3"
     },
