@@ -261,6 +261,7 @@ caller repairs in-turn via `correct` rather than re-submitting the same payload.
 | `MISSING_IDENTITY_FIELDS` | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
 | `UNKNOWN_FIELD`           | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
 | `MISSING_REQUIRED_FIELD`  | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
+| `SOURCE_PRIORITY_IGNORED` | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot. |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -290,6 +291,16 @@ non-fatally accepted (mirror of the `unknown_fields` contract); the top-level
 observation_index }` tuples. Agents SHOULD repair in-turn by `correct`-ing the
 missing field. Use `describe_entity_type` before storing to learn which fields a type
 requires.
+
+**`SOURCE_PRIORITY_IGNORED`** — fired when the caller sets a non-default
+`source_priority` (any value other than 100) but every field on the entity type uses a
+merge strategy that ignores it — `last_write` and `merge_array` both discard
+`source_priority` during reduction (issue #1755). The write is accepted; the priority
+value is stored on the observation but has no effect on the projected snapshot.
+`source_priority` is only effective when at least one field's `reducer_config` uses
+`strategy: "highest_priority"` or `strategy: "most_specific"` with
+`tie_breaker: "source_priority"`. To make priority effective, register (or update) the
+schema so the relevant fields use one of those strategies.
 
 ## Validation Errors
 

@@ -6011,6 +6011,27 @@ export class NeotomaServer {
           }
         }
       }
+
+      // Issue #1755: SOURCE_PRIORITY_IGNORED — non-blocking advisory warning
+      // when the caller sets a non-default source_priority but none of the
+      // fields being written will actually honour it. This happens when every
+      // field's merge policy is `last_write` (the auto-discovered-schema
+      // default) or `merge_array` — both ignore source_priority entirely.
+      // The warning is emitted regardless of whether the entity has a
+      // registered schema (no schema → all fields effectively last_write).
+      {
+        const { buildSourcePriorityIgnoredWarning } =
+          await import("./services/source_priority_warning.js");
+        const spWarn = buildSourcePriorityIgnoredWarning({
+          sourcePriority,
+          writtenFields: entityFields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: i,
+          entityType: e.entityType,
+          entityId: e.entityId,
+        });
+        if (spWarn) schemaStoreWarnings.push(spWarn);
+      }
     }
 
     // Issue #1549: conditional unknown_fields hint. update_schema_incremental

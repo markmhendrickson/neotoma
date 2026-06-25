@@ -1939,10 +1939,14 @@ components:
                   empties that field), `UNKNOWN_FIELD` (fired per field that
                   is not declared on the entity's active schema; the value is
                   preserved on the observation but dropped from the snapshot
-                  projection until the field is added to the schema), and
+                  projection until the field is added to the schema),
                   `MISSING_REQUIRED_FIELD` (fired per schema field declared
                   `required: true` that the stored observation omits or leaves
-                  empty).
+                  empty), and `SOURCE_PRIORITY_IGNORED` (fired when the caller
+                  sets a non-default `source_priority` but no field on the
+                  entity type uses a merge strategy that honours it — all
+                  fields effectively use `last_write`, so the priority value
+                  has no effect on the stored snapshot).
               message:
                 type: string
                 description: Human-readable description from the schema rule.
