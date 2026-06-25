@@ -156,9 +156,178 @@
           "paid_date": "2026-06-12"
         }
       ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "fin-conv",
+      "entities": [
+        {
+          "_ref": "conv_fin",
+          "entity_type": "conversation",
+          "canonical_name": "June close and reconciliation",
+          "title": "June close and reconciliation",
+          "platform": "chatgpt",
+          "started_at": "2026-06-30T12:00:00Z",
+          "ended_at": "2026-06-30T12:20:00Z",
+          "turn_count": 6,
+          "idempotency_hint": "conv-sandbox-financial-ops-1",
+          "conversation_id": "conv-sandbox-financial-ops-1"
+        },
+        {
+          "_ref": "conv_fin_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "financial-ops-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Let's close out June. We have three vendor invoices: CloudHost for €420 (due June 15), the LexCo Legal retainer for €2,500 (due July 1), and WeWork July rent €1,800 (due July 5). Log them.",
+          "turn_key": "conv-sandbox-financial-ops-1:turn:1",
+          "timestamp": "2026-06-30T12:00:00Z",
+          "conversation_id": "conv-sandbox-financial-ops-1"
+        },
+        {
+          "_ref": "conv_fin_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "financial-ops-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged all three against their vendors: CloudHost €420 (paid), LexCo Legal retainer €2,500 (open, due 2026-07-01), and WeWork July rent €1,800 (open, due 2026-07-05). CloudHost, LexCo Legal, and WeWork are on file as organizations.",
+          "turn_key": "conv-sandbox-financial-ops-1:turn:2",
+          "timestamp": "2026-06-30T12:05:00Z",
+          "conversation_id": "conv-sandbox-financial-ops-1"
+        },
+        {
+          "_ref": "conv_fin_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "financial-ops-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "The CloudHost invoice was paid by SEPA on June 12. Post that and the other June movements to the operating ledger: €12,000 received from Acme Retail and €18,000 for payroll on the 28th.",
+          "turn_key": "conv-sandbox-financial-ops-1:turn:3",
+          "timestamp": "2026-06-30T12:10:00Z",
+          "conversation_id": "conv-sandbox-financial-ops-1"
+        },
+        {
+          "_ref": "conv_fin_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "financial-ops-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Posted the CloudHost payment (€420 debit, 2026-06-12, SEPA) and linked it to the CloudHost invoice. Also posted the Acme Retail receipt (€12,000 credit) and June payroll (€18,000 debit) to the Operating ledger Q2 (period 2026-Q2, EUR).",
+          "turn_key": "conv-sandbox-financial-ops-1:turn:4",
+          "timestamp": "2026-06-30T12:14:00Z",
+          "conversation_id": "conv-sandbox-financial-ops-1"
+        },
+        {
+          "_ref": "conv_fin_m5",
+          "entity_type": "conversation_message",
+          "canonical_name": "financial-ops-msg-5",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Run the June bank reconciliation against that ledger.",
+          "turn_key": "conv-sandbox-financial-ops-1:turn:5",
+          "timestamp": "2026-06-30T12:17:00Z",
+          "conversation_id": "conv-sandbox-financial-ops-1"
+        },
+        {
+          "_ref": "conv_fin_m6",
+          "entity_type": "conversation_message",
+          "canonical_name": "financial-ops-msg-6",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Completed the June bank reconciliation (period 2026-06) against the Operating ledger Q2 — status balanced. All three posted transactions tie out.",
+          "turn_key": "conv-sandbox-financial-ops-1:turn:6",
+          "timestamp": "2026-06-30T12:20:00Z",
+          "conversation_id": "conv-sandbox-financial-ops-1"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_fin_m1",
+      "target_ref": "conv_fin",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_fin_m2",
+      "target_ref": "conv_fin",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_fin_m3",
+      "target_ref": "conv_fin",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_fin_m4",
+      "target_ref": "conv_fin",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_fin_m5",
+      "target_ref": "conv_fin",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_fin_m6",
+      "target_ref": "conv_fin",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "v_cloud",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "v_legal",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "v_office",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "i_cloud",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "i_legal",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "i_office",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "x_cloud",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "x_acme",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "x_payroll",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "l_main",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_fin",
+      "target_ref": "r_june",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "i_cloud",
       "target_ref": "v_cloud",

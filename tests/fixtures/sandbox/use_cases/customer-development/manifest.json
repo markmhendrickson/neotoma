@@ -166,9 +166,173 @@
           "first_response_min": 12
         }
       ]
+    },
+    {
+      "agent_index": 3,
+      "idempotency_prefix": "cd-conv",
+      "entities": [
+        {
+          "_ref": "conv_cd",
+          "entity_type": "conversation",
+          "canonical_name": "Support triage and insight roll-up",
+          "title": "Support triage and insight roll-up",
+          "platform": "cli",
+          "started_at": "2026-06-16T10:00:00Z",
+          "ended_at": "2026-06-16T10:18:00Z",
+          "turn_count": 6,
+          "idempotency_hint": "conv-sandbox-customer-development-1",
+          "conversation_id": "conv-sandbox-customer-development-1"
+        },
+        {
+          "_ref": "conv_cd_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "customer-development-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Acme Retail (enterprise) just called — their SSO login is failing for the whole team. Open a high-priority ticket and log the call.",
+          "turn_key": "conv-sandbox-customer-development-1:turn:1",
+          "timestamp": "2026-06-16T10:00:00Z",
+          "conversation_id": "conv-sandbox-customer-development-1"
+        },
+        {
+          "_ref": "conv_cd_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "customer-development-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Opened ticket \"SSO login fails\" at high priority against Acme Retail and recorded the \"Acme support call\" interaction for today. Since it's an org-wide auth outage I escalated it to L2 and routed it to the platform team (rationale: auth subsystem). First response was 12 minutes, assignee Dev Patel.",
+          "turn_key": "conv-sandbox-customer-development-1:turn:2",
+          "timestamp": "2026-06-16T10:05:00Z",
+          "conversation_id": "conv-sandbox-customer-development-1"
+        },
+        {
+          "_ref": "conv_cd_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "customer-development-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Globex also pinged us on chat — their CSV export truncates on big files. And Sara Kim from Initech asked a low-priority question about pricing tiers.",
+          "turn_key": "conv-sandbox-customer-development-1:turn:3",
+          "timestamp": "2026-06-16T10:10:00Z",
+          "conversation_id": "conv-sandbox-customer-development-1"
+        },
+        {
+          "_ref": "conv_cd_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "customer-development-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged the \"Globex chat thread\" interaction and a medium ticket \"CSV export truncates\" for Globex (now resolved). Also opened a low-priority ticket \"Question about pricing tiers\" for Sara Kim.",
+          "turn_key": "conv-sandbox-customer-development-1:turn:4",
+          "timestamp": "2026-06-16T10:13:00Z",
+          "conversation_id": "conv-sandbox-customer-development-1"
+        },
+        {
+          "_ref": "conv_cd_m5",
+          "entity_type": "conversation_message",
+          "canonical_name": "customer-development-msg-5",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Globex left feedback that export should stream large files, and Acme loves the new pack picker. Anything we should act on?",
+          "turn_key": "conv-sandbox-customer-development-1:turn:5",
+          "timestamp": "2026-06-16T10:16:00Z",
+          "conversation_id": "conv-sandbox-customer-development-1"
+        },
+        {
+          "_ref": "conv_cd_m6",
+          "entity_type": "conversation_message",
+          "canonical_name": "customer-development-msg-6",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Recorded both: the negative feedback \"Export should stream large files\" (Globex) and the positive \"Love the new pack picker\" (Acme). Rolling up the export signal, I logged a high-confidence insight: \"Large-account exports need streaming.\"",
+          "turn_key": "conv-sandbox-customer-development-1:turn:6",
+          "timestamp": "2026-06-16T10:18:00Z",
+          "conversation_id": "conv-sandbox-customer-development-1"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_cd_m1",
+      "target_ref": "conv_cd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_cd_m2",
+      "target_ref": "conv_cd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_cd_m3",
+      "target_ref": "conv_cd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_cd_m4",
+      "target_ref": "conv_cd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_cd_m5",
+      "target_ref": "conv_cd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_cd_m6",
+      "target_ref": "conv_cd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "ti_login",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "ti_export",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "ti_pricing",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "it_call",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "it_chat",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "es_login",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "rd_login",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "fb_export",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "fb_picker",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_cd",
+      "target_ref": "in_export",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "ti_login",
       "target_ref": "k_acme",
