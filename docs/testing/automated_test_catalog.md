@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **507**
-- Backend and repo Vitest files: **473**
+- Total automated test files: **509**
+- Backend and repo Vitest files: **475**
 - Frontend Vitest files: **9**
 - Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 139 |
+| Vitest unit tests | 141 |
 | Vitest service tests | 35 |
 | Source-adjacent tests | 62 |
 | Vitest integration tests | 143 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (139):**
+**Files (141):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -134,6 +134,7 @@ flowchart TD
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
+- `tests/unit/bundles_activation.test.ts`
 - `tests/unit/bundles_loader.test.ts`
 - `tests/unit/canonical_markdown_body_heading.test.ts`
 - `tests/unit/capability_delta.test.ts`
@@ -181,6 +182,7 @@ flowchart TD
 - `tests/unit/inspector_skin.test.ts`
 - `tests/unit/keepalive_timeout.test.ts`
 - `tests/unit/list_timeline_events_unknown_type.test.ts`
+- `tests/unit/manage_bundles_tool.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
 - `tests/unit/mcp_initialize_skills.test.ts`
