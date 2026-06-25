@@ -2438,11 +2438,74 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
-      file_path: z.string(),
+      file_path: z.string().optional(),
+      source_id: z.string().optional(),
       expires_in: z.number().optional(),
     });
 
-    const { file_path, expires_in } = schema.parse(args);
+    const parsed = schema.parse(args);
+    const { expires_in } = parsed;
+
+    // --- Reference-source lookup (#1775) ---
+    // If source_id is provided, check if it is a reference source and resolve locally.
+    if (parsed.source_id) {
+      const { data: sourceRow, error: sourceErr } = await db
+        .from("sources")
+        .select("id, storage_mode, reference_path, content_hash, host_id, mime_type")
+        .eq("id", parsed.source_id)
+        .maybeSingle();
+
+      if (sourceErr) {
+        throw new Error(`Failed to look up source: ${sourceErr.message}`);
+      }
+
+      if (sourceRow?.storage_mode === "reference") {
+        const { resolveReferenceSource } = await import("./services/raw_storage.js");
+        const resolution = resolveReferenceSource({
+          reference_path: sourceRow.reference_path,
+          content_hash: sourceRow.content_hash,
+          host_id: sourceRow.host_id,
+        });
+
+        if (!resolution.found) {
+          return this.buildTextResponse({
+            error: resolution.error,
+            ...resolution.details,
+          });
+        }
+
+        // For a reference source, return the absolute path directly (it's host-local)
+        return this.buildTextResponse({
+          storage_mode: "reference",
+          path: sourceRow.reference_path,
+          host_id: sourceRow.host_id,
+          content_hash: sourceRow.content_hash,
+          mime_type: sourceRow.mime_type,
+        });
+      }
+    }
+
+    // --- Legacy path: storage_url / signed URL ---
+    const file_path = parsed.file_path;
+    if (!file_path) {
+      // If we have a source_id but it's not a reference source, retrieve its storage_url
+      if (parsed.source_id) {
+        const { data: sourceRow, error: sourceErr } = await db
+          .from("sources")
+          .select("storage_url")
+          .eq("id", parsed.source_id)
+          .maybeSingle();
+        if (sourceErr || !sourceRow?.storage_url) {
+          throw new Error("Could not resolve storage_url for source");
+        }
+        // Fall through with the resolved storage_url as file_path
+        return await this.retrieveFileUrl({
+          file_path: sourceRow.storage_url,
+          expires_in,
+        });
+      }
+      throw new Error("file_path or source_id is required");
+    }
 
     const pathParts = file_path.split("/");
     const bucket = pathParts[0];
@@ -4615,6 +4678,7 @@ export class NeotomaServer {
         commit: z.boolean().optional(),
         strict: z.boolean().optional(),
         intake: IntakeHintSchema.optional(),
+        source_storage: z.enum(["inline", "reference"]).default("inline"),
       })
       .refine(
         (data) => {
@@ -4631,7 +4695,19 @@ export class NeotomaServer {
       )
       .refine((data) => data.intake?.mode === "overflow" || Boolean(data.idempotency_key), {
         message: "idempotency_key is required when intake.mode is not 'overflow'",
-      });
+      })
+      .refine(
+        (data) => {
+          // reference mode requires an absolute file_path (no base64 inline content)
+          if (data.source_storage === "reference") {
+            return Boolean(data.file_path);
+          }
+          return true;
+        },
+        {
+          message: "source_storage='reference' requires file_path (not file_content)",
+        }
+      );
 
     const parsed = schema.parse(args);
 
@@ -4741,6 +4817,67 @@ export class NeotomaServer {
         );
       }
     }
+
+    // --- By-reference storage path (#1775) ---
+    if (parsed.source_storage === "reference" && parsed.file_path) {
+      const { storeRawReference } = await import("./services/raw_storage.js");
+      const refResult = await storeRawReference({
+        userId,
+        absolutePath: parsed.file_path,
+        mimeType: parsed.mime_type,
+        originalFilename: parsed.original_filename,
+        idempotencyKey,
+        provenance: {
+          upload_method: "mcp_store_reference",
+          client: "mcp",
+        },
+      });
+
+      const refResponse: Record<string, unknown> = {
+        source_id: refResult.sourceId,
+        content_hash: refResult.contentHash,
+        size_bytes: refResult.sizeBytes,
+        mime_type: refResult.mimeType,
+        path: refResult.path,
+        host_id: refResult.hostId,
+        mtime: refResult.mtime,
+        storage_mode: "reference",
+        deduplicated: refResult.deduplicated,
+      };
+
+      // Ensure asset entity (same as inline path — provenance chain is preserved)
+      const refAssetInfo = await this.ensureUnstructuredAssetEntity({
+        userId,
+        sourceId: refResult.sourceId,
+        contentHash: refResult.contentHash,
+        fileSize: refResult.sizeBytes,
+        mimeType: refResult.mimeType,
+        originalFilename: parsed.original_filename ?? refResult.path.split("/").pop(),
+        storageUrl: `reference://${refResult.hostId}${refResult.path}`,
+        sourcePriority: parsed.source_priority,
+        idempotencyKey,
+      });
+      refResponse.asset_entity_id = refAssetInfo.entityId;
+      refResponse.asset_entity_type = refAssetInfo.entityType;
+
+      const refEntityIds = await this.getEntityIdsFromSource(refResult.sourceId);
+      // Dangling-reference invariant: warn if no observations were materialized
+      if (refEntityIds.length === 0 && !refResult.deduplicated) {
+        refResponse.store_warnings = [
+          {
+            code: "DANGLING_REFERENCE",
+            message:
+              "Reference source stored but produced zero observations. " +
+              "Eager derivation is required for reference sources — re-ingest with entities if needed.",
+            path: refResult.path,
+            source_id: refResult.sourceId,
+          },
+        ];
+      }
+
+      return this.buildTextResponse(refResponse);
+    }
+    // --- End by-reference storage path ---
 
     const { fileBuffer, mimeType, filename } = await this.readUnstructuredInput(parsed);
     const storageResult = await storeRawContent({

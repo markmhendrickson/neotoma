@@ -1,0 +1,116 @@
+{
+  "meta": {
+    "id": "store_reference_source",
+    "description": "Agent stores a local file by reference (source_storage='reference'), then retrieves metadata for the available file and for a deleted file. Validates that: (1) the hook records a tool_invocation for the store call whose input_summary includes 'reference'; (2) the tool_output for the available retrieve carries storage_mode='reference' with no blob bytes; (3) the deleted-file retrieve surfaces a SOURCE_UNAVAILABLE structured error, not an exception; (4) all three tool invocations are persisted and the turn lifecycle is complete.",
+    "harnesses": ["cursor-hooks"],
+    "models": [
+      "composer-2",
+      "gpt-5.5-fast",
+      "claude-haiku-4",
+      "claude-sonnet-4.5",
+      "gpt-5.5-medium"
+    ],
+    "tags": ["sources", "reference-storage", "turn-lifecycle", "tool-loop"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Ingest /tmp/large-report.pdf by reference — do not copy the bytes. Then check whether the source is still accessible and show me what happens when the file is missing."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "file_path": "/tmp/large-report.pdf",
+          "source_storage": "reference",
+          "idempotency_key": "ref-store-eval-001"
+        },
+        "tool_output": {
+          "source_id": "src_ref_abc123",
+          "storage_mode": "reference",
+          "path": "/tmp/large-report.pdf",
+          "content_hash": "a3f9c1b2d4e5f6078901234567890abcdef1234567890abcdef1234567890ab12",
+          "size_bytes": 204800
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_file_url",
+        "tool_input": {
+          "source_id": "src_ref_abc123"
+        },
+        "tool_output": {
+          "storage_mode": "reference",
+          "path": "/tmp/large-report.pdf",
+          "content_hash": "a3f9c1b2d4e5f6078901234567890abcdef1234567890abcdef1234567890ab12",
+          "size_bytes": 204800
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_file_url",
+        "tool_input": {
+          "source_id": "src_ref_abc123"
+        },
+        "tool_output": {
+          "error": "SOURCE_UNAVAILABLE",
+          "path": "/tmp/large-report.pdf",
+          "reason": "File not found at reference path"
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "Done. I stored /tmp/large-report.pdf by reference (src_ref_abc123, 200 KB, SHA-256 verified). The first retrieve confirmed storage_mode=reference with no bytes transferred. The second retrieve — after the file was removed — returned a structured SOURCE_UNAVAILABLE error with the original path, as expected."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "input_summary",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_retrieve_file_url" }
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 4
+      }
+    ]
+  }
+}

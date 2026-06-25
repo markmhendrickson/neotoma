@@ -454,6 +454,15 @@ function ensureSchema(db: SqliteDatabase): void {
     // the source of truth and the column self-heals.
     addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
 
+    // By-reference source storage (#1775): path-only ingestion mode where bytes
+    // remain on disk. Additive columns; existing rows default storage_mode='inline'
+    // so all pre-existing sources behave identically without migration work.
+    addColumnIfMissing(db, "sources", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'");
+    addColumnIfMissing(db, "sources", "reference_path", "TEXT");
+    addColumnIfMissing(db, "sources", "host_id", "TEXT");
+    addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
+    addColumnIfMissing(db, "sources", "mtime", "TEXT");
+
     db.prepare(
       `CREATE TABLE IF NOT EXISTS sandbox_sessions (
       user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
