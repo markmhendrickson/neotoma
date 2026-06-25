@@ -2518,7 +2518,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/schemas/locked-vs-evolving": {
     title: "Locked vs Evolving Schemas | Schemas | Neotoma",
     description:
-      "The three NEOTOMA_SCHEMA_MODE lock postures — evolving (default, any type may auto-create), guided (only installed-bundle types auto-create), and locked (no auto-create) — and when to use each.",
+      "The three NEOTOMA_SCHEMA_MODE lock postures: evolving (default, any type may auto-create), guided (only installed-bundle types auto-create), and locked (no auto-create), plus when to use each.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
