@@ -469,7 +469,8 @@ export async function runMirrorPushCommand(
   let targetProfiles = profiles;
   if (options.profile) {
     targetProfiles = profiles.filter(
-      (p) => p.id === options.profile || path.resolve(p.output_path) === path.resolve(options.profile!)
+      (p) =>
+        p.id === options.profile || path.resolve(p.output_path) === path.resolve(options.profile!)
     );
     if (targetProfiles.length === 0) {
       return [

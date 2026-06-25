@@ -417,7 +417,7 @@ Body.
     await fs.mkdir(baseDir, { recursive: true });
     const baseMap = {
       "my-plan.md": {
-        content_hash: "aabbcc",  // different from disk (disk changed)
+        content_hash: "aabbcc", // different from disk (disk changed)
         snapshot: canonicalSnapshot,
       },
     };

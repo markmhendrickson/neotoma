@@ -11225,9 +11225,8 @@ mirrorCommand
     ) => {
       const outputMode = resolveOutputMode();
       try {
-        const { runMirrorPushCommand, formatMirrorPushResult } = await import(
-          "./commands/mirror.js"
-        );
+        const { runMirrorPushCommand, formatMirrorPushResult } =
+          await import("./commands/mirror.js");
         const mirrorConfig = await readConfig();
         const mirrorToken = await getCliToken();
         const mirrorApi = createApiClient({
