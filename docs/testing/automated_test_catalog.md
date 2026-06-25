@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **502**
-- Backend and repo Vitest files: **468**
+- Total automated test files: **504**
+- Backend and repo Vitest files: **470**
 - Frontend Vitest files: **9**
 - Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 136 |
+| Vitest unit tests | 138 |
 | Vitest service tests | 35 |
 | Source-adjacent tests | 62 |
 | Vitest integration tests | 142 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (136):**
+**Files (138):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -186,6 +186,7 @@ flowchart TD
 - `tests/unit/mcp_initialize_version.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
+- `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
 - `tests/unit/mcp_server_card.test.ts`
@@ -223,6 +224,7 @@ flowchart TD
 - `tests/unit/schema_agent_instructions.test.ts`
 - `tests/unit/schema_derived_entity_extraction.test.ts`
 - `tests/unit/schema_inference.test.ts`
+- `tests/unit/schema_mode.test.ts`
 - `tests/unit/schema_projection_lag.test.ts`
 - `tests/unit/search_normalization.test.ts`
 - `tests/unit/security_hardening.test.ts`
