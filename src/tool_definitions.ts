@@ -448,6 +448,12 @@ export function buildToolDefinitions(
             description:
               "Original filename or source label (optional). For unstructured: auto-detected from file_path if not provided. For structured (entities): omit when data is agent-provided (no file origin); the source will have no filename. Pass only when mirroring a real file name or when a display label is desired.",
           },
+          source_storage: {
+            type: "string",
+            enum: ["inline", "reference"],
+            description:
+              "Storage mode for file ingestion. Default 'inline' copies bytes into the database (portable, durable). 'reference' stores only a path + metadata row without copying bytes — zero DB bloat, but host-local and depends on the file staying in place. Requires file_path (not file_content). Derivations (observations/entities) are still materialized at ingest. Use 'reference' for large local files you control; use 'inline' for anything that must be shared or portable.",
+          },
         },
       },
     },
