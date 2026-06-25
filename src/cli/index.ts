@@ -27,6 +27,7 @@ import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
 import { createApiClient } from "../shared/api_client.js";
 import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
+import { parseSchemaFields } from "./parse_schema_fields.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
@@ -13796,26 +13797,9 @@ schemasCommand
       if (!fieldsJson) {
         throw new Error("--fields or --schema is required (JSON object of field definitions)");
       }
-      const parsedFields = JSON.parse(fieldsJson);
-      let schemaFields: Record<string, any>;
-      if (Array.isArray(parsedFields)) {
-        schemaFields = {};
-        parsedFields.forEach((f: any) => {
-          schemaFields[f.field_name] = { type: f.field_type, required: f.required ?? false };
-        });
-      } else if (parsedFields.fields) {
-        // Already a schema definition object
-        schemaFields = parsedFields.fields;
-      } else {
-        schemaFields = Object.fromEntries(
-          Object.entries(parsedFields).map(([name, def]: [string, any]) => [
-            name,
-            { type: def.type ?? "string", required: def.required ?? false },
-          ])
-        );
-      }
+      const { schemaFields, mergePolicies } = parseSchemaFields(JSON.parse(fieldsJson));
       const schemaDefinition = { fields: schemaFields };
-      const reducerConfig = { merge_policies: {} };
+      const reducerConfig = { merge_policies: mergePolicies };
       const { data, error } = await api.POST("/register_schema", {
         body: {
           entity_type: entityType,
