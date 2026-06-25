@@ -114,9 +114,7 @@ export function buildSourcePriorityIgnoredWarning(opts: {
   const { sourcePriority, writtenFields, mergePolicies, observationIndex, entityType, entityId } =
     opts;
 
-  if (
-    !sourcePriorityWillBeIgnored({ sourcePriority, writtenFields, mergePolicies })
-  ) {
+  if (!sourcePriorityWillBeIgnored({ sourcePriority, writtenFields, mergePolicies })) {
     return null;
   }
 
