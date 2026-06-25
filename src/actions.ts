@@ -6822,6 +6822,61 @@ export async function storeStructuredForApi(params: {
     throw aggregate;
   }
 
+  // Write-time value constraint enforcement (#1756).
+  // Run before any observation writes so a "reject" policy aborts the whole
+  // batch cleanly (mirrors the ERR_STORE_RESOLUTION_FAILED aggregate pattern).
+  // Constraint violations in "warn" mode are deferred to the schemaStoreWarnings
+  // pass below where the schema is re-loaded alongside the other warnings.
+  {
+    const { schemaRegistry: cvSchemaRegistry } = await import("./services/schema_registry.js");
+    const { collectConstraintViolations, ConstraintViolationError } =
+      await import("./services/field_constraints.js");
+
+    const constraintIssues: Array<{
+      observation_index: number;
+      entity_type: string;
+      message: string;
+    }> = [];
+
+    for (const r of resolved) {
+      let cvSchemaEntry;
+      try {
+        cvSchemaEntry = await cvSchemaRegistry.loadActiveSchema(r.entity_type, userId);
+      } catch {
+        // Best-effort; never block store on registry IO failure.
+      }
+      if (!cvSchemaEntry?.schema_definition?.fields) continue;
+      const cvPolicy = cvSchemaEntry.schema_definition.constraint_violation_policy ?? "reject";
+      const violations = collectConstraintViolations(
+        r.fields,
+        cvSchemaEntry.schema_definition.fields
+      );
+      if (violations.length === 0) continue;
+
+      if (cvPolicy === "reject") {
+        const cvErr = new ConstraintViolationError(violations);
+        constraintIssues.push({
+          observation_index: r.observation_index,
+          entity_type: r.entity_type,
+          message: cvErr.message,
+        });
+      }
+      // "warn" mode violations are surfaced in the schemaStoreWarnings pass below.
+    }
+
+    if (constraintIssues.length > 0) {
+      const cvAggregate = new Error(
+        `Structured store refused: ${constraintIssues.length} observation(s) failed constraint validation.`
+      ) as Error & {
+        code: string;
+        issues: Array<{ observation_index: number; entity_type: string; message: string }>;
+      };
+      cvAggregate.code = "ERR_CONSTRAINT_VIOLATION";
+      cvAggregate.issues = constraintIssues;
+      throw cvAggregate;
+    }
+  }
+
   const createdEntities: Array<{
     entity_id: string;
     entity_type: string;
@@ -7232,6 +7287,27 @@ export async function storeStructuredForApi(params: {
         }
       }
 
+      // Write-time constraint violations in "warn" mode (#1756).
+      // "reject" violations were already handled before the observation write
+      // loop; only "warn" policies reach this point.
+      if (schemaDef?.fields) {
+        const cvPolicy = schemaDef.constraint_violation_policy ?? "reject";
+        if (cvPolicy === "warn") {
+          const { collectConstraintViolations: _cvCollect } =
+            await import("./services/field_constraints.js");
+          const warnViolations = _cvCollect(r.fields, schemaDef.fields);
+          for (const v of warnViolations) {
+            schemaStoreWarnings.push({
+              code: "CONSTRAINT_VIOLATION",
+              message: `${r.entity_type} field "${v.field}" failed constraint "${v.constraint}": ${v.message}`,
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+          }
+        }
+      }
+
       // Issue #1755: SOURCE_PRIORITY_IGNORED — non-blocking advisory warning
       // when the caller sets a non-default source_priority but none of the
       // fields being written will actually honour it. This happens when every
@@ -7608,6 +7684,26 @@ async function handleStorePost(
       return res.status(400).json({
         error: {
           code: "ERR_STORE_RESOLUTION_FAILED",
+          message: err.message,
+          issues: err.issues ?? [],
+        },
+      });
+    }
+    if (error && typeof error === "object" && errCode === "ERR_CONSTRAINT_VIOLATION") {
+      const err = error as {
+        message: string;
+        issues: Array<{
+          observation_index: number;
+          entity_type: string;
+          message: string;
+        }>;
+      };
+      logWarn("ConstraintViolationError:store", req, {
+        issue_count: err.issues?.length ?? 0,
+      });
+      return res.status(400).json({
+        error: {
+          code: "ERR_CONSTRAINT_VIOLATION",
           message: err.message,
           issues: err.issues ?? [],
         },

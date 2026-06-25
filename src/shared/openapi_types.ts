@@ -2260,6 +2260,34 @@ export interface components {
       };
     };
     /**
+     * @description 400 response shape for `ERR_CONSTRAINT_VIOLATION`. Returned by `/store`
+     *     when one or more observations fail a declarative write-time value
+     *     constraint declared on their schema (constraint `policy: "reject"`). The
+     *     `issues` array carries one entry per failing observation; each entry
+     *     identifies the observation by its zero-based `observation_index` in the
+     *     request `entities[]` array, the `entity_type`, and a human-readable
+     *     `message` describing which constraint rule was violated. No partial write
+     *     is performed — the entire request is rejected atomically.
+     */
+    ConstraintViolationErrorEnvelope: {
+      error?: {
+        /** @enum {string} */
+        code?: "ERR_CONSTRAINT_VIOLATION";
+        message?: string;
+        issues?: {
+          /**
+           * @description Zero-based index into the request `entities[]` array
+           *     identifying which observation failed constraint validation.
+           */
+          observation_index?: number;
+          /** @description Entity type of the offending observation. */
+          entity_type?: string;
+          /** @description Human-readable description of the constraint violation. */
+          message?: string;
+        }[];
+      };
+    };
+    /**
      * @description R5: declarative predicate describing which observations of the source
      *     entity should be re-pointed onto the new entity. Every form reads a
      *     column every observation row carries so the predicate surface is
@@ -3480,11 +3508,15 @@ export interface components {
          *     projection until the field is added to the schema),
          *     `MISSING_REQUIRED_FIELD` (fired per schema field declared
          *     `required: true` that the stored observation omits or leaves
-         *     empty), and `SOURCE_PRIORITY_IGNORED` (fired when the caller
-         *     sets a non-default `source_priority` but no field on the
-         *     entity type uses a merge strategy that honours it — all
-         *     fields effectively use `last_write`, so the priority value
-         *     has no effect on the stored snapshot).
+         *     empty), `CONSTRAINT_VIOLATION` (fired per observation
+         *     that fails a declarative write-time value constraint when the
+         *     constraint's `policy` is `"warn"`; the write is accepted and
+         *     the violating value is stored as-is), and
+         *     `SOURCE_PRIORITY_IGNORED` (fired when the caller sets a
+         *     non-default `source_priority` but no field on the entity type
+         *     uses a merge strategy that honours it — all fields effectively
+         *     use `last_write`, so the priority value has no effect on the
+         *     stored snapshot).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */
@@ -5804,10 +5836,14 @@ export interface operations {
       };
       /**
        * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-       *     `StoreResolutionErrorEnvelope` shape. `ERR_IDEMPOTENCY_MISMATCH` is
-       *     returned when the same `idempotency_key` is reused with materially
-       *     different content — use a new key for a different payload. Other
-       *     validation errors fall back to the generic `ErrorEnvelope`.
+       *     `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+       *     returned when one or more observations fail a declarative write-time
+       *     value constraint (constraint `policy: "reject"`); its envelope carries
+       *     a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
+       *     `ERR_IDEMPOTENCY_MISMATCH` is returned when the same `idempotency_key`
+       *     is reused with materially different content — use a new key for a
+       *     different payload. Other validation errors fall back to the generic
+       *     `ErrorEnvelope`.
        */
       400: {
         headers: {
@@ -5816,6 +5852,7 @@ export interface operations {
         content: {
           "application/json":
             | components["schemas"]["StoreResolutionErrorEnvelope"]
+            | components["schemas"]["ConstraintViolationErrorEnvelope"]
             | components["schemas"]["ErrorEnvelope"];
         };
       };

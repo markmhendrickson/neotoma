@@ -4927,6 +4927,8 @@ export class NeotomaServer {
       await import("./services/entity_resolution.js");
     const { schemaRegistry } = await import("./services/schema_registry.js");
     const { validateFieldsWithConverters } = await import("./services/field_validation.js");
+    const { collectConstraintViolations, ConstraintViolationError } =
+      await import("./services/field_constraints.js");
     const { generateObservationId } = await import("./services/observation_identity.js");
     const { db } = await import("./db.js");
     const { detectFlatPackedRows, FlatPackedRowsError } =
@@ -5255,6 +5257,11 @@ export class NeotomaServer {
     }> = [];
     // Track the resolved fields per observation index for schema-driven store_warnings.
     const resolvedFieldsByIndex = new Map<number, Record<string, unknown>>();
+    // Track constraint violations in "warn" mode per observation index (#1756).
+    const constraintViolationsByIndex = new Map<
+      number,
+      import("./services/field_constraints.js").ConstraintViolation[]
+    >();
     const insertedObservationIds = new Set<string>();
     let unknownFieldsCount = 0;
     const unknownFieldNamesSet = new Set<string>();
@@ -5434,6 +5441,29 @@ export class NeotomaServer {
       const validFields = validationResult.validFields;
       const unknownFields = validationResult.unknownFields;
       const originalValues = validationResult.originalValues;
+
+      // Write-time value constraint enforcement (#1756).
+      // Run on the schema-validated fields so type-coerced values are checked.
+      {
+        const cvPolicy = schema.schema_definition.constraint_violation_policy ?? "reject";
+        const violations = collectConstraintViolations(
+          validFields,
+          schema.schema_definition.fields
+        );
+        if (violations.length > 0) {
+          if (cvPolicy === "reject") {
+            const cvErr = new ConstraintViolationError(violations);
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `Observation ${createdEntities.length} (${entityType}): ${cvErr.message}`
+            );
+          }
+          // "warn" — stash on a per-observation-index accumulator so the
+          // schema-driven store_warnings pass below can surface them as
+          // CONSTRAINT_VIOLATION entries without re-running the checks.
+          constraintViolationsByIndex.set(createdEntities.length, violations);
+        }
+      }
 
       // When canonical_name was supplied explicitly but is not a declared
       // schema field, validateFieldsWithConverters routes it to unknownFields
@@ -6009,6 +6039,21 @@ export class NeotomaServer {
               entity_id: e.entityId,
             });
           }
+        }
+      }
+
+      // Write-time constraint violations in "warn" mode (#1756): emit
+      // CONSTRAINT_VIOLATION entries collected during the entity-processing loop.
+      const warnViolations = constraintViolationsByIndex.get(i);
+      if (warnViolations?.length) {
+        for (const v of warnViolations) {
+          schemaStoreWarnings.push({
+            code: "CONSTRAINT_VIOLATION",
+            message: `${e.entityType} field "${v.field}" failed constraint "${v.constraint}": ${v.message}`,
+            observation_index: i,
+            entity_type: e.entityType,
+            entity_id: e.entityId,
+          });
         }
       }
 
