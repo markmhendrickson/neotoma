@@ -38,10 +38,14 @@ beforeAll(() => {
   fs.mkdirSync(path.join(docsRoot, "architecture"), { recursive: true });
   fs.mkdirSync(path.join(docsRoot, "subsystems"), { recursive: true });
   fs.mkdirSync(path.join(docsRoot, "plans"), { recursive: true });
+  fs.mkdirSync(path.join(docsRoot, "releases"), { recursive: true });
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "core_identity.md"),
     "# Core Identity\n\nState Layer.\n"
   );
+  // `releases` resolves to `visibility: public` via FOLDER_DEFAULTS, but it is a
+  // non-public top folder: excluded from the public surface unless show-internal.
+  fs.writeFileSync(path.join(docsRoot, "releases", "v1.md"), "# Release v1\n\nNotes.\n");
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "philosophy.md"),
     "# Philosophy\n\nPrinciples.\n"
@@ -92,6 +96,27 @@ describe("buildDocsIndex", () => {
     expect(internal.subcategories.find((s) => s.key === "plans")!.docs.map((d) => d.slug)).toEqual([
       "plans/draft",
     ]);
+  });
+
+  it("excludes non-public top folders by default", () => {
+    const idx = buildDocsIndex({ docsRoot, manifest: MANIFEST, env: { NODE_ENV: "production" } });
+    expect(idx.categories.find((c) => c.key === "releases")).toBeUndefined();
+    const slugs = idx.categories.flatMap((c) => [
+      ...c.uncategorized.map((d) => d.slug),
+      ...c.subcategories.flatMap((s) => s.docs.map((d) => d.slug)),
+    ]);
+    expect(slugs).not.toContain("releases/v1");
+  });
+
+  it("includes non-public top folders with the show-internal flag", () => {
+    const idx = buildDocsIndex({
+      docsRoot,
+      manifest: MANIFEST,
+      env: { NODE_ENV: "production", NEOTOMA_DOCS_SHOW_INTERNAL: "true" },
+    });
+    const releases = idx.categories.find((c) => c.key === "releases")!;
+    expect(releases).toBeDefined();
+    expect(releases.uncategorized.map((d) => d.slug)).toContain("releases/v1");
   });
 
   it("populates the featured list in manifest order, filtered by visibility", () => {
