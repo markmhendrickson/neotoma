@@ -246,6 +246,12 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
         connectSrc: ["'self'", ...extraConnectSrc],
         imgSrc: ["'self'", "data:"],
+        // Allow inline audio/video so rendered_page guest pages can embed media
+        // (e.g. a prospect's own voice note) as a data: URI. Without this,
+        // media falls back to default-src 'self', which blocks data: — the
+        // <audio> element errors with MEDIA_ELEMENT_ERROR (code 4, no source).
+        // Mirrors imgSrc, which already permits data: for inline illustrations.
+        mediaSrc: ["'self'", "data:"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
         objectSrc: ["'none'"],
         frameSrc: ["'self'"],
