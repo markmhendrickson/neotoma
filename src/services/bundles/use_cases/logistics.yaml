@@ -1,0 +1,4 @@
+use_case: logistics
+description: Logistics and supply chain.
+schema_bundles: [logistics, financial_ops]
+skill_bundles: [core_workflows]

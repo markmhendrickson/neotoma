@@ -12,12 +12,26 @@ beforeAll(() => {
   docsRoot = path.join(tmpRoot, "docs");
   fs.mkdirSync(path.join(docsRoot, "foundation"), { recursive: true });
   fs.mkdirSync(path.join(docsRoot, "plans"), { recursive: true });
+  fs.mkdirSync(path.join(docsRoot, "releases"), { recursive: true });
   fs.mkdirSync(path.join(docsRoot, "private"), { recursive: true });
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "core_identity.md"),
     "# Core Identity\n\nNeotoma is the State Layer.\n"
   );
   fs.writeFileSync(path.join(docsRoot, "plans", "next.md"), "# Next Plan\n\nDraft.\n");
+  // `releases` is `public` by FOLDER_DEFAULTS but is a non-public top folder:
+  // off the public docs surface unless show-internal is set.
+  fs.writeFileSync(
+    path.join(docsRoot, "releases", "changelog.md"),
+    "# Changelog\n\nRelease history.\n"
+  );
+  // `site` is excluded from the browsable index but MUST remain directly
+  // resolvable so the root-landing footer deep-links keep working.
+  fs.mkdirSync(path.join(docsRoot, "site", "pages", "en"), { recursive: true });
+  fs.writeFileSync(
+    path.join(docsRoot, "site", "pages", "en", "install.md"),
+    "# Install\n\nSetup.\n"
+  );
   fs.writeFileSync(
     path.join(docsRoot, "private", "secret.md"),
     "# Secret\n\nShould never render.\n"
@@ -88,5 +102,26 @@ describe("lookupDoc — visibility", () => {
     const r = lookupDoc("foundation/nope", { docsRoot, env: {} });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("not_found");
+  });
+
+  it("hides a public doc in a non-public top folder by default", () => {
+    const r = lookupDoc("releases/changelog", { docsRoot, env: { NODE_ENV: "production" } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe("hidden");
+  });
+
+  it("shows a non-public top folder doc with show-internal flag", () => {
+    const r = lookupDoc("releases/changelog", {
+      docsRoot,
+      env: { NODE_ENV: "production", NEOTOMA_DOCS_SHOW_INTERNAL: "true" },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.doc.frontmatter.title).toBe("Changelog");
+  });
+
+  it("resolves a site/ page by default (excluded from index, still deep-linkable)", () => {
+    const r = lookupDoc("site/pages/en/install", { docsRoot, env: { NODE_ENV: "production" } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.doc.frontmatter.title).toBe("Install");
   });
 });

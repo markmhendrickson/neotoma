@@ -1,0 +1,29 @@
+# Bundle manifest — see docs/foundation/bundles.md
+# Default install: schema bundle, always active.
+name: core
+version: 1.0.0
+description: Core entity types every Neotoma install ships with.
+bundle_type: schema
+requires_bundles: []
+provides_entity_types:
+  - conversation
+  - conversation_message
+  - agent_message
+  - note
+  - task
+  - event
+  - contact
+  - file_asset
+  - document
+# Shared schemas added to core by other default-install bundles (core_workflows)
+# live in ../_shared_schemas/ once a second consumer triggers ownership transfer.
+references_shared_schemas: []
+extends_schemas: []
+provides_skills: []
+compatible_modes:
+  - evolving
+  - guided
+  - locked
+category: core
+serves_use_cases:
+  - personal_data

@@ -194,9 +194,163 @@
           "owner": "Sam"
         }
       ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "crm-conv",
+      "entities": [
+        {
+          "_ref": "conv_crm",
+          "entity_type": "conversation",
+          "canonical_name": "Acme rollout pipeline review",
+          "title": "Acme rollout pipeline review",
+          "platform": "claude",
+          "started_at": "2026-06-10T09:30:00Z",
+          "ended_at": "2026-06-10T09:48:00Z",
+          "turn_count": 6,
+          "idempotency_hint": "conv-sandbox-crm-1",
+          "conversation_id": "conv-sandbox-crm-1"
+        },
+        {
+          "_ref": "conv_crm_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "crm-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Just got off the Acme discovery call with Jordan Vance, their VP Ops. They're an enterprise retail account and want the platform rolled out across all stores. Mina Roy is the buyer. Set up the account and the deal — we're talking around $85k.",
+          "turn_key": "conv-sandbox-crm-1:turn:1",
+          "timestamp": "2026-06-10T09:30:00Z",
+          "conversation_id": "conv-sandbox-crm-1"
+        },
+        {
+          "_ref": "conv_crm_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "crm-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Done. I've logged Acme Retail as an enterprise account, added Jordan Vance (VP Ops) and Mina Roy (Buyer) as contacts on it, and created the \"Acme platform rollout\" deal at $85,000 in the negotiation stage. I also recorded the discovery call as an engagement dated today.",
+          "turn_key": "conv-sandbox-crm-1:turn:2",
+          "timestamp": "2026-06-10T09:33:00Z",
+          "conversation_id": "conv-sandbox-crm-1"
+        },
+        {
+          "_ref": "conv_crm_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "crm-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Good. Jordan owns this deal on their side. Add a task to send the Acme quote — it needs to go out by Friday the 12th. Also flag that we have two smaller deals open: the Globex pilot at $24k in proposal, and the Initech renewal at $12k which already closed won.",
+          "turn_key": "conv-sandbox-crm-1:turn:3",
+          "timestamp": "2026-06-10T09:40:00Z",
+          "conversation_id": "conv-sandbox-crm-1"
+        },
+        {
+          "_ref": "conv_crm_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "crm-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged. Jordan Vance now manages the Acme rollout deal. I created a task \"Send Acme quote\" due 2026-06-12 and linked it to the rollout deal. The Globex pilot ($24k, proposal) and Initech renewal ($12k, closed won) are both on file against their accounts, with Dev Patel (Globex CTO) and Sara Kim (Initech Founder) as the contacts.",
+          "turn_key": "conv-sandbox-crm-1:turn:4",
+          "timestamp": "2026-06-10T09:44:00Z",
+          "conversation_id": "conv-sandbox-crm-1"
+        },
+        {
+          "_ref": "conv_crm_m5",
+          "entity_type": "conversation_message",
+          "canonical_name": "crm-msg-5",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "One more — add a follow-up task for Globex due July 1, and put a rollout planning meeting on the books with Jordan for June 18.",
+          "turn_key": "conv-sandbox-crm-1:turn:5",
+          "timestamp": "2026-06-10T09:46:00Z",
+          "conversation_id": "conv-sandbox-crm-1"
+        },
+        {
+          "_ref": "conv_crm_m6",
+          "entity_type": "conversation_message",
+          "canonical_name": "crm-msg-6",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "All set. Added \"Follow up with Globex\" due 2026-07-01 linked to the Globex pilot, and scheduled the \"Acme rollout planning\" meeting for 2026-06-18 with Jordan Vance, tied to the rollout deal.",
+          "turn_key": "conv-sandbox-crm-1:turn:6",
+          "timestamp": "2026-06-10T09:48:00Z",
+          "conversation_id": "conv-sandbox-crm-1"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_crm_m1",
+      "target_ref": "conv_crm",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_crm_m2",
+      "target_ref": "conv_crm",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_crm_m3",
+      "target_ref": "conv_crm",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_crm_m4",
+      "target_ref": "conv_crm",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_crm_m5",
+      "target_ref": "conv_crm",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_crm_m6",
+      "target_ref": "conv_crm",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "a_acme",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "c_jordan",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "c_mina",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "d_acme",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "e_call",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "t_quote",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "t_followup",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_crm",
+      "target_ref": "m_acme",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "c_jordan",
       "target_ref": "a_acme",

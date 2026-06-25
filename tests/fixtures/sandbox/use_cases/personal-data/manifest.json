@@ -183,9 +183,188 @@
           "source": "Garmin"
         }
       ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "pdd-conv",
+      "entities": [
+        {
+          "_ref": "conv_pd",
+          "entity_type": "conversation",
+          "canonical_name": "Quantified-self weekly sync",
+          "title": "Quantified-self weekly sync",
+          "platform": "claude",
+          "started_at": "2026-06-25T20:00:00Z",
+          "ended_at": "2026-06-25T20:16:00Z",
+          "turn_count": 6,
+          "idempotency_hint": "conv-sandbox-personal-data-1",
+          "conversation_id": "conv-sandbox-personal-data-1"
+        },
+        {
+          "_ref": "conv_pd_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "personal-data-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Goal for the quarter: lower my resting heart rate to 55 bpm. Track a daily morning run and a daily meditate habit toward it.",
+          "turn_key": "conv-sandbox-personal-data-1:turn:1",
+          "timestamp": "2026-06-25T20:00:00Z",
+          "conversation_id": "conv-sandbox-personal-data-1"
+        },
+        {
+          "_ref": "conv_pd_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "personal-data-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Created the goal \"Lower resting heart rate\" (target 55 bpm) and two daily habits linked to it: \"Morning run\" and \"Meditate\".",
+          "turn_key": "conv-sandbox-personal-data-1:turn:2",
+          "timestamp": "2026-06-25T20:03:00Z",
+          "conversation_id": "conv-sandbox-personal-data-1"
+        },
+        {
+          "_ref": "conv_pd_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "personal-data-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Sync this week from Garmin: a 6km run Monday (34 min), a 45-min strength session Tuesday, and a 14km long run Sunday (82 min).",
+          "turn_key": "conv-sandbox-personal-data-1:turn:3",
+          "timestamp": "2026-06-25T20:07:00Z",
+          "conversation_id": "conv-sandbox-personal-data-1"
+        },
+        {
+          "_ref": "conv_pd_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "personal-data-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Synced all three workouts: 6km run (34 min, avg HR 148, source Garmin), 45-min strength, and the 14km long run (82 min). The 6km and long runs are linked to your Morning run habit.",
+          "turn_key": "conv-sandbox-personal-data-1:turn:4",
+          "timestamp": "2026-06-25T20:10:00Z",
+          "conversation_id": "conv-sandbox-personal-data-1"
+        },
+        {
+          "_ref": "conv_pd_m5",
+          "entity_type": "conversation_message",
+          "canonical_name": "personal-data-msg-5",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Today's metrics: resting HR 58, weight 72.4kg, slept 7.4h. Also log my €49 gym membership and €140 running shoes, and keep units metric with a 7am workout time.",
+          "turn_key": "conv-sandbox-personal-data-1:turn:5",
+          "timestamp": "2026-06-25T20:13:00Z",
+          "conversation_id": "conv-sandbox-personal-data-1"
+        },
+        {
+          "_ref": "conv_pd_m6",
+          "entity_type": "conversation_message",
+          "canonical_name": "personal-data-msg-6",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged today's health metrics (resting HR 58 bpm, weight 72.4 kg, sleep 7.4 h) — the HR reading is tied to the morning 6km run. Recorded the €49 gym membership and €140 running shoes transactions, and set your preferences: units metric, workout time 07:00.",
+          "turn_key": "conv-sandbox-personal-data-1:turn:6",
+          "timestamp": "2026-06-25T20:16:00Z",
+          "conversation_id": "conv-sandbox-personal-data-1"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_pd_m1",
+      "target_ref": "conv_pd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_pd_m2",
+      "target_ref": "conv_pd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_pd_m3",
+      "target_ref": "conv_pd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_pd_m4",
+      "target_ref": "conv_pd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_pd_m5",
+      "target_ref": "conv_pd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_pd_m6",
+      "target_ref": "conv_pd",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_go",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_hb",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_med",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_w1",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_w2",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_w3",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_hr",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_wt",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_sleep",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_gym",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_shoes",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_pref",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_pd",
+      "target_ref": "pd_pref2",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "pd_w1",
       "target_ref": "pd_hb",

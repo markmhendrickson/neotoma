@@ -93,13 +93,15 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
     stats.total_entities = entities.length;
   }
 
-  // Get total events count
-  // Note: timeline_events table doesn't have user_id column
-  // User filtering should be done through source_id -> sources.user_id if needed
-  // For now, we rely on RLS policies to enforce user isolation
-  const { count: eventsCount } = await db
-    .from("timeline_events")
-    .select("*", { count: "exact", head: true });
+  // Get total events count. timeline_events DOES carry a user_id column, so
+  // scope it like every other count in this function when a userId is supplied.
+  // (The prior code counted timeline_events across all users — a cross-user
+  // leak in any multi-user deployment, since there is no runtime RLS.)
+  let eventsQuery = db.from("timeline_events").select("*", { count: "exact", head: true });
+  if (userId) {
+    eventsQuery = eventsQuery.eq("user_id", userId);
+  }
+  const { count: eventsCount } = await eventsQuery;
   stats.total_events = eventsCount || 0;
 
   // Get total observations count

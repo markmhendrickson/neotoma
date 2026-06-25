@@ -14,7 +14,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveFrontmatter, type DocFrontmatter } from "./doc_frontmatter.js";
-import { isVisible, type VisibilityEnv } from "./visibility.js";
+import {
+  isVisible,
+  isIndexExcludedTopFolder,
+  shouldShowInternal,
+  type VisibilityEnv,
+} from "./visibility.js";
 
 const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived"]);
 
@@ -124,10 +129,17 @@ function compareDocs(a: DocEntry, b: DocEntry): number {
 export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
   const { docsRoot, manifest, env, manifestEntries, includeDeprecated } = opts;
   const files = collectMarkdownFiles(docsRoot);
+  const showInternal = shouldShowInternal(env);
 
   // Resolve all entries up front (single pass).
   const all: DocEntry[] = [];
   for (const rel of files) {
+    // Folders excluded from the browsable index (release history, feature
+    // units, the marketing site, internal-process trees) are dropped unless
+    // show-internal is enabled, so a from-source host matches the curated npm
+    // bundle. site/ is index-excluded but still deep-linkable; see
+    // `INDEX_EXCLUDED_TOP_FOLDERS`.
+    if (!showInternal && isIndexExcludedTopFolder(rel)) continue;
     const abs = path.join(docsRoot, rel);
     let source = "";
     try {

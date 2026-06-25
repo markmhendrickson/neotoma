@@ -8,14 +8,22 @@ import {
   buildBundledDocsFooterColumns,
   buildBundledDocsNavCategories,
   resolveBundledDocsQuickLinks,
+  resolveExtraKnownFooterSlugs,
 } from "../../src/services/docs/bundled_nav.js";
 import { buildLandingContext } from "../../src/services/root_landing/index.js";
 import type express from "express";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const docsRoot = path.join(repoRoot, "docs");
 
 describe("bundled docs nav", () => {
   const index = getBundledDocsIndex({ repoRoot, envSource: { NODE_ENV: "production" } });
+  // site/ is excluded from the browsable index but footer links deep-link into
+  // it; these slugs are validated via direct lookup, not index membership.
+  const extraKnown = resolveExtraKnownFooterSlugs({
+    docsRoot,
+    env: { NODE_ENV: "production" },
+  });
 
   it("quick-link slugs exist in the bundled docs index", () => {
     const slugs = new Set<string>();
@@ -52,7 +60,7 @@ describe("bundled docs nav", () => {
     }
   });
 
-  it("footer link slugs exist in the bundled docs index", () => {
+  it("footer link slugs resolve via the index or direct lookup", () => {
     const slugs = new Set<string>();
     for (const doc of index.featured) slugs.add(doc.slug);
     for (const cat of index.categories) {
@@ -61,20 +69,31 @@ describe("bundled docs nav", () => {
         for (const doc of sub.docs) slugs.add(doc.slug);
       }
     }
+    for (const s of extraKnown) slugs.add(s);
     for (const col of BUNDLED_DOCS_FOOTER_COLUMNS) {
       for (const link of col.links) {
         if (link.slug === "" || /^https?:\/\//i.test(link.slug)) continue;
-        expect(slugs.has(link.slug), `missing footer slug: ${link.slug}`).toBe(true);
+        expect(slugs.has(link.slug), `unresolvable footer slug: ${link.slug}`).toBe(true);
       }
     }
   });
 
+  it("site/ footer slugs are resolvable but NOT in the browsable index", () => {
+    const indexSlugs = new Set<string>();
+    for (const cat of index.categories) {
+      for (const doc of cat.uncategorized) indexSlugs.add(doc.slug);
+      for (const sub of cat.subcategories) for (const doc of sub.docs) indexSlugs.add(doc.slug);
+    }
+    // Marketing site pages must not flood the browsable index...
+    expect([...indexSlugs].some((s) => s.startsWith("site/"))).toBe(false);
+    // ...but the footer's site deep-links still resolve directly.
+    expect(extraKnown.has("site/pages/en/install")).toBe(true);
+  });
+
   it("buildBundledDocsFooterColumns emits /docs hrefs on same origin", () => {
-    const footer = buildBundledDocsFooterColumns(index, "http://127.0.0.1:3180");
+    const footer = buildBundledDocsFooterColumns(index, "http://127.0.0.1:3180", extraKnown);
     expect(footer.some((c) => c.title === "Product")).toBe(true);
-    const install = footer
-      .flatMap((c) => c.items)
-      .find((i) => i.label === "Install");
+    const install = footer.flatMap((c) => c.items).find((i) => i.label === "Install");
     expect(install?.href).toBe("http://127.0.0.1:3180/docs/site/pages/en/install");
   });
 

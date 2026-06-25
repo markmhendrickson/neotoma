@@ -1,0 +1,24 @@
+# Bundle manifest — see docs/foundation/bundles.md
+# Default install: schema bundle, always active.
+name: infrastructure
+version: 1.0.0
+description: Infrastructure entity types for sessions, issues, plans, sync, and abuse reporting.
+bundle_type: schema
+requires_bundles: []
+provides_entity_types:
+  - issue
+  - plan
+  - subscription
+  - submission_config
+  - peer_config
+  - sandbox_abuse_report
+references_shared_schemas: []
+extends_schemas: []
+provides_skills: []
+compatible_modes:
+  - evolving
+  - guided
+  - locked
+category: infrastructure
+serves_use_cases:
+  - agent_auth

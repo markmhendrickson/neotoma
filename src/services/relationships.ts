@@ -290,7 +290,8 @@ export class RelationshipsService {
   async getRelationshipsForEntity(
     entityId: string,
     direction: "outgoing" | "incoming" | "both" = "both",
-    includeDeleted: boolean = false
+    includeDeleted: boolean = false,
+    userId?: string
   ): Promise<RelationshipSnapshot[]> {
     let query;
 
@@ -303,6 +304,12 @@ export class RelationshipsService {
         .from("relationship_snapshots")
         .select("*")
         .or(`source_entity_id.eq.${entityId},target_entity_id.eq.${entityId}`);
+    }
+
+    // Scope to the caller when a userId is supplied. These methods have no
+    // callers today; the optional param keeps them safe-by-construction for reuse.
+    if (userId) {
+      query = query.eq("user_id", userId);
     }
 
     // Order by recency, then by relationship_key (the relationship_snapshots
@@ -320,7 +327,7 @@ export class RelationshipsService {
 
     // Filter deleted relationships unless explicitly requested
     if (!includeDeleted) {
-      return this.filterDeletedRelationships(relationships);
+      return this.filterDeletedRelationships(relationships, userId);
     }
 
     return relationships;
@@ -339,7 +346,8 @@ export class RelationshipsService {
    * handler). Returns the input list unchanged when it is empty.
    */
   async filterDeletedRelationships(
-    relationships: RelationshipSnapshot[]
+    relationships: RelationshipSnapshot[],
+    userId?: string
   ): Promise<RelationshipSnapshot[]> {
     if (relationships.length === 0) {
       return relationships;
@@ -348,10 +356,14 @@ export class RelationshipsService {
     const relationshipKeys = relationships.map((r) => r.relationship_key);
 
     // Check for deletion observations (highest priority with _deleted: true)
-    const { data: deletionObservations } = await db
+    let deletionQuery = db
       .from("relationship_observations")
       .select("relationship_key, source_priority, observed_at, metadata")
-      .in("relationship_key", relationshipKeys)
+      .in("relationship_key", relationshipKeys);
+    if (userId) {
+      deletionQuery = deletionQuery.eq("user_id", userId);
+    }
+    const { data: deletionObservations } = await deletionQuery
       .order("source_priority", { ascending: false })
       .order("observed_at", { ascending: false });
 
@@ -391,15 +403,17 @@ export class RelationshipsService {
    */
   async getRelationshipsByType(
     type: RelationshipType,
-    includeDeleted: boolean = false
+    includeDeleted: boolean = false,
+    userId?: string
   ): Promise<RelationshipSnapshot[]> {
     // Order by recency, then by relationship_key (the relationship_snapshots
     // PRIMARY KEY) as a stable secondary sort so ties on last_observation_at
     // are deterministic. See docs/architecture/determinism.md.
-    const { data, error } = await db
-      .from("relationship_snapshots")
-      .select("*")
-      .eq("relationship_type", type)
+    let query = db.from("relationship_snapshots").select("*").eq("relationship_type", type);
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+    const { data, error } = await query
       .order("last_observation_at", { ascending: false })
       .order("relationship_key", { ascending: true });
 
@@ -411,7 +425,7 @@ export class RelationshipsService {
 
     // Filter deleted relationships unless explicitly requested
     if (!includeDeleted) {
-      return this.filterDeletedRelationships(relationships);
+      return this.filterDeletedRelationships(relationships, userId);
     }
 
     return relationships;

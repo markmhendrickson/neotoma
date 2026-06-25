@@ -61,21 +61,21 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **504**
-- Backend and repo Vitest files: **470**
+- Total automated test files: **511**
+- Backend and repo Vitest files: **477**
 - Frontend Vitest files: **9**
 - Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 138 |
+| Vitest unit tests | 143 |
 | Vitest service tests | 35 |
 | Source-adjacent tests | 62 |
-| Vitest integration tests | 142 |
+| Vitest integration tests | 143 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
-| Vitest security tests | 3 |
+| Vitest security tests | 4 |
 | Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (138):**
+**Files (143):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -134,6 +134,8 @@ flowchart TD
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
+- `tests/unit/bundles_activation.test.ts`
+- `tests/unit/bundles_loader.test.ts`
 - `tests/unit/canonical_markdown_body_heading.test.ts`
 - `tests/unit/capability_delta.test.ts`
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
@@ -180,12 +182,14 @@ flowchart TD
 - `tests/unit/inspector_skin.test.ts`
 - `tests/unit/keepalive_timeout.test.ts`
 - `tests/unit/list_timeline_events_unknown_type.test.ts`
+- `tests/unit/manage_bundles_tool.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
 - `tests/unit/mcp_initialize_skills.test.ts`
 - `tests/unit/mcp_initialize_version.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
+- `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
 - `tests/unit/mcp_server_card.test.ts`
@@ -225,6 +229,7 @@ flowchart TD
 - `tests/unit/schema_agent_instructions.test.ts`
 - `tests/unit/schema_derived_entity_extraction.test.ts`
 - `tests/unit/schema_inference.test.ts`
+- `tests/unit/schema_mode.test.ts`
 - `tests/unit/schema_projection_lag.test.ts`
 - `tests/unit/search_normalization.test.ts`
 - `tests/unit/security_hardening.test.ts`
@@ -365,7 +370,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (142):**
+**Files (143):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -435,6 +440,7 @@ flowchart TD
 - `tests/integration/mcp_entity_variations.test.ts`
 - `tests/integration/mcp_get_entity_type_counts.test.ts`
 - `tests/integration/mcp_graph_variations.test.ts`
+- `tests/integration/mcp_handler_cross_user_scoping.test.ts`
 - `tests/integration/mcp_invalid_bearer_auth.test.ts`
 - `tests/integration/mcp_npm_check_update_capability_delta.test.ts`
 - `tests/integration/mcp_npm_check_update.test.ts`
@@ -607,8 +613,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (3):**
+**Files (4):**
 - `tests/security/auth_topology_matrix.test.ts`
+- `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
 

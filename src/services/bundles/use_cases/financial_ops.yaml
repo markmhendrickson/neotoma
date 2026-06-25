@@ -1,0 +1,4 @@
+use_case: financial_ops
+description: Financial operations and accounting.
+schema_bundles: [financial_ops]
+skill_bundles: [core_workflows]
