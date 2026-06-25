@@ -56,7 +56,7 @@ export function buildToolDefinitions(
       name: "retrieve_entity_snapshot",
       description: desc(
         "retrieve_entity_snapshot",
-        "Retrieve the current snapshot of an entity with provenance information. Supports historical snapshots via 'at' parameter."
+        "Retrieve the current snapshot of an entity with provenance information. Supports point-in-time reconstruction via 'at' (event-time cutoff: filters on observed_at) and 'at_ingested' (ingestion-time cutoff: filters on created_at, prevents look-ahead from backfilled observations). When both are supplied, both bounds are applied."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entity_snapshot"),
     },

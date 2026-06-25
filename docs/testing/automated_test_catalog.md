@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **488**
-- Backend and repo Vitest files: **455**
+- Total automated test files: **489**
+- Backend and repo Vitest files: **456**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 130 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 61 |
-| Vitest integration tests | 137 |
+| Vitest integration tests | 138 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 3 |
@@ -355,7 +355,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (137):**
+**Files (138):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -471,6 +471,7 @@ flowchart TD
 - `tests/integration/sandbox_report.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
+- `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
