@@ -1,30 +1,22 @@
 name: Claude PR Review
 
+# DISABLED for automatic PR review (2026-06-24).
+#
+# PR review is now owned by the Ateles swarm review panel (Anthus-dispatched
+# gates: pm/Pavo, ux/Accipiter, arch/Bombycilla, qa/Phoenicurus,
+# pr_review/Vanellus, legal/Buteo), governed by the neotoma|feature
+# workflow_definition and the `code_review` agent_policy "Swarm PR review: full
+# diff + role-based depth". The swarm reviews every PR in depth by role against
+# the full diff, so this standalone single-pass reviewer is no longer the
+# correctness backstop.
+#
+# The job below is hard-guarded with `if: ${{ false }}`, so it is inert even on
+# manual dispatch. To re-enable: restore the `pull_request` / `issue_comment`
+# triggers and the original job `if:` condition (preserved as a comment on the
+# job). The workflow_dispatch trigger is retained only so the file stays a valid,
+# discoverable workflow.
 on:
-  pull_request:
-    types:
-      - opened
-      - ready_for_review
-      - synchronize
-    # Run when code, contract, or agent-facing surfaces change. Agent instructions
-    # ship to every MCP client, so changes there are user-facing behavior even
-    # when no src/ file changed.
-    paths:
-      - "src/**"
-      - "packages/**"
-      - "openapi.yaml"
-      - "package.json"
-      - "tests/**"
-      - "docs/developer/mcp/instructions.md"
-      - "docs/developer/cli_agent_instructions.md"
-      - "docs/foundation/**"
-      - "docs/architecture/**"
-      - "docs/subsystems/**"
-      - ".claude/skills/**"
-      - ".claude/rules/**"
-  issue_comment:
-    types:
-      - created
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -44,16 +36,13 @@ concurrency:
 
 jobs:
   review:
-    if: |
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.draft == false &&
-       !(github.event.action == 'synchronize' && (
-         startsWith(github.event.pull_request.head.ref, 'claude/') ||
-         github.event.pull_request.user.login == 'castor-agent'
-       ))) ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request != null &&
-       contains(github.event.comment.body, '@claude review'))
+    # DISABLED — the Ateles swarm review panel owns PR review (see header).
+    # This guard makes the job inert even if manually dispatched. To re-enable,
+    # restore the pull_request/issue_comment triggers above and the original
+    # condition below (preserved as a comment):
+    #   (github.event_name == 'pull_request' && pr.draft == false && !(synchronize on claude/* or castor-agent))
+    #   || (github.event_name == 'issue_comment' && issue.pull_request != null && contains(comment.body, '@claude review'))
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
