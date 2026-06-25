@@ -704,14 +704,17 @@ export async function queryEntities(
  */
 export async function getEntityWithProvenance(
   entityId: string,
-  includeDeleted: boolean = false
+  includeDeleted: boolean = false,
+  userId?: string
 ): Promise<EntityWithProvenance | null> {
-  // Get entity
-  const { data: entity, error: entityError } = await db
-    .from("entities")
-    .select("*")
-    .eq("id", entityId)
-    .single();
+  // Get entity. When a userId is supplied, scope by it so a cross-user
+  // entity_id cannot be read by id alone (the HTTP callers precheck ownership;
+  // the MCP retrieve_entity_snapshot path historically did not).
+  let entityQuery = db.from("entities").select("*").eq("id", entityId);
+  if (userId) {
+    entityQuery = entityQuery.eq("user_id", userId);
+  }
+  const { data: entity, error: entityError } = await entityQuery.single();
 
   if (entityError || !entity) {
     return null;
@@ -719,15 +722,19 @@ export async function getEntityWithProvenance(
 
   // Check if entity is merged - redirect to target
   if (entity.merged_to_entity_id) {
-    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted);
+    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId);
   }
 
   // Check if entity is deleted (unless explicitly requested)
   if (!includeDeleted) {
-    const { data: observations } = await db
+    let deletedCheckQuery = db
       .from("observations")
       .select("source_priority, observed_at, fields")
-      .eq("entity_id", entityId)
+      .eq("entity_id", entityId);
+    if (userId) {
+      deletedCheckQuery = deletedCheckQuery.eq("user_id", userId);
+    }
+    const { data: observations } = await deletedCheckQuery
       .order("source_priority", { ascending: false })
       .order("observed_at", { ascending: false })
       .limit(1);
@@ -742,11 +749,11 @@ export async function getEntityWithProvenance(
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
-  const { data: snapshot, error: snapshotError } = await db
-    .from("entity_snapshots")
-    .select("*")
-    .eq("entity_id", entityId)
-    .single();
+  let snapshotQuery = db.from("entity_snapshots").select("*").eq("entity_id", entityId);
+  if (userId) {
+    snapshotQuery = snapshotQuery.eq("user_id", userId);
+  }
+  const { data: snapshot, error: snapshotError } = await snapshotQuery.single();
 
   let effectiveSnapshot: EntitySnapshotRow | null = snapshot as EntitySnapshotRow | null;
   if (snapshotError && snapshotError.code !== "PGRST116") {
@@ -758,12 +765,15 @@ export async function getEntityWithProvenance(
 
   // Get raw_fragments for this entity
   // Find all sources that have observations for this entity
-  const { data: observations } = await db
+  let sourceObsQuery = db
     .from("observations")
     .select("source_id, user_id")
     .eq("entity_id", entityId)
-    .not("source_id", "is", null)
-    .limit(100); // Get sample of sources
+    .not("source_id", "is", null);
+  if (userId) {
+    sourceObsQuery = sourceObsQuery.eq("user_id", userId);
+  }
+  const { data: observations } = await sourceObsQuery.limit(100); // Get sample of sources
 
   const rawFragments: Record<string, unknown> = {};
   if (observations && observations.length > 0) {

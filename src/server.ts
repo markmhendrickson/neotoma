@@ -905,6 +905,7 @@ export class NeotomaServer {
     });
 
     const parsed = schema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId();
     const { db } = await import("./db.js");
 
     // Get all entity snapshots with observation_count = 0
@@ -912,6 +913,7 @@ export class NeotomaServer {
       .from("entity_snapshots")
       .select("entity_id, entity_type, observation_count, computed_at")
       .eq("observation_count", 0)
+      .eq("user_id", userId)
       .order("computed_at", { ascending: false });
 
     if (snapshotError) {
@@ -942,7 +944,8 @@ export class NeotomaServer {
       const { data: observations, error: obsError } = await db
         .from("observations")
         .select("id")
-        .eq("entity_id", snapshot.entity_id);
+        .eq("entity_id", snapshot.entity_id)
+        .eq("user_id", userId);
 
       if (obsError) {
         continue;
@@ -972,6 +975,7 @@ export class NeotomaServer {
             .from("observations")
             .select("*")
             .eq("entity_id", stale.entity_id)
+            .eq("user_id", userId)
             .order("observed_at", { ascending: false });
 
           if (!observations || observations.length === 0) continue;
@@ -2730,6 +2734,10 @@ export class NeotomaServer {
     const { schemaRegistry } = await import("./services/schema_registry.js");
 
     const parsed = EntitySnapshotRequestSchema.parse(args ?? {});
+    // Scope reads to the authenticated user so a cross-user entity_id cannot be
+    // fetched by id alone. The HTTP callers of getEntityWithProvenance precheck
+    // ownership; this MCP path historically did not.
+    const userId = this.getAuthenticatedUserId();
     const responseFormat = parsed.format ?? "markdown";
 
     const renderEntitySnapshotResponse = async (payload: {
@@ -2802,7 +2810,7 @@ export class NeotomaServer {
     };
 
     // Get entity first to check if it exists and handle merged entity redirection
-    const entity = await getEntityWithProvenance(parsed.entity_id);
+    const entity = await getEntityWithProvenance(parsed.entity_id, false, userId);
 
     if (!entity) {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
@@ -2841,7 +2849,11 @@ export class NeotomaServer {
         }
 
         // Build observations query applying whichever bounds are set
-        let obsQuery = db.from("observations").select("*").eq("entity_id", entity.entity_id);
+        let obsQuery = db
+          .from("observations")
+          .select("*")
+          .eq("entity_id", entity.entity_id)
+          .eq("user_id", userId);
 
         if (parsed.at) {
           // Event-time upper bound: filter by when the event occurred
@@ -3356,7 +3368,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RelationshipSnapshotRequestSchema.parse(args ?? {});
 
-    const userId = "00000000-0000-0000-0000-000000000000"; // Default for v0.1.0 single-user
+    const userId = this.getAuthenticatedUserId();
 
     // Get relationship snapshot
     const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
@@ -3511,8 +3523,9 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = TimelineEventsRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId();
 
-    let query = db.from("timeline_events").select("*");
+    let query = db.from("timeline_events").select("*").eq("user_id", userId);
 
     if (parsed.event_type) {
       query = query.eq("event_type", parsed.event_type);
@@ -3531,10 +3544,13 @@ export class NeotomaServer {
     }
 
     // Get total count
-    let countQuery = db.from("timeline_events").select("*", {
-      count: "exact",
-      head: true,
-    });
+    let countQuery = db
+      .from("timeline_events")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("user_id", userId);
 
     if (parsed.event_type) {
       countQuery = countQuery.eq("event_type", parsed.event_type);
@@ -4013,7 +4029,10 @@ export class NeotomaServer {
     const schemaRegistry = new SchemaRegistryService();
 
     try {
-      const entityTypes = await schemaRegistry.listEntityTypes(parsed.keyword);
+      const entityTypes = await schemaRegistry.listEntityTypes(
+        parsed.keyword,
+        this.getAuthenticatedUserId()
+      );
 
       // When no keyword, always return summary to avoid huge payload (all types × full schema).
       // When keyword is provided, respect summary param (default full detail for the few matches).
