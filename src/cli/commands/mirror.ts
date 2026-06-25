@@ -20,6 +20,11 @@ import {
 } from "../../services/canonical_mirror.js";
 import { initMirrorRepo } from "../../services/canonical_mirror_git.js";
 import type { NeotomaApiClient } from "../../shared/api_client.js";
+import {
+  runMirrorPush,
+  type MirrorPushOptions,
+  type MirrorPushResult,
+} from "../../services/mirror_writeback.js";
 
 export interface MirrorRebuildOptions {
   kind?: string;
@@ -413,5 +418,170 @@ export function formatMirrorGitignore(result: MirrorGitignoreResult | null): str
   } else {
     lines.push("Status:         unchanged");
   }
+  return lines.join("\n");
+}
+
+// ============================================================================
+// mirror push — disk-to-entity write-back
+// ============================================================================
+
+export interface MirrorPushCommandOptions {
+  /** Profile id or path. When omitted, push all writeback-enabled profiles. */
+  profile?: string;
+  /** Print corrections without applying. */
+  check?: boolean;
+  /** Alias for check. */
+  dryRun?: boolean;
+  /** Limit to a specific file or entity_id. */
+  target?: string;
+  /** Emit per-correction details. */
+  verbose?: boolean;
+  /** When provided, profile fetches use the HTTP API instead of local SQLite. */
+  apiClient?: NeotomaApiClient;
+}
+
+export async function runMirrorPushCommand(
+  options: MirrorPushCommandOptions
+): Promise<MirrorPushResult[]> {
+  const cfg = getMirrorConfig();
+  const profiles = cfg.profiles ?? [];
+
+  if (profiles.length === 0) {
+    return [
+      {
+        profile_id: "(none)",
+        files_scanned: 0,
+        corrections_applied: 0,
+        corrections_dry_run: 0,
+        conflicts: [],
+        errors: [
+          {
+            file: cfg.path,
+            message:
+              "No mirror profiles are configured. Add a profile with allow_disk_writeback: true to use mirror push.",
+          },
+        ],
+      },
+    ];
+  }
+
+  // Filter profiles by id or enable flag.
+  let targetProfiles = profiles;
+  if (options.profile) {
+    targetProfiles = profiles.filter(
+      (p) => p.id === options.profile || path.resolve(p.output_path) === path.resolve(options.profile!)
+    );
+    if (targetProfiles.length === 0) {
+      return [
+        {
+          profile_id: options.profile,
+          files_scanned: 0,
+          corrections_applied: 0,
+          corrections_dry_run: 0,
+          conflicts: [],
+          errors: [
+            {
+              file: options.profile,
+              message: `No profile found with id or path "${options.profile}".`,
+            },
+          ],
+        },
+      ];
+    }
+  }
+
+  const dryRun = Boolean(options.check ?? options.dryRun);
+  const pushOptions: MirrorPushOptions = {
+    dry_run: dryRun,
+    target: options.target,
+    verbose: Boolean(options.verbose),
+  };
+
+  const results: MirrorPushResult[] = [];
+
+  for (const profile of targetProfiles) {
+    // We need an API client to fetch canonical snapshots and apply corrections.
+    // If no client is provided, report an error.
+    if (!options.apiClient) {
+      results.push({
+        profile_id: profile.id,
+        files_scanned: 0,
+        corrections_applied: 0,
+        corrections_dry_run: 0,
+        conflicts: [],
+        errors: [
+          {
+            file: profile.output_path,
+            message: "mirror push requires an API client (authentication). Use neotoma auth login.",
+          },
+        ],
+      });
+      continue;
+    }
+
+    // Cast to the minimal WritebackApiClient interface expected by runMirrorPush.
+    const apiClientCast = options.apiClient as unknown as Parameters<typeof runMirrorPush>[1];
+    const result = await runMirrorPush(profile, apiClientCast, pushOptions);
+    results.push(result);
+  }
+
+  return results;
+}
+
+export function formatMirrorPushResult(results: MirrorPushResult[], dryRun = false): string {
+  const lines: string[] = [];
+
+  if (dryRun) {
+    lines.push("Mode: dry-run (--check). No changes applied.");
+    lines.push("");
+  }
+
+  for (const result of results) {
+    lines.push(`Profile: ${result.profile_id}`);
+    lines.push(`  Files scanned:        ${result.files_scanned}`);
+    if (dryRun) {
+      lines.push(`  Corrections (would):  ${result.corrections_dry_run}`);
+    } else {
+      lines.push(`  Corrections applied:  ${result.corrections_applied}`);
+    }
+    lines.push(`  Conflicts:            ${result.conflicts.length}`);
+    lines.push(`  Errors:               ${result.errors.length}`);
+
+    if (result.conflicts.length > 0) {
+      lines.push("");
+      lines.push("  Conflicts (resolve manually):");
+      for (const c of result.conflicts) {
+        lines.push(`    [${c.entity_id}] field "${c.field}" in ${path.basename(c.source_file)}`);
+        lines.push(`      base:      ${JSON.stringify(c.base_value)}`);
+        lines.push(`      disk:      ${JSON.stringify(c.disk_value)}`);
+        lines.push(`      canonical: ${JSON.stringify(c.canonical_value)}`);
+        lines.push(`      ${c.message}`);
+      }
+    }
+
+    if (result.errors.length > 0) {
+      lines.push("");
+      lines.push("  Errors:");
+      for (const e of result.errors) {
+        lines.push(`    ${path.basename(e.file)}: ${e.message}`);
+      }
+    }
+    lines.push("");
+  }
+
+  const totalApplied = results.reduce((s, r) => s + r.corrections_applied, 0);
+  const totalDryRun = results.reduce((s, r) => s + r.corrections_dry_run, 0);
+  const totalConflicts = results.reduce((s, r) => s + r.conflicts.length, 0);
+  const totalErrors = results.reduce((s, r) => s + r.errors.length, 0);
+
+  lines.push("Summary:");
+  if (dryRun) {
+    lines.push(`  Corrections that would be applied: ${totalDryRun}`);
+  } else {
+    lines.push(`  Corrections applied: ${totalApplied}`);
+  }
+  lines.push(`  Conflicts:           ${totalConflicts}`);
+  lines.push(`  Errors:              ${totalErrors}`);
+
   return lines.join("\n");
 }

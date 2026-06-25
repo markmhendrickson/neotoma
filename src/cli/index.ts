@@ -11205,6 +11205,62 @@ mirrorCommand
     }
   });
 
+mirrorCommand
+  .command("push")
+  .description(
+    "Push on-disk mirror edits back to Neotoma as corrections (requires allow_disk_writeback: true on the profile)"
+  )
+  .argument(
+    "[profile]",
+    "Profile id or output path to push (default: all profiles with allow_disk_writeback: true)"
+  )
+  .option("--check", "Dry-run: show what corrections would be applied without applying them")
+  .option("--dry-run", "Alias for --check")
+  .option("--target <fileOrId>", "Limit push to a specific mirror file path or entity id")
+  .option("--verbose", "Emit per-correction details")
+  .action(
+    async (
+      profileArg: string | undefined,
+      opts: { check?: boolean; dryRun?: boolean; target?: string; verbose?: boolean }
+    ) => {
+      const outputMode = resolveOutputMode();
+      try {
+        const { runMirrorPushCommand, formatMirrorPushResult } = await import(
+          "./commands/mirror.js"
+        );
+        const mirrorConfig = await readConfig();
+        const mirrorToken = await getCliToken();
+        const mirrorApi = createApiClient({
+          baseUrl: await resolveBaseUrl(program.opts().baseUrl, mirrorConfig),
+          token: mirrorToken,
+        });
+        const results = await runMirrorPushCommand({
+          profile: profileArg,
+          check: opts.check,
+          dryRun: opts.dryRun,
+          target: opts.target,
+          verbose: opts.verbose,
+          apiClient: mirrorApi,
+        });
+        const dryRun = Boolean(opts.check ?? opts.dryRun);
+        if (outputMode === "json") {
+          writeOutput(results, outputMode);
+        } else {
+          process.stdout.write(formatMirrorPushResult(results, dryRun) + "\n");
+        }
+        // Exit non-zero when there are conflicts or errors.
+        const hasConflicts = results.some((r) => r.conflicts.length > 0);
+        const hasErrors = results.some((r) => r.errors.length > 0);
+        if (hasConflicts || hasErrors) {
+          process.exitCode = 1;
+        }
+      } catch (err) {
+        writeCliError(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    }
+  );
+
 registerProcessesCommands(program, {
   resolveOutputMode,
   writeOutput,
