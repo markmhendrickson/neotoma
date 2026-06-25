@@ -14,7 +14,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveFrontmatter, splitFrontmatter, type DocFrontmatter } from "./doc_frontmatter.js";
 import { renderMarkdown } from "./markdown_render.js";
-import { isVisible, type VisibilityEnv } from "./visibility.js";
+import {
+  isVisible,
+  isNonPublicTopFolder,
+  shouldShowInternal,
+  type VisibilityEnv,
+} from "./visibility.js";
 
 const SLUG_RE = /^[A-Za-z0-9_./-]+$/;
 
@@ -72,6 +77,12 @@ export function lookupDoc(
   const relFromRoot = path.relative(docsRootResolved, abs).split(path.sep).join("/");
   if (relFromRoot.startsWith("private/")) {
     return { ok: false, error: { kind: "not_found" } };
+  }
+  // Non-public top-level folders are off the public docs surface. Hide them
+  // unless show-internal is enabled, so direct slug lookup matches both the
+  // `/docs` index and the npm bundle (which never ships these folders).
+  if (!shouldShowInternal(env) && isNonPublicTopFolder(relFromRoot)) {
+    return { ok: false, error: { kind: "hidden" } };
   }
   if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
     return { ok: false, error: { kind: "not_found" } };
