@@ -44,6 +44,8 @@ export interface DocsRoutesOptions {
   repoRoot?: string;
   /** Override the env source (used in tests). */
   envSource?: VisibilityEnv;
+  /** Override the bundled docs fallback dir (used in tests). */
+  bundledDocsRoot?: string;
 }
 
 interface DocsIndexCache {
@@ -119,7 +121,7 @@ export function getBundledDocsIndex(opts: {
 
 export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = {}): void {
   const repoRoot = opts.repoRoot ?? resolveRepoRoot();
-  const { docsRoot, manifestPath } = resolveDocsSources(repoRoot);
+  const { docsRoot, manifestPath } = resolveDocsSources(repoRoot, opts.bundledDocsRoot);
 
   // Content negotiation: the inspector SPA navigates to /docs and /docs/<slug>
   // and expects HTML (the SPA shell) — it then fetches JSON from the same URL

@@ -17,7 +17,7 @@ export interface BundledDocsExternalLink {
 export type BundledDocsFooterLink = BundledDocsLink | BundledDocsExternalLink;
 
 export function isExternalBundledDocsLink(
-  link: BundledDocsFooterLink,
+  link: BundledDocsFooterLink
 ): link is BundledDocsExternalLink {
   return "href" in link;
 }
@@ -29,7 +29,7 @@ export interface BundledDocsFooterColumn {
 
 export const BUNDLED_DOCS_LINKS: readonly BundledDocsLink[] = [
   { label: "Documentation", to: "/docs" },
-  { label: "Install", to: "/docs/developer/getting_started" },
+  { label: "Get started", to: "/docs/getting_started/getting_started" },
   { label: "Architecture", to: "/docs/architecture/architecture" },
   { label: "REST API", to: "/docs/api/rest_api" },
   { label: "MCP Server", to: "/docs/developer/mcp/instructions" },
