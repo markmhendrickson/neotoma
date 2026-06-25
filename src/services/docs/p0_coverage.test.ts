@@ -32,10 +32,17 @@ describe("P0 onboarding docs coverage", () => {
     }
   });
 
-  it("leads the featured list with the getting-started docs", () => {
-    const featured = index.featured.map((d) => d.slug);
+  it("leads the featured list with the getting-started docs, in order", () => {
+    const leadingSlugs = index.featured.slice(0, P0_SLUGS.length).map((d) => d.slug);
+    expect(leadingSlugs).toEqual(P0_SLUGS);
+  });
+
+  it("keeps the P0 docs public and non-deprecated", () => {
     for (const s of P0_SLUGS) {
-      expect(featured, `P0 doc not featured: ${s}`).toContain(s);
+      const entry = index.featured.find((d) => d.slug === s);
+      expect(entry, `P0 doc not featured: ${s}`).toBeTruthy();
+      expect(entry?.frontmatter.visibility).toBe("public");
+      expect(entry?.frontmatter.deprecated ?? false).toBe(false);
     }
   });
 });
