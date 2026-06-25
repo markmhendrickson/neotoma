@@ -10,6 +10,7 @@ This document does NOT cover:
 - Observation creation (see `docs/subsystems/observation_architecture.md`)
 - Schema registry (see `docs/subsystems/schema_registry.md`)
 - Database schema (see `docs/subsystems/schema.md`)
+- User-facing merge policy configuration, "omit don't zero" semantics, and the LWW-default footgun (see `docs/subsystems/conflict_resolution.md`)
 ## 1. Reducer Overview
 ### 1.1 What is a Reducer?
 A **reducer** is a pure function that computes an entity snapshot from multiple observations:
