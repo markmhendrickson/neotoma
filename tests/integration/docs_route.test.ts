@@ -44,32 +44,29 @@ beforeAll(() => {
   fs.mkdirSync(path.join(docsRoot, "site"), { recursive: true });
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "core_identity.md"),
-    "# Core Identity\n\nNeotoma is the State Layer.\n",
+    "# Core Identity\n\nNeotoma is the State Layer.\n"
   );
-  fs.writeFileSync(
-    path.join(docsRoot, "plans", "draft.md"),
-    "# Draft Plan\n\nNot yet ready.\n",
-  );
+  fs.writeFileSync(path.join(docsRoot, "plans", "draft.md"), "# Draft Plan\n\nNot yet ready.\n");
   fs.writeFileSync(
     path.join(docsRoot, "site", "site_doc_manifest.yaml"),
     [
       "version: 1",
       "categories:",
       "  - key: foundation",
-      "    display_name: \"Foundation\"",
+      '    display_name: "Foundation"',
       "    order: 20",
       "    subcategories: []",
       "  - key: internal",
-      "    display_name: \"Internal\"",
+      '    display_name: "Internal"',
       "    order: 200",
       "    subcategories:",
       "      - key: plans",
-      "        display_name: \"Plans\"",
+      '        display_name: "Plans"',
       "        order: 20",
       "featured:",
       "  - docs/foundation/core_identity.md",
       "",
-    ].join("\n"),
+    ].join("\n")
   );
 });
 
@@ -81,9 +78,15 @@ afterEach(async () => {
   if (server) await stopServer(server);
 });
 
-async function fetchPath(p: string): Promise<{ status: number; body: string; cacheControl: string | null }> {
+async function fetchPath(
+  p: string
+): Promise<{ status: number; body: string; cacheControl: string | null }> {
   const res = await fetch(baseUrl + p);
-  return { status: res.status, body: await res.text(), cacheControl: res.headers.get("cache-control") };
+  return {
+    status: res.status,
+    body: await res.text(),
+    cacheControl: res.headers.get("cache-control"),
+  };
 }
 
 describe("/docs", () => {
@@ -123,7 +126,13 @@ describe("/docs", () => {
   });
 
   it("returns 404 for additional invalid slug forms", async () => {
-    for (const slug of ["/docs/../etc/passwd", "/docs/%00", "/docs/foo%5Cbar", "/docs/foo/", "/docs/foo.md/bar"]) {
+    for (const slug of [
+      "/docs/../etc/passwd",
+      "/docs/%00",
+      "/docs/foo%5Cbar",
+      "/docs/foo/",
+      "/docs/foo.md/bar",
+    ]) {
       const r = await fetchPath(slug);
       expect(r.status).toBe(404);
     }
@@ -151,6 +160,81 @@ describe("/docs with staging-like env", () => {
   it("hides internal docs unless explicitly enabled", async () => {
     const r = await fetchPath("/docs/plans/draft");
     expect(r.status).toBe(404);
+  });
+});
+
+describe("/docs bundled fallback (npm install simulation)", () => {
+  let installRoot: string;
+  let bundleDir: string;
+
+  beforeAll(() => {
+    // An install root WITHOUT docs/site/site_doc_manifest.yaml forces
+    // resolveDocsSources to fall back to the bundled dir — the dist/docs case
+    // for npm installs, where the source docs tree is not shipped.
+    installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-docs-install-"));
+    bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-docs-bundle-"));
+    fs.mkdirSync(path.join(bundleDir, "foundation"), { recursive: true });
+    fs.mkdirSync(path.join(bundleDir, "plans"), { recursive: true });
+    fs.mkdirSync(path.join(bundleDir, "site"), { recursive: true });
+    fs.writeFileSync(
+      path.join(bundleDir, "foundation", "core_identity.md"),
+      "# Core Identity\n\nNeotoma is the State Layer.\n"
+    );
+    // `plans/` defaults to visibility: internal, so it must be filtered out
+    // even when served from the bundled tree in production.
+    fs.writeFileSync(path.join(bundleDir, "plans", "draft.md"), "# Draft Plan\n\nNot yet ready.\n");
+    fs.writeFileSync(
+      path.join(bundleDir, "site", "site_doc_manifest.yaml"),
+      [
+        "version: 1",
+        "categories:",
+        "  - key: foundation",
+        '    display_name: "Foundation"',
+        "    order: 20",
+        "    subcategories: []",
+        "featured:",
+        "  - docs/foundation/core_identity.md",
+        "",
+      ].join("\n")
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(installRoot, { recursive: true, force: true });
+    fs.rmSync(bundleDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    const app = express();
+    mountDocsRoutes(app, {
+      repoRoot: installRoot,
+      bundledDocsRoot: bundleDir,
+      envSource: { NODE_ENV: "production" },
+    });
+    server = await startServer(app);
+    const addr = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  it("serves the index from the bundled dir when the source manifest is absent", async () => {
+    const r = await fetchPath("/docs");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain("Core Identity");
+    expect(r.body).toContain("Featured");
+    expect(r.cacheControl).toBe("public, max-age=60");
+  });
+
+  it("renders a bundled doc page", async () => {
+    const r = await fetchPath("/docs/foundation/core_identity");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain("State Layer");
+  });
+
+  it("applies visibility filtering when serving from the bundled dir", async () => {
+    const detail = await fetchPath("/docs/plans/draft");
+    expect(detail.status).toBe(404);
+    const index = await fetchPath("/docs");
+    expect(index.body).not.toContain("Draft Plan");
   });
 });
 
