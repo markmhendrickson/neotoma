@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import { logger } from "../../utils/logger.js";
 import { ManifestError, parseManifest } from "./manifest.js";
+import { isBundleEnabled, listInstalledBundles } from "./state_store.js";
 import type { BundleManifest, LoadedBundle } from "./types.js";
 
 /**
@@ -69,7 +70,11 @@ export function loadBundlesFrom(root: string): LoadedBundle[] {
     const manifestPath = path.join(dir, "manifest.yaml");
     const source = fs.readFileSync(manifestPath, "utf8");
     const manifest = parseManifest(source, path.relative(root, manifestPath));
-    bundles.push({ manifest, dir, enabled: true });
+    // `enabled` reflects persisted install state: default bundles are always
+    // active; non-default bundles must be explicitly enabled (m3 state store).
+    // A disabled schema bundle's types stop counting as "provided" under
+    // guided/locked (see "Disable, not uninstall" in docs/foundation/bundles.md).
+    bundles.push({ manifest, dir, enabled: isBundleEnabled(manifest.name) });
   }
   return bundles;
 }
@@ -183,5 +188,64 @@ export function bundleProviding(entityType: string): string | undefined {
 export function resetBundleRegistryForTesting(): void {
   cached = undefined;
 }
+
+/**
+ * Returns the loaded bundle for `name`, or `undefined` if no bundle by that name
+ * is in the registry. Used by the CLI/MCP `info` surface and install validation.
+ */
+export function getBundle(name: string): LoadedBundle | undefined {
+  return getBundleRegistry().bundles.find((b) => b.manifest.name === name);
+}
+
+/**
+ * Loader-level install-state listing: the install state of every bundle known to
+ * the registry (plus any with persisted deviations), enriched with manifest
+ * metadata for display. Combines the state store with the discovered registry.
+ */
+export interface InstalledBundleView {
+  name: string;
+  enabled: boolean;
+  always_active: boolean;
+  /** Present when the bundle is in the discovered registry. */
+  bundle_type?: BundleManifest["bundle_type"];
+  version?: string;
+  provides_entity_types_count?: number;
+}
+
+/**
+ * Returns the install state for all known bundles, enriched with manifest data
+ * where available. The registry's bundle names seed the listing so newly added
+ * (but not-yet-toggled) bundles still appear.
+ */
+export function listInstalledBundleViews(): InstalledBundleView[] {
+  const registry = getBundleRegistry();
+  const byName = new Map(registry.bundles.map((b) => [b.manifest.name, b]));
+  const rows = listInstalledBundles(byName.keys());
+  return rows.map((row) => {
+    const loaded = byName.get(row.name);
+    return {
+      ...row,
+      ...(loaded
+        ? {
+            bundle_type: loaded.manifest.bundle_type,
+            version: loaded.manifest.version,
+            provides_entity_types_count: loaded.manifest.provides_entity_types.length,
+          }
+        : {}),
+    };
+  });
+}
+
+export {
+  ALWAYS_ACTIVE_BUNDLES,
+  BundleStateError,
+  bundleStatePath,
+  isAlwaysActiveBundle,
+  isBundleEnabled,
+  listInstalledBundles,
+  resetBundleStateCacheForTesting,
+  setBundleEnabled,
+  type InstalledBundleState,
+} from "./state_store.js";
 
 export type { BundleManifest, LoadedBundle };

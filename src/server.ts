@@ -1595,6 +1595,74 @@ export class NeotomaServer {
     return this.buildTextResponse({ subscription: redactSubscriptionForClient(row) });
   }
 
+  private async handleManageBundles(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      action: z.enum(["list", "info", "install", "enable", "disable"]),
+      bundle: z.string().min(1).optional(),
+    });
+    const parsed = schema.parse(args ?? {});
+    const {
+      listBundles,
+      getBundleInfo,
+      installBundle,
+      enableBundle,
+      disableBundle,
+      BundleStateError,
+      UnknownBundleError,
+    } = await import("./services/bundles/index.js");
+
+    // m3 follow-up: AAuth admin-tier gating of install/disable belongs here,
+    // before the mutating actions below. Intentionally not implemented in m3.
+
+    try {
+      if (parsed.action === "list") {
+        return this.buildTextResponse({ ok: true, action: "list", bundles: listBundles() });
+      }
+      const bundle = parsed.bundle?.trim();
+      if (!bundle) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `manage_bundles: action "${parsed.action}" requires a "bundle" name.`
+        );
+      }
+      if (parsed.action === "info") {
+        const info = getBundleInfo(bundle);
+        if (!info) {
+          return this.buildTextResponse({
+            ok: false,
+            action: "info",
+            bundle,
+            error: `Unknown bundle "${bundle}".`,
+          });
+        }
+        return this.buildTextResponse({ ok: true, action: "info", ...info });
+      }
+      const result =
+        parsed.action === "install"
+          ? installBundle(bundle)
+          : parsed.action === "enable"
+            ? enableBundle(bundle)
+            : disableBundle(bundle);
+      return this.buildTextResponse({ ok: true, action: parsed.action, ...result });
+    } catch (err) {
+      if (err instanceof McpError) throw err;
+      if (err instanceof BundleStateError || err instanceof UnknownBundleError) {
+        return this.buildTextResponse({
+          ok: false,
+          action: parsed.action,
+          bundle: parsed.bundle,
+          error: err.message,
+        });
+      }
+      throw new McpError(
+        ErrorCode.InternalError,
+        `manage_bundles failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
   private async handleAddPeer(
     args: unknown,
     userId: string
@@ -2069,6 +2137,8 @@ export class NeotomaServer {
         return await this.handleResolveSyncConflict(args, this.getAuthenticatedUserId());
       case "publish_rendered_page":
         return await this.handlePublishRenderedPage(args);
+      case "manage_bundles":
+        return await this.handleManageBundles(args);
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
