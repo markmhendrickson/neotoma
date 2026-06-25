@@ -115,6 +115,7 @@ import {
   submitIssue,
 } from "./services/issues/issue_operations.js";
 import { syncIssuesFromGitHub } from "./services/issues/sync_issues_from_github.js";
+import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -2862,7 +2863,6 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const { observationReducer } = await import("./reducers/observation_reducer.js");
     const { renderEntityCompactText } = await import("./services/canonical_markdown.js");
     const { schemaRegistry } = await import("./services/schema_registry.js");
 
@@ -2950,7 +2950,8 @@ export class NeotomaServer {
     }
 
     // If 'at' (event-time) or 'at_ingested' (ingestion-time) cutoff is provided,
-    // compute a point-in-time snapshot.
+    // compute a point-in-time snapshot via the shared helper so this path and
+    // the offline/HTTP path (actions.ts) stay in sync.
     //
     // - `at`          filters on `observed_at`  (event time): "what had happened by T"
     // - `at_ingested` filters on `created_at`   (row time):   "what did we know by T"
@@ -2961,111 +2962,28 @@ export class NeotomaServer {
     // backfilled/late-arriving observations.
     if (parsed.at || parsed.at_ingested) {
       try {
-        // Validate timestamps
-        if (parsed.at) {
-          const atTimestamp = new Date(parsed.at);
-          if (isNaN(atTimestamp.getTime())) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              `Invalid timestamp format for 'at': ${parsed.at}. Expected ISO 8601 format.`
-            );
-          }
-        }
-        if (parsed.at_ingested) {
-          const atIngestedTimestamp = new Date(parsed.at_ingested);
-          if (isNaN(atIngestedTimestamp.getTime())) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              `Invalid timestamp format for 'at_ingested': ${parsed.at_ingested}. Expected ISO 8601 format.`
-            );
-          }
-        }
-
-        // Build observations query applying whichever bounds are set
-        let obsQuery = db
-          .from("observations")
-          .select("*")
-          .eq("entity_id", entity.entity_id)
-          .eq("user_id", userId);
-
-        if (parsed.at) {
-          // Event-time upper bound: filter by when the event occurred
-          obsQuery = obsQuery.lte("observed_at", parsed.at);
-        }
-        if (parsed.at_ingested) {
-          // Ingestion-time upper bound: filter by when the row was inserted
-          obsQuery = obsQuery.lte("created_at", parsed.at_ingested);
-        }
-
-        const { data: observations, error: obsError } = await obsQuery.order("observed_at", {
-          ascending: false,
-        });
-
-        if (obsError) {
-          throw new McpError(
-            ErrorCode.InternalError,
-            `Failed to get observations: ${obsError.message}`
-          );
-        }
-
-        if (!observations || observations.length === 0) {
-          // No observations visible at this point in time - return empty snapshot
-          return renderEntitySnapshotResponse({
-            entity_id: entity.entity_id,
-            entity_type: entity.entity_type,
-            schema_version: entity.entity_type, // Fallback
-            snapshot: {},
-            provenance: {},
-            computed_at: new Date().toISOString(),
-            observation_count: 0,
-            last_observation_at: null,
-          });
-        }
-
-        // Map observations to reducer's expected format
-        const mappedObservations = observations.map((obs: any) => ({
-          id: obs.id,
-          entity_id: obs.entity_id,
-          entity_type: obs.entity_type,
-          schema_version: obs.schema_version,
-          source_id: obs.source_id || "",
-          observed_at: obs.observed_at,
-          specificity_score: obs.specificity_score,
-          source_priority: obs.source_priority,
-          observation_source: obs.observation_source ?? null,
-          fields: obs.fields,
-          created_at: obs.created_at,
-          user_id: obs.user_id,
-        }));
-
-        // Compute historical snapshot using reducer
-        const historicalSnapshot = await observationReducer.computeSnapshot(
+        const historicalResult = await computeEntitySnapshotAtTime(
           entity.entity_id,
-          mappedObservations
+          userId,
+          parsed.at,
+          parsed.at_ingested
         );
 
-        if (!historicalSnapshot) {
-          throw new McpError(
-            ErrorCode.InternalError,
-            `Failed to compute historical snapshot for entity ${entity.entity_id}`
-          );
+        if (!historicalResult) {
+          // Entity disappeared between the existence check and the cutoff query —
+          // treat the same as "not found" at this point in time.
+          throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
         }
 
-        // Get raw_fragments for historical snapshot (same logic as current snapshot)
+        // Fetch current raw_fragments for the historical response; they are not
+        // time-sensitive (fragment content doesn't change) so we reuse the current
+        // value just as the previous inlined implementation did.
         const { getEntityWithProvenance } = await import("./services/entity_queries.js");
         const currentEntity = await getEntityWithProvenance(entity.entity_id);
 
-        // Format response to match EntityWithProvenance structure
         return renderEntitySnapshotResponse({
-          entity_id: historicalSnapshot.entity_id,
-          entity_type: historicalSnapshot.entity_type,
-          schema_version: historicalSnapshot.schema_version,
-          snapshot: historicalSnapshot.snapshot,
-          raw_fragments: currentEntity?.raw_fragments, // Use current raw_fragments (they don't change with historical snapshots)
-          provenance: historicalSnapshot.provenance,
-          computed_at: historicalSnapshot.computed_at,
-          observation_count: historicalSnapshot.observation_count,
-          last_observation_at: historicalSnapshot.last_observation_at,
+          ...historicalResult,
+          raw_fragments: currentEntity?.raw_fragments,
         });
       } catch (error) {
         if (error instanceof McpError) {
