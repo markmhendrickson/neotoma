@@ -16,7 +16,7 @@ import path from "node:path";
 import { resolveFrontmatter, type DocFrontmatter } from "./doc_frontmatter.js";
 import {
   isVisible,
-  isNonPublicTopFolder,
+  isIndexExcludedTopFolder,
   shouldShowInternal,
   type VisibilityEnv,
 } from "./visibility.js";
@@ -134,11 +134,12 @@ export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
   // Resolve all entries up front (single pass).
   const all: DocEntry[] = [];
   for (const rel of files) {
-    // Non-public top-level folders (release history, feature units, the
-    // marketing site, internal-process trees) are not part of the public docs
-    // surface. Drop them unless show-internal is enabled, so a from-source host
-    // matches the curated npm bundle. See `NON_PUBLIC_TOP_FOLDERS`.
-    if (!showInternal && isNonPublicTopFolder(rel)) continue;
+    // Folders excluded from the browsable index (release history, feature
+    // units, the marketing site, internal-process trees) are dropped unless
+    // show-internal is enabled, so a from-source host matches the curated npm
+    // bundle. site/ is index-excluded but still deep-linkable; see
+    // `INDEX_EXCLUDED_TOP_FOLDERS`.
+    if (!showInternal && isIndexExcludedTopFolder(rel)) continue;
     const abs = path.join(docsRoot, rel);
     let source = "";
     try {

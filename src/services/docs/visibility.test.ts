@@ -3,6 +3,7 @@ import {
   isVisible,
   shouldShowInternal,
   isNonPublicTopFolder,
+  isIndexExcludedTopFolder,
   NON_PUBLIC_TOP_FOLDERS,
 } from "./visibility.js";
 
@@ -62,5 +63,20 @@ describe("isNonPublicTopFolder", () => {
     for (const folder of NON_PUBLIC_TOP_FOLDERS) {
       expect(isNonPublicTopFolder(`${folder}/x.md`)).toBe(true);
     }
+  });
+});
+
+describe("isIndexExcludedTopFolder", () => {
+  it("excludes the non-public folders AND site from the browsable index", () => {
+    expect(isIndexExcludedTopFolder("releases/v1.md")).toBe(true);
+    expect(isIndexExcludedTopFolder("feature_units/x.md")).toBe(true);
+    // site/ is index-excluded here (unlike isNonPublicTopFolder, which keeps it
+    // resolvable for direct lookup).
+    expect(isIndexExcludedTopFolder("site/pages/en/install.md")).toBe(true);
+    expect(isNonPublicTopFolder("site/pages/en/install.md")).toBe(false);
+  });
+  it("keeps public-surface folders in the index", () => {
+    expect(isIndexExcludedTopFolder("foundation/core_identity.md")).toBe(false);
+    expect(isIndexExcludedTopFolder("getting_started/what_is_neotoma.md")).toBe(false);
   });
 });

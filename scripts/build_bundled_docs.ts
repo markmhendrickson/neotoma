@@ -24,7 +24,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveFrontmatter } from "../src/services/docs/doc_frontmatter.js";
 import { loadManifest } from "../src/services/docs/manifest_loader.js";
-import { NON_PUBLIC_TOP_FOLDERS } from "../src/services/docs/visibility.js";
+import { isIndexExcludedTopFolder } from "../src/services/docs/visibility.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
@@ -32,15 +32,12 @@ const docsRoot = path.join(repoRoot, "docs");
 const manifestPath = path.join(docsRoot, "site", "site_doc_manifest.yaml");
 const outRoot = path.join(repoRoot, "dist", "docs");
 
-// Top-level `docs/` folders excluded from the bundle. The non-public surface
-// set is shared with the runtime `/docs` route via `NON_PUBLIC_TOP_FOLDERS`.
-// The bundle additionally drops `site` (the marketing-site pages): the package
-// ships `.md` docs only, not the marketing tree, so npm installs never serve
-// `site/`. From-source hosts DO serve it (the root-landing footer links into
-// `site/pages/en/*`), which is why `site` is a bundler-only exclusion and not
-// in the shared set. Per-file `visibility` filtering (below) handles internal
+// Top-level `docs/` folders excluded from the bundle are defined once in
+// `src/services/docs/visibility.ts` (`INDEX_EXCLUDED_TOP_FOLDERS` = the
+// non-public surface plus `site`) and shared with the runtime browsable index
+// via `isIndexExcludedTopFolder`. The bundle applies the exclusion
+// unconditionally; per-file `visibility` filtering (below) handles internal
 // docs inside kept folders.
-const BUNDLE_EXCLUDED_TOP = new Set([...NON_PUBLIC_TOP_FOLDERS, "site"]);
 const SKIP_DIRS = new Set(["node_modules", ".git", "archived", "private"]);
 
 function collectMarkdown(root: string): string[] {
@@ -56,7 +53,7 @@ function collectMarkdown(root: string): string[] {
       if (ent.isDirectory()) {
         if (SKIP_DIRS.has(ent.name)) continue;
         const childRel = rel ? `${rel}/${ent.name}` : ent.name;
-        if (BUNDLE_EXCLUDED_TOP.has(childRel.split("/")[0])) continue;
+        if (isIndexExcludedTopFolder(childRel)) continue;
         walk(path.join(absDir, ent.name), childRel);
       } else if (ent.isFile() && ent.name.endsWith(".md")) {
         out.push(rel ? `${rel}/${ent.name}` : ent.name);
