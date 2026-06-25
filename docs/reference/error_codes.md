@@ -261,6 +261,7 @@ caller repairs in-turn via `correct` rather than re-submitting the same payload.
 | `MISSING_IDENTITY_FIELDS` | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
 | `UNKNOWN_FIELD`           | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
 | `MISSING_REQUIRED_FIELD`  | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
+| `CONSTRAINT_VIOLATION`    | 200  | No     | An observation fails a declarative write-time value constraint whose `policy` is `"warn"`. The write is accepted and the violating value is stored as-is. |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -290,6 +291,48 @@ non-fatally accepted (mirror of the `unknown_fields` contract); the top-level
 observation_index }` tuples. Agents SHOULD repair in-turn by `correct`-ing the
 missing field. Use `describe_entity_type` before storing to learn which fields a type
 requires.
+
+**`CONSTRAINT_VIOLATION`** — fired per observation that fails a declarative
+write-time value constraint whose `policy` is `"warn"` (issue #1756). The write
+is accepted and the violating value is stored as-is; no partial rejection occurs.
+Agents SHOULD treat these entries as data-quality signals and repair the violating
+field in-turn via `correct`. When the constraint `policy` is `"reject"`, the
+request is rejected atomically and the response is HTTP 400
+`ERR_CONSTRAINT_VIOLATION` rather than a store warning (see below).
+
+## ERR_CONSTRAINT_VIOLATION
+
+Hard-rejection error returned by `/store` when one or more observations fail a
+declarative write-time value constraint whose `policy` is `"reject"`. No partial
+write is performed — the entire request is rejected atomically.
+
+| Code                       | HTTP | Retry? | Description                                                                               |
+| -------------------------- | ---- | ------ | ----------------------------------------------------------------------------------------- |
+| `ERR_CONSTRAINT_VIOLATION` | 400  | No     | One or more observations failed a `policy: "reject"` write-time value constraint check.  |
+
+Response shape (`ConstraintViolationErrorEnvelope`):
+
+```json
+{
+  "error": {
+    "code": "ERR_CONSTRAINT_VIOLATION",
+    "message": "Structured store refused: <N> observation(s) failed constraint validation.",
+    "issues": [
+      {
+        "observation_index": 0,
+        "entity_type": "<entity_type>",
+        "message": "<constraint rule description>"
+      }
+    ]
+  }
+}
+```
+
+The `issues[]` array carries one entry per failing observation. Each entry
+identifies the observation by its zero-based `observation_index` in the request
+`entities[]` array, the `entity_type`, and a human-readable `message` describing
+which constraint rule was violated. Callers MUST NOT retry the same payload —
+fix the offending field value(s) first, then re-submit.
 
 ## Validation Errors
 

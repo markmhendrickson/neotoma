@@ -244,6 +244,43 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/StoreResolutionIssue"
+    ConstraintViolationErrorEnvelope:
+      type: object
+      description: |
+        400 response shape for `ERR_CONSTRAINT_VIOLATION`. Returned by `/store`
+        when one or more observations fail a declarative write-time value
+        constraint declared on their schema (constraint `policy: "reject"`). The
+        `issues` array carries one entry per failing observation; each entry
+        identifies the observation by its zero-based `observation_index` in the
+        request `entities[]` array, the `entity_type`, and a human-readable
+        `message` describing which constraint rule was violated. No partial write
+        is performed — the entire request is rejected atomically.
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - ERR_CONSTRAINT_VIOLATION
+            message:
+              type: string
+            issues:
+              type: array
+              items:
+                type: object
+                properties:
+                  observation_index:
+                    type: integer
+                    description: |
+                      Zero-based index into the request `entities[]` array
+                      identifying which observation failed constraint validation.
+                  entity_type:
+                    type: string
+                    description: Entity type of the offending observation.
+                  message:
+                    type: string
+                    description: Human-readable description of the constraint violation.
     SplitPredicate:
       type: object
       description: |
@@ -1939,10 +1976,13 @@ components:
                   empties that field), `UNKNOWN_FIELD` (fired per field that
                   is not declared on the entity's active schema; the value is
                   preserved on the observation but dropped from the snapshot
-                  projection until the field is added to the schema), and
+                  projection until the field is added to the schema),
                   `MISSING_REQUIRED_FIELD` (fired per schema field declared
                   `required: true` that the stored observation omits or leaves
-                  empty).
+                  empty), and `CONSTRAINT_VIOLATION` (fired per observation
+                  that fails a declarative write-time value constraint when the
+                  constraint's `policy` is `"warn"`; the write is accepted and
+                  the violating value is stored as-is).
               message:
                 type: string
                 description: Human-readable description from the schema rule.
@@ -4647,15 +4687,20 @@ paths:
         "400":
           description: |
             Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-            `StoreResolutionErrorEnvelope` shape. `ERR_IDEMPOTENCY_MISMATCH` is
-            returned when the same `idempotency_key` is reused with materially
-            different content — use a new key for a different payload. Other
-            validation errors fall back to the generic `ErrorEnvelope`.
+            `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+            returned when one or more observations fail a declarative write-time
+            value constraint (constraint `policy: "reject"`); its envelope carries
+            a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
+            `ERR_IDEMPOTENCY_MISMATCH` is returned when the same `idempotency_key`
+            is reused with materially different content — use a new key for a
+            different payload. Other validation errors fall back to the generic
+            `ErrorEnvelope`.
           content:
             application/json:
               schema:
                 oneOf:
                   - { $ref: "#/components/schemas/StoreResolutionErrorEnvelope" }
+                  - { $ref: "#/components/schemas/ConstraintViolationErrorEnvelope" }
                   - { $ref: "#/components/schemas/ErrorEnvelope" }
         "403":
           description: |
