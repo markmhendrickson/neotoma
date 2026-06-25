@@ -177,21 +177,29 @@ describe("storeRawReference — with mocked db", () => {
     // Mock the db module at the module level
     const mockSingle = vi.fn().mockResolvedValue({ data: null, error: null });
     const mockMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    const mockSelect = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle }) }) });
-    const mockInsertSelect = vi.fn().mockReturnValue({ single: mockSingle.mockResolvedValue({
-      data: {
-        id: "src-ref-1",
-        user_id: "user-1",
-        content_hash: expectedHash,
-        storage_mode: "reference",
-        reference_path: filePath,
-        host_id: "test-host",
-        size_bytes: Buffer.from(content, "utf-8").length,
-        mtime: new Date().toISOString(),
-        mime_type: "application/octet-stream",
-      },
-      error: null,
-    }) });
+    const mockSelect = vi
+      .fn()
+      .mockReturnValue({
+        eq: vi
+          .fn()
+          .mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle }) }),
+      });
+    const mockInsertSelect = vi.fn().mockReturnValue({
+      single: mockSingle.mockResolvedValue({
+        data: {
+          id: "src-ref-1",
+          user_id: "user-1",
+          content_hash: expectedHash,
+          storage_mode: "reference",
+          reference_path: filePath,
+          host_id: "test-host",
+          size_bytes: Buffer.from(content, "utf-8").length,
+          mtime: new Date().toISOString(),
+          mime_type: "application/octet-stream",
+        },
+        error: null,
+      }),
+    });
     const mockInsert = vi.fn().mockReturnValue({ select: mockInsertSelect });
 
     // We use vi.doMock to inject a fake db before importing storeRawReference

@@ -373,7 +373,9 @@ export async function storeRawReference(
   if (idempotencyKey) {
     const { data: existingByKey, error: existingByKeyError } = await db
       .from("sources")
-      .select("id, content_hash, storage_mode, reference_path, size_bytes, mime_type, mtime, host_id")
+      .select(
+        "id, content_hash, storage_mode, reference_path, size_bytes, mime_type, mtime, host_id"
+      )
       .eq("user_id", userId)
       .eq("idempotency_key", idempotencyKey)
       .maybeSingle();
@@ -404,7 +406,9 @@ export async function storeRawReference(
   // Check for an existing source with the same hash (any storage mode)
   const { data: existing, error: checkError } = await db
     .from("sources")
-    .select("id, storage_mode, idempotency_key, reference_path, size_bytes, mime_type, mtime, host_id")
+    .select(
+      "id, storage_mode, idempotency_key, reference_path, size_bytes, mime_type, mtime, host_id"
+    )
     .eq("user_id", userId)
     .eq("content_hash", contentHash)
     .maybeSingle();
@@ -417,10 +421,7 @@ export async function storeRawReference(
     // Upgrade inline → reference is not needed (inline is already more durable).
     // Update idempotency key if not yet set.
     if (idempotencyKey && !existing.idempotency_key) {
-      await db
-        .from("sources")
-        .update({ idempotency_key: idempotencyKey })
-        .eq("id", existing.id);
+      await db.from("sources").update({ idempotency_key: idempotencyKey }).eq("id", existing.id);
     }
     return {
       sourceId: existing.id,
