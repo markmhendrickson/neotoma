@@ -23,6 +23,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 # Fly production uses internal_port 3180 (see fly.toml). Local overrides may set HTTP_PORT.
 ENV HTTP_PORT=3180
+# Real git commit of the deployed build, passed at deploy time
+# (`flyctl deploy --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)"`).
+# readGitSha() (src/services/root_landing/index.ts) prefers this over the
+# Fly machine-version ULID so the root JSON / footer show a verifiable commit.
+ARG NEOTOMA_GIT_SHA=""
+ENV NEOTOMA_GIT_SHA=$NEOTOMA_GIT_SHA
 EXPOSE 3180
 
 COPY package*.json ./
