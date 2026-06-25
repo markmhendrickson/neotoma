@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-06-24T15:09:52.380Z",
-  "total_files": 693,
+  "generated_at": "2026-06-25T10:51:11.155Z",
+  "total_files": 707,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -10,7 +10,8 @@
     "examples": 1,
     "feature_units": 20,
     "foundation": 24,
-    "icp": 8,
+    "getting_started": 4,
+    "icp": 10,
     "implementation": 2,
     "infrastructure": 2,
     "integrations": 12,
@@ -18,9 +19,9 @@
     "migration": 2,
     "NEOTOMA_MANIFEST.md": 1,
     "observability": 3,
-    "operations": 4,
+    "operations": 9,
     "performance": 1,
-    "plans": 68,
+    "plans": 69,
     "proposals": 10,
     "prototypes": 2,
     "reference": 1,
@@ -28,10 +29,10 @@
     "reports": 48,
     "research": 1,
     "security": 6,
-    "site": 176,
+    "site": 177,
     "skills": 1,
     "specs": 14,
-    "subsystems": 48,
+    "subsystems": 49,
     "templates": 2,
     "testing": 10,
     "ui": 42,
@@ -844,6 +845,22 @@
       "top": "foundation"
     },
     {
+      "rel": "docs/getting_started/getting_started.md",
+      "top": "getting_started"
+    },
+    {
+      "rel": "docs/getting_started/using_the_inspector.md",
+      "top": "getting_started"
+    },
+    {
+      "rel": "docs/getting_started/what_is_neotoma.md",
+      "top": "getting_started"
+    },
+    {
+      "rel": "docs/getting_started/working_with_your_memory.md",
+      "top": "getting_started"
+    },
+    {
       "rel": "docs/icp/developer_release_targeting.md",
       "top": "icp"
     },
@@ -853,6 +870,14 @@
     },
     {
       "rel": "docs/icp/general_release_criteria.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/icp_from_functionality.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/icp_reconciliation.md",
       "top": "icp"
     },
     {
@@ -996,6 +1021,14 @@
       "top": "observability"
     },
     {
+      "rel": "docs/operations/agent_access_control.md",
+      "top": "operations"
+    },
+    {
+      "rel": "docs/operations/configuration.md",
+      "top": "operations"
+    },
+    {
       "rel": "docs/operations/debugging/error_debug_instructions.md",
       "top": "operations"
     },
@@ -1004,11 +1037,23 @@
       "top": "operations"
     },
     {
+      "rel": "docs/operations/deployment.md",
+      "top": "operations"
+    },
+    {
+      "rel": "docs/operations/encryption.md",
+      "top": "operations"
+    },
+    {
       "rel": "docs/operations/health_check.md",
       "top": "operations"
     },
     {
       "rel": "docs/operations/runbook.md",
+      "top": "operations"
+    },
+    {
+      "rel": "docs/operations/running_the_server.md",
       "top": "operations"
     },
     {
@@ -1053,6 +1098,10 @@
     },
     {
       "rel": "docs/plans/bug-report-and-contribution-client-guidance.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/bundled_docs_reconciliation_plan.md",
       "top": "plans"
     },
     {
@@ -1562,6 +1611,10 @@
     {
       "rel": "docs/security/threat_model.md",
       "top": "security"
+    },
+    {
+      "rel": "docs/site/documentation_outline.md",
+      "top": "site"
     },
     {
       "rel": "docs/site/generated/DOCS_MARKDOWN_AUDIT.md",
@@ -2361,6 +2414,10 @@
     },
     {
       "rel": "docs/subsystems/auth.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/conflict_resolution.md",
       "top": "subsystems"
     },
     {

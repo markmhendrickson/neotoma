@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import mdx from "@mdx-js/rollup";
+import remarkGfm from "remark-gfm";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -11,7 +12,7 @@ export default defineConfig({
   // pick-port --print-resources and earlier terminal output are not cleared on HMR/restart.
   clearScreen: false,
   plugins: [
-    { ...mdx({ providerImportSource: "@mdx-js/react" }), enforce: "pre" },
+    { ...mdx({ providerImportSource: "@mdx-js/react", remarkPlugins: [remarkGfm] }), enforce: "pre" },
     react(),
   ],
   root: "frontend",
