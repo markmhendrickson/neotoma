@@ -1,15 +1,236 @@
 {
-  "schema_version": "1.0",
-  "description": "Personal agent use case sandbox seed.",
+  "schema_version": "2.0",
+  "description": "Personal-agent showcase: goals, habits, workouts, events, contacts, notes, and tasks — a connected personal graph with habit-streak provenance.",
   "agent_identities": [
     {
-      "agent_sub": "sandbox-agent-personal-agent@neotoma.sandbox",
-      "client_name": "sandbox-seed-personal-agent",
+      "agent_sub": "sandbox-agent-chatgpt@neotoma.sandbox",
+      "client_name": "sandbox-seed-chatgpt",
       "client_version": "0.1.0",
-      "label": "Personal agent seed runner"
+      "label": "ChatGPT seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-claude@neotoma.sandbox",
+      "client_name": "sandbox-seed-claude",
+      "client_version": "0.1.0",
+      "label": "Claude seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cursor@neotoma.sandbox",
+      "client_name": "sandbox-seed-cursor",
+      "client_version": "0.1.0",
+      "label": "Cursor seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cli@neotoma.sandbox",
+      "client_name": "sandbox-seed-cli",
+      "client_version": "0.1.0",
+      "label": "Neotoma CLI seed runner"
     }
   ],
-  "entity_batches": [],
+  "entity_batches": [
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "pa-goals",
+      "entities": [
+        {
+          "_ref": "go_fit",
+          "entity_type": "goal",
+          "name": "Run a half marathon",
+          "target_date": "2026-10-01"
+        },
+        {
+          "_ref": "go_ship",
+          "entity_type": "goal",
+          "name": "Ship the sandbox",
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "pa-habits",
+      "entities": [
+        {
+          "_ref": "hb_run",
+          "entity_type": "habit",
+          "name": "Morning run",
+          "cadence": "daily"
+        },
+        {
+          "_ref": "hb_review",
+          "entity_type": "habit",
+          "name": "Weekly review",
+          "cadence": "weekly"
+        },
+        {
+          "_ref": "hb_read",
+          "entity_type": "habit",
+          "name": "Read 20 pages",
+          "cadence": "daily"
+        }
+      ]
+    },
+    {
+      "agent_index": 3,
+      "idempotency_prefix": "pa-workouts",
+      "entities": [
+        {
+          "_ref": "wo_mon",
+          "entity_type": "workout",
+          "name": "6km easy run",
+          "date": "2026-06-23",
+          "distance_km": 6
+        },
+        {
+          "_ref": "wo_wed",
+          "entity_type": "workout",
+          "name": "Intervals",
+          "date": "2026-06-25",
+          "distance_km": 8
+        },
+        {
+          "_ref": "wo_sat",
+          "entity_type": "workout",
+          "name": "Long run",
+          "date": "2026-06-28",
+          "distance_km": 14
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "pa-events",
+      "entities": [
+        {
+          "_ref": "ev_standup",
+          "entity_type": "event",
+          "name": "Team standup",
+          "date": "2026-06-24T09:00:00Z"
+        },
+        {
+          "_ref": "ev_dentist",
+          "entity_type": "event",
+          "name": "Dentist",
+          "date": "2026-06-27T11:00:00Z"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "pa-contacts",
+      "entities": [
+        {
+          "_ref": "pc_sam",
+          "entity_type": "contact",
+          "name": "Sam (coach)",
+          "role": "Running coach"
+        },
+        {
+          "_ref": "pc_alex",
+          "entity_type": "contact",
+          "name": "Alex",
+          "role": "Friend"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "pa-notes",
+      "entities": [
+        {
+          "_ref": "pn_plan",
+          "entity_type": "note",
+          "title": "Training plan",
+          "content": "Build to 18km long runs by September."
+        },
+        {
+          "_ref": "pn_idea",
+          "entity_type": "note",
+          "title": "Sandbox idea",
+          "content": "Add a guided tour to the picker."
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "pa-tasks",
+      "entities": [
+        {
+          "_ref": "pt_register",
+          "entity_type": "task",
+          "title": "Register for the race",
+          "status": "todo",
+          "due_date": "2026-08-01"
+        },
+        {
+          "_ref": "pt_tour",
+          "entity_type": "task",
+          "title": "Prototype guided tour",
+          "status": "todo"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "pa-prov",
+      "entities": [
+        {
+          "_ref": "hb_run2",
+          "entity_type": "habit",
+          "name": "Morning run",
+          "streak_days": 21,
+          "best_streak": 34
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_ref": "wo_mon",
+      "target_ref": "hb_run",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "wo_wed",
+      "target_ref": "hb_run",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "wo_sat",
+      "target_ref": "hb_run",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "hb_run",
+      "target_ref": "go_fit",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pt_register",
+      "target_ref": "go_fit",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pn_plan",
+      "target_ref": "go_fit",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pt_tour",
+      "target_ref": "pn_idea",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pt_register",
+      "target_ref": "ev_dentist",
+      "relationship_type": "related_to"
+    },
+    {
+      "source_ref": "wo_sat",
+      "target_ref": "pc_sam",
+      "relationship_type": "references"
+    }
+  ],
   "unstructured_sources": [],
   "excluded_fixtures": []
 }

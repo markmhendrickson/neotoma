@@ -1,21 +1,220 @@
 {
-  "schema_version": "1.0",
-  "description": "Personal life use case sandbox seed. Habits, health metrics, goals.",
+  "schema_version": "2.0",
+  "description": "Personal-data showcase: workouts, health metrics, habits, a goal, transactions, and preferences — quantified-self data linked with device provenance.",
   "agent_identities": [
     {
-      "agent_sub": "sandbox-agent-personal@neotoma.sandbox",
-      "client_name": "sandbox-seed-personal",
+      "agent_sub": "sandbox-agent-chatgpt@neotoma.sandbox",
+      "client_name": "sandbox-seed-chatgpt",
       "client_version": "0.1.0",
-      "label": "Personal life seed runner"
+      "label": "ChatGPT seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-claude@neotoma.sandbox",
+      "client_name": "sandbox-seed-claude",
+      "client_version": "0.1.0",
+      "label": "Claude seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cursor@neotoma.sandbox",
+      "client_name": "sandbox-seed-cursor",
+      "client_version": "0.1.0",
+      "label": "Cursor seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cli@neotoma.sandbox",
+      "client_name": "sandbox-seed-cli",
+      "client_version": "0.1.0",
+      "label": "Neotoma CLI seed runner"
     }
   ],
   "entity_batches": [
     {
+      "agent_index": 1,
+      "idempotency_prefix": "pdd-goals",
+      "entities": [
+        {
+          "_ref": "pd_go",
+          "entity_type": "goal",
+          "name": "Lower resting heart rate",
+          "target": "55 bpm"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "pdd-habits",
+      "entities": [
+        {
+          "_ref": "pd_hb",
+          "entity_type": "habit",
+          "name": "Morning run",
+          "cadence": "daily"
+        },
+        {
+          "_ref": "pd_med",
+          "entity_type": "habit",
+          "name": "Meditate",
+          "cadence": "daily"
+        }
+      ]
+    },
+    {
+      "agent_index": 3,
+      "idempotency_prefix": "pdd-workouts",
+      "entities": [
+        {
+          "_ref": "pd_w1",
+          "entity_type": "workout",
+          "name": "6km run",
+          "date": "2026-06-23",
+          "distance_km": 6,
+          "duration_min": 34
+        },
+        {
+          "_ref": "pd_w2",
+          "entity_type": "workout",
+          "name": "Strength",
+          "date": "2026-06-24",
+          "duration_min": 45
+        },
+        {
+          "_ref": "pd_w3",
+          "entity_type": "workout",
+          "name": "Long run",
+          "date": "2026-06-28",
+          "distance_km": 14,
+          "duration_min": 82
+        }
+      ]
+    },
+    {
+      "agent_index": 3,
+      "idempotency_prefix": "pdd-metrics",
+      "entities": [
+        {
+          "_ref": "pd_hr",
+          "entity_type": "health_metric",
+          "name": "Resting heart rate",
+          "value": 58,
+          "unit": "bpm",
+          "date": "2026-06-25"
+        },
+        {
+          "_ref": "pd_wt",
+          "entity_type": "health_metric",
+          "name": "Weight",
+          "value": 72.4,
+          "unit": "kg",
+          "date": "2026-06-25"
+        },
+        {
+          "_ref": "pd_sleep",
+          "entity_type": "health_metric",
+          "name": "Sleep",
+          "value": 7.4,
+          "unit": "h",
+          "date": "2026-06-25"
+        }
+      ]
+    },
+    {
       "agent_index": 0,
-      "idempotency_prefix": "sandbox-seed-personal-habits",
-      "fixture": "reuse://tests/fixtures/json/habit.json",
-      "entity_type_override": "habit",
-      "note": "Reuses existing habit fixture."
+      "idempotency_prefix": "pdd-txns",
+      "entities": [
+        {
+          "_ref": "pd_gym",
+          "entity_type": "transaction",
+          "name": "Gym membership",
+          "amount": 49,
+          "currency": "EUR",
+          "direction": "debit",
+          "date": "2026-06-01"
+        },
+        {
+          "_ref": "pd_shoes",
+          "entity_type": "transaction",
+          "name": "Running shoes",
+          "amount": 140,
+          "currency": "EUR",
+          "direction": "debit",
+          "date": "2026-06-05"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "pdd-contacts",
+      "entities": [
+        {
+          "_ref": "pd_coach",
+          "entity_type": "contact",
+          "name": "Sam (coach)",
+          "role": "Running coach"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "pdd-prefs",
+      "entities": [
+        {
+          "_ref": "pd_pref",
+          "entity_type": "preference",
+          "name": "Units",
+          "value": "metric"
+        },
+        {
+          "_ref": "pd_pref2",
+          "entity_type": "preference",
+          "name": "Workout time",
+          "value": "07:00"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "pdd-prov",
+      "entities": [
+        {
+          "_ref": "pd_w1b",
+          "entity_type": "workout",
+          "name": "6km run",
+          "avg_hr": 148,
+          "source": "Garmin"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_ref": "pd_w1",
+      "target_ref": "pd_hb",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "pd_w3",
+      "target_ref": "pd_hb",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "pd_hr",
+      "target_ref": "pd_w1",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pd_hb",
+      "target_ref": "pd_go",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "pd_gym",
+      "target_ref": "pd_coach",
+      "relationship_type": "transacted_with"
+    },
+    {
+      "source_ref": "pd_w3",
+      "target_ref": "pd_coach",
+      "relationship_type": "references"
     }
   ],
   "unstructured_sources": [],

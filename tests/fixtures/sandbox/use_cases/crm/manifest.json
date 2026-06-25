@@ -1,21 +1,271 @@
 {
-  "schema_version": "1.0",
-  "description": "CRM use case sandbox seed. Contacts, deals, accounts, and engagements.",
+  "schema_version": "2.0",
+  "description": "CRM showcase: accounts, contacts, deals, engagements, meetings, and tasks wired into a pipeline graph with multi-source provenance.",
   "agent_identities": [
     {
-      "agent_sub": "sandbox-agent-crm@neotoma.sandbox",
-      "client_name": "sandbox-seed-crm",
+      "agent_sub": "sandbox-agent-chatgpt@neotoma.sandbox",
+      "client_name": "sandbox-seed-chatgpt",
       "client_version": "0.1.0",
-      "label": "CRM seed runner"
+      "label": "ChatGPT seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-claude@neotoma.sandbox",
+      "client_name": "sandbox-seed-claude",
+      "client_version": "0.1.0",
+      "label": "Claude seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cursor@neotoma.sandbox",
+      "client_name": "sandbox-seed-cursor",
+      "client_version": "0.1.0",
+      "label": "Cursor seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cli@neotoma.sandbox",
+      "client_name": "sandbox-seed-cli",
+      "client_version": "0.1.0",
+      "label": "Neotoma CLI seed runner"
     }
   ],
   "entity_batches": [
     {
+      "agent_index": 1,
+      "idempotency_prefix": "crm-accounts",
+      "entities": [
+        {
+          "_ref": "a_acme",
+          "entity_type": "account",
+          "name": "Acme Retail",
+          "industry": "Retail",
+          "tier": "enterprise"
+        },
+        {
+          "_ref": "a_globex",
+          "entity_type": "account",
+          "name": "Globex",
+          "industry": "Manufacturing",
+          "tier": "mid-market"
+        },
+        {
+          "_ref": "a_initech",
+          "entity_type": "account",
+          "name": "Initech",
+          "industry": "Software",
+          "tier": "smb"
+        }
+      ]
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "crm-contacts",
+      "entities": [
+        {
+          "_ref": "c_jordan",
+          "entity_type": "contact",
+          "name": "Jordan Vance",
+          "email": "jordan@acme.example",
+          "role": "VP Ops",
+          "company": "Acme Retail"
+        },
+        {
+          "_ref": "c_mina",
+          "entity_type": "contact",
+          "name": "Mina Roy",
+          "email": "mina@acme.example",
+          "role": "Buyer",
+          "company": "Acme Retail"
+        },
+        {
+          "_ref": "c_dev",
+          "entity_type": "contact",
+          "name": "Dev Patel",
+          "email": "dev@globex.example",
+          "role": "CTO",
+          "company": "Globex"
+        },
+        {
+          "_ref": "c_sara",
+          "entity_type": "contact",
+          "name": "Sara Kim",
+          "email": "sara@initech.example",
+          "role": "Founder",
+          "company": "Initech"
+        }
+      ]
+    },
+    {
       "agent_index": 0,
-      "idempotency_prefix": "sandbox-seed-crm-contacts",
-      "fixture": "reuse://tests/fixtures/json/contact.json",
-      "entity_type_override": "contact",
-      "note": "Reuses existing contact fixture."
+      "idempotency_prefix": "crm-deals",
+      "entities": [
+        {
+          "_ref": "d_acme",
+          "entity_type": "deal",
+          "name": "Acme platform rollout",
+          "amount": 85000,
+          "currency": "USD",
+          "stage": "negotiation"
+        },
+        {
+          "_ref": "d_globex",
+          "entity_type": "deal",
+          "name": "Globex pilot",
+          "amount": 24000,
+          "currency": "USD",
+          "stage": "proposal"
+        },
+        {
+          "_ref": "d_initech",
+          "entity_type": "deal",
+          "name": "Initech renewal",
+          "amount": 12000,
+          "currency": "USD",
+          "stage": "closed_won"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "crm-engagements",
+      "entities": [
+        {
+          "_ref": "e_call",
+          "entity_type": "engagement",
+          "name": "Acme discovery call",
+          "channel": "call",
+          "date": "2026-06-10"
+        },
+        {
+          "_ref": "e_email",
+          "entity_type": "engagement",
+          "name": "Globex proposal email",
+          "channel": "email",
+          "date": "2026-06-14"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "crm-meetings",
+      "entities": [
+        {
+          "_ref": "m_acme",
+          "entity_type": "meeting",
+          "title": "Acme rollout planning",
+          "date": "2026-06-18T15:00:00Z"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "crm-tasks",
+      "entities": [
+        {
+          "_ref": "t_quote",
+          "entity_type": "task",
+          "title": "Send Acme quote",
+          "status": "done",
+          "due_date": "2026-06-12"
+        },
+        {
+          "_ref": "t_followup",
+          "entity_type": "task",
+          "title": "Follow up with Globex",
+          "status": "todo",
+          "due_date": "2026-07-01"
+        }
+      ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "crm-prov",
+      "entities": [
+        {
+          "_ref": "c_jordan2",
+          "entity_type": "contact",
+          "name": "Jordan Vance",
+          "phone": "+1 415 555 0101",
+          "linkedin": "https://linkedin.example/in/jordanvance"
+        },
+        {
+          "_ref": "d_acme2",
+          "entity_type": "deal",
+          "name": "Acme platform rollout",
+          "close_date": "2026-07-15",
+          "owner": "Sam"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_ref": "c_jordan",
+      "target_ref": "a_acme",
+      "relationship_type": "works_at"
+    },
+    {
+      "source_ref": "c_mina",
+      "target_ref": "a_acme",
+      "relationship_type": "works_at"
+    },
+    {
+      "source_ref": "c_dev",
+      "target_ref": "a_globex",
+      "relationship_type": "works_at"
+    },
+    {
+      "source_ref": "c_sara",
+      "target_ref": "a_initech",
+      "relationship_type": "works_at"
+    },
+    {
+      "source_ref": "d_acme",
+      "target_ref": "a_acme",
+      "relationship_type": "related_to"
+    },
+    {
+      "source_ref": "d_globex",
+      "target_ref": "a_globex",
+      "relationship_type": "related_to"
+    },
+    {
+      "source_ref": "d_initech",
+      "target_ref": "a_initech",
+      "relationship_type": "related_to"
+    },
+    {
+      "source_ref": "c_jordan",
+      "target_ref": "d_acme",
+      "relationship_type": "manages"
+    },
+    {
+      "source_ref": "e_call",
+      "target_ref": "c_jordan",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "e_email",
+      "target_ref": "c_dev",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "m_acme",
+      "target_ref": "d_acme",
+      "relationship_type": "related_to"
+    },
+    {
+      "source_ref": "m_acme",
+      "target_ref": "c_jordan",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "t_quote",
+      "target_ref": "d_acme",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "t_followup",
+      "target_ref": "d_globex",
+      "relationship_type": "part_of"
     }
   ],
   "unstructured_sources": [],
