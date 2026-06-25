@@ -40,14 +40,20 @@ describe("retrieve_entity_snapshot — at_ingested ingestion-time cutoff (#1757)
   it("at_ingested excludes late-arriving backfilled observation that at includes", async () => {
     // We set up an entity with two observations:
     //
-    //   obs_early: observed_at = T-2 days, created_at = T-2 days  (both old)
-    //   obs_backfill: observed_at = T-2 days, created_at = NOW     (late arrival)
+    //   obs_early:    observed_at = T-3 days, created_at = T-3 days  (genuinely historical)
+    //   obs_backfill: observed_at = T-2 days, created_at = NOW        (late arrival / backfill)
     //
     // Query window: at = T-1 day, at_ingested = T-1 day
     //
-    //   - `at` alone should return BOTH (both observed_at ≤ T-1)
+    //   - `at` alone should return BOTH (both observed_at ≤ T-1) and the reducer
+    //     picks obs_backfill (observed_at T-2 > T-3) → status="done" deterministically.
     //   - `at_ingested` alone should return ONLY obs_early (obs_backfill.created_at > T-1)
-    //   - Both together should return ONLY obs_early (most conservative)
+    //     → status="pending".
+    //   - Both together should return ONLY obs_early (most conservative).
+    //
+    // This differentiates the observations on `observed_at` so the reducer's primary
+    // sort key (observed_at DESC) breaks the tie deterministically — never relying on
+    // id ASC over random UUIDs.
 
     const entityId = `ent_test_1757_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     tracker.trackEntity(entityId);
@@ -69,25 +75,29 @@ describe("retrieve_entity_snapshot — at_ingested ingestion-time cutoff (#1757)
     expect(source).toBeDefined();
     tracker.trackSource(source!.id);
 
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
     const oneDayAgo = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
     const now = new Date().toISOString();
 
-    // obs_early: both observed_at and created_at are T-2
+    // obs_early: observed_at = T-3, created_at = T-3 (genuinely historical)
     const { error: err1 } = await db.from("observations").insert({
       entity_id: entityId,
       entity_type: "task",
       schema_version: "1.0",
       source_id: source!.id,
       user_id: testUserId,
-      observed_at: twoDaysAgo,
-      created_at: twoDaysAgo,
+      observed_at: threeDaysAgo,
+      created_at: threeDaysAgo,
       fields: { title: "Early Observation", status: "pending" },
     });
     expect(err1).toBeNull();
 
-    // obs_backfill: observed_at is T-2 (looks historical) but created_at is NOW (late arrival)
+    // obs_backfill: observed_at = T-2 (looks more recent) but created_at = NOW (late arrival).
     // This simulates a backfill that was ingested today but describes a past event.
+    // Because observed_at T-2 > T-3, the reducer will deterministically prefer this
+    // observation's fields when both are included — so the look-ahead leak is
+    // demonstrated without any UUID tie-breaking coin-flip.
     const { error: err2 } = await db.from("observations").insert({
       entity_id: entityId,
       entity_type: "task",
@@ -106,8 +116,9 @@ describe("retrieve_entity_snapshot — at_ingested ingestion-time cutoff (#1757)
 
     // -----------------------------------------------------------------------
     // Case 1: `at` alone (event-time only) — should include BOTH observations
-    // since both have observed_at ≤ oneDayAgo. The reducer picks the latest
-    // fields, so status will be "done" (from the backfilled observation).
+    // since both have observed_at ≤ oneDayAgo. The reducer sorts by observed_at
+    // DESC, so obs_backfill (T-2) wins over obs_early (T-3) → status="done".
+    // This is deterministic because observed_at values differ.
     // -----------------------------------------------------------------------
     const resultAt = await callMCPAction(server, "retrieve_entity_snapshot", {
       entity_id: entityId,
@@ -118,7 +129,7 @@ describe("retrieve_entity_snapshot — at_ingested ingestion-time cutoff (#1757)
     const dataAt = JSON.parse(resultAt.content[0].text);
     // Both observations pass the at filter; the snapshot should be non-empty
     expect(dataAt.observation_count).toBe(2);
-    // The backfilled obs contributes its fields (status=done)
+    // The backfilled obs wins (observed_at T-2 > T-3) → status=done
     expect(dataAt.snapshot?.status).toBe("done");
 
     // -----------------------------------------------------------------------
