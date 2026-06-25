@@ -70,9 +70,7 @@ export async function computeEntitySnapshotAtTime(
   if (at) {
     const ts = new Date(at);
     if (isNaN(ts.getTime())) {
-      throw new Error(
-        `Invalid timestamp format for 'at': ${at}. Expected ISO 8601 format.`
-      );
+      throw new Error(`Invalid timestamp format for 'at': ${at}. Expected ISO 8601 format.`);
     }
   }
   if (atIngested) {
