@@ -7307,6 +7307,27 @@ export async function storeStructuredForApi(params: {
           }
         }
       }
+
+      // Issue #1755: SOURCE_PRIORITY_IGNORED — non-blocking advisory warning
+      // when the caller sets a non-default source_priority but none of the
+      // fields being written will actually honour it. This happens when every
+      // field's merge policy is `last_write` (the auto-discovered-schema
+      // default) or `merge_array` — both ignore source_priority entirely.
+      // The warning is emitted regardless of whether the entity has a
+      // registered schema (no schema → all fields effectively last_write).
+      {
+        const { buildSourcePriorityIgnoredWarning } =
+          await import("./services/source_priority_warning.js");
+        const spWarn = buildSourcePriorityIgnoredWarning({
+          sourcePriority,
+          writtenFields: r.fields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: r.observation_index,
+          entityType: r.entity_type,
+          entityId: r.entity_id,
+        });
+        if (spWarn) schemaStoreWarnings.push(spWarn);
+      }
     }
   }
 

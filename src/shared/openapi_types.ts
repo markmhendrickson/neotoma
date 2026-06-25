@@ -3508,10 +3508,15 @@ export interface components {
          *     projection until the field is added to the schema),
          *     `MISSING_REQUIRED_FIELD` (fired per schema field declared
          *     `required: true` that the stored observation omits or leaves
-         *     empty), and `CONSTRAINT_VIOLATION` (fired per observation
+         *     empty), `CONSTRAINT_VIOLATION` (fired per observation
          *     that fails a declarative write-time value constraint when the
          *     constraint's `policy` is `"warn"`; the write is accepted and
-         *     the violating value is stored as-is).
+         *     the violating value is stored as-is), and
+         *     `SOURCE_PRIORITY_IGNORED` (fired when the caller sets a
+         *     non-default `source_priority` but no field on the entity type
+         *     uses a merge strategy that honours it — all fields effectively
+         *     use `last_write`, so the priority value has no effect on the
+         *     stored snapshot).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */
@@ -5891,8 +5896,10 @@ export interface operations {
       content: {
         "application/json": {
           entity_id?: string;
-          /** @description ISO 8601 timestamp for historical snapshot reconstruction */
+          /** @description Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `observed_at` ≤ this timestamp. Reflects what *happened* by time T, regardless of when the observation was ingested into Neotoma. Use `at_ingested` instead when you need "what did we actually know at time T" semantics. */
           at?: string;
+          /** @description Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `created_at` (row-insertion time) ≤ this timestamp. Excludes backfilled or late-arriving observations that have a past `observed_at` but arrived after this cutoff, preventing look-ahead leaks. When both `at` and `at_ingested` are supplied, both bounds are applied (AND logic): an observation must satisfy `observed_at ≤ at` AND `created_at ≤ at_ingested`. */
+          at_ingested?: string;
           /**
            * @description Response text format. `markdown` (default for MCP) returns canonical deterministic markdown for KV-cache stability. `json` returns the raw snapshot payload for programmatic callers.
            * @enum {string}

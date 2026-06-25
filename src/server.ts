@@ -2791,25 +2791,53 @@ export class NeotomaServer {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
     }
 
-    // If 'at' parameter is provided, compute historical snapshot
-    if (parsed.at) {
+    // If 'at' (event-time) or 'at_ingested' (ingestion-time) cutoff is provided,
+    // compute a point-in-time snapshot.
+    //
+    // - `at`          filters on `observed_at`  (event time): "what had happened by T"
+    // - `at_ingested` filters on `created_at`   (row time):   "what did we know by T"
+    //
+    // When both are supplied, both bounds are applied (AND): an observation must
+    // satisfy observed_at ≤ at AND created_at ≤ at_ingested. This is the most
+    // conservative "knowledge-as-of" view and prevents look-ahead leaks from
+    // backfilled/late-arriving observations.
+    if (parsed.at || parsed.at_ingested) {
       try {
-        // Validate timestamp
-        const atTimestamp = new Date(parsed.at);
-        if (isNaN(atTimestamp.getTime())) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            `Invalid timestamp format: ${parsed.at}. Expected ISO 8601 format.`
-          );
+        // Validate timestamps
+        if (parsed.at) {
+          const atTimestamp = new Date(parsed.at);
+          if (isNaN(atTimestamp.getTime())) {
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `Invalid timestamp format for 'at': ${parsed.at}. Expected ISO 8601 format.`
+            );
+          }
+        }
+        if (parsed.at_ingested) {
+          const atIngestedTimestamp = new Date(parsed.at_ingested);
+          if (isNaN(atIngestedTimestamp.getTime())) {
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `Invalid timestamp format for 'at_ingested': ${parsed.at_ingested}. Expected ISO 8601 format.`
+            );
+          }
         }
 
-        // Get all observations for this entity up to the specified timestamp
-        const { data: observations, error: obsError } = await db
-          .from("observations")
-          .select("*")
-          .eq("entity_id", entity.entity_id)
-          .lte("observed_at", parsed.at)
-          .order("observed_at", { ascending: false });
+        // Build observations query applying whichever bounds are set
+        let obsQuery = db.from("observations").select("*").eq("entity_id", entity.entity_id);
+
+        if (parsed.at) {
+          // Event-time upper bound: filter by when the event occurred
+          obsQuery = obsQuery.lte("observed_at", parsed.at);
+        }
+        if (parsed.at_ingested) {
+          // Ingestion-time upper bound: filter by when the row was inserted
+          obsQuery = obsQuery.lte("created_at", parsed.at_ingested);
+        }
+
+        const { data: observations, error: obsError } = await obsQuery.order("observed_at", {
+          ascending: false,
+        });
 
         if (obsError) {
           throw new McpError(
@@ -2819,7 +2847,7 @@ export class NeotomaServer {
         }
 
         if (!observations || observations.length === 0) {
-          // No observations at this point in time - return empty snapshot
+          // No observations visible at this point in time - return empty snapshot
           return renderEntitySnapshotResponse({
             entity_id: entity.entity_id,
             entity_type: entity.entity_type,
@@ -6027,6 +6055,27 @@ export class NeotomaServer {
             entity_id: e.entityId,
           });
         }
+      }
+
+      // Issue #1755: SOURCE_PRIORITY_IGNORED — non-blocking advisory warning
+      // when the caller sets a non-default source_priority but none of the
+      // fields being written will actually honour it. This happens when every
+      // field's merge policy is `last_write` (the auto-discovered-schema
+      // default) or `merge_array` — both ignore source_priority entirely.
+      // The warning is emitted regardless of whether the entity has a
+      // registered schema (no schema → all fields effectively last_write).
+      {
+        const { buildSourcePriorityIgnoredWarning } =
+          await import("./services/source_priority_warning.js");
+        const spWarn = buildSourcePriorityIgnoredWarning({
+          sourcePriority,
+          writtenFields: entityFields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: i,
+          entityType: e.entityType,
+          entityId: e.entityId,
+        });
+        if (spWarn) schemaStoreWarnings.push(spWarn);
       }
     }
 

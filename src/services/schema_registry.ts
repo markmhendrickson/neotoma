@@ -309,6 +309,22 @@ export interface SchemaDefinition {
   constraint_violation_policy?: "reject" | "warn";
 
   /**
+   * When `true`, the schema's `canonical_name_fields` are AUTHORITATIVE: if none
+   * of the declared rules resolve for a write, derivation fails loudly
+   * (`CanonicalNameUnresolvedError`) instead of falling back to the mutable
+   * heuristic fields (name/title/first-string). This prevents a write that
+   * misses the declared identity from silently minting a divergent entity that
+   * never coalesces with its real twin once enriched — e.g. an issue stored with
+   * only a `title` getting a title-keyed id that never merges with its
+   * `(github_number, repo)` row (#1761).
+   *
+   * Only meaningful alongside a non-empty `canonical_name_fields`. Opt-in:
+   * omitted/`false` preserves the legacy heuristic-fallback behavior for every
+   * existing schema.
+   */
+  canonical_name_strict?: boolean;
+
+  /**
    * Fields compared by the post-hoc duplicate detector (R5). When omitted,
    * the detector falls back to comparing canonical_name only, which is the
    * weakest possible signal. Declaring additional fields (e.g. ["email"],

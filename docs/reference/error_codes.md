@@ -262,6 +262,7 @@ caller repairs in-turn via `correct` rather than re-submitting the same payload.
 | `UNKNOWN_FIELD`           | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
 | `MISSING_REQUIRED_FIELD`  | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
 | `CONSTRAINT_VIOLATION`    | 200  | No     | An observation fails a declarative write-time value constraint whose `policy` is `"warn"`. The write is accepted and the violating value is stored as-is. |
+| `SOURCE_PRIORITY_IGNORED` | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot. |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -299,6 +300,16 @@ Agents SHOULD treat these entries as data-quality signals and repair the violati
 field in-turn via `correct`. When the constraint `policy` is `"reject"`, the
 request is rejected atomically and the response is HTTP 400
 `ERR_CONSTRAINT_VIOLATION` rather than a store warning (see below).
+
+**`SOURCE_PRIORITY_IGNORED`** — fired when the caller sets a non-default
+`source_priority` (any value other than 100) but every field on the entity type uses a
+merge strategy that ignores it — `last_write` and `merge_array` both discard
+`source_priority` during reduction (issue #1755). The write is accepted; the priority
+value is stored on the observation but has no effect on the projected snapshot.
+`source_priority` is only effective when at least one field's `reducer_config` uses
+`strategy: "highest_priority"` or `strategy: "most_specific"` with
+`tie_breaker: "source_priority"`. To make priority effective, register (or update) the
+schema so the relevant fields use one of those strategies.
 
 ## ERR_CONSTRAINT_VIOLATION
 
