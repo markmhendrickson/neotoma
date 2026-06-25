@@ -11,6 +11,7 @@ import { observationReducer } from "../reducers/observation_reducer.js";
 import {
   CanonicalNameUnresolvedError,
   deriveCanonicalNameFromFieldsWithTrace,
+  entityIdTenantSalt,
   generateEntityId,
 } from "./entity_resolution.js";
 import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
@@ -165,7 +166,7 @@ async function maybeRederiveCanonicalName(params: {
   // Collision guard: refuse to rename if another entity already occupies the
   // (entity_type, canonical_name) slot — either by hashed id or by the text
   // column — because that would silently converge two distinct records.
-  const collisionId = generateEntityId(entityType, newCanonicalName);
+  const collisionId = generateEntityId(entityType, newCanonicalName, entityIdTenantSalt(userId));
   if (collisionId !== entityId) {
     const { data: collisionById } = await db
       .from("entities")

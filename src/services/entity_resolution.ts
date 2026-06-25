@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import { isSandboxMode } from "./sandbox_mode.js";
 import {
   schemaRegistry,
   type CanonicalNameRule,
@@ -266,11 +267,53 @@ export interface Entity {
  * Generate deterministic entity ID from entity type and name.
  * Validators: {@link isNeotomaEntityId} in `shared/neotoma_entity_id.ts`.
  */
-export function generateEntityId(entityType: string, canonicalName: string): string {
+export function generateEntityId(
+  entityType: string,
+  canonicalName: string,
+  tenantSalt?: string
+): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
-  const hash = createHash("sha256").update(`${entityType}:${normalized}`).digest("hex");
+  // Without a tenant salt the id is global (legacy single-tenant behavior —
+  // preserved for prod so existing entity ids never change). With a salt the id
+  // is namespaced per tenant so two tenants can hold same-named entities as
+  // distinct rows. See entityIdTenantSalt for when the salt is applied.
+  const basis = tenantSalt
+    ? `tenant:${tenantSalt}:${entityType}:${normalized}`
+    : `${entityType}:${normalized}`;
+  const hash = createHash("sha256").update(basis).digest("hex");
 
   return `ent_${hash.substring(0, 24)}`;
+}
+
+/**
+ * Resolve the tenant salt for deterministic entity ids.
+ *
+ * Entity ids are otherwise a global hash of (entity_type, canonical_name), and
+ * `entities.id` is a global PRIMARY KEY — so two tenants writing the same-named
+ * entity collide on one row. That is fine for a single-tenant install but broken
+ * for a multi-tenant deployment like the public sandbox: every visitor after the
+ * first `matched_existing` against the prior visitor's entity and seeds nothing.
+ *
+ * Returns the userId to fold into the id hash when tenant-scoped ids are enabled
+ * — in sandbox mode (any `NEOTOMA_SANDBOX_MODE` truthy value, via the canonical
+ * {@link isSandboxMode} helper) or via the explicit `NEOTOMA_TENANT_SCOPED_ENTITY_IDS`
+ * override — otherwise `undefined`, which preserves the legacy global id (prod
+ * default; no migration, no id churn).
+ *
+ * Both gates accept `1` / `true` / `yes` (case-insensitive). Delegating to
+ * `isSandboxMode()` is deliberate: a deployment that sets `NEOTOMA_SANDBOX_MODE=true`
+ * mounts the sandbox session routes, so the id fix must turn on with them — a
+ * strict `=== "1"` check here would silently re-introduce cross-tenant collisions.
+ */
+export function entityIdTenantSalt(userId?: string | null): string | undefined {
+  if (!userId) return undefined;
+  const override = (process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS ?? "")
+    .toString()
+    .trim()
+    .toLowerCase();
+  const overrideOn = override === "1" || override === "true" || override === "yes";
+  const enabled = overrideOn || isSandboxMode();
+  return enabled ? userId : undefined;
 }
 
 /**
@@ -947,7 +990,11 @@ export async function resolveEntityWithTrace(
     if (schema?.canonical_name_fields && schema.canonical_name_fields.length > 0) {
       const derivation = deriveCanonicalNameFromSchemaRules(entityType, fields, schema);
       if (derivation) {
-        const canonicalEntityId = generateEntityId(entityType, derivation.canonicalName);
+        const canonicalEntityId = generateEntityId(
+          entityType,
+          derivation.canonicalName,
+          entityIdTenantSalt(userId)
+        );
         if (canonicalEntityId !== targetId) {
           const { data: existingBySchemaIdentity } = await db
             .from("entities")
@@ -987,7 +1034,7 @@ export async function resolveEntityWithTrace(
   const identityBasis = derivation.identityBasis;
   const identityRule = derivation.identityRule;
 
-  const entityId = generateEntityId(entityType, canonicalName);
+  const entityId = generateEntityId(entityType, canonicalName, entityIdTenantSalt(userId));
 
   const { data: existing } = await db.from("entities").select("*").eq("id", entityId).maybeSingle();
 
@@ -1165,6 +1212,12 @@ export async function resolveEntityWithTrace(
  * @param options.entityType - Type of entity (e.g., "person", "company")
  * @param options.fields - Entity fields containing identifying information
  * @param options.userId - User ID for user-scoped resolution (optional for backwards compatibility)
+ *
+ * Tenant-scoped ids contract: the **object** form threads `userId` and applies
+ * {@link entityIdTenantSalt} (see {@link resolveEntityWithTrace}). The legacy
+ * **positional** form has no `userId`, so it always derives a GLOBAL id and is
+ * NOT tenant-scoped. Sandbox / multi-tenant writes must use the object form;
+ * the positional form is for single-tenant/no-auth callers only.
  */
 export async function resolveEntity(
   options: ResolveEntityOptions | string,
@@ -1176,6 +1229,8 @@ export async function resolveEntity(
   if (typeof options === "string") {
     const entityType = options;
     const canonicalName = formatCanonicalNameForStorage(entityType, rawValue || "");
+    // No userId on the positional path → always a global id (never tenant-salted).
+    // See the tenant-scoping contract in this function's JSDoc.
     const entityId = generateEntityId(entityType, canonicalName);
 
     const { data: existing } = await db
