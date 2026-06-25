@@ -56,7 +56,7 @@ export function buildToolDefinitions(
       name: "retrieve_entity_snapshot",
       description: desc(
         "retrieve_entity_snapshot",
-        "Retrieve the current snapshot of an entity with provenance information. Supports point-in-time reconstruction via 'at' (event-time cutoff: filters on observed_at) and 'at_ingested' (ingestion-time cutoff: filters on created_at, prevents look-ahead from backfilled observations). When both are supplied, both bounds are applied."
+        "Retrieve the current snapshot of an entity with provenance information. Supports point-in-time / as-of reconstruction ('what did we know at time T') via 'at' (event-time cutoff: filters on observed_at) and 'at_ingested' (ingestion-time cutoff: filters on created_at, prevents look-ahead from backfilled observations). When both are supplied, both bounds are applied."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entity_snapshot"),
     },
@@ -863,7 +863,7 @@ export function buildToolDefinitions(
       name: "register_schema",
       description: desc(
         "register_schema",
-        "Register a new schema or schema version. Supports both global and user-specific schemas."
+        "Register a new schema or schema version (global or user-specific). This is also where you configure per-field CONFLICT RESOLUTION via reducer_config: pick a merge strategy per field (last_write [default], highest_priority, most_specific, merge_array) plus tie-breakers (observed_at, source_priority). To make an observation's source_priority actually take effect, set that field's strategy to highest_priority here — under the default last_write, source_priority is recorded but ignored."
       ),
       inputSchema: {
         type: "object",
@@ -875,7 +875,8 @@ export function buildToolDefinitions(
           },
           reducer_config: {
             type: "object",
-            description: "Reducer configuration with merge policies",
+            description:
+              "Per-field conflict-resolution config. merge_policies maps each field to a strategy: last_write (default — latest observed_at wins), highest_priority (the observation with the largest source_priority wins), most_specific, or merge_array; with an optional tie_breaker (observed_at | source_priority). Set highest_priority to honor source_priority — without it, source_priority is stored but ignored.",
           },
           schema_version: { type: "string", default: "1.0" },
           user_specific: { type: "boolean", default: false },

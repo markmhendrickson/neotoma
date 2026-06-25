@@ -1060,6 +1060,11 @@ components:
           type: number
         source_priority:
           type: integer
+          description: >-
+            Trust/priority of this observation's source. Only affects snapshot
+            resolution for fields whose merge strategy is highest_priority (set
+            via register_schema reducer_config); under the default last_write
+            strategy it is stored but ignored.
         observation_source:
           type: string
           nullable: true
@@ -1716,6 +1721,11 @@ components:
           $ref: "#/components/schemas/StoreInterpretationInput"
         source_priority:
           type: integer
+          description: >-
+            Trust/priority of this observation's source. Only affects snapshot
+            resolution for fields whose merge strategy is highest_priority (set
+            via register_schema reducer_config); under the default last_write
+            strategy it is stored but ignored.
         observation_source:
           type: string
           enum: [sensor, llm_summary, workflow_state, human, import, sync]
@@ -1812,6 +1822,11 @@ components:
           $ref: "#/components/schemas/StoreInterpretationInput"
         source_priority:
           type: integer
+          description: >-
+            Trust/priority of this observation's source. Only affects snapshot
+            resolution for fields whose merge strategy is highest_priority (set
+            via register_schema reducer_config); under the default last_write
+            strategy it is stored but ignored.
         observation_source:
           type: string
           enum: [sensor, llm_summary, workflow_state, human, import, sync]

@@ -2799,6 +2799,7 @@ export interface components {
       /** Format: date-time */
       observed_at?: string;
       specificity_score?: number;
+      /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
       source_priority?: number;
       /**
        * @description Classifies the *kind* of write that produced this observation,
@@ -3292,6 +3293,7 @@ export interface components {
        */
       relationships?: components["schemas"]["StoreRelationshipInput"][];
       interpretation?: components["schemas"]["StoreInterpretationInput"];
+      /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
       source_priority?: number;
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
@@ -3371,6 +3373,7 @@ export interface components {
        */
       relationships?: components["schemas"]["StoreRelationshipInput"][];
       interpretation?: components["schemas"]["StoreInterpretationInput"];
+      /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
       source_priority?: number;
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
