@@ -5,10 +5,14 @@ import { PageShell } from "@/components/layout/page_shell";
 import { StatTotalsGrid } from "@/components/shared/stat_totals_grid";
 import { PinnedDashboardPanel } from "@/components/home/pinned_dashboard_panel";
 import { OrientationStrip } from "@/components/home/orientation_strip";
+import { SandboxPackPicker } from "@/components/home/sandbox_pack_picker";
 
 /**
- * Operator-focused home — three stacked sections in this order:
+ * Operator-focused home — stacked sections in this order:
  *
+ *   0. Sandbox pack picker (sandbox modes only). Lets a visitor seed their own
+ *      ephemeral workspace; replaces the old server-rendered landing page now
+ *      that the Inspector is served at root in sandbox too.
  *   1. At-a-glance stat totals (whenever a configured API is reachable).
  *   2. Orientation strip (visitor modes only: hosted_sandbox / local_sandbox /
  *      refuse). One factual line; hidden for installed operators.
@@ -27,11 +31,13 @@ export default function HomePage() {
   const apiConfigured = isApiUrlConfigured();
   const showPinnedPanel = apiConfigured;
   const showOperatorStats = apiConfigured;
+  const isSandbox = mode === "hosted_sandbox" || mode === "local_sandbox";
 
   return (
     <div className="flex min-h-full flex-col">
       <PageShell>
         <div className="space-y-6">
+          {isSandbox ? <SandboxPackPicker /> : null}
           {showOperatorStats ? <StatTotalsGrid /> : null}
           <OrientationStrip mode={mode} dataDir={dataDir} />
           {showPinnedPanel ? <PinnedDashboardPanel /> : null}

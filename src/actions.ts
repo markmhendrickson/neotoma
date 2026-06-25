@@ -112,7 +112,6 @@ import { getSandboxPack } from "./services/sandbox/pack_registry.js";
 import {
   buildEndpointsMap,
   buildLandingContext,
-  buildRootLandingHtml,
   buildRootLandingJson,
   buildRootLandingMarkdown,
   buildRobotsTxt,
@@ -641,15 +640,13 @@ app.get("/", (req, res, next) => {
   try {
     const ctx = buildLandingContext(req);
     res.setHeader("Cache-Control", "public, max-age=60");
-    // For HTML requests, serve the server-rendered landing page only in
-    // hosted_sandbox mode (public funnel).  In all other modes (local, personal,
-    // prod) the Inspector SPA is the primary UI: fall through to the SPA
-    // fallback handler registered by installInspectorSpaFallback so the
-    // Inspector's HomePage loads instead.
+    // For HTML requests the Inspector SPA is the primary UI in EVERY mode,
+    // hosted_sandbox included: fall through to the SPA fallback handler
+    // (installInspectorSpaFallback) so the Inspector's HomePage loads at root.
+    // In sandbox the HomePage renders the pack picker (SandboxPackPicker) that
+    // previously lived on this server-rendered landing page. Agents/curl still
+    // get the structured JSON/Markdown payload below.
     if (acceptWantsHtml(req.headers.accept)) {
-      if (ctx.hostedSandbox) {
-        return res.type("html").send(buildRootLandingHtml(ctx));
-      }
       return next();
     }
     // JSON and Markdown consumers (agents, curl) always get the structured
