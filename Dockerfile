@@ -10,10 +10,16 @@ RUN npm run build:server
 FROM node:20-alpine AS inspector-build
 WORKDIR /app/inspector
 ARG VITE_NEOTOMA_SANDBOX_UI=""
+# Vite base path = router basename (main.tsx derives ROUTER_BASENAME from
+# import.meta.env.BASE_URL). Default "/inspector/" for installs that reach the
+# Inspector at /inspector. The sandbox serves the SPA at the site ROOT, so it
+# must build with "/" (otherwise <Router basename="/inspector"> can't match "/"
+# and renders a blank page) — fly.sandbox.toml overrides this to "/".
+ARG VITE_PUBLIC_BASE_PATH="/inspector/"
 COPY inspector/package*.json ./
 RUN npm ci
 COPY inspector/ ./
-RUN VITE_PUBLIC_BASE_PATH="/inspector/" \
+RUN VITE_PUBLIC_BASE_PATH="$VITE_PUBLIC_BASE_PATH" \
     VITE_NEOTOMA_SANDBOX_UI="$VITE_NEOTOMA_SANDBOX_UI" \
     npm run build
 
@@ -23,6 +29,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 # Fly production uses internal_port 3180 (see fly.toml). Local overrides may set HTTP_PORT.
 ENV HTTP_PORT=3180
+# Real git commit of the deployed build, passed at deploy time
+# (`flyctl deploy --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)"`).
+# readGitSha() (src/services/root_landing/index.ts) prefers this over the
+# Fly machine-version ULID so the root JSON / footer show a verifiable commit.
+ARG NEOTOMA_GIT_SHA=""
+ENV NEOTOMA_GIT_SHA=$NEOTOMA_GIT_SHA
 EXPOSE 3180
 
 COPY package*.json ./

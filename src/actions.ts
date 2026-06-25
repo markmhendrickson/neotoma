@@ -105,11 +105,13 @@ import {
   purgeSessionUserData,
   sweepExpiredSessions,
   SESSION_COOKIE_NAME,
+  type SandboxSession,
 } from "./services/sandbox/sessions.js";
+import { seedForSession } from "./services/sandbox/seeder.js";
+import { getSandboxPack } from "./services/sandbox/pack_registry.js";
 import {
   buildEndpointsMap,
   buildLandingContext,
-  buildRootLandingHtml,
   buildRootLandingJson,
   buildRootLandingMarkdown,
   buildRobotsTxt,
@@ -334,10 +336,47 @@ if (isSandboxMode()) {
     validate: { trustProxy: false } as never,
   });
 
-  app.post("/sandbox/session/new", sessionRateLimit, (req, res) => {
+  // Create an ephemeral session AND seed its pack fixtures. Seeding runs the
+  // seed entrypoint against this server over HTTP authenticated as the new
+  // session's bearer, so the chosen pack's entities land in the visitor's
+  // workspace. Seeding failures are non-fatal (the session is still usable,
+  // just empty) — they are logged so a broken pack is visible in ops logs, and
+  // surfaced to the caller via `seed_status` so the picker can distinguish a
+  // legitimately empty pack from a seeding failure (explicit-over-implicit).
+  type SeedStatus = "seeded" | "skipped" | "failed";
+  const createAndSeedSession = async (
+    packId: string
+  ): Promise<{ session: SandboxSession; seedStatus: SeedStatus }> => {
+    const session = createSandboxSession(packId);
+    const pack = getSandboxPack(session.packId);
+    // Packs with seedPolicy "none" (e.g. the empty pack) legitimately seed
+    // nothing — that is "skipped", not a failure.
+    if (!pack || pack.seedPolicy === "none" || !pack.manifestPath) {
+      return { session, seedStatus: "skipped" };
+    }
+    try {
+      const baseUrl =
+        process.env.NEOTOMA_SANDBOX_BASE_URL?.trim() ||
+        `http://127.0.0.1:${process.env.HTTP_PORT?.trim() || "3180"}`;
+      const seeded = await seedForSession({
+        packId: session.packId,
+        baseUrl,
+        bearer: session.bearerToken,
+        logger: (msg) => logger.info(`[Sandbox][seed] ${msg}`),
+      });
+      return { session, seedStatus: seeded ? "seeded" : "failed" };
+    } catch (err) {
+      logger.error(
+        `[Sandbox] seeding failed for session ${session.userId} (pack ${session.packId}): ${(err as Error).message}`
+      );
+      return { session, seedStatus: "failed" };
+    }
+  };
+
+  app.post("/sandbox/session/new", sessionRateLimit, async (req, res) => {
     try {
       const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : "generic";
-      const session = createSandboxSession(packId);
+      const { session, seedStatus } = await createAndSeedSession(packId);
       res.cookie(SESSION_COOKIE_NAME, session.bearerToken, {
         httpOnly: true,
         sameSite: "lax",
@@ -348,6 +387,7 @@ if (isSandboxMode()) {
         one_time_code: session.oneTimeCode,
         expires_at: session.expiresAt,
         pack_id: session.packId,
+        seed_status: seedStatus,
       });
     } catch (err) {
       logger.error(`[Sandbox] session/new failed: ${(err as Error).message}`);
@@ -405,7 +445,7 @@ if (isSandboxMode()) {
     });
   });
 
-  app.post("/sandbox/session/reset", (req, res) => {
+  app.post("/sandbox/session/reset", async (req, res) => {
     const session = resolveSessionFromRequest(req);
     if (!session) {
       res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
@@ -413,7 +453,9 @@ if (isSandboxMode()) {
     }
     const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : undefined;
     purgeSessionUserData(session.userId);
-    const newSession = createSandboxSession(packId ?? session.packId);
+    const { session: newSession, seedStatus } = await createAndSeedSession(
+      packId ?? session.packId
+    );
     res.cookie(SESSION_COOKIE_NAME, newSession.bearerToken, {
       httpOnly: true,
       sameSite: "lax",
@@ -424,6 +466,7 @@ if (isSandboxMode()) {
       user_id: newSession.userId,
       pack_id: newSession.packId,
       expires_at: newSession.expiresAt,
+      seed_status: seedStatus,
     });
   });
 
@@ -597,15 +640,13 @@ app.get("/", (req, res, next) => {
   try {
     const ctx = buildLandingContext(req);
     res.setHeader("Cache-Control", "public, max-age=60");
-    // For HTML requests, serve the server-rendered landing page only in
-    // hosted_sandbox mode (public funnel).  In all other modes (local, personal,
-    // prod) the Inspector SPA is the primary UI: fall through to the SPA
-    // fallback handler registered by installInspectorSpaFallback so the
-    // Inspector's HomePage loads instead.
+    // For HTML requests the Inspector SPA is the primary UI in EVERY mode,
+    // hosted_sandbox included: fall through to the SPA fallback handler
+    // (installInspectorSpaFallback) so the Inspector's HomePage loads at root.
+    // In sandbox the HomePage renders the pack picker (SandboxPackPicker) that
+    // previously lived on this server-rendered landing page. Agents/curl still
+    // get the structured JSON/Markdown payload below.
     if (acceptWantsHtml(req.headers.accept)) {
-      if (ctx.hostedSandbox) {
-        return res.type("html").send(buildRootLandingHtml(ctx));
-      }
       return next();
     }
     // JSON and Markdown consumers (agents, curl) always get the structured
@@ -1864,9 +1905,26 @@ app.all("/mcp", async (req, res) => {
     }
 
     // Handle request with the transport inside the attribution context.
+    // Include aauthAdmission in the outer context so the per-async-chain ALS
+    // isolation carries the correct per-request admission into the transport
+    // handler and all nested runWithRequestContext scopes (initialize,
+    // callTool). This replaces the previous single-field
+    // serverInstance.setSessionAdmission() pattern, which had a cross-request
+    // race: concurrent requests from different grant owners shared one mutable
+    // field on the NeotomaServer instance (one per MCP session), so request B's
+    // setSessionAdmission() could overwrite the field before request A read it,
+    // causing A to authenticate / dispatch as B's user_id. The ALS is
+    // per-async-chain: each HTTP POST to /mcp runs in its own chain and sees
+    // only its own aauthAdmission value. `aauthAdmissionForRequest` was already
+    // resolved above (from the aauthAdmission() middleware on req).
     const attributionDecision = getAttributionDecisionFromRequest(req);
-    await runWithRequestContext({ agentIdentity: fallbackIdentity, attributionDecision }, () =>
-      transport!.handleRequest(req, res, req.body)
+    await runWithRequestContext(
+      {
+        agentIdentity: fallbackIdentity,
+        attributionDecision,
+        aauthAdmission: aauthAdmissionForRequest,
+      },
+      () => transport!.handleRequest(req, res, req.body)
     );
   } catch (error: any) {
     logger.error("[MCP HTTP] Request error:", error);
@@ -3571,6 +3629,26 @@ app.use(async (req, res, next) => {
     } catch (authError) {
       if (await maybeStampGuestPrincipal(req)) {
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+        return next();
+      }
+      // Sandbox: a Bearer that resolves to no valid identity is almost always a
+      // returning visitor whose ephemeral sandbox session expired or was wiped
+      // by the weekly reset — the Inspector SPA keeps replaying the stale
+      // localStorage bearer. 401-walling it leaves the visitor stuck: the home,
+      // /me, and even DELETE /sandbox/session all 401, and the HttpOnly cookie
+      // can't be cleared client-side. Degrade to the anonymous public user
+      // (the same floor unauthenticated sandbox requests already get above) and
+      // clear the stale cookie so the Inspector loads and the pack picker lets
+      // them start fresh. This does NOT widen the trust boundary: anonymous is
+      // already the sandbox floor, writes stay gated by sandboxWriteGate /
+      // sandboxDestructiveGuard, and AAuth-only routes by aauthRequired.
+      if (isSandboxMode()) {
+        res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+        const sandboxUser = ensureSandboxPublicUser();
+        stampUserPrincipal(req, sandboxUser.id);
+        logger.info(
+          `[Auth] ${req.method} ${req.path} auth_method=sandbox_public_stale_bearer user_id=${sandboxUser.id}`
+        );
         return next();
       }
       // Not a valid token

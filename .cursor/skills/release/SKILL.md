@@ -301,16 +301,20 @@ After the RC PR is merged and the user confirms execute, run **every** step belo
    The output must equal `X.Y.Z`. If it still reports the previous version, the registry has not propagated yet — wait 30s and retry rather than advancing.
 
 11. **Deploy sandbox.neotoma.io (mandatory for a full release)**:
-    Deploy the Fly app from the final release commit:
+    Deploy the Fly app from the final release commit, stamping the real commit
+    SHA so the deployed build is verifiable (otherwise the root JSON `git_sha`
+    falls back to the opaque Fly machine-version ULID):
     ```bash
-    flyctl deploy -c fly.sandbox.toml --remote-only
+    flyctl deploy -c fly.sandbox.toml --remote-only \
+      --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)"
     ```
-    Then verify the live sandbox before advancing:
+    Then verify the live sandbox before advancing — confirm both the version
+    **and** that `git_sha` matches the released commit (not a 26-char ULID):
     ```bash
-    curl -fsS -H "Accept: application/json" https://sandbox.neotoma.io/ | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s); if (j.version !== "X.Y.Z" || j.mode !== "sandbox") { console.error(j); process.exit(1); } console.log(j.version); })'
+    curl -fsS -H "Accept: application/json" https://sandbox.neotoma.io/ | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s); const sha="'"$(git rev-parse HEAD)"'"; if (j.version !== "X.Y.Z" || j.mode !== "sandbox" || j.git_sha !== sha) { console.error(j); process.exit(1); } console.log(j.version, j.git_sha); })'
     curl -fsSI https://sandbox.neotoma.io/health | grep -i '^x-neotoma-sandbox: 1'
     ```
-    Do not treat the release as complete until the root JSON reports `version: X.Y.Z`, `mode: sandbox`, and `/health` returns `X-Neotoma-Sandbox: 1`. If sandbox deployment fails after npm publish, report the partial-release state and keep working the sandbox failure unless the user explicitly pauses.
+    Do not treat the release as complete until the root JSON reports `version: X.Y.Z`, `mode: sandbox`, a `git_sha` equal to the released commit, and `/health` returns `X-Neotoma-Sandbox: 1`. If sandbox deployment fails after npm publish, report the partial-release state and keep working the sandbox failure unless the user explicitly pauses.
 
 11b. **Publish the GitHub Release draft** (after sandbox verified):
     ```bash

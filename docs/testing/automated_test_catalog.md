@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **493**
-- Backend and repo Vitest files: **460**
+- Total automated test files: **500**
+- Backend and repo Vitest files: **466**
 - Frontend Vitest files: **9**
-- Playwright spec files: **24**
+- Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 132 |
-| Vitest service tests | 34 |
+| Vitest unit tests | 135 |
+| Vitest service tests | 35 |
 | Source-adjacent tests | 62 |
-| Vitest integration tests | 139 |
+| Vitest integration tests | 141 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 3 |
@@ -83,7 +83,7 @@ flowchart TD
 | Vitest shared-environment tests | 1 |
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
-| Playwright Inspector E2E tests | 2 |
+| Playwright Inspector E2E tests | 3 |
 | Tests Performance | 1 |
 | Tests Scripts | 1 |
 
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (132):**
+**Files (135):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -157,6 +157,7 @@ flowchart TD
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
+- `tests/unit/entity_id_tenant_scope.test.ts`
 - `tests/unit/entity_queries_status_projection.test.ts`
 - `tests/unit/env_contamination_audit.test.ts`
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
@@ -210,12 +211,14 @@ flowchart TD
 - `tests/unit/relationship_reducer.test.ts`
 - `tests/unit/relationship_traversal_indexes.test.ts`
 - `tests/unit/request_context.test.ts`
+- `tests/unit/root_landing_git_sha.test.ts`
 - `tests/unit/root_landing_harness_snippets.test.ts`
 - `tests/unit/root_landing_site_nav_drift.test.ts`
 - `tests/unit/safe_request_log_format.test.ts`
 - `tests/unit/sandbox_boot_banner.test.ts`
 - `tests/unit/sandbox_pack_registry.test.ts`
 - `tests/unit/sandbox_reset.test.ts`
+- `tests/unit/sandbox_seeder_command.test.ts`
 - `tests/unit/schema_agent_instructions.test.ts`
 - `tests/unit/schema_derived_entity_extraction.test.ts`
 - `tests/unit/schema_inference.test.ts`
@@ -248,12 +251,13 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (34):**
+**Files (35):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
 - `tests/services/encryption_service.test.ts`
+- `tests/services/entity_id_tenant_scope_resolution.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
@@ -358,10 +362,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (139):**
+**Files (141):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
+- `tests/integration/aauth_mcp_session_admission_race.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
 - `tests/integration/aauth_sandbox_attribution_partition.test.ts`
@@ -472,6 +477,7 @@ flowchart TD
 - `tests/integration/root_landing.test.ts`
 - `tests/integration/sandbox_mode.test.ts`
 - `tests/integration/sandbox_report.test.ts`
+- `tests/integration/sandbox_stale_bearer_fallback.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
@@ -696,9 +702,10 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e:inspector`
 **Requirements:** Inspector bundle built before execution.
-**Files (2):**
+**Files (3):**
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
+- `playwright/tests/inspector/inspector-sandbox-pack-picker.spec.ts`
 
 ### Tests Performance
 **Directory:** `tests/performance/`

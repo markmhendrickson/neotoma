@@ -60,13 +60,17 @@ This document does NOT cover:
 ```
 
 Everything runs on one Fly app (`neotoma-sandbox`). The Inspector SPA is
-unconditionally bundled into the Docker image and served at `/inspector` on
-the same origin. Users reach both the API (`https://sandbox.neotoma.io/mcp`)
-and the UI (`https://sandbox.neotoma.io/inspector`) from a single hostname —
-no CORS, no separate cert, no separate deployment.
+unconditionally bundled into the Docker image and served at the site **root**
+(`/`) as well as `/inspector` on the same origin — in sandbox mode `GET /`
+(HTML) falls through to the Inspector SPA just like local/personal/prod, so a
+visitor lands directly in the Inspector. Agents/`curl` (`Accept: application/json`
+or `text/markdown`) still get the structured discovery payload at `/`. Users
+reach both the API (`https://sandbox.neotoma.io/mcp`) and the UI
+(`https://sandbox.neotoma.io/`) from a single hostname — no CORS, no separate
+cert, no separate deployment.
 
-**`inspector.neotoma.io` is deprecated.** All Inspector access is via
-`/inspector` on the Neotoma server.
+**`inspector.neotoma.io` is deprecated.** All Inspector access is via the
+sandbox root (or `/inspector`) on the Neotoma server.
 
 ## Ephemeral session lifecycle
 
@@ -74,17 +78,19 @@ Each sandbox visitor gets an isolated, ephemeral workspace:
 
 ### Session handoff flow
 
-1. Visitor arrives at `sandbox.neotoma.io/` and picks a fixture pack
-   (generic, empty, or a use case) from the pack picker.
-2. The landing page POSTs to `/sandbox/session/new { pack_id }`.
+1. Visitor arrives at `sandbox.neotoma.io/` — the Inspector SPA loads, and its
+   home renders the `SandboxPackPicker` (fed by `sandbox_packs` /
+   `sandbox_default_pack_id` from the root JSON).
+2. The visitor picks a fixture pack and the picker POSTs
+   `/sandbox/session/new { pack_id }` (same origin).
 3. The server creates an ephemeral user (`is_ephemeral=1`), a
-   `sandbox_sessions` row with hashed bearer and one-time code, and returns
-   `{ one_time_code, expires_at, pack_id }`.
-4. The landing page redirects to `/inspector#session=<code>` (same origin).
-5. The Inspector's `consumeSandboxSessionHandoff` reads the hash, POSTs
-   `/sandbox/session/redeem { code }` (same-origin), receives the bearer,
-   stores it in `sessionStorage`, scrubs the hash, and reloads.
-6. The Inspector is now authenticated as the ephemeral user.
+   `sandbox_sessions` row with hashed bearer and one-time code, seeds the pack
+   into that user, and returns `{ one_time_code, expires_at, pack_id }`.
+4. The picker redeems the code in place via `redeemSandboxSession` (POST
+   `/sandbox/session/redeem { code }`), which stores the bearer and then reloads.
+5. The Inspector is now authenticated as the ephemeral user, showing the seeded
+   workspace. (The legacy hash-handoff — `/inspector#session=<code>` consumed by
+   `consumeSandboxSessionHandoff` — still works for any external entry point.)
 
 ### Session management endpoints
 
@@ -235,7 +241,9 @@ criteria in the previous version of this document).
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `NEOTOMA_SANDBOX_MODE` | Fly (`fly.sandbox.toml`) | Enable all sandbox-only behaviors. |
+| `NEOTOMA_SANDBOX_MODE` | Fly (`fly.sandbox.toml`) | Enable all sandbox-only behaviors. Also auto-enables tenant-scoped entity ids (see below). |
+| `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` | Fly (optional) | Force tenant-scoped deterministic entity ids (salt `generateEntityId` with `user_id`) independent of sandbox mode. Auto-on when `NEOTOMA_SANDBOX_MODE=1`. Without it, entity ids are a global `hash(entity_type, canonical_name)` and two ephemeral visitors seeding the same name collide on one row — so only the first visitor's pack materializes. |
+| `NEOTOMA_GIT_SHA` | Docker build arg (deploy time) | Real commit SHA of the deployed build, stamped via `flyctl deploy --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)"`. Surfaced in the root JSON `git_sha` / footer so deploy freshness is verifiable; without it the value falls back to the opaque `FLY_MACHINE_VERSION` ULID. |
 | `NEOTOMA_DATA_DIR` | Fly | Persisted volume path; used by reset script. |
 | `NEOTOMA_SANDBOX_REPORT_FORWARD_URL` | Fly | Target for `HttpSandboxReportTransport` (Netlify). |
 | `NEOTOMA_SANDBOX_REPORT_FORWARD_BEARER` | Fly | Bearer sent to Netlify with each forwarded report. |

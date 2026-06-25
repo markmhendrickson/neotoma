@@ -1,0 +1,90 @@
+name: Deploy sandbox
+
+# Deploys the public sandbox (`neotoma-sandbox` on Fly) whenever a GitHub
+# Release is published, so the sandbox always tracks the latest shipped
+# release. Replaces the manual `flyctl deploy` step in the /release flow
+# (which is easy to skip — the sandbox silently drifts behind a release).
+#
+# Also runnable on demand via workflow_dispatch (manual redeploy / hotfix).
+#
+# Requires repository secret: FLY_API_TOKEN (deploy token scoped to the org).
+# The NEOTOMA_GIT_SHA build-arg only takes effect once the Dockerfile declares
+# it (see the git-SHA stamping PR); until then the verify step treats the
+# deployed git_sha as informational (Fly machine-version ULID) and gates only
+# on the version + sandbox header. Once the ARG is in, a real 40-hex git_sha
+# that mismatches the deployed commit fails the job.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (defaults to the workflow ref)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-sandbox
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly (sandbox)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl deploy -c fly.sandbox.toml --remote-only \
+            --build-arg NEOTOMA_GIT_SHA="${{ github.sha }}"
+
+      - name: Verify live sandbox
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          export EXPECTED_VERSION="$(node -p "require('./package.json').version")"
+          echo "Expecting version=$EXPECTED_VERSION, git_sha=$EXPECTED_SHA"
+
+          # Root JSON must report the release version and sandbox mode.
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            -H "Accept: application/json" https://sandbox.neotoma.io/ -o /tmp/root.json
+          cat /tmp/root.json
+
+          node -e '
+            const fs = require("fs");
+            const j = JSON.parse(fs.readFileSync("/tmp/root.json", "utf8"));
+            const expVer = process.env.EXPECTED_VERSION;
+            const expSha = process.env.EXPECTED_SHA;
+            const fail = (m) => { console.error("FAIL: " + m); process.exit(1); };
+            if (j.version !== expVer) fail(`version ${j.version} != ${expVer}`);
+            if (j.mode !== "sandbox") fail(`mode ${j.mode} != sandbox`);
+            // git_sha: enforce only when it is a real 40-hex commit (Dockerfile
+            // ARG present). A 26-char ULID means the ARG is not wired yet — log
+            // and pass so this workflow does not depend on that PR landing first.
+            if (/^[0-9a-f]{40}$/.test(j.git_sha || "")) {
+              if (j.git_sha !== expSha) fail(`git_sha ${j.git_sha} != ${expSha}`);
+              console.log("git_sha verified:", j.git_sha);
+            } else {
+              console.log("git_sha not a commit (ARG not wired yet):", j.git_sha);
+            }
+            console.log("OK:", j.version, j.mode);
+          '
+
+      - name: Verify sandbox health header
+        run: |
+          set -euo pipefail
+          curl -fsSI --retry 5 --retry-delay 5 --retry-all-errors \
+            https://sandbox.neotoma.io/health | grep -i '^x-neotoma-sandbox: 1'
