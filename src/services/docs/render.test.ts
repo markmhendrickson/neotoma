@@ -25,6 +25,13 @@ beforeAll(() => {
     path.join(docsRoot, "releases", "changelog.md"),
     "# Changelog\n\nRelease history.\n"
   );
+  // `site` is excluded from the browsable index but MUST remain directly
+  // resolvable so the root-landing footer deep-links keep working.
+  fs.mkdirSync(path.join(docsRoot, "site", "pages", "en"), { recursive: true });
+  fs.writeFileSync(
+    path.join(docsRoot, "site", "pages", "en", "install.md"),
+    "# Install\n\nSetup.\n"
+  );
   fs.writeFileSync(
     path.join(docsRoot, "private", "secret.md"),
     "# Secret\n\nShould never render.\n"
@@ -110,5 +117,11 @@ describe("lookupDoc — visibility", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.doc.frontmatter.title).toBe("Changelog");
+  });
+
+  it("resolves a site/ page by default (excluded from index, still deep-linkable)", () => {
+    const r = lookupDoc("site/pages/en/install", { docsRoot, env: { NODE_ENV: "production" } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.doc.frontmatter.title).toBe("Install");
   });
 });

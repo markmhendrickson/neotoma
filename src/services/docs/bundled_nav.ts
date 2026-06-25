@@ -6,6 +6,8 @@
 
 import type { DocsIndex, DocEntry } from "./index_builder.js";
 import type { RootLandingNavCategory, RootLandingNavItem } from "../root_landing/site_nav.js";
+import { lookupDoc } from "./render.js";
+import type { VisibilityEnv } from "./visibility.js";
 
 export interface BundledDocsQuickLink {
   label: string;
@@ -138,14 +140,51 @@ function footerHref(docsNavBase: string, slug: string): string {
 }
 
 /**
+ * Footer/quick-link slugs that resolve via DIRECT lookup even though their
+ * folder is excluded from the browsable index — i.e. the `site/pages/*`
+ * marketing pages. The footer columns deep-link into these, so we validate
+ * them against `lookupDoc` rather than index membership: present on from-source
+ * hosts (where `docs/site/` exists), absent on npm installs (bundle drops
+ * `site/`), matching each deployment's real reachability.
+ *
+ * Deterministic: a pure function of the static link lists + the docs tree.
+ */
+export function resolveExtraKnownFooterSlugs(opts: {
+  docsRoot: string;
+  env: VisibilityEnv;
+  manifestEntries?: Map<string, { status?: string }>;
+}): Set<string> {
+  const candidates = new Set<string>();
+  for (const col of BUNDLED_DOCS_FOOTER_COLUMNS) {
+    for (const link of col.links) {
+      if (link.slug && !/^https?:\/\//i.test(link.slug)) candidates.add(link.slug);
+    }
+  }
+  const known = new Set<string>();
+  for (const slug of candidates) {
+    const res = lookupDoc(slug, {
+      docsRoot: opts.docsRoot,
+      env: opts.env,
+      manifestEntries: opts.manifestEntries,
+    });
+    if (res.ok) known.add(slug);
+  }
+  return known;
+}
+
+/**
  * Footer columns for the MCP root landing page when `bundledDocsNav` is active.
- * Drops links whose doc slug is absent from the visibility-filtered index.
+ * Drops links whose doc slug is neither in the visibility-filtered index nor in
+ * `extraKnownSlugs` (directly-resolvable slugs such as `site/pages/*`, computed
+ * via {@link resolveExtraKnownFooterSlugs}).
  */
 export function buildBundledDocsFooterColumns(
   index: DocsIndex,
-  docsNavBase: string
+  docsNavBase: string,
+  extraKnownSlugs?: ReadonlySet<string>
 ): RootLandingNavCategory[] {
   const known = slugSet(index);
+  if (extraKnownSlugs) for (const s of extraKnownSlugs) known.add(s);
   const columns: RootLandingNavCategory[] = [];
 
   for (const col of BUNDLED_DOCS_FOOTER_COLUMNS) {

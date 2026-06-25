@@ -46,6 +46,13 @@ beforeAll(() => {
   // `releases` resolves to `visibility: public` via FOLDER_DEFAULTS, but it is a
   // non-public top folder: excluded from the public surface unless show-internal.
   fs.writeFileSync(path.join(docsRoot, "releases", "v1.md"), "# Release v1\n\nNotes.\n");
+  // `site` is public per FOLDER_DEFAULTS but is excluded from the browsable
+  // index (marketing pages); still resolvable via direct lookup.
+  fs.mkdirSync(path.join(docsRoot, "site", "pages", "en"), { recursive: true });
+  fs.writeFileSync(
+    path.join(docsRoot, "site", "pages", "en", "install.md"),
+    "# Install\n\nSetup.\n"
+  );
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "philosophy.md"),
     "# Philosophy\n\nPrinciples.\n"
@@ -106,6 +113,15 @@ describe("buildDocsIndex", () => {
       ...c.subcategories.flatMap((s) => s.docs.map((d) => d.slug)),
     ]);
     expect(slugs).not.toContain("releases/v1");
+  });
+
+  it("excludes the marketing site/ folder from the browsable index by default", () => {
+    const idx = buildDocsIndex({ docsRoot, manifest: MANIFEST, env: { NODE_ENV: "production" } });
+    const slugs = idx.categories.flatMap((c) => [
+      ...c.uncategorized.map((d) => d.slug),
+      ...c.subcategories.flatMap((s) => s.docs.map((d) => d.slug)),
+    ]);
+    expect(slugs.some((s) => s.startsWith("site/"))).toBe(false);
   });
 
   it("includes non-public top folders with the show-internal flag", () => {
