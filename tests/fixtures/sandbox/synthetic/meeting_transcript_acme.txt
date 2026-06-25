@@ -1,0 +1,14 @@
+Customer call — Acme Retail onboarding
+Date: 2026-06-19
+
+Maya: Thanks for joining, Sam. We're excited to get Acme Retail onto the Neotoma sandbox.
+Sam: Likewise. Our main need is per-team isolation and a clean import path for our existing records.
+Maya: Both are covered — a separate workspace per team, plus a CSV importer that maps to your schema.
+Sam: Great. Could we get a walkthrough for the wider engineering team next week?
+Maya: Absolutely. I'll send an onboarding doc and set up a demo session.
+
+Action items:
+- Maya to send the onboarding doc to Sam.
+- Schedule an Acme team demo for next week.
+
+(Synthetic transcript authored for the Neotoma sandbox showcase — no real persons or data.)
