@@ -34,9 +34,30 @@ export interface SandboxAgentIdentity {
 export interface SandboxEntityBatch {
   agent_index: number;
   idempotency_prefix: string;
-  fixture: string;
+  /** Fixture reference (`reuse://` or `inline://`). Omit when `entities` is set. */
+  fixture?: string;
+  /**
+   * Inline entity objects (showcase packs author the data directly in the
+   * manifest). Each entity may carry a `_ref` string used by manifest-level
+   * `relationships` to wire the graph; any `_`-prefixed key is stripped before
+   * the entity is sent to /store.
+   */
+  entities?: Record<string, unknown>[];
   entity_type_override?: string;
   note?: string;
+}
+
+/**
+ * Manifest-level relationship between two seeded entities, referenced by the
+ * `_ref` handles assigned in entity_batches. Resolved to entity ids after all
+ * batches are stored, then created via /create_relationships — this is what
+ * populates the Relationships list and Graph Explorer.
+ */
+export interface SandboxRelationship {
+  source_ref: string;
+  target_ref: string;
+  relationship_type: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SandboxUnstructuredSource {
@@ -45,6 +66,13 @@ export interface SandboxUnstructuredSource {
   mime_type: string;
   original_filename: string;
   note?: string;
+  /**
+   * Optional entities "extracted" from this file. When present, they are stored
+   * against the raw file source as an interpretation (source_ref: "unstructured"),
+   * populating the Sources → Interpretations → derived-entities chain.
+   */
+  interpretation_entities?: Record<string, unknown>[];
+  interpretation_config?: Record<string, unknown>;
 }
 
 export interface SandboxManifest {
@@ -54,6 +82,8 @@ export interface SandboxManifest {
   entity_batches: SandboxEntityBatch[];
   unstructured_sources: SandboxUnstructuredSource[];
   excluded_fixtures: string[];
+  /** Optional graph edges wired by `_ref` after entity batches are stored. */
+  relationships?: SandboxRelationship[];
 }
 
 export interface SeedOptions {
@@ -75,6 +105,7 @@ export interface SeedResult {
   entity_batches_submitted: number;
   entities_planned: number;
   unstructured_sources_submitted: number;
+  relationships_created: number;
   dry_run: boolean;
 }
 
@@ -160,6 +191,15 @@ async function resolveFixtureEntities(
   batch: SandboxEntityBatch,
   repoRoot: string
 ): Promise<Record<string, unknown>[]> {
+  // Inline entities authored directly in the manifest (showcase packs).
+  if (Array.isArray(batch.entities)) {
+    return batch.entities.map((row) =>
+      batch.entity_type_override ? { entity_type: batch.entity_type_override, ...row } : row
+    );
+  }
+  if (!batch.fixture) {
+    throw new Error(`Batch ${batch.idempotency_prefix} has neither 'entities' nor 'fixture'`);
+  }
   if (batch.fixture.startsWith("inline://")) {
     const key = batch.fixture.slice("inline://".length);
     return inlineConversation(key);
@@ -210,6 +250,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
       entity_batches_submitted: 0,
       entities_planned: 0,
       unstructured_sources_submitted: 0,
+      relationships_created: 0,
       dry_run: false,
     };
   }
@@ -225,6 +266,10 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
   let entityBatchesSubmitted = 0;
   let entitiesPlanned = 0;
   let unstructuredSubmitted = 0;
+  let relationshipsCreated = 0;
+  // `_ref` handle -> server-assigned entity id, so manifest relationships can
+  // wire the graph after every entity exists.
+  const refToEntityId = new Map<string, string>();
 
   for (let i = 0; i < manifest.entity_batches.length; i++) {
     const batch = manifest.entity_batches[i];
@@ -234,8 +279,22 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
         `Batch ${i} (${batch.idempotency_prefix}) references agent_index ${batch.agent_index}, which is out of range`
       );
     }
-    const entities = await resolveFixtureEntities(batch, repoRoot);
-    entitiesPlanned += entities.length;
+    const resolved = await resolveFixtureEntities(batch, repoRoot);
+    entitiesPlanned += resolved.length;
+
+    // Strip `_ref` (and any `_`-prefixed authoring keys) before /store; remember
+    // each entity's ref by position so we can map ids back from the response.
+    const refsByIndex: (string | undefined)[] = [];
+    const entities = resolved.map((row) => {
+      const clean: Record<string, unknown> = {};
+      let ref: string | undefined;
+      for (const [k, v] of Object.entries(row)) {
+        if (k === "_ref") ref = typeof v === "string" ? v : undefined;
+        else if (!k.startsWith("_")) clean[k] = v;
+      }
+      refsByIndex.push(ref);
+      return clean;
+    });
 
     if (options.dryRun) {
       logger(
@@ -252,19 +311,77 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
       source_priority: 80,
     });
 
-    const res = await fetchFn(`${baseUrl}/store`, {
-      method: "POST",
-      headers: headersForAgent(agent, options.bearer),
-      body,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `seed batch ${batch.idempotency_prefix} failed: ${res.status} ${text.slice(0, 200)}`
-      );
+    try {
+      const res = await fetchFn(`${baseUrl}/store`, {
+        method: "POST",
+        headers: headersForAgent(agent, options.bearer),
+        body,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        // Best-effort: one bad batch must not abort the rest of the seed.
+        logger(
+          `WARN: seed batch ${batch.idempotency_prefix} failed (${res.status}): ${text.slice(0, 200)}`
+        );
+        continue;
+      }
+      const result = (await res.json().catch(() => null)) as {
+        entities?: { observation_index?: number; entity_id?: string }[];
+      } | null;
+      for (const ent of result?.entities ?? []) {
+        const ref =
+          typeof ent.observation_index === "number"
+            ? refsByIndex[ent.observation_index]
+            : undefined;
+        if (ref && ent.entity_id) refToEntityId.set(ref, ent.entity_id);
+      }
+      entityBatchesSubmitted++;
+      logger(`seeded batch ${batch.idempotency_prefix} (${entities.length} entities)`);
+    } catch (err) {
+      logger(`WARN: seed batch ${batch.idempotency_prefix} threw: ${(err as Error).message}`);
     }
-    entityBatchesSubmitted++;
-    logger(`seeded batch ${batch.idempotency_prefix} (${entities.length} entities)`);
+  }
+
+  // Relationship pass — wire the graph from `_ref` handles now that ids exist.
+  if (!options.dryRun && Array.isArray(manifest.relationships) && manifest.relationships.length) {
+    const relAgent = manifest.agent_identities[0];
+    const resolvedRels = manifest.relationships
+      .map((rel) => {
+        const source_entity_id = refToEntityId.get(rel.source_ref);
+        const target_entity_id = refToEntityId.get(rel.target_ref);
+        if (!source_entity_id || !target_entity_id) {
+          logger(
+            `WARN: relationship ${rel.source_ref} -[${rel.relationship_type}]-> ${rel.target_ref} skipped (unresolved ref)`
+          );
+          return null;
+        }
+        return {
+          source_entity_id,
+          target_entity_id,
+          relationship_type: rel.relationship_type,
+          ...(rel.metadata ? { metadata: rel.metadata } : {}),
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+    if (resolvedRels.length) {
+      try {
+        const res = await fetchFn(`${baseUrl}/create_relationships`, {
+          method: "POST",
+          headers: headersForAgent(relAgent, options.bearer),
+          body: JSON.stringify({ relationships: resolvedRels }),
+        });
+        if (res.ok) {
+          relationshipsCreated = resolvedRels.length;
+          logger(`created ${relationshipsCreated} relationships`);
+        } else {
+          const text = await res.text().catch(() => "");
+          logger(`WARN: create_relationships failed (${res.status}): ${text.slice(0, 200)}`);
+        }
+      } catch (err) {
+        logger(`WARN: create_relationships threw: ${(err as Error).message}`);
+      }
+    }
   }
 
   for (const source of manifest.unstructured_sources) {
@@ -284,7 +401,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
     const abs = path.join(repoRoot, source.fixture_path);
     const buf = await fs.readFile(abs);
     const base64 = buf.toString("base64");
-    const body = JSON.stringify({
+    const payload: Record<string, unknown> = {
       file_content: base64,
       mime_type: source.mime_type,
       original_filename: source.original_filename,
@@ -292,12 +409,25 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
         `sandbox-seed-unstructured-${source.original_filename}`,
         0
       ),
-    });
+    };
+    // Optional interpretation: attach extracted entities to the raw file source
+    // so the Sources → Interpretations → derived-entities chain is populated.
+    if (Array.isArray(source.interpretation_entities) && source.interpretation_entities.length) {
+      payload.entities = source.interpretation_entities;
+      payload.interpretation = {
+        source_ref: "unstructured",
+        ...(source.interpretation_config
+          ? { interpretation_config: source.interpretation_config }
+          : {}),
+      };
+    }
 
-    const res = await fetchFn(`${baseUrl}/store/unstructured`, {
+    // Unstructured storage is handled by the unified /store endpoint (file_content
+    // + optional interpretation); there is no separate /store/unstructured route.
+    const res = await fetchFn(`${baseUrl}/store`, {
       method: "POST",
       headers: headersForAgent(agent, options.bearer),
-      body,
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -316,6 +446,7 @@ export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
     entity_batches_submitted: entityBatchesSubmitted,
     entities_planned: entitiesPlanned,
     unstructured_sources_submitted: unstructuredSubmitted,
+    relationships_created: relationshipsCreated,
     dry_run: options.dryRun === true,
   };
 }
