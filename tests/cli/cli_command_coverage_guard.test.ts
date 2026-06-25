@@ -53,6 +53,7 @@ describe("CLI command coverage guard", () => {
       "upload",
       "db", // subcommands covered by db_migrate_encryption.test.ts (migrate-encryption) and db_repair_schema_lag.test.ts (repair-schema-lag)
       "onboarding", // subcommands covered by onboarding_import_transcripts.test.ts (import-transcripts)
+      "bundles", // list/info/install/enable/disable behavior covered by tests/unit/bundles_activation.test.ts + manage_bundles_tool.test.ts
     ]);
 
     // Commands intentionally help-only due interactivity or generic dispatch.
