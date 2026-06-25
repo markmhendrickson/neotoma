@@ -161,3 +161,9 @@ Almost entirely **Have** (architecture, determinism, reducer, entity_resolution,
 ## Scope note
 
 Step 5 of this effort implements Phase 2 (the highest-priority new user/operator docs) and the Phase 3 manifest/`FOLDER_DEFAULTS` curation, plus the Phase 4 visibility fixes that overlap ICP reconciliation. Phase 1 (npm packaging change) is specified here and recommended but is a build/release change; it is flagged for follow-up rather than bundled into the same docs change unless approved.
+
+## Execution update
+
+- Phase 1 has since been implemented: a build-time bundler (`scripts/build_bundled_docs.ts`) copies the public docs into `dist/docs`, and the `/docs` route falls back to it for npm installs (`src/services/docs/docs_root.ts`).
+- The P2 operator cluster from the outline gap analysis has been authored under `docs/operations/`: Configuration Reference, Running the Server, Encryption and Key Management, Deployment Modes, and Agent Access Control. The corresponding gap-analysis rows (configuration reference, encryption, running the server, agent grants operator how-to) move from Partial to Have.
+- Remaining: the empty-state `/docs` link (P1.2), the `docs/developer/*` visibility sweep (P4.6 second half), the remaining lower-priority outline reference docs, and the non-blocking reviewer suggestions (build-script filtering test, npm-fallback integration test, naming/empty-state polish, a P0-coverage CI gate). These stay as follow-ups.
