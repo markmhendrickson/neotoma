@@ -822,3 +822,52 @@ export interface ConversationTurnIndex {
   conversation_entity_id: string;
   turns: ConversationTurnIndexTurn[];
 }
+
+// Bundles m4 surfacing — mirrors `InstalledBundleView` (src/services/bundles/loader.ts),
+// served read-only by `GET /bundles`. Plan ent_089da2ecebc3bd804d63dcf2.
+export interface BundleListEntry {
+  name: string;
+  enabled: boolean;
+  always_active: boolean;
+  /** Present when the bundle is in the discovered registry. */
+  bundle_type?: "schema" | "skill";
+  version?: string;
+  provides_entity_types_count?: number;
+  serves_use_cases?: string[];
+}
+
+export interface BundleListResponse {
+  bundles: BundleListEntry[];
+}
+
+// A bundle's full skill spec, as declared in its manifest.
+export interface BundleSkillSpec {
+  name: string;
+  requires_entity_types?: string[];
+  depth?: string;
+}
+
+// Full parsed manifest, mirrors `BundleManifest` (src/services/bundles/types.ts).
+export interface BundleManifest {
+  name: string;
+  version: string;
+  description: string;
+  bundle_type: "schema" | "skill";
+  requires_bundles: string[];
+  provides_entity_types: string[];
+  references_shared_schemas: string[];
+  extends_schemas: string[];
+  provides_skills: BundleSkillSpec[];
+  compatible_modes: string[];
+  category?: string;
+  serves_use_cases: string[];
+}
+
+// Mirrors `BundleInfo` (src/services/bundles/activation.ts), served by
+// `GET /bundles/:name`.
+export interface BundleInfoResponse {
+  name: string;
+  enabled: boolean;
+  always_active: boolean;
+  manifest: BundleManifest;
+}
