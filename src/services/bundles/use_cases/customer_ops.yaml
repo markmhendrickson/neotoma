@@ -1,0 +1,4 @@
+use_case: customer_ops
+description: Support and CX operations.
+schema_bundles: [crm, customer_ops]
+skill_bundles: [core_workflows]

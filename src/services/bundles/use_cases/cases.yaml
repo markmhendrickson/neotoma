@@ -1,0 +1,4 @@
+use_case: cases
+description: Legal cases and investigation casework.
+schema_bundles: [cases, crm]
+skill_bundles: [core_workflows]

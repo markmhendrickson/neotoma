@@ -1,0 +1,4 @@
+use_case: government
+description: Public sector and GovTech workflows.
+schema_bundles: [government, compliance]
+skill_bundles: [core_workflows]

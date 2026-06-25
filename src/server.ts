@@ -5391,6 +5391,18 @@ export class NeotomaServer {
       }
 
       if (!schema) {
+        // Bundles m2: gate auto-create on the configured schema mode. Default
+        // mode `evolving` always allows (parity). `guided` permits only
+        // bundle-provided types; `locked` blocks all auto-create.
+        const { checkAutoCreateAllowed } = await import("./services/bundles/index.js");
+        const autoCreateDecision = checkAutoCreateAllowed(entityType);
+        if (!autoCreateDecision.allowed) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `ERR_SCHEMA_MODE_${autoCreateDecision.reason.toUpperCase()}: ${autoCreateDecision.message}`
+          );
+        }
+
         // Auto-create user-specific schema from structured data
         logger.error(`[STORE] No schema found for "${entityType}", inferring from data structure`);
 

@@ -134,6 +134,7 @@ flowchart TD
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
+- `tests/unit/bundles_loader.test.ts`
 - `tests/unit/canonical_markdown_body_heading.test.ts`
 - `tests/unit/capability_delta.test.ts`
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
