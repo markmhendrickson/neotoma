@@ -197,6 +197,7 @@ import {
   listRecentConversations,
 } from "./services/recent_conversations.js";
 import { listConversationTurns, getConversationTurn } from "./services/conversation_turn.js";
+import { listBundles, getBundleInfo } from "./services/bundles/index.js";
 import { getTimelineEventForUser, listTimelineEventsForUser } from "./services/timeline_query.js";
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
@@ -5392,6 +5393,56 @@ app.get("/recent_conversations", async (req, res) => {
       "Failed to list recent conversations",
       "DB_QUERY_FAILED",
       "APIError:recent_conversations"
+    );
+  }
+});
+
+// GET /bundles — Inspector: installed-bundle directory (Bundles m4 surfacing).
+// Read-only. Lists every bundle in the registry with its install/enable state
+// and manifest metadata. Enable/disable mutations are intentionally NOT exposed
+// over HTTP in this PR — they need the AAuth admin gate deferred from m3 (see
+// `assertAdminGateHook` in src/services/bundles/activation.ts). This route is
+// Inspector-serving only and is intentionally absent from openapi.yaml (mirrors
+// /turns and /recent_conversations); auth is consistent with those routes via
+// getAuthenticatedUserId. Tracking: plan ent_089da2ecebc3bd804d63dcf2.
+app.get("/bundles", async (req, res) => {
+  try {
+    // Resolve the caller (auth parity with other Inspector routes); the bundle
+    // registry is process-global, not user-scoped, so the id is not used to
+    // filter — it just enforces the same auth contract as /turns.
+    await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    return res.json({ bundles: listBundles() });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list bundles",
+      "DB_QUERY_FAILED",
+      "APIError:bundles"
+    );
+  }
+});
+
+// GET /bundles/:name — Inspector: full manifest detail for one bundle (404 if
+// unknown). Read-only; see the /bundles note above for the deferred mutations.
+app.get("/bundles/:name", async (req, res) => {
+  try {
+    await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const name = String(req.params.name ?? "").trim();
+    const info = getBundleInfo(name);
+    if (!info) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", `Bundle "${name}" not found`);
+    }
+    return res.json(info);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to load bundle",
+      "DB_QUERY_FAILED",
+      "APIError:bundle_detail"
     );
   }
 });

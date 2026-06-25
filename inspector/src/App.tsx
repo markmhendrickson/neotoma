@@ -36,6 +36,7 @@ const ConversationDetailPage = lazy(() => import("@/pages/conversation_detail"))
 const TurnsPage = lazy(() => import("@/pages/turns"));
 const TurnDetailPage = lazy(() => import("@/pages/turn_detail"));
 const InterpretationsPage = lazy(() => import("@/pages/interpretations"));
+const BundlesPage = lazy(() => import("@/pages/bundles"));
 const AgentsPage = lazy(() => import("@/pages/agents"));
 const AgentDetailPage = lazy(() => import("@/pages/agent_detail"));
 const AgentGrantsPage = lazy(() => import("@/pages/agent_grants"));
@@ -116,6 +117,7 @@ export default function App() {
         <Route path="/timeline" element={<TimelinePage />} />
         <Route path="/timeline/:id" element={<TimelineEventDetailPage />} />
         <Route path="/interpretations" element={<InterpretationsPage />} />
+        <Route path="/bundles" element={<BundlesPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/agents/grants" element={<AgentGrantsPage />} />
         <Route path="/agents/grants/:id" element={<AgentGrantDetailPage />} />
