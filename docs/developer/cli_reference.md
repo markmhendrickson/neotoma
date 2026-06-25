@@ -761,10 +761,16 @@ For chat persistence recipes, MCP and CLI use the same underlying store contract
   - `--kind <entities|relationships|sources|timeline|schemas|all>` (default `all`).
   - `--entity-type <type>`, `--entity-id <id>`: Scope rebuild to a type or single record.
   - `--clean`: Remove stale mirror files within the targeted scope that this rebuild did not produce.
+- `neotoma mirror push [profile]`: Write on-disk mirror edits BACK into Neotoma as corrections — the inverse of `rebuild`. **Opt-in and gated:** only runs for profiles with `allow_disk_writeback: true`, and is a no-op otherwise. Pull-based (explicit invocation, no background watcher): for each mirrored file it 3-way compares the editable fields (last-synced base / on-disk / current canonical) and applies changed fields as `correct()` calls; managed/generated regions (frontmatter, "do not edit" headers) are never written back. When both the file and canonical changed since the base, it surfaces a conflict instead of overwriting.
+  - `--check` / `--dry-run`: Show the corrections that would be applied, without writing.
+  - `--target <path>`: Restrict the push to a specific mirror file or directory.
+  - `--verbose`: Print per-field diffs and per-file outcomes.
+  - Example (dry-run): `neotoma mirror push --dry-run` lists files with pending edits and the field-level corrections each would produce.
+  - See [`docs/subsystems/markdown_mirror.md`](../subsystems/markdown_mirror.md) for 3-way-diff semantics.
 - `neotoma mirror status`: Print current mirror config, file counts per kind, and whether git is enabled.
 - `neotoma mirror gitignore`: Idempotently append the resolved mirror path to the enclosing git repo's `.gitignore`, under a `# Neotoma markdown mirror` comment. The helper walks up from the mirror path to find the enclosing `.git` directory; it never prompts for a path and never writes to a repo it did not detect. When the mirror path is not inside a repo, it exits 0 with a "not inside a git repo" message. Use `--json` to get the structured result (`repo_root`, `gitignore_path`, `entry`, `added`, `already_present`).
 
-The mirror is a derived artifact: SQLite is the only source of truth. Mirror files carry a header warning that manual edits will be overwritten on the next write. To edit an entity, use `neotoma edit <id>` or the Inspector (see below). The mirror defaults to disabled; activation offers it as an opt-in (see [`install.md`](../../install.md#activation-step-66-offer-markdown-mirror-opt-in)). See `docs/subsystems/markdown_mirror.md` for layout, determinism, and git semantics.
+The mirror is a derived artifact: SQLite is the only source of truth. Mirror files carry a header warning that manual edits are overwritten on the next write — **unless** the profile opts into write-back (`allow_disk_writeback: true`), in which case `neotoma mirror push` (above) is the supported path to flow on-disk edits back as corrections. To edit an entity directly, use `neotoma edit <id>` or the Inspector (see below). The mirror defaults to disabled; activation offers it as an opt-in (see [`install.md`](../../install.md#activation-step-66-offer-markdown-mirror-opt-in)). See `docs/subsystems/markdown_mirror.md` for layout, determinism, and git semantics.
 
 ### Skills
 
