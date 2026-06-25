@@ -2515,6 +2515,27 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "updateSchemaIncremental",
     ],
   },
+  "/schemas/locked-vs-evolving": {
+    title: "Locked vs Evolving Schemas | Schemas | Neotoma",
+    description:
+      "The three NEOTOMA_SCHEMA_MODE lock postures — evolving (default, any type may auto-create), guided (only installed-bundle types auto-create), and locked (no auto-create) — and when to use each.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Schemas", path: "/schemas" },
+      { name: "Locked vs evolving", path: "/schemas/locked-vs-evolving" },
+    ],
+    keywords: [
+      "schema mode",
+      "NEOTOMA_SCHEMA_MODE",
+      "locked schemas",
+      "evolving schemas",
+      "guided mode",
+      "bundles",
+    ],
+  },
   "/data-model": {
     title: "Walkthrough | Neotoma",
     description:
@@ -2564,7 +2585,13 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Docs", path: "/docs" },
       { name: "Test safely", path: "/non-destructive-testing" },
     ],
-    keywords: ["shadow install", "test safely", "non-destructive testing", "evaluation", "migration-free trial"],
+    keywords: [
+      "shadow install",
+      "test safely",
+      "non-destructive testing",
+      "evaluation",
+      "migration-free trial",
+    ],
   },
   "/changelog": {
     title: "Changelog and Release Notes | Neotoma",
