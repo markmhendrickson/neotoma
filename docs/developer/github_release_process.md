@@ -151,6 +151,12 @@ The `/release` skill ([`.cursor/skills/release/SKILL.md`](../../.cursor/skills/r
 
 ## Deploy sandbox.neotoma.io
 
+> **Now automated.** Publishing the GitHub Release triggers
+> [`.github/workflows/deploy-sandbox.yml`](../../.github/workflows/deploy-sandbox.yml),
+> which deploys `neotoma-sandbox` on Fly and verifies the live version + sandbox
+> header. The manual steps below are the fallback (run `workflow_dispatch` on
+> that workflow, or the `flyctl` command directly) when CI is unavailable.
+
 A normal `/release` is also **not finished** until the public sandbox host is redeployed and verified. After npm publish succeeds and the registry reports the new version, deploy the Fly sandbox app:
 
 ```bash

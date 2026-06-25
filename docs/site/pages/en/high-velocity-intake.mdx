@@ -1,0 +1,119 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+High-velocity intake gives firehose sources — news feeds, social streams, webhooks, log tails — a first-class path into Neotoma that keeps the knowledge graph clean. Two mechanisms work together: an **overflow sink** that discards-by-default at write time, and **canonical key sightings** that aggregate duplicates at read time without ever merging or deleting stored rows.
+
+## The problem it solves
+
+A firehose source produces more events than belong in a graph. Storing every raw event creates noise, pollutes deduplication, and buries signal under volume. The prior approach — filtering outside Neotoma and only storing "interesting" events — puts domain logic in the agent and makes replay impossible.
+
+High-velocity intake inverts this: write everything to the overflow sink (fast, disk-only, no graph touch), then surface aggregated signal through `canonical_key` sightings at read time. The graph stays clean; the full audit trail is on disk.
+
+## Overflow sink
+
+The `store` tool accepts an optional `intake` object:
+
+```json
+{
+  "intake": {
+    "mode": "overflow",
+    "reason": "raw twitter stream event"
+  },
+  "entities": [{ ... }]
+}
+```
+
+When `mode` is `"overflow"`, the store call:
+
+1. Appends the raw payload as a JSONL line to the configured sink file — no entity or observation is created.
+2. Returns an `OverflowReceipt` immediately: `{ overflowed: true, sink_path, line_offset }`.
+3. Never touches the graph — dedup, schema validation, and observation indexing are all skipped.
+
+The default mode is `"graph"` (today's behavior). All existing `store` calls that omit `intake` are unchanged.
+
+### Configuring the sink
+
+Set `NEOTOMA_OVERFLOW_SINK` to an absolute path:
+
+- **Directory path** — Neotoma writes daily files: `overflow-YYYY-MM-DD.jsonl` inside the directory.
+- **`.jsonl` path** — Neotoma writes to that exact file.
+
+If `NEOTOMA_OVERFLOW_SINK` is unset and a caller passes `intake.mode: "overflow"`, the call returns a structured hint rather than writing or throwing:
+
+```json
+{
+  "error": "OVERFLOW_SINK_NOT_CONFIGURED",
+  "hint": "Set NEOTOMA_OVERFLOW_SINK env var to an absolute directory path..."
+}
+```
+
+### When to use overflow mode
+
+- You receive events faster than they can be meaningfully evaluated
+- You want a complete audit trail on disk but only a filtered subset in the graph
+- You need replay capability: process the JSONL offline, then `store` the interesting events with `mode: "graph"`
+
+## Canonical key sightings
+
+For sources that publish the same logical event multiple times (multiple aggregators reporting the same news item, retries, mirror feeds), `canonical_key` and `sighting_source_id` let you store each sighting as its own row and aggregate them at read time — without any write-path merge.
+
+### Storing sightings
+
+Include `canonical_key` and `sighting_source_id` in each entity's snapshot (or as top-level observation fields). Both are nullable additive columns: existing rows without them are unaffected.
+
+- `canonical_key` — a stable identifier for the logical event (e.g. the article URL, the tweet ID, the order number)
+- `sighting_source_id` — which feed or source produced this row (e.g. `"reuters"`, `"ap"`, `"bloomberg"`)
+
+Each `(sighting_source_id, canonical_key)` pair is an idempotent row. Re-storing the same sighting overwrites (updates) the existing row; it does not create a duplicate.
+
+### Reading with `collapse_by: "canonical_key"`
+
+Pass `collapse_by: "canonical_key"` to `retrieve_entities` to aggregate sightings at read time:
+
+```json
+{
+  "entity_type": "news_item",
+  "collapse_by": "canonical_key"
+}
+```
+
+The response groups rows that share the same `canonical_key` into one synthesized result per key:
+
+```json
+{
+  "entities": [
+    {
+      "canonical_key": "https://example.com/article/123",
+      "sightings": [
+        { "sighting_source_id": "reuters", "entity_id": "ent_aaa" },
+        { "sighting_source_id": "ap",      "entity_id": "ent_bbb" }
+      ],
+      "significance": 0.9,
+      "snapshot": { ... }
+    }
+  ],
+  "collapsed_by": "canonical_key"
+}
+```
+
+Underlying rows are **never merged or deleted**. Collapse is a view operation at read time, so a dedup bug cannot corrupt stored data. Entities without a `canonical_key` are returned as-is alongside collapsed groups.
+
+## Upgrade notes
+
+Both mechanisms are fully backward-compatible:
+
+- `intake` defaults to `{ mode: "graph" }` when omitted — no behavior change for existing callers.
+- `canonical_key` and `sighting_source_id` are nullable additive columns — existing observation rows get `NULL` and are unchanged.
+- `collapse_by` defaults to no collapsing when omitted.
+
+The `canonical_key` index is created automatically on startup via the existing `addColumnIfMissing` migration pattern.
+
+<p className="text-[14px] leading-6 text-muted-foreground">
+  Shipped in v0.17.0 (PRs #1604, #1697). See the{" "}
+  <MdxI18nLink to="/changelog" className="text-foreground underline underline-offset-2 hover:no-underline">
+    changelog
+  </MdxI18nLink>{" "}
+  for release notes. For embedding the Inspector graph in your product, see{" "}
+  <MdxI18nLink to="/embed-graph" className="text-foreground underline underline-offset-2 hover:no-underline">
+    embeddable graph
+  </MdxI18nLink>{"."}
+</p>

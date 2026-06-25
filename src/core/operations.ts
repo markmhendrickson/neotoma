@@ -116,11 +116,19 @@ export interface Operations {
   /** Look up a single entity by identifier (name, email, canonical_name, etc.). */
   retrieveEntityByIdentifier(input: RetrieveEntityByIdentifierInput): Promise<unknown>;
 
-  /** Snapshot of a single entity. Pass format: "json" for machine-readable payloads (e.g. issue tooling). */
+  /**
+   * Snapshot of a single entity. Pass format: "json" for machine-readable payloads (e.g. issue tooling).
+   *
+   * - `at`          — event-time cutoff: reconstructs from observations whose `observed_at` ≤ timestamp.
+   * - `at_ingested` — ingestion-time cutoff: reconstructs from observations whose `created_at` ≤ timestamp.
+   *   Use this for "what did we actually know at time T" semantics (prevents look-ahead from backfills).
+   *   When both are supplied, both bounds are applied (AND logic).
+   */
   retrieveEntitySnapshot(input: {
     entity_id: string;
     format?: string;
     at?: string;
+    at_ingested?: string;
   }): Promise<unknown>;
 
   /** List observations for provenance / history. */

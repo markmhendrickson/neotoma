@@ -11,7 +11,24 @@ export const EntityIdSchema = z.object({
 
 export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
+  /**
+   * Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations
+   * whose `observed_at` ≤ this timestamp. Reflects what *happened* at time T,
+   * regardless of when the observation was ingested.
+   */
   at: z.string().optional(),
+  /**
+   * Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from
+   * observations whose `created_at` (row-insertion time) ≤ this timestamp.
+   * Use this for "what did we actually KNOW at time T" semantics: backfilled
+   * or late-arriving observations with a past `observed_at` are excluded if
+   * they arrived after this cutoff.
+   *
+   * When both `at` and `at_ingested` are supplied, both bounds are applied
+   * simultaneously (most conservative knowledge-as-of: an observation must
+   * satisfy both `observed_at ≤ at` AND `created_at ≤ at_ingested`).
+   */
+  at_ingested: z.string().optional(),
   /**
    * Response text format. Defaults to `markdown` so MCP output is KV-cache
    * stable for LLMs (see canonical_markdown renderer). Use `json` for
