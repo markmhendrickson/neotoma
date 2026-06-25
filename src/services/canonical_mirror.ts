@@ -136,6 +136,22 @@ export interface MirrorProfile {
    * field to use as the markdown body. Defaults to "content".
    */
   content_field?: string;
+  /**
+   * Opt-in to disk-to-entity write-back via `neotoma mirror push`.
+   * Default: false (one-way Neotoma→disk mirror).
+   *
+   * When true, `neotoma mirror push <profile>` parses edited on-disk files
+   * back into their editable snapshot fields and calls `POST /correct` for
+   * each changed field (3-way diff: base, on-disk, canonical).
+   * Use `--check` / `--dry-run` to preview without applying.
+   *
+   * Safety constraints:
+   *   - Managed regions (frontmatter system fields, DO NOT EDIT header) are
+   *     never round-tripped back.
+   *   - Both-sides-changed produces a conflict error instead of overwriting.
+   *   - Never deletes canonical data.
+   */
+  allow_disk_writeback?: boolean;
 }
 
 export interface MirrorConfig {
