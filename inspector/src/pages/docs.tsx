@@ -95,7 +95,9 @@ function DocCard({ doc }: { doc: DocEntry }) {
         <div className="min-w-0">
           <h3 className="truncate text-sm font-semibold">{doc.frontmatter.title}</h3>
           {doc.frontmatter.summary ? (
-            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{doc.frontmatter.summary}</p>
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              {doc.frontmatter.summary}
+            </p>
           ) : null}
         </div>
       </div>
@@ -138,8 +140,27 @@ function IndexPage() {
           <QueryErrorAlert title="Could not load docs index">
             {docs.error instanceof Error ? docs.error.message : String(docs.error)}
           </QueryErrorAlert>
+        ) : categories.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 text-sm text-muted-foreground">
+              No bundled documentation is available on this instance. Browse the full documentation
+              at{" "}
+              <a
+                className="underline"
+                href="https://neotoma.io/docs"
+                target="_blank"
+                rel="noreferrer"
+              >
+                neotoma.io/docs
+              </a>
+              .
+            </CardContent>
+          </Card>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="docs-category-grid">
+          <div
+            className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+            data-testid="docs-category-grid"
+          >
             {categories.map((cat) => (
               <CategoryCard
                 key={cat.key}
@@ -165,7 +186,7 @@ function CategoryPage({ categoryKey }: { categoryKey: string }) {
 
   const category = useMemo(
     () => docs.data?.categories.find((c) => c.key === categoryKey) ?? null,
-    [docs.data, categoryKey],
+    [docs.data, categoryKey]
   );
 
   const crumbs: BrowseCrumb[] = [
@@ -243,11 +264,11 @@ function SubcategoryPage({
 
   const category = useMemo(
     () => docs.data?.categories.find((c) => c.key === categoryKey) ?? null,
-    [docs.data, categoryKey],
+    [docs.data, categoryKey]
   );
   const subcategory = useMemo(
     () => category?.subcategories.find((s) => s.key === subcategoryKey) ?? null,
-    [category, subcategoryKey],
+    [category, subcategoryKey]
   );
 
   const crumbs: BrowseCrumb[] = [

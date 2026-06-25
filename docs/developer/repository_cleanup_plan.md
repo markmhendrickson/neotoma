@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 name: Repository Cleanup and Reorganization
 overview: Clean up outdated files, remove build artifacts, reorganize documentation, and improve repository structure
 todos:

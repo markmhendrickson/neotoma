@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # CLI banner: show Prod/Dev counts when using user data dir (no repo root)
 
 Apply this fix in the **Neotoma CLI** source (the package that publishes the `neotoma` npm binary). If the CLI lives in a separate repo from this one, use this doc as guidance there.

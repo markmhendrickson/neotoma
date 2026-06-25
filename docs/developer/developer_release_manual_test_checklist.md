@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # Developer Release Manual Test Checklist
 
 _(Manual validation before releasing a developer-facing release)_

@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # ChatGPT App Submission Draft (Neotoma)
 
 Use this as starter copy for ChatGPT App submission fields.

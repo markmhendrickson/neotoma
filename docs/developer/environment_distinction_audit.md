@@ -1,3 +1,7 @@
+---
+visibility: internal
+---
+
 # Environment distinction audit (dev vs prod)
 
 ## Purpose

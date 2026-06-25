@@ -167,8 +167,14 @@ function renderCategory(cat: CategoryGroup): string {
 }
 
 export function renderIndexHtml(index: DocsIndex): string {
-  const featured = renderFeatured(index.featured);
-  const cats = index.categories.map(renderCategory).join("");
+  const main =
+    index.total === 0
+      ? `<p class="docs-meta">No bundled documentation is available on this instance. Browse the full documentation at <a href="https://neotoma.io/docs">neotoma.io/docs</a>.</p>`
+      : [
+          `<input id="docs-search" class="docs-search" type="search" placeholder="Search ${index.total} docs..." autocomplete="off">`,
+          renderFeatured(index.featured),
+          index.categories.map(renderCategory).join(""),
+        ].join("");
   return [
     `<!doctype html>`,
     `<html lang="en"><head><meta charset="utf-8"><title>Docs · Neotoma</title>`,
@@ -176,9 +182,7 @@ export function renderIndexHtml(index: DocsIndex): string {
     `<style>${BASE_STYLES}</style></head><body>`,
     renderHeader("Documentation"),
     `<main class="docs-main">`,
-    `<input id="docs-search" class="docs-search" type="search" placeholder="Search ${index.total} docs..." autocomplete="off">`,
-    featured,
-    cats,
+    main,
     `</main>`,
     `<script>${SEARCH_SCRIPT}</script>`,
     `</body></html>`,
