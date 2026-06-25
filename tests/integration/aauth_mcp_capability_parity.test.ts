@@ -201,12 +201,13 @@ describe("AAuth/MCP capability-scope parity", () => {
     expect(body.entities?.length ?? body.entity_ids?.length ?? 1).toBeGreaterThanOrEqual(1);
   });
 
-  it("dispatch path: executeToolForCli threads sessionAdmission into ALS so the gate binds", async () => {
-    // This exercises the real tool-dispatch wiring (not a direct store() call):
-    // setSessionAdmission + setSessionAgentIdentity feed the dispatch wrapper,
-    // which injects the admission into the request-scoped ALS context so
-    // enforceAgentCapability (reading getCurrentAAuthAdmission) fires. Without
-    // the sessionAdmission threading this would silently no-op.
+  it("CLI dispatch path: executeToolForCli is NOT capability-gated (CLI uses local auth, not AAuth grants)", async () => {
+    // Under the ALS-based fix, executeToolForCli always passes aauthAdmission: null
+    // into the request context — the CLI path uses local auth, not grant-based AAuth.
+    // setSessionAdmission is now a no-op (deprecated); callers that relied on it
+    // feeding executeToolForCli's dispatch were testing the OLD shared-field mechanism.
+    // The correct contract: CLI callers are never capability-gated regardless of any
+    // prior setSessionAdmission call.
     const s = server as unknown as {
       setSessionAdmission: (c: AAuthAdmissionContext | null) => void;
       setSessionAgentIdentity: (c: AAuthRequestContext | null) => void;
@@ -216,21 +217,8 @@ describe("AAuth/MCP capability-scope parity", () => {
         userId: string
       ) => Promise<{ content: Array<{ text: string }> }>;
     };
-    const verifiedCtx = {
-      verified: true,
-      sub: "agent@test.local",
-      iss: "https://test.local",
-      thumbprint: "tp-aauth-mcp-parity",
-      algorithm: "ES256",
-      publicKey: '{"kty":"EC"}',
-      decision: {
-        signature_present: true,
-        signature_verified: true,
-        resolved_tier: "software",
-      },
-    } as unknown as AAuthRequestContext;
-
-    s.setSessionAgentIdentity(verifiedCtx);
+    // Even if someone calls setSessionAdmission (now a no-op), executeToolForCli
+    // must NOT apply capability gating — the CLI path is always ungated.
     s.setSessionAdmission({
       admitted: true,
       user_id: USER_ID,
@@ -239,21 +227,64 @@ describe("AAuth/MCP capability-scope parity", () => {
       capabilities: [{ op: "store", entity_types: [ALLOWED] }],
     });
     try {
-      await expect(
-        s.executeToolForCli(
-          "store",
-          {
-            user_id: USER_ID,
-            idempotency_key: `aauth-cap-dispatch-${randomUUID()}`,
-            entities: [{ entity_type: FORBIDDEN, title: "dispatch denied" }],
-          },
-          USER_ID
-        )
-      ).rejects.toThrow(AgentCapabilityError);
+      // Writing FORBIDDEN via executeToolForCli must SUCCEED — no capability gate on CLI path.
+      const result = await s.executeToolForCli(
+        "store",
+        {
+          user_id: USER_ID,
+          idempotency_key: `aauth-cap-cli-ungated-${randomUUID()}`,
+          entities: [{ entity_type: FORBIDDEN, title: "cli ungated" }],
+        },
+        USER_ID
+      );
+      const body = JSON.parse(result.content[0].text);
+      expect(body.entities?.length ?? body.entity_ids?.length ?? 1).toBeGreaterThanOrEqual(1);
     } finally {
       s.setSessionAdmission(null);
       s.setSessionAgentIdentity(null);
     }
+  });
+
+  it("HTTP dispatch path: runWithRequestContext admission gates store via ALS threading", async () => {
+    // This proves the ALS-based dispatch path (used by the MCP HTTP handler in
+    // server.ts CallToolRequestSchema) correctly gates capability: the
+    // CallToolRequestSchema handler reads getCurrentAAuthAdmission() from the
+    // outer runWithRequestContext set by actions.ts, then nests a new context
+    // carrying it forward. Here we directly simulate that inner scope by
+    // calling the store method (executeTool) inside runWithRequestContext —
+    // exactly what the handler does.
+    //
+    // Critically: the gate fires only when getCurrentAgentIdentity() is non-null
+    // (contextFromAgentIdentity returns null for unauthenticated callers). So we
+    // must supply an agentIdentity to simulate an AAuth-admitted HTTP session.
+    const agentIdentity: AgentIdentity = {
+      sub: "agent@test.local",
+      iss: "https://test.local",
+      thumbprint: "tp-aauth-mcp-dispatch",
+      algorithm: "ES256",
+      publicKey: '{"kty":"EC"}',
+    };
+    await expect(
+      runWithRequestContext(
+        {
+          agentIdentity,
+          attributionDecision: null,
+          aauthAdmission: {
+            admitted: true,
+            user_id: USER_ID,
+            grant_id: "ent_test_aauth_cap_grant",
+            agent_label: "AAuth MCP parity dispatch test",
+            capabilities: [{ op: "store", entity_types: [ALLOWED] }],
+          },
+        },
+        () =>
+          callStore(server, {
+            user_id: USER_ID,
+            idempotency_key: `aauth-cap-dispatch-als-${randomUUID()}`,
+            entities: [{ entity_type: FORBIDDEN, title: "als dispatch denied" }],
+          })
+      )
+    ).rejects.toThrow(AgentCapabilityError);
   });
 
   it("non-admitted caller: store is NOT capability-gated (no admission in context)", async () => {
