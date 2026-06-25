@@ -380,6 +380,44 @@
   }
 
   /**
+   * MDX doc tables (emitted by remark-gfm as plain <table> elements).
+   * These are NOT wrapped by TableScrollWrapper, so we make the table itself
+   * scrollable and apply editorial styling consistent with the docs palette.
+   * Scoped to `.post-prose` so it never leaks into app/inspector UI.
+   */
+  .post-prose table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.6;
+    margin: 1.25rem 0;
+    width: max-content;
+    min-width: 100%;
+  }
+  .post-prose thead {
+    border-bottom: 2px solid hsl(var(--doc-border));
+  }
+  .post-prose th {
+    text-align: left;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    color: hsl(var(--doc-foreground));
+    border-bottom: 2px solid hsl(var(--doc-border));
+    white-space: nowrap;
+  }
+  .post-prose td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid hsl(var(--doc-border));
+    color: hsl(var(--doc-foreground));
+    vertical-align: top;
+  }
+  .post-prose tr:last-child td {
+    border-bottom: none;
+  }
+
+  /**
    * Doc / article body links: underline + offset, clear on hover.
    * Excludes CTAs (`data-post-prose-cta`), explicit `no-underline`, and integration "Getting started" rows.
    */

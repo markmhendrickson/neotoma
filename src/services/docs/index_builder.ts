@@ -14,7 +14,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveFrontmatter, type DocFrontmatter } from "./doc_frontmatter.js";
-import { isVisible, type VisibilityEnv } from "./visibility.js";
+import {
+  isVisible,
+  isNonPublicTopFolder,
+  shouldShowInternal,
+  type VisibilityEnv,
+} from "./visibility.js";
 
 const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived"]);
 
@@ -124,10 +129,16 @@ function compareDocs(a: DocEntry, b: DocEntry): number {
 export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
   const { docsRoot, manifest, env, manifestEntries, includeDeprecated } = opts;
   const files = collectMarkdownFiles(docsRoot);
+  const showInternal = shouldShowInternal(env);
 
   // Resolve all entries up front (single pass).
   const all: DocEntry[] = [];
   for (const rel of files) {
+    // Non-public top-level folders (release history, feature units, the
+    // marketing site, internal-process trees) are not part of the public docs
+    // surface. Drop them unless show-internal is enabled, so a from-source host
+    // matches the curated npm bundle. See `NON_PUBLIC_TOP_FOLDERS`.
+    if (!showInternal && isNonPublicTopFolder(rel)) continue;
     const abs = path.join(docsRoot, rel);
     let source = "";
     try {
