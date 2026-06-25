@@ -86,6 +86,131 @@ neotoma issues status --issue-number 42 --guest-access-token <token>
 neotoma issues message 42 --body "Still happening on v0.13.0" --guest-access-token <token>
 ```
 
+## Observer / batch JSONL import
+
+Agents and automated observers that run offline (in CI, as daemons, or in restricted environments) can accumulate a structured log of command executions and surface anomalies in bulk via `neotoma issues import --from-jsonl`.
+
+This is the partner day-one-adopt path: pipe your observer's output log through the importer and let Neotoma handle deduplication, PII redaction, and filing — no per-event network calls required while the observer runs.
+
+### What it does
+
+The importer reads a JSONL file (one JSON object per line), scans each line against a fixed set of anomaly predicates, redacts PII, deduplicates against existing open issues, and either files new issues or folds duplicate observations as thread messages.
+
+### JSONL line format
+
+Each line must be a valid JSON object. All fields are optional for forward compatibility, but the following are recognised:
+
+| Field | Type | Description |
+|---|---|---|
+| `timestamp` | string (ISO 8601) | When the command ran. Used by `--since` / `--until` filters. |
+| `command` | string | The command string (e.g. `"store entities"`). Used in issue titles and dedup keys. |
+| `exit_code` | number | Process exit code. Non-zero + `ERR_*` in stderr triggers a `hard_error` anomaly. |
+| `stderr` | string | Standard error output. Scanned for `ERR_*` codes and sentinel strings. |
+| `stdout` | string | Standard output. Scanned for `unknown_fields_count > 0` (schema drift). |
+| `duration_ms` | number | Execution time in milliseconds. Values over 5000 on store/retrieve commands trigger a `perf_regression` anomaly. |
+| `status_code` | number | HTTP status code. `503` on `/mcp` triggers a `stale_mcp_session` anomaly. |
+| `path` | string | Request path (used with `status_code`). |
+| `reporter_channel` | string | Label stamped on every filed issue for grouping by source (e.g. `"prod-daemon"`, `"ci"`). Overridable with `--reporter-channel`. |
+| `reporter_git_sha` | string | Git SHA of the reporting binary. Used as reporter provenance. |
+| `reporter_app_version` | string | Semver of the reporting binary. Used as reporter provenance. |
+| `unknown_fields_count` | number | Count of fields not projected by the current schema. Non-zero triggers a `schema_drift` anomaly. |
+
+Lines beginning with `//` and blank lines are ignored. Lines that cannot be parsed as JSON objects are counted as `lines_unparseable` in the sweep report.
+
+**Anomaly predicates (hard-coded):**
+
+1. `exit_code != 0` AND stderr matches `ERR_[A-Z_]+` → `hard_error`
+2. `unknown_fields_count > 0` → `schema_drift`
+3. stderr contains `HEURISTIC_MERGE` → `heuristic_merge`
+4. `duration_ms > 5000` on store/retrieve commands → `perf_regression`
+5. Any field contains `ERR_STORE_RESOLUTION_FAILED` → `resolver_bug`
+6. Any field contains `database disk image is malformed` → `sqlite_corruption`
+7. Any field contains `ERR_REPORTER_ENVIRONMENT_REQUIRED` → `reporter_env_required`
+8. `status_code == 503` and `path` contains `/mcp` → `stale_mcp_session`
+
+Clean lines (exit code 0, no matching warning) are skipped silently.
+
+### Command
+
+```bash
+neotoma issues import --from-jsonl <path> [options]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--from-jsonl <path>` | required | Path to the observer JSONL file. |
+| `--since <iso8601>` | — | Skip lines with `timestamp` before this value. |
+| `--until <iso8601>` | — | Skip lines with `timestamp` after this value. |
+| `--reporter-channel <label>` | from line | Override the channel label for all filed issues. |
+| `--reporter-git-sha <sha>` | from line or binary | Reporter git SHA when not in JSONL lines (required on dev builds). |
+| `--reporter-app-version <ver>` | from line or binary | Reporter app version when not in JSONL lines. |
+| `--mode proactive\|consent` | `consent` | `consent` prompts before each file/fold action; `proactive` files immediately. |
+| `--dry-run` | false | Emit a structured JSON sweep report without filing anything. |
+| `--limit <n>` | — | Stop after extracting n anomalies (useful for testing). |
+| `--json` | false | Emit the sweep report as JSON instead of prose. |
+
+### Deduplication and idempotency
+
+Before filing, the importer loads existing open GitHub issues (best-effort; proceeds without dedup if GitHub is unavailable). For each anomaly it computes a dedup key from `(anomaly_class, command_prefix, reporter_channel)` and derives a deterministic `observer-dedup:<8-char-hex>` label. If an open issue already carries that label, the anomaly is **folded** (appended as a thread message) instead of filed as a new issue.
+
+Within a single batch, the first occurrence of a dedup key is filed and subsequent occurrences fold into the just-filed issue — so running the same log twice does not create duplicates.
+
+### PII redaction
+
+Before any issue is filed or folded, the title and body pass through the same `runRedactionGuard` backstop used by `issues create`. UUIDs, email addresses, auth tokens, and home-directory paths are replaced with `<LABEL:hash>` placeholders. Lines are never dropped for containing PII; if the redaction guard itself throws (a programming error), the line is counted as `issues_skipped` in the sweep report.
+
+### Reporter environment requirement
+
+A reporter environment field (`reporter_git_sha` or `reporter_app_version`) must be resolvable for each anomaly. Resolution order: per-line JSONL field → `--reporter-git-sha` / `--reporter-app-version` CLI flag → CLI binary version from `package.json`. If none of these are available (common in dev builds), the import fails fast with an actionable error before making any network calls.
+
+### Example
+
+Sample JSONL file (`observer.jsonl`):
+
+```jsonl
+{"timestamp":"2026-06-01T08:00:00Z","command":"store entities","exit_code":1,"stderr":"ERR_TRANSPORT_FAILED: connection refused","duration_ms":120,"reporter_channel":"prod-daemon","reporter_git_sha":"abc1234","reporter_app_version":"0.16.0"}
+{"timestamp":"2026-06-01T08:01:00Z","command":"store entities","exit_code":0,"stderr":"","duration_ms":45,"reporter_channel":"prod-daemon","reporter_git_sha":"abc1234","reporter_app_version":"0.16.0"}
+{"timestamp":"2026-06-01T08:05:00Z","command":"retrieve entities","exit_code":0,"stderr":"","duration_ms":6200,"reporter_channel":"prod-daemon","reporter_git_sha":"abc1234","reporter_app_version":"0.16.0"}
+```
+
+Run in proactive mode (no prompts):
+
+```bash
+neotoma issues import --from-jsonl observer.jsonl --mode proactive
+```
+
+Dry-run to inspect what would be filed:
+
+```bash
+neotoma issues import --from-jsonl observer.jsonl --dry-run --json
+```
+
+Filter to a time window:
+
+```bash
+neotoma issues import --from-jsonl observer.jsonl \
+  --since 2026-06-01T00:00:00Z \
+  --until 2026-06-02T00:00:00Z \
+  --mode proactive
+```
+
+### Sweep report
+
+At the end of each run (or as JSON with `--dry-run` or `--json`), the command prints:
+
+```
+=== Observer JSONL import sweep report ===
+  Lines scanned:       3
+  Lines unparseable:   0
+  Lines filtered:      0
+  Anomalies extracted: 2
+  Issues filed:        1
+  Issues folded:       0
+  Issues skipped:      0
+```
+
+The JSON form includes a per-issue `outcomes` array with `status` (`filed`, `folded`, `skipped`, or `dry_run`) and outcome-specific fields (`entity_id`, `issue_number`, `existing_entity_id`, or `reason`).
+
 ## Related
 
 <ul className="list-none pl-0 space-y-2 mb-6">

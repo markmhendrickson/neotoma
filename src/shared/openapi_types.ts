@@ -2260,6 +2260,34 @@ export interface components {
       };
     };
     /**
+     * @description 400 response shape for `ERR_CONSTRAINT_VIOLATION`. Returned by `/store`
+     *     when one or more observations fail a declarative write-time value
+     *     constraint declared on their schema (constraint `policy: "reject"`). The
+     *     `issues` array carries one entry per failing observation; each entry
+     *     identifies the observation by its zero-based `observation_index` in the
+     *     request `entities[]` array, the `entity_type`, and a human-readable
+     *     `message` describing which constraint rule was violated. No partial write
+     *     is performed — the entire request is rejected atomically.
+     */
+    ConstraintViolationErrorEnvelope: {
+      error?: {
+        /** @enum {string} */
+        code?: "ERR_CONSTRAINT_VIOLATION";
+        message?: string;
+        issues?: {
+          /**
+           * @description Zero-based index into the request `entities[]` array
+           *     identifying which observation failed constraint validation.
+           */
+          observation_index?: number;
+          /** @description Entity type of the offending observation. */
+          entity_type?: string;
+          /** @description Human-readable description of the constraint violation. */
+          message?: string;
+        }[];
+      };
+    };
+    /**
      * @description R5: declarative predicate describing which observations of the source
      *     entity should be re-pointed onto the new entity. Every form reads a
      *     column every observation row carries so the predicate surface is
@@ -2771,6 +2799,7 @@ export interface components {
       /** Format: date-time */
       observed_at?: string;
       specificity_score?: number;
+      /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
       source_priority?: number;
       /**
        * @description Classifies the *kind* of write that produced this observation,
@@ -3264,6 +3293,7 @@ export interface components {
        */
       relationships?: components["schemas"]["StoreRelationshipInput"][];
       interpretation?: components["schemas"]["StoreInterpretationInput"];
+      /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
       source_priority?: number;
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
@@ -3343,6 +3373,7 @@ export interface components {
        */
       relationships?: components["schemas"]["StoreRelationshipInput"][];
       interpretation?: components["schemas"]["StoreInterpretationInput"];
+      /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
       source_priority?: number;
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
@@ -3477,10 +3508,18 @@ export interface components {
          *     empties that field), `UNKNOWN_FIELD` (fired per field that
          *     is not declared on the entity's active schema; the value is
          *     preserved on the observation but dropped from the snapshot
-         *     projection until the field is added to the schema), and
+         *     projection until the field is added to the schema),
          *     `MISSING_REQUIRED_FIELD` (fired per schema field declared
          *     `required: true` that the stored observation omits or leaves
-         *     empty).
+         *     empty), `CONSTRAINT_VIOLATION` (fired per observation
+         *     that fails a declarative write-time value constraint when the
+         *     constraint's `policy` is `"warn"`; the write is accepted and
+         *     the violating value is stored as-is), and
+         *     `SOURCE_PRIORITY_IGNORED` (fired when the caller sets a
+         *     non-default `source_priority` but no field on the entity type
+         *     uses a merge strategy that honours it — all fields effectively
+         *     use `last_write`, so the priority value has no effect on the
+         *     stored snapshot).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */
@@ -5800,10 +5839,14 @@ export interface operations {
       };
       /**
        * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-       *     `StoreResolutionErrorEnvelope` shape. `ERR_IDEMPOTENCY_MISMATCH` is
-       *     returned when the same `idempotency_key` is reused with materially
-       *     different content — use a new key for a different payload. Other
-       *     validation errors fall back to the generic `ErrorEnvelope`.
+       *     `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+       *     returned when one or more observations fail a declarative write-time
+       *     value constraint (constraint `policy: "reject"`); its envelope carries
+       *     a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
+       *     `ERR_IDEMPOTENCY_MISMATCH` is returned when the same `idempotency_key`
+       *     is reused with materially different content — use a new key for a
+       *     different payload. Other validation errors fall back to the generic
+       *     `ErrorEnvelope`.
        */
       400: {
         headers: {
@@ -5812,6 +5855,7 @@ export interface operations {
         content: {
           "application/json":
             | components["schemas"]["StoreResolutionErrorEnvelope"]
+            | components["schemas"]["ConstraintViolationErrorEnvelope"]
             | components["schemas"]["ErrorEnvelope"];
         };
       };
@@ -5855,8 +5899,10 @@ export interface operations {
       content: {
         "application/json": {
           entity_id?: string;
-          /** @description ISO 8601 timestamp for historical snapshot reconstruction */
+          /** @description Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `observed_at` ≤ this timestamp. Reflects what *happened* by time T, regardless of when the observation was ingested into Neotoma. Use `at_ingested` instead when you need "what did we actually know at time T" semantics. */
           at?: string;
+          /** @description Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `created_at` (row-insertion time) ≤ this timestamp. Excludes backfilled or late-arriving observations that have a past `observed_at` but arrived after this cutoff, preventing look-ahead leaks. When both `at` and `at_ingested` are supplied, both bounds are applied (AND logic): an observation must satisfy `observed_at ≤ at` AND `created_at ≤ at_ingested`. */
+          at_ingested?: string;
           /**
            * @description Response text format. `markdown` (default for MCP) returns canonical deterministic markdown for KV-cache stability. `json` returns the raw snapshot payload for programmatic callers.
            * @enum {string}

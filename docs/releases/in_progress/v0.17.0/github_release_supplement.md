@@ -36,3 +36,12 @@ Operator-facing fixes to the public sandbox; none affect single-tenant installs.
 ## Breaking changes
 
 None. This release is additive.
+
+## Documentation
+
+Pre-staged site pages for each feature (discharges #1760 coverage for these tools):
+
+- [Identity resolver](/identify-entity-by-signals) — `identify_entity_by_signals` multi-signal bundle, scoring, resolution bands, example call
+- [Capability delta](/capability-delta) — `npm_check_update` with `include_capability_delta`, `new_tools`/`removed_tools` response, agent integration pattern
+- [High-velocity intake](/high-velocity-intake) — overflow sink (`intake.mode='overflow'`, `NEOTOMA_OVERFLOW_SINK`), `canonical_key` sightings, `collapse_by` read-time aggregation
+- [Embeddable graph](/embed-graph) — chrome-less `/embed/graph` iframe route, `?apiBase=`/`?node=` params, `postMessage` on node double-click
