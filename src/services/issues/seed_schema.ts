@@ -133,7 +133,7 @@ const ISSUE_FIELDS: FieldSpec = [
   },
 ];
 
-function buildSchemaDefinition(): SchemaDefinition {
+export function buildSchemaDefinition(): SchemaDefinition {
   const fields: Record<string, FieldDefinition> = {
     schema_version: { type: "string", required: true },
   };
@@ -146,7 +146,22 @@ function buildSchemaDefinition(): SchemaDefinition {
   }
   return {
     fields,
-    canonical_name_fields: [{ composite: ["github_number", "repo"] }, "local_issue_id", "title"],
+    // Identity precedence: GitHub-backed issues key on (github_number, repo);
+    // local-only issues key on local_issue_id. `title` is deliberately NOT an
+    // identity fallback — it is mutable and non-identifying, and as a fallback it
+    // mints a divergent entity_id when a write lands before/without the composite
+    // fields (e.g. a triage write carrying only a title). That row's id is frozen
+    // off the title hash; once it later gains github_number+repo its snapshot
+    // canonical_name recomputes to the composite form, so it *displays* identical
+    // to the real issue yet never coalesces with it — the #1761 collision. A write
+    // with neither the composite fields nor local_issue_id now fails loudly
+    // (CanonicalNameUnresolvedError) instead of silently creating a title-keyed
+    // duplicate.
+    canonical_name_fields: [{ composite: ["github_number", "repo"] }, "local_issue_id"],
+    // Authoritative identity: a write that satisfies none of the rules above
+    // must fail loudly rather than fall back to the heuristic title/name path
+    // (which is what minted the divergent title-keyed duplicate in #1761).
+    canonical_name_strict: true,
     temporal_fields: [
       { field: "created_at", event_type: "issue_created" },
       { field: "closed_at", event_type: "issue_closed" },
@@ -274,6 +289,7 @@ export async function seedIssueSchema(options?: {
       ...existing.schema_definition,
       fields: { ...definition.fields, ...existing.schema_definition.fields },
       canonical_name_fields: definition.canonical_name_fields,
+      canonical_name_strict: definition.canonical_name_strict,
       temporal_fields: definition.temporal_fields ?? existing.schema_definition.temporal_fields,
     };
     const mergedReducer: ReducerConfig = {
