@@ -1,3 +1,12 @@
+---
+title: "Neotoma ICP Profiles"
+summary: Internal detailed market profiles for all target segments. Public ICP statement is in icp_from_functionality.md.
+category: use_cases
+subcategory: icp
+audience: developer
+visibility: internal
+---
+
 # Neotoma ICP Profiles
 *(Detailed Profiles for All Target User Segments)*
 

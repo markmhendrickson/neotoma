@@ -132,6 +132,12 @@ export const FOLDER_DEFAULTS: ReadonlyArray<{
   visibility: DocVisibility;
   audience: DocAudience;
 }> = [
+  {
+    prefix: "getting_started",
+    category: "getting_started",
+    visibility: "public",
+    audience: "user",
+  },
   { prefix: "foundation", category: "foundation", visibility: "public", audience: "developer" },
   { prefix: "architecture", category: "architecture", visibility: "public", audience: "developer" },
   {

@@ -1,4 +1,15 @@
+---
+title: "Primary ICP: Personal Agentic OS Builders/Operators"
+summary: Internal, market-derived view of the primary ICP. The public, functionally-grounded statement is in icp_from_functionality.md.
+category: use_cases
+subcategory: icp
+audience: developer
+visibility: internal
+---
+
 # Primary ICP: Personal Agentic OS Builders/Operators
+
+> Reconciliation: this is the internal, market-derived view of the primary ICP. The public, functionally-grounded statement is [ICP from functionality](icp_from_functionality.md). See [ICP reconciliation](icp_reconciliation.md) for how the two relate (they agree on the primary ICP).
 
 ## Scope
 

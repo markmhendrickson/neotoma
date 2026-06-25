@@ -63,7 +63,7 @@ export const BUNDLED_DOCS_FOOTER_COLUMNS: readonly BundledDocsFooterColumn[] = [
 /** Curated shortcuts surfaced in the Inspector sidebar and home Resources card. */
 export const BUNDLED_DOCS_QUICK_LINKS: readonly BundledDocsQuickLink[] = [
   { label: "Documentation", slug: "" },
-  { label: "Install", slug: "developer/getting_started" },
+  { label: "Get started", slug: "getting_started/getting_started" },
   { label: "Architecture", slug: "architecture/architecture" },
   { label: "REST API", slug: "api/rest_api" },
   { label: "MCP Server", slug: "developer/mcp/instructions" },
