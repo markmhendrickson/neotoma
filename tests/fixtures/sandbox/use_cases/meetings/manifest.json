@@ -153,9 +153,233 @@
           "timezone": "Europe/Madrid"
         }
       ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "meet-conv-intro",
+      "entities": [
+        {
+          "_ref": "conv_meet_intro",
+          "entity_type": "conversation",
+          "canonical_name": "Cedar Labs intro call prep & recap",
+          "title": "Cedar Labs intro call prep & recap",
+          "platform": "cursor",
+          "started_at": "2026-06-18T16:00:00Z",
+          "ended_at": "2026-06-18T16:12:00Z",
+          "turn_count": 4,
+          "idempotency_hint": "conv-sandbox-meetings-1",
+          "conversation_id": "conv-sandbox-meetings-1"
+        },
+        {
+          "_ref": "conv_meet_intro_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-intro-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "We just had the Cedar Labs ↔ Northwind intro call on Zoom — Maya Chen (CEO) and Tom Okafor (investor) were on it. Capture the meeting and transcript.",
+          "turn_key": "conv-sandbox-meetings-1:turn:1",
+          "timestamp": "2026-06-18T16:00:00Z",
+          "conversation_id": "conv-sandbox-meetings-1"
+        },
+        {
+          "_ref": "conv_meet_intro_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-intro-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged the \"Cedar Labs ↔ Northwind intro\" meeting (2026-06-18) with Maya Chen and Tom Okafor as attendees, plus the 2,100-word Zoom intro call transcript linked to it.",
+          "turn_key": "conv-sandbox-meetings-1:turn:2",
+          "timestamp": "2026-06-18T16:04:00Z",
+          "conversation_id": "conv-sandbox-meetings-1"
+        },
+        {
+          "_ref": "conv_meet_intro_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-intro-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "It went warm — Northwind is interested at seed. Write the recap and add an action item to send the investor deck by the 20th.",
+          "turn_key": "conv-sandbox-meetings-1:turn:3",
+          "timestamp": "2026-06-18T16:08:00Z",
+          "conversation_id": "conv-sandbox-meetings-1"
+        },
+        {
+          "_ref": "conv_meet_intro_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-intro-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Saved the \"Intro call recap\" note (Northwind interested at seed; follow up with deck) and created the task \"Send investor deck\" due 2026-06-20, both linked to the intro meeting.",
+          "turn_key": "conv-sandbox-meetings-1:turn:4",
+          "timestamp": "2026-06-18T16:12:00Z",
+          "conversation_id": "conv-sandbox-meetings-1"
+        }
+      ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "meet-conv-design",
+      "entities": [
+        {
+          "_ref": "conv_meet_design",
+          "entity_type": "conversation",
+          "canonical_name": "Launch design review recap",
+          "title": "Launch design review recap",
+          "platform": "chatgpt",
+          "started_at": "2026-06-22T11:00:00Z",
+          "ended_at": "2026-06-22T11:10:00Z",
+          "turn_count": 4,
+          "idempotency_hint": "conv-sandbox-meetings-2",
+          "conversation_id": "conv-sandbox-meetings-2"
+        },
+        {
+          "_ref": "conv_meet_design_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-design-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "The Launch design review wrapped on Google Meet with Priya Nair (design). Log the meeting and its transcript.",
+          "turn_key": "conv-sandbox-meetings-2:turn:1",
+          "timestamp": "2026-06-22T11:00:00Z",
+          "conversation_id": "conv-sandbox-meetings-2"
+        },
+        {
+          "_ref": "conv_meet_design_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-design-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged the \"Launch design review\" meeting (2026-06-22) with Priya Nair and the 3,400-word Google Meet design review transcript linked to it.",
+          "turn_key": "conv-sandbox-meetings-2:turn:2",
+          "timestamp": "2026-06-22T11:03:00Z",
+          "conversation_id": "conv-sandbox-meetings-2"
+        },
+        {
+          "_ref": "conv_meet_design_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-design-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Outcome: the picker is approved, just tighten the empty states. The picker specs are finalized. Recap it and note the QA action for the auth path.",
+          "turn_key": "conv-sandbox-meetings-2:turn:3",
+          "timestamp": "2026-06-22T11:06:00Z",
+          "conversation_id": "conv-sandbox-meetings-2"
+        },
+        {
+          "_ref": "conv_meet_design_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "meetings-design-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Saved the \"Design review recap\" note (picker approved; tighten empty states), marked \"Finalize picker specs\" done, and added \"Add auth-path QA\" due 2026-06-30 against the upcoming Launch retro.",
+          "turn_key": "conv-sandbox-meetings-2:turn:4",
+          "timestamp": "2026-06-22T11:10:00Z",
+          "conversation_id": "conv-sandbox-meetings-2"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_meet_intro_m1",
+      "target_ref": "conv_meet_intro",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_intro_m2",
+      "target_ref": "conv_meet_intro",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_intro_m3",
+      "target_ref": "conv_meet_intro",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_intro_m4",
+      "target_ref": "conv_meet_intro",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_intro",
+      "target_ref": "mt_intro",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_intro",
+      "target_ref": "a_maya",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_intro",
+      "target_ref": "a_tom",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_intro",
+      "target_ref": "tr_intro",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_intro",
+      "target_ref": "ai_deck",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_intro",
+      "target_ref": "rc_intro",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_design_m1",
+      "target_ref": "conv_meet_design",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_design_m2",
+      "target_ref": "conv_meet_design",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_design_m3",
+      "target_ref": "conv_meet_design",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_design_m4",
+      "target_ref": "conv_meet_design",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_meet_design",
+      "target_ref": "mt_design",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_design",
+      "target_ref": "a_priya",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_design",
+      "target_ref": "tr_design",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_design",
+      "target_ref": "ai_specs",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_design",
+      "target_ref": "ai_qa",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_meet_design",
+      "target_ref": "rc_design",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "mt_intro",
       "target_ref": "a_maya",

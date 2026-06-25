@@ -145,9 +145,168 @@
           "engagement_rate": 0.041
         }
       ]
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "content-conv",
+      "entities": [
+        {
+          "_ref": "conv_content",
+          "entity_type": "conversation",
+          "canonical_name": "Sandbox launch content plan",
+          "title": "Sandbox launch content plan",
+          "platform": "chatgpt",
+          "started_at": "2026-06-22T14:00:00Z",
+          "ended_at": "2026-06-22T14:20:00Z",
+          "turn_count": 6,
+          "idempotency_hint": "conv-sandbox-content-ops-1",
+          "conversation_id": "conv-sandbox-content-ops-1"
+        },
+        {
+          "_ref": "conv_content_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "content-ops-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Let's plan the Sandbox launch campaign. The core idea is \"Show the graph, not the chat\" — that one's approved. Spin up an X thread and a blog article around it.",
+          "turn_key": "conv-sandbox-content-ops-1:turn:1",
+          "timestamp": "2026-06-22T14:00:00Z",
+          "conversation_id": "conv-sandbox-content-ops-1"
+        },
+        {
+          "_ref": "conv_content_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "content-ops-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Created the \"Sandbox launch\" campaign (active) and tied two content pieces to it: an X thread \"A sandbox you can actually click\" and a blog article \"Per-visitor sandbox seeding\". Both stem from the approved idea \"Show the graph, not the chat\" and are slated for X and the Neotoma Blog respectively.",
+          "turn_key": "conv-sandbox-content-ops-1:turn:2",
+          "timestamp": "2026-06-22T14:05:00Z",
+          "conversation_id": "conv-sandbox-content-ops-1"
+        },
+        {
+          "_ref": "conv_content_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "content-ops-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Also start the \"Memory vs truth-layer series\" campaign in planning, with a LinkedIn post \"Why memory needs a truth layer\" as a draft. Idea behind it is \"Provenance you can click\" — keep that in the backlog for now.",
+          "turn_key": "conv-sandbox-content-ops-1:turn:3",
+          "timestamp": "2026-06-22T14:10:00Z",
+          "conversation_id": "conv-sandbox-content-ops-1"
+        },
+        {
+          "_ref": "conv_content_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "content-ops-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Done. Added the \"Memory vs truth-layer series\" campaign in planning, created the LinkedIn draft \"Why memory needs a truth layer\" under it, and logged the backlog idea \"Provenance you can click\" that it draws from.",
+          "turn_key": "conv-sandbox-content-ops-1:turn:4",
+          "timestamp": "2026-06-22T14:14:00Z",
+          "conversation_id": "conv-sandbox-content-ops-1"
+        },
+        {
+          "_ref": "conv_content_m5",
+          "entity_type": "conversation_message",
+          "canonical_name": "content-ops-msg-5",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "The thread and the blog are live now — record the publications. And pull the engagement on the launch thread.",
+          "turn_key": "conv-sandbox-content-ops-1:turn:5",
+          "timestamp": "2026-06-22T14:17:00Z",
+          "conversation_id": "conv-sandbox-content-ops-1"
+        },
+        {
+          "_ref": "conv_content_m6",
+          "entity_type": "conversation_message",
+          "canonical_name": "content-ops-msg-6",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Logged the \"X thread — launch\" publication (2026-06-24) and the \"Blog — seeding\" publication (2026-06-23). The launch thread has 18,400 impressions at a 4.1% engagement rate so far.",
+          "turn_key": "conv-sandbox-content-ops-1:turn:6",
+          "timestamp": "2026-06-22T14:20:00Z",
+          "conversation_id": "conv-sandbox-content-ops-1"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_content_m1",
+      "target_ref": "conv_content",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_content_m2",
+      "target_ref": "conv_content",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_content_m3",
+      "target_ref": "conv_content",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_content_m4",
+      "target_ref": "conv_content",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_content_m5",
+      "target_ref": "conv_content",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_content_m6",
+      "target_ref": "conv_content",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "cp_launch",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "cp_series",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "id_graph",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "id_prov",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "co_thread",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "co_post",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "co_blog",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "pb_thread",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_content",
+      "target_ref": "pb_blog",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "co_thread",
       "target_ref": "cp_launch",

@@ -174,9 +174,168 @@
           "key_alg": "Ed25519"
         }
       ]
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "aa-conv",
+      "entities": [
+        {
+          "_ref": "conv_aa",
+          "entity_type": "conversation",
+          "canonical_name": "AAuth trust graph setup",
+          "title": "AAuth trust graph setup",
+          "platform": "cursor",
+          "started_at": "2026-06-11T11:00:00Z",
+          "ended_at": "2026-06-11T11:22:00Z",
+          "turn_count": 6,
+          "idempotency_hint": "conv-sandbox-agent-auth-1",
+          "conversation_id": "conv-sandbox-agent-auth-1"
+        },
+        {
+          "_ref": "conv_aa_m1",
+          "entity_type": "conversation_message",
+          "canonical_name": "agent-auth-msg-1",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Set up the AAuth grants for the swarm. Corvus (content agent) needs contacts:read, and Apis (orchestrator) needs tasks:write. Both active. Register Apis and Corvus as agents under the ateles-swarm.",
+          "turn_key": "conv-sandbox-agent-auth-1:turn:1",
+          "timestamp": "2026-06-11T11:00:00Z",
+          "conversation_id": "conv-sandbox-agent-auth-1"
+        },
+        {
+          "_ref": "conv_aa_m2",
+          "entity_type": "conversation_message",
+          "canonical_name": "agent-auth-msg-2",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Registered Apis (apis@ateles-swarm) and Corvus (corvus@ateles-swarm) as agents. Created an active \"contacts:read\" grant scoped to Corvus and an active \"tasks:write\" grant scoped to Apis. I recorded the matching allow decisions: Corvus reads contacts, Apis writes tasks.",
+          "turn_key": "conv-sandbox-agent-auth-1:turn:2",
+          "timestamp": "2026-06-11T11:05:00Z",
+          "conversation_id": "conv-sandbox-agent-auth-1"
+        },
+        {
+          "_ref": "conv_aa_m3",
+          "entity_type": "conversation_message",
+          "canonical_name": "agent-auth-msg-3",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Monedula (payments agent) requested payments:execute. We held a governance vote and it was rejected 2 of 3. Revoke that grant and make sure any payment attempt is denied.",
+          "turn_key": "conv-sandbox-agent-auth-1:turn:3",
+          "timestamp": "2026-06-11T11:12:00Z",
+          "conversation_id": "conv-sandbox-agent-auth-1"
+        },
+        {
+          "_ref": "conv_aa_m4",
+          "entity_type": "conversation_message",
+          "canonical_name": "agent-auth-msg-4",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Recorded the governance vote \"enable payments for Monedula\" with a 2/3 rejected tally and revoked the payments:execute grant. The policy evaluation for payments:execute now fails, and I logged a deny decision for Monedula's payment attempt with reason \"grant revoked\".",
+          "turn_key": "conv-sandbox-agent-auth-1:turn:4",
+          "timestamp": "2026-06-11T11:16:00Z",
+          "conversation_id": "conv-sandbox-agent-auth-1"
+        },
+        {
+          "_ref": "conv_aa_m5",
+          "entity_type": "conversation_message",
+          "canonical_name": "agent-auth-msg-5",
+          "role": "user",
+          "sender_kind": "user",
+          "content": "Confirm the delegation chain and that the scope check for contacts:read passes.",
+          "turn_key": "conv-sandbox-agent-auth-1:turn:5",
+          "timestamp": "2026-06-11T11:19:00Z",
+          "conversation_id": "conv-sandbox-agent-auth-1"
+        },
+        {
+          "_ref": "conv_aa_m6",
+          "entity_type": "conversation_message",
+          "canonical_name": "agent-auth-msg-6",
+          "role": "assistant",
+          "sender_kind": "assistant",
+          "content": "Confirmed. The delegation chain Operator → Apis → Corvus (depth 2) is recorded, the contacts:read scope check passes, and Apis has an active activity webhook subscription.",
+          "turn_key": "conv-sandbox-agent-auth-1:turn:6",
+          "timestamp": "2026-06-11T11:22:00Z",
+          "conversation_id": "conv-sandbox-agent-auth-1"
+        }
+      ]
     }
   ],
   "relationships": [
+    {
+      "source_ref": "conv_aa_m1",
+      "target_ref": "conv_aa",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_aa_m2",
+      "target_ref": "conv_aa",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_aa_m3",
+      "target_ref": "conv_aa",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_aa_m4",
+      "target_ref": "conv_aa",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_aa_m5",
+      "target_ref": "conv_aa",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_aa_m6",
+      "target_ref": "conv_aa",
+      "relationship_type": "part_of"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "ag_apis",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "ag_corvus",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "ag_mon",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "cg_read",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "cg_write",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "cg_pay",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "ad_3",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "gv_pay",
+      "relationship_type": "references"
+    },
+    {
+      "source_ref": "conv_aa",
+      "target_ref": "dc_apis",
+      "relationship_type": "references"
+    },
     {
       "source_ref": "cg_read",
       "target_ref": "ag_corvus",
