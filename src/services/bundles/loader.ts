@@ -210,6 +210,8 @@ export interface InstalledBundleView {
   bundle_type?: BundleManifest["bundle_type"];
   version?: string;
   provides_entity_types_count?: number;
+  /** Use-case ids the bundle contributes to (informational). Present when in the registry. */
+  serves_use_cases?: string[];
 }
 
 /**
@@ -230,6 +232,7 @@ export function listInstalledBundleViews(): InstalledBundleView[] {
             bundle_type: loaded.manifest.bundle_type,
             version: loaded.manifest.version,
             provides_entity_types_count: loaded.manifest.provides_entity_types.length,
+            serves_use_cases: loaded.manifest.serves_use_cases,
           }
         : {}),
     };
