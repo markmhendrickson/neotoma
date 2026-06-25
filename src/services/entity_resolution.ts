@@ -459,10 +459,27 @@ function deriveCanonicalNameFromSchemaRules(
 export function deriveCanonicalNameFromFieldsWithTrace(
   entityType: string,
   fields: Record<string, unknown>,
-  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null
+  schema?: Pick<SchemaDefinition, "canonical_name_fields" | "canonical_name_strict"> | null
 ): CanonicalNameDerivation {
   const schemaDerivation = deriveCanonicalNameFromSchemaRules(entityType, fields, schema);
   if (schemaDerivation) return schemaDerivation;
+
+  // Schema-authoritative identity: when the schema declares canonical_name_fields
+  // AND opts into strict identity, refuse the mutable heuristic fallbacks below.
+  // A write that misses every declared rule fails loudly instead of minting a
+  // divergent heuristic-keyed entity (e.g. a title-keyed issue that never
+  // coalesces with its (github_number, repo) twin — #1761).
+  if (
+    schema?.canonical_name_strict &&
+    Array.isArray(schema.canonical_name_fields) &&
+    schema.canonical_name_fields.length > 0
+  ) {
+    throw new CanonicalNameUnresolvedError({
+      entityType,
+      seenFields: Object.keys(fields),
+      attemptedValue: null,
+    });
+  }
 
   const preferredNameKeys = [
     "canonical_name",
