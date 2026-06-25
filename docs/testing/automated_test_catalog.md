@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **488**
-- Backend and repo Vitest files: **455**
+- Total automated test files: **493**
+- Backend and repo Vitest files: **460**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 130 |
+| Vitest unit tests | 132 |
 | Vitest service tests | 34 |
-| Source-adjacent tests | 61 |
-| Vitest integration tests | 137 |
+| Source-adjacent tests | 62 |
+| Vitest integration tests | 139 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 3 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (130):**
+**Files (132):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -167,6 +167,7 @@ flowchart TD
 - `tests/unit/external_actor_promoter.test.ts`
 - `tests/unit/external_actor_provenance.test.ts`
 - `tests/unit/features/FU-2026-Q3-aauth-inspector-attestation-viz/agent_badge_tier_icon.test.ts`
+- `tests/unit/field_constraints.test.ts`
 - `tests/unit/github_issue_thread.test.ts`
 - `tests/unit/github_mirror_guidance.test.ts`
 - `tests/unit/github_pages_asset_paths.test.ts`
@@ -224,6 +225,7 @@ flowchart TD
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
+- `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
 - `tests/unit/sqlite_connection_pragmas.test.ts`
 - `tests/unit/standing_rules.test.ts`
@@ -287,7 +289,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (61):**
+**Files (62):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -325,6 +327,7 @@ flowchart TD
 - `src/services/entity_submission/submission_service.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/body_newline_decode.test.ts`
+- `src/services/issues/issue_identity.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
 - `src/services/issues/observer_import.test.ts`
@@ -355,7 +358,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (137):**
+**Files (139):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -471,6 +474,7 @@ flowchart TD
 - `tests/integration/sandbox_report.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
+- `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
@@ -481,6 +485,7 @@ flowchart TD
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
+- `tests/integration/store_source_priority_ignored_warning.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
 - `tests/integration/subscription_list.test.ts`
