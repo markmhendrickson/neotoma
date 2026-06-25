@@ -28,6 +28,7 @@ import { buildDocsIndex, type DocsIndex } from "./index_builder.js";
 import { renderIndexHtml, renderDocHtml, renderNotFoundHtml } from "./html_template.js";
 import { lookupDoc } from "./render.js";
 import { loadManifest } from "./manifest_loader.js";
+import { resolveDocsSources } from "./docs_root.js";
 import type { VisibilityEnv } from "./visibility.js";
 import { acceptPrefersHtml } from "../inspector_mount.js";
 
@@ -111,16 +112,14 @@ export function getBundledDocsIndex(opts: {
   repoRoot: string;
   envSource?: VisibilityEnv;
 }): DocsIndex {
-  const docsRoot = path.join(opts.repoRoot, "docs");
-  const manifestPath = path.join(opts.repoRoot, "docs", "site", "site_doc_manifest.yaml");
+  const { docsRoot, manifestPath } = resolveDocsSources(opts.repoRoot);
   const env = opts.envSource ?? (process.env as VisibilityEnv);
   return getDocsIndex({ docsRoot, manifestPath, env });
 }
 
 export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = {}): void {
   const repoRoot = opts.repoRoot ?? resolveRepoRoot();
-  const docsRoot = path.join(repoRoot, "docs");
-  const manifestPath = path.join(repoRoot, "docs", "site", "site_doc_manifest.yaml");
+  const { docsRoot, manifestPath } = resolveDocsSources(repoRoot);
 
   // Content negotiation: the inspector SPA navigates to /docs and /docs/<slug>
   // and expects HTML (the SPA shell) — it then fetches JSON from the same URL
