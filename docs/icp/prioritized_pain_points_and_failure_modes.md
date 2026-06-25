@@ -1,3 +1,12 @@
+---
+title: "ICP-Prioritized Pain Points and Failure Modes"
+summary: Internal prioritization of ICP pain points and failure modes.
+category: use_cases
+subcategory: icp
+audience: developer
+visibility: internal
+---
+
 # ICP-Prioritized Pain Points and Failure Modes
 
 ## Source of Truth

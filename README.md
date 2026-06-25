@@ -1,117 +1,100 @@
 # Neotoma
 
-Your agents forget. Neotoma makes them remember.
+Neotoma is a local-first, deterministic memory layer for AI agents. Your agents store structured records (contacts, tasks, transactions, decisions, events, and any other type) once, and read them back across every tool and session. You own the data, you can inspect every change, and the same observations always reduce to the same state.
 
-Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, Windsurf, VS Code, Continue, Letta, OpenClaw, IronClaw, and every agent you run. Open-source. Local-first. Deterministic. MIT licensed.
+It runs on your machine as a single SQLite-backed service and exposes the same state through an MCP server, a REST API, a command-line interface, and a bundled web Inspector.
 
-**[neotoma.io](https://neotoma.io)** · **[Evaluate](https://neotoma.io/evaluate)** · **[Install](https://neotoma.io/install)** · **[Documentation](https://neotoma.io/docs)**
+**[neotoma.io](https://neotoma.io)** · **[Install](https://neotoma.io/install)** · **[Documentation](https://neotoma.io/docs)** (also served in-app at `/docs`)
 
-## Why this exists
+## What Neotoma is
 
-You run AI agents across tools and sessions. Without a state layer, you become the human sync layer:
+Neotoma is a state layer, not a chat memory or a vector cache. It records immutable observations from your sources, resolves them into entities, and computes a current snapshot for each entity by reducing its observations in a deterministic order. Nothing is overwritten. Corrections and reinterpretations add new observations; the prior history stays intact and replayable.
 
-- Every session starts from zero — nothing your agent learns carries over
-- Facts conflict across tools — two agents store different versions of the same person
-- Decisions execute without a reproducible trail — you can't trace why your agent acted
-- Corrections don't stick — you fix something in Claude and it's wrong again in Cursor
+Three properties hold across every interface:
 
-These are not hypothetical. They happen every day in production agent systems. You compensate by re-prompting context, patching state gaps, and maintaining manual workarounds. Neotoma removes that tax.
+- **Deterministic.** Entity IDs, observation IDs, event IDs, and reducer output are all derived from the inputs by hashing. The same observations produce the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
+- **Immutable and auditable.** Sources and observations are append-only. Every field in a snapshot traces back to the observation that set it, and through that observation to its source, interpretation, agent, and timestamp.
+- **Local-first and yours.** Data lives in a SQLite file and content-addressed file storage under a directory you control. Optional AES-256-GCM at-rest encryption protects sensitive columns. Nothing is sent anywhere for training. You can export everything.
 
-## What Neotoma does
-
-Neotoma is a deterministic state layer for AI agents. It stores structured records — contacts, tasks, transactions, decisions, events, contracts — with versioned history and full provenance. Every change creates a new version. Nothing is overwritten. Every state can be replayed from the observation log.
-
-Not retrieval memory (RAG, vector search, semantic lookup). Neotoma enforces deterministic state evolution: same observations always produce the same entity state, regardless of when or in what order they are processed.
-
-The **Inspector** — Neotoma's visual control plane for browsing the entity graph, timeline, schema editor, and agent attribution — is bundled and served at `/inspector` by default when the server starts. No separate build or configuration required. Override with `NEOTOMA_INSPECTOR_DISABLE`, `NEOTOMA_PUBLIC_INSPECTOR_URL`, `NEOTOMA_INSPECTOR_STATIC_DIR`, or `NEOTOMA_INSPECTOR_BASE_PATH` (see `.env.example`).
-
-## Architecture
+## How it works
 
 ```mermaid
 graph LR
-  Sources["Sources (files, messages, APIs)"] --> Obs[Observations]
-  Obs --> Entities[Entity Resolution]
-  Entities --> Snapshots["Entity Snapshots (versioned)"]
-  Snapshots --> Graph[Memory Graph]
-  Graph <--> MCP[MCP Protocol]
-  MCP --> Claude
-  MCP --> ChatGPT
-  MCP --> Cursor
-  MCP --> OpenClaw
-  MCP --> IronClaw
+  Sources["Sources (files, messages, API payloads)"] --> Obs[Observations]
+  Obs --> Res[Entity resolution]
+  Res --> Snap["Entity snapshots (reduced, versioned)"]
+  Snap --> Graph["Graph + timeline"]
+  Graph <--> MCP[MCP]
+  Graph <--> REST[REST API]
+  Graph <--> CLI[CLI]
+  Graph <--> Inspector[Inspector]
 ```
 
-- **Deterministic.** Same observations always produce the same versioned entity snapshots. No ordering sensitivity.
-- **Immutable.** Append-only observations. Corrections add new data, never erase.
-- **Replayable.** Inspect any entity at any point in time. Diff versions. Reconstruct history from the observation log.
-- **Structure-first.** Schema-first extraction with deterministic retrieval. Optional similarity search when embeddings are configured.
+1. **Source.** Raw input is stored once, deduplicated by SHA-256 content hash, with a deterministic source ID.
+2. **Interpretation.** Structured fields are extracted from the source (directly for structured input, or via an LLM interpretation run whose model, temperature, and prompt are recorded).
+3. **Observation.** Each extracted fact becomes an immutable observation with a hash-based ID, linked to its source and interpretation.
+4. **Entity resolution.** A deterministic canonical name (driven by the type's schema) maps the observation to an entity, creating it if needed.
+5. **Snapshot.** All observations for an entity are reduced into a current snapshot using per-field merge policies, with a stable order (`observed_at DESC, id ASC`) and a field-to-observation provenance map.
+6. **Timeline and relationships.** Date fields emit deterministic timeline events; typed relationships connect entities into a graph.
 
-### Four foundations
+## What you can do with it
 
-| Foundation                  | What it means                                                                                                                                              |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Privacy-first**           | Your data stays local. Never used for training. Nothing is stored unless you approve it; no background scanning or implicit captures. Full export and deletion control. |
-| **Deterministic**           | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.                                |
-| **Immutable and verifiable** | Append-only observations; history cannot be rewritten. Hash-based entity IDs are tamper-evident. Full provenance chain from any state to its source.       |
-| **Cross-platform**          | One memory graph across Claude, ChatGPT, Cursor, Windsurf, VS Code, Continue, Letta, OpenClaw, IronClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
+Neotoma exposes roughly 60 MCP tools and about 100 REST endpoints, all backed by the same operations. The capability surface includes:
 
-Full compatibility matrix: [Integrations](docs/integrations/matrix.md).
+**Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. Writes are idempotent through an `idempotency_key`.
 
-## State guarantees
+**Resolve, retrieve, and search.** Look up entities by identifier (name, email, and similar), resolve identity from multiple signals with confidence scoring, list observations, retrieve a field's provenance chain, traverse the relationship graph N hops, and pull a full graph neighborhood. When an embedding key is configured, semantic vector search runs over entity snapshots (stored locally in sqlite-vec); keyword filtering works without it.
 
-Most AI memory systems optimize storage or retrieval. Neotoma enforces state integrity. [Full comparison with explanations →](https://neotoma.io/memory-guarantees)
+**Correct and evolve.** Submit corrections that always win in the snapshot (they are high-priority observations, never edits). Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
 
-| Property                             | Platform  | Retrieval / RAG | Files      | Database      | Neotoma       |
-| ------------------------------------ | --------- | --------------- | ---------- | ------------- | ------------- |
-| Deterministic state evolution        | ✗         | ✗               | ✗          | ✗             | ✓             |
-| Versioned history                    | ✗         | ✗               | ⚠ manual   | ✗             | ✓             |
-| Replayable timeline                  | ✗         | ✗               | ✗          | ✗             | ✓             |
-| Auditable change log                 | ✗         | ✗               | ⚠ partial  | ✗             | ✓             |
-| Schema constraints                   | ✗         | ✗               | ✗          | ⚠ partial     | ✓             |
-| Silent mutation risk                 | ⚠ common  | ⚠ common        | ⚠ common   | ⚠ common      | prevented     |
-| Conflicting facts risk               | ⚠ common  | ⚠ common        | ⚠ possible | ⚠ common      | prevented     |
-| Reproducible state reconstruction    | ✗         | ✗               | ✗          | ✗             | ✓             |
-| Human inspectability (diffs/lineage) | ⚠ partial | ⚠ partial       | ⚠ partial  | ⚠ partial     | ✓             |
-| Zero-setup onboarding                | ✓         | ✗               | ✗          | ✗             | ✗             |
-| Semantic similarity search           | ✗         | ✓               | ✗          | ✗             | ✓             |
-| Direct human editability             | ✗         | ✗               | ✓          | ✗             | ✗             |
-| Strong consistency                   | ✗         | ✗               | ✗          | ✓             | ✓             |
-| Transactional writes                 | ✗         | ✗               | ✗          | ✓             | ✓             |
+**Relate and sequence.** Create typed relationships (for example `PART_OF`, `DEPENDS_ON`, `REFERS_TO`, `DUPLICATE_OF`), query timeline events across types and date ranges, and view a deterministic, replayable history.
 
-**Platform:** Claude, ChatGPT, Gemini, Copilot. **Retrieval:** Mem0, Zep, LangChain Memory. **Files:** Markdown files, JSON stores, CRDT docs. **Database:** SQLite, Postgres, MySQL. **Neotoma:** Deterministic state layer (reference implementation).
+**Manage the entity lifecycle.** Merge duplicates, split an entity by predicate, soft-delete and restore, list potential duplicates, and run GDPR-oriented deletion. Merge and split are transactional and audited.
 
-## Quick start
+**Control multi-agent access.** Every write is attributed to an agent identity (verified key thumbprint, JWT subject, or client name). Agent grants express least-privilege capabilities (which operations on which entity types). Optional hardware-attested authentication (Apple Secure Enclave, TPM 2.0, WebAuthn/FIDO2, YubiKey, Windows TBS) raises an agent's trust tier. Guest access tokens grant scoped read-back without full credentials.
 
-### Evaluate first (recommended)
+**Federate and sync.** Register peer instances and sync entities between them with configurable scope and conflict resolution (last-write-wins, source priority, or manual). Subscribe to entity or event changes over webhooks (HMAC-signed) or Server-Sent Events. Mirror your data to deterministic, git-trackable canonical Markdown.
 
-Ask your AI agent whether Neotoma fits your workflow. Paste this into Claude, Cursor, ChatGPT, or any MCP-capable tool:
+**Export and own your data.** Produce a bounded `MEMORY.md` summary, a JSON snapshot export with full provenance and attribution metadata, or a complete Markdown mirror of every entity, relationship, source, and timeline day.
 
-```
-Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.
-```
+## Interfaces
 
-The agent reads the evaluation page, checks your context, and gives you an honest assessment. If it's a fit, the agent carries you through install and activation.
+The same state and the same guarantees are reachable four ways. All map to one OpenAPI-backed contract.
 
-### Agent-driven install
+| Interface | What it is | Transports |
+| --- | --- | --- |
+| **MCP server** | Model Context Protocol tools for agents to store and retrieve state | stdio, WebSocket, streamable HTTP |
+| **REST API** | Full HTTP interface for application integration | HTTP/HTTPS, OAuth or key-based auth |
+| **CLI** | The `neotoma` command for setup, scripting, and direct access | local process |
+| **Inspector** | Bundled web app for browsing and managing the store | served by the API server |
 
-Agents install Neotoma themselves. Paste this prompt into Claude, Cursor, ChatGPT, or Codex:
+### The Inspector
 
-```
-Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Use `neotoma` commands for status and setup. If Neotoma is already installed, start with `neotoma status --json`; otherwise install it and run `neotoma setup --tool <my_tool> --yes`. Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.
-```
+The Inspector is a single-page web app bundled into the build and served by the API server (at `/` for browsers, no separate deployment). It is an operator console for the data store, with screens for:
 
-The agent handles npm install, initialization, and MCP configuration. **Manual install:**
+- Entities (browse, detail, correct fields, view history and provenance, per-entity timeline)
+- Observations, sources, interpretations, and recent activity
+- An interactive knowledge-graph explorer
+- Relationships and the global timeline
+- Schemas and entity types (browse, register, inspect merge policies)
+- Agents, agent grants (create, suspend, revoke, restore), peers, and subscriptions
+- Issues, conversations and turns (the agent audit trail), access policies, and compliance
+- Search, analytics and usage, settings (including dark mode), a sandbox surface, and an in-app documentation browser at `/docs`
+
+## Install
 
 ```bash
 npm install -g neotoma
 neotoma init
-neotoma setup --tool <cursor|claude-code|codex> --yes
+neotoma setup --tool <cursor|claude-code|codex|...> --yes
 neotoma mcp config
 ```
 
-More options: [Docker](docs/developer/docker.md) | [CLI reference](docs/developer/cli_reference.md) | [Getting started](docs/developer/getting_started.md)
+Prerequisites: Node.js 20.x (see `.nvmrc`) and npm 9+. No `.env` is required for local storage. The `neotoma doctor` command checks your environment, database, and security configuration.
 
-## Example
+The CLI also handles MCP config scanning and sync, harness configuration, lifecycle hook installation, peers and access management, plans, transcript and onboarding import, server and database management, memory export, and the canonical mirror. See the [CLI reference](docs/developer/cli_reference.md).
+
+### Example
 
 ```bash
 neotoma store --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'
@@ -119,117 +102,83 @@ neotoma entities list --type task
 neotoma upload ./invoice.pdf
 ```
 
-Results reflect versioned entity state with full provenance. Agents perform the same operations through MCP tool calls (`store`, `retrieve_entities`, `retrieve_entity_by_identifier`).
+Agents perform the same operations through MCP tool calls such as `store`, `retrieve_entities`, and `retrieve_entity_by_identifier`. Each MCP call logs its equivalent CLI invocation.
 
-## Available skills
+## Connect your tools
 
-Skills are guided workflows that teach your AI agent to import, extract, and persist data into Neotoma memory. They ship with the npm package and are installed by `neotoma setup`.
+Neotoma works across MCP-capable hosts. Most are a single setup command; some compose MCP with lifecycle hooks for guaranteed capture.
+
+| Host | Modes | Install |
+| --- | --- | --- |
+| Cursor | MCP + hooks | `neotoma setup --tool cursor --yes` |
+| Claude Code | MCP + hooks | `neotoma setup --tool claude-code --yes` |
+| Claude Desktop | MCP (local + remote) | `neotoma setup --tool claude-desktop --yes` |
+| Codex CLI | MCP + hooks | `neotoma setup --tool codex --yes` |
+| OpenClaw | Native plugin + MCP | `neotoma setup --tool openclaw --yes` |
+| ChatGPT | MCP App + Custom GPT Actions | Manual HTTPS + OAuth |
+| Windsurf, Continue, VS Code (Copilot) | MCP | `neotoma setup --tool <host> --yes` |
+| OpenCode | hooks | plugin install |
+
+Full matrix: [Integrations](docs/integrations/matrix.md).
+
+**Hooks** are the reliability floor (guaranteed capture, retrieval injection, compaction awareness) and MCP is the quality ceiling (agent-driven structured writes). Per-harness packages live under `packages/`: [`claude-code-plugin`](packages/claude-code-plugin), [`cursor-hooks`](packages/cursor-hooks), [`opencode-plugin`](packages/opencode-plugin), [`codex-hooks`](packages/codex-hooks), [`claude-agent-sdk-adapter`](packages/claude-agent-sdk-adapter).
+
+**Client SDKs:** [`@neotoma/client`](packages/client) (TypeScript) and [`neotoma-client`](packages/client-python) (Python).
+
+**OpenClaw native plugin:** Neotoma ships as a native OpenClaw plugin with `kind: "memory"`, so it can fill the dedicated memory slot with all MCP tools registered as agent tools.
+
+## Skills
+
+Skills are guided workflows that teach an agent to import, extract, and persist data. They ship with the npm package and are installed by `neotoma setup`.
 
 | Skill | Description |
-|-------|-------------|
-| **ensure-neotoma** | Install Neotoma, configure MCP, verify connectivity. Prerequisite for all other skills. |
-| **remember-email** | Configure email MCP, import emails, extract contacts, tasks, events, transactions. |
-| **remember-conversations** | Import ChatGPT/Claude/Slack exports, reconstruct decision timeline. |
-| **remember-meetings** | Ingest meeting transcripts, extract decisions and action items. |
-| **remember-finances** | Import bank statements, receipts, invoices. Extract structured transactions. |
-| **remember-contacts** | Consolidate contacts from email, calendar, chat, vCards, LinkedIn. |
-| **remember-calendar** | Configure calendar MCP, import events and commitments. |
-| **remember-codebase** | Developer repo integration — inventory, architecture decisions, MCP wiring. |
-| **store-data** | Generic: persist any structured data or file with provenance. |
-| **query-memory** | Generic: retrieve what your agent knows about anything. |
-| **recover-sqlite-database** | Troubleshooting: check integrity and recover corrupted Neotoma database. |
-
-[Full skill documentation →](https://neotoma.io/skills) | [Skill strategy →](docs/skills/skill_strategy.md)
-
-## Interfaces
-
-Three interfaces. One state invariant. Every interface provides the same deterministic behavior regardless of how you access the state layer.
-
-| Interface      | Description                                                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **REST API**   | Full HTTP interface for application integration. Entities, relationships, observations, schema, timeline, and version history. |
-| **MCP Server** | Model Context Protocol for Claude, ChatGPT, Cursor, Windsurf, VS Code, Continue, Letta, OpenClaw, IronClaw, Codex, and more. Agents store and retrieve state through structured tool calls. |
-| **CLI**        | Command-line for scripting and direct access. Inspect entities, replay timelines, and manage state from the terminal.          |
-
-All three map to the same OpenAPI-backed operations. MCP tool calls log the equivalent CLI invocation.
-
-## Who this is for
-
-People building a personal operating system with AI agents across their life — wiring together tools like Claude, Cursor, ChatGPT, Windsurf, VS Code, Letta, OpenClaw, IronClaw, and custom scripts to manage contacts, tasks, finances, code, content, and other domains. The same person operates their agents, builds new pipelines, and debugs state drift. These are three operational modes, not separate personas:
-
-| Mode | What you're doing | The tax you pay without Neotoma | What you get back |
-| ---- | ----------------- | ------------------------------- | ----------------- |
-| **Operating** | Running AI tools across sessions and contexts | Re-prompting, context re-establishment, manual cross-tool sync | Attention, continuity, trust in your tools |
-| **Building** | Shipping agents and pipelines | Prompt workarounds, dedup hacks, memory regression fixes | Product velocity, shipping confidence |
-| **Debugging** | Tracing state drift and reproducing failures | Writing glue (checkpoint logic, custom diffing, state serialization) | Debugging speed, platform design time |
-
-**Not for:** Casual note-taking. PKM/Obsidian-style users. Thought-partner usage where the human drives every turn. Platform builders who build state management as their core product. Users who need zero-install onboarding (Neotoma requires npm and CLI today).
+| --- | --- |
+| **ensure-neotoma** | Install Neotoma, configure MCP, verify connectivity. Prerequisite for the rest. |
+| **remember-email** | Import email, extract contacts, tasks, events, and transactions. |
+| **remember-conversations** | Import ChatGPT/Claude/Slack exports, reconstruct a decision timeline. |
+| **remember-meetings** | Ingest transcripts, extract decisions and action items. |
+| **remember-finances** | Import statements, receipts, and invoices as structured transactions. |
+| **remember-contacts** | Consolidate contacts from email, calendar, chat, vCards. |
+| **remember-calendar** | Import events and commitments. |
+| **remember-codebase** | Repository integration: inventory, decisions, MCP wiring. |
+| **store-data** / **query-memory** | Generic persist and retrieve workflows. |
+| **recover-sqlite-database** | Check integrity and recover a corrupted database. |
 
 ## Record types
 
-Neotoma stores typed entities with versioned history and provenance. Each type has a dedicated guide on [neotoma.io](https://neotoma.io):
+Neotoma stores typed entities with versioned history and provenance. The schema is flexible: store any entity type with whatever fields the data implies, and the system infers and evolves the schema.
 
-| Type | What it stores | Examples |
-| ---- | -------------- | -------- |
-| **[Contacts](https://neotoma.io/types/contacts)** | People, companies, roles, relationships | `contact`, `company`, `account` |
-| **[Tasks](https://neotoma.io/types/tasks)** | Obligations, deadlines, habits, goals | `task`, `habit`, `goal` |
-| **[Transactions](https://neotoma.io/types/transactions)** | Payments, receipts, invoices, ledger entries | `transaction`, `invoice`, `receipt` |
-| **[Contracts](https://neotoma.io/types/contracts)** | Agreements, clauses, amendments | `contract`, `clause`, `amendment` |
-| **[Decisions](https://neotoma.io/types/decisions)** | Choices, rationale, audit trails | `decision`, `assessment`, `review` |
-| **[Events](https://neotoma.io/types/events)** | Meetings, milestones, outcomes | `event`, `meeting`, `milestone` |
+| Type | Stores | Examples |
+| --- | --- | --- |
+| **Contacts** | People, companies, roles | `contact`, `company`, `account` |
+| **Tasks** | Obligations, deadlines, goals | `task`, `habit`, `goal` |
+| **Transactions** | Payments, receipts, invoices | `transaction`, `invoice`, `receipt` |
+| **Contracts** | Agreements, clauses, amendments | `contract`, `clause`, `amendment` |
+| **Decisions** | Choices, rationale, reviews | `decision`, `assessment`, `review` |
+| **Events** | Meetings, milestones, outcomes | `event`, `meeting`, `milestone` |
 
-Schema is flexible — store any entity type with whatever fields the message implies. The system infers and evolves schemas automatically.
+## Storage, privacy, and security
 
-## Current status
+- **Storage:** Local SQLite (`better-sqlite3`, WAL mode) plus content-addressed file storage, under `NEOTOMA_DATA_DIR`. Separate dev and prod profiles. Semantic search uses sqlite-vec locally.
+- **Privacy:** Your data stays local and is never used for training. Logs and event payloads carry IDs, not PII.
+- **Encryption:** Optional AES-256-GCM column encryption of sensitive content and metadata, keyed by a key file or BIP-39 mnemonic. Some tables (for example the event log) are not yet column-encrypted; pair with an encrypted volume for full coverage. See [architecture](docs/architecture/architecture.md).
+- **Auth:** Local auth for single-user installs, MCP OAuth for hosted use, optional hardware attestation for agents, and explicit per-operation access controls. Run `neotoma doctor` to verify your setup. See [Auth](docs/subsystems/auth.md) and [Privacy](docs/subsystems/privacy.md).
 
-**Version:** v0.9.1 · **Releases:** 26 · **License:** MIT
+## Who this is for
 
-### What is guaranteed (even in preview)
+Neotoma is for a technically proficient individual who runs several AI agents and wants one private, self-hosted memory those agents share, that the person owns, inspects, and controls. The same person typically operates the agents, builds new pipelines on top of the API, and debugs state drift. Secondary audiences are developers building agentic applications on Neotoma as a deterministic state layer, and security-conscious operators of multi-agent fleets who need attested agent identity, least-privilege grants, and a full audit trail.
 
-- **No silent data loss.** Operations either succeed and are recorded or fail with explicit errors.
-- **Explicit, inspectable state mutations.** Every change is a named operation with visible inputs. State is reconstructable from the audit trail.
-- **Auditable operations.** Full provenance. CLI and MCP map to the same underlying contract.
-- **Same contract for CLI and MCP.** Both use the same OpenAPI-backed operations.
+It is not aimed at casual note-taking, PKM/Obsidian-style human-driven knowledge bases, or users who need a zero-install hosted product (Neotoma requires npm and the CLI today).
 
-### What is not guaranteed yet
+Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md).
 
-- Stable schemas
-- Deterministic extraction across versions
-- Long-term replay compatibility
-- Backward compatibility
+## Status
 
-Breaking changes should be expected. **Storage:** Local-only (SQLite + local file storage). See [Developer preview storage](docs/developer/developer_preview_storage.md).
+**Version:** v0.17.0 · **License:** MIT · **Storage:** local-only (SQLite + local files).
 
-## Security defaults
-
-Neotoma stores user data and requires secure configuration.
-
-- **Authentication:** Local auth (dev stub or key-based when encryption is enabled).
-- **Authorization:** Local data isolation and explicit operation-level access controls.
-- **Data protection:** User-controlled data with full export and deletion control. Never used for training. Optional at-rest encryption: AES-256-GCM column encryption of the sensitive content/metadata columns when enabled with a key file or mnemonic (some tables, e.g. the event log and embeddings, are not yet column-encrypted — pair with an encrypted volume for full coverage). See [architecture § 7.2](docs/architecture/architecture.md).
-- **Verify your setup:** Run `npm run doctor` for environment, database, and security checks. See [Auth](docs/subsystems/auth.md), [Privacy](docs/subsystems/privacy.md), [Compliance](docs/legal/compliance.md).
+Neotoma is in developer preview and used daily in real agent workflows. The core guarantees (deterministic state, versioned history, append-only log, full provenance, same contract across CLI and MCP) are stable. Schemas, extraction across versions, long-term replay compatibility, and backward compatibility are not yet guaranteed. Expect breaking changes.
 
 ## Development
-
-**Servers:**
-
-```bash
-npm run dev          # MCP server (stdio)
-npm run dev:mcp:dev-shim  # stable stdio shim for MCP source iteration
-npm run dev:ui       # Frontend
-npm run dev:server   # API only (MCP at /mcp)
-npm run dev:full     # API + UI + build watch
-```
-
-**CLI:**
-
-```bash
-npm run cli        # Run via npm (no global install)
-npm run cli:dev    # Dev mode (tsx; picks up source changes)
-npm run setup:cli  # Build and link so `neotoma` is available globally
-```
-
-**Testing:** `npm test` | `npm run test:integration` | `npm run test:e2e` | `npm run test:agent-mcp` | `npm run type-check` | `npm run lint` · **Source checkout:**
 
 ```bash
 git clone https://github.com/markmhendrickson/neotoma.git
@@ -238,109 +187,28 @@ npm install
 npm test
 ```
 
-**Prerequisites:** Node.js v18.x or v20.x (LTS), npm v9+. No `.env` required for local storage. See [Getting started](docs/developer/getting_started.md).
-
-## Using with AI tools (MCP)
-
-Neotoma exposes state via MCP. Local storage only in preview. Local built-in auth.
-
-**Full compatibility matrix:** [Integrations](docs/integrations/matrix.md) · [neotoma.io/integrations](https://neotoma.io/integrations)
-
-| Host | Modes | Install | Setup guide |
-| --- | --- | --- | --- |
-| Cursor | MCP + hooks | `neotoma setup --tool cursor --yes` | [neotoma-with-cursor](https://neotoma.io/neotoma-with-cursor) |
-| Claude Code | MCP + hooks | `neotoma setup --tool claude-code --yes` | [neotoma-with-claude-code](https://neotoma.io/neotoma-with-claude-code) |
-| Claude Desktop | MCP (local + remote) | `neotoma setup --tool claude-desktop --yes` | [neotoma-with-claude](https://neotoma.io/neotoma-with-claude) |
-| Claude Agent SDK | hooks | adapter install | [hooks/claude_agent_sdk.md](docs/integrations/hooks/claude_agent_sdk.md) |
-| ChatGPT | MCP App + Custom GPT Actions | Manual HTTPS + OAuth | [neotoma-with-chatgpt](https://neotoma.io/neotoma-with-chatgpt) |
-| Codex CLI | MCP + hooks | `neotoma setup --tool codex --yes` | [neotoma-with-codex](https://neotoma.io/neotoma-with-codex) |
-| OpenClaw | Native plugin + MCP | `neotoma setup --tool openclaw --yes` | [neotoma-with-openclaw](https://neotoma.io/neotoma-with-openclaw) |
-| IronClaw | MCP | `neotoma setup --tool ironclaw --yes` | [neotoma-with-ironclaw](https://neotoma.io/neotoma-with-ironclaw) |
-| OpenCode | hooks | plugin install | [hooks/opencode.md](docs/integrations/hooks/opencode.md) |
-| Windsurf | MCP | `neotoma setup --tool windsurf --yes` | [neotoma-with-windsurf](https://neotoma.io/neotoma-with-windsurf) |
-| Continue | MCP | `neotoma setup --tool continue --yes` | [neotoma-with-continue](https://neotoma.io/neotoma-with-continue) |
-| VS Code (Copilot Chat) | MCP | `neotoma setup --tool vscode --yes` | [neotoma-with-vscode](https://neotoma.io/neotoma-with-vscode) |
-| Letta | MCP (streamable HTTP, SSE, stdio) | Manual SDK setup | [neotoma-with-letta](https://neotoma.io/neotoma-with-letta) |
-
-Shared client libraries: [`@neotoma/client`](packages/client) (TypeScript), [`neotoma-client`](packages/client-python) (Python). Not yet supported: LangGraph, CrewAI — see [Integrations roadmap](docs/integrations/matrix.md#not-yet-supported-roadmap).
-
-For local source iteration, use the stable dev shim (`scripts/run_neotoma_mcp_stdio_dev_shim.sh`) or signed shim (`scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh`) instead of pointing installed MCP clients at a `tsx watch` stdio process. `neotoma mcp config` defaults to **`b`** for low-friction local stdio setup; use **`a`** for signed + AAuth HTTP `/mcp` proxy entries when the Neotoma API is running, **`c`** for direct stdio, or **`d`** when both MCP entries should target prod.
-
-**Agent behavior contract:** Store first, retrieve before storing, extract entities from user input, create tasks for commitments, and attach bounded host context such as repository name/root scope when available. Full instructions: [MCP instructions](docs/developer/mcp/instructions.md) and [CLI agent instructions](docs/developer/cli_agent_instructions.md).
-
-**Representative actions:** `store`, `retrieve_entities`, `retrieve_entity_snapshot`, `merge_entities`, `list_observations`, `create_relationship`, `list_relationships`, `list_timeline_events`, `retrieve_graph_neighborhood`. Full list: [MCP spec](docs/specs/MCP_SPEC.md).
-
-### Hooks composition
-
-Hooks integrate with harnesses that expose lifecycle events. Hooks and MCP compose: hooks are the reliability floor (guaranteed capture, retrieval injection, compaction awareness, persistence safety net), and MCP remains the quality ceiling (agent-driven structured writes). Per-harness hooks packages: [`claude-code-plugin`](packages/claude-code-plugin), [`cursor-hooks`](packages/cursor-hooks), [`opencode-plugin`](packages/opencode-plugin), [`codex-hooks`](packages/codex-hooks), [`claude-agent-sdk-adapter`](packages/claude-agent-sdk-adapter). Per-harness setup guides in [`docs/integrations/hooks/`](docs/integrations/hooks/).
-
-### OpenClaw native plugin
-
-Neotoma ships as a native OpenClaw plugin with `kind: "memory"`, so it can fill the dedicated memory slot. All 30+ MCP tools are registered as agent tools.
+Common commands:
 
 ```bash
-openclaw plugins install clawhub:neotoma
+npm run dev          # MCP server (stdio)
+npm run dev:full     # API + UI + build watch
+npm run cli:dev      # CLI in dev mode (tsx)
+npm run type-check   # TypeScript
+npm run lint         # ESLint
+npm test             # unit/contract/security tests
+npm run test:integration
+npm run test:e2e     # Playwright (Inspector)
 ```
-
-Then assign it to the memory slot in your OpenClaw config:
-
-```json5
-{
-  plugins: {
-    slots: { memory: "neotoma" },
-    entries: {
-      neotoma: {
-        enabled: true,
-        config: {
-          dataDir: "~/.local/share/neotoma",
-          environment: "production"
-        }
-      }
-    }
-  }
-}
-```
-
-Verify installation: `openclaw plugins inspect neotoma` shows `Format: native`, `Kind: memory`, and all registered tool contracts.
-
-## Common questions
-
-**Platform memory (Claude, ChatGPT) is good enough — why add another tool?**
-Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool state you control.
-
-**Can't I just build this with SQLite or a JSON file?**
-You can start there — many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.
-
-**What's the difference between RAG memory and deterministic memory?**
-RAG stores text chunks and retrieves them by similarity. Neotoma stores structured observations and composes entity state with reducers; the same observations always yield the same snapshot. RAG optimizes relevance; deterministic memory optimizes integrity, versioning, and auditability.
-
-**Is this production-ready?**
-Neotoma is in developer preview — used daily by real agent workflows. The core guarantees (deterministic state, versioned history, append-only log) are stable. Install in 5 minutes and let your agent evaluate the fit.
-
-More questions: [FAQ](https://neotoma.io/faq)
-
-## Related posts
-
-- [Neotoma developer release](https://markmhendrickson.com/posts/neotoma-developer-release)
-- [Your AI remembers your vibe but not your work](https://markmhendrickson.com/posts/your-ai-remembers-your-vibe-but-not-your-work)
-- [Building a truth layer for persistent agent memory](https://markmhendrickson.com/posts/truth-layer-agent-memory)
-- [Agent memory has a truth problem](https://markmhendrickson.com/posts/agent-memory-truth-problem)
-- [Six agentic trends I'm betting on (and how I might be wrong)](https://markmhendrickson.com/posts/six-agentic-trends-betting-on)
-- [Why agent memory needs more than RAG](https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag)
-- [Agent command centers need one source of truth](https://markmhendrickson.com/posts/agent-command-centers-source-of-truth)
 
 ## Documentation
 
-Full documentation is organized at [neotoma.io/docs](https://neotoma.io/docs) and in the `docs/` directory.
+Documentation is served in-app at `/docs` (browsable in the Inspector), published at [neotoma.io/docs](https://neotoma.io/docs), and stored under `docs/`.
 
-**Getting started:** [Evaluate](https://neotoma.io/evaluate), [Install](https://neotoma.io/install), [Walkthrough](https://neotoma.io/developer-walkthrough)
-
-**Reference:** [REST API](https://neotoma.io/api), [MCP server](https://neotoma.io/mcp), [CLI](https://neotoma.io/cli), [Memory guarantees](https://neotoma.io/memory-guarantees), [Architecture](https://neotoma.io/architecture), [Terminology](https://neotoma.io/terminology)
-
-**Foundational:** [Core identity](docs/foundation/core_identity.md), [Philosophy](docs/foundation/philosophy.md), [Problem statement](docs/foundation/problem_statement.md)
-
-**Operations:** [Runbook](docs/operations/runbook.md), [Health check](docs/operations/health_check.md) (`npm run doctor`), SQLite salvage (`neotoma storage recover-db`, `npm run recover:db`, `npm run recover:db:prod`), [Troubleshooting](https://neotoma.io/troubleshooting)
+- **Foundations:** [Core identity](docs/foundation/core_identity.md), [Philosophy](docs/foundation/philosophy.md), [Manifest](docs/NEOTOMA_MANIFEST.md)
+- **Architecture:** [Architecture](docs/architecture/architecture.md), [Determinism](docs/architecture/determinism.md)
+- **Interfaces:** [CLI reference](docs/developer/cli_reference.md), [MCP instructions](docs/developer/mcp/instructions.md), [REST API](docs/api/rest_api.md)
+- **Operations:** [Runbook](docs/operations/runbook.md), health check (`neotoma doctor`)
 
 ## Contributing
 
-Neotoma is in active development. For questions or collaboration, open an issue or discussion. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). **License:** MIT
+Neotoma is in active development. Open an issue or discussion for questions or collaboration. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). License: MIT.

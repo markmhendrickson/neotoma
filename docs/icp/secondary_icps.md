@@ -1,4 +1,15 @@
+---
+title: "Secondary ICPs (Adjacent / Later in Dev Release)"
+summary: Internal, market-derived secondary ICPs. See icp_from_functionality.md for the functional view and icp_reconciliation.md for the mapping.
+category: use_cases
+subcategory: icp
+audience: developer
+visibility: internal
+---
+
 # Secondary ICPs (Adjacent / Later in Dev Release)
+
+> Reconciliation: the functional audit recommends naming a security-conscious multi-agent fleet operator as a first-class secondary ICP here, since the code already invests heavily in attested agent identity, grants, and provenance. See [ICP reconciliation](icp_reconciliation.md) and [ICP from functionality](icp_from_functionality.md).
 
 ## Scope
 

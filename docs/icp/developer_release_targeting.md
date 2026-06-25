@@ -1,3 +1,12 @@
+---
+title: "Developer Release Targeting"
+summary: Internal release-scoped ICP targeting, activation risks, and status tracking.
+category: use_cases
+subcategory: icp
+audience: developer
+visibility: internal
+---
+
 # Developer Release Targeting
 
 Release-scoped targeting, activation risks, and status tracking for the developer release. This document is temporal — it will evolve or be replaced as the product moves past the developer release phase.

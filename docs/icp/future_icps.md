@@ -1,3 +1,12 @@
+---
+title: "Future ICPs (Post Developer Release)"
+summary: Internal forward-looking ICP planning. See icp_from_functionality.md for the current functional view.
+category: use_cases
+subcategory: icp
+audience: developer
+visibility: internal
+---
+
 # Future ICPs (Post Developer Release)
 
 ## Scope

@@ -647,13 +647,13 @@ categories:
         order: 50
 
 featured:
-  - docs/NEOTOMA_MANIFEST.md
-  - docs/foundation/core_identity.md
-  - docs/foundation/philosophy.md
+  - docs/getting_started/what_is_neotoma.md
+  - docs/getting_started/getting_started.md
+  - docs/getting_started/using_the_inspector.md
+  - docs/getting_started/working_with_your_memory.md
   - docs/architecture/architecture.md
   - docs/architecture/determinism.md
   - docs/developer/cli_reference.md
   - docs/developer/mcp/instructions.md
-  - docs/observability/logging.md
-  - docs/security/threat_model.md
-  - docs/testing/testing_standard.md
+  - docs/foundation/core_identity.md
+  - docs/NEOTOMA_MANIFEST.md
