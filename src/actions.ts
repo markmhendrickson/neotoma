@@ -1919,7 +1919,11 @@ app.all("/mcp", async (req, res) => {
     // resolved above (from the aauthAdmission() middleware on req).
     const attributionDecision = getAttributionDecisionFromRequest(req);
     await runWithRequestContext(
-      { agentIdentity: fallbackIdentity, attributionDecision, aauthAdmission: aauthAdmissionForRequest },
+      {
+        agentIdentity: fallbackIdentity,
+        attributionDecision,
+        aauthAdmission: aauthAdmissionForRequest,
+      },
       () => transport!.handleRequest(req, res, req.body)
     );
   } catch (error: any) {
