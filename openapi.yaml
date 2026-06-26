@@ -1758,6 +1758,15 @@ components:
           description: Required with file_content, optional with file_path
         original_filename:
           type: string
+        source_storage:
+          type: string
+          enum: [inline, reference]
+          default: inline
+          description: >-
+            Storage mode for an accompanying file. "inline" (default) reads and
+            ingests the bytes; "reference" registers the file by path +
+            content_hash WITHOUT copying its bytes (requires file_path, not
+            file_content). Mirrors the MCP store tool. (#1826)
         user_id:
           type: string
         commit:

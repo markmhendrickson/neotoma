@@ -4655,6 +4655,9 @@ export class NeotomaServer {
         mime_type: parsed.mime_type,
         original_filename: parsed.original_filename,
         source_priority: parsed.source_priority,
+        // Propagate by-reference storage to the file leg (#1827): without this the
+        // recursive store() defaults to inline and silently copies the bytes.
+        source_storage: parsed.source_storage,
       });
       try {
         const text = unstructuredResponse.content[0]?.text ?? "{}";
@@ -4706,6 +4709,9 @@ export class NeotomaServer {
           mime_type: parsed.mime_type,
           original_filename: parsed.original_filename,
           source_priority: parsed.source_priority,
+          // Propagate by-reference storage to the file leg (#1827): without this the
+          // recursive store() defaults to inline and silently copies the bytes.
+          source_storage: parsed.source_storage,
         });
         try {
           const text = unstructuredResponse.content[0]?.text ?? "{}";

@@ -3327,6 +3327,12 @@ export interface components {
       /** @description Required with file_content, optional with file_path */
       mime_type?: string;
       original_filename?: string;
+      /**
+       * @description Storage mode for an accompanying file. "inline" (default) reads and ingests the bytes; "reference" registers the file by path + content_hash WITHOUT copying its bytes (requires file_path, not file_content). Mirrors the MCP store tool. (#1826)
+       * @default inline
+       * @enum {string}
+       */
+      source_storage?: "inline" | "reference";
       user_id?: string;
       /**
        * @description When false, runs in plan/dry-run mode: resolves entities and returns
