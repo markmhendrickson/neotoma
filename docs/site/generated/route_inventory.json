@@ -120,6 +120,14 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/usage-telemetry",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/rendered-pages",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/inspector",
     "classification": "other"
   },

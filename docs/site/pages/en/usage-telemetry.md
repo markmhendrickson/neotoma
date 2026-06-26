@@ -1,0 +1,158 @@
+---
+path: /usage-telemetry
+locale: en
+page_title: Usage telemetry
+shell: detail
+translation_status: canonical
+nav_group: reference
+nav_order: 116
+---
+
+Agents and observer processes can report periodic, PII-safe aggregate telemetry to a Neotoma instance by storing `usage_digest` entities. A digest captures a bounded time window of operational health and usage metrics — error rates, operation counts, tool call breakdowns — at a rollup grain, complementing the per-event `harness_event` and per-incident `daemon_report` types.
+
+## What a usage digest is
+
+A `usage_digest` is one entity per observer × period. It is not a stream of raw events; it is a pre-aggregated summary produced by an observer after a period closes. The period boundary is open on the right: `period_start` is inclusive, `period_end` is exclusive.
+
+Three entity types cover different observability layers:
+
+| Type | Grain | Purpose |
+|---|---|---|
+| `harness_event` | per turn / operation | Raw event log (high cardinality) |
+| `daemon_report` | per incident / anomaly | Exception and incident tracking |
+| `usage_digest` | per observer × period | Aggregated rollup for trend queries |
+
+Retrieve digests sorted by `period_end` for a trend view; join to `daemon_report` rows from the same period for the incident drill-down.
+
+## Fields
+
+### Required fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `schema_version` | string | Always `"1.0"` for this spec version. |
+| `period_start` | string (ISO-8601) | Start of the window, inclusive. Must be a string, not a date — lexicographic sort must match temporal order. |
+| `period_end` | string (ISO-8601) | End of the window, exclusive. Used as the time-series sort key. |
+| `reporter_channel` | string | Observer slug that identifies the emitter instance (e.g. `"my-observer"`). |
+
+### Optional fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `aauth_sub` | string | Agent attribution. Optional — a guest emitter without an AAuth keypair may omit it. |
+| `reporter_app_version` | string | Semver of the observer app. |
+| `reporter_git_sha` | string | Short SHA of the deployed build. |
+| `operation_counts` | object | Total and per-operation call counts for the period. |
+| `error_rate` | number | Fraction [0, 1] of operations that errored. |
+| `error_counts` | object | Total and per-error-code error counts. |
+| `entity_type_usage` | object | Store and retrieve counts broken down by entity type. |
+| `tool_usage` | object | Call and error counts broken down by MCP tool name. |
+| `compliance_signals` | object | Agent-instruction adherence metrics (rates [0, 1] and violation counts). |
+| `friction_notes` | array | Array of strings describing UX friction points. PII must be redacted before submission; the server also redacts on ingest as a backstop. |
+| `effectiveness_signal` | string | Enum: `excellent` \| `good` \| `fair` \| `poor` \| `unknown`. |
+| `notes` | string | Free-text operational notes. PII is redacted server-side on ingest. |
+| `redaction_salt` | string | Shared salt for client-side PII redaction (see [Redaction](#redaction)). |
+
+### `aauth_sub` is optional
+
+`aauth_sub` is the agent attribution field and is intentionally optional. An external observer without a registered AAuth keypair can submit digests as a keyless guest — `aauth_sub` is simply omitted. Adding an AAuth key and grant later upgrades the emitter to verified attribution without a schema change.
+
+## Submitting a digest
+
+### Via `store`
+
+Call `store` with `entity_type: "usage_digest"` and the period fields. Use an idempotency key of the form `usage-digest-<reporter_channel>-<period_end>` to prevent duplicate ingestion on retry.
+
+```json
+{
+  "entity_type": "usage_digest",
+  "idempotency_key": "usage-digest-my-observer-2026-06-01T00:00:00Z",
+  "schema_version": "1.0",
+  "period_start": "2026-05-25T00:00:00Z",
+  "period_end": "2026-06-01T00:00:00Z",
+  "reporter_channel": "my-observer",
+  "reporter_app_version": "1.4.2",
+  "operation_counts": {
+    "total": 4821,
+    "by_operation": {
+      "store": 3100,
+      "retrieve_entities": 980,
+      "correct": 410,
+      "retrieve_entity_by_identifier": 331
+    }
+  },
+  "error_rate": 0.0097,
+  "error_counts": {
+    "total": 47,
+    "by_error_code": {
+      "ERR_STORE_VALIDATION_FAILED": 28,
+      "ERR_STORE_RESOLUTION_FAILED": 12,
+      "ERR_NOT_FOUND": 7
+    }
+  },
+  "entity_type_usage": {
+    "by_entity_type": {
+      "conversation": { "store_count": 214, "retrieve_count": 88 },
+      "task": { "store_count": 156, "retrieve_count": 304 }
+    }
+  },
+  "tool_usage": {
+    "by_tool": {
+      "store": { "call_count": 3100, "error_count": 18 },
+      "retrieve_entities": { "call_count": 980, "error_count": 4 }
+    }
+  },
+  "friction_notes": [
+    "retrieve_entities returned empty for entity_type=task despite known stored entities"
+  ],
+  "effectiveness_signal": "good"
+}
+```
+
+### Authentication
+
+Two paths are supported:
+
+1. **AAuth grant** — configure a grant with `{ op: "store", entity_types: ["usage_digest"] }` for the reporting agent's `aauth_sub`. Recommended for automated observers that already hold a keypair.
+2. **Keyless guest** — `usage_digest` ships with `guest_access_policy: "submit_only"`. An observer without an AAuth keypair can submit via an unauthenticated `store` call. Guests may write but not read digests back (appropriate for a write-only telemetry sink).
+
+### Identity and idempotency
+
+The canonical identity of a `usage_digest` is the composite `[reporter_channel, period_start, period_end]`. A second `store` with the same composite returns `ERR_STORE_RESOLUTION_FAILED` rather than silently merging or duplicating. To amend a submitted digest, use `correct` instead.
+
+## Retrieving digests (time-series)
+
+```json
+{
+  "entity_type": "usage_digest",
+  "sort_by": "snapshot.period_end",
+  "sort_order": "desc",
+  "limit": 30
+}
+```
+
+To filter by channel:
+
+```json
+{
+  "entity_type": "usage_digest",
+  "sort_by": "snapshot.period_end",
+  "sort_order": "desc",
+  "snapshot_filters": {
+    "reporter_channel": { "op": "eq", "value": "my-observer" }
+  }
+}
+```
+
+`period_end` is stored as an ISO-8601 string so lexicographic order matches temporal order — descending `period_end` sort works correctly without a date-aware index.
+
+## Redaction
+
+Free-text fields (`friction_notes`, `notes`) are protected with defense in depth:
+
+- **Client-side (recommended):** redact PII before submission using a per-digest `redaction_salt`. This keeps raw PII off the wire and lets the emitter control placeholder correlation.
+- **Server-side (enforced):** the Neotoma store seam scans `notes` and each `friction_notes` element on ingest for every `usage_digest` entity and writes back the redacted form. This backstop ensures that a misconfigured guest emitter cannot silently persist raw PII.
+
+Both layers apply the same patterns — emails, bearer tokens, filesystem paths, UUIDs, phone numbers — and replace matches with `<LABEL:sha256[:8]>` placeholders keyed to the `redaction_salt`.
+
+See the [changelog](/changelog) for release notes, and [auditable change log](/auditable-change-log) for the related per-event entity type.
