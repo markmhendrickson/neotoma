@@ -173,6 +173,9 @@ describe("store_warnings: SOURCE_PRIORITY_IGNORED (#1755)", () => {
     expect(warn!.observation_index).toBe(0);
     expect(warn!.message).toContain("source_priority");
     expect(warn!.message).toContain("200");
+    // #1822: message must name the written field and its effective strategy.
+    expect(warn!.message).toContain("'label'");
+    expect(warn!.message).toContain("last_write");
   });
 
   it("MCP: default source_priority (100) + auto-discovered type → no warning", async () => {
@@ -247,6 +250,9 @@ describe("store_warnings: SOURCE_PRIORITY_IGNORED (#1755)", () => {
     expect(warn).toBeDefined();
     expect(warn!.entity_type).toBe(LAST_WRITE_TYPE);
     expect(warn!.observation_index).toBe(0);
+    // #1822: message must name the written fields and their effective strategy.
+    expect(warn!.message).toContain("'label'");
+    expect(warn!.message).toContain("last_write");
   });
 
   // ─── HTTP /store path ────────────────────────────────────────────────────────
@@ -283,6 +289,9 @@ describe("store_warnings: SOURCE_PRIORITY_IGNORED (#1755)", () => {
     expect(warn!.entity_id).toBe(entityId);
     expect(warn!.observation_index).toBe(0);
     expect(warn!.message).toContain("source_priority");
+    // #1822: message must name the written field and its effective strategy.
+    expect(warn!.message).toContain("'label'");
+    expect(warn!.message).toContain("last_write");
   });
 
   it("HTTP: default source_priority (100) + all-last_write schema → no warning", async () => {

@@ -96,8 +96,36 @@ export type SourcePriorityIgnoredWarning = {
 };
 
 /**
+ * Returns a list of written field names that will NOT honour source_priority,
+ * paired with their effective merge strategy (from mergePolicies, or
+ * "last_write" when the field is absent from the policy map / no schema exists).
+ *
+ * Returns an empty array when every written field honours priority (i.e. the
+ * caller should not emit a warning).
+ */
+export function ignoredFieldStrategies(opts: {
+  writtenFields: Record<string, unknown>;
+  mergePolicies: ReducerConfig["merge_policies"] | undefined | null;
+}): Array<{ field: string; strategy: string }> {
+  const { writtenFields, mergePolicies } = opts;
+  const result: Array<{ field: string; strategy: string }> = [];
+  for (const fieldName of Object.keys(writtenFields)) {
+    const policy = mergePolicies?.[fieldName];
+    if (!fieldHonorsPriority(policy)) {
+      // If the field has an explicit policy, report its strategy; otherwise it
+      // falls back to the auto-discovered default ("last_write").
+      result.push({ field: fieldName, strategy: policy?.strategy ?? "last_write" });
+    }
+  }
+  return result;
+}
+
+/**
  * Returns a structured store_warnings[] entry when `source_priority` will have
  * no effect on the observation, or `null` when no warning is warranted.
+ *
+ * The message now names each written field that ignores source_priority and
+ * states its effective merge strategy, making the warning self-diagnosing.
  *
  * Centralises both the predicate check and the message template so the HTTP
  * and MCP call sites are each a single expression rather than an ~11-line
@@ -118,15 +146,27 @@ export function buildSourcePriorityIgnoredWarning(opts: {
     return null;
   }
 
+  const ignored = ignoredFieldStrategies({ writtenFields, mergePolicies });
+
+  // Build a compact per-field summary: "field 'foo' uses last_write"
+  const fieldSummary = ignored
+    .map(({ field, strategy }) => `'${field}' uses ${strategy}`)
+    .join(", ");
+
+  const noSchema = !mergePolicies || Object.keys(mergePolicies).length === 0;
+  const policyNote = noSchema
+    ? " (reducer_config.merge_policies has no entries for this type)"
+    : " (reducer_config.merge_policies has no highest_priority entry for these fields)";
+
   return {
     code: "SOURCE_PRIORITY_IGNORED",
     message:
-      `${entityType} stored with source_priority ${sourcePriority} but no field ` +
-      "on this entity type uses a merge strategy that honours it. " +
+      `${entityType} stored with source_priority ${sourcePriority} but the written ` +
+      `field(s) ignore it — ${fieldSummary}${policyNote}. ` +
       "source_priority is only effective when a field's reducer policy is " +
       '`highest_priority` (or `most_specific` with `tie_breaker: "source_priority"`). ' +
-      "To fix: register a schema whose reducer_config sets the relevant field(s) to " +
-      "`highest_priority` so source_priority is honoured during reduction.",
+      "To fix: register a schema whose reducer_config.merge_policies sets the relevant " +
+      "field(s) to `highest_priority` so source_priority is honoured during reduction.",
     observation_index: observationIndex,
     entity_type: entityType,
     entity_id: entityId,
