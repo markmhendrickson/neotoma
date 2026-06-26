@@ -82,6 +82,24 @@ describe("unknownFieldsGuard", () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
+  it("allows source_storage on POST /store (by-reference storage over HTTP, #1826)", () => {
+    _resetUnknownFieldsGuardCache();
+    const req = {
+      method: "POST",
+      path: "/store",
+      body: {
+        idempotency_key: "k",
+        file_path: "/tmp/sample.pdf",
+        source_storage: "reference",
+      },
+    } as any;
+    const res = buildRes();
+    const next = vi.fn();
+    unknownFieldsGuard(req, res, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
   it("passes through when the route is not a closed OpenAPI shape", () => {
     _resetUnknownFieldsGuardCache();
     const req = {
