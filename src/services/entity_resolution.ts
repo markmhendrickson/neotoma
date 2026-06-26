@@ -596,6 +596,14 @@ export function deriveCanonicalNameFromFieldsWithTrace(
       "import_date",
       "import_source_file",
       "source",
+      // Provenance/origin labels — like `source`, these describe where the
+      // entity came from rather than what it is. Accepting them as canonical
+      // names causes unrelated entities to merge under a shared provenance
+      // label (e.g. every auto-merged entity named after "stale cache" or
+      // "gmail import"). `source` was already rejected; add siblings.
+      "source_name",
+      "data_source",
+      "origin",
       "currency",
       "currency_code",
       "category",

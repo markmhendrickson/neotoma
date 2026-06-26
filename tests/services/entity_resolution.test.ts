@@ -432,6 +432,64 @@ describe("Entity Resolution Service", () => {
       expect(typeof canonical).toBe("string");
     });
 
+    // Regression: #1821 — source_name provenance field must never become
+    // the canonical_name for auto-discovered entity types.
+    describe("source_name / provenance-key exclusion (#1821)", () => {
+      it("uses name over source_name when both are present", () => {
+        // The reporter stored {name, source_name}; canonical_name must come
+        // from `name`, not from the provenance label.
+        // Note: formatCanonicalNameForStorage normalises underscores to spaces,
+        // so "spy_priority_test" is stored as "spy priority test".
+        const result = deriveCanonicalNameFromFieldsWithTrace("spy_priority", {
+          name: "spy_priority_test",
+          source_name: "stale cache",
+        });
+        expect(result.canonicalName).toContain("spy priority test");
+        expect(result.canonicalName).not.toContain("stale cache");
+        expect(result.identityBasis).toBe("heuristic_name");
+        expect(result.identityRule).toBe("name_key:name");
+      });
+
+      it("refuses to derive canonical_name from source_name alone (no name present)", () => {
+        // A second write arriving with only {source_name} must not mint an
+        // entity named after the provenance label.
+        expect(() =>
+          deriveCanonicalNameFromFields("spy_priority", {
+            source_name: "stale cache",
+          }),
+        ).toThrow(CanonicalNameUnresolvedError);
+      });
+
+      it("refuses to derive canonical_name from data_source alone", () => {
+        expect(() =>
+          deriveCanonicalNameFromFields("custom_type", {
+            data_source: "webhook_import",
+          }),
+        ).toThrow(CanonicalNameUnresolvedError);
+      });
+
+      it("refuses to derive canonical_name from origin alone", () => {
+        expect(() =>
+          deriveCanonicalNameFromFields("custom_type", {
+            origin: "webhook_import",
+          }),
+        ).toThrow(CanonicalNameUnresolvedError);
+      });
+
+      it("heuristic fallback still picks a legitimate payload field when source_name is also present", () => {
+        // When neither name nor id fields are present but another legitimate
+        // string field exists alongside source_name, the fallback must pick
+        // the legitimate field, not source_name.
+        const result = deriveCanonicalNameFromFieldsWithTrace("custom_widget", {
+          source_name: "import_batch_7",
+          widget_label: "Dashboard Widget",
+        });
+        expect(result.canonicalName).toContain("Dashboard Widget");
+        expect(result.identityBasis).toBe("heuristic_fallback");
+        expect(result.identityRule).toContain("widget_label");
+      });
+    });
+
     // R1: ordered identity precedence with partial matches.
     describe("ordered identity precedence (R1)", () => {
       const orderedContactSchema = {
