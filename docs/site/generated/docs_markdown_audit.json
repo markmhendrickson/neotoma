@@ -1,15 +1,16 @@
 {
-  "generated_at": "2026-06-25T10:51:11.155Z",
-  "total_files": 707,
+  "generated_at": "2026-06-26T09:16:58.413Z",
+  "total_files": 717,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
+    "bundles": 2,
     "conventions": 12,
     "coverage_manifest.md": 1,
     "developer": 122,
     "examples": 1,
     "feature_units": 20,
-    "foundation": 24,
+    "foundation": 25,
     "getting_started": 4,
     "icp": 10,
     "implementation": 2,
@@ -29,8 +30,8 @@
     "reports": 48,
     "research": 1,
     "security": 6,
-    "site": 177,
-    "skills": 1,
+    "site": 181,
+    "skills": 4,
     "specs": 14,
     "subsystems": 49,
     "templates": 2,
@@ -123,6 +124,14 @@
     {
       "rel": "docs/architecture/source_material_model.md",
       "top": "architecture"
+    },
+    {
+      "rel": "docs/bundles/m5/phase0_field_coverage.md",
+      "top": "bundles"
+    },
+    {
+      "rel": "docs/bundles/m5/phase0_orphaned_type_map.md",
+      "top": "bundles"
     },
     {
       "rel": "docs/conventions/always_on_rules_review.md",
@@ -754,6 +763,10 @@
     },
     {
       "rel": "docs/foundation/ai_safety.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/bundles.md",
       "top": "foundation"
     },
     {
@@ -1617,6 +1630,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/faq/schema_modes.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/generated/DOCS_MARKDOWN_AUDIT.md",
       "top": "site"
     },
@@ -1961,6 +1978,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/pages/en/rendered-pages.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/pages/en/replayable-timeline.md",
       "top": "site"
     },
@@ -1982,6 +2003,10 @@
     },
     {
       "rel": "docs/site/pages/en/schemas.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/schemas/locked_vs_evolving.md",
       "top": "site"
     },
     {
@@ -2042,6 +2067,10 @@
     },
     {
       "rel": "docs/site/pages/en/troubleshooting.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/pages/en/usage-telemetry.md",
       "top": "site"
     },
     {
@@ -2319,6 +2348,18 @@
     {
       "rel": "docs/site/README.md",
       "top": "site"
+    },
+    {
+      "rel": "docs/skills/core_workflows/close-session/SKILL.md",
+      "top": "skills"
+    },
+    {
+      "rel": "docs/skills/core_workflows/get-context/SKILL.md",
+      "top": "skills"
+    },
+    {
+      "rel": "docs/skills/core_workflows/start-session/SKILL.md",
+      "top": "skills"
     },
     {
       "rel": "docs/skills/skill_strategy.md",
