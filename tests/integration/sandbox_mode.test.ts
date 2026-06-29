@@ -96,11 +96,11 @@ describe("sandbox_mode middleware", () => {
     const body = (await res.json()) as {
       error_code: string;
       message: string;
-      details: { docs: string; weekly_reset: string };
+      details: { docs: string; session_ttl_cap: string };
     };
     expect(body.error_code).toBe("SANDBOX_DISABLED");
     expect(body.message).toMatch(/sandbox/i);
-    expect(body.details.weekly_reset).toBe("Sunday 00:00 UTC");
+    expect(body.details.session_ttl_cap).toMatch(/Sunday 00:00 UTC/);
     expect(res.headers.get("x-neotoma-sandbox")).toBe("1");
   });
 

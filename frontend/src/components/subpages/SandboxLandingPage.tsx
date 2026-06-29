@@ -24,7 +24,7 @@ const CLAUDE_CODE_REMOTE_MCP = `claude mcp add neotoma-sandbox --transport http 
 
 const AGENT_CONNECT_PROMPT = `Connect this Neotoma MCP server for me: ${SANDBOX_MCP_URL}
 
-It is a public, shared sandbox. Anything I store is publicly visible and will be wiped on the next weekly reset (Sunday 00:00 UTC). Use it to help me kick the tires only - do not store anything private, and do not rely on persistence across the reset.
+It is a public sandbox with ephemeral per-session workspaces. Anything I store is publicly visible and is hard-deleted when my session expires (up to 7 days, capped at Sunday 00:00 UTC), when I end/reset the session, or sooner via the background sweep. Use it to help me kick the tires only - do not store anything private, and do not rely on persistence.
 
 Add the server to my current tool's MCP config, then confirm it is reachable with a single retrieve call.`;
 
@@ -38,7 +38,7 @@ export function SandboxLandingPageBody() {
         </span>
         <span className="inline-flex items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/5 px-2.5 py-1 text-[12px] font-medium text-amber-700 dark:text-amber-400">
           <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          Resets weekly
+          Ephemeral sessions
         </span>
         <span className="inline-flex items-center gap-1.5 rounded border border-rose-500/25 bg-rose-500/5 px-2.5 py-1 text-[12px] font-medium text-rose-700 dark:text-rose-400">
           <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -82,9 +82,9 @@ export function SandboxLandingPageBody() {
               ↻
             </span>
             <span>
-              <strong>Data resets weekly.</strong> The sandbox dataset is wiped every Sunday at
-              00:00 UTC. Anything you create is guaranteed to disappear - treat it as scratch space,
-              not storage.
+              <strong>Data is ephemeral per session.</strong> Your workspace is hard-deleted when
+              the session expires (up to 7 days, capped at Sunday 00:00 UTC), when you end or reset
+              the session, or when the background sweep runs. Treat it as scratch space, not storage.
             </span>
           </li>
           <li className="text-[15px] leading-7 text-foreground flex items-start gap-2">
@@ -94,7 +94,7 @@ export function SandboxLandingPageBody() {
             <span>
               <strong>Destructive admin endpoints are disabled.</strong> Merge, split, schema
               rewrites, and full-corpus snapshot recomputes are blocked so abusive callers cannot
-              nuke the demo between resets. Soft deletes still work and are reversible.
+              nuke the demo for other visitors. Soft deletes still work and are reversible.
             </span>
           </li>
           <li className="text-[15px] leading-7 text-foreground flex items-start gap-2">
