@@ -13,7 +13,9 @@
 #
 # Weekly reset: run `./scripts/schedule_sandbox_reset.sh` (SSH into the app VM;
 # Fly volumes cannot mount on a second Machine). Or enable the GitHub Action
-# `.github/workflows/sandbox-weekly-reset.yml` with repo secret FLY_API_TOKEN.
+# Weekly security probes: `.github/workflows/sandbox-weekly-security-probes.yml`.
+# Manual volume reset (operator): `.github/workflows/sandbox-weekly-reset.yml`
+# (workflow_dispatch) with repo secret FLY_API_TOKEN.
 
 app = 'neotoma-sandbox'
 primary_region = 'lhr'

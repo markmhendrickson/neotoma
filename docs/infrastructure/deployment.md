@@ -529,10 +529,12 @@ Fly app. Full architecture and operator runbook:
 flyctl deploy --config fly.sandbox.toml  # bakes Inspector via [build.args] in fly.sandbox.toml
 ```
 
-After the first deploy, add repository secret **`FLY_API_TOKEN`** and enable
-the **Sandbox weekly reset** workflow (`.github/workflows/sandbox-weekly-reset.yml`),
-or run `./scripts/schedule_sandbox_reset.sh` manually (uses `fly ssh` into the
-app; Fly volumes cannot attach to a second scheduled Machine).
+After the first deploy, add repository secret **`FLY_API_TOKEN`** for optional
+**manual** volume reset (`.github/workflows/sandbox-weekly-reset.yml`,
+workflow_dispatch only) via `./scripts/schedule_sandbox_reset.sh` (`fly ssh`
+into the app; Fly volumes cannot attach to a second Machine). Weekly security
+probes run from `.github/workflows/sandbox-weekly-security-probes.yml` and do
+not require SSH.
 
 ### Secrets
 
