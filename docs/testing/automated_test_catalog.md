@@ -61,16 +61,16 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **526**
-- Backend and repo Vitest files: **491**
+- Total automated test files: **524**
+- Backend and repo Vitest files: **490**
 - Frontend Vitest files: **9**
-- Playwright spec files: **26**
+- Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 146 |
-| Vitest service tests | 36 |
+| Vitest service tests | 35 |
 | Source-adjacent tests | 64 |
 | Vitest integration tests | 150 |
 | Vitest CLI tests | 65 |
@@ -83,7 +83,7 @@ flowchart TD
 | Vitest shared-environment tests | 1 |
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
-| Playwright Inspector E2E tests | 4 |
+| Playwright Inspector E2E tests | 3 |
 | Tests Performance | 1 |
 | Tests Scripts | 2 |
 
@@ -262,12 +262,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (36):**
+**Files (35):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
-- `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
@@ -410,7 +409,6 @@ flowchart TD
 - `tests/integration/dashboard_stats.test.ts`
 - `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/docs_route.test.ts`
-- `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
@@ -520,6 +518,7 @@ flowchart TD
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`
 - `tests/integration/sync_webhook_inbound.test.ts`
+- `tests/integration/transport_parity_store_snapshot_auth.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
 - `tests/integration/tunnel_discovery.test.ts`
 - `tests/integration/turn_summary_mcp_apps.test.ts`
@@ -703,7 +702,7 @@ flowchart TD
 - `playwright/tests/entity-detail.spec.ts`
 - `playwright/tests/entity-list.spec.ts`
 - `playwright/tests/floating-settings-button.spec.ts`
-- `playwright/tests/graph-data-integrity.spec.ts`
+- `playwright/tests/graph-integrity.spec.ts`
 - `playwright/tests/interpretations.spec.ts`
 - `playwright/tests/mcp-configuration.spec.ts`
 - `playwright/tests/mcp-relationships.spec.ts`
@@ -726,9 +725,8 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e:inspector`
 **Requirements:** Inspector bundle built before execution.
-**Files (4):**
+**Files (3):**
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
-- `playwright/tests/inspector/inspector-graph-render.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
 - `playwright/tests/inspector/inspector-sandbox-pack-picker.spec.ts`
 
