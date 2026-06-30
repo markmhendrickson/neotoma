@@ -35,9 +35,34 @@ Applies once per session, at user request. Does not modify code. Files Neotoma e
 - The only thing it never auto-executes is `do-now` code work unless the user explicitly asked for it in-session; those are filed as tasks like any other `track` item.
 - PII MUST still be stripped from any filed issues per the `feedback_issue_pii` memory, and standing constraints (Neotoma prod, never mark yoga/therapy done, etc.) still apply.
 
+## Phase 0: Whole-session coverage (read the transcript when context is partial)
+
+`/end` must audit the **whole session**, not just the portion currently in context. This matters more here than for `/status`: a partial scan silently *fails to file* trackable work and *misses storage gaps* from the earlier session, defeating the skill's purpose.
+
+Before Phase 1, decide whether context is whole-session or partial. Treat it as **partial** whenever any of these hold:
+
+- A compaction/summary boundary is present in context (a "This session is being continued…" summary block, or an injected session-summary).
+- The session spans multiple days or many turns.
+- The user signals earlier work was missed.
+
+When partial, reconstruct the full arc from the transcript **before** auditing:
+
+1. **Locate the transcript JSONL — by identity, not recency.** Resolve the path in this strict order, stopping at the first that yields exactly one file:
+   1. The exact path named in the compaction/summary block in context — use it directly.
+   2. The harness-provided session id (a `<session-id>` / transcript path in environment context) → `~/.claude/projects/<project-slug>/<session-id>.jsonl`.
+   3. Only if neither is available: list `~/.claude/projects/<project-slug>/*.jsonl`. If exactly one exists, use it. **Do not** silently pick "the most recently modified" when several exist — a concurrent or prior-day session in the same project would make recency select the wrong file. If multiple remain and the session id can't disambiguate, treat it as *transcript unresolved* (see not-found handling) rather than guessing — filing tasks against the wrong session is worse than flagging tail-only.
+2. **Do not read the whole file into context** — it can be multiple MB. Extract a skeleton deterministically: parse the JSONL line by line; keep entries where `type`/`role` is `user` **and** the text does **not** match `^\s*<(system-reminder|command-name|command-message|local-command)`; drop `tool_result` content entirely; drop standalone "Continue from where you left off." lines; keep short assistant summary lines and any entity IDs / PR numbers mentioned. The "filter out tool_result" rule targets the `tool_result` *content type*, not user-pasted log/test output inside a genuine user message. This recovers the full request arc and the set of entities surfaced, cheaply.
+3. **Feed that whole-session skeleton into Phases 1 and 2** — the remaining-work audit and the storage audit must both cover the entire session, not just the in-context tail.
+
+If the transcript can't be resolved or read (not found, ambiguous, parse error, or zero user messages after filtering), proceed from context but lead the final report with one explicit, prefixed caveat line naming the reason and that coverage is tail-only — so the user knows earlier work might be unaudited and unfiled, e.g.:
+
+> ⚠️ Whole-session transcript unavailable (<reason>) — audit coverage is tail-only; trackable work and storage gaps before the boundary may be missed.
+
+When context is already whole-session (short, no compaction boundary), skip the transcript read. (Attaching the transcript itself as a `source_id` is out of scope here — Phase 2.3 already covers source-linking for files the session actually ingested; the transcript is a read aid, not an audited artifact.)
+
 ## Phase 1: Remaining-work audit
 
-Scan the current conversation and identify every follow-up under these headings:
+Scan the whole session (per Phase 0 — the transcript skeleton when context is partial, otherwise the in-context conversation) and identify every follow-up under these headings:
 
 1. **Open work** — TODOs the assistant introduced, partial implementations, files modified but not verified, tests not run, lint/type-check skipped, PRs/commits not made.
 2. **Decisions or proposals not acted on** — recommendations the user accepted that have not been executed; designs sketched but not implemented.
@@ -51,7 +76,7 @@ For each item, classify: `do-now` (trivially finishable inline only if the user 
 
 Determine what should be in Neotoma from this session and what already is.
 
-1. **Per-turn lifecycle compliance** — confirm each turn this session followed the Neotoma turn lifecycle (user message + assistant message stored, PART_OF + REFERS_TO edges). If any turn was skipped (which is forbidden), note it for repair.
+1. **Per-turn lifecycle compliance** — confirm each turn this session followed the Neotoma turn lifecycle (user message + assistant message stored, PART_OF + REFERS_TO edges). Use the Phase 0 transcript skeleton to enumerate turns when context is partial, so turns from before a compaction boundary are checked too. If any turn was skipped (which is forbidden), note it for repair.
 2. **Substantive entities surfaced** — list every concrete entity discussed or produced this session: plans, decisions, skills, rules, bugs, contacts, transactions, events, code artifacts, etc. For each, check via `retrieve_entity_by_identifier` or `retrieve_entities` whether it is already stored.
 3. **Files or attachments** — any files the user pasted, screenshots, transcripts, or external URLs fetched. Check whether each has a corresponding `source_id` / content-addressed source row.
 4. **Memory-worthy facts** — items that should be written to the auto-memory directory (`~/.claude/projects/.../memory/`) per the auto-memory protocol.
@@ -96,6 +121,7 @@ Both `/end` and `store-neotoma` MUST emit a **succinct affected-records list** i
 
 ## Constraints
 
+- MUST audit the whole session: when context is partial (a compaction boundary is present, the session is multi-day / many-turn, or the user flags missed work), reconstruct the full arc from the transcript JSONL (Phase 0) before Phases 1–2, so trackable work and storage gaps from before the boundary are not missed. If the transcript is unreadable, proceed but state in the final report that coverage may be tail-only.
 - MUST file `track` items as task entities **before** rendering the remaining-work bullets, so the bullets reflect stored state.
 - MUST NOT request confirmation before filing tasks, storing entities, or invoking `store-neotoma`.
 - MUST NOT skip the storage audit even if the user only asks about remaining work, and vice versa.
