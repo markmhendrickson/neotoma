@@ -66,5 +66,23 @@ fi
 # Validate documentation dependencies for modified docs
 npm run validate:doc-deps
 
+# Regenerate + stage the automated test catalog when test files change.
+# The baseline CI lane's "Validate automated test catalog" step has failed
+# repeatedly because docs/testing/automated_test_catalog.md drifts whenever a
+# test file is added/removed/renamed and the author forgets to regenerate it.
+# Auto-regenerating here makes the drift impossible to commit.
+if [ "$NEOTOMA_SKIP_TEST_CATALOG" = "1" ]; then
+  echo "Skipping test-catalog regeneration (NEOTOMA_SKIP_TEST_CATALOG=1)"
+elif git diff --cached --name-only | grep -E '(^|/)tests/|\.test\.tsx?$' > /dev/null; then
+  echo "Test files changed — regenerating automated test catalog..."
+  npm run generate:test-catalog || exit 1
+  if ! git diff --quiet -- docs/testing/automated_test_catalog.md; then
+    git add docs/testing/automated_test_catalog.md
+    echo "✓ docs/testing/automated_test_catalog.md regenerated and staged"
+  else
+    echo "✓ Automated test catalog already up to date"
+  fi
+fi
+
 # Sync .cursor/ and .claude/ if rule/command sources modified
 ./scripts/linters/sync_agent_instructions_pre_commit.sh

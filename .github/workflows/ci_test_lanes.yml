@@ -92,6 +92,42 @@ jobs:
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
 
+      # Breaking-change documentation gate (BLOCKING on release PRs).
+      #
+      # Retrospective #1841: the v0.18.0 `observation_source` enum tightening was
+      # a real OpenAPI/validation breaking change, but that release's supplement
+      # declared "## Breaking changes\n- None." and shipped the break undocumented.
+      #
+      # This step runs ONLY on release PRs (head branch chore/release/* or
+      # release/*). It derives the tag from package.json and the base from the
+      # latest reachable tag, runs the OpenAPI breaking-change diff, and FAILS the
+      # PR if a breaking diff exists while the supplement's "Breaking changes"
+      # section is missing or empty. Non-release PRs no-op.
+      - name: Breaking-change documentation gate (release PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          case "$HEAD_REF" in
+            chore/release/*|release/*)
+              echo "Release PR detected (head: $HEAD_REF) — enforcing breaking-change documentation gate."
+              # Unshallow + tags so the base tag's openapi.yaml blob is reachable
+              # for the bc-diff (default checkout is shallow with no tags).
+              git fetch --tags --force --unshallow || git fetch --tags --force
+              TAG="v$(node -p "require('./package.json').version")"
+              # Base = latest reachable tag that is not the release tag itself.
+              BASE="$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -n1)"
+              if [ -z "$BASE" ]; then
+                echo "::warning::No prior tag found to diff against; skipping breaking-change gate."
+                exit 0
+              fi
+              echo "Diffing $BASE -> HEAD for tag $TAG"
+              npm run validate:breaking-changes -- --tag "$TAG" --base "$BASE" --head HEAD
+              ;;
+            *)
+              echo "Not a release PR (head: $HEAD_REF) — breaking-change documentation gate skipped."
+              ;;
+          esac
+
   contract_parity:
     # Focused PR-time cross-surface contract-parity lane.
     #

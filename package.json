@@ -154,6 +154,7 @@
     "docs:serve": "npm run dev:docs:serve",
     "openapi:generate": "openapi-typescript ./openapi.yaml --default-non-nullable false -o src/shared/openapi_types.ts && prettier --write src/shared/openapi_types.ts",
     "openapi:bc-diff": "node scripts/openapi_bc_diff.js",
+    "validate:breaking-changes": "node scripts/validate_breaking_changes_documented.js",
     "security:classify-diff": "node scripts/security/classify_diff.js",
     "security:lint": "node scripts/security/run_semgrep.js",
     "security:auth-matrix": "vitest run tests/security/auth_topology_matrix.test.ts",
