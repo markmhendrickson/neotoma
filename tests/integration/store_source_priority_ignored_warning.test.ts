@@ -19,6 +19,13 @@
  *     schema → `SOURCE_PRIORITY_IGNORED` warning in the response body.
  *  5. HTTP `POST /store` path — default priority (100) + all-`last_write`
  *     schema → no warning.
+ *
+ * And for the mirror-image SOURCE_PRIORITY_ESCALATION warning (#1838):
+ *  6. MCP/HTTP `store` — DEFAULT priority (100) write into a registered
+ *     `highest_priority` field → `SOURCE_PRIORITY_ESCALATION` warning (the
+ *     unprioritized write would silently outrank an explicit lower priority).
+ *  7. MCP `store` — NON-default priority into the same field → no escalation
+ *     warning (the caller ranked intentionally).
  */
 
 import { createServer } from "node:http";
@@ -164,9 +171,7 @@ describe("store_warnings: SOURCE_PRIORITY_IGNORED (#1755)", () => {
     expect(body.entities && body.entities.length).toBe(1);
 
     const entityId = body.entities![0].entity_id;
-    const warn = (body.store_warnings ?? []).find(
-      (w) => w.code === "SOURCE_PRIORITY_IGNORED"
-    );
+    const warn = (body.store_warnings ?? []).find((w) => w.code === "SOURCE_PRIORITY_IGNORED");
     expect(warn).toBeDefined();
     expect(warn!.entity_type).toBe(AUTO_TYPE);
     expect(warn!.entity_id).toBe(entityId);
@@ -224,6 +229,95 @@ describe("store_warnings: SOURCE_PRIORITY_IGNORED (#1755)", () => {
     expect(hasWarning).toBe(false);
   });
 
+  // ─── SOURCE_PRIORITY_ESCALATION (#1838) ──────────────────────────────────────
+
+  it("MCP: default source_priority (100) + registered highest_priority schema → SOURCE_PRIORITY_ESCALATION warning", async () => {
+    const result = await callStore(server, {
+      user_id: TEST_USER_ID,
+      idempotency_key: `sp-escalation-${Date.now()}`,
+      commit: true,
+      // source_priority omitted → defaults to 100; `score` uses highest_priority.
+      entities: [
+        {
+          entity_type: PRIORITY_TYPE,
+          canonical_name: "priority-escalation-test",
+          score: 7,
+        },
+      ],
+    });
+
+    const body = JSON.parse(result.content[0].text) as StoreResponse;
+    expect(body.error).toBeUndefined();
+    expect(body.entities && body.entities.length).toBe(1);
+
+    const entityId = body.entities![0].entity_id;
+    const warn = (body.store_warnings ?? []).find((w) => w.code === "SOURCE_PRIORITY_ESCALATION");
+    expect(warn).toBeDefined();
+    expect(warn!.entity_type).toBe(PRIORITY_TYPE);
+    expect(warn!.entity_id).toBe(entityId);
+    expect(warn!.observation_index).toBe(0);
+    expect(warn!.message).toContain("100");
+    expect(warn!.message).toContain("'score'");
+    expect(warn!.message.toLowerCase()).toContain("outrank");
+    // No IGNORED warning — the field DOES honour priority.
+    const ignored = (body.store_warnings ?? []).some((w) => w.code === "SOURCE_PRIORITY_IGNORED");
+    expect(ignored).toBe(false);
+  });
+
+  it("MCP: non-default source_priority + highest_priority schema → no SOURCE_PRIORITY_ESCALATION warning", async () => {
+    const result = await callStore(server, {
+      user_id: TEST_USER_ID,
+      idempotency_key: `sp-no-escalation-${Date.now()}`,
+      commit: true,
+      source_priority: 999,
+      entities: [
+        {
+          entity_type: PRIORITY_TYPE,
+          canonical_name: "priority-no-escalation-test",
+          score: 11,
+        },
+      ],
+    });
+
+    const body = JSON.parse(result.content[0].text) as StoreResponse;
+    expect(body.error).toBeUndefined();
+    const hasEscalation = (body.store_warnings ?? []).some(
+      (w) => w.code === "SOURCE_PRIORITY_ESCALATION"
+    );
+    expect(hasEscalation).toBe(false);
+  });
+
+  it("HTTP: default source_priority (100) + highest_priority schema → SOURCE_PRIORITY_ESCALATION warning", async () => {
+    const res = await fetch(`${API_BASE}/store`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        idempotency_key: `http-sp-escalation-${Date.now()}`,
+        commit: true,
+        // source_priority omitted → defaults to 100.
+        entities: [
+          {
+            entity_type: PRIORITY_TYPE,
+            canonical_name: "http-priority-escalation-test",
+            score: 13,
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as StoreResponse;
+    expect(body.error).toBeUndefined();
+    expect(body.entities && body.entities.length).toBe(1);
+
+    const warn = (body.store_warnings ?? []).find((w) => w.code === "SOURCE_PRIORITY_ESCALATION");
+    expect(warn).toBeDefined();
+    expect(warn!.entity_type).toBe(PRIORITY_TYPE);
+    expect(warn!.observation_index).toBe(0);
+    expect(warn!.message).toContain("'score'");
+    expect(warn!.message.toLowerCase()).toContain("outrank");
+  });
+
   it("MCP: non-default source_priority + all-last_write registered schema → SOURCE_PRIORITY_IGNORED warning", async () => {
     const result = await callStore(server, {
       user_id: TEST_USER_ID,
@@ -244,9 +338,7 @@ describe("store_warnings: SOURCE_PRIORITY_IGNORED (#1755)", () => {
     expect(body.error).toBeUndefined();
     expect(body.entities && body.entities.length).toBe(1);
 
-    const warn = (body.store_warnings ?? []).find(
-      (w) => w.code === "SOURCE_PRIORITY_IGNORED"
-    );
+    const warn = (body.store_warnings ?? []).find((w) => w.code === "SOURCE_PRIORITY_IGNORED");
     expect(warn).toBeDefined();
     expect(warn!.entity_type).toBe(LAST_WRITE_TYPE);
     expect(warn!.observation_index).toBe(0);
@@ -281,9 +373,7 @@ describe("store_warnings: SOURCE_PRIORITY_IGNORED (#1755)", () => {
     expect(body.entities && body.entities.length).toBe(1);
 
     const entityId = body.entities![0].entity_id;
-    const warn = (body.store_warnings ?? []).find(
-      (w) => w.code === "SOURCE_PRIORITY_IGNORED"
-    );
+    const warn = (body.store_warnings ?? []).find((w) => w.code === "SOURCE_PRIORITY_IGNORED");
     expect(warn).toBeDefined();
     expect(warn!.entity_type).toBe(LAST_WRITE_TYPE);
     expect(warn!.entity_id).toBe(entityId);

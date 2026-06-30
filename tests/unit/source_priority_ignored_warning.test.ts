@@ -26,6 +26,9 @@ import {
   ignoredFieldStrategies,
   sourcePriorityWillBeIgnored,
   buildSourcePriorityIgnoredWarning,
+  priorityHonouringFields,
+  sourcePriorityMayEscalate,
+  buildSourcePriorityEscalationWarning,
 } from "../../src/services/source_priority_warning.js";
 
 // ---------------------------------------------------------------------------
@@ -38,15 +41,15 @@ describe("fieldHonorsPriority", () => {
   });
 
   it("returns true for most_specific with tie_breaker: source_priority", () => {
-    expect(
-      fieldHonorsPriority({ strategy: "most_specific", tie_breaker: "source_priority" }),
-    ).toBe(true);
+    expect(fieldHonorsPriority({ strategy: "most_specific", tie_breaker: "source_priority" })).toBe(
+      true
+    );
   });
 
   it("returns false for most_specific with tie_breaker: observed_at", () => {
-    expect(
-      fieldHonorsPriority({ strategy: "most_specific", tie_breaker: "observed_at" }),
-    ).toBe(false);
+    expect(fieldHonorsPriority({ strategy: "most_specific", tie_breaker: "observed_at" })).toBe(
+      false
+    );
   });
 
   it("returns false for most_specific without tie_breaker", () => {
@@ -372,6 +375,152 @@ describe("buildSourcePriorityIgnoredWarning message detail", () => {
       observationIndex: 0,
       entityType: "leaderboard_entry",
       entityId: "eid-6",
+    });
+    expect(warn).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SOURCE_PRIORITY_ESCALATION (#1838)
+// ---------------------------------------------------------------------------
+
+describe("priorityHonouringFields", () => {
+  it("lists only fields whose policy honours source_priority", () => {
+    const result = priorityHonouringFields({
+      writtenFields: { score: 42, note: "x", spec: "y" },
+      mergePolicies: {
+        score: { strategy: "highest_priority" },
+        note: { strategy: "last_write" },
+        spec: { strategy: "most_specific", tie_breaker: "source_priority" },
+      },
+    });
+    expect(result).toEqual([
+      { field: "score", strategy: "highest_priority" },
+      { field: "spec", strategy: "most_specific" },
+    ]);
+  });
+
+  it("returns [] when no field honours priority", () => {
+    expect(
+      priorityHonouringFields({
+        writtenFields: { note: "x" },
+        mergePolicies: { note: { strategy: "last_write" } },
+      })
+    ).toEqual([]);
+  });
+
+  it("returns [] when there are no merge policies (auto-discovered)", () => {
+    expect(
+      priorityHonouringFields({
+        writtenFields: { score: 1 },
+        mergePolicies: undefined,
+      })
+    ).toEqual([]);
+  });
+});
+
+describe("sourcePriorityMayEscalate", () => {
+  it("true: default priority 100 + highest_priority field", () => {
+    expect(
+      sourcePriorityMayEscalate({
+        sourcePriority: 100,
+        writtenFields: { score: 42 },
+        mergePolicies: { score: { strategy: "highest_priority" } },
+      })
+    ).toBe(true);
+  });
+
+  it("false: non-default priority (caller ranked intentionally)", () => {
+    expect(
+      sourcePriorityMayEscalate({
+        sourcePriority: 50,
+        writtenFields: { score: 42 },
+        mergePolicies: { score: { strategy: "highest_priority" } },
+      })
+    ).toBe(false);
+  });
+
+  it("false: priority 100 but no honouring field (last_write only)", () => {
+    expect(
+      sourcePriorityMayEscalate({
+        sourcePriority: 100,
+        writtenFields: { note: "x" },
+        mergePolicies: { note: { strategy: "last_write" } },
+      })
+    ).toBe(false);
+  });
+
+  it("false: priority 100 + highest_priority policy but that field not written", () => {
+    expect(
+      sourcePriorityMayEscalate({
+        sourcePriority: 100,
+        writtenFields: { note: "x" },
+        mergePolicies: {
+          score: { strategy: "highest_priority" },
+          note: { strategy: "last_write" },
+        },
+      })
+    ).toBe(false);
+  });
+
+  it("true: priority 100 + most_specific tie_breaker source_priority", () => {
+    expect(
+      sourcePriorityMayEscalate({
+        sourcePriority: 100,
+        writtenFields: { spec: "y" },
+        mergePolicies: { spec: { strategy: "most_specific", tie_breaker: "source_priority" } },
+      })
+    ).toBe(true);
+  });
+});
+
+describe("buildSourcePriorityEscalationWarning", () => {
+  it("builds a SOURCE_PRIORITY_ESCALATION warning for a default-100 write to a highest_priority field", () => {
+    const warn = buildSourcePriorityEscalationWarning({
+      sourcePriority: 100,
+      writtenFields: { score: 42, note: "ignored" },
+      mergePolicies: {
+        score: { strategy: "highest_priority" },
+        note: { strategy: "last_write" },
+      },
+      observationIndex: 3,
+      entityType: "leaderboard_entry",
+      entityId: "eid-esc-1",
+    });
+    expect(warn).not.toBeNull();
+    expect(warn!.code).toBe("SOURCE_PRIORITY_ESCALATION");
+    expect(warn!.observation_index).toBe(3);
+    expect(warn!.entity_type).toBe("leaderboard_entry");
+    expect(warn!.entity_id).toBe("eid-esc-1");
+    // Names the honouring field, not the last_write one.
+    expect(warn!.message).toContain("'score'");
+    expect(warn!.message).not.toContain("'note'");
+    expect(warn!.message).toContain("100");
+    expect(warn!.message.toLowerCase()).toContain("outrank");
+    // Documents the default-vs-explicit-100 limitation.
+    expect(warn!.message.toLowerCase()).toContain("indistinguishable");
+  });
+
+  it("returns null when priority is non-default (intentional ranking)", () => {
+    const warn = buildSourcePriorityEscalationWarning({
+      sourcePriority: 500,
+      writtenFields: { score: 42 },
+      mergePolicies: { score: { strategy: "highest_priority" } },
+      observationIndex: 0,
+      entityType: "leaderboard_entry",
+      entityId: "eid-esc-2",
+    });
+    expect(warn).toBeNull();
+  });
+
+  it("returns null when no written field honours priority", () => {
+    const warn = buildSourcePriorityEscalationWarning({
+      sourcePriority: 100,
+      writtenFields: { note: "x" },
+      mergePolicies: { note: { strategy: "last_write" } },
+      observationIndex: 0,
+      entityType: "contact",
+      entityId: "eid-esc-3",
     });
     expect(warn).toBeNull();
   });

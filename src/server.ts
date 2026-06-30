@@ -5904,6 +5904,11 @@ export class NeotomaServer {
 
     // Compute and store snapshots for all entities
     const snapshotByEntityId = new Map<string, Record<string, unknown>>();
+    // Issue #1839: capture each entity's prior and post-reduction snapshot so
+    // the store_warnings loop below can detect a NULL_CLEARED_FIELD event (an
+    // incoming null clearing a prior non-null value under highest_priority).
+    const priorSnapshotByEntityId = new Map<string, Record<string, unknown>>();
+    const newSnapshotByEntityId = new Map<string, Record<string, unknown>>();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
     for (const createdEntity of createdEntities) {
       try {
@@ -5915,6 +5920,7 @@ export class NeotomaServer {
           .maybeSingle();
         const priorSnapshot =
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+        priorSnapshotByEntityId.set(createdEntity.entityId, priorSnapshot);
 
         // Get all observations for entity, scoped to the current user so
         // cross-user data does not bleed into this user's snapshot.
@@ -5959,6 +5965,14 @@ export class NeotomaServer {
           if (!snapshot) {
             continue; // Skip snapshot and timeline derivation if snapshot computation failed
           }
+
+          // Issue #1839: record the post-reduction snapshot before the embedding
+          // upsert, so the NULL_CLEARED_FIELD warning's "field actually cleared"
+          // check is independent of embedding availability.
+          newSnapshotByEntityId.set(
+            snapshot.entity_id,
+            (snapshot.snapshot as Record<string, unknown>) || {}
+          );
 
           const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
             entity_id: snapshot.entity_id,
@@ -6291,6 +6305,50 @@ export class NeotomaServer {
           entityId: e.entityId,
         });
         if (spWarn) schemaStoreWarnings.push(spWarn);
+
+        // Issue #1838: SOURCE_PRIORITY_ESCALATION — mirror-image advisory. A
+        // write at the DEFAULT source_priority (100) into a `highest_priority`
+        // field silently OUTRANKS any prior observation written with an
+        // explicit lower priority. Non-blocking; reuses the same import.
+        const { buildSourcePriorityEscalationWarning } =
+          await import("./services/source_priority_warning.js");
+        const spEsc = buildSourcePriorityEscalationWarning({
+          sourcePriority,
+          writtenFields: entityFields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: i,
+          entityType: e.entityType,
+          entityId: e.entityId,
+        });
+        if (spEsc) schemaStoreWarnings.push(spEsc);
+      }
+
+      // Issue #1839: NULL_CLEARED_FIELD — non-blocking advisory warning when an
+      // incoming null clears a prior non-null value under a `highest_priority`
+      // field. The clear is by design (null is an explicit tombstone), but it
+      // is silent today; this surfaces the data-loss vector. Warn-only: no
+      // change to snapshot computation or clearing semantics.
+      {
+        const mergePolicies = schemaEntry?.reducer_config?.merge_policies;
+        if (mergePolicies) {
+          const priorSnapshot = priorSnapshotByEntityId.get(e.entityId) ?? {};
+          const newSnapshot = newSnapshotByEntityId.get(e.entityId) ?? {};
+          const { buildNullClearedFieldWarning } =
+            await import("./services/null_cleared_field_warning.js");
+          for (const field of Object.keys(entityFields)) {
+            const nullWarn = buildNullClearedFieldWarning({
+              field,
+              strategy: mergePolicies[field]?.strategy,
+              prior_value: priorSnapshot[field],
+              incoming_value: entityFields[field],
+              new_value: newSnapshot[field],
+              observation_index: i,
+              entity_type: e.entityType,
+              entity_id: e.entityId,
+            });
+            if (nullWarn) schemaStoreWarnings.push(nullWarn);
+          }
+        }
       }
     }
 

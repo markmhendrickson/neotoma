@@ -7047,6 +7047,13 @@ export async function storeStructuredForApi(params: {
     entity_snapshot_after: Record<string, unknown> | null;
   }> = [];
 
+  // Issue #1839: capture each entity's prior and post-reduction snapshot so the
+  // store_warnings loop below can detect a NULL_CLEARED_FIELD event (an incoming
+  // null clearing a prior non-null value under highest_priority). Keyed by
+  // entity_id.
+  const priorSnapshotByEntityId = new Map<string, Record<string, unknown>>();
+  const newSnapshotByEntityId = new Map<string, Record<string, unknown>>();
+
   for (const r of resolved) {
     let observation_id: string | null = null;
     let snapshotAfter: Record<string, unknown> | null = null;
@@ -7060,6 +7067,7 @@ export async function storeStructuredForApi(params: {
         .maybeSingle();
       const priorSnapshot =
         (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+      priorSnapshotByEntityId.set(r.entity_id, priorSnapshot);
 
       const obsData = await createObservation({
         entity_id: r.entity_id,
@@ -7084,6 +7092,7 @@ export async function storeStructuredForApi(params: {
         const snap = await recomputeSnapshot(r.entity_id, userId);
         snapshotAfter =
           (snap as { snapshot?: Record<string, unknown> } | null | undefined)?.snapshot ?? null;
+        if (snapshotAfter) newSnapshotByEntityId.set(r.entity_id, snapshotAfter);
       } catch (snapshotErr) {
         logger.warn(`Snapshot recompute failed for ${r.entity_id}: ${snapshotErr}`);
       }
@@ -7482,6 +7491,50 @@ export async function storeStructuredForApi(params: {
           entityId: r.entity_id,
         });
         if (spWarn) schemaStoreWarnings.push(spWarn);
+
+        // Issue #1838: SOURCE_PRIORITY_ESCALATION — mirror-image advisory. A
+        // write at the DEFAULT source_priority (100) into a `highest_priority`
+        // field silently OUTRANKS any prior observation written with an
+        // explicit lower priority. Non-blocking; reuses the same import.
+        const { buildSourcePriorityEscalationWarning } =
+          await import("./services/source_priority_warning.js");
+        const spEsc = buildSourcePriorityEscalationWarning({
+          sourcePriority,
+          writtenFields: r.fields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: r.observation_index,
+          entityType: r.entity_type,
+          entityId: r.entity_id,
+        });
+        if (spEsc) schemaStoreWarnings.push(spEsc);
+      }
+
+      // Issue #1839: NULL_CLEARED_FIELD — non-blocking advisory warning when an
+      // incoming null clears a prior non-null value under a `highest_priority`
+      // field. The clear is by design (null is an explicit tombstone), but it
+      // is silent today; this surfaces the data-loss vector. Warn-only: no
+      // change to snapshot computation or clearing semantics.
+      {
+        const mergePolicies = schemaEntry?.reducer_config?.merge_policies;
+        if (mergePolicies) {
+          const priorSnapshot = priorSnapshotByEntityId.get(r.entity_id) ?? {};
+          const newSnapshot = newSnapshotByEntityId.get(r.entity_id) ?? {};
+          const { buildNullClearedFieldWarning } =
+            await import("./services/null_cleared_field_warning.js");
+          for (const field of Object.keys(r.fields)) {
+            const nullWarn = buildNullClearedFieldWarning({
+              field,
+              strategy: mergePolicies[field]?.strategy,
+              prior_value: priorSnapshot[field],
+              incoming_value: r.fields[field],
+              new_value: newSnapshot[field],
+              observation_index: r.observation_index,
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+            });
+            if (nullWarn) schemaStoreWarnings.push(nullWarn);
+          }
+        }
       }
     }
   }
