@@ -132,21 +132,29 @@ function inferMimeTypeForPath(filePath: string): string {
   return getMimeTypeFromExtension(ext) ?? "application/octet-stream";
 }
 
-const OBSERVATION_SOURCE_CLI_VALUES = [
+// Must stay in lockstep with OBSERVATION_SOURCE_VALUES in
+// src/shared/action_schemas.ts and the `observation_source` enum in
+// openapi.yaml. `sync` is API-accepted (Phase 5 peer-sync loop prevention),
+// so the CLI must accept it too. This enum was tightened from arbitrary
+// strings in v0.17 — an intentional breaking change (see issue #1841);
+// custom v0.17 labels now belong in the free-form `data_source` field.
+export const OBSERVATION_SOURCE_CLI_VALUES = [
   "sensor",
   "llm_summary",
   "workflow_state",
   "human",
   "import",
+  "sync",
 ] as const;
 
 type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
 
-function normalizeObservationSourceFlag(raw: string): ObservationSourceFlag {
+export function normalizeObservationSourceFlag(raw: string): ObservationSourceFlag {
   const normalized = raw.trim().toLowerCase().replace(/-/g, "_");
   if (!(OBSERVATION_SOURCE_CLI_VALUES as readonly string[]).includes(normalized)) {
     throw new Error(
-      `Invalid --observation-source "${raw}". Expected one of: ${OBSERVATION_SOURCE_CLI_VALUES.join(", ")}.`
+      `Invalid --observation-source "${raw}". Expected one of: ${OBSERVATION_SOURCE_CLI_VALUES.join(", ")}. ` +
+        `Custom v0.17 observation_source labels are no longer accepted — put them in the free-form "data_source" field instead.`
     );
   }
   return normalized as ObservationSourceFlag;
@@ -14275,7 +14283,7 @@ program
   .option("--source-priority <level>", "Source priority level (default: 100)")
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, or import"
+    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
   )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
   .option(
@@ -14522,7 +14530,7 @@ program
   .option("--source-priority <level>", "Source priority level (default: 100)")
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, or import"
+    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
   )
   .option(
     "--source-upload",
@@ -15746,7 +15754,7 @@ snapshotsCommand
   )
   .option(
     "--observation-source <kind>",
-    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import"
+    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync (custom v0.17 values → use data_source)"
   )
   .option("--since <iso>", "ISO-8601 lower bound on last_observation_at")
   .option("--limit <n>", "Cap on returned entities (default: 500)")

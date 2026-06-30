@@ -41,6 +41,9 @@ Set `observation_source` on every structured write. The value is orthogonal to A
 | `llm_summary`    | LLM-authored summaries / extractions. **Default** when `observation_source` is unspecified.       |
 | `human`          | Direct human edits, acceptances, corrections.                                                     |
 | `import`         | Batch / ETL ingestion. Ranked last by default because provenance is typically second-hand.        |
+| `sync`           | Writes replayed from a peer during fleet sync (Phase 5 loop prevention). Set automatically by the sync path; rarely supplied by hand. |
+
+`sensor`, `llm_summary`, `workflow_state`, `human`, `import`, and `sync` are the **only** accepted values — this is a closed enum (see the v0.17→v0.18 migration note below).
 
 Reducer tie-breaking proceeds `source_priority → observation_source_priority → observed_at`. Per-schema overrides (e.g. `agent_sensor_signal` locks `observation_source_priority` so sensor rows always win) live on `SchemaDefinition.reducer_config.observation_source_priority`.
 
@@ -68,6 +71,26 @@ neotoma store \
 ```
 
 See the applied rules in [`.cursor/rules/neotoma_cli.mdc`](../../.cursor/rules/neotoma_cli.mdc) (rule 14a) or [`docs/developer/mcp/instructions.md`](./mcp/instructions.md) for the agent-instruction wording.
+
+### Migrating `observation_source` from v0.17 to v0.18
+
+**Breaking change (v0.18.x, [#1841](https://github.com/markmhendrickson/neotoma/issues/1841)).** In v0.17, `observation_source` (and the `--observation-source` CLI flag) accepted arbitrary strings — e.g. `cboe_live`, `stale_cache`, `computed_greeks`. v0.18 restricts it to the closed enum above. Stores and `--observation-source` flags carrying a custom string now fail with:
+
+```
+Invalid --observation-source "cboe_live". Expected one of: sensor, llm_summary, workflow_state, human, import, sync. Custom v0.17 observation_source labels are no longer accepted — put them in the free-form "data_source" field instead.
+```
+
+`observation_source` is a *fixed classification* of the kind of write (it drives reducer tie-breaking); the descriptive label of *where* a value came from belongs in the free-form `data_source` field, which remains unconstrained. To migrate, map each custom string to the closest enum value and move the original label into `data_source`:
+
+| v0.17 custom string (examples) | v0.18 `observation_source` | `data_source` (free-form) |
+| ------------------------------ | -------------------------- | ------------------------- |
+| `cboe_live`, `*_live`, market/exchange feeds, webhooks, telemetry | `sensor` | `cboe_live` |
+| `computed_greeks`, derived/calculated state, state-machine output | `workflow_state` | `computed_greeks` |
+| `gpt_summary`, model-authored extractions / summaries | `llm_summary` | `gpt_summary` |
+| `analyst_note`, manual edits / acceptances | `human` | `analyst_note` |
+| `stale_cache`, `nightly_etl`, batch / backfill ingestion | `import` | `stale_cache` |
+
+If no enum value fits the *kind* of write, default to `import` (second-hand provenance) or `llm_summary` (the system default) and preserve the original string in `data_source`. There is no back-compat shim — the enum is enforced at the parse boundary on both the CLI and the API.
 
 ## 3. Use the fleet-general `agent_*` schemas
 
