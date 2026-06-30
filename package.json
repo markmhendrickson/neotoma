@@ -95,6 +95,7 @@
     "test:cross-layer": "vitest run tests/integration/cli_to_mcp_store.test.ts tests/integration/cli_to_mcp_entities.test.ts tests/integration/cli_to_mcp_relationships.test.ts tests/integration/cli_to_mcp_schemas.test.ts",
     "test:parity": "vitest run tests/contract/contract_mcp_cli_parity.test.ts",
     "test:contract-parity": "vitest run --no-file-parallelism tests/integration/store_reference_source_parity.test.ts tests/integration/http_store_reference_source.test.ts tests/integration/mcp_store_reference_source.test.ts",
+    "test:transport-parity": "vitest run tests/integration/transport_parity_store_snapshot_auth.test.ts",
     "test:e2e:coverage": "npm run test:contract && npm run test:cross-layer",
     "test:agent-mcp": "vitest run tests/agent",
     "test:coverage": "vitest run --coverage",

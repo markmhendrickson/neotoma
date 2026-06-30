@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **523**
-- Backend and repo Vitest files: **489**
+- Total automated test files: **524**
+- Backend and repo Vitest files: **490**
 - Frontend Vitest files: **9**
 - Playwright spec files: **25**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 146 |
 | Vitest service tests | 35 |
 | Source-adjacent tests | 64 |
-| Vitest integration tests | 149 |
+| Vitest integration tests | 150 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -375,7 +375,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (149):**
+**Files (150):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -518,6 +518,7 @@ flowchart TD
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`
 - `tests/integration/sync_webhook_inbound.test.ts`
+- `tests/integration/transport_parity_store_snapshot_auth.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
 - `tests/integration/tunnel_discovery.test.ts`
 - `tests/integration/turn_summary_mcp_apps.test.ts`
