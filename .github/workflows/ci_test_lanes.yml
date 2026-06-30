@@ -131,6 +131,14 @@ jobs:
       - name: Run cross-surface contract-parity integration tests
         run: npm run test:contract-parity
 
+      # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
+      # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
+      # #1842 issue-submit auth) are asserted through BOTH the MCP and offline
+      # transports, so a fix that lands on one surface but regresses on the other
+      # fails this PR-time lane. New infra (task ent_5850561116).
+      - name: Run offline/local-transport parity gate
+        run: npm run test:transport-parity
+
   frontend:
     runs-on: ubuntu-latest
     steps:
