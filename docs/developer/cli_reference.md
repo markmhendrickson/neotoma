@@ -693,6 +693,7 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
     - Use `--json=` (equals, no space) so the payload is parsed as entities input.
     - Bare `--json` (without `=`) remains the global output-format flag.
   - `--file <path>`: Path to JSON file containing entity array. Use for long payloads.
+  - `--observation-source <kind>`: Classify the *kind* of write. Closed enum — `sensor | llm_summary | workflow_state | human | import | sync` (default `llm_summary`). **Breaking change in v0.18.x (was open in v0.17):** arbitrary strings are rejected. Put custom v0.17 labels (e.g. `cboe_live`, `stale_cache`) in the free-form `data_source` field and map the closest enum value here. See [Migrating from v0.17 to v0.18](fleet_onboarding.md#migrating-observation_source-from-v017-to-v018).
   - `--interpretation-source-id <id>` / `--interpretation-source-ref <structured|unstructured>` plus `--interpretation-config <json>`: Opt into Source -> Interpretation -> Observation provenance for source-derived extraction. Omit for ordinary already-structured/chat-native facts.
   - Silent-failure guard (v0.5.1+): when a commit-mode store returns `entities_created=0`, no resolved entities, and is not an idempotency replay (`replayed: true`), the CLI emits a non-fatal stderr warning so agents/humans don't mistake an empty result for success. Typical root cause: fields nested under `attributes` (see v0.5.0 breaking change) or mismatched `user_id` scope.
   - Idempotency replays: `POST /store` returns `replayed: true` when a request is a deterministic re-commit of a previously committed `(user_id, idempotency_key)` tuple. Use this to distinguish "same call, no new work" from "call produced zero entities."
@@ -951,7 +952,7 @@ Fleet-general write-integrity tooling built on the canonical snapshot layer. `sn
   - `--entity-types <csv>`: Restrict to comma-separated entity types (e.g. `agent_task,agent_attempt`).
   - `--agent-sub <sub>`: Restrict to a single AAuth `agent_sub`.
   - `--attribution-tier <tier>`: Restrict to one tier — `hardware | software | unverified_client | anonymous`.
-  - `--observation-source <kind>`: Restrict to one write kind — `sensor | llm_summary | workflow_state | human | import`.
+  - `--observation-source <kind>`: Restrict to one write kind — `sensor | llm_summary | workflow_state | human | import | sync`.
   - `--since <iso>`: ISO-8601 lower bound on `last_observation_at`.
   - `--limit <n>`: Cap on returned entities (default: 500).
   - `--out <path>`: Write the export to this file instead of stdout.

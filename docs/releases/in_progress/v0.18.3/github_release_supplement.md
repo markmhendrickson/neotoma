@@ -37,6 +37,7 @@ No OpenAPI changes. `source_storage` is an existing `StoreRequest` field; this r
 - **#1826** — `source_storage: "reference"` was unreachable over HTTP `POST /store`. The OpenAPI contract accepted it (v0.18.1) but `handleStorePost` still stored inline. The REST handler now honors reference mode end to end.
 - **#1827 (REST extension)** — the combined `entities[] + file + source_storage:reference` call returned a 500 on `observations.id` UNIQUE collision because the REST structured leg lacked the existing-observation guard that the MCP path has. Brought to parity.
 - **#1837** — the Inspector graph viewer fired `retrieve_graph_neighborhood` in an unbounded loop and never painted. Root cause was a global `refetchInterval: 5000`, not unbounded traversal. Polling disabled on the graph hooks; canvas height fixed.
+- **#1841** — the v0.18.0 `observation_source` enum restriction was undocumented, and the CLI enum had drifted from the API (missing `sync`). Documented the breaking change + migration mapping, aligned the CLI enum and error message to the API, no back-compat shim. See *Breaking changes* above.
 
 ## Tests and validation
 
@@ -52,4 +53,16 @@ Security review artifact: [docs/releases/in_progress/v0.18.3/security_review.md]
 
 ## Breaking changes
 
-No breaking changes. No OpenAPI tightening, no request-shape changes, no field promotions or removals. Both behavior changes (reference stores honored, duplicate observations replayed) are strict improvements aligning REST with MCP. Patch bump is correct per SemVer.
+This patch introduces no *new* breaking changes. No OpenAPI tightening, no request-shape changes, no field promotions or removals. Both behavior changes (reference stores honored, duplicate observations replayed) are strict improvements aligning REST with MCP. Patch bump is correct per SemVer.
+
+### Retroactively documented: `observation_source` closed enum (since v0.18.0)
+
+[#1841](https://github.com/markmhendrickson/neotoma/issues/1841) surfaced a v0.18.0 breaking change that shipped **undocumented**: `observation_source` was tightened from arbitrary strings (v0.17) to a closed enum — `sensor`, `llm_summary`, `workflow_state`, `human`, `import`, `sync`. Stores carrying a custom string (e.g. `cboe_live`, `stale_cache`) now hard-fail at the parse boundary on both the CLI and the API. There is no back-compat shim (operator verdict P2: document, don't widen).
+
+This release does **not** change that enforcement; it documents and de-drifts it:
+
+- The CLI `--observation-source` enum now matches the API/OpenAPI exactly (added the missing `sync`); previously the CLI rejected a value the API accepts.
+- The invalid-value error message now tells users to put custom v0.17 labels in the free-form `data_source` field.
+- A migration guide (custom v0.17 strings → closest enum + `data_source`) was added to [`docs/developer/fleet_onboarding.md`](../../developer/fleet_onboarding.md#migrating-observation_source-from-v017-to-v018) and the [CLI reference](../../developer/cli_reference.md).
+
+**If you upgraded from v0.17 and used custom `observation_source` strings:** map each to the closest enum value and move the original label to `data_source`. See the migration guide for the mapping table.

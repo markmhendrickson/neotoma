@@ -439,6 +439,12 @@ export const ObservationsQueryRequestSchema = z.object({
  * is applied by the write path, not at parse time, so MCP callers that
  * omit the field remain LLM-driven by construction without breaking
  * idempotency hashes or contract-test fixtures.
+ *
+ * NOTE (v0.17 → v0.18 breaking change, issue #1841): this is a CLOSED enum.
+ * v0.17 accepted arbitrary `observation_source` strings; v0.18 restricts them
+ * to the values below — an intentional breaking change, not a regression.
+ * Custom v0.17 labels (e.g. `cboe_live`, `stale_cache`) now belong in the
+ * free-form `data_source` field; map the closest enum value here.
  */
 export const OBSERVATION_SOURCE_VALUES = [
   "sensor",
