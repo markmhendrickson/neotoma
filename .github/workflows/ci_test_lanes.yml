@@ -92,6 +92,45 @@ jobs:
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
 
+  contract_parity:
+    # Focused PR-time cross-surface contract-parity lane.
+    #
+    # Retrospective ent_68a9270e2e656da847c10ced: the `source_storage:'reference'`
+    # feature shipped incomplete to an evaluator across three releases because the
+    # covering integration tests ran only in the nightly remote_integration
+    # workflow — never on the PR baseline lane, which runs `test:unit` (no DB).
+    #
+    # This lane runs ONLY the parity-critical store/reference integration tests
+    # (MCP + REST surfaces driven through one shared scenario matrix) on every PR.
+    # It deliberately does NOT pull the whole nightly integration suite onto each
+    # PR — just the cross-surface parity gate — so it stays fast (~a few seconds
+    # of tests). The tests run against the same local SQLite backend the nightly
+    # job uses (default mode: RUN_REMOTE_TESTS unset), with file-parallelism
+    # disabled to avoid SQLite lock contention between the two HTTP-server files.
+    #
+    # Implements task_policy cross_surface_contract_parity_tested_all_surfaces
+    # (ent_2ad0677fe23c0c1878ae43e8) and
+    # fixed_means_behavior_verified_not_contract_accepted (ent_db0b7855d47012084477fb00).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build server (integration tests boot the in-process Actions server)
+        run: npm run build:server
+
+      - name: Run cross-surface contract-parity integration tests
+        run: npm run test:contract-parity
+
   frontend:
     runs-on: ubuntu-latest
     steps:
