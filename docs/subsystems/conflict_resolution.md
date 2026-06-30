@@ -1,6 +1,7 @@
 # Conflict Resolution — Merge Policies and Field Semantics
 
 **Related docs:**
+
 - [Reducer engine](reducer.md) — how merge strategies are executed
 - [Schema registry](schema_registry.md) — how to register a schema with custom policies
 - [Observation architecture](observation_architecture.md) — `source_priority` and `observed_at`
@@ -163,20 +164,20 @@ it silently.
   "schema_version": "1.0",
   "schema_definition": {
     "fields": {
-      "sensor_id":   { "type": "string", "required": true },
-      "value":       { "type": "number", "required": true },
-      "unit":        { "type": "string" },
+      "sensor_id": { "type": "string", "required": true },
+      "value": { "type": "number", "required": true },
+      "unit": { "type": "string" },
       "recorded_at": { "type": "date" },
-      "tags":        { "type": "array" }
+      "tags": { "type": "array" }
     }
   },
   "reducer_config": {
     "merge_policies": {
-      "sensor_id":   { "strategy": "last_write" },
-      "value":       { "strategy": "highest_priority", "tie_breaker": "observed_at" },
-      "unit":        { "strategy": "last_write" },
+      "sensor_id": { "strategy": "last_write" },
+      "value": { "strategy": "highest_priority", "tie_breaker": "observed_at" },
+      "unit": { "strategy": "last_write" },
       "recorded_at": { "strategy": "highest_priority", "tie_breaker": "observed_at" },
-      "tags":        { "strategy": "merge_array" }
+      "tags": { "strategy": "merge_array" }
     }
   },
   "activate": true
@@ -203,20 +204,20 @@ Or via the MCP tool:
   "schema_version": "1.0",
   "schema_definition": {
     "fields": {
-      "sensor_id":   { "type": "string", "required": true },
-      "value":       { "type": "number", "required": true },
-      "unit":        { "type": "string" },
+      "sensor_id": { "type": "string", "required": true },
+      "value": { "type": "number", "required": true },
+      "unit": { "type": "string" },
       "recorded_at": { "type": "date" },
-      "tags":        { "type": "array" }
+      "tags": { "type": "array" }
     }
   },
   "reducer_config": {
     "merge_policies": {
-      "sensor_id":   { "strategy": "last_write" },
-      "value":       { "strategy": "highest_priority", "tie_breaker": "observed_at" },
-      "unit":        { "strategy": "last_write" },
+      "sensor_id": { "strategy": "last_write" },
+      "value": { "strategy": "highest_priority", "tie_breaker": "observed_at" },
+      "unit": { "strategy": "last_write" },
       "recorded_at": { "strategy": "highest_priority", "tie_breaker": "observed_at" },
-      "tags":        { "strategy": "merge_array" }
+      "tags": { "strategy": "merge_array" }
     }
   },
   "activate": true
@@ -229,10 +230,10 @@ regardless of which was written more recently.
 
 ### `tie_breaker` options
 
-| Value | Behavior within the same `source_priority` tier |
-|-------|--------------------------------------------------|
-| `"observed_at"` (default) | Most recent observation wins |
-| `"source_priority"` | Falls through to `id ASC` (stable, not time-based) |
+| Value                     | Behavior within the same `source_priority` tier    |
+| ------------------------- | -------------------------------------------------- |
+| `"observed_at"` (default) | Most recent observation wins                       |
+| `"source_priority"`       | Falls through to `id ASC` (stable, not time-based) |
 
 ---
 
@@ -286,8 +287,8 @@ const obs = {
   entity_type: "invoice",
   fields: {
     vendor_name: fetchedName,
-    amount_due: fetchedAmount ?? 0,   // ← 0 is now a real observation
-  }
+    amount_due: fetchedAmount ?? 0, // ← 0 is now a real observation
+  },
 };
 
 // Correct — omit the field when the read failed
@@ -344,18 +345,58 @@ This footgun is tracked in
 **Mitigation today:** register an explicit schema (`register_schema`) for any entity type
 where source priority must be honored.
 
+### The default `source_priority = 100` footgun
+
+`source_priority` **defaults to `100`** (`z.number().optional().default(100)` in
+`src/shared/action_schemas.ts`). The default is unchanged for backward compatibility, but
+it has a sharp edge on any field whose reducer policy is `highest_priority` (or
+`most_specific` with `tie_breaker: "source_priority"`):
+
+> An **unprioritized** write — one that omits `--source-priority` / `source_priority` —
+> silently inherits priority `100`, which **outranks** any prior observation written with
+> an explicit priority **≤ 99** (e.g. a trusted import at `50`). The unprioritized write
+> wins the field. This is a silent **trust-escalation**: a caller who never thought about
+> priority at all can override a value that was deliberately ranked lower.
+
+Concretely, with a `highest_priority` schema on `value`:
+
+```
+obs_a: { value: "trusted-import", source_priority: 50 }   # explicit, deliberately low
+obs_b: { value: "casual-write" }                          # omitted → defaults to 100
+# Reducer winner: obs_b ("casual-write"), because 100 > 50.
+```
+
+**Why the default isn't being changed:** lowering it (e.g. to `0`) would silently flip the
+winner of existing reductions across every deployment — a breaking semantic change. The
+mitigation is detection + discipline, not a new default.
+
+**Limitation — default vs. explicit `100` are indistinguishable at write time:** zod
+applies `.default(100)` before the request handler runs, so by the time the write is
+processed there is no way to tell "caller omitted `source_priority`" from "caller
+explicitly passed `100`". The advisory below therefore fires on **both** cases (framed as
+"default/non-explicit 100"); a caller who genuinely intends priority `100` can ignore it.
+
+**Detection:** a write at priority `100` into a `highest_priority` field emits a
+non-blocking `SOURCE_PRIORITY_ESCALATION` `store_warning` (issue
+[#1838](https://github.com/markmhendrickson/neotoma/issues/1838)) naming the affected
+field(s). It is advisory only — nothing is rejected and no merge semantics change.
+
+**Mitigation today:** **always pass an explicit `--source-priority` / `source_priority`**
+for any priority-semantic write (one that targets a `highest_priority` field), reflecting
+how that write should rank against others — rather than relying on the implicit `100`.
+
 ---
 
 ## Quick Reference
 
-| I want... | Strategy | Notes |
-|-----------|----------|-------|
-| Latest write wins | `last_write` | Default for auto-discovered schemas |
-| Trusted source wins | `highest_priority` | Requires a registered schema; `source_priority` on observations |
-| Most specific value wins | `most_specific` | Requires `specificity_score` on observations |
-| Accumulate all values | `merge_array` | Field must be array type; corrections replace |
-| Field cleared | Write `null` explicitly | Use `correct()` at high priority |
-| Field kept from earlier observation | Omit the field | Do not write `0` or `null` as sentinel |
+| I want...                           | Strategy                | Notes                                                           |
+| ----------------------------------- | ----------------------- | --------------------------------------------------------------- |
+| Latest write wins                   | `last_write`            | Default for auto-discovered schemas                             |
+| Trusted source wins                 | `highest_priority`      | Requires a registered schema; `source_priority` on observations |
+| Most specific value wins            | `most_specific`         | Requires `specificity_score` on observations                    |
+| Accumulate all values               | `merge_array`           | Field must be array type; corrections replace                   |
+| Field cleared                       | Write `null` explicitly | Use `correct()` at high priority                                |
+| Field kept from earlier observation | Omit the field          | Do not write `0` or `null` as sentinel                          |
 
 ## Related Documents
 
@@ -364,3 +405,4 @@ where source priority must be honored.
 - [observation_architecture.md](observation_architecture.md) — `source_priority`, `observed_at`, `specificity_score`
 - [issue #1755](https://github.com/markmhendrickson/neotoma/issues/1755) — LWW-default footgun (source-priority silently ignored for auto-discovered schemas)
 - [issue #1756](https://github.com/markmhendrickson/neotoma/issues/1756) — write-time value constraints (range/enum/required-enforcement)
+- [issue #1838](https://github.com/markmhendrickson/neotoma/issues/1838) — default `source_priority = 100` footgun (unprioritized write silently outranks an explicit lower priority; `SOURCE_PRIORITY_ESCALATION` advisory)
