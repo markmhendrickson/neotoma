@@ -435,6 +435,7 @@ flowchart TD
 - `tests/integration/interpretation_store.test.ts`
 - `tests/integration/issue_207_list_timeline_events_unknown_type.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
+- `tests/integration/issues_local_auth_fallback.test.ts`
 - `tests/integration/lexical_search.test.ts`
 - `tests/integration/list_relationships_pagination.test.ts`
 - `tests/integration/live_issues_tooling.test.ts`

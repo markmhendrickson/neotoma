@@ -3117,6 +3117,28 @@ export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" |
   return false;
 }
 
+/**
+ * Exported for unit tests: the two issue-write routes that extend local-loopback
+ * trust to unauthenticated requests. A local request to `/issues/submit` or
+ * `/issues/add_message` with no `Authorization: Bearer` header falls through to
+ * the local dev user — the same offline-developer trust the entity-read routes
+ * already grant (see `resolveGuestUserId`). This is the ONLY place that trust is
+ * widened; every other route still requires a Bearer token, and remote requests
+ * (non-loopback / untrusted XFF) get AUTH_REQUIRED on these routes too.
+ */
+export function routeAllowsLocalIssueWriteFallback(
+  req: Pick<express.Request, "method" | "path">
+): boolean {
+  const path = req.path;
+  return (
+    req.method === "POST" &&
+    (path === "/issues/submit" ||
+      path === "/api/issues/submit" ||
+      path === "/issues/add_message" ||
+      path === "/api/issues/add_message")
+  );
+}
+
 /** Exported for unit tests: guest-capable routes that mutate state and should consume a guest write-rate budget. */
 export function routeConsumesGuestWriteBudget(
   req: Pick<express.Request, "method" | "path">
@@ -3227,6 +3249,27 @@ async function resolveRoutePrincipal(
   }
 
   if (accept.includes("user")) {
+    // Local-loopback trust for the two issue-write routes: a local request with
+    // no Bearer token resolves to the local dev user instead of failing
+    // AUTH_REQUIRED. This mirrors the existing local fallback in
+    // `resolveGuestUserId` and keeps `neotoma issues create` working offline
+    // (gh-CLI auth alone does not configure a Neotoma Bearer token). Scoped as
+    // narrowly as possible: ONLY these routes, ONLY local requests, ONLY when
+    // no Bearer header is present — remote/Bearer requests fall through to the
+    // normal `getAuthenticatedUserId` gate below.
+    const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
+    if (
+      routeAllowsLocalIssueWriteFallback(req) &&
+      isLocalRequest(req) &&
+      !headerAuth.startsWith("Bearer ")
+    ) {
+      const userId = _localSandboxActive ? ensureLocalSandboxUser().id : ensureLocalDevUser().id;
+      // Stamp the principal so a later `getAuthenticatedUserId` in the handler
+      // resolves the same local user without re-tripping the missing-Bearer gate.
+      stampUserPrincipal(req, userId);
+      return { kind: "user", userId };
+    }
+
     const userId = await getAuthenticatedUserId(
       req,
       ((req.body as { user_id?: string } | undefined)?.user_id ??
