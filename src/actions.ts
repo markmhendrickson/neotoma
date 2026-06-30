@@ -7482,6 +7482,22 @@ export async function storeStructuredForApi(params: {
           entityId: r.entity_id,
         });
         if (spWarn) schemaStoreWarnings.push(spWarn);
+
+        // Issue #1838: SOURCE_PRIORITY_ESCALATION — mirror-image advisory. A
+        // write at the DEFAULT source_priority (100) into a `highest_priority`
+        // field silently OUTRANKS any prior observation written with an
+        // explicit lower priority. Non-blocking; reuses the same import.
+        const { buildSourcePriorityEscalationWarning } =
+          await import("./services/source_priority_warning.js");
+        const spEsc = buildSourcePriorityEscalationWarning({
+          sourcePriority,
+          writtenFields: r.fields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: r.observation_index,
+          entityType: r.entity_type,
+          entityId: r.entity_id,
+        });
+        if (spEsc) schemaStoreWarnings.push(spEsc);
       }
     }
   }

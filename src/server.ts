@@ -6255,6 +6255,22 @@ export class NeotomaServer {
           entityId: e.entityId,
         });
         if (spWarn) schemaStoreWarnings.push(spWarn);
+
+        // Issue #1838: SOURCE_PRIORITY_ESCALATION — mirror-image advisory. A
+        // write at the DEFAULT source_priority (100) into a `highest_priority`
+        // field silently OUTRANKS any prior observation written with an
+        // explicit lower priority. Non-blocking; reuses the same import.
+        const { buildSourcePriorityEscalationWarning } =
+          await import("./services/source_priority_warning.js");
+        const spEsc = buildSourcePriorityEscalationWarning({
+          sourcePriority,
+          writtenFields: entityFields,
+          mergePolicies: schemaEntry?.reducer_config?.merge_policies,
+          observationIndex: i,
+          entityType: e.entityType,
+          entityId: e.entityId,
+        });
+        if (spEsc) schemaStoreWarnings.push(spEsc);
       }
     }
 
