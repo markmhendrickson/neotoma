@@ -140,7 +140,7 @@ function EmbedGraphView({ initialNodeId }: { initialNodeId: string }) {
 
   return (
     <div
-      className="flex flex-col h-full w-full"
+      className="flex flex-col min-h-screen w-full"
       data-testid="embed-graph-root"
       data-embed="graph"
     >
@@ -204,7 +204,7 @@ function EmbedGraphView({ initialNodeId }: { initialNodeId: string }) {
       </div>
 
       {/* Graph canvas — fills remaining height */}
-      <div className="flex-1 min-h-0 bg-background">
+      <div className="flex-1 bg-background min-h-[calc(100dvh-5rem)]">
         {showInitialQuerySkeleton(graph) ? (
           <GraphAreaSkeleton />
         ) : graph.error && activeNodeId ? (

@@ -9,6 +9,7 @@ export function useGraphNeighborhood(params: GraphNeighborhoodParams | null) {
     queryKey: ["graph-neighborhood", params],
     queryFn: ({ signal }) => retrieveGraphNeighborhood(params!, { signal }),
     enabled: isApiUrlConfigured() && !!params?.node_id,
+    refetchInterval: false,
   });
 }
 
@@ -28,6 +29,7 @@ export function useGraphNeighborhoodWithBase(
     queryFn: ({ signal }) =>
       retrieveGraphNeighborhoodWithBase(apiBase, params!, { signal }),
     enabled: !!apiBase.trim() && !!params?.node_id,
+    refetchInterval: false,
   });
 }
 
@@ -36,5 +38,6 @@ export function useRelatedEntities(params: RelatedEntitiesParams | null) {
     queryKey: ["related-entities", params],
     queryFn: ({ signal }) => retrieveRelatedEntities(params!, { signal }),
     enabled: isApiUrlConfigured() && !!params?.entity_id,
+    refetchInterval: false,
   });
 }

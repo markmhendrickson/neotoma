@@ -543,6 +543,7 @@ export const StoreRequestSchema = z
     file_path: z.string().optional(),
     mime_type: z.string().min(1).optional(),
     original_filename: z.string().optional(),
+    source_storage: z.enum(["inline", "reference"]).optional().default("inline"),
     /** Plan/dry-run: resolve and report action per observation, skip inserts. */
     commit: z.boolean().optional().default(true),
     /** Refuse merges that resolve to an existing entity without a deterministic rule. */

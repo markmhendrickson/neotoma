@@ -7613,32 +7613,65 @@ async function storeUnstructuredForApi(params: {
   userId: string;
   fileContent?: string;
   fileBuffer?: Buffer;
+  filePath?: string;
   mimeType: string;
   idempotencyKey?: string;
   originalFilename?: string;
   sourceType?: string;
+  storageMode?: "inline" | "reference";
 }) {
   const {
     fileContent,
     fileBuffer,
+    filePath,
     mimeType,
     idempotencyKey,
     originalFilename,
     sourceType,
     userId,
+    storageMode = "inline",
   } = params;
   const resolvedFileBuffer =
     fileBuffer ?? (fileContent !== undefined ? Buffer.from(fileContent, "base64") : undefined);
-  if (!resolvedFileBuffer) {
-    throw new Error("fileContent or fileBuffer is required for unstructured storage");
+  if (!resolvedFileBuffer && storageMode !== "reference") {
+    throw new Error("fileContent or fileBuffer is required for inline storage");
   }
+
+  if (storageMode === "reference") {
+    if (!filePath) {
+      throw new Error("filePath is required for reference storage mode");
+    }
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(process.cwd(), filePath);
+
+    const { storeRawReference } = await import("./services/raw_storage.js");
+    const referenceResult = await storeRawReference({
+      userId,
+      absolutePath,
+      mimeType,
+      originalFilename: originalFilename?.trim() || undefined,
+      idempotencyKey,
+      provenance: { upload_method: "api_store_reference", client: "api" },
+    });
+
+    return {
+      source_id: referenceResult.sourceId,
+      content_hash: referenceResult.contentHash,
+      storage_mode: "reference",
+      reference_path: referenceResult.path,
+      file_size: referenceResult.sizeBytes,
+      mime_type: referenceResult.mimeType,
+    };
+  }
+
   const resolvedIdempotencyKey =
     idempotencyKey ??
-    (await import("node:crypto")).createHash("sha256").update(resolvedFileBuffer).digest("hex");
+    (await import("node:crypto")).createHash("sha256").update(resolvedFileBuffer!).digest("hex");
 
   const storageResult = await storeRawContent({
     userId,
-    fileBuffer: resolvedFileBuffer,
+    fileBuffer: resolvedFileBuffer!,
     mimeType,
     originalFilename: originalFilename?.trim() || undefined,
     sourceType,
@@ -7694,15 +7727,29 @@ async function handleStorePost(
         const resolvedPath = path.isAbsolute(parsed.data.file_path as string)
           ? (parsed.data.file_path as string)
           : path.resolve(process.cwd(), parsed.data.file_path as string);
-        resolvedFileBuffer = fs.readFileSync(resolvedPath);
-        if (!mimeType) {
-          const ext = path.extname(resolvedPath).toLowerCase();
-          mimeType = getMimeTypeFromExtension(ext) || "application/octet-stream";
+
+        if (parsed.data.source_storage === "reference") {
+          // For reference mode, don't read the file buffer, just use the path
+          if (!mimeType) {
+            const ext = path.extname(resolvedPath).toLowerCase();
+            mimeType = getMimeTypeFromExtension(ext) || "application/octet-stream";
+          }
+          originalFilename = originalFilename || path.basename(resolvedPath);
+        } else {
+          // For inline mode, read the file buffer
+          resolvedFileBuffer = fs.readFileSync(resolvedPath);
+          if (!mimeType) {
+            const ext = path.extname(resolvedPath).toLowerCase();
+            mimeType = getMimeTypeFromExtension(ext) || "application/octet-stream";
+          }
+          originalFilename = originalFilename || path.basename(resolvedPath);
         }
-        originalFilename = originalFilename || path.basename(resolvedPath);
       }
 
-      if ((!fileContent && !resolvedFileBuffer) || !mimeType) {
+      if (
+        (!fileContent && !resolvedFileBuffer && parsed.data.source_storage !== "reference") ||
+        !mimeType
+      ) {
         sendError(
           res,
           400,
@@ -7716,12 +7763,14 @@ async function handleStorePost(
         userId,
         fileContent,
         fileBuffer: resolvedFileBuffer,
+        filePath: parsed.data.file_path,
         mimeType,
         idempotencyKey:
           parsed.data.file_idempotency_key ??
           (!hasEntities ? parsed.data.idempotency_key : undefined),
         originalFilename,
         sourceType: (parsed.data as Record<string, unknown>).source_type as string | undefined,
+        storageMode: parsed.data.source_storage,
       });
     };
 
