@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **518**
-- Backend and repo Vitest files: **484**
+- Total automated test files: **520**
+- Backend and repo Vitest files: **486**
 - Frontend Vitest files: **9**
 - Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 144 |
+| Vitest unit tests | 145 |
 | Vitest service tests | 35 |
 | Source-adjacent tests | 64 |
-| Vitest integration tests | 146 |
+| Vitest integration tests | 147 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (144):**
+**Files (145):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -200,6 +200,7 @@ flowchart TD
 - `tests/unit/mirror_writeback_integration.test.ts`
 - `tests/unit/mirror_writeback.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
+- `tests/unit/null_cleared_field_warning.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_merge_array_correction.test.ts`
 - `tests/unit/observation_reducer_merge_array_stringified.test.ts`
@@ -373,7 +374,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (146):**
+**Files (147):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -502,6 +503,7 @@ flowchart TD
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
+- `tests/integration/store_null_cleared_field_warning.test.ts`
 - `tests/integration/store_prefix_duplicate_candidates.test.ts`
 - `tests/integration/store_reference_source_parity.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
