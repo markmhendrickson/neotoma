@@ -144,6 +144,28 @@ export async function createObservation(
     (row as Record<string, unknown>).provenance = attribution;
   }
 
+  // Content-addressed idempotency: the observation id is a deterministic hash
+  // of (source_id, interpretation_id, entity_id, fields, idempotency_key), so a
+  // re-store of identical content yields the same id. Return the existing row
+  // instead of letting the insert collide on the observations.id UNIQUE
+  // constraint (which surfaced as a 500 on the REST /store structured leg for
+  // repeated content — e.g. a "file + its entities" combined call). Scope the
+  // check to (id, user_id) so a same-content observation owned by another user
+  // never masks this user's write. Mirrors the MCP store path in server.ts.
+  const { data: existing, error: existingError } = await db
+    .from("observations")
+    .select("*")
+    .eq("id", observationId)
+    .eq("user_id", params.user_id)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(`Failed to check existing observation: ${existingError.message}`);
+  }
+  if (existing) {
+    return existing as ObservationRecord;
+  }
+
   const { data, error } = await db.from("observations").insert(row).select().single();
 
   if (error) {

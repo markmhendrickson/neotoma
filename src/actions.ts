@@ -7746,7 +7746,10 @@ async function handleStorePost(
         }
       }
 
-      if ((!fileContent && !resolvedFileBuffer && parsed.data.source_storage !== "reference") || !mimeType) {
+      if (
+        (!fileContent && !resolvedFileBuffer && parsed.data.source_storage !== "reference") ||
+        !mimeType
+      ) {
         sendError(
           res,
           400,
