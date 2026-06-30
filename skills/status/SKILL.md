@@ -26,6 +26,24 @@ This skill is **user-level** (`~/.claude/skills/status/`), so it is available in
 - **`/status` is read-only.** It does NOT store entities, file tasks, write memory, invoke `store-neotoma`, or render the `🧠 Neotoma` turn report. It just reports. (Read-only retrieval of an existing plan is allowed — see Project-aware mode — but it never writes.)
 - **`/end` is the closing audit** — it files and persists. Reach for `/end` at the natural close of a session; reach for `/status` any time mid-session to check in.
 
+## Whole-session coverage (read the transcript when context is partial)
+
+`/status` must report on the **whole session**, not just the portion currently in context. Long sessions get compacted: the active context window may hold only a recent slice (a pre-compaction summary plus the last few turns), so reporting from context alone silently under-represents earlier work.
+
+Before composing the report, decide whether context is whole-session or partial. Treat it as **partial** whenever any of these hold:
+
+- A compaction/summary boundary is present in context (a "This session is being continued…" summary block, or an injected session-summary).
+- The session spans multiple days or many turns.
+- The user signals the read-out missed earlier work.
+
+When partial, reconstruct the full arc from the transcript **before** reporting:
+
+1. **Locate the transcript JSONL.** It lives under `~/.claude/projects/<project-slug>/<session-id>.jsonl`. The compaction summary names the exact path; otherwise pick the most recently modified `.jsonl` in that project dir.
+2. **Do not read the whole file into context** — it can be multiple MB. Extract a skeleton with a small script: pull genuine user messages (filter out `tool_result` payloads, `<system-reminder>` / `<command-*>` / `<local-command-*>` blocks, and "Continue from where you left off."), and optionally the assistant's short summary lines. This recovers the session's request arc cheaply.
+3. **Compose Achieved / Remaining from that whole-session skeleton**, not just the in-context tail.
+
+If the transcript can't be found or read, say so in one line and report from context with an explicit caveat that coverage may be tail-only — don't present a partial read-out as complete. When context is already whole-session (short, no compaction boundary), skip the transcript read.
+
 ## Modes
 
 `/status` has one default behavior and two optional modifiers, which compose:
@@ -110,7 +128,8 @@ If no plan is found, silently fall back to the session-only report — do not an
 
 ## Constraints
 
-- MUST be read-only: no `store`, no task filing, no memory writes, no `store-neotoma`, no `🧠 Neotoma` turn report. Project-aware mode may *read* a plan but MUST NOT correct or write it (that's `/update-plan`).
+- MUST report on the whole session: when context is partial (a compaction boundary is present, the session is multi-day / many-turn, or the user flags missed work), reconstruct the full arc from the transcript JSONL *before* reporting; never present a tail-only read-out as complete. If the transcript is unreadable, report from context with an explicit coverage caveat.
+- MUST be read-only: no `store`, no task filing, no memory writes, no `store-neotoma`, no `🧠 Neotoma` turn report. Project-aware mode may *read* a plan but MUST NOT correct or write it (that's `/update-plan`). Reading the transcript JSONL is a read and is allowed.
 - MUST keep technical detail light — anchors for navigation only, never logs or diffs — in both default and verbose modes.
 - MUST separate genuinely-completed work from outstanding/in-progress work; do not report attempts as achievements.
 - Default `/status` MUST stay succinct; resist turning the report into a full audit (that's `/end`). `verbose` adds context, never mechanics.
