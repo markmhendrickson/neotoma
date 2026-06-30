@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **516**
-- Backend and repo Vitest files: **482**
+- Total automated test files: **517**
+- Backend and repo Vitest files: **483**
 - Frontend Vitest files: **9**
 - Playwright spec files: **25**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 144 |
 | Vitest service tests | 35 |
 | Source-adjacent tests | 64 |
-| Vitest integration tests | 144 |
+| Vitest integration tests | 145 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -373,7 +373,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (144):**
+**Files (145):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -422,6 +422,7 @@ flowchart TD
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/http_related_entities_multihop.test.ts`
+- `tests/integration/http_store_reference_source.test.ts`
 - `tests/integration/idempotency_collision.test.ts`
 - `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
