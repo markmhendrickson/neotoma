@@ -5235,6 +5235,35 @@ export class NeotomaServer {
           ...new Set((fragmentRows ?? []).map((r: { fragment_key: string }) => r.fragment_key)),
         ].sort();
 
+        // Issue #1840: on a deduplicated (idempotency-replay) store, the early
+        // return must still surface the current snapshot in
+        // `entity_snapshot_after`. Previously this path omitted the field, so
+        // callers that validate writes by inspecting the response saw a false
+        // empty snapshot ({}) even though getEntitySnapshot returned the real
+        // one. No new observation is written, so we read the persisted snapshot
+        // directly. Mark each entry `deduplicated: true` so callers can tell a
+        // replay from a fresh write.
+        const { getSnapshot: getSnapshotForReplay } =
+          await import("./services/snapshot_computation.js");
+        const replaySnapshotByEntityId = new Map<string, Record<string, unknown>>();
+        for (const replayEntityId of new Set<string>(existingEntityIds as string[])) {
+          try {
+            const snap = await getSnapshotForReplay(replayEntityId, userId);
+            if (snap?.snapshot) {
+              replaySnapshotByEntityId.set(
+                replayEntityId,
+                snap.snapshot as Record<string, unknown>
+              );
+            }
+          } catch (snapErr) {
+            logger.warn(
+              `store replay: snapshot fetch failed for ${replayEntityId}: ${
+                snapErr instanceof Error ? snapErr.message : String(snapErr)
+              }`
+            );
+          }
+        }
+
         return this.buildTextResponse({
           source_id: existingSource.id,
           entities:
@@ -5243,6 +5272,8 @@ export class NeotomaServer {
                 entity_id: obs.entity_id,
                 entity_type: obs.entity_type,
                 observation_id: obs.id,
+                entity_snapshot_after: replaySnapshotByEntityId.get(obs.entity_id) ?? null,
+                deduplicated: true,
               })
             ) ?? [],
           unknown_fields_count: replayUnknownFieldNames.length,
@@ -5420,6 +5451,7 @@ export class NeotomaServer {
       identityBasis: string;
       identityRule: string;
       action: string;
+      deduplicated: boolean;
       duplicateCandidates?: import("./services/entity_resolution.js").ResolverDuplicateCandidate[];
     }> = [];
     // Track the resolved fields per observation index for schema-driven store_warnings.
@@ -5860,6 +5892,10 @@ export class NeotomaServer {
         identityBasis: resolverTrace.identityBasis,
         identityRule: resolverTrace.identityRule,
         action: resolverTrace.action,
+        // Issue #1840: an existing observation row means this store deduplicated
+        // (no new observation was inserted). Surface it so callers can tell a
+        // replay from a fresh write on the normal (non-idempotency-replay) path.
+        deduplicated: Boolean(existingObservation),
         ...(resolverTrace.duplicateCandidates && resolverTrace.duplicateCandidates.length > 0
           ? { duplicateCandidates: resolverTrace.duplicateCandidates }
           : {}),
@@ -6347,6 +6383,7 @@ export class NeotomaServer {
         identity_basis: e.identityBasis,
         identity_rule: e.identityRule,
         entity_snapshot_after: snapshotByEntityId.get(e.entityId) ?? null,
+        deduplicated: e.deduplicated,
         ...(e.duplicateCandidates && e.duplicateCandidates.length > 0
           ? {
               prefix_duplicate_candidates: e.duplicateCandidates.map((c) => ({
