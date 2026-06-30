@@ -47,11 +47,18 @@ Before Phase 1, decide whether context is whole-session or partial. Treat it as 
 
 When partial, reconstruct the full arc from the transcript **before** auditing:
 
-1. **Locate the transcript JSONL.** It lives under `~/.claude/projects/<project-slug>/<session-id>.jsonl`. The compaction summary names the exact path; otherwise pick the most recently modified `.jsonl` in that project dir.
-2. **Do not read the whole file into context** — it can be multiple MB. Extract a skeleton with a small script: pull genuine user messages (filter out `tool_result` payloads, `<system-reminder>` / `<command-*>` / `<local-command-*>` blocks, and "Continue from where you left off."), plus the assistant's short summary lines and any entity IDs / PR numbers mentioned. This recovers the full request arc and the set of entities surfaced, cheaply.
+1. **Locate the transcript JSONL — by identity, not recency.** Resolve the path in this strict order, stopping at the first that yields exactly one file:
+   1. The exact path named in the compaction/summary block in context — use it directly.
+   2. The harness-provided session id (a `<session-id>` / transcript path in environment context) → `~/.claude/projects/<project-slug>/<session-id>.jsonl`.
+   3. Only if neither is available: list `~/.claude/projects/<project-slug>/*.jsonl`. If exactly one exists, use it. **Do not** silently pick "the most recently modified" when several exist — a concurrent or prior-day session in the same project would make recency select the wrong file. If multiple remain and the session id can't disambiguate, treat it as *transcript unresolved* (see not-found handling) rather than guessing — filing tasks against the wrong session is worse than flagging tail-only.
+2. **Do not read the whole file into context** — it can be multiple MB. Extract a skeleton deterministically: parse the JSONL line by line; keep entries where `type`/`role` is `user` **and** the text does **not** match `^\s*<(system-reminder|command-name|command-message|local-command)`; drop `tool_result` content entirely; drop standalone "Continue from where you left off." lines; keep short assistant summary lines and any entity IDs / PR numbers mentioned. The "filter out tool_result" rule targets the `tool_result` *content type*, not user-pasted log/test output inside a genuine user message. This recovers the full request arc and the set of entities surfaced, cheaply.
 3. **Feed that whole-session skeleton into Phases 1 and 2** — the remaining-work audit and the storage audit must both cover the entire session, not just the in-context tail.
 
-If the transcript can't be found or read, proceed from context but state in the final report that coverage may be tail-only, so the user knows earlier work might be unaudited. When context is already whole-session (short, no compaction boundary), skip the transcript read.
+If the transcript can't be resolved or read (not found, ambiguous, parse error, or zero user messages after filtering), proceed from context but lead the final report with one explicit, prefixed caveat line naming the reason and that coverage is tail-only — so the user knows earlier work might be unaudited and unfiled, e.g.:
+
+> ⚠️ Whole-session transcript unavailable (<reason>) — audit coverage is tail-only; trackable work and storage gaps before the boundary may be missed.
+
+When context is already whole-session (short, no compaction boundary), skip the transcript read. (Attaching the transcript itself as a `source_id` is out of scope here — Phase 2.3 already covers source-linking for files the session actually ingested; the transcript is a read aid, not an audited artifact.)
 
 ## Phase 1: Remaining-work audit
 

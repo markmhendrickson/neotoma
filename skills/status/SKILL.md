@@ -38,11 +38,18 @@ Before composing the report, decide whether context is whole-session or partial.
 
 When partial, reconstruct the full arc from the transcript **before** reporting:
 
-1. **Locate the transcript JSONL.** It lives under `~/.claude/projects/<project-slug>/<session-id>.jsonl`. The compaction summary names the exact path; otherwise pick the most recently modified `.jsonl` in that project dir.
-2. **Do not read the whole file into context** — it can be multiple MB. Extract a skeleton with a small script: pull genuine user messages (filter out `tool_result` payloads, `<system-reminder>` / `<command-*>` / `<local-command-*>` blocks, and "Continue from where you left off."), and optionally the assistant's short summary lines. This recovers the session's request arc cheaply.
+1. **Locate the transcript JSONL — by identity, not recency.** Resolve the path in this strict order, stopping at the first that yields exactly one file:
+   1. The exact path named in the compaction/summary block in context (it almost always states it verbatim) — use it directly.
+   2. The harness-provided session id (e.g. a `<session-id>` / transcript path in environment context) → `~/.claude/projects/<project-slug>/<session-id>.jsonl`.
+   3. Only if neither is available: list `~/.claude/projects/<project-slug>/*.jsonl`. If exactly one exists, use it. **Do not** silently pick "the most recently modified" when several exist — a concurrent or prior-day session in the same project would make recency select the wrong file. If multiple remain and none can be disambiguated by the session id, treat it as *transcript unresolved* (see the not-found handling below) rather than guessing.
+2. **Do not read the whole file into context** — it can be multiple MB. Extract a skeleton deterministically: parse the JSONL line by line; keep entries where `type`/`role` is `user` **and** the text does **not** match `^\s*<(system-reminder|command-name|command-message|local-command)`; drop `tool_result` content entirely; drop standalone "Continue from where you left off." lines; optionally keep short assistant summary lines. The "filter out tool_result" rule targets the `tool_result` *content type*, not user-pasted log/test output inside a genuine user message — keep the latter. This yields the session's request arc in a few hundred chars.
 3. **Compose Achieved / Remaining from that whole-session skeleton**, not just the in-context tail.
 
-If the transcript can't be found or read, say so in one line and report from context with an explicit caveat that coverage may be tail-only — don't present a partial read-out as complete. When context is already whole-session (short, no compaction boundary), skip the transcript read.
+If the transcript can't be resolved or read (not found, ambiguous, parse error, or zero user messages after filtering), do not present a partial read-out as complete. Lead the report with one explicit, prefixed caveat line naming the reason and that coverage is tail-only, e.g.:
+
+> ⚠️ Whole-session transcript unavailable (<reason: not found / multiple candidates / parse error>) — coverage is tail-only; earlier work may be under-reported. Re-run with the session id if you have it.
+
+Then report from context. When context is already whole-session (short, no compaction boundary), skip the transcript read.
 
 ## Modes
 
