@@ -14280,7 +14280,13 @@ program
   .option("--file-path <path>", "Path to any file to store (unstructured pipeline)")
   .option("--file-content <content>", "Inline file content to store")
   .option("--user-id <id>", "User ID for the operation")
-  .option("--source-priority <level>", "Source priority level (default: 100)")
+  .option(
+    "--source-priority <level>",
+    "Source priority level (default: 100). Only affects fields whose reducer policy is " +
+      "highest_priority (or most_specific with tie_breaker source_priority); ignored elsewhere. " +
+      "The default 100 silently outranks an explicit lower priority on such fields — always pass " +
+      "an explicit value for priority-semantic writes. See docs/subsystems/conflict_resolution.md."
+  )
   .option(
     "--observation-source <kind>",
     "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
@@ -14527,7 +14533,13 @@ program
     "--file-idempotency-key <key>",
     "Optional idempotency key for the source file (default: derived from contents)"
   )
-  .option("--source-priority <level>", "Source priority level (default: 100)")
+  .option(
+    "--source-priority <level>",
+    "Source priority level (default: 100). Only affects fields whose reducer policy is " +
+      "highest_priority (or most_specific with tie_breaker source_priority); ignored elsewhere. " +
+      "The default 100 silently outranks an explicit lower priority on such fields — always pass " +
+      "an explicit value for priority-semantic writes. See docs/subsystems/conflict_resolution.md."
+  )
   .option(
     "--observation-source <kind>",
     "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"

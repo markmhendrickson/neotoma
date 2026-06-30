@@ -172,3 +172,121 @@ export function buildSourcePriorityIgnoredWarning(opts: {
     entity_id: entityId,
   };
 }
+
+// ─── SOURCE_PRIORITY_ESCALATION (#1838) ──────────────────────────────────────
+//
+// The mirror-image footgun of SOURCE_PRIORITY_IGNORED. `source_priority`
+// defaults to 100 (see action_schemas.ts). When a caller writes to a field
+// governed by a `highest_priority` reducer WITHOUT passing an explicit
+// `--source-priority`, the write silently inherits priority 100 — which
+// OUTRANKS any prior observation that was written with an explicit lower
+// priority (e.g. a trusted import at priority 50). The result is a silent
+// trust-escalation: the unprioritized write wins the field.
+//
+// LIMITATION (#1838): zod applies `.default(100)` before the handler runs, so
+// at the warning call site we cannot distinguish "caller omitted
+// source_priority" from "caller explicitly passed 100". We therefore warn
+// whenever priority === 100 AND a highest_priority field is written, framed as
+// "default/non-explicit 100". A caller who genuinely wants priority 100 can
+// ignore the advisory; the warning is non-blocking.
+
+/**
+ * Returns the list of written field names whose merge policy honours
+ * source_priority (`highest_priority`, or `most_specific` with
+ * `tie_breaker: "source_priority"`). These are the fields where a default-100
+ * write can silently outrank an explicit lower priority.
+ */
+export function priorityHonouringFields(opts: {
+  writtenFields: Record<string, unknown>;
+  mergePolicies: ReducerConfig["merge_policies"] | undefined | null;
+}): Array<{ field: string; strategy: string }> {
+  const { writtenFields, mergePolicies } = opts;
+  const result: Array<{ field: string; strategy: string }> = [];
+  for (const fieldName of Object.keys(writtenFields)) {
+    const policy = mergePolicies?.[fieldName];
+    if (fieldHonorsPriority(policy)) {
+      result.push({ field: fieldName, strategy: policy?.strategy ?? "highest_priority" });
+    }
+  }
+  return result;
+}
+
+/**
+ * Returns true when a write at the default priority (100) participates in at
+ * least one field that honours source_priority — i.e. the write could silently
+ * outrank a prior observation written with an explicit lower priority.
+ *
+ * Conditions (all must hold):
+ *  1. `sourcePriority === 100` — the (possibly-defaulted) value. Because zod
+ *     applies the default before this runs, we cannot tell an omitted value
+ *     from an explicit 100; we warn on both.
+ *  2. At least one written field's merge policy honours source_priority.
+ */
+export function sourcePriorityMayEscalate(opts: {
+  sourcePriority: number;
+  writtenFields: Record<string, unknown>;
+  mergePolicies: ReducerConfig["merge_policies"] | undefined | null;
+}): boolean {
+  const { sourcePriority, writtenFields, mergePolicies } = opts;
+  if (sourcePriority !== 100) return false;
+  return priorityHonouringFields({ writtenFields, mergePolicies }).length > 0;
+}
+
+/**
+ * The shape of one store_warnings[] entry emitted by the
+ * SOURCE_PRIORITY_ESCALATION code path. Mirrors SourcePriorityIgnoredWarning.
+ */
+export type SourcePriorityEscalationWarning = {
+  code: "SOURCE_PRIORITY_ESCALATION";
+  message: string;
+  observation_index: number;
+  entity_type: string;
+  entity_id: string;
+};
+
+/**
+ * Returns a structured store_warnings[] entry when a default-priority (100)
+ * write participates in a `highest_priority` field and could silently outrank
+ * an explicit lower priority, or `null` when no warning is warranted.
+ *
+ * Mitigation surfaced in the message: pass an explicit `--source-priority`
+ * (CLI) / `source_priority` (API) for any write whose value should be ranked,
+ * so the relative trust is intentional rather than inherited from the default.
+ */
+export function buildSourcePriorityEscalationWarning(opts: {
+  sourcePriority: number;
+  writtenFields: Record<string, unknown>;
+  mergePolicies: ReducerConfig["merge_policies"] | undefined | null;
+  observationIndex: number;
+  entityType: string;
+  entityId: string;
+}): SourcePriorityEscalationWarning | null {
+  const { sourcePriority, writtenFields, mergePolicies, observationIndex, entityType, entityId } =
+    opts;
+
+  if (!sourcePriorityMayEscalate({ sourcePriority, writtenFields, mergePolicies })) {
+    return null;
+  }
+
+  const honouring = priorityHonouringFields({ writtenFields, mergePolicies });
+  const fieldSummary = honouring
+    .map(({ field, strategy }) => `'${field}' uses ${strategy}`)
+    .join(", ");
+
+  return {
+    code: "SOURCE_PRIORITY_ESCALATION",
+    message:
+      `${entityType} written at the default source_priority ${sourcePriority} into ` +
+      `field(s) that rank by priority — ${fieldSummary}. A default/non-explicit ` +
+      `priority ${sourcePriority} OUTRANKS any prior observation written with an ` +
+      "explicit lower priority (e.g. a trusted import at 50), silently escalating " +
+      "this write's trust. Note: an explicit source_priority of 100 is " +
+      "indistinguishable from the default at write time, so this advisory fires on " +
+      "both. To make ranking intentional, pass an explicit --source-priority " +
+      "(CLI) / source_priority (API) reflecting how this write should rank against " +
+      "others — see docs/subsystems/conflict_resolution.md.",
+    observation_index: observationIndex,
+    entity_type: entityType,
+    entity_id: entityId,
+  };
+}
