@@ -130,6 +130,16 @@ import {
   installInspectorSpaShellEarly,
   resolveBundledInspectorDir,
 } from "./services/inspector_mount.js";
+import {
+  EMBED_ALLOWED_ORIGINS_ENV,
+  applyFrameAncestorsToCsp,
+  buildFrameAncestorsDirective,
+  embedCorsHeaders,
+  isEmbedReadEndpoint,
+  isEmbedShellPath,
+  isOriginAllowed,
+  parseAllowedEmbedOrigins,
+} from "./services/embed_cross_origin.js";
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
 import type { SandboxReportReason } from "./services/sandbox/types.js";
@@ -261,6 +271,78 @@ app.use(
     },
   })
 );
+// ── Official cross-origin Inspector-embed support (opt-in, secure by default) ──
+//
+// When NEOTOMA_EMBED_ALLOWED_ORIGINS lists one or more host origins, an
+// allowlisted host may iframe `/embed/graph` directly and its browser may
+// `fetch()` the two graph read endpoints cross-origin — WITHOUT running a
+// same-origin reverse proxy. Two response behaviors change, ONLY for
+// allowlisted traffic:
+//
+//   1. Embed shell paths (`/embed/*`) get `Content-Security-Policy:
+//      frame-ancestors 'self' <origins>` and drop `X-Frame-Options`, so the
+//      allowlisted host can frame them. Non-embed paths are untouched.
+//   2. The two blessed read endpoints (`/entities/query`,
+//      `/retrieve_graph_neighborhood`) get scoped CORS (exact-origin echo,
+//      never `*`, no credentials) + preflight handling — and ONLY those two.
+//      Write endpoints are never CORS-enabled here, so a browser on an
+//      allowlisted origin can never reach `/store`,`/correct`,… cross-origin.
+//
+// SECURE BY DEFAULT: with no allowlist configured, this middleware is inert and
+// every response is byte-identical to the locked-down `'self'`/`SAMEORIGIN`
+// posture. Registered AFTER Helmet (so it can override the `X-Frame-Options`
+// Helmet set and rewrite Helmet's CSP), BEFORE the global `cors()` (so it owns
+// the embed preflight and its response is not pre-empted), and before the auth
+// stack (so a CORS preflight OPTIONS is answered without a bearer, as browsers
+// require).
+const embedAllowedOrigins = parseAllowedEmbedOrigins(process.env[EMBED_ALLOWED_ORIGINS_ENV]);
+if (embedAllowedOrigins.length > 0) {
+  logger.info(
+    `[EmbedCORS] Cross-origin Inspector embed enabled for: ${embedAllowedOrigins.join(", ")}`
+  );
+}
+app.use((req, res, next) => {
+  if (embedAllowedOrigins.length === 0) return next();
+
+  const requestOrigin = req.headers.origin;
+  const reqPath = req.path;
+
+  // (1) Relax framing on the embed shell so an allowlisted host can iframe it.
+  // Applied on embed paths (framing is enforced by the browser against the CSP
+  // `frame-ancestors` list, which is itself restricted to the configured
+  // origins — so emitting it grants nothing beyond the allowlist). Rewrite the
+  // existing Helmet CSP if present, else set a standalone `frame-ancestors`
+  // policy, and remove `X-Frame-Options` (which has no allowlist form and would
+  // otherwise still block the frame).
+  if (isEmbedShellPath(reqPath)) {
+    const existingCsp = res.getHeader("Content-Security-Policy");
+    if (typeof existingCsp === "string") {
+      res.setHeader(
+        "Content-Security-Policy",
+        applyFrameAncestorsToCsp(existingCsp, embedAllowedOrigins)
+      );
+    } else {
+      const directive = buildFrameAncestorsDirective(embedAllowedOrigins);
+      if (directive) res.setHeader("Content-Security-Policy", directive);
+    }
+    res.removeHeader("X-Frame-Options");
+  }
+
+  // (2) Scoped CORS on the two blessed read endpoints, only for an allowlisted
+  // Origin. Preflight (OPTIONS) is answered here directly with 204.
+  if (isEmbedReadEndpoint(reqPath) && isOriginAllowed(requestOrigin, embedAllowedOrigins)) {
+    const canonical = new URL(requestOrigin as string).origin;
+    for (const [name, value] of Object.entries(embedCorsHeaders(canonical))) {
+      res.setHeader(name, value);
+    }
+    if (req.method === "OPTIONS") {
+      return res.status(204).end();
+    }
+  }
+
+  return next();
+});
+
 // Configure CORS to allow frontend origin
 const corsOptions = {
   origin: process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195",
@@ -277,6 +359,7 @@ const corsOptions = {
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 app.use(cors(corsOptions));
+
 // Capture raw body for AAuth HTTP Message Signature verification. The JSON
 // parser's `verify` hook runs before the body is consumed, so we can stash a
 // Buffer on `req.rawBody` without affecting downstream handlers that read
