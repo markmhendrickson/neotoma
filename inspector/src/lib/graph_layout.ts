@@ -26,6 +26,15 @@ export interface GraphSpec {
   edges: GraphEdgeSpec[];
 }
 
+/**
+ * Fallback node dimensions used as `initialWidth`/`initialHeight` on every
+ * flow node. They match the default React Flow node box (≈150×40) closely
+ * enough for `fitView` bounds and edge-path geometry to be correct before the
+ * ResizeObserver reports the real measured size. See `graphSpecToFlow`.
+ */
+const NODE_INITIAL_WIDTH = 150;
+const NODE_INITIAL_HEIGHT = 40;
+
 const TREE_ORIGIN_X = 40;
 const TREE_CHILD_X = 360;
 const TREE_ROW_SPACING = 72;
@@ -143,9 +152,7 @@ export function applyGraphLayout(
   const focus = spec.nodes.find((n) => n.id === spec.focusId || n.kind === "focus");
   const focusId = focus?.id ?? spec.focusId;
 
-  const neighbors = spec.nodes
-    .filter((n) => n.id !== focusId)
-    .sort(compareGraphNodeSpecs);
+  const neighbors = spec.nodes.filter((n) => n.id !== focusId).sort(compareGraphNodeSpecs);
 
   if (mode === "tree") {
     const totalHeight = Math.max(neighbors.length - 1, 0) * TREE_ROW_SPACING;
@@ -235,6 +242,15 @@ export function graphSpecToFlow(
     position: positions.get(node.id) ?? { x: 0, y: 0 },
     data: { label: node.label, raw: node.raw },
     style: nodeStyle(node.kind),
+    // Dimension hints so edge geometry and `getNodesBounds` have a fallback
+    // before React Flow's per-node measurement populates `measured`. React
+    // Flow overrides these with the real measured size once it observes the
+    // DOM node, so labels of any size still render normally. This alone is
+    // NOT sufficient — `fitView` strictly requires `measured` — which is why
+    // the graph pages also force a node-internals measurement pass after the
+    // nodes mount (see GraphAutoFit). Shared by /graph and /embed/graph.
+    initialWidth: NODE_INITIAL_WIDTH,
+    initialHeight: NODE_INITIAL_HEIGHT,
   }));
 
   const flowEdges: Edge[] = spec.edges.map((edge) => ({
