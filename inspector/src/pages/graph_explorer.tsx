@@ -20,6 +20,7 @@ import {
   graphSpecToFlow,
   type GraphLayoutMode,
 } from "@/lib/graph_layout";
+import { GraphAutoFit } from "@/components/shared/graph_auto_fit";
 const LAYOUT_STORAGE_KEY = "inspector_graph_layout_mode";
 
 function readStoredLayoutMode(): GraphLayoutMode {
@@ -173,6 +174,7 @@ export default function GraphExplorerPage() {
               fitViewOptions={{ padding: 0.2 }}
               proOptions={{ hideAttribution: true }}
             >
+              <GraphAutoFit nodeIds={nodes.map((n) => n.id)} />
               <Background />
               <Controls />
               <MiniMap />
