@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **523**
-- Backend and repo Vitest files: **489**
+- Total automated test files: **525**
+- Backend and repo Vitest files: **491**
 - Frontend Vitest files: **9**
 - Playwright spec files: **25**
 
@@ -70,9 +70,9 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 146 |
-| Vitest service tests | 35 |
+| Vitest service tests | 36 |
 | Source-adjacent tests | 64 |
-| Vitest integration tests | 149 |
+| Vitest integration tests | 150 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -262,11 +262,12 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (35):**
+**Files (36):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
+- `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
@@ -375,7 +376,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (149):**
+**Files (150):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -409,6 +410,7 @@ flowchart TD
 - `tests/integration/dashboard_stats.test.ts`
 - `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/docs_route.test.ts`
+- `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
