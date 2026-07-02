@@ -50,6 +50,7 @@ import {
   graphSpecToFlow,
   type GraphLayoutMode,
 } from "@/lib/graph_layout";
+import { GraphAutoFit } from "@/components/shared/graph_auto_fit";
 import { ApiBaseProvider } from "@/contexts/api_base_context";
 
 const LAYOUT_STORAGE_KEY = "inspector_graph_layout_mode";
@@ -234,6 +235,7 @@ function EmbedGraphView({ initialNodeId }: { initialNodeId: string }) {
             fitViewOptions={{ padding: 0.2 }}
             proOptions={{ hideAttribution: true }}
           >
+            <GraphAutoFit nodeIds={nodes.map((n) => n.id)} />
             <Background />
             <Controls />
             <MiniMap />
