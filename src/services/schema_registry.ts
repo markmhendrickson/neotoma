@@ -186,11 +186,24 @@ export interface SchemaDefinition {
   /**
    * Fields whose string values are references to other entities. Used to
    * auto-create REFERS_TO edges at store time.
+   *
+   * By default a reference field only links to an EXISTING target entity —
+   * "we do not invent targets" (see `schema_reference_linking.ts`). Set
+   * `resolve_target: true` to opt into get-or-create-with-fuzzy-match
+   * semantics instead (see `company_resolution.ts`): the field value is
+   * normalized, matched against existing `target_entity_type` entities via
+   * exact-normalized-name first and then a conservative Levenshtein
+   * similarity pass, and a new target entity is created only when neither
+   * finds a match. Currently only `target_entity_type: "company"` is wired
+   * to a resolver (`resolveCompanyEntity`); other target types with
+   * `resolve_target: true` fall back to the existing skip-if-missing
+   * behavior with a one-time warning.
    */
   reference_fields?: Array<{
     field: string;
     target_entity_type: string;
     relationship_type?: string;
+    resolve_target?: boolean;
   }>;
 
   /**
@@ -2279,6 +2292,9 @@ export class SchemaRegistryService {
           throw new Error(
             "reference_fields entries must be { field, target_entity_type, relationship_type? }"
           );
+        }
+        if (entry.resolve_target !== undefined && typeof entry.resolve_target !== "boolean") {
+          throw new Error("reference_fields entries: resolve_target must be a boolean");
         }
         if (!definition.fields[entry.field]) {
           throw new Error(`reference_fields references unknown field: ${entry.field}`);
