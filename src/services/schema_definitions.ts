@@ -1744,6 +1744,20 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // identifiers depending on source (CRM export, email signature, chat
       // mention), so each strong identifier is a single-field rule.
       canonical_name_fields: ["email", "phone", "external_id", "contact_id", "name"],
+      // `organization` becomes a reliable join key: resolve (fuzzy, get-or-
+      // create) a canonical `company` entity and link this contact to it via
+      // `works_at`. `resolve_target: true` opts into
+      // `resolveCompanyEntity` (company_resolution.ts) instead of the default
+      // skip-if-missing reference-field behavior — see
+      // docs/foundation/entity_resolution.md#15.4-company-entity-resolution-leads-graph-join-key.
+      reference_fields: [
+        {
+          field: "organization",
+          target_entity_type: "company",
+          relationship_type: "works_at",
+          resolve_target: true,
+        },
+      ],
     },
     reducer_config: {
       merge_policies: {
