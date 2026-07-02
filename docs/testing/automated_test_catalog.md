@@ -61,10 +61,10 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **525**
+- Total automated test files: **526**
 - Backend and repo Vitest files: **491**
 - Frontend Vitest files: **9**
-- Playwright spec files: **25**
+- Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
@@ -83,7 +83,7 @@ flowchart TD
 | Vitest shared-environment tests | 1 |
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
-| Playwright Inspector E2E tests | 3 |
+| Playwright Inspector E2E tests | 4 |
 | Tests Performance | 1 |
 | Tests Scripts | 2 |
 
@@ -703,7 +703,7 @@ flowchart TD
 - `playwright/tests/entity-detail.spec.ts`
 - `playwright/tests/entity-list.spec.ts`
 - `playwright/tests/floating-settings-button.spec.ts`
-- `playwright/tests/graph-integrity.spec.ts`
+- `playwright/tests/graph-data-integrity.spec.ts`
 - `playwright/tests/interpretations.spec.ts`
 - `playwright/tests/mcp-configuration.spec.ts`
 - `playwright/tests/mcp-relationships.spec.ts`
@@ -726,8 +726,9 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e:inspector`
 **Requirements:** Inspector bundle built before execution.
-**Files (3):**
+**Files (4):**
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
+- `playwright/tests/inspector/inspector-graph-render.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
 - `playwright/tests/inspector/inspector-sandbox-pack-picker.spec.ts`
 

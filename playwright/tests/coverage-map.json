@@ -30,10 +30,10 @@
     "specFile": "floating-settings-button.spec.ts"
   },
   "graphIntegrity": {
-    "description": "Graph integrity UI coverage.",
+    "description": "Graph DATA-integrity coverage (orphans/cycles/deletion). NOT render coverage — the graph render smoke gate is playwright/tests/inspector/inspector-graph-render.spec.ts.",
     "components": ["GraphIntegrityView"],
     "states": ["inspect graph checks"],
-    "specFile": "graph-integrity.spec.ts"
+    "specFile": "graph-data-integrity.spec.ts"
   },
   "interpretations": {
     "description": "Interpretation page coverage.",
@@ -143,4 +143,3 @@
     "specFile": "upload-flow.spec.ts"
   }
 }
-

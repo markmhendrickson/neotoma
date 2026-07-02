@@ -1,7 +1,17 @@
 /**
- * E2E Test: Graph Integrity Checks
- * 
- * Tests orphan detection and cycle prevention in the graph.
+ * E2E Test: Graph DATA-Integrity Checks
+ *
+ * ⚠️ THIS IS NOT RENDER COVERAGE. This test exercises the graph DATA MODEL only —
+ * orphan detection, cycle prevention, and entity-deletion behavior — by querying
+ * the database directly. It never opens the graph viewer and asserts NOTHING about
+ * whether the graph actually paints in the browser.
+ *
+ * The v0.18.5 blank-canvas and v0.18.6 /embed/graph height-collapse render bugs
+ * both shipped while this "graph" test was green, because "graph coverage" was
+ * misread as "render coverage." Pixel-level render coverage lives in
+ * playwright/tests/inspector/inspector-graph-render.spec.ts (task
+ * ent_6636601b50fc2d43b21d5174, policy ent_aa78b25af71561a203bde840). Do NOT
+ * extend this file for render assertions.
  */
 
 import { expect } from "@playwright/test";
@@ -85,7 +95,7 @@ async function detectCycles() {
   };
 }
 
-test.describe("E2E-009: Graph Integrity Checks", () => {
+test.describe("E2E-009: Graph DATA-Integrity Checks (NOT render coverage)", () => {
   const testUserId = "test-user-graph-integrity";
   const createdEntityIds: string[] = [];
   const createdSourceIds: string[] = [];
