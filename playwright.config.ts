@@ -17,7 +17,7 @@ const legacySpecFiles = [
   'entity-detail.spec.ts',
   'entity-list.spec.ts',
   'floating-settings-button.spec.ts',
-  'graph-integrity.spec.ts',
+  'graph-data-integrity.spec.ts',
   'interpretations.spec.ts',
   'mcp-configuration.spec.ts',
   'mcp-relationships.spec.ts',

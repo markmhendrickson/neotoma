@@ -121,6 +121,7 @@
     "test:e2e": "cross-env PLAYWRIGHT_USE_MOCK_API=1 PLAYWRIGHT_TEST_SEED=ci npx playwright test",
     "test:e2e:headed": "cross-env PLAYWRIGHT_USE_MOCK_API=1 PLAYWRIGHT_TEST_SEED=ci npx playwright test --headed",
     "test:e2e:inspector": "npm run build:inspector && cross-env PLAYWRIGHT_USE_MOCK_API=1 PLAYWRIGHT_TEST_SEED=ci npx playwright test playwright/tests/inspector",
+    "test:e2e:graph-render": "npm run build:inspector && cross-env PLAYWRIGHT_USE_MOCK_API=1 PLAYWRIGHT_TEST_SEED=ci npx playwright test playwright/tests/inspector/inspector-graph-render.spec.ts --project=chromium",
     "generate:capability-manifest": "tsx scripts/generate-capability-manifest.ts",
     "validate:capability-manifest": "tsx scripts/generate-capability-manifest.ts --check",
     "generate:test-catalog": "tsx scripts/generate-automated-test-catalog.ts",
