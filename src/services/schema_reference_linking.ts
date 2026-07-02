@@ -7,8 +7,10 @@
  *
  * The referenced entity is resolved by (1) treating the field value as a
  * canonical name / identifier and (2) looking up an existing entity of the
- * declared `target_entity_type`. If no match is found, the link is skipped
- * (we do not invent targets).
+ * declared `target_entity_type`. If no match is found, the link is skipped by
+ * default (we do not invent targets) UNLESS the reference field opts in via
+ * `resolve_target: true`, in which case a resolver may create the target
+ * (see the `resolve_target` branch below and `company_resolution.ts`).
  *
  * This is the schema-agnostic replacement for hardcoded
  * "if entity.category === 'foo', link to Foo" logic.
@@ -26,6 +28,16 @@ export interface AutoLinkReferenceFieldsParams {
   schema: SchemaDefinition | null | undefined;
   userId: string;
   sourceId?: string;
+  /**
+   * When false (dry-run / `store --plan`), `resolve_target` reference fields
+   * are skipped entirely rather than creating a target entity — matches the
+   * store pipeline's existing "no writes when commit:false" contract. Plain
+   * (non-`resolve_target`) reference fields never write a target entity
+   * regardless of this flag (they only link to entities that already exist),
+   * so this only changes behavior for `resolve_target: true` fields.
+   * Defaults to true so existing callers are unaffected.
+   */
+  commit?: boolean;
 }
 
 export interface AutoLinkResult {
@@ -103,6 +115,38 @@ export async function autoLinkReferenceFields(
           targetEntityId = (hit as { entity_id: string }).entity_id;
           break;
         }
+      }
+    }
+
+    // resolve_target opts a reference field into get-or-create-with-fuzzy-match
+    // semantics instead of "skip when no existing target is found" (see the
+    // schema_registry.ts SchemaDefinition.reference_fields doc). Only
+    // `target_entity_type: "company"` is wired to a resolver today
+    // (`resolveCompanyEntity` in company_resolution.ts); other target types
+    // fall back to the default skip behavior with a one-time warning so a
+    // misconfigured schema fails loud in logs rather than silently no-op-ing.
+    const commitTargets = params.commit ?? true;
+    if (!targetEntityId && ref.resolve_target && commitTargets) {
+      if (ref.target_entity_type === "company") {
+        try {
+          const { resolveCompanyEntity } = await import("./company_resolution.js");
+          const resolution = await resolveCompanyEntity({
+            organizationName: candidate,
+            userId: params.userId,
+          });
+          targetEntityId = resolution.entityId;
+        } catch (err) {
+          logger.warn(
+            `[SCHEMA_REF_LINK] resolve_target company resolution failed for ` +
+              `${params.entityType}.${ref.field}: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      } else {
+        logger.warn(
+          `[SCHEMA_REF_LINK] resolve_target: true declared for ` +
+            `${params.entityType}.${ref.field} -> ${ref.target_entity_type}, but no resolver ` +
+            `is wired for that target_entity_type. Falling back to skip-if-missing.`
+        );
       }
     }
 
