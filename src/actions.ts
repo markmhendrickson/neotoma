@@ -7276,6 +7276,7 @@ export async function storeStructuredForApi(params: {
             schema: schemaEntry.schema_definition,
             userId,
             sourceId: observationSourceId,
+            commit,
           });
         }
       } catch (linkErr) {

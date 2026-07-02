@@ -6066,6 +6066,7 @@ export class NeotomaServer {
                 schema: timelineSchema,
                 userId: snapshot.user_id || userId,
                 sourceId: storageResult.sourceId,
+                commit,
               });
             } catch (linkErr) {
               logger.warn(
