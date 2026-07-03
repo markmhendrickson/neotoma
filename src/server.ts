@@ -37,6 +37,7 @@ import {
   DescribeEntityTypeRequestSchema,
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
+  QueryContactsAtCompanyRequestSchema,
   MergeEntitiesRequestSchema,
   SplitEntityRequestSchema,
   DeleteEntityRequestSchema,
@@ -2030,6 +2031,8 @@ export class NeotomaServer {
         return await this.createRelationships(args);
       case "list_relationships":
         return await this.listRelationships(args);
+      case "query_contacts_at_company":
+        return await this.queryContactsAtCompanyTool(args);
       case "get_relationship_snapshot":
         return await this.getRelationshipSnapshot(args);
       case "retrieve_entities":
@@ -3412,6 +3415,45 @@ export class NeotomaServer {
       limit: parsed.limit,
       offset: parsed.offset,
     });
+  }
+
+  /**
+   * "Who do we have connected at company X" — read-only leads-graph lookup.
+   * Resolves `company_name` to the canonical `company` entity (exact then
+   * fuzzy, via `queryContactsAtCompany` / company_resolution.ts) and returns
+   * every contact linked to it via a live `works_at` edge. Never creates a
+   * company entity. `owner_user_id` scopes the search to a specific
+   * partner's network; defaults to the authenticated user's own graph.
+   */
+  private async queryContactsAtCompanyTool(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = QueryContactsAtCompanyRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.owner_user_id);
+
+    try {
+      const { queryContactsAtCompany } = await import("./services/company_query.js");
+      const result = await queryContactsAtCompany({
+        companyName: parsed.company_name,
+        userId,
+      });
+
+      const totalContacts = result.contacts.length;
+      const paginatedContacts = result.contacts.slice(0, parsed.limit);
+
+      return this.buildTextResponse({
+        queried_name: result.queried_name,
+        company: result.company,
+        contacts: paginatedContacts,
+        total_contacts: totalContacts,
+        limit: parsed.limit,
+      });
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to query contacts at company: ${error.message}`
+      );
+    }
   }
 
   private async getRelationshipSnapshot(

@@ -95,6 +95,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("list_relationships"),
     },
     {
+      name: "query_contacts_at_company",
+      description: desc(
+        "query_contacts_at_company",
+        "Answer \"who do we have connected at company X\": resolve company_name to the canonical company entity (exact-normalized match first, then a conservative fuzzy pass — the same resolution order used when a contact's organization field auto-links to a company at store time) and return every contact linked to it via a live works_at edge. Read-only: never creates a company entity — when no company matches, returns company: null and an empty contacts list. Optional owner_user_id scopes the search to a specific partner's network (must equal the authenticated user's id today; no cross-tenant admission yet); omit to search the authenticated user's own graph."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("query_contacts_at_company"),
+    },
+    {
       name: "get_relationship_snapshot",
       description: desc(
         "get_relationship_snapshot",
@@ -1488,6 +1496,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "create_relationship",
   "create_relationships",
   "list_relationships",
+  "query_contacts_at_company",
   "get_relationship_snapshot",
   "retrieve_entities",
   "list_timeline_events",
