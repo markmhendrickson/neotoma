@@ -174,6 +174,24 @@ export const ListRelationshipsRequestSchema = z
     }
   );
 
+/**
+ * "Who do we have connected at company X" — read-only leads-graph lookup.
+ * Resolves `company_name` (exact-normalized, then fuzzy) and returns the
+ * contacts linked via a live `works_at` edge. See src/services/company_query.ts.
+ */
+export const QueryContactsAtCompanyRequestSchema = z.object({
+  company_name: z.string().min(1, "company_name must not be empty"),
+  /**
+   * Which partner's network to search, matching the `user_id` override
+   * pattern on ListRelationshipsRequestSchema. Must equal the authenticated
+   * user's id today (no cross-tenant admission yet) — see
+   * getAuthenticatedUserId in server.ts. Omit to search the authenticated
+   * user's own graph.
+   */
+  owner_user_id: z.string().optional(),
+  limit: z.number().int().positive().optional().default(100),
+});
+
 export const TimelineEventsRequestSchema = z.object({
   event_type: z.string().optional(),
   after_date: z.string().optional(),

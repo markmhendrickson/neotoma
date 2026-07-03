@@ -504,6 +504,15 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "relationships list",
   },
   {
+    operationId: "queryContactsAtCompany",
+    method: "post",
+    path: "/query_contacts_at_company",
+    adapter: "mcp",
+    mcpTool: "query_contacts_at_company",
+    notes:
+      "Read-only leads-graph lookup: resolve a company name (exact/fuzzy) and return contacts linked via works_at. Never creates a company.",
+  },
+  {
     operationId: "recordComparison",
     method: "post",
     path: "/record_comparison",
@@ -834,6 +843,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   create_relationship: "createRelationship",
   create_relationships: "createRelationships",
   list_relationships: "listRelationshipsForEntity",
+  query_contacts_at_company: "queryContactsAtCompany",
   retrieve_entities: "queryEntities",
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",

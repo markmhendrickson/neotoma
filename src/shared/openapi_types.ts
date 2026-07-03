@@ -1349,6 +1349,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/query_contacts_at_company": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Query contacts at a company
+     * @description Resolve a free-text company name to the canonical `company` entity
+     *     (exact-normalized match first, then a conservative fuzzy pass — the
+     *     same resolution order used at store time when a `contact`'s
+     *     `organization` field auto-links to a `company` via `works_at`, see
+     *     docs/foundation/entity_resolution.md#15.4-company-entity-resolution-leads-graph-join-key)
+     *     and return every contact linked to it via a live `works_at` edge.
+     *
+     *     Answers "who do we have connected at company X" for a leads/warm-intro
+     *     graph. Read-only: unlike the store-time resolver, this never creates a
+     *     company entity — when no company matches (exact or fuzzy), the
+     *     response reports `company: null` and an empty `contacts` list rather
+     *     than inventing one.
+     *
+     *     Optional `owner_user_id` scopes both the company resolution and the
+     *     works_at/contact lookup to one tenant's graph (which partner's
+     *     network to search); omit to search the caller's own graph via the
+     *     authenticated user. Mirrors the `user_id` override on
+     *     `/list_relationships`: today the server requires it to match the
+     *     authenticated caller (single-tenant admission), so this is
+     *     forward-compatible API surface rather than a live cross-tenant query
+     *     capability yet.
+     */
+    post: operations["queryContactsAtCompany"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/retrieve_entity_by_identifier": {
     parameters: {
       query?: never;
@@ -6277,6 +6317,96 @@ export interface operations {
             limit?: number;
             /** @description Echo of the requested `offset`. */
             offset?: number;
+          };
+        };
+      };
+    };
+  };
+  queryContactsAtCompany: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /**
+           * @description Free-text company name to resolve, e.g. "Northgate" or
+           *     "North Gate". Matched exact-normalized first, then fuzzy
+           *     (see COMPANY_FUZZY_MATCH_THRESHOLD in
+           *     src/services/company_resolution.ts).
+           */
+          company_name: string;
+          /**
+           * @description Optional user_id override scoping the query to a specific
+           *     partner's network (which partner's contacts/company graph
+           *     to search), matching the `user_id` override pattern on
+           *     /list_relationships. Must equal the authenticated user's
+           *     id today (the server has no cross-tenant admission yet);
+           *     supplying a different value is rejected. When omitted,
+           *     the authenticated user's own graph is searched.
+           */
+          owner_user_id?: string;
+          /**
+           * @description Maximum number of linked contacts to return. Applied
+           *     after the full works_at edge set is resolved, so
+           *     `total_contacts` on the response reflects the true
+           *     pre-limit count.
+           * @default 100
+           */
+          limit?: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Resolved company (or none) and its linked contacts */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @description The `company_name` as given by the caller, unmodified. */
+            queried_name?: string;
+            /**
+             * @description The resolved company entity, or `null` when no
+             *     exact/fuzzy match exists. Never created by this
+             *     read-only query.
+             */
+            company?: {
+              entity_id?: string;
+              canonical_name?: string;
+              /**
+               * @description Which resolution path matched.
+               * @enum {string}
+               */
+              basis?: "exact_normalized" | "fuzzy_match";
+              /** @description Similarity score when `basis` is `fuzzy_match`. */
+              fuzzy_score?: number;
+            } | null;
+            /**
+             * @description Contacts linked to the resolved company via a live
+             *     `works_at` edge, ordered by entity_id ascending for
+             *     deterministic pagination. Empty when `company` is null
+             *     or no contacts are linked.
+             */
+            contacts?: {
+              entity_id?: string;
+              canonical_name?: string;
+              snapshot?: {
+                [key: string]: unknown;
+              };
+              /** @description The `works_at` relationship_key linking this contact to the company. */
+              relationship_key?: string;
+              /** @description When the works_at relationship was last observed. */
+              last_observation_at?: string;
+            }[];
+            /** @description Total linked contacts before `limit` is applied. */
+            total_contacts?: number;
+            /** @description Echo of the requested (or default) `limit`. */
+            limit?: number;
           };
         };
       };
