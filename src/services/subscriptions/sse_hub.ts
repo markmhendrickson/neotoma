@@ -52,19 +52,36 @@ export function registerSseClient(client: SseClient): () => void {
 }
 
 export function broadcastSubstrateEventToSse(event: SubstrateEvent, eventRingId: string): void {
+  // Collect dead clients to evict after the pass. A client whose socket is gone
+  // (e.g. a daemon that dropped without `req.on("close")` firing — common on
+  // `incomplete chunked read` disconnects) would otherwise linger in `clients`
+  // forever: `res.write()` on a destroyed socket throws or reports the stream
+  // is no longer writable, and the accumulation degrades fan-out on a
+  // long-running process. Prune them so delivery stays healthy across the
+  // lifetime of the server, not just after a restart.
+  const dead: SseClient[] = [];
   for (const c of clients) {
     if (c.subscription.delivery_method !== "sse") continue;
     if (!subscriptionMatchesEvent(c.subscription, event)) continue;
+    if (c.res.writableEnded || c.res.destroyed) {
+      dead.push(c);
+      continue;
+    }
     try {
       c.res.write(`id: ${eventRingId}\n`);
       c.res.write(`event: ${event.event_type}\n`);
       c.res.write(`data: ${JSON.stringify(event)}\n\n`);
     } catch (err) {
-      logger.warn("[subscriptions] sse write failed", {
+      dead.push(c);
+      logger.warn("[subscriptions] sse write failed; evicting client", {
         subscription_id: c.subscription.subscription_id,
         message: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+  for (const c of dead) {
+    const i = clients.indexOf(c);
+    if (i >= 0) clients.splice(i, 1);
   }
 }
 
