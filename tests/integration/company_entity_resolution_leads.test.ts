@@ -230,6 +230,26 @@ describe("company entity resolution: contact -> company linking + company query"
       .eq("user_id", TEST_USER_ID);
     expect((after.data ?? []).length).toBe(beforeCount);
   });
+
+  it("(d) queryContactsAtCompany throws when userId is missing instead of scanning across all tenants (cross-tenant leak guard)", async () => {
+    await expect(
+      queryContactsAtCompany({
+        companyName: "Initrove8",
+        // @ts-expect-error — userId is required; this exercises the runtime
+        // guard for callers that bypass the type system.
+        userId: undefined,
+      })
+    ).rejects.toThrow(/requires a non-empty userId/);
+  });
+
+  it("(d) queryContactsAtCompany throws when userId is an empty string", async () => {
+    await expect(
+      queryContactsAtCompany({
+        companyName: "Initrove8",
+        userId: "",
+      })
+    ).rejects.toThrow(/requires a non-empty userId/);
+  });
 });
 
 describe("(e) query_contacts_at_company MCP tool", () => {

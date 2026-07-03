@@ -80,31 +80,37 @@ export function normalizeCompanyName(raw: string): string {
 
 /**
  * Find the best fuzzy match for `normalizedInput` among existing `company`
- * entities for this user (or global scope when `userId` is omitted). Never
- * throws — scan failures are logged and treated as "no match" so callers can
- * fall back to creating a new entity.
+ * entities for this user. Never throws — scan failures are logged and
+ * treated as "no match" so callers can fall back to creating a new entity.
+ *
+ * `userId` is REQUIRED (not optional): this scans and fuzzy-matches raw
+ * `canonical_name` values across `company` rows, so an omitted/empty userId
+ * would silently perform a global cross-tenant scan over confidential
+ * company data instead of failing loud. Callers must resolve/require a real
+ * tenant id before calling this.
  */
 async function findBestFuzzyCompanyMatch(params: {
   normalizedInput: string;
-  userId?: string;
+  userId: string;
   threshold: number;
 }): Promise<{ entityId: string; canonicalName: string; score: number } | null> {
   const { normalizedInput, userId, threshold } = params;
+  if (!userId) {
+    throw new Error(
+      "[COMPANY_RESOLUTION] findBestFuzzyCompanyMatch requires a non-empty userId " +
+        "— refusing to fuzzy-scan company data across all tenants."
+    );
+  }
   if (!normalizedInput) return null;
 
   try {
-    let query = db
+    const { data, error } = await db
       .from("entities")
       .select("id, canonical_name, user_id, merged_to_entity_id")
       .eq("entity_type", "company")
+      .eq("user_id", userId)
       .is("merged_to_entity_id", null)
       .limit(MAX_FUZZY_CANDIDATES);
-
-    if (userId) {
-      query = query.eq("user_id", userId);
-    }
-
-    const { data, error } = await query;
     if (error) {
       logger.warn(`[COMPANY_RESOLUTION] fuzzy scan query failed: ${error.message}`);
       return null;
@@ -154,13 +160,23 @@ async function findBestFuzzyCompanyMatch(params: {
  * get-or-create primitive used by contact->company auto-linking and by the
  * company query seam (`company_query.ts`), which resolves read-only via the
  * fuzzy pass alone (see {@link findBestFuzzyCompanyMatch} usage there).
+ *
+ * `userId` is REQUIRED: it is forwarded to {@link findBestFuzzyCompanyMatch},
+ * which fuzzy-scans confidential company data and must always be scoped to
+ * one tenant (see that function's doc).
  */
 export async function resolveCompanyEntity(params: {
   organizationName: string;
-  userId?: string;
+  userId: string;
   threshold?: number;
 }): Promise<CompanyResolutionResult> {
   const { organizationName, userId } = params;
+  if (!userId) {
+    throw new Error(
+      "[COMPANY_RESOLUTION] resolveCompanyEntity requires a non-empty userId " +
+        "— refusing to resolve/create company entities across all tenants."
+    );
+  }
   const threshold = params.threshold ?? COMPANY_FUZZY_MATCH_THRESHOLD;
 
   const normalizedName = normalizeEntityValue("company", organizationName);

@@ -54,13 +54,24 @@ export interface CompanyQueryResult {
  * Read-only company resolution: exact-normalized match first, then a
  * conservative fuzzy pass. Mirrors `resolveCompanyEntity`'s matching order
  * (see company_resolution.ts) but never creates a new entity.
+ *
+ * `userId` is REQUIRED (not optional): the fuzzy pass scans raw
+ * `canonical_name` values across `company` rows, so an omitted/empty userId
+ * would silently read across every tenant's company data instead of failing
+ * loud. Callers must resolve/require a real tenant id before calling this.
  */
 async function findCompanyReadOnly(params: {
   companyName: string;
-  userId?: string;
+  userId: string;
   threshold: number;
 }): Promise<CompanyQueryResult["company"]> {
   const { companyName, userId, threshold } = params;
+  if (!userId) {
+    throw new Error(
+      "[COMPANY_QUERY] findCompanyReadOnly requires a non-empty userId " +
+        "— refusing to read company data across all tenants."
+    );
+  }
 
   const canonicalNameForStorage = formatCanonicalNameForStorage("company", companyName);
   const exactEntityId = generateEntityId(
@@ -87,17 +98,13 @@ async function findCompanyReadOnly(params: {
   const normalizedInput = normalizeEntityValue("company", companyName);
   if (!normalizedInput) return null;
 
-  let query = db
+  const { data, error } = await db
     .from("entities")
     .select("id, canonical_name, user_id, merged_to_entity_id")
     .eq("entity_type", "company")
+    .eq("user_id", userId)
     .is("merged_to_entity_id", null)
     .limit(2000);
-  if (userId) {
-    query = query.eq("user_id", userId);
-  }
-
-  const { data, error } = await query;
   if (error) {
     logger.warn(`[COMPANY_QUERY] fuzzy scan query failed: ${error.message}`);
     return null;
@@ -134,16 +141,24 @@ async function findCompanyReadOnly(params: {
  * canonical `company` entity (read-only) and return every contact linked to
  * it via a live `works_at` edge.
  *
- * `userId` scopes both the company resolution and the relationship/contact
- * lookup to one tenant's graph (optional filter — omit for a global/legacy
- * single-tenant scan, matching the rest of the resolver stack's convention).
+ * `userId` is REQUIRED: it scopes both the company resolution (see
+ * {@link findCompanyReadOnly}) and the relationship/contact lookup to one
+ * tenant's graph. This reads confidential company/contact data, so an
+ * omitted/empty userId must fail loud rather than silently scanning every
+ * tenant's data.
  */
 export async function queryContactsAtCompany(params: {
   companyName: string;
-  userId?: string;
+  userId: string;
   threshold?: number;
 }): Promise<CompanyQueryResult> {
   const { companyName, userId } = params;
+  if (!userId) {
+    throw new Error(
+      "[COMPANY_QUERY] queryContactsAtCompany requires a non-empty userId " +
+        "— refusing to query company/contact data across all tenants."
+    );
+  }
   const threshold = params.threshold ?? COMPANY_FUZZY_MATCH_THRESHOLD;
 
   const company = await findCompanyReadOnly({ companyName, userId, threshold });

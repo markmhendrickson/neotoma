@@ -201,4 +201,26 @@ describe("company_resolution", () => {
       await db.from("entities").delete().eq("entity_type", "company").eq("user_id", otherUserId);
     });
   });
+
+  describe("resolveCompanyEntity: userId is required (cross-tenant leak guard)", () => {
+    it("throws when userId is undefined instead of silently scanning/creating across all tenants", async () => {
+      await expect(
+        resolveCompanyEntity({
+          organizationName: "Northgate",
+          // @ts-expect-error — userId is required; this exercises the runtime guard
+          // for callers that bypass the type system (e.g. plain JS callers).
+          userId: undefined,
+        })
+      ).rejects.toThrow(/requires a non-empty userId/);
+    });
+
+    it("throws when userId is an empty string", async () => {
+      await expect(
+        resolveCompanyEntity({
+          organizationName: "Northgate",
+          userId: "",
+        })
+      ).rejects.toThrow(/requires a non-empty userId/);
+    });
+  });
 });
