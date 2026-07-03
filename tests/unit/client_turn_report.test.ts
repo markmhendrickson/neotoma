@@ -17,10 +17,10 @@ describe("renderTurnReport", () => {
     expect(out).toContain("## 🧠 Neotoma");
     expect(out).toContain("Created (2)");
     expect(out).toContain(
-      "✅ Follow up on invoice ([task](http://localhost:3180/inspector/entities/ent_task1))"
+      "✅ Follow up on invoice ([task](http://localhost:3180/entities/ent_task1))"
     );
     expect(out).toContain(
-      "👤 Ana Pérez ([contact](http://localhost:3180/inspector/entities/ent_contact1))"
+      "👤 Ana Pérez ([contact](http://localhost:3180/entities/ent_contact1))"
     );
     expect(out).not.toContain("Updated");
     expect(out).not.toContain("Retrieved");
@@ -47,14 +47,14 @@ describe("renderTurnReport", () => {
       inspectorBaseUrl: "http://localhost:3180",
     });
     expect(out).toContain(
-      "## 🧠 Neotoma — [Chat thread](http://localhost:3180/inspector/conversations/ent_conv)"
+      "## 🧠 Neotoma — [Chat thread](http://localhost:3180/conversations/ent_conv)"
     );
     expect(out).toContain("Retrieved (1)");
     expect(out).toContain("Created (1)");
     expect(out).toContain("Updated (1)");
-    expect(out).toContain("📅 C ([event](http://localhost:3180/inspector/entities/ent_c))");
-    expect(out).toContain("✅ A ([task](http://localhost:3180/inspector/entities/ent_a))");
-    expect(out).toContain("👤 B ([contact](http://localhost:3180/inspector/entities/ent_b))");
+    expect(out).toContain("📅 C ([event](http://localhost:3180/entities/ent_c))");
+    expect(out).toContain("✅ A ([task](http://localhost:3180/entities/ent_a))");
+    expect(out).toContain("👤 B ([contact](http://localhost:3180/entities/ent_b))");
     expect(out).not.toContain("Conversation (");
   });
 
@@ -71,7 +71,7 @@ describe("renderTurnReport", () => {
       inspectorBaseUrl: "http://localhost:3180",
     });
     expect(out).toContain(
-      "## 🧠 Neotoma — [Chat thread](http://localhost:3180/inspector/conversations/ent_conv)"
+      "## 🧠 Neotoma — [Chat thread](http://localhost:3180/conversations/ent_conv)"
     );
     expect(out).toContain("No durable facts read or written this turn.");
     expect(out).not.toContain("Retrieved (");
@@ -133,7 +133,7 @@ describe("renderTurnReport", () => {
     });
     expect(out).toContain("Repairs (1)");
     expect(out).toContain(
-      "🟡 Backfilled missing user message ([neotoma_repair](http://localhost:3180/inspector/entities/ent_repair1))"
+      "🟡 Backfilled missing user message ([neotoma_repair](http://localhost:3180/entities/ent_repair1))"
     );
   });
 
@@ -144,7 +144,7 @@ describe("renderTurnReport", () => {
       ],
       inspectorBaseUrl: "http://localhost:3180",
     });
-    expect(out).toContain("🚀 Custom ([task](http://localhost:3180/inspector/entities/ent_custom))");
+    expect(out).toContain("🚀 Custom ([task](http://localhost:3180/entities/ent_custom))");
   });
 
   it("renders (no id — see Issues) when an entity lacks an entity_id", () => {

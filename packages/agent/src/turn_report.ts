@@ -9,13 +9,13 @@
  *
  * Groups:
  *   - Linked conversation heading — optional. When a conversation entity is
- *     present, the heading links to `/inspector/conversations/<entity_id>`.
+ *     present, the heading links to `/conversations/<entity_id>`.
  *   - `Retrieved` / `Created` / `Updated` — optional non-bookkeeping groups.
  *   - `Issues` — populated from diagnoses with non-`ok` severity.
  *   - `Repairs` — applied auto-repairs from `applyRepairs`.
  *
  * Every entity bullet ends with a markdown link on the entity-type text to the
- * Neotoma Inspector entity page (`<base>/inspector/entities/<entity_id>`).
+ * Neotoma Inspector entity page (`<base>/entities/<entity_id>`).
  * Callers can override the base via `inspectorBaseUrl`; the default follows
  * the local Neotoma HTTP API origin (`http://localhost:3080` for dev).
  */
@@ -137,7 +137,7 @@ export function renderTurnReport(input: TurnReportInput): string {
     for (const r of repairs) {
       const prefix = r.severity === "error" ? "🔴" : r.severity === "warning" ? "🟡" : "🛠️";
       const link = r.repairEntityId
-        ? ` ([neotoma_repair](${baseUrl}/inspector/entities/${r.repairEntityId}))`
+        ? ` ([neotoma_repair](${baseUrl}/entities/${r.repairEntityId}))`
         : "";
       lines.push(`- ${prefix} ${r.label}${link}`);
     }
@@ -149,7 +149,7 @@ export function renderTurnReport(input: TurnReportInput): string {
 
 function formatHeading(conversation: TurnReportEntity | undefined, baseUrl: string): string {
   if (conversation?.entityId && conversation.label) {
-    return `## 🧠 Neotoma — [${conversation.label}](${baseUrl}/inspector/conversations/${conversation.entityId})`;
+    return `## 🧠 Neotoma — [${conversation.label}](${baseUrl}/conversations/${conversation.entityId})`;
   }
   if (conversation?.label) return `## 🧠 Neotoma — ${conversation.label}`;
   return "## 🧠 Neotoma";
@@ -158,7 +158,7 @@ function formatHeading(conversation: TurnReportEntity | undefined, baseUrl: stri
 function formatEntityBullet(entity: TurnReportEntity, baseUrl: string): string {
   const emoji = entity.emoji ?? pickDefaultEmoji(entity.entityType);
   if (!entity.entityId) return `${emoji} ${entity.label} (no id — see Issues)`;
-  return `${emoji} ${entity.label} ([${entity.entityType}](${baseUrl}/inspector/entities/${entity.entityId}))`;
+  return `${emoji} ${entity.label} ([${entity.entityType}](${baseUrl}/entities/${entity.entityId}))`;
 }
 
 function formatIssueBullet(diagnosis: Diagnosis): string {
