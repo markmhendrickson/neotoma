@@ -52,7 +52,33 @@ describe("Entity Resolution Service", () => {
       const id1 = generateEntityId("company", "Acme  Corp");
       const id2 = generateEntityId("company", "Acme Corp");
       const id3 = generateEntityId("company", "  Acme Corp  ");
-      
+
+      expect(id1).toBe(id2);
+      expect(id2).toBe(id3);
+    });
+
+    it("should NOT collapse bare SA/AG legal-form suffixes (false-merge guard)", () => {
+      // "SA" (Spanish/French sociedad anonima) and "AG" (German
+      // Aktiengesellschaft) are NOT stripped as legal-entity suffixes,
+      // because this exact-match path isn't gated by the fuzzy-match
+      // threshold — an incorrect strip here silently merges distinct
+      // companies that happen to share a base name across locales (e.g.
+      // "Banco SA" vs "Banco AG" are two different companies, not suffix
+      // variants of the same one).
+      const bare = generateEntityId("company", "Banco");
+      const sa = generateEntityId("company", "Banco SA");
+      const ag = generateEntityId("company", "Banco AG");
+
+      expect(sa).not.toBe(bare);
+      expect(ag).not.toBe(bare);
+      expect(sa).not.toBe(ag);
+    });
+
+    it("should still collapse Inc/LLC company suffix variants to one ID", () => {
+      const id1 = generateEntityId("company", "Acme Inc");
+      const id2 = generateEntityId("company", "Acme LLC");
+      const id3 = generateEntityId("company", "Acme");
+
       expect(id1).toBe(id2);
       expect(id2).toBe(id3);
     });
@@ -129,6 +155,23 @@ describe("Entity Resolution Service", () => {
       it("should handle companies without suffixes", () => {
         expect(normalizeEntityValue("company", "Acme")).toBe("acme");
         expect(normalizeEntityValue("company", "Tesla")).toBe("tesla");
+      });
+
+      it("should NOT strip bare SA/AG as legal-entity suffixes (false-merge guard)", () => {
+        // Regression guard: "Banco SA" and "Banco AG" are different real
+        // companies (Spanish sociedad anonima vs German Aktiengesellschaft)
+        // that happen to share a base name. Bare `sa`/`ag` are two-letter
+        // tokens with high collision risk, and this normalization feeds the
+        // exact-match path directly (not gated by the fuzzy threshold), so
+        // they are deliberately excluded from the stripped-suffix list.
+        expect(normalizeEntityValue("company", "Banco SA")).toBe("banco sa");
+        expect(normalizeEntityValue("company", "Banco AG")).toBe("banco ag");
+        expect(normalizeEntityValue("company", "Banco SA")).not.toBe(
+          normalizeEntityValue("company", "Banco AG")
+        );
+        expect(normalizeEntityValue("company", "Banco SA")).not.toBe(
+          normalizeEntityValue("company", "Banco")
+        );
       });
 
       it("should normalize organization type same as company", () => {
