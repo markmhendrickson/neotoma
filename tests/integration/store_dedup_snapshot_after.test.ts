@@ -8,11 +8,18 @@
  * count stays 1) but the store response must still return the current,
  * populated snapshot in `entity_snapshot_after` and mark the entity entry with
  * `deduplicated: true`.
+ *
+ * Issue #1860: the #1840 fix was applied only to the MCP path (src/server.ts).
+ * The offline/HTTP path (storeStructuredForApi in src/actions.ts) still stripped
+ * the snapshot on replay. The second test below asserts transport parity: the
+ * offline path returns the same populated `entity_snapshot_after` +
+ * `deduplicated: true` as the MCP path.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
+import { storeStructuredForApi } from "../../src/actions.js";
 import { randomUUID } from "crypto";
 import { cleanupTestEntityType } from "../helpers/test_schema_helpers.js";
 import { getSnapshot } from "../../src/services/snapshot_computation.js";
@@ -125,5 +132,89 @@ describe("store: dedup replay populates entity_snapshot_after (#1840)", () => {
     // It must match what getEntitySnapshot returns directly.
     const direct = await getSnapshot(entityId, TEST_USER_ID);
     expect(entryTwo.entity_snapshot_after).toEqual(direct?.snapshot);
+  });
+
+  it("offline/HTTP transport replay populates snapshot + deduplicated marker (#1860 parity)", async () => {
+    await db.from("schema_registry").insert({
+      entity_type: entityType,
+      schema_version: "1.0",
+      schema_definition: {
+        fields: {
+          value: { type: "number", required: false },
+          label: { type: "string", required: true },
+        },
+      },
+      reducer_config: {
+        merge_policies: {
+          value: { strategy: "last_write" },
+          label: { strategy: "last_write" },
+        },
+      },
+      active: true,
+      scope: "user",
+      user_id: TEST_USER_ID,
+    });
+
+    const entities = [
+      {
+        entity_type: entityType,
+        name: "offline-test",
+        label: "t",
+        value: 42,
+      },
+    ];
+    const sharedIdempotencyKey = `test-1860-${randomUUID()}`;
+
+    // First store over the offline/HTTP path (storeStructuredForApi).
+    const first = await storeStructuredForApi({
+      userId: TEST_USER_ID,
+      entities,
+      sourcePriority: 5,
+      idempotencyKey: sharedIdempotencyKey,
+      observationSource: "sensor",
+    });
+    expect(first.entities.length).toBeGreaterThan(0);
+    const firstEntry = first.entities[0] as {
+      entity_id: string;
+      entity_snapshot_after?: Record<string, unknown> | null;
+    };
+    const entityId = firstEntry.entity_id;
+    createdEntityIds.push(entityId);
+    if (first.source_id) createdSourceIds.push(first.source_id);
+    expect(firstEntry.entity_snapshot_after).toMatchObject({ value: 42, label: "t" });
+
+    // Second identical store, same key → offline idempotency-replay dedup.
+    const second = await storeStructuredForApi({
+      userId: TEST_USER_ID,
+      entities,
+      sourcePriority: 5,
+      idempotencyKey: sharedIdempotencyKey,
+      observationSource: "sensor",
+    });
+    if (second.source_id) createdSourceIds.push(second.source_id);
+    expect((second as { replayed?: boolean }).replayed).toBe(true);
+    expect(second.entities).toHaveLength(1);
+    const secondEntry = second.entities[0] as {
+      entity_snapshot_after?: Record<string, unknown> | null;
+      deduplicated?: boolean;
+    };
+
+    // Observation count stays at 1 (dedup worked).
+    const { count: obsCount } = await db
+      .from("observations")
+      .select("id", { count: "exact", head: true })
+      .eq("entity_id", entityId)
+      .eq("user_id", TEST_USER_ID);
+    expect(obsCount).toBe(1);
+
+    // #1860: the offline replay must return a POPULATED snapshot (not absent/{})
+    // and the deduplicated marker — matching the MCP path above.
+    expect(secondEntry.entity_snapshot_after).toBeTruthy();
+    expect(secondEntry.entity_snapshot_after).toMatchObject({ value: 42, label: "t" });
+    expect(secondEntry.deduplicated).toBe(true);
+
+    // And it must equal what getSnapshot returns directly (transport parity).
+    const direct = await getSnapshot(entityId, TEST_USER_ID);
+    expect(secondEntry.entity_snapshot_after).toEqual(direct?.snapshot);
   });
 });

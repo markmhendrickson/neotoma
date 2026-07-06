@@ -6701,10 +6701,38 @@ export async function storeStructuredForApi(params: {
     const { listObservationsForSource } = await import("./services/observation_storage.js");
     const existingObs = await listObservationsForSource(existingSource.id, userId);
 
+    // Issue #1860 (mirrors the #1840 MCP-path fix in src/server.ts): on a
+    // deduplicated (idempotency-replay) store, the early return must still
+    // surface the current snapshot in `entity_snapshot_after` and mark each
+    // entry `deduplicated: true` — matching the MCP transport. Previously the
+    // offline/HTTP path omitted both, so callers validating writes by
+    // inspecting the response saw a false empty snapshot even though
+    // getSnapshot returned the real one. No new observation is written, so we
+    // read the persisted snapshot directly.
+    const { getSnapshot: getSnapshotForReplay } =
+      await import("./services/snapshot_computation.js");
+    const replaySnapshotByEntityId = new Map<string, Record<string, unknown>>();
+    for (const replayEntityId of new Set<string>(existingObs.map((obs) => obs.entity_id))) {
+      try {
+        const snap = await getSnapshotForReplay(replayEntityId, userId);
+        if (snap?.snapshot) {
+          replaySnapshotByEntityId.set(replayEntityId, snap.snapshot as Record<string, unknown>);
+        }
+      } catch (snapErr) {
+        logger.warn(
+          `store replay: snapshot fetch failed for ${replayEntityId}: ${
+            snapErr instanceof Error ? snapErr.message : String(snapErr)
+          }`
+        );
+      }
+    }
+
     const existingEntities = existingObs.map((obs) => ({
       entity_id: obs.entity_id,
       entity_type: obs.entity_type,
       observation_id: obs.id,
+      entity_snapshot_after: replaySnapshotByEntityId.get(obs.entity_id) ?? null,
+      deduplicated: true,
     }));
 
     // Idempotency replay: the source row already exists for
