@@ -265,13 +265,27 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
     expect(mcpSnap).toMatchObject({ value: 42, label: "t" });
     assertIdenticalEffect("dedup reduced snapshot", mcpSnap, offSnap);
 
-    // ---- MCP-only response enrichment from the #1840 fix ----
-    // The MCP replay response carries the deduplicated marker AND the populated
-    // entity_snapshot_after. (The offline/HTTP idempotency-replay path returns a
-    // stripped entry — a documented divergence; see the matrix note. The parity
-    // guarantee above covers the integrity-critical effect on both transports.)
+    // ---- Response enrichment from the #1840 fix — HARD PARITY (#1860) ----
+    // Both transports MUST carry the deduplicated marker AND the populated
+    // entity_snapshot_after on the idempotency replay. This was an MCP-only
+    // divergence until #1860 (PR #1878) mirrored the #1840 fix into the
+    // offline/HTTP path (src/actions.ts); this cell now asserts identical
+    // effect on both surfaces rather than documenting the gap.
+    const offEntryTwo = (offTwo.json.entities as Array<Record<string, unknown>>)[0]!;
     expect(mcpEntryTwo.deduplicated).toBe(true);
+    expect(offEntryTwo.deduplicated).toBe(true);
+    assertIdenticalEffect(
+      "dedup deduplicated marker",
+      mcpEntryTwo.deduplicated,
+      offEntryTwo.deduplicated
+    );
     expect(mcpEntryTwo.entity_snapshot_after).toMatchObject({ value: 42, label: "t" });
+    expect(offEntryTwo.entity_snapshot_after).toMatchObject({ value: 42, label: "t" });
+    assertIdenticalEffect(
+      "dedup entity_snapshot_after",
+      mcpEntryTwo.entity_snapshot_after,
+      offEntryTwo.entity_snapshot_after
+    );
   });
 
   // -------------------------------------------------------------------------

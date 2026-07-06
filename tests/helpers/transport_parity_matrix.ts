@@ -291,10 +291,9 @@ export const TRANSPORT_PARITY_MATRIX: TransportParityScenario[] = [
       "Parity invariant asserted on BOTH transports: an identical re-store creates no new " +
       "observation (count stays 1) and the reduced snapshot stays populated. The RESPONSE-ENVELOPE " +
       "enrichment from the #1840 fix (deduplicated:true + populated entity_snapshot_after on the " +
-      "replayed entry) is asserted additionally on MCP; the offline/HTTP idempotency-replay path " +
-      "returns a stripped {entity_id,entity_type,observation_id} entry, so that envelope detail is " +
-      "MCP-only today. The effect that matters for data integrity (no duplicate observation; snapshot " +
-      "intact) is identical across transports and is what this cell locks in.",
+      "replayed entry) is now asserted on BOTH surfaces as a HARD parity assertion — the offline/HTTP " +
+      "idempotency-replay path was fixed in #1860 (PR #1878) to mirror the MCP path, so the previously " +
+      "MCP-only envelope detail is no longer a documented divergence.",
   },
   {
     id: "null_cleared_field_warning",
