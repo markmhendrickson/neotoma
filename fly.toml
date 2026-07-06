@@ -1,19 +1,31 @@
-# fly.toml app configuration file generated for neotoma on 2025-10-30T11:26:06+01:00
+# fly.toml app configuration file generated for tenant-neotoma on 2026-07-06T14:53:01+02:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'neotoma-sandbox'
-primary_region = 'lhr'
+app = 'tenant-neotoma'
+primary_region = 'iad'
 
 [build]
 
+[deploy]
+  # Seeds/activates all ENTITY_SCHEMAS rows in schema_registry on every
+  # deploy, against the target machine's DB, after the image is built.
+  # A fresh instance boots with an empty schema_registry table and
+  # loadActiveSchema() has no code fallback, so nothing works until this
+  # runs. Safe to run repeatedly (idempotent: skips already-active
+  # schemas). See src/seed_schemas_entry.ts.
+  release_command = 'node dist/seed_schemas_entry.js'
+
 [env]
-  NODE_ENV = "production"
-  NEOTOMA_ENV = "production"
-  # Must match internal_port (Fly routes to this port on the machine)
-  HTTP_PORT = "3180"
-  NEOTOMA_HTTP_PORT = "3180"
+  HTTP_PORT = '3180'
+  NEOTOMA_ENV = 'production'
+  NEOTOMA_HTTP_PORT = '3180'
+  NODE_ENV = 'production'
+
+[[mounts]]
+  source = 'data'
+  destination = '/app/data'
 
 [http_service]
   internal_port = 3180
@@ -27,7 +39,4 @@ primary_region = 'lhr'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-
-[[mounts]]
-  source = "data"
-  destination = "/app/data"
+  memory_mb = 1024
