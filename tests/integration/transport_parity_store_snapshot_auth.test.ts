@@ -373,8 +373,22 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
       reporter_git_sha: "0".repeat(40),
       reporter_app_version: "0.0.0-test",
     });
+    // The LOCAL auth gate must clear: no 401, and the write is accepted + stored
+    // locally (entity_id present). Assert this via structured fields, NOT a raw
+    // body string-match: the response can carry a `remote_submission_error` whose
+    // text legitimately mentions AUTH_REQUIRED when the remote MIRROR to a hosted
+    // Neotoma has no agent_grant (the default in CI). That remote-mirror failure
+    // is orthogonal to the local-loopback auth gate this cell verifies — the local
+    // submit still succeeds and stores with sync_pending for later retry.
     expect(local.status).not.toBe(401);
-    expect(local.text).not.toMatch(/AUTH_REQUIRED/);
+    const localJson = local.json as {
+      entity_id?: string;
+      code?: string;
+      error?: string;
+    };
+    expect(localJson.entity_id).toBeTruthy();
+    expect(localJson.code).not.toBe("AUTH_REQUIRED");
+    expect(localJson.error ?? "").not.toMatch(/AUTH_REQUIRED/);
 
     // Remote request (untrusted X-Forwarded-For), NO Bearer → must be rejected.
     const remote = await callHttp(
