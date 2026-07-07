@@ -421,27 +421,64 @@ export function buildToolDefinitions(
       name: "store",
       description: desc(
         "store",
-        "Save, create, or record entities and files into Neotoma. Use this tool to store any structured data — tasks, notes, contacts, transactions, events, plans, issues, receipts, decisions, or any other entity type. Also handles file uploads (base64 or path). Alias names: store, save, create entity, add record, ingest, persist. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments."
+        "Save entities and files to Neotoma. Provide entities[] for structured data, or file_content+mime_type / file_path for files. Handles per-user SHA-256 file dedup and automatic schema inference."
       ),
       inputSchema: {
         ...storeBaseSchema,
         type: "object",
         properties: {
           ...storeBaseProperties,
+          entities: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: true,
+            },
+            description:
+              "Array of structured entities to store. Each entity must include ALL fields from source data, not just schema-matched ones — unknown fields are captured in raw_fragments. When entity_type is unregistered, Neotoma automatically infers and creates a per-user schema from the entity fields. Use this path for structured data extraction (contacts, events, tasks, transactions). Include interpretation block only when the entity is derived from external source data (email, calendar, API response, web fetch); omit for agent-generated or chat-native entities.",
+          },
+          interpretation: {
+            type: "object",
+            additionalProperties: false,
+            description:
+              "Provenance link for source-derived entities. Interpretation block creates a Source → Interpretation → Observation chain, recording which external data source (email_thread, calendar_event, web_fetch, etc.) contributed to the stored entity. Include only when storing entities extracted from external data; omit for agent-generated or previously-stored entities. When omitted, observation.interpretation_id is null.",
+            properties: {
+              source_id: {
+                type: "string",
+                description: "Existing source to interpret.",
+              },
+              source_ref: {
+                type: "string",
+                enum: ["structured", "unstructured"],
+                description: "Source created by this store request. Use unstructured for the raw file source in combined file+entities requests, or structured for the generated JSON source.",
+              },
+              interpretation_config: {
+                type: "object",
+                additionalProperties: true,
+                description:
+                  "Audit configuration for a parser or agent-authored interpretation run. Include extractor_type, extractor_version, model, prompt_hash, schema_version, agent_notes, or other provenance fields as needed.",
+              },
+            },
+          },
           file_content: {
             type: "string",
             description:
-              "Base64-encoded file content. Use file_path for local files instead of base64 encoding.",
+              "Base64-encoded file content. Use when file is in-memory or when file_path is unavailable. Files are stored with per-user SHA-256 content deduplication (same content from same tenant shares storage). Supply mime_type to document file format. Alternatively, use file_path for filesystem access (Cursor/Claude Code only).",
           },
           file_path: {
             type: "string",
             description:
-              "Local file path (alternative to file_content). If provided, file will be read from filesystem. MIME type will be auto-detected from extension if not provided. Works in local environments (Cursor, Claude Code) where MCP server has filesystem access. Does NOT work in web-based environments (claude.ai, chatgpt.com) - use file_content for those.",
+              "Filesystem path to file (Cursor/Claude Code only; unavailable in web). File is read, stored with per-user SHA-256 content deduplication, and retrieved via retrieve_file_url. Provide mime_type to document format. Alternatively, use file_content (base64) for in-memory or web-accessible files.",
           },
           mime_type: {
             type: "string",
             description:
-              "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path (auto-detected from extension)",
+              "MIME type documenting file format (e.g., application/pdf, text/csv). Required with file_content, optional with file_path (auto-detected from extension).",
+          },
+          idempotency_key: {
+            type: "string",
+            description:
+              "Required for entities[] path; optional for file-only operations. Ensures idempotent writes: reuse with identical content returns the original result; reuse with different content raises ERR_IDEMPOTENCY_MISMATCH.",
           },
           original_filename: {
             type: "string",
