@@ -10,6 +10,7 @@ import {
 import {
   inferHookHarnessesFromMcpConfigs,
   scanForMcpConfigs,
+  type McpHookHarness,
   type McpTransportChoice,
 } from "./mcp_config_scan.js";
 import type { RunSetupOptions, SetupStepResult } from "./setup.js";
@@ -24,6 +25,8 @@ export interface DefaultSetupRunnerOptions {
   rewriteExistingNeotoma?: boolean;
   skipHooks?: boolean;
   allHarnesses?: boolean;
+  /** Target harness (from `setup --tool <harness>`); steers project MCP config placement. */
+  harness?: McpHookHarness;
 }
 
 function runInitSubprocess(cwd: string): Promise<SetupStepResult> {
@@ -112,6 +115,7 @@ export function createDefaultSetupRunners(
         mcpTransport: options.mcpTransport,
         assumeYes: options.yes,
         rewriteExistingNeotoma: options.rewriteExistingNeotoma,
+        harness: options.harness,
       });
       return {
         id: "mcp-configure",
