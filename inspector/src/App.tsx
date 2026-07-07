@@ -15,9 +15,7 @@ const EntitySegmentPage = lazy(() => import("@/pages/entity_segment_page"));
 const EntityCorrectPage = lazy(() => import("@/pages/entity_correct"));
 const EntityTimelinePage = lazy(() => import("@/pages/entity_timeline"));
 const EntityHistoryPage = lazy(() => import("@/pages/entity_history"));
-const EntityRelationshipsByTypePage = lazy(
-  () => import("@/pages/entity_relationships_by_type"),
-);
+const EntityRelationshipsByTypePage = lazy(() => import("@/pages/entity_relationships_by_type"));
 const ObservationsPage = lazy(() => import("@/pages/observations"));
 const SourcesPage = lazy(() => import("@/pages/sources"));
 const SourceDetailPage = lazy(() => import("@/pages/source_detail"));
@@ -42,6 +40,7 @@ const AgentDetailPage = lazy(() => import("@/pages/agent_detail"));
 const AgentGrantsPage = lazy(() => import("@/pages/agent_grants"));
 const AgentGrantDetailPage = lazy(() => import("@/pages/agent_grant_detail"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
+const OAuthCallbackPage = lazy(() => import("@/pages/oauth_callback"));
 const SandboxPage = lazy(() => import("@/pages/sandbox"));
 const ComplianceDashboardPage = lazy(() => import("@/pages/compliance"));
 const AccessPoliciesPage = lazy(() => import("@/pages/access_policies"));
@@ -124,6 +123,7 @@ export default function App() {
         <Route path="/agents/:key" element={<AgentDetailPage />} />
         <Route path="/design" element={<DesignPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
         <Route path="/sandbox" element={<SandboxPage />} />
         <Route path="/access-policies" element={<AccessPoliciesPage />} />
         <Route path="/subscriptions" element={<SubscriptionsPage />} />
