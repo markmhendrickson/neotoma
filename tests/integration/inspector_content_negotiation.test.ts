@@ -107,8 +107,19 @@ describe("isApiOnlyPath", () => {
 
   it("matches the OAuth / MCP / sandbox-session families", () => {
     expect(isApiOnlyPath("/mcp/oauth/authorize")).toBe(true);
-    expect(isApiOnlyPath("/oauth/callback")).toBe(true);
+    // The server's own OAuth callback lives under /mcp/oauth/* and stays API-only.
+    expect(isApiOnlyPath("/mcp/oauth/callback")).toBe(true);
+    expect(isApiOnlyPath("/oauth/token")).toBe(true);
     expect(isApiOnlyPath("/sandbox/session/reset")).toBe(true);
+  });
+
+  it("exempts /oauth/callback so the Inspector SPA can handle the OAuth code exchange", () => {
+    // /oauth/callback is a CLIENT-side SPA route (inspector/src/pages/oauth_callback.tsx),
+    // not a server API route. It must serve the SPA shell, not a Bearer-token 401.
+    expect(isApiOnlyPath("/oauth/callback")).toBe(false);
+    // The exemption is exact: other /oauth/* paths remain API-only.
+    expect(isApiOnlyPath("/oauth/authorize")).toBe(true);
+    expect(isApiOnlyPath("/oauth/callback/extra")).toBe(true);
   });
 
   it("does NOT match Inspector-overlapping paths", () => {
