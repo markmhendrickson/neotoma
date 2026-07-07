@@ -11,6 +11,8 @@ import {
   findMcpConfigPaths,
   inferHookHarnessesFromMcpConfigs,
   ensureAAuthKeysForSignedTransport,
+  isMcpHookHarness,
+  type McpHookHarness,
   neotomaServerEntriesForTransport,
   neotomaServerEntries,
   offerInstall,
@@ -304,6 +306,61 @@ describe("CLI MCP and instruction commands", () => {
       } finally {
         await fs.rm(tmpProject, { recursive: true, force: true });
       }
+    });
+
+    it("falls back to .cursor/mcp.json for an unsupported harness value", async () => {
+      // A caller that bypasses toHookHarness's narrowing (e.g. a future harness id, or an
+      // untyped/externally-sourced string) must not be treated as "claude-code" by offerInstall.
+      // isMcpHookHarness rejects it and the project-level default (.cursor/mcp.json) is used —
+      // this documents and locks in that runtime fallback behavior.
+      const tmpProject = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-unsupported-harness-"));
+      try {
+        await fs.writeFile(
+          path.join(tmpProject, "package.json"),
+          JSON.stringify({ name: "some-user-app", version: "1.0.0" }, null, 2)
+        );
+
+        const result = await offerInstall([], /* repoRoot */ null, {
+          silent: false,
+          cwd: tmpProject,
+          autoInstallScope: "project",
+          autoInstallEnv: "both",
+          // Cast: "vscode" is not a valid McpHookHarness. This exercises the runtime guard
+          // that protects offerInstall from an untyped caller passing an unsupported value.
+          harness: "vscode" as unknown as McpHookHarness,
+          skipProjectSync: true,
+        });
+
+        expect(result.installed).toBe(true);
+        const cursorMcpPath = path.join(tmpProject, ".cursor", "mcp.json");
+        const rootMcpPath = path.join(tmpProject, ".mcp.json");
+        expect(result.updatedPaths).toContain(cursorMcpPath);
+        expect(result.updatedPaths).not.toContain(rootMcpPath);
+        await expect(fs.access(rootMcpPath)).rejects.toThrow();
+        const parsed = JSON.parse(await fs.readFile(cursorMcpPath, "utf-8")) as {
+          mcpServers?: Record<string, unknown>;
+        };
+        expect(parsed.mcpServers?.["neotoma-dev"]).toBeDefined();
+        expect(parsed.mcpServers?.neotoma).toBeDefined();
+      } finally {
+        await fs.rm(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("isMcpHookHarness", () => {
+    it("accepts only the supported McpHookHarness values", () => {
+      expect(isMcpHookHarness("claude-code")).toBe(true);
+      expect(isMcpHookHarness("cursor")).toBe(true);
+      expect(isMcpHookHarness("codex")).toBe(true);
+    });
+
+    it("rejects unsupported or malformed values", () => {
+      expect(isMcpHookHarness("vscode")).toBe(false);
+      expect(isMcpHookHarness("")).toBe(false);
+      expect(isMcpHookHarness(undefined)).toBe(false);
+      expect(isMcpHookHarness(null)).toBe(false);
+      expect(isMcpHookHarness(123)).toBe(false);
     });
   });
 

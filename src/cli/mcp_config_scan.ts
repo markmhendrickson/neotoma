@@ -1078,6 +1078,21 @@ export type ConfigStatus = {
 
 export type McpHookHarness = "cursor" | "claude-code" | "codex";
 
+/** Canonical list of `McpHookHarness` values, for runtime validation of untyped input. */
+const MCP_HOOK_HARNESSES: readonly McpHookHarness[] = ["cursor", "claude-code", "codex"];
+
+/**
+ * Runtime type guard for `McpHookHarness`. `offerInstall`'s `options.harness` is typed as
+ * `McpHookHarness | undefined` at compile time, but callers may thread through an untyped or
+ * externally-sourced string (e.g. from a future harness added to `HookHarnessId` in
+ * hooks_detect.ts before `McpHookHarness` is updated to match, or from a caller that skips
+ * `toHookHarness`'s narrowing). Validate here so an unsupported value can't silently reach the
+ * `.mcp.json`-vs-`.cursor/mcp.json` decision below as if it were a real, supported harness.
+ */
+export function isMcpHookHarness(value: unknown): value is McpHookHarness {
+  return typeof value === "string" && (MCP_HOOK_HARNESSES as readonly string[]).includes(value);
+}
+
 /** Infer hook-capable harnesses from MCP config paths that already contain a Neotoma server. */
 export function inferHookHarnessesFromMcpConfigs(configs: ConfigStatus[]): McpHookHarness[] {
   const harnesses = new Set<McpHookHarness>();
@@ -1875,10 +1890,15 @@ export async function offerInstall(
 
     process.stdout.write("No MCP config files found.\n");
     // For a project-scoped Claude Code install, the canonical target is a project-root
-    // `.mcp.json` (local stdio server), not `.cursor/mcp.json`. Other harnesses keep the
-    // Cursor default. This is the path a global install of `setup --tool claude-code` hits.
+    // `.mcp.json` (local stdio server), not `.cursor/mcp.json`. Other harnesses — including
+    // any value that fails `isMcpHookHarness` (e.g. an unsupported/future harness id passed
+    // through an untyped caller) — fall back to the Cursor default `.cursor/mcp.json`. This
+    // fallback is deliberate and safe: `.cursor/mcp.json` is the harness-agnostic default this
+    // function used before the Claude Code carve-out existed. This is the path a global install
+    // of `setup --tool claude-code` hits.
     const createClaudeCodeProjectMcp =
-      options?.harness === "claude-code" &&
+      isMcpHookHarness(options?.harness) &&
+      options.harness === "claude-code" &&
       (options?.autoInstallScope === "project" || options?.autoInstallScope === undefined);
     const promptText = createClaudeCodeProjectMcp
       ? "Create user-level (~/.cursor/mcp.json) or project-level (.mcp.json in current project)? (u/p)"
