@@ -6,16 +6,25 @@ RUN npm ci
 COPY . .
 RUN npm run build:server
 
-# --- Inspector build stage: compile Vite SPA (always built; served at /inspector).
+# --- Inspector build stage: compile Vite SPA (always built; served at / by default).
 FROM node:20-alpine AS inspector-build
 WORKDIR /app/inspector
 ARG VITE_NEOTOMA_SANDBOX_UI=""
 # Vite base path = router basename (main.tsx derives ROUTER_BASENAME from
-# import.meta.env.BASE_URL). Default "/inspector/" for installs that reach the
-# Inspector at /inspector. The sandbox serves the SPA at the site ROOT, so it
-# must build with "/" (otherwise <Router basename="/inspector"> can't match "/"
-# and renders a blank page) — fly.sandbox.toml overrides this to "/".
-ARG VITE_PUBLIC_BASE_PATH="/inspector/"
+# import.meta.env.BASE_URL). The server unconditionally serves the Inspector
+# SPA at the site ROOT for every deploy of this image — root-level static
+# assets (installInspectorRootStaticAssets), the early SPA-shell content
+# negotiation (installInspectorSpaShellEarly), and a 308 /inspector → /
+# redirect (installInspectorLegacyRedirect) are all wired in unconditionally
+# in src/actions.ts (see src/services/inspector_mount.ts). So the build MUST
+# default to "/" here too (matching inspector/vite.config.ts's own default
+# and inspector/README.md) — building with "/inspector/" makes <Router
+# basename="/inspector"> unable to match "/" and renders a blank page for any
+# Fly app (e.g. fly.toml's tenant-neotoma) that doesn't override this ARG.
+# Set VITE_PUBLIC_BASE_PATH=/inspector/ only when restoring the legacy
+# subpath mount for a deployment that deliberately serves Inspector at
+# /inspector instead of /.
+ARG VITE_PUBLIC_BASE_PATH="/"
 COPY inspector/package*.json ./
 RUN npm ci
 COPY inspector/ ./
