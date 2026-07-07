@@ -71,6 +71,50 @@ describe("isRedirectUriAllowedForTunnel", () => {
     });
   });
 
+  describe("same-origin Inspector callback", () => {
+    it("allows a same-origin https callback when selfHost matches", () => {
+      expect(
+        isRedirectUriAllowedForTunnel(
+          "https://tenant-neotoma.fly.dev/oauth/callback",
+          "tenant-neotoma.fly.dev"
+        )
+      ).toBe(true);
+    });
+
+    it("ignores a port suffix on selfHost", () => {
+      expect(
+        isRedirectUriAllowedForTunnel(
+          "https://tenant-neotoma.fly.dev/oauth/callback",
+          "tenant-neotoma.fly.dev:443"
+        )
+      ).toBe(true);
+    });
+
+    it("still rejects a different host even when selfHost is provided", () => {
+      expect(
+        isRedirectUriAllowedForTunnel(
+          "https://evil.com/steal-code",
+          "tenant-neotoma.fly.dev"
+        )
+      ).toBe(false);
+    });
+
+    it("does not allow same-origin over http (only https is publicly served)", () => {
+      expect(
+        isRedirectUriAllowedForTunnel(
+          "http://tenant-neotoma.fly.dev/oauth/callback",
+          "tenant-neotoma.fly.dev"
+        )
+      ).toBe(false);
+    });
+
+    it("without selfHost, an arbitrary tunnel host is still rejected", () => {
+      expect(
+        isRedirectUriAllowedForTunnel("https://tenant-neotoma.fly.dev/oauth/callback")
+      ).toBe(false);
+    });
+  });
+
   describe("edge cases", () => {
     it("returns false for empty string", () => {
       expect(isRedirectUriAllowedForTunnel("")).toBe(false);

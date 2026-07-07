@@ -2846,7 +2846,10 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       // When reached via tunnel, only allow redirect_uri to localhost, app schemes, or OpenAI Custom GPT
       if (!isLocalRequest(req)) {
         const { isRedirectUriAllowedForTunnel } = await import("./services/mcp_oauth.js");
-        if (!isRedirectUriAllowedForTunnel(redirect_uri)) {
+        // Public host as seen from outside the tunnel (x-forwarded-host set by the
+        // proxy) so an Inspector callback on this instance's own origin is allowed.
+        const selfHost = req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.get("host");
+        if (!isRedirectUriAllowedForTunnel(redirect_uri, selfHost)) {
           logger.warn("[MCP OAuth] Authorize rejected: redirect_uri not allowed for tunnel", {
             redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
           });
