@@ -3339,6 +3339,81 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  issue_spec: {
+    entity_type: "issue_spec",
+    schema_version: "1.0",
+    metadata: {
+      label: "Issue Spec",
+      description:
+        "An additive, multi-agent specification for a single GitHub issue produced by the " +
+        "Ateles swarm's issue-spec pipeline. Each participating agent contributes its own " +
+        "section (PM, design, engineering, QA, security, legal); the entity accumulates them " +
+        "in place. Keyed by (repo, issue_number).",
+      category: "agent_runtime",
+      aliases: ["swarm_issue_spec", "issue_specification"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        // Repository slug in owner/repo format (e.g. "markmhendrickson/neotoma").
+        repo: { type: "string", required: true },
+        // GitHub issue number — primary identifier within a repo.
+        issue_number: { type: "number", required: true },
+        // Human-readable composite key "<repo>#<number>"; mirrors the
+        // (repo, issue_number) identity and doubles as a fallback identity rule.
+        spec_key: { type: "string", required: false },
+        // Issue title.
+        title: { type: "string", required: false, preserveCase: true },
+        // Per-agent additive section markdown. Each agent corrects its own
+        // section in place as the spec progresses through the pipeline.
+        pm_section: { type: "string", required: false, preserveCase: true },
+        design_section: { type: "string", required: false, preserveCase: true },
+        eng_section: { type: "string", required: false, preserveCase: true },
+        qa_section: { type: "string", required: false, preserveCase: true },
+        security_section: { type: "string", required: false, preserveCase: true },
+        legal_section: { type: "string", required: false, preserveCase: true },
+        // Ordered list of completed section keys, tracking pipeline progress.
+        sequence_state: { type: "array", required: false },
+        // ISO-8601 timestamps. Strings (not date type) so lexicographic sort
+        // matches temporal order.
+        last_updated_at: { type: "string", required: false },
+        last_mirrored_at: { type: "string", required: false },
+      },
+      // An issue_spec is uniquely identified by its issue number within a repo.
+      // The composite [repo, issue_number] is the primary rule so two stores for
+      // the same repo#number resolve to the SAME entity (agents correct in
+      // place); spec_key ("<repo>#<number>") is a fallback for callers that only
+      // supply the pre-formed composite key.
+      canonical_name_fields: [{ composite: ["repo", "issue_number"] }, "spec_key"],
+      name_collision_policy: "reject",
+      agent_instructions:
+        "An issue_spec entity is the additive, multi-agent spec for one GitHub issue. " +
+        "Use repo and issue_number together as the primary identifier (spec_key = " +
+        '"<repo>#<number>" mirrors it). Each agent appends or corrects only its own ' +
+        "section field (pm_section, design_section, eng_section, qa_section, " +
+        "security_section, legal_section) and adds its section key to sequence_state; " +
+        "never overwrite another agent's section. Update last_updated_at on each write " +
+        "and last_mirrored_at when the spec is mirrored back to GitHub.",
+    },
+    reducer_config: {
+      merge_policies: {
+        repo: { strategy: "last_write" },
+        issue_number: { strategy: "last_write" },
+        spec_key: { strategy: "last_write" },
+        title: { strategy: "last_write" },
+        pm_section: { strategy: "last_write" },
+        design_section: { strategy: "last_write" },
+        eng_section: { strategy: "last_write" },
+        qa_section: { strategy: "last_write" },
+        security_section: { strategy: "last_write" },
+        legal_section: { strategy: "last_write" },
+        sequence_state: { strategy: "last_write" },
+        last_updated_at: { strategy: "last_write" },
+        last_mirrored_at: { strategy: "last_write" },
+      },
+    },
+  },
+
   usage_digest: {
     entity_type: "usage_digest",
     schema_version: "1.0",
