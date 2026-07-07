@@ -20,6 +20,7 @@ const ENV_KEYS = [
   "NEOTOMA_GOOGLE_CLIENT_ID",
   "NEOTOMA_GOOGLE_CLIENT_SECRET",
   "NEOTOMA_APPROVED_EMAILS",
+  "NEOTOMA_SHARED_GRAPH_USER_ID",
 ] as const;
 
 const CLIENT_ID = "test-client-id.apps.googleusercontent.com";
@@ -130,6 +131,40 @@ describe("google_oidc", () => {
       withEnv({ NEOTOMA_GOOGLE_CLIENT_ID: CLIENT_ID, NEOTOMA_APPROVED_EMAILS: "a@example.com" });
       const mod = await loadModule();
       expect(mod.isGoogleSigninEnabled()).toBe(true);
+    });
+  });
+
+  describe("getSharedGraphUserId", () => {
+    const UUID = "00000000-0000-0000-0000-000000000000";
+
+    it("returns null when unset (default: isolated per-email graphs)", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: undefined });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBeNull();
+    });
+
+    it("returns null for an empty / whitespace value", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: "   " });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBeNull();
+    });
+
+    it("returns the UUID when set to a valid UUID", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: UUID });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBe(UUID);
+    });
+
+    it("lowercases and trims a valid UUID", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: `  32EF8C6E-02B7-7B4B-CD33-7EA1A3C807CE  ` });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBe("32ef8c6e-02b7-7b4b-cd33-7ea1a3c807ce");
+    });
+
+    it("fail-safes to null on a malformed value (never binds to a bad id)", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: "not-a-uuid" });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBeNull();
     });
   });
 

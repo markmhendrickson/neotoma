@@ -146,6 +146,33 @@ export function isGoogleSigninEnabled(): boolean {
   return clientId.length > 0 && approved.length > 0;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Shared-graph opt-in (a bounded, explicit slice of "Model B").
+ *
+ * When `NEOTOMA_SHARED_GRAPH_USER_ID` is set to a valid UUID, every
+ * Google-verified **approved** email is admitted onto THAT single user_id's
+ * graph instead of its own per-email hash. This is how a known, allowlisted
+ * team (defined by `NEOTOMA_APPROVED_EMAILS`) shares one populated graph:
+ * every teammate's Google login, plus the bearer/MCP identity that owns the
+ * data, converge on the same user_id.
+ *
+ * It is deliberately NOT general cross-user read access: it does not let an
+ * arbitrary user read another's data. It only redirects the *identity a
+ * verified-and-approved session resolves to*. Unset → every email stays
+ * isolated on its own graph (the default, unchanged behavior). Only honored
+ * for emails that already pass the `NEOTOMA_APPROVED_EMAILS` allowlist, so a
+ * non-approved Google account can never be mapped onto the shared graph.
+ *
+ * Returns null when unset or malformed (fail-safe to isolated behavior).
+ */
+export function getSharedGraphUserId(): string | null {
+  const raw = (process.env.NEOTOMA_SHARED_GRAPH_USER_ID || "").trim();
+  if (!raw) return null;
+  return UUID_RE.test(raw) ? raw.toLowerCase() : null;
+}
+
 function getJwks(): ReturnType<typeof createRemoteJWKSet> {
   if (cachedJwks) return cachedJwks;
   cachedJwks = createRemoteJWKSet(new URL(GOOGLE_JWKS_URL));

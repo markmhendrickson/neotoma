@@ -156,6 +156,7 @@ import {
   createGoogleSigninNonce,
   consumeGoogleSigninNonce,
   exchangeGoogleAuthorizationCode,
+  getSharedGraphUserId,
   GoogleIdTokenError,
   isGoogleSigninEnabled,
   verifyGoogleIdToken,
@@ -2757,24 +2758,31 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
 
     // Resolve the verified email to a stable user_id via the EXISTING per-email
     // primitive (local_auth.ts) — the same primitive createLocalAuthUser /
-    // hashEmailToUserId already uses elsewhere. No new identity model, no
-    // cross-user read logic: this person is admitted as their own isolated
-    // user_id, same as any other local-auth user.
+    // hashEmailToUserId already uses elsewhere. By default this person is
+    // admitted as their own isolated user_id, same as any other local-auth user.
     const { createLocalAuthUser } = await import("./services/local_auth.js");
     const { randomBytes } = await import("node:crypto");
     // Password is unused for Google-authenticated users (they never log in
     // with it) — generate an unguessable throwaway so createLocalAuthUser's
     // shared code path is satisfied without weakening any other account.
     const throwawayPassword = randomBytes(32).toString("hex");
-    const user = createLocalAuthUser(email, throwawayPassword);
+    const perEmailUser = createLocalAuthUser(email, throwawayPassword);
 
-    // Mark this browser session as Google-verified and bound to `user.id`,
-    // exactly the same OAuth key-session cookie the private-key/mnemonic/
-    // bearer path sets. `/mcp/oauth/authorize` -> `/mcp/oauth/local-login`
-    // then runs completely unmodified, except local-login now resolves the
-    // user via this session instead of always ensureLocalDevUser().
+    // Shared-graph opt-in: when NEOTOMA_SHARED_GRAPH_USER_ID is set, an
+    // approved teammate (the email already passed the allowlist inside
+    // verifyGoogleIdToken) is bound to the shared graph's user_id instead of
+    // their isolated per-email one — so the whole allowlisted team, plus the
+    // bearer/MCP identity that owns the data, share one populated graph. Unset
+    // → isolated per-email behavior (unchanged). See getSharedGraphUserId.
+    const resolvedUserId = getSharedGraphUserId() ?? perEmailUser.id;
+
+    // Mark this browser session as Google-verified and bound to the resolved
+    // user_id, exactly the same OAuth key-session cookie the private-key/
+    // mnemonic/bearer path sets. `/mcp/oauth/authorize` -> `/mcp/oauth/
+    // local-login` then runs completely unmodified, except local-login now
+    // resolves the user via this session instead of always ensureLocalDevUser().
     const sessionToken = setOAuthKeySessionCookie(req, res);
-    googleVerifiedUserBySessionToken.set(sessionToken, user.id);
+    googleVerifiedUserBySessionToken.set(sessionToken, resolvedUserId);
 
     return res.redirect(nextPath);
   } catch (error: any) {
