@@ -9697,7 +9697,16 @@ program
     }
     const { runSetup } = await import("./setup.js");
     const { createDefaultSetupRunners } = await import("./setup_runners.js");
+    const { toHookHarness } = await import("./hooks_detect.js");
     const cwd = process.cwd();
+    // Narrow the target tool to an MCP-config-capable harness so a project-scoped
+    // Claude Code install writes a project-root .mcp.json (vs. the Cursor default),
+    // which is what unblocks global npm installs of `setup --tool claude-code`.
+    const hookHarness = toHookHarness(opts.tool);
+    const mcpHarness =
+      hookHarness === "claude-code" || hookHarness === "cursor" || hookHarness === "codex"
+        ? hookHarness
+        : undefined;
     const report = await runSetup({
       tool: opts.tool ?? null,
       dryRun: Boolean(opts.dryRun),
@@ -9717,6 +9726,7 @@ program
         rewriteExistingNeotoma: Boolean(opts.rewriteNeotomaMcp),
         skipHooks: Boolean(opts.skipHooks),
         allHarnesses: Boolean(opts.allHarnesses),
+        harness: mcpHarness,
       }),
     });
     const exitCode = report.overall_ok ? 0 : 1;

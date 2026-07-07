@@ -548,6 +548,28 @@ function resolveMcpLaunchTarget(repoRoot: string): { root: string; mode: "script
   return { root: repoRoot, mode: "scripts" };
 }
 
+/**
+ * Resolve a root usable for GENERATING launch entries and OFFERING a project-level
+ * `.mcp.json` write, even when the caller has no Neotoma source checkout (repoRoot null).
+ *
+ * A global/built npm install has no source checkout on the cwd path, so findRepoRoot
+ * returns null — but getInstalledCliRoot() still points at the installed package, which
+ * carries either the MCP shim scripts or a `dist/index.js` entrypoint. Either is enough
+ * to launch a local stdio Neotoma MCP server. Returns null only when no launchable
+ * Neotoma install can be found at all (neither a source checkout nor a built package).
+ *
+ * NOTE: this root is for entry generation only. Repo-only side effects (npm run
+ * sync:mcp) must still gate on a real source checkout, not on this value.
+ */
+function resolveEffectiveInstallRoot(repoRoot: string | null): string | null {
+  if (repoRoot) return repoRoot;
+  const installedRoot = getInstalledCliRoot();
+  if (hasRequiredMcpScripts(installedRoot) || hasDistMcpEntrypoint(installedRoot)) {
+    return installedRoot;
+  }
+  return null;
+}
+
 export function neotomaServerEntries(
   repoRoot: string,
   _sessionPorts?: SessionPorts
@@ -1562,10 +1584,15 @@ export async function offerFix(
     return { fixed: false, message: "No misconfigurations detected.", updatedPaths: [] };
   }
 
-  if (!repoRoot) {
+  // A globally installed CLI has no source checkout on the cwd path (repoRoot null),
+  // but can still launch a local stdio MCP server from its built package. Only bail
+  // when no launchable Neotoma install is resolvable at all.
+  const effectiveRoot = resolveEffectiveInstallRoot(repoRoot);
+  if (!effectiveRoot) {
     return {
       fixed: false,
-      message: "Cannot fix: Neotoma source root not found. Run from a Neotoma source checkout.",
+      message:
+        "Cannot fix: no Neotoma install found. Install neotoma (npm i -g neotoma) or run from a source checkout.",
       updatedPaths: [],
     };
   }
@@ -1705,6 +1732,12 @@ export async function offerInstall(
     assumeYes?: boolean;
     /** When true, do not run sync:mcp (avoids writing project-level MCP configs). */
     skipProjectSync?: boolean;
+    /**
+     * Target harness for this install (e.g. from `setup --tool <harness>`). When
+     * "claude-code" and creating a fresh project-level config, write a project-root
+     * `.mcp.json` (Claude Code's config location) instead of `.cursor/mcp.json`.
+     */
+    harness?: McpHookHarness;
   }
 ): Promise<{
   installed: boolean;
@@ -1721,12 +1754,20 @@ export async function offerInstall(
       ? { devPort: options.devPort, prodPort: options.prodPort }
       : undefined;
 
-  if (!repoRoot) {
+  // `installRoot` is the root used to GENERATE launch entries (scripts or dist/index.js).
+  // A global/built install has no source checkout on the cwd path (repoRoot null) but is
+  // still launchable via getInstalledCliRoot(); only bail when nothing launchable exists.
+  const installRoot = resolveEffectiveInstallRoot(repoRoot);
+  if (!installRoot) {
     const message =
-      "Cannot install: Neotoma source root not found. Run from a Neotoma source checkout or set NEOTOMA_REPO_ROOT.";
+      "Cannot install: no Neotoma install found. Install neotoma (npm i -g neotoma) or run from a source checkout, or set NEOTOMA_REPO_ROOT.";
     if (!silent) process.stderr.write(message + "\n");
     return { installed: false, message };
   }
+  // `projectScopeRoot` is where a project-level config (.mcp.json / .cursor/mcp.json)
+  // would live for the CURRENT project. In a source checkout this equals repoRoot; for a
+  // global install it is the user's project root, resolved from cwd.
+  const projectScopeRoot = repoRoot ?? (await getProjectRoot(cwd));
 
   const getMissingConfigs = (env: "dev" | "prod" | null): ConfigStatus[] =>
     env
@@ -1734,10 +1775,10 @@ export async function offerInstall(
       : configs.filter((c) => !c.hasDev || !c.hasProd);
   const getConfigsForScope = (allConfigs: ConfigStatus[]): ConfigStatus[] => {
     if (options?.autoInstallScope === "user") {
-      return filterConfigsByInstallChoice(allConfigs, "user_all", repoRoot);
+      return filterConfigsByInstallChoice(allConfigs, "user_all", projectScopeRoot);
     }
     if (options?.autoInstallScope === "project") {
-      return filterConfigsByInstallChoice(allConfigs, "project_all", repoRoot);
+      return filterConfigsByInstallChoice(allConfigs, "project_all", projectScopeRoot);
     }
     return allConfigs;
   };
@@ -1833,14 +1874,21 @@ export async function offerInstall(
     }
 
     process.stdout.write("No MCP config files found.\n");
+    // For a project-scoped Claude Code install, the canonical target is a project-root
+    // `.mcp.json` (local stdio server), not `.cursor/mcp.json`. Other harnesses keep the
+    // Cursor default. This is the path a global install of `setup --tool claude-code` hits.
+    const createClaudeCodeProjectMcp =
+      options?.harness === "claude-code" &&
+      (options?.autoInstallScope === "project" || options?.autoInstallScope === undefined);
+    const promptText = createClaudeCodeProjectMcp
+      ? "Create user-level (~/.cursor/mcp.json) or project-level (.mcp.json in current project)? (u/p)"
+      : "Create user-level (~/.cursor/mcp.json) or project-level (.cursor/mcp.json in current project)? (u/p)";
     const choice =
       options?.autoInstallScope === "user"
         ? "user"
         : options?.autoInstallScope === "project"
           ? "project"
-          : await promptUserOrProject(
-              "Create user-level (~/.cursor/mcp.json) or project-level (.cursor/mcp.json in current project)? (u/p)"
-            );
+          : await promptUserOrProject(promptText);
     if (choice === null) {
       return { installed: false, message: "Installation cancelled." };
     }
@@ -1849,14 +1897,21 @@ export async function offerInstall(
     }
     await ensureAAuthKeysForSignedTransport(selectedTransport, silent);
 
-    const cursorDir =
-      choice === "user"
-        ? path.join(os.homedir(), ".cursor")
-        : path.join(await getProjectRoot(cwd), ".cursor");
-    const configPath = path.join(cursorDir, "mcp.json");
+    let configPath: string;
+    if (choice === "project" && createClaudeCodeProjectMcp) {
+      // Claude Code reads a project-root .mcp.json.
+      configPath = path.join(await getProjectRoot(cwd), ".mcp.json");
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
+    } else {
+      const cursorDir =
+        choice === "user"
+          ? path.join(os.homedir(), ".cursor")
+          : path.join(await getProjectRoot(cwd), ".cursor");
+      configPath = path.join(cursorDir, "mcp.json");
+      await fs.mkdir(cursorDir, { recursive: true });
+    }
 
-    await fs.mkdir(cursorDir, { recursive: true });
-    const entries = neotomaServerEntriesForTransport(repoRoot, sessionPorts, selectedTransport);
+    const entries = neotomaServerEntriesForTransport(installRoot, sessionPorts, selectedTransport);
     const mcpServers =
       selectedEnv === "dev"
         ? { "neotoma-dev": entries["neotoma-dev"] }
@@ -1866,10 +1921,16 @@ export async function offerInstall(
     const newConfig = { mcpServers };
     await fs.writeFile(configPath, JSON.stringify(newConfig, null, 2) + "\n");
 
-    if (choice === "project" && configPath.startsWith(repoRoot) && !options?.skipProjectSync) {
+    // sync:mcp only exists in a source checkout; skip it for global installs.
+    if (
+      choice === "project" &&
+      repoRoot &&
+      configPath.startsWith(repoRoot) &&
+      !options?.skipProjectSync
+    ) {
       await runSyncMcp(repoRoot);
     }
-    await attemptCursorMcpReload(configPath);
+    if (!createClaudeCodeProjectMcp) await attemptCursorMcpReload(configPath);
 
     const createdMsg = selectedEnv
       ? `Created ${configPath} with ${selectedEnv} server.`
@@ -1894,8 +1955,12 @@ export async function offerInstall(
   if (!boxAlreadyShown && !silent) {
     process.stdout.write("\n" + formatMcpStatusBox(scopedTargetConfigs) + "\n");
   }
-  const runningFromSourceCheckout = cwd === repoRoot || cwd.startsWith(repoRoot + path.sep);
-  const includeProjectOptions = runningFromSourceCheckout;
+  const runningFromSourceCheckout =
+    !!repoRoot && (cwd === repoRoot || cwd.startsWith(repoRoot + path.sep));
+  // Project-level configs are offered from a source checkout OR whenever we can launch a
+  // built/global install (installRoot resolved above) — the latter writes a project-root
+  // .mcp.json that points at the installed dist entrypoint, no checkout required.
+  const includeProjectOptions = runningFromSourceCheckout || !!installRoot;
 
   const installChoice: InstallTargetChoice =
     options?.autoInstallScope === "project"
@@ -1919,11 +1984,11 @@ export async function offerInstall(
   let selectedMissingConfigs = filterConfigsByInstallChoice(
     configsForInstallTargets,
     installChoice,
-    repoRoot
+    projectScopeRoot
   );
   if (!includeProjectOptions) {
     selectedMissingConfigs = selectedMissingConfigs.filter(
-      (c) => !isProjectLevelConfig(c.path, repoRoot)
+      (c) => !isProjectLevelConfig(c.path, projectScopeRoot)
     );
   }
   if (selectedMissingConfigs.length === 0) {
@@ -1934,7 +1999,7 @@ export async function offerInstall(
     };
   }
 
-  const entries = neotomaServerEntriesForTransport(repoRoot, sessionPorts, selectedTransport);
+  const entries = neotomaServerEntriesForTransport(installRoot, sessionPorts, selectedTransport);
   const updatedPaths: string[] = [];
   const selectedIncludesCodex = selectedMissingConfigs.some((c) => isCodexConfigPath(c.path));
   const forceRewriteNeotoma = options?.rewriteExistingNeotoma ?? false;
