@@ -10546,6 +10546,14 @@ app.post("/get_authenticated_user", async (req, res) => {
       config.storageBackend === "local"
         ? {
             storage_backend: "local" as const,
+            // Surface the active environment + DB so an agent can confirm it is
+            // on the intended graph before writing (#1905). On a fresh npm
+            // install the CLI local transport defaults to production while the
+            // server defaults to development; exposing `environment` here lets
+            // a caller detect the split (e.g. writing to dev while an unflagged
+            // CLI reads empty prod) instead of discovering it via silent-empty
+            // results.
+            environment: config.environment,
             data_dir: config.dataDir,
             sqlite_db: config.sqlitePath,
           }
