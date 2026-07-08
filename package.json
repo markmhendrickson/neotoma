@@ -257,6 +257,9 @@
     "openapi.yaml",
     "openclaw.plugin.json",
     "skills",
+    "packages/claude-code-plugin",
+    "packages/codex-hooks",
+    "packages/cursor-hooks",
     "LICENSE",
     "README.md"
   ],
