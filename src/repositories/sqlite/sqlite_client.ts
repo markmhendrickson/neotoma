@@ -14,13 +14,47 @@ export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
   Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
 );
 
+function isSqliteBusyError(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "SQLITE_BUSY" || code === "SQLITE_BUSY_SNAPSHOT";
+}
+
+/**
+ * Retry `fn` while it keeps throwing SQLITE_BUSY/SQLITE_BUSY_SNAPSHOT, up to
+ * `SQLITE_BUSY_TIMEOUT_MS`. Any other error rethrows immediately and is never
+ * retried, so a real problem (corruption, permissions) surfaces as-is instead
+ * of being masked as transient lock contention.
+ *
+ * Needed specifically for `PRAGMA journal_mode = WAL` on a brand-new DB file:
+ * switching journal mode rewrites the file header and briefly needs the
+ * write lock, so two processes racing to first-touch-open the same fresh
+ * file can have one throw SQLITE_BUSY on this very first statement — before
+ * `busy_timeout` (set moments later on that same connection) has had any
+ * chance to cover it, since the failing call happens ahead of that pragma.
+ * See #1927.
+ */
+async function retryOnBusy<T>(fn: () => Promise<T>): Promise<T> {
+  const deadline = Date.now() + SQLITE_BUSY_TIMEOUT_MS;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isSqliteBusyError(error) || Date.now() >= deadline) {
+        throw error;
+      }
+    }
+  }
+}
+
 /**
  * Apply the connection PRAGMAs every Neotoma SQLite handle needs: WAL for
  * concurrent readers alongside a single writer, foreign-key enforcement, and a
  * busy_timeout so lock contention waits rather than throwing immediately.
+ * journal_mode is retried on SQLITE_BUSY in its own right (see retryOnBusy)
+ * since it can throw before busy_timeout (set moments later) takes effect.
  */
 export async function applyConnectionPragmas(db: DbDatabase): Promise<void> {
-  await db.pragma("journal_mode = WAL");
+  await retryOnBusy(() => db.pragma("journal_mode = WAL"));
   await db.pragma("foreign_keys = ON");
   await db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
 }
