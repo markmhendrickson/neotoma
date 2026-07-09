@@ -64,7 +64,7 @@ describe("autoLinkReferenceFields", () => {
     const result = await autoLinkReferenceFields({
       entityId: "ent_1",
       entityType: "transaction",
-      fields: { merchant: "Kestrel" },
+      fields: { merchant: "Northgate" },
       schema: { fields: {} },
       userId: "u1",
     });
@@ -126,9 +126,9 @@ describe("autoLinkReferenceFields", () => {
   describe("resolve_target: true (company get-or-create)", () => {
     it("resolves and links to a company entity via resolveCompanyEntity when no existing target matches", async () => {
       resolveCompanyEntityMock.mockResolvedValue({
-        entityId: "ent_company_kestrel8",
-        normalizedName: "kestrel8",
-        canonicalName: "Kestrel8",
+        entityId: "ent_company_northgate",
+        normalizedName: "northgate",
+        canonicalName: "Northgate",
         basis: "created",
         created: true,
       });
@@ -138,7 +138,7 @@ describe("autoLinkReferenceFields", () => {
       const result = await autoLinkReferenceFields({
         entityId: "ent_contact_1",
         entityType: "contact",
-        fields: { organization: "Kestrel8" },
+        fields: { organization: "Northgate" },
         schema: {
           fields: {},
           reference_fields: [
@@ -154,14 +154,14 @@ describe("autoLinkReferenceFields", () => {
       });
 
       expect(resolveCompanyEntityMock).toHaveBeenCalledWith({
-        organizationName: "Kestrel8",
+        organizationName: "Northgate",
         userId: "u1",
       });
       expect(result.created).toBe(1);
       expect(result.skipped).toBe(0);
       expect(result.details[0]).toMatchObject({
         field: "organization",
-        target_entity_id: "ent_company_kestrel8",
+        target_entity_id: "ent_company_northgate",
         relationship_type: "works_at",
         linked: true,
       });
@@ -169,7 +169,7 @@ describe("autoLinkReferenceFields", () => {
         expect.objectContaining({
           relationship_type: "works_at",
           source_entity_id: "ent_contact_1",
-          target_entity_id: "ent_company_kestrel8",
+          target_entity_id: "ent_company_northgate",
           user_id: "u1",
         })
       );
@@ -181,7 +181,7 @@ describe("autoLinkReferenceFields", () => {
       const result = await autoLinkReferenceFields({
         entityId: "ent_contact_1",
         entityType: "contact",
-        fields: { organization: "Kestrel8" },
+        fields: { organization: "Northgate" },
         schema: {
           fields: {},
           reference_fields: [
@@ -240,7 +240,7 @@ describe("autoLinkReferenceFields", () => {
       await autoLinkReferenceFields({
         entityId: "ent_contact_1",
         entityType: "contact",
-        fields: { organization: "Kestrel8" },
+        fields: { organization: "Northgate" },
         schema: {
           fields: {},
           reference_fields: [{ field: "organization", target_entity_type: "company" }],

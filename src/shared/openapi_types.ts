@@ -6333,8 +6333,8 @@ export interface operations {
       content: {
         "application/json": {
           /**
-           * @description Free-text company name to resolve, e.g. "Kestrel8" or
-           *     "Kestrel 8". Matched exact-normalized first, then fuzzy
+           * @description Free-text company name to resolve, e.g. "Northgate" or
+           *     "North Gate". Matched exact-normalized first, then fuzzy
            *     (see COMPANY_FUZZY_MATCH_THRESHOLD in
            *     src/services/company_resolution.ts).
            */

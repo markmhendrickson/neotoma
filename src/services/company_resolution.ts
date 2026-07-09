@@ -3,7 +3,7 @@
  *
  * Turns a free-text organization name (e.g. `contact.organization`) into a
  * reliable, queryable join key: a canonical `company` entity that fuzzy
- * duplicates ("Kestrel8", "Kestrel 8", "Kestrel8 LLC") all resolve to.
+ * duplicates ("Northgate", "North Gate", "Northgate LLC") all resolve to.
  *
  * Resolution order (conservative — exact before fuzzy, fuzzy before create):
  *   1. Normalize the raw org string with the same rules `entity_resolution.ts`
@@ -13,7 +13,7 @@
  *   2. Exact-normalized match: `resolveEntityWithTrace({entityType:"company"})`
  *      — deterministic get-or-create keyed on the normalized canonical_name.
  *      This alone already collapses case/whitespace/suffix variants (e.g.
- *      "Kestrel8 LLC" -> "kestrel8") because the normalizer strips suffixes
+ *      "Northgate LLC" -> "northgate") because the normalizer strips suffixes
  *      before hashing.
  *   3. Fuzzy pre-check (only reached when step 2 is about to CREATE a new
  *      row): scan existing `company` entities for this user and score each
