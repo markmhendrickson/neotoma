@@ -92,10 +92,7 @@ describe("isRedirectUriAllowedForTunnel", () => {
 
     it("still rejects a different host even when selfHost is provided", () => {
       expect(
-        isRedirectUriAllowedForTunnel(
-          "https://evil.com/steal-code",
-          "tenant-neotoma.fly.dev"
-        )
+        isRedirectUriAllowedForTunnel("https://evil.com/steal-code", "tenant-neotoma.fly.dev")
       ).toBe(false);
     });
 
@@ -109,9 +106,9 @@ describe("isRedirectUriAllowedForTunnel", () => {
     });
 
     it("without selfHost, an arbitrary tunnel host is still rejected", () => {
-      expect(
-        isRedirectUriAllowedForTunnel("https://tenant-neotoma.fly.dev/oauth/callback")
-      ).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://tenant-neotoma.fly.dev/oauth/callback")).toBe(
+        false
+      );
     });
   });
 
