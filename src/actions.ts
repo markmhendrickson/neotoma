@@ -1972,12 +1972,12 @@ app.all("/mcp", async (req, res) => {
         logger.warn(
           `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}... often wrong replica behind a load balancer, API restart, or stale client state`
         );
-        return res.status(503).json({
+        return res.status(404).json({
           jsonrpc: "2.0",
           error: {
             code: -32001,
             message:
-              "Service Unavailable: MCP session is unknown on this API instance. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance). Otherwise restart the MCP client so initialize runs again after a server restart.",
+              "Not Found: MCP session is unknown or expired on this API instance. The client should re-initialize by sending a new InitializeRequest without a session ID. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance).",
           },
           id: rpcId,
         });

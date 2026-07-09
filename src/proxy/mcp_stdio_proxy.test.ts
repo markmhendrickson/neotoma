@@ -27,8 +27,23 @@ function jsonResponse(obj: unknown, opts: { status?: number; sessionId?: string 
   return new Response(JSON.stringify(obj), { status: opts.status ?? 200, headers });
 }
 
-/** Mirrors the `503 … session is unknown on this API instance` body from src/actions.ts. */
+/** Mirrors the current `404 … session is unknown on this API instance` body from src/actions.ts. */
 function sessionLostResponse(): Response {
+  return jsonResponse(
+    {
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32001,
+        message: "Not Found: MCP session is unknown or expired on this API instance.",
+      },
+    },
+    { status: 404 }
+  );
+}
+
+/** Mirrors the legacy (pre-neotoma#1923) `503 … session is unknown on this API instance` body. */
+function legacySessionLostResponse(): Response {
   return jsonResponse(
     {
       jsonrpc: "2.0",
@@ -76,7 +91,15 @@ function methodOf(body: string): string {
 }
 
 describe("isRecoverableMcpSessionLostError", () => {
-  it("matches the 503 session-unknown body", () => {
+  it("matches the 404 session-unknown body (current)", () => {
+    expect(
+      isRecoverableMcpSessionLostError(404, "MCP session is unknown on this API instance")
+    ).toBe(true);
+    expect(
+      isRecoverableMcpSessionLostError(404, "not found: session is unknown on this api instance")
+    ).toBe(true);
+  });
+  it("matches the 503 session-unknown body (legacy, pre-neotoma#1923)", () => {
     expect(
       isRecoverableMcpSessionLostError(503, "MCP session is unknown on this API instance")
     ).toBe(true);
@@ -87,10 +110,14 @@ describe("isRecoverableMcpSessionLostError", () => {
       )
     ).toBe(true);
   });
-  it("ignores non-503 statuses and unrelated bodies", () => {
+  it("ignores non-404/503 statuses and unrelated bodies", () => {
     expect(isRecoverableMcpSessionLostError(500, "session is unknown on this api instance")).toBe(
       false
     );
+    expect(isRecoverableMcpSessionLostError(400, "session is unknown on this api instance")).toBe(
+      false
+    );
+    expect(isRecoverableMcpSessionLostError(404, "rate limited")).toBe(false);
     expect(isRecoverableMcpSessionLostError(503, "rate limited")).toBe(false);
   });
 });
@@ -168,6 +195,39 @@ describe("dispatchCore", () => {
     expect(calls).toEqual(["tools/call", "initialize", "tools/call"]);
     expect(loop.session.sessionId).toBe("S2");
     expect(emitted).toEqual([{ jsonrpc: "2.0", id: 7, result: { ok: true } }]); // no error leaked to client
+  });
+
+  it("recovers from a lost session on a legacy (pre-neotoma#1923) 503 response, same as 404", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "S1";
+    loop.lastInitializeBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 0,
+      method: "initialize",
+      params: { clientInfo: { name: "test-proxy", version: "1.0.0" } },
+    });
+
+    const calls: string[] = [];
+    const send: DispatchDeps["send"] = async (_headers, body) => {
+      const method = methodOf(body);
+      calls.push(method);
+      if (method === "initialize") return jsonResponse({ result: {} }, { sessionId: "S2" });
+      return calls.filter((m) => m === "tools/call").length === 1
+        ? legacySessionLostResponse()
+        : jsonResponse({ jsonrpc: "2.0", id: 7, result: { ok: true } });
+    };
+
+    const { deps, emitted } = makeDeps(send);
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {},
+    });
+
+    expect(calls).toEqual(["tools/call", "initialize", "tools/call"]);
+    expect(loop.session.sessionId).toBe("S2");
+    expect(emitted).toEqual([{ jsonrpc: "2.0", id: 7, result: { ok: true } }]);
   });
 
   it("recovers from a transport error/timeout window (restart) by re-handshaking", async () => {

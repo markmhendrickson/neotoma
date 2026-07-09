@@ -158,14 +158,17 @@ describe("Proxy constants", () => {
     );
   });
 
-  it("detects recoverable unknown MCP session 503 bodies", async () => {
+  it("detects recoverable unknown MCP session bodies on 404 (current) and 503 (legacy)", async () => {
     const { isRecoverableMcpSessionLostError } =
       await import("../../src/proxy/mcp_stdio_proxy.js");
     const fromActions =
+      '{"jsonrpc":"2.0","error":{"code":-32001,"message":"Not Found: MCP session is unknown or expired on this API instance. The client should re-initialize by sending a new InitializeRequest without a session ID. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance)."},"id":1}';
+    const legacyFromActions =
       '{"jsonrpc":"2.0","error":{"code":-32001,"message":"Service Unavailable: MCP session is unknown on this API instance. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance). Otherwise restart the MCP client so initialize runs again after a server restart."},"id":1}';
-    expect(isRecoverableMcpSessionLostError(503, fromActions)).toBe(true);
+    expect(isRecoverableMcpSessionLostError(404, fromActions)).toBe(true);
+    expect(isRecoverableMcpSessionLostError(503, legacyFromActions)).toBe(true);
     expect(isRecoverableMcpSessionLostError(502, fromActions)).toBe(false);
-    expect(isRecoverableMcpSessionLostError(503, "database unavailable")).toBe(false);
+    expect(isRecoverableMcpSessionLostError(404, "database unavailable")).toBe(false);
   });
 });
 

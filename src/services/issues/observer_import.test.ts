@@ -272,7 +272,24 @@ describe("classifyLine — predicate 7: reporter_env_required", () => {
 // ─── Predicate 8: stale_mcp_session ──────────────────────────────────────────
 
 describe("classifyLine — predicate 8: stale_mcp_session", () => {
-  it("classifies status_code=503 on /mcp path as stale_mcp_session", () => {
+  it("classifies status_code=404 on /mcp path as stale_mcp_session (current, neotoma#1923)", () => {
+    const line: ObserverLogLine = {
+      exit_code: 0,
+      status_code: 404,
+      path: "/mcp",
+    };
+    expect(classifyLine(line)).toBe("stale_mcp_session");
+  });
+
+  it("classifies status_code=404 on /mcp/store as stale_mcp_session", () => {
+    const line: ObserverLogLine = {
+      status_code: 404,
+      path: "/mcp/store",
+    };
+    expect(classifyLine(line)).toBe("stale_mcp_session");
+  });
+
+  it("classifies status_code=503 on /mcp path as stale_mcp_session (legacy, pre-neotoma#1923)", () => {
     const line: ObserverLogLine = {
       exit_code: 0,
       status_code: 503,
@@ -287,6 +304,14 @@ describe("classifyLine — predicate 8: stale_mcp_session", () => {
       path: "/mcp/store",
     };
     expect(classifyLine(line)).toBe("stale_mcp_session");
+  });
+
+  it("does NOT classify 404 on a non-mcp path", () => {
+    const line: ObserverLogLine = {
+      status_code: 404,
+      path: "/health",
+    };
+    expect(classifyLine(line)).toBeNull();
   });
 
   it("does NOT classify 503 on a non-mcp path", () => {
