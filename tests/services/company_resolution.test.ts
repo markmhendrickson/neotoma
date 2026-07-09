@@ -3,8 +3,8 @@
  *
  * Covers:
  *  (a) org-name normalization rules (suffix stripping, case, whitespace)
- *  (b) fuzzy company resolution, including the Northgate near-duplicate
- *      variants named in the design ("Northgate" / "North Gate" / "Northgate LLC")
+ *  (b) fuzzy company resolution, including the Contoso8 near-duplicate
+ *      variants named in the design ("Contoso8" / "Contoso 8" / "Contoso8 LLC")
  *  (c) get-or-create semantics: repeated resolution of the same org string
  *      (or an exact-normalized variant) reuses the same entity_id
  *
@@ -33,21 +33,21 @@ describe("company_resolution", () => {
 
   describe("normalizeCompanyName (org normalization rules)", () => {
     it("lowercases and trims", () => {
-      expect(normalizeCompanyName("  Northgate  ")).toBe("northgate");
+      expect(normalizeCompanyName("  Contoso8  ")).toBe("contoso8");
     });
 
     it("strips common legal-entity suffixes", () => {
-      expect(normalizeCompanyName("Northgate Inc")).toBe("northgate");
-      expect(normalizeCompanyName("Northgate Inc.")).toBe("northgate");
-      expect(normalizeCompanyName("Northgate LLC")).toBe("northgate");
-      expect(normalizeCompanyName("Northgate Ltd")).toBe("northgate");
-      expect(normalizeCompanyName("Northgate Corp")).toBe("northgate");
-      expect(normalizeCompanyName("Northgate GmbH")).toBe("northgate");
+      expect(normalizeCompanyName("Contoso8 Inc")).toBe("contoso8");
+      expect(normalizeCompanyName("Contoso8 Inc.")).toBe("contoso8");
+      expect(normalizeCompanyName("Contoso8 LLC")).toBe("contoso8");
+      expect(normalizeCompanyName("Contoso8 Ltd")).toBe("contoso8");
+      expect(normalizeCompanyName("Contoso8 Corp")).toBe("contoso8");
+      expect(normalizeCompanyName("Contoso8 GmbH")).toBe("contoso8");
     });
 
     it("collapses internal whitespace and strips punctuation", () => {
-      expect(normalizeCompanyName("Acme,   Corp.")).toBe("acme");
-      expect(normalizeCompanyName("Acme -  Widgets")).toBe("acme widgets");
+      expect(normalizeCompanyName("Contoso,   Corp.")).toBe("contoso");
+      expect(normalizeCompanyName("Contoso -  Widgets")).toBe("contoso widgets");
     });
 
     it("does not strip a suffix-like token that isn't trailing", () => {
@@ -59,21 +59,21 @@ describe("company_resolution", () => {
   describe("resolveCompanyEntity: exact-normalized match", () => {
     it("creates a new company entity when none exists", async () => {
       const result = await resolveCompanyEntity({
-        organizationName: "Northgate",
+        organizationName: "Contoso8",
         userId: testUserId,
       });
       expect(result.created).toBe(true);
       expect(result.basis).toBe("created");
-      expect(result.entityId).toBe(computeExactCompanyEntityId("Northgate", testUserId));
+      expect(result.entityId).toBe(computeExactCompanyEntityId("Contoso8", testUserId));
     });
 
     it("is idempotent: resolving the same name twice returns the same entity_id and does not create twice", async () => {
       const first = await resolveCompanyEntity({
-        organizationName: "Northgate",
+        organizationName: "Contoso8",
         userId: testUserId,
       });
       const second = await resolveCompanyEntity({
-        organizationName: "Northgate",
+        organizationName: "Contoso8",
         userId: testUserId,
       });
 
@@ -90,14 +90,14 @@ describe("company_resolution", () => {
     });
 
     it("collapses suffix/case/whitespace variants to the same entity via exact-normalized match (no fuzzy pass needed)", async () => {
-      const base = await resolveCompanyEntity({ organizationName: "Northgate", userId: testUserId });
+      const base = await resolveCompanyEntity({ organizationName: "Contoso8", userId: testUserId });
 
       for (const variant of [
-        "northgate",
-        "NORTHGATE",
-        "Northgate LLC",
-        "Northgate, Inc.",
-        "  Northgate  ",
+        "contoso8",
+        "CONTOSO8",
+        "Contoso8 LLC",
+        "Contoso8, Inc.",
+        "  Contoso8  ",
       ]) {
         const result = await resolveCompanyEntity({
           organizationName: variant,
@@ -117,12 +117,12 @@ describe("company_resolution", () => {
     });
   });
 
-  describe("resolveCompanyEntity: fuzzy match (Northgate variants)", () => {
-    it("collapses 'North Gate' (space) onto the existing 'Northgate' entity via the fuzzy pass", async () => {
-      const base = await resolveCompanyEntity({ organizationName: "Northgate", userId: testUserId });
+  describe("resolveCompanyEntity: fuzzy match (Contoso8 variants)", () => {
+    it("collapses 'Contoso 8' (space) onto the existing 'Contoso8' entity via the fuzzy pass", async () => {
+      const base = await resolveCompanyEntity({ organizationName: "Contoso8", userId: testUserId });
 
       const fuzzy = await resolveCompanyEntity({
-        organizationName: "North Gate",
+        organizationName: "Contoso 8",
         userId: testUserId,
       });
 
@@ -140,19 +140,19 @@ describe("company_resolution", () => {
     });
 
     it("does NOT collapse two distinct companies that merely look similar (false-positive guard)", async () => {
-      const northgate = await resolveCompanyEntity({
-        organizationName: "Northgate",
+      const contoso8 = await resolveCompanyEntity({
+        organizationName: "Contoso8",
         userId: testUserId,
       });
-      // "Eastgate" is a different company one character off — must NOT collapse
+      // "Contoso9" is a different company one character off — must NOT collapse
       // (levenshtein similarity ~0.875, below the 0.88 threshold).
-      const eastgate = await resolveCompanyEntity({
-        organizationName: "Eastgate",
+      const contoso9 = await resolveCompanyEntity({
+        organizationName: "Contoso9",
         userId: testUserId,
       });
 
-      expect(eastgate.entityId).not.toBe(northgate.entityId);
-      expect(eastgate.created).toBe(true);
+      expect(contoso9.entityId).not.toBe(contoso8.entityId);
+      expect(contoso9.created).toBe(true);
 
       const { data } = await db
         .from("entities")
@@ -174,10 +174,10 @@ describe("company_resolution", () => {
     });
 
     it("respects a caller-supplied stricter threshold", async () => {
-      const base = await resolveCompanyEntity({ organizationName: "Northgate", userId: testUserId });
-      // With threshold 0.95, "North Gate" (score ~0.889) must NOT match and a new entity is created.
+      const base = await resolveCompanyEntity({ organizationName: "Contoso8", userId: testUserId });
+      // With threshold 0.95, "Contoso 8" (score ~0.889) must NOT match and a new entity is created.
       const strict = await resolveCompanyEntity({
-        organizationName: "North Gate",
+        organizationName: "Contoso 8",
         userId: testUserId,
         threshold: 0.95,
       });
@@ -189,9 +189,9 @@ describe("company_resolution", () => {
       const otherUserId = "00000000-0000-0000-0000-00000000c092";
       await db.from("entities").delete().eq("entity_type", "company").eq("user_id", otherUserId);
 
-      await resolveCompanyEntity({ organizationName: "Northgate", userId: otherUserId });
+      await resolveCompanyEntity({ organizationName: "Contoso8", userId: otherUserId });
       const result = await resolveCompanyEntity({
-        organizationName: "North Gate",
+        organizationName: "Contoso 8",
         userId: testUserId,
       });
 
@@ -206,7 +206,7 @@ describe("company_resolution", () => {
     it("throws when userId is undefined instead of silently scanning/creating across all tenants", async () => {
       await expect(
         resolveCompanyEntity({
-          organizationName: "Northgate",
+          organizationName: "Contoso8",
           // @ts-expect-error — userId is required; this exercises the runtime guard
           // for callers that bypass the type system (e.g. plain JS callers).
           userId: undefined,
@@ -217,7 +217,7 @@ describe("company_resolution", () => {
     it("throws when userId is an empty string", async () => {
       await expect(
         resolveCompanyEntity({
-          organizationName: "Northgate",
+          organizationName: "Contoso8",
           userId: "",
         })
       ).rejects.toThrow(/requires a non-empty userId/);

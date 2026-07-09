@@ -10,7 +10,7 @@
  *  (d) `queryContactsAtCompany` (company_query.ts) resolves a company name
  *      (exact or fuzzy) and returns every contact linked to it, including
  *      contacts whose `organization` string was a near-duplicate variant
- *      ("Northgate" / "North Gate" / "Northgate LLC") of the company that was
+ *      ("Contoso8" / "Contoso 8" / "Contoso8 LLC") of the company that was
  *      actually created.
  *  (e) the `query_contacts_at_company` MCP tool wraps `queryContactsAtCompany`
  *      end-to-end (input validation + executeTool dispatch + happy path),
@@ -112,7 +112,7 @@ describe("company entity resolution: contact -> company linking + company query"
   }
 
   it("(c) storing a contact with organization auto-links it to a company entity via works_at", async () => {
-    const contactId = await storeContact("Jamie Founder", "Northgate");
+    const contactId = await storeContact("Jamie Founder", "Contoso8");
 
     const outgoing = await relationshipsService.getRelationshipsForEntity(
       contactId,
@@ -131,12 +131,12 @@ describe("company entity resolution: contact -> company linking + company query"
       .eq("id", worksAt[0].target_entity_id)
       .single();
     expect(companyRow.entity_type).toBe("company");
-    expect(companyRow.canonical_name.toLowerCase()).toContain("northgate");
+    expect(companyRow.canonical_name.toLowerCase()).toContain("contoso8");
   });
 
   it("(c) two contacts at suffix/case variants of the same org link to the SAME company entity", async () => {
-    const aliceId = await storeContact("Alice Exact", "Northgate");
-    const bobId = await storeContact("Bob Suffix", "Northgate, LLC");
+    const aliceId = await storeContact("Alice Exact", "Contoso8");
+    const bobId = await storeContact("Bob Suffix", "Contoso8, LLC");
 
     const aliceEdges = await relationshipsService.getRelationshipsForEntity(
       aliceId,
@@ -181,7 +181,7 @@ describe("company entity resolution: contact -> company linking + company query"
 
   it("(d) queryContactsAtCompany('Initrove8') returns every contact linked via works_at, including a fuzzy-matched org spelling", async () => {
     // Use an org name unique to this test (earlier tests in this file already
-    // created Northgate-family contacts, which would otherwise also match).
+    // created Contoso8-family contacts, which would otherwise also match).
     const carolId = await storeContact("Carol Query", "Initrove8");
     // "Initrove 8" (space) is a near-duplicate spelling — the contact schema's
     // resolve_target linking resolves it (fuzzy) to the SAME company entity
@@ -352,11 +352,11 @@ describe("(e) query_contacts_at_company MCP tool", () => {
     expect(contactIds).toEqual([evaId, finnId].sort());
   });
 
-  it("fuzzy Northgate-shaped variant: resolves a compact query to a contact stored under a spaced spelling via the tool handler", async () => {
-    // Exercises the same "Northgate" / "North Gate" near-duplicate-spelling
+  it("fuzzy Contoso8-shaped variant: resolves a compact query to a contact stored under a spaced spelling via the tool handler", async () => {
+    // Exercises the same "Contoso8" / "Contoso 8" near-duplicate-spelling
     // shape the design calls out (docs/foundation/entity_resolution.md#15.4),
     // but with a name unique to this test file's tenant — the literal
-    // "Northgate"/"North Gate" strings are also used as shared-DB fixtures in
+    // "Contoso8"/"Contoso 8" strings are also used as shared-DB fixtures in
     // tests/services/company_resolution.test.ts under its own dedicated
     // testUserId, and reusing them here previously cross-matched that
     // fixture's company row.

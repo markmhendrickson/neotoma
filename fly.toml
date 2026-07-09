@@ -1,46 +1,33 @@
-# fly.toml app configuration file generated for tenant-neotoma on 2026-07-06T14:53:01+02:00
+# fly.toml app configuration file generated for neotoma on 2025-10-30T11:26:06+01:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'tenant-neotoma'
-primary_region = 'iad'
+app = 'neotoma-sandbox'
+primary_region = 'lhr'
 
 [build]
 
-[deploy]
-  # Seeds/activates all ENTITY_SCHEMAS rows in schema_registry on every
-  # deploy, against the target machine's DB, after the image is built.
-  # A fresh instance boots with an empty schema_registry table and
-  # loadActiveSchema() has no code fallback, so nothing works until this
-  # runs. Safe to run repeatedly (idempotent: skips already-active
-  # schemas). See src/seed_schemas_entry.ts.
-  release_command = 'node dist/seed_schemas_entry.js'
-
 [env]
-  HTTP_PORT = '3180'
-  NEOTOMA_ENV = 'production'
-  NEOTOMA_HTTP_PORT = '3180'
-  NODE_ENV = 'production'
-
-[[mounts]]
-  source = 'data'
-  destination = '/app/data'
+  NODE_ENV = "production"
+  NEOTOMA_ENV = "production"
+  # Must match internal_port (Fly routes to this port on the machine)
+  HTTP_PORT = "3180"
+  NEOTOMA_HTTP_PORT = "3180"
 
 [http_service]
   internal_port = 3180
   force_https = true
-  # Keep one machine always running. MCP sessions are held in-memory and are
-  # wiped on any stop/start, so auto-stop caused "Service Unavailable: MCP
-  # session is unknown" for idle clients after the machine idled down. Always-on
-  # keeps sessions alive across idle periods. Single small machine; cost is trivial.
-  auto_stop_machines = 'off'
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ['app']
 
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 1024
+
+[[mounts]]
+  source = "data"
+  destination = "/app/data"

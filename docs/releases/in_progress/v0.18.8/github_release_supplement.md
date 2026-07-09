@@ -65,7 +65,7 @@ No routes, breaking schema changes, or removed/renamed fields.
 - **#1860** — offline/HTTP `/store` dedup-replay response missing `entity_snapshot_after` / `deduplicated: true` (already present on MCP transport).
 - **#1555** — agent-facing URL emitters still producing legacy `/inspector/...` links after the SPA prefix retirement.
 
-#1904, #1905, #1906, #1907 reported by an external evaluator (an external evaluator, Northgate) during onboarding, with independent repro. #1860 reported by an evaluator using Neotoma as an offline audit ledger. All fixes ship with an effect test (npm-pack contents, HTTP response shape, bytes+mtime unchanged, or transport-parity assertion).
+#1904, #1905, #1906, #1907 reported by an external evaluator during onboarding, with independent repro. #1860 reported by an evaluator using Neotoma as an offline audit ledger. All fixes ship with an effect test (npm-pack contents, HTTP response shape, bytes+mtime unchanged, or transport-parity assertion).
 
 ## Tests and validation
 

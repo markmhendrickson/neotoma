@@ -20,7 +20,7 @@ ARG VITE_NEOTOMA_SANDBOX_UI=""
 # default to "/" here too (matching inspector/vite.config.ts's own default
 # and inspector/README.md) — building with "/inspector/" makes <Router
 # basename="/inspector"> unable to match "/" and renders a blank page for any
-# Fly app (e.g. fly.toml's tenant-neotoma) that doesn't override this ARG.
+# Fly app (e.g. fly.toml's app name) that doesn't override this ARG.
 # Set VITE_PUBLIC_BASE_PATH=/inspector/ only when restoring the legacy
 # subpath mount for a deployment that deliberately serves Inspector at
 # /inspector instead of /.
