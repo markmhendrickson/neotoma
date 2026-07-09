@@ -69,16 +69,18 @@ When **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** (or `true`) is set in **`mcp.json` 
 
 HTTP and stdio transports share the same **`NeotomaServer`** `initialize` behavior: declared **`tools.listChanged`** and **`resources`** must appear in the **`initialize` response** so clients can surface tools correctly. See **`docs/specs/MCP_SPEC.md` § 1.1** and `NEOTOMA_MCP_DECLARED_CAPABILITIES` in `src/server.ts`.
 
-## HTTP 400 / 503 from `POST /mcp` (session errors)
+## HTTP 400 / 404 from `POST /mcp` (session errors)
 
 Streamable HTTP MCP keeps each session in **process memory** (`mcpTransports` in `src/actions.ts`). The stdio proxy captures **`mcp-session-id`** from the **`initialize`** response and attaches it to later tool calls.
+
+As of neotoma#1923, an unknown/expired session returns **404** (not 503), per the [MCP Streamable HTTP session management spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#session-management) — this lets spec-compliant clients auto-reinitialize instead of treating the server as unavailable. Servers predating that fix return 503 for the same condition; `neotoma mcp proxy` recognizes both.
 
 | Symptom | Typical cause | What to do |
 |--------|----------------|------------|
 | **400** — no session header on a non-`initialize` POST | Proxy never stored an id (failed init, stripped response header) or client skipped `initialize` | Restart the MCP server in the IDE; confirm proxy stderr shows a successful downstream `initialize` and that your reverse proxy **forwards** `mcp-session-id` on responses and requests (custom headers are not hop-by-hop but some templates hide unknown headers). |
-| **503** — session header present but unknown on this instance | **Load-balanced replicas** without affinity: `initialize` hit instance A, `tools/call` hit B | Use **sticky sessions** for `POST /mcp` (same as [`/mcp/oauth`](../subsystems/auth.md) guidance), scale MCP to **one** API replica for `/mcp`, or terminate TLS on a single Node process. |
-| **503** — same, while using **`neotoma mcp proxy`** | Transient replica drift or API restart after the IDE finished `initialize` | The proxy **replays `initialize` to downstream once** (without emitting a second `initialize` on stdout), captures a fresh `mcp-session-id`, and **retries the failing RPC once**. If the second attempt still 503s, fix infra (sticky sessions / single `/mcp` worker) or restart the MCP client. |
-| **503** / **400** after deploy or restart | In-memory map cleared | Restart the MCP client once so `initialize` runs again. |
+| **404** (or, against an older server, **503**) — session header present but unknown on this instance | **Load-balanced replicas** without affinity: `initialize` hit instance A, `tools/call` hit B | Use **sticky sessions** for `POST /mcp` (same as [`/mcp/oauth`](../subsystems/auth.md) guidance), scale MCP to **one** API replica for `/mcp`, or terminate TLS on a single Node process. |
+| **404** (or **503**) — same, while using **`neotoma mcp proxy`** | Transient replica drift or API restart after the IDE finished `initialize` | The proxy **replays `initialize` to downstream once** (without emitting a second `initialize` on stdout), captures a fresh `mcp-session-id`, and **retries the failing RPC once**. If the second attempt still fails, fix infra (sticky sessions / single `/mcp` worker) or restart the MCP client. |
+| **404** / **503** / **400** after deploy or restart | In-memory map cleared | Restart the MCP client once so `initialize` runs again. |
 
 When debugging, read the proxy line `Downstream error status=… body=…` (stderr): the JSON body includes the real `message` from Neotoma or the MCP SDK.
 
