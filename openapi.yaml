@@ -5226,8 +5226,8 @@ paths:
                 company_name:
                   type: string
                   description: |
-                    Free-text company name to resolve, e.g. "Contoso8" or
-                    "Contoso 8". Matched exact-normalized first, then fuzzy
+                    Free-text company name to resolve, e.g. "Kestrel8" or
+                    "Kestrel 8". Matched exact-normalized first, then fuzzy
                     (see COMPANY_FUZZY_MATCH_THRESHOLD in
                     src/services/company_resolution.ts).
                 owner_user_id:
