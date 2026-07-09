@@ -55,6 +55,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    // Run test FILES sequentially (one worker), not in parallel across processes.
+    // The suite shares a single on-disk SQLite DB (config.sqlitePath) and a single
+    // global HTTP server; parallel workers racing ensureSchema's DDL transaction
+    // hit SQLITE_BUSY_SNAPSHOT (a write-write snapshot conflict busy_timeout can't
+    // retry), producing nondeterministic "database is locked" failures. Serializing
+    // file execution removes the race. Within-file order is already deterministic.
+    fileParallelism: false,
     include: [
       "src/**/*.test.ts",
       "src/**/*.spec.ts",
