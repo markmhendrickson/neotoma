@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **529**
-- Backend and repo Vitest files: **494**
+- Total automated test files: **530**
+- Backend and repo Vitest files: **495**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 147 |
 | Vitest service tests | 36 |
 | Source-adjacent tests | 64 |
-| Vitest integration tests | 152 |
+| Vitest integration tests | 153 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -377,7 +377,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (152):**
+**Files (153):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -463,6 +463,7 @@ flowchart TD
 - `tests/integration/mcp_retrieval_reliability.test.ts`
 - `tests/integration/mcp_schema_actions.test.ts`
 - `tests/integration/mcp_schema_variations.test.ts`
+- `tests/integration/mcp_session_404_reconnect.test.ts`
 - `tests/integration/mcp_stdio_attribution.test.ts`
 - `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
 - `tests/integration/mcp_store_intra_batch_relationships.test.ts`

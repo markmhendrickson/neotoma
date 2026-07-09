@@ -234,7 +234,7 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
   5. `ERR_STORE_RESOLUTION_FAILED` in any field → `resolver_bug`
   6. `database disk image is malformed` in any field → `sqlite_corruption`
   7. `ERR_REPORTER_ENVIRONMENT_REQUIRED` in any field → `reporter_env_required`
-  8. `status_code == 503` on `/mcp` path → `stale_mcp_session`
+  8. `status_code == 404` (current) or `503` (legacy, pre-neotoma#1923) on `/mcp` path → `stale_mcp_session`
 
   Clean lines (`exit_code == 0`, no warnings matching any predicate) are skipped silently. PII redaction runs in scan mode: UUIDs, email addresses, auth tokens, and home-directory paths are replaced with `<LABEL:hash>` placeholders before the title and body are filed; lines are never dropped for containing PII. Redaction can only fail if an unexpected exception is thrown by the guard itself (which would indicate a programming error); in that case the line is skipped with a `skipped` outcome and an error reason in the sweep report. Deduplication stamps a deterministic `observer-dedup:<hash>` label (derived from `(anomaly_class, command_prefix, reporter_channel)`) on every filed issue, loads the existing open GitHub issues (best-effort; proceeds without dedup if GitHub is unavailable), and folds via `issues add_message` when an existing issue carrying the exact same dedup label is found.
 

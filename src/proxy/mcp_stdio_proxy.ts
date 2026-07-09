@@ -132,9 +132,14 @@ export class SessionState {
   }
 }
 
-/** Exported for unit tests — matches `src/actions.ts` Streamable HTTP 503 copy. */
+/**
+ * Exported for unit tests — matches `src/actions.ts` Streamable HTTP unknown-session
+ * copy. Accepts 404 (current, spec-compliant status per MCP Streamable HTTP session
+ * management) and 503 (prior status, retained so this proxy still recovers against
+ * older/unpatched Neotoma server instances).
+ */
 export function isRecoverableMcpSessionLostError(status: number, bodyText: string): boolean {
-  if (status !== 503) return false;
+  if (status !== 404 && status !== 503) return false;
   const t = bodyText.toLowerCase();
   return (
     t.includes("mcp session is unknown") || t.includes("session is unknown on this api instance")
@@ -352,12 +357,13 @@ export interface DispatchDeps {
 
 /**
  * Forward one JSON-RPC message downstream, recovering automatically from a
- * lost/expired MCP session — the failure mode behind neotoma#1472/#1667,
+ * lost/expired MCP session — the failure mode behind neotoma#1472/#1667/#1923,
  * where a single-instance restart (or a non-sticky replica) drops the
- * in-memory session and the server replies `503 … session is unknown on
- * this API instance`, or the request hangs through the restart window.
+ * in-memory session and the server replies `404 … session is unknown on
+ * this API instance` (or, against an older server, `503`), or the request
+ * hangs through the restart window.
  *
- * On that 503 OR a transport error/timeout for a non-initialize method, the
+ * On that 404/503 OR a transport error/timeout for a non-initialize method, the
  * cached `initialize` is replayed downstream and the message retried, up to
  * `maxAttempts` with exponential backoff. The client's stdout only ever sees
  * the final result, so backend restarts become invisible instead of failing
