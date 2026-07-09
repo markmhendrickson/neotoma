@@ -11,6 +11,8 @@ import {
   findMcpConfigPaths,
   inferHookHarnessesFromMcpConfigs,
   ensureAAuthKeysForSignedTransport,
+  isMcpHookHarness,
+  type McpHookHarness,
   neotomaServerEntriesForTransport,
   neotomaServerEntries,
   offerInstall,
@@ -236,6 +238,129 @@ describe("CLI MCP and instruction commands", () => {
       } finally {
         await fs.rm(tmpRoot, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe("global install (no source checkout) claude-code project .mcp.json", () => {
+    it("writes a project-root .mcp.json pointing at the installed CLI when repoRoot is null", async () => {
+      // Simulates a global npm install: findRepoRoot(cwd) returns null (no neotoma
+      // package.json above the user's project). Previously offerInstall bailed with
+      // "source root not found" and wrote nothing. It must now fall back to the
+      // installed CLI root and create <project>/.mcp.json for Claude Code.
+      const tmpProject = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-global-install-cc-"));
+      try {
+        // Give the scratch dir a project marker so getProjectRoot resolves to it.
+        await fs.writeFile(
+          path.join(tmpProject, "package.json"),
+          JSON.stringify({ name: "some-user-app", version: "1.0.0" }, null, 2)
+        );
+
+        const result = await offerInstall([], /* repoRoot */ null, {
+          silent: false,
+          cwd: tmpProject,
+          autoInstallScope: "project",
+          autoInstallEnv: "both",
+          harness: "claude-code",
+          skipProjectSync: true,
+        });
+
+        expect(result.installed).toBe(true);
+        const mcpJsonPath = path.join(tmpProject, ".mcp.json");
+        expect(result.updatedPaths).toContain(mcpJsonPath);
+        const parsed = JSON.parse(await fs.readFile(mcpJsonPath, "utf-8")) as {
+          mcpServers?: Record<string, { command?: string; args?: string[] }>;
+        };
+        // Both dev and prod neotoma servers should be present and launchable
+        // (either script shims or a node dist/index.js entrypoint from the install root).
+        expect(parsed.mcpServers?.["neotoma-dev"]).toBeDefined();
+        expect(parsed.mcpServers?.neotoma).toBeDefined();
+        const prod = parsed.mcpServers?.neotoma;
+        const serialized = JSON.stringify(prod);
+        // The launcher must be a real Neotoma stdio entrypoint from the install root
+        // (a run_neotoma_mcp_*.sh shim, or a node dist/index.js for a built package),
+        // never a stale/empty path — this is the whole point of the global-install fix.
+        expect(
+          serialized.includes("run_neotoma_mcp") || serialized.includes("dist/index.js")
+        ).toBe(true);
+      } finally {
+        await fs.rm(tmpProject, { recursive: true, force: true });
+      }
+    });
+
+    it("does not bail with 'source root not found' for a resolvable install", async () => {
+      const tmpProject = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-global-install-msg-"));
+      try {
+        await fs.writeFile(
+          path.join(tmpProject, "package.json"),
+          JSON.stringify({ name: "some-user-app", version: "1.0.0" }, null, 2)
+        );
+        const result = await offerInstall([], /* repoRoot */ null, {
+          silent: true,
+          cwd: tmpProject,
+          autoInstallScope: "project",
+          autoInstallEnv: "both",
+          harness: "claude-code",
+          skipProjectSync: true,
+        });
+        expect(result.message.toLowerCase()).not.toContain("source root not found");
+      } finally {
+        await fs.rm(tmpProject, { recursive: true, force: true });
+      }
+    });
+
+    it("falls back to .cursor/mcp.json for an unsupported harness value", async () => {
+      // A caller that bypasses toHookHarness's narrowing (e.g. a future harness id, or an
+      // untyped/externally-sourced string) must not be treated as "claude-code" by offerInstall.
+      // isMcpHookHarness rejects it and the project-level default (.cursor/mcp.json) is used —
+      // this documents and locks in that runtime fallback behavior.
+      const tmpProject = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-unsupported-harness-"));
+      try {
+        await fs.writeFile(
+          path.join(tmpProject, "package.json"),
+          JSON.stringify({ name: "some-user-app", version: "1.0.0" }, null, 2)
+        );
+
+        const result = await offerInstall([], /* repoRoot */ null, {
+          silent: false,
+          cwd: tmpProject,
+          autoInstallScope: "project",
+          autoInstallEnv: "both",
+          // Cast: "vscode" is not a valid McpHookHarness. This exercises the runtime guard
+          // that protects offerInstall from an untyped caller passing an unsupported value.
+          harness: "vscode" as unknown as McpHookHarness,
+          skipProjectSync: true,
+        });
+
+        expect(result.installed).toBe(true);
+        const cursorMcpPath = path.join(tmpProject, ".cursor", "mcp.json");
+        const rootMcpPath = path.join(tmpProject, ".mcp.json");
+        expect(result.updatedPaths).toContain(cursorMcpPath);
+        expect(result.updatedPaths).not.toContain(rootMcpPath);
+        await expect(fs.access(rootMcpPath)).rejects.toThrow();
+        const parsed = JSON.parse(await fs.readFile(cursorMcpPath, "utf-8")) as {
+          mcpServers?: Record<string, unknown>;
+        };
+        expect(parsed.mcpServers?.["neotoma-dev"]).toBeDefined();
+        expect(parsed.mcpServers?.neotoma).toBeDefined();
+      } finally {
+        await fs.rm(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("isMcpHookHarness", () => {
+    it("accepts only the supported McpHookHarness values", () => {
+      expect(isMcpHookHarness("claude-code")).toBe(true);
+      expect(isMcpHookHarness("cursor")).toBe(true);
+      expect(isMcpHookHarness("codex")).toBe(true);
+    });
+
+    it("rejects unsupported or malformed values", () => {
+      expect(isMcpHookHarness("vscode")).toBe(false);
+      expect(isMcpHookHarness("")).toBe(false);
+      expect(isMcpHookHarness(undefined)).toBe(false);
+      expect(isMcpHookHarness(null)).toBe(false);
+      expect(isMcpHookHarness(123)).toBe(false);
     });
   });
 

@@ -6841,6 +6841,13 @@ paths:
                       storage_backend:
                         type: string
                         enum: [local]
+                      environment:
+                        type: string
+                        description: |
+                          Active NEOTOMA_ENV for the local backend
+                          (development vs production), so a caller can
+                          confirm which graph it resolved to before writing.
+                        enum: [development, production]
                       data_dir:
                         type: string
                       sqlite_db:

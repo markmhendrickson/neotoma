@@ -3,7 +3,12 @@ import {
   scanAgentInstructions,
   type CliInstructionsScope,
 } from "./agent_instructions_scan.js";
-import { offerInstall, scanForMcpConfigs, type McpTransportChoice } from "./mcp_config_scan.js";
+import {
+  offerInstall,
+  scanForMcpConfigs,
+  type McpHookHarness,
+  type McpTransportChoice,
+} from "./mcp_config_scan.js";
 
 export type HarnessInstallScope = "project" | "user" | "both";
 export type HarnessMcpEnv = "dev" | "prod" | "both";
@@ -25,6 +30,8 @@ export interface ConfigureMcpServersOptions {
   silent?: boolean;
   boxAlreadyShown?: boolean;
   skipProjectSync?: boolean;
+  /** Target harness (e.g. from `setup --tool <harness>`); steers project-config file choice. */
+  harness?: McpHookHarness;
 }
 
 export async function configureMcpServers(options: ConfigureMcpServersOptions): Promise<{
@@ -55,6 +62,7 @@ export async function configureMcpServers(options: ConfigureMcpServersOptions): 
     silent: options.silent,
     boxAlreadyShown: options.boxAlreadyShown,
     skipProjectSync: options.skipProjectSync,
+    harness: options.harness,
   });
   return { ...result, repoRoot };
 }

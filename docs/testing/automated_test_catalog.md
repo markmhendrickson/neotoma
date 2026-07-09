@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **529**
-- Backend and repo Vitest files: **494**
+- Total automated test files: **535**
+- Backend and repo Vitest files: **500**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 146 |
-| Vitest service tests | 38 |
+| Vitest unit tests | 149 |
+| Vitest service tests | 39 |
 | Source-adjacent tests | 64 |
-| Vitest integration tests | 151 |
+| Vitest integration tests | 153 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (146):**
+**Files (149):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -177,11 +177,14 @@ flowchart TD
 - `tests/unit/github_mirror_guidance.test.ts`
 - `tests/unit/github_pages_asset_paths.test.ts`
 - `tests/unit/github_webhook.test.ts`
+- `tests/unit/google_oidc_identity_resolution.test.ts`
+- `tests/unit/google_oidc.test.ts`
 - `tests/unit/hook_feedback_accumulator.test.ts`
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
 - `tests/unit/inspector_admin_unlock_url.test.ts`
 - `tests/unit/inspector_skin.test.ts`
+- `tests/unit/issue_spec_schema.test.ts`
 - `tests/unit/keepalive_timeout.test.ts`
 - `tests/unit/list_timeline_events_unknown_type.test.ts`
 - `tests/unit/manage_bundles_tool.test.ts`
@@ -262,7 +265,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (38):**
+**Files (39):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -297,6 +300,7 @@ flowchart TD
 - `tests/services/schema_reference_fields_resolve_target_validation.test.ts`
 - `tests/services/schema_reference_linking.test.ts`
 - `tests/services/schema_registry_incremental.test.ts`
+- `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
 - `tests/services/sync_webhook_inbound.test.ts`
@@ -378,7 +382,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (151):**
+**Files (153):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -422,6 +426,7 @@ flowchart TD
 - `tests/integration/field_converters.test.ts`
 - `tests/integration/fixture_mcp_store_replay.test.ts`
 - `tests/integration/gdpr_deletion.test.ts`
+- `tests/integration/get_authenticated_user_environment.test.ts`
 - `tests/integration/graph_neighborhood_pagination.test.ts`
 - `tests/integration/graph_neighborhood_source_branch.test.ts`
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
@@ -523,6 +528,7 @@ flowchart TD
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`
 - `tests/integration/sync_webhook_inbound.test.ts`
+- `tests/integration/transport_parity_store_snapshot_auth.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
 - `tests/integration/tunnel_discovery.test.ts`
 - `tests/integration/turn_summary_mcp_apps.test.ts`

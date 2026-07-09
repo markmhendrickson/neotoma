@@ -27,6 +27,26 @@ function jsonStr(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+/**
+ * True when the file's existing content is semantically equal to the value we
+ * would write — i.e. only formatting (indentation, key order, trailing
+ * newline) differs. Used to avoid a no-op rewrite that reformats a user's
+ * settings.local.json when nothing meaningful changed (#1906): running
+ * `neotoma setup` to diagnose an error should not touch tracked config just
+ * because the on-disk formatting differs from our serializer's.
+ */
+function isSemanticNoOp(before: string | null, next: unknown): boolean {
+  if (before === null) return false;
+  try {
+    const parsedBefore = JSON.parse(before);
+    // Compare canonical serializations so key order / whitespace don't count.
+    return JSON.stringify(parsedBefore) === JSON.stringify(next);
+  } catch {
+    // Unparseable existing file — treat as a real change so we can fix it.
+    return false;
+  }
+}
+
 async function readText(p: string): Promise<string | null> {
   try {
     return await fs.readFile(p, "utf8");
@@ -73,7 +93,9 @@ export async function patchClaudeCodeProject(
   const allow = mergeAllow(parsed.permissions?.allow, CLAUDE_ALLOW_ENTRIES);
   const next = { ...parsed, permissions: { ...(parsed.permissions ?? {}), allow } };
   const after = jsonStr(next);
-  const changed = after !== before;
+  // Only a real change if the *content* differs — a pure reformat (indentation,
+  // key order, trailing newline) must not rewrite the file (#1906).
+  const changed = after !== before && !isSemanticNoOp(before, next);
   if (changed && !options.dryRun) {
     await ensureDir(path.dirname(target));
     await fs.writeFile(target, after, "utf8");
@@ -98,7 +120,7 @@ export async function patchClaudeCodeUser(
   const allow = mergeAllow(parsed.permissions?.allow, CLAUDE_ALLOW_ENTRIES);
   const next = { ...parsed, permissions: { ...(parsed.permissions ?? {}), allow } };
   const after = jsonStr(next);
-  const changed = after !== before;
+  const changed = after !== before && !isSemanticNoOp(before, next);
   if (changed && !options.dryRun) {
     await ensureDir(path.dirname(target));
     await fs.writeFile(target, after, "utf8");

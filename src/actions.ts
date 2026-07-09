@@ -6863,10 +6863,38 @@ export async function storeStructuredForApi(params: {
     const { listObservationsForSource } = await import("./services/observation_storage.js");
     const existingObs = await listObservationsForSource(existingSource.id, userId);
 
+    // Issue #1860 (mirrors the #1840 MCP-path fix in src/server.ts): on a
+    // deduplicated (idempotency-replay) store, the early return must still
+    // surface the current snapshot in `entity_snapshot_after` and mark each
+    // entry `deduplicated: true` — matching the MCP transport. Previously the
+    // offline/HTTP path omitted both, so callers validating writes by
+    // inspecting the response saw a false empty snapshot even though
+    // getSnapshot returned the real one. No new observation is written, so we
+    // read the persisted snapshot directly.
+    const { getSnapshot: getSnapshotForReplay } =
+      await import("./services/snapshot_computation.js");
+    const replaySnapshotByEntityId = new Map<string, Record<string, unknown>>();
+    for (const replayEntityId of new Set<string>(existingObs.map((obs) => obs.entity_id))) {
+      try {
+        const snap = await getSnapshotForReplay(replayEntityId, userId);
+        if (snap?.snapshot) {
+          replaySnapshotByEntityId.set(replayEntityId, snap.snapshot as Record<string, unknown>);
+        }
+      } catch (snapErr) {
+        logger.warn(
+          `store replay: snapshot fetch failed for ${replayEntityId}: ${
+            snapErr instanceof Error ? snapErr.message : String(snapErr)
+          }`
+        );
+      }
+    }
+
     const existingEntities = existingObs.map((obs) => ({
       entity_id: obs.entity_id,
       entity_type: obs.entity_type,
       observation_id: obs.id,
+      entity_snapshot_after: replaySnapshotByEntityId.get(obs.entity_id) ?? null,
+      deduplicated: true,
     }));
 
     // Idempotency replay: the source row already exists for
@@ -10681,6 +10709,14 @@ app.post("/get_authenticated_user", async (req, res) => {
       config.storageBackend === "local"
         ? {
             storage_backend: "local" as const,
+            // Surface the active environment + DB so an agent can confirm it is
+            // on the intended graph before writing (#1905). On a fresh npm
+            // install the CLI local transport defaults to production while the
+            // server defaults to development; exposing `environment` here lets
+            // a caller detect the split (e.g. writing to dev while an unflagged
+            // CLI reads empty prod) instead of discovering it via silent-empty
+            // results.
+            environment: config.environment,
             data_dir: config.dataDir,
             sqlite_db: config.sqlitePath,
           }

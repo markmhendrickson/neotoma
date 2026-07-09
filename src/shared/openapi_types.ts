@@ -7594,6 +7594,13 @@ export interface operations {
             storage?: {
               /** @enum {string} */
               storage_backend?: "local";
+              /**
+               * @description Active NEOTOMA_ENV for the local backend
+               *     (development vs production), so a caller can
+               *     confirm which graph it resolved to before writing.
+               * @enum {string}
+               */
+              environment?: "development" | "production";
               data_dir?: string;
               sqlite_db?: string;
             };
