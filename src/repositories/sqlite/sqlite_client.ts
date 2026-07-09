@@ -17,15 +17,49 @@ export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
   Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
 );
 
+function isSqliteBusyError(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "SQLITE_BUSY" || code === "SQLITE_BUSY_SNAPSHOT";
+}
+
+/**
+ * Retry `fn` while it keeps throwing SQLITE_BUSY/SQLITE_BUSY_SNAPSHOT, up to
+ * `SQLITE_BUSY_TIMEOUT_MS`. Any other error rethrows immediately and is never
+ * retried, so a real problem (corruption, permissions) surfaces as-is instead
+ * of being masked as transient lock contention.
+ *
+ * Needed specifically for `PRAGMA journal_mode = WAL` on a brand-new DB file:
+ * switching journal mode rewrites the file header and briefly needs the
+ * write lock, so two processes racing to first-touch-open the same fresh
+ * file can have one throw SQLITE_BUSY on this very first statement — before
+ * `busy_timeout` (set moments later on that same connection) has had any
+ * chance to cover it, since the failing call happens synchronously ahead of
+ * that pragma. See #1927.
+ */
+function retryOnBusy<T>(fn: () => T): T {
+  const deadline = Date.now() + SQLITE_BUSY_TIMEOUT_MS;
+  for (;;) {
+    try {
+      return fn();
+    } catch (error) {
+      if (!isSqliteBusyError(error) || Date.now() >= deadline) {
+        throw error;
+      }
+    }
+  }
+}
+
 /**
  * Apply the connection PRAGMAs every Neotoma SQLite handle needs: WAL for
  * concurrent readers alongside a single writer, foreign-key enforcement, and a
  * busy_timeout so lock contention waits rather than throwing immediately.
+ * busy_timeout is set first so it's in effect before the journal_mode switch,
+ * which is retried on SQLITE_BUSY in its own right (see retryOnBusy).
  */
 function applyConnectionPragmas(db: SqliteDatabase): void {
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
   db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+  retryOnBusy(() => db.pragma("journal_mode = WAL"));
+  db.pragma("foreign_keys = ON");
 }
 
 let cachedDb: SqliteDatabase | null = null;
@@ -368,103 +402,110 @@ function addColumnIfMissing(db: SqliteDatabase, table: string, column: string, t
 }
 
 function ensureSchema(db: SqliteDatabase): void {
-  const transaction = db.transaction(() => {
-    db.pragma("foreign_keys = OFF");
-    for (const table of DEPRECATED_TABLES) {
-      db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
-    }
-    db.pragma("foreign_keys = ON");
+  // BEGIN IMMEDIATE: two workers can otherwise both open this transaction as
+  // readers on the same fresh-DB WAL snapshot, and whichever tries to
+  // upgrade to a writer second hits SQLITE_BUSY_SNAPSHOT, which busy_timeout
+  // cannot retry. Taking the write lock up front serializes concurrent
+  // first-touch schema init on ordinary lock contention instead, which
+  // busy_timeout does retry. See #1927.
+  const transaction = db.transaction(
+    () => {
+      db.pragma("foreign_keys = OFF");
+      for (const table of DEPRECATED_TABLES) {
+        db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
+      }
+      db.pragma("foreign_keys = ON");
 
-    for (const statement of SCHEMA_STATEMENTS) {
-      db.prepare(statement).run();
-    }
+      for (const statement of SCHEMA_STATEMENTS) {
+        db.prepare(statement).run();
+      }
 
-    // Add columns if missing (existing DBs created before these columns existed)
-    addColumnIfMissing(db, "sources", "source_type", "TEXT");
-    addColumnIfMissing(db, "sources", "original_filename", "TEXT");
-    addColumnIfMissing(db, "sources", "mime_type", "TEXT");
-    addColumnIfMissing(db, "sources", "storage_url", "TEXT");
-    addColumnIfMissing(db, "sources", "file_size", "INTEGER");
-    addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
-    addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
-    addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
-    addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
-    addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
-    addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
-    addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
-    addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
-    addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
-    // Agent attribution (Phase 1 AAuth integration). `provenance` is a JSON
-    // blob containing AAuth fields, fallback clientInfo, and trust tier; see
-    // src/crypto/agent_identity.ts AttributionProvenance shape. Adding via
-    // the soft-migration helper keeps existing databases backward-compatible.
-    addColumnIfMissing(db, "observations", "provenance", "TEXT");
-    // Write-kind classification (sensor / llm_summary / workflow_state /
-    // human / import), orthogonal to numeric `source_priority` and to the
-    // `provenance` attribution blob. Soft migration keeps pre-existing
-    // rows at NULL so historical data round-trips intact.
-    addColumnIfMissing(db, "observations", "observation_source", "TEXT");
-    // Cross-instance sync (Phase 5): originating peer id stamped on
-    // observations created from peer webhook replay; drives subscription
-    // loop prevention on the event bus.
-    addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
-    // Sighting deduplication (#1604): canonical_key groups N reports of the
-    // same event into one logical signal; sighting_source_id is the origin
-    // record (e.g. a webhook event id) that produced this observation. Together
-    // they form a stable compound key for upsert idempotency. Indexed to
-    // support fast collapse_by grouping on retrieve_entities.
-    addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
-    addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
-    ).run();
-    addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
-    addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
-    addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
-    addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
-    addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
-    addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
-    addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
-    addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
-    addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
-    addColumnIfMissing(db, "auto_enhancement_queue", "priority", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "retry_count", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "job_type", "TEXT DEFAULT 'auto_enhance'");
+      // Add columns if missing (existing DBs created before these columns existed)
+      addColumnIfMissing(db, "sources", "source_type", "TEXT");
+      addColumnIfMissing(db, "sources", "original_filename", "TEXT");
+      addColumnIfMissing(db, "sources", "mime_type", "TEXT");
+      addColumnIfMissing(db, "sources", "storage_url", "TEXT");
+      addColumnIfMissing(db, "sources", "file_size", "INTEGER");
+      addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
+      addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
+      addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
+      addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
+      addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
+      addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
+      addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
+      addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
+      addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
+      // Agent attribution (Phase 1 AAuth integration). `provenance` is a JSON
+      // blob containing AAuth fields, fallback clientInfo, and trust tier; see
+      // src/crypto/agent_identity.ts AttributionProvenance shape. Adding via
+      // the soft-migration helper keeps existing databases backward-compatible.
+      addColumnIfMissing(db, "observations", "provenance", "TEXT");
+      // Write-kind classification (sensor / llm_summary / workflow_state /
+      // human / import), orthogonal to numeric `source_priority` and to the
+      // `provenance` attribution blob. Soft migration keeps pre-existing
+      // rows at NULL so historical data round-trips intact.
+      addColumnIfMissing(db, "observations", "observation_source", "TEXT");
+      // Cross-instance sync (Phase 5): originating peer id stamped on
+      // observations created from peer webhook replay; drives subscription
+      // loop prevention on the event bus.
+      addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
+      // Sighting deduplication (#1604): canonical_key groups N reports of the
+      // same event into one logical signal; sighting_source_id is the origin
+      // record (e.g. a webhook event id) that produced this observation. Together
+      // they form a stable compound key for upsert idempotency. Indexed to
+      // support fast collapse_by grouping on retrieve_entities.
+      addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
+      addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
+      ).run();
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
+      ).run();
+      addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
+      addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
+      addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
+      addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
+      addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
+      addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
+      addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
+      addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
+      addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
+      addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
+      addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
+      addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
+      addColumnIfMissing(db, "auto_enhancement_queue", "priority", "INTEGER");
+      addColumnIfMissing(db, "auto_enhancement_queue", "retry_count", "INTEGER");
+      addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
+      addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
+      addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
+      addColumnIfMissing(db, "auto_enhancement_queue", "job_type", "TEXT DEFAULT 'auto_enhance'");
 
-    addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
 
-    // Materialized relationship liveness (#1570). Derived from the
-    // highest-priority `relationship_observations` row's `metadata._deleted`
-    // for each `relationship_key` — the same rule `filterDeletedRelationships`
-    // applies — so the default `list_relationships` read can exclude
-    // soft-deleted edges via a DB predicate instead of loading the full
-    // matching set into memory and filtering in process. DEFAULT 1 (live)
-    // keeps pre-existing rows behaving exactly as before until the one-time
-    // backfill below recomputes them; the value is re-stamped on every
-    // snapshot recompute (computeRelationshipSnapshot), so observations remain
-    // the source of truth and the column self-heals.
-    addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
+      // Materialized relationship liveness (#1570). Derived from the
+      // highest-priority `relationship_observations` row's `metadata._deleted`
+      // for each `relationship_key` — the same rule `filterDeletedRelationships`
+      // applies — so the default `list_relationships` read can exclude
+      // soft-deleted edges via a DB predicate instead of loading the full
+      // matching set into memory and filtering in process. DEFAULT 1 (live)
+      // keeps pre-existing rows behaving exactly as before until the one-time
+      // backfill below recomputes them; the value is re-stamped on every
+      // snapshot recompute (computeRelationshipSnapshot), so observations remain
+      // the source of truth and the column self-heals.
+      addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
 
-    // By-reference source storage (#1775): path-only ingestion mode where bytes
-    // remain on disk. Additive columns; existing rows default storage_mode='inline'
-    // so all pre-existing sources behave identically without migration work.
-    addColumnIfMissing(db, "sources", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'");
-    addColumnIfMissing(db, "sources", "reference_path", "TEXT");
-    addColumnIfMissing(db, "sources", "host_id", "TEXT");
-    addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
-    addColumnIfMissing(db, "sources", "mtime", "TEXT");
+      // By-reference source storage (#1775): path-only ingestion mode where bytes
+      // remain on disk. Additive columns; existing rows default storage_mode='inline'
+      // so all pre-existing sources behave identically without migration work.
+      addColumnIfMissing(db, "sources", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'");
+      addColumnIfMissing(db, "sources", "reference_path", "TEXT");
+      addColumnIfMissing(db, "sources", "host_id", "TEXT");
+      addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
+      addColumnIfMissing(db, "sources", "mtime", "TEXT");
 
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS sandbox_sessions (
+      db.prepare(
+        `CREATE TABLE IF NOT EXISTS sandbox_sessions (
       user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
       bearer_token_hash TEXT NOT NULL,
       one_time_code_hash TEXT,
@@ -473,63 +514,65 @@ function ensureSchema(db: SqliteDatabase): void {
       expires_at TEXT NOT NULL,
       revoked_at TEXT
     )`
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
-    ).run();
+      ).run();
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
+      ).run();
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
+      ).run();
 
-    // Graph-traversal indexes (#1467): every hop of retrieve_related_entities /
-    // retrieve_graph_neighborhood filters relationship_snapshots by
-    // (source_entity_id, user_id) for outbound and (target_entity_id, user_id)
-    // for inbound. Without these, each hop full-scans the table, so deep
-    // traversal cost grows with total table size. Composite indexes turn each
-    // hop into an indexed lookup, flattening traversal latency vs graph size
-    // (measured: 3-hop over 50k relationships dropped from ~777ms to ~6ms).
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
-    ).run();
-    // Liveness-aware composites (#1570): the default list_relationships read
-    // filters by (source|target entity, user_id, is_live) before paginating at
-    // the DB. Including is_live in the index keeps that access path covered so
-    // the live-edge filter never falls back to a table scan.
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
-    ).run();
+      // Graph-traversal indexes (#1467): every hop of retrieve_related_entities /
+      // retrieve_graph_neighborhood filters relationship_snapshots by
+      // (source_entity_id, user_id) for outbound and (target_entity_id, user_id)
+      // for inbound. Without these, each hop full-scans the table, so deep
+      // traversal cost grows with total table size. Composite indexes turn each
+      // hop into an indexed lookup, flattening traversal latency vs graph size
+      // (measured: 3-hop over 50k relationships dropped from ~777ms to ~6ms).
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
+      ).run();
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
+      ).run();
+      // Liveness-aware composites (#1570): the default list_relationships read
+      // filters by (source|target entity, user_id, is_live) before paginating at
+      // the DB. Including is_live in the index keeps that access path covered so
+      // the live-edge filter never falls back to a table scan.
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
+      ).run();
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
+      ).run();
 
-    // Durable substrate-event log (#1464 Tier 2): resume queries read by
-    // (user_id, seq); pruning reads by created_at.
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
-    ).run();
+      // Durable substrate-event log (#1464 Tier 2): resume queries read by
+      // (user_id, seq); pruning reads by created_at.
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
+      ).run();
+      db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
+      ).run();
 
-    // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
-    ).run();
+      // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
+      db.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
+      ).run();
 
-    // One-time backfill of relationship_snapshots.is_live (#1570). New rows are
-    // stamped at write time by computeRelationshipSnapshot, but pre-existing
-    // rows and rows written before this column existed all default to 1 (live).
-    // Recompute liveness from the highest-priority deletion observation per
-    // relationship_key — the same rule filterDeletedRelationships uses — and
-    // flip stale rows to 0. Idempotent: re-running only updates rows whose
-    // materialized is_live disagrees with the observation-derived value, so it
-    // is a no-op once converged. Guarded so it only runs when there is at least
-    // one deletion observation to reconcile (the common case has none).
-    backfillRelationshipLiveness(db);
-  });
+      // One-time backfill of relationship_snapshots.is_live (#1570). New rows are
+      // stamped at write time by computeRelationshipSnapshot, but pre-existing
+      // rows and rows written before this column existed all default to 1 (live).
+      // Recompute liveness from the highest-priority deletion observation per
+      // relationship_key — the same rule filterDeletedRelationships uses — and
+      // flip stale rows to 0. Idempotent: re-running only updates rows whose
+      // materialized is_live disagrees with the observation-derived value, so it
+      // is a no-op once converged. Guarded so it only runs when there is at least
+      // one deletion observation to reconcile (the common case has none).
+      backfillRelationshipLiveness(db);
+    },
+    { mode: "immediate" }
+  );
   transaction();
 }
 

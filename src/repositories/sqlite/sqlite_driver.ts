@@ -76,14 +76,30 @@ class SqliteDatabaseImpl {
     return [];
   }
 
+  /**
+   * `mode: "immediate"` acquires the write lock at `BEGIN` time (`BEGIN
+   * IMMEDIATE`) instead of deferring it to the transaction's first write.
+   * Use this for any transaction that concurrent processes may open as a
+   * reader against the same DB file (e.g. one-time schema init): a deferred
+   * transaction lets two callers both start as readers on the same WAL
+   * snapshot, and whichever tries to upgrade to a writer second hits
+   * SQLITE_BUSY_SNAPSHOT — a snapshot conflict that busy_timeout cannot
+   * retry. Taking the write lock up front makes the second caller block on
+   * ordinary lock contention instead, which busy_timeout does retry.
+   */
   transaction<TArgs extends unknown[], TResult>(
-    fn: (...args: TArgs) => TResult
+    fn: (...args: TArgs) => TResult,
+    options?: { mode?: "deferred" | "immediate" }
   ): (...args: TArgs) => TResult {
+    const immediate = options?.mode === "immediate";
     if (typeof this.db.transaction === "function" && !hasNativeSqlite) {
-      return this.db.transaction(fn) as (...args: TArgs) => TResult;
+      const tx = this.db.transaction(fn) as ((...args: TArgs) => TResult) & {
+        immediate: (...args: TArgs) => TResult;
+      };
+      return immediate ? (tx.immediate.bind(tx) as (...args: TArgs) => TResult) : tx;
     }
     return (...args: TArgs): TResult => {
-      this.db.exec("BEGIN");
+      this.db.exec(immediate ? "BEGIN IMMEDIATE" : "BEGIN");
       try {
         const result = fn(...args);
         this.db.exec("COMMIT");
