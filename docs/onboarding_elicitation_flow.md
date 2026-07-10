@@ -6,6 +6,17 @@
 
 ---
 
+## Terms
+
+- **Light-up:** the visible moment a prospect recognizes their own delegation use case and gets excited — the flow's success signal.
+- **Wedge:** the specific use case a prospect names as their entry point into Neotoma; the flow lets each user name their own instead of us marketing one.
+- **Beat:** one numbered stage of the five-stage elicitation conversation (Beat 0 through Beat 4, plus the Beat -1 router).
+- **Cohort:** either of the two demand-state segments the flow forks on — LATENT (operators) or ACTIVE (builders).
+- **Archetype:** one of the 7 named "I wish I could hand this off" use-case patterns mined from evaluator data (see below).
+- **Vanity-activation guard:** the rule that a self-selected out-of-network user must clear a defined engagement bar before counting as an activation, so raw click-throughs don't inflate the metric.
+
+---
+
 ## Why this exists
 
 Most prospects haven't hit Neotoma's memory pain because they've **pre-emptively not attempted** the delegation that would create it — they already sense that chats are ephemeral, so they never try to hand recurring work to an agent, and so never feel the wall. The pain is real but **unfelt**.
@@ -80,7 +91,7 @@ Make the unfelt pain felt. Constant shape: *capable agent + no durable, trustwor
 Because the elicitation agent **dogfoods Neotoma**, show the user *their own session graph*, recorded live: "while we've been talking, I've been keeping notes the way Neotoma does — look." Typed nodes, every fact traceable, nothing overwritten silently. Then the reframe: "some people call it memory; it's really the nervous system your agents run on." Surface local-first reassurance here (answers the data-sharing hesitancy from the CRM calls).
 
 ### Beat 4 — Start it now (manufacture the egg)
-Hand off into a tailored setup + first delegation so the attempt happens this session. Generate a **one-line install + tailored first-delegation script** for the chosen harness (all three, **Claude Code first** as the canonical artifact; Cursor + desktop are transforms). The script: installs+connects Neotoma (agent runs `ensure-neotoma`), seeds the session graph into the real local instance, runs the first delegation live, shows the nodes it wrote, then demonstrates the **keystone cross-session recall a-ha** — now meaningful because they have something they want recalled.
+Hand off into a tailored setup + first delegation so the attempt happens this session. Generate a **one-line install + tailored first-delegation script** for Claude Code (only harness at launch; Cursor and desktop are roadmapped transforms, not yet spec'd). The script: installs+connects Neotoma (agent runs `ensure-neotoma`), seeds the session graph into the real local instance, runs the first delegation live, shows the nodes it wrote, then demonstrates the **keystone cross-session recall a-ha** — now meaningful because they have something they want recalled. See `onboarding_elicitation_script.md` Beat 4 for the failure/stall fallback paths.
 
 ---
 
