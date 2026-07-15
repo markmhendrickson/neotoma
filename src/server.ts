@@ -143,7 +143,7 @@ const ADVISORY_VISIBILITY_DEPRECATION =
  */
 const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "Every turn, do the following in order — do not skip steps:",
-  "1. Bounded retrieval: for entities implied by the user message, use retrieve_entity_by_identifier for concrete identifiers and retrieve_entities for category/list queries.",
+  "1. Bounded retrieval: for entities implied by the user message, use retrieve_entity_by_identifier for concrete identifiers and retrieve_entities for category/list queries. A newly-named entity requires this lookup BEFORE reasoning about it — no-match is fine, skipping is not.",
   '2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE **`store`** call (deprecated alias: store_structured). entities = [ { entity_type: "conversation", conversation_id, target_id? when bounded retrieval found the existing conversation, title?, thread_kind?, client_name?/harness?, repository_name?/repository_root?/repository_remote?, scope_summary? }, { entity_type: "conversation_message", role: "user", sender_kind: "user", content: "<exact message>", turn_key: "{conversation_id}:{turn_id}" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. Context fields are optional and never identity-bearing; do not store raw git status, terminal output, file contents, secrets, or large open-file lists by default. MUST NOT skip for greetings or minimal messages.',
   "3. Other actions: host IDE tools and other MCP tools may run only after steps 1 and 2.",
   "4. Compose reply: synthesize the answer using retrieval results and tool output.",
@@ -156,17 +156,17 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves non-chat entities, render `🧠 Neotoma — [<conversation name>](<origin>/conversations/<id>)` with Created/Updated/Retrieved groups. Use `get_session_identity.origins.inspector_origin` as `<origin>` when present; if absent, do NOT guess sandbox/localhost; render labels without links. Each bullet: emoji + label + linked entity_type only when origin and entity_id are known.",
+  "Display rule: when a turn creates, updates, or retrieves non-chat entities, render `🧠 Neotoma — [<conversation name>](<origin>/conversations/<id>)` with Created/Updated/Retrieved groups. Use `get_session_identity.origins.inspector_origin` as `<origin>`; if absent, do NOT guess sandbox/localhost. Each bullet: emoji + label + linked entity_type only when origin and entity_id are known.",
   "",
   "Schema/fidelity: for known entity_types (seen this session), check declared fields via get_schema_recommendations or an existing snapshot before storing; use declared fields, invent snake_case only for unfit data. unknown_fields_count > 0 = mandatory repair before closing store. FORBIDDEN: inventing all fields for a known type without checking; ignoring unknown_fields_count > 0.",
   "",
-  "Per-turn QA: before finalizing, self-audit for missing user/assistant stores, missing PART_OF/REFERS_TO/EMBEDS relationships, orphaned entities, missing provenance, ignored ErrorEnvelope, and source extraction mistakes. Repair safe gaps in-turn; otherwise list Issues with immediate meaning, risk if unresolved, and recommended resolution.",
+  "Per-turn QA: before finalizing, self-audit for missing user/assistant stores, missing PART_OF/REFERS_TO/EMBEDS relationships, orphaned entities, missing provenance, ignored ErrorEnvelope, and unretrieved newly-named entities. Repair safe gaps in-turn; otherwise list Issues with meaning, risk, resolution.",
   "",
   "Product-bug repair escalation: when a Neotoma MCP/API/tooling call fails during compliance or QA repair, classify before stopping. Fix caller payload/procedure issues and retry. If it appears to be a deterministic Neotoma product bug and you are inside the Neotoma source checkout, proactively inspect tool docs, trace code, read canonical docs, add or find focused tests, apply the smallest safe fix, and run targeted validation. Stop and ask before schema migrations, auth/security, foundation docs, or destructive data repair. Outside the repo, submit_issue with redacted reproduction instead of editing the consumer project.",
   "",
-  "Issue reporting QA: every Issues item about Neotoma product/tooling/doc behavior needs a local fix (inside the repo) or submit_issue (outside). Show skipped-filing decisions in the Issues group.",
+  "Issue reporting QA: every Issues item about Neotoma product/tooling/doc behavior needs a local fix (inside repo) or submit_issue (outside). Show skipped-filing decisions in Issues.",
   "",
-  "Store retry policy: if **`store`** fails, (1) fix caller payload issues first (for conversation heuristic-name collision, reuse bounded-retrieval entity with target_id or stable conversation_id) and retry once; (2) if it fails again, surface the error to the user before responding; (3) do not silently skip storage.",
+  "Store retry policy: if **`store`** fails, (1) fix caller payload issues first (for conversation heuristic-name collision, reuse bounded-retrieval entity with target_id or stable conversation_id) and retry once; (2) if it fails again, surface the error before responding; (3) do not silently skip storage.",
   "",
 ] as const;
 
