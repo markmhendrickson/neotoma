@@ -6168,6 +6168,11 @@ export class NeotomaServer {
       const storeWarningRules = schemaDef?.store_warnings;
       if (storeWarningRules?.length) {
         for (const rule of storeWarningRules) {
+          // A store_warnings rule fires when none of its `fields` are present.
+          // Guard against a malformed rule (no `fields` array, e.g. a legacy
+          // `condition`-shaped entry): it cannot evaluate "missing identity
+          // field", so skip it rather than throwing on `undefined.some`.
+          if (!Array.isArray(rule.fields) || rule.fields.length === 0) continue;
           const hasIdentityField = rule.fields.some(
             (f) =>
               entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
