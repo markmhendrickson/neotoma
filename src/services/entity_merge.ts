@@ -10,9 +10,11 @@
  * The full mutation sequence — observation rewrite, relationship repoint +
  * dedup/self-loop deletes, entity merged-mark, entity_merges audit insert,
  * entity_snapshots delete, and relationship_snapshots delete — is executed
- * inside a single synchronous better-sqlite3 `db.transaction()` call via
- * `getSqliteDb()`. This guarantees atomicity: a partial failure leaves the
- * source entity still alive and queryable rather than orphaning edges.
+ * inside a single async `db.transaction()` call on the shared driver. The
+ * driver serializes transactions and holds unrelated statements out of the
+ * open transaction window (see repositories/db/driver.ts), so the sequence
+ * commits or rolls back as a unit on every backend: a partial failure leaves
+ * the source entity still alive and queryable rather than orphaning edges.
  *
  * The pre-mutation validation reads (entity existence + merged status) run
  * *outside* the transaction so we can throw typed errors before entering
@@ -22,7 +24,7 @@
  */
 
 import crypto from "crypto";
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 import { db } from "../db.js";
 import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
@@ -73,20 +75,20 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
 
   // --- Atomic mutation sequence ---
 
-  const sqliteDb = getSqliteDb();
+  const sqliteDb = await getDb();
   const merged_at = new Date().toISOString();
 
-  const result = sqliteDb.transaction(
-    (): { observations_moved: number; relationships_repointed: number } => {
+  const result = await sqliteDb.transaction(
+    async (tx): Promise<{ observations_moved: number; relationships_repointed: number }> => {
       // 1. Rewrite observation entity_id (observations table)
-      const obsResult = sqliteDb
+      const obsResult = await tx
         .prepare(
           `UPDATE observations
            SET entity_id = ?
            WHERE entity_id = ? AND user_id = ?`
         )
         .run(toEntityId, fromEntityId, userId);
-      const observations_moved = (obsResult.changes as number) ?? 0;
+      const observations_moved = obsResult.changes ?? 0;
 
       // 2. Fetch relationship_observations rows that reference fromEntityId
       type RelRow = {
@@ -97,7 +99,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
         target_entity_id: string;
         canonical_hash: string | null;
       };
-      const fromRows = sqliteDb
+      const fromRows = (await tx
         .prepare(
           `SELECT id, relationship_key, relationship_type,
                   source_entity_id, target_entity_id, canonical_hash
@@ -105,7 +107,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
            WHERE user_id = ?
              AND (source_entity_id = ? OR target_entity_id = ?)`
         )
-        .all(userId, fromEntityId, fromEntityId) as RelRow[];
+        .all(userId, fromEntityId, fromEntityId)) as RelRow[];
 
       // 3. Build dedup set from rows already owned by the survivor.
       // Collapse by relationship_key (type:source:target) — the unique edge
@@ -113,14 +115,14 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
       // so that duplicate edges differing only in observation metadata still
       // collapse to a single edge on the survivor after a merge.
       type SurvivorRow = { relationship_key: string };
-      const survivorRows = sqliteDb
+      const survivorRows = (await tx
         .prepare(
           `SELECT relationship_key
            FROM relationship_observations
            WHERE user_id = ?
              AND (source_entity_id = ? OR target_entity_id = ?)`
         )
-        .all(userId, toEntityId, toEntityId) as SurvivorRow[];
+        .all(userId, toEntityId, toEntityId)) as SurvivorRow[];
 
       const survivorKeys = new Set<string>(survivorRows.map((r) => r.relationship_key));
 
@@ -160,7 +162,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
       // 4. Delete self-loops and duplicates
       if (idsToDelete.length > 0) {
         const placeholders = idsToDelete.map(() => "?").join(",");
-        sqliteDb
+        await tx
           .prepare(
             `DELETE FROM relationship_observations
              WHERE id IN (${placeholders}) AND user_id = ?`
@@ -169,7 +171,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
       }
 
       // 5. Repoint surviving relationship_observations rows
-      const updateRelStmt = sqliteDb.prepare(
+      const updateRelStmt = tx.prepare(
         `UPDATE relationship_observations
          SET source_entity_id = ?,
              target_entity_id = ?,
@@ -177,11 +179,17 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
          WHERE id = ? AND user_id = ?`
       );
       for (const { id, newRelationshipKey, newSourceEntityId, newTargetEntityId } of repointed) {
-        updateRelStmt.run(newSourceEntityId, newTargetEntityId, newRelationshipKey, id, userId);
+        await updateRelStmt.run(
+          newSourceEntityId,
+          newTargetEntityId,
+          newRelationshipKey,
+          id,
+          userId
+        );
       }
 
       // 6. Clean up stale relationship_snapshots for fromEntityId
-      sqliteDb
+      await tx
         .prepare(
           `DELETE FROM relationship_snapshots
            WHERE user_id = ?
@@ -191,7 +199,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
 
       // 7. Mark source entity as merged (LAST mutation — ensures entity stays
       //    alive/queryable on any earlier failure so edges are never orphaned)
-      sqliteDb
+      await tx
         .prepare(
           `UPDATE entities
            SET merged_to_entity_id = ?,
@@ -201,7 +209,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
         .run(toEntityId, merged_at, fromEntityId, userId);
 
       // 8. Audit record
-      sqliteDb
+      await tx
         .prepare(
           `INSERT INTO entity_merges
              (id, user_id, from_entity_id, to_entity_id, reason, merged_by, observations_rewritten, created_at)
@@ -219,7 +227,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
         );
 
       // 9. Delete entity_snapshots for the merged-away entity
-      sqliteDb
+      await tx
         .prepare(
           `DELETE FROM entity_snapshots
            WHERE entity_id = ? AND user_id = ?`
@@ -228,7 +236,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
 
       return { observations_moved, relationships_repointed: repointed.length };
     }
-  )();
+  );
 
   // --- Post-mutation side effects (events — outside transaction intentionally) ---
 

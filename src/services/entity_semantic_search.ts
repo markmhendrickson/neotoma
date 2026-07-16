@@ -50,7 +50,7 @@ export async function semanticSearchEntities(
     return { entityIds: [], total: 0 };
   }
 
-  const { entityIds, total } = searchLocalEntityEmbeddings({
+  const { entityIds, total } = await searchLocalEntityEmbeddings({
     queryEmbedding,
     userId,
     entityType: entityType ?? null,

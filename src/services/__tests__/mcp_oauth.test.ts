@@ -55,11 +55,11 @@ async function loadLocalMcpAuthModule(tempDir: string) {
   return await import(cacheBustUrl);
 }
 
-async function loadSqliteClient(tempDir: string) {
+async function loadDbConnection(tempDir: string) {
   process.env.NEOTOMA_DATA_DIR = tempDir;
   process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
 
-  const moduleUrl = new URL("../../repositories/sqlite/sqlite_client.js", import.meta.url).href;
+  const moduleUrl = new URL("../../repositories/db/connection.js", import.meta.url).href;
   const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
   return await import(cacheBustUrl);
 }
@@ -231,8 +231,8 @@ describe("MCP OAuth Service", () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);
       const localAuth = await loadLocalAuthModule(tempDir);
-      localAuth.createLocalAuthUser("local@example.com", "password123");
-      const user = localAuth.getLocalAuthUserByEmail("local@example.com");
+      await localAuth.createLocalAuthUser("local@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("local@example.com");
       if (!user) {
         throw new Error("Local auth user not found in test");
       }
@@ -263,9 +263,9 @@ describe("MCP OAuth Service", () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-renew-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);
       const localAuth = await loadLocalAuthModule(tempDir);
-      const { getSqliteDb } = await loadSqliteClient(tempDir);
-      localAuth.createLocalAuthUser("renew@example.com", "password123");
-      const user = localAuth.getLocalAuthUserByEmail("renew@example.com");
+      const { getDb } = await loadDbConnection(tempDir);
+      await localAuth.createLocalAuthUser("renew@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("renew@example.com");
       if (!user) {
         throw new Error("Local auth user not found in test");
       }
@@ -280,7 +280,7 @@ describe("MCP OAuth Service", () => {
       await oauth.completeLocalAuthorization(request.state, user.id);
       const firstToken = await oauth.getTokenResponseForConnection(connectionId);
 
-      getSqliteDb()
+      await (await getDb())
         .prepare(
           "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
         )
@@ -303,9 +303,9 @@ describe("MCP OAuth Service", () => {
       const oauth = await loadLocalOAuthModule(tempDir);
       const localAuth = await loadLocalAuthModule(tempDir);
       const mcpAuth = await loadLocalMcpAuthModule(tempDir);
-      const { getSqliteDb } = await loadSqliteClient(tempDir);
-      localAuth.createLocalAuthUser("expired@example.com", "password123");
-      const user = localAuth.getLocalAuthUserByEmail("expired@example.com");
+      const { getDb } = await loadDbConnection(tempDir);
+      await localAuth.createLocalAuthUser("expired@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("expired@example.com");
       if (!user) {
         throw new Error("Local auth user not found in test");
       }
@@ -319,7 +319,7 @@ describe("MCP OAuth Service", () => {
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
       const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
-      getSqliteDb()
+      await (await getDb())
         .prepare(
           "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
         )
@@ -339,8 +339,8 @@ describe("MCP OAuth Service", () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-refresh-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);
       const localAuth = await loadLocalAuthModule(tempDir);
-      localAuth.createLocalAuthUser("refresh@example.com", "password123");
-      const user = localAuth.getLocalAuthUserByEmail("refresh@example.com");
+      await localAuth.createLocalAuthUser("refresh@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("refresh@example.com");
       if (!user) {
         throw new Error("Local auth user not found in test");
       }
@@ -372,8 +372,8 @@ describe("MCP OAuth Service", () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-concurrent-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);
       const localAuth = await loadLocalAuthModule(tempDir);
-      localAuth.createLocalAuthUser("concurrent@example.com", "password123");
-      const user = localAuth.getLocalAuthUserByEmail("concurrent@example.com");
+      await localAuth.createLocalAuthUser("concurrent@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("concurrent@example.com");
       if (!user) throw new Error("Local auth user not found in test");
 
       const connectionId = "cursor-local-concurrent";
@@ -409,9 +409,9 @@ describe("MCP OAuth Service", () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-revoked-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);
       const localAuth = await loadLocalAuthModule(tempDir);
-      const { getSqliteDb } = await loadSqliteClient(tempDir);
-      localAuth.createLocalAuthUser("revoked@example.com", "password123");
-      const user = localAuth.getLocalAuthUserByEmail("revoked@example.com");
+      const { getDb } = await loadDbConnection(tempDir);
+      await localAuth.createLocalAuthUser("revoked@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("revoked@example.com");
       if (!user) throw new Error("Local auth user not found in test");
 
       const connectionId = "cursor-local-revoked";
@@ -425,7 +425,7 @@ describe("MCP OAuth Service", () => {
       const firstToken = await oauth.getTokenResponseForConnection(connectionId);
       if (!firstToken.refresh_token) throw new Error("Expected refresh token");
 
-      getSqliteDb()
+      await (await getDb())
         .prepare("UPDATE mcp_oauth_connections SET revoked_at = ? WHERE connection_id = ?")
         .run(new Date().toISOString(), connectionId);
 
@@ -440,9 +440,9 @@ describe("MCP OAuth Service", () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-tunnel-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);
       const localAuth = await loadLocalAuthModule(tempDir);
-      const { getSqliteDb } = await loadSqliteClient(tempDir);
-      localAuth.createLocalAuthUser("tunnel@example.com", "password123");
-      const user = localAuth.getLocalAuthUserByEmail("tunnel@example.com");
+      const { getDb } = await loadDbConnection(tempDir);
+      await localAuth.createLocalAuthUser("tunnel@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("tunnel@example.com");
       if (!user) throw new Error("Local auth user not found in test");
 
       const connectionId = "cursor-local-tunnel-restart";
@@ -455,7 +455,7 @@ describe("MCP OAuth Service", () => {
       await oauth.completeLocalAuthorization(request.state, user.id);
       const firstToken = await oauth.getTokenResponseForConnection(connectionId);
 
-      getSqliteDb()
+      await (await getDb())
         .prepare(
           "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
         )

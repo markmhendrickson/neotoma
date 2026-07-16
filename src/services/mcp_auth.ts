@@ -5,7 +5,7 @@
  */
 
 import { logger } from "../utils/logger.js";
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 import { getLocalAuthUserById } from "./local_auth.js";
 
 export interface ValidatedUser {
@@ -44,12 +44,12 @@ function decodeJWTUnverified(token: string): {
  * @throws Error if token is invalid or expired
  */
 export async function validateSessionToken(token: string): Promise<ValidatedUser> {
-  const db = getSqliteDb();
-  const connection = db
+  const db = await getDb();
+  const connection = (await db
     .prepare(
       "SELECT user_id, access_token_expires_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
     )
-    .get(token) as { user_id?: string; access_token_expires_at?: string } | undefined;
+    .get(token)) as { user_id?: string; access_token_expires_at?: string } | undefined;
 
   if (!connection?.user_id) {
     const decoded = decodeJWTUnverified(token);
@@ -70,7 +70,7 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
     throw new Error("Local session token expired");
   }
 
-  const user = getLocalAuthUserById(connection.user_id);
+  const user = await getLocalAuthUserById(connection.user_id);
   return {
     userId: connection.user_id,
     email: user?.email,

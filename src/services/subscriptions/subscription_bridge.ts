@@ -17,7 +17,7 @@ export async function handleSubstrateEventForSubscriptions(event: SubstrateEvent
     // must never break delivery, so fall back to the ring's own id.
     let durableSeq: number | null = null;
     try {
-      durableSeq = persistSubstrateEvent(event, null);
+      durableSeq = await persistSubstrateEvent(event, null);
     } catch (err) {
       logger.warn("[subscriptions] durable event persist failed", {
         message: err instanceof Error ? err.message : String(err),

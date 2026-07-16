@@ -23,7 +23,7 @@ describe("@neotoma/agent turn lifecycle (LocalTransport)", () => {
   let userId: string;
 
   beforeAll(async () => {
-    const localUser = ensureLocalDevUser();
+    const localUser = await ensureLocalDevUser();
     userId = localUser.id;
     const operations = createOperations({ userId });
     transport = new LocalTransport({ userId, operations });

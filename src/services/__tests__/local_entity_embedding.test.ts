@@ -7,7 +7,8 @@ import {
   searchLocalEntityEmbeddings,
   ensureSqliteVecLoaded,
 } from "../local_entity_embedding.js";
-import { getSqliteDb } from "../../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../repositories/db/connection.js";
+import { AsyncSqliteDatabase } from "../../repositories/sqlite/sqlite_driver.js";
 
 const EMBEDDING_DIM = 1536;
 
@@ -19,17 +20,17 @@ function makeEmbedding(seed = 0): number[] {
 }
 
 describe("local_entity_embedding", () => {
-  beforeEach(() => {
-    const db = getSqliteDb();
+  beforeEach(async () => {
+    const db = await getDb();
     try {
-      db.exec("DELETE FROM entity_embedding_rows");
+      await db.exec("DELETE FROM entity_embedding_rows");
     } catch {
       // Table may not exist
     }
   });
 
   describe("storeLocalEntityEmbedding", () => {
-    it("returns without throwing when sqlite-vec loads", () => {
+    it("returns without throwing when sqlite-vec loads", async () => {
       const row = {
         entity_id: "ent_test_store_1",
         embedding: makeEmbedding(1),
@@ -37,33 +38,33 @@ describe("local_entity_embedding", () => {
         entity_type: "contact",
         merged: false,
       };
-      expect(() => storeLocalEntityEmbedding(row)).not.toThrow();
+      await expect(storeLocalEntityEmbedding(row)).resolves.toBeUndefined();
     });
 
-    it("ignores rows with wrong embedding dimension", () => {
+    it("ignores rows with wrong embedding dimension", async () => {
       const row = {
         entity_id: "ent_bad_dim",
         embedding: [1, 2, 3],
         user_id: "user_test",
         entity_type: "contact",
       };
-      expect(() => storeLocalEntityEmbedding(row)).not.toThrow();
+      await expect(storeLocalEntityEmbedding(row)).resolves.toBeUndefined();
     });
 
-    it("ignores rows with null embedding", () => {
+    it("ignores rows with null embedding", async () => {
       const row = {
         entity_id: "ent_null",
         embedding: null,
         user_id: "user_test",
         entity_type: "contact",
       };
-      expect(() => storeLocalEntityEmbedding(row)).not.toThrow();
+      await expect(storeLocalEntityEmbedding(row)).resolves.toBeUndefined();
     });
   });
 
   describe("searchLocalEntityEmbeddings", () => {
-    it("returns empty array when no embeddings", () => {
-      const result = searchLocalEntityEmbeddings({
+    it("returns empty array when no embeddings", async () => {
+      const result = await searchLocalEntityEmbeddings({
         queryEmbedding: makeEmbedding(0),
         userId: "user_test",
         includeMerged: false,
@@ -74,8 +75,8 @@ describe("local_entity_embedding", () => {
       expect(result.total).toBe(0);
     });
 
-    it("returns stored entity after store when sqlite-vec works", () => {
-      storeLocalEntityEmbedding({
+    it("returns stored entity after store when sqlite-vec works", async () => {
+      await storeLocalEntityEmbedding({
         entity_id: "ent_search_1",
         embedding: makeEmbedding(5),
         user_id: "user_test",
@@ -83,7 +84,7 @@ describe("local_entity_embedding", () => {
         merged: false,
       });
 
-      const result = searchLocalEntityEmbeddings({
+      const result = await searchLocalEntityEmbeddings({
         queryEmbedding: makeEmbedding(5),
         userId: "user_test",
         includeMerged: false,
@@ -100,9 +101,12 @@ describe("local_entity_embedding", () => {
   });
 
   describe("ensureSqliteVecLoaded", () => {
-    it("returns boolean and does not throw", () => {
-      const db = getSqliteDb();
-      const loaded = ensureSqliteVecLoaded(db);
+    it("returns boolean and does not throw", async () => {
+      const db = await getDb();
+      // sqlite-vec needs the raw synchronous handle; backends without one
+      // (e.g. libSQL) degrade the same way as a failed extension load.
+      if (!(db instanceof AsyncSqliteDatabase)) return;
+      const loaded = ensureSqliteVecLoaded(db.rawDb());
       expect(typeof loaded).toBe("boolean");
     });
   });
