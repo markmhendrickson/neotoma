@@ -105,7 +105,11 @@ const stripMetadata = workerData.stripRowMetadata
 parentPort.on("message", (msg) => {
   try {
     let result;
-    if (msg.op === "run") {
+    if (msg.sql === "__crash__") {
+      // Test-only hook: simulate a hard worker crash so supervised-restart is
+      // exercisable. Never issued by production code paths.
+      process.exit(1);
+    } else if (msg.op === "run") {
       const r = db.prepare(msg.sql).run(...msg.params);
       result = { changes: Number(r.changes ?? 0), lastInsertRowid: r.lastInsertRowid };
     } else if (msg.op === "get") {
@@ -142,28 +146,53 @@ type WorkerReply = {
   error?: { message: string; code?: string; errno?: number };
 };
 
+/**
+ * Thrown when a worker dies (crash or unexpected `exit`) with requests still in
+ * flight. The requests that were mid-execution reject with this — the caller
+ * can't know whether a mutating statement committed, so it is surfaced rather
+ * than silently retried. The connection self-heals: the next request spawns a
+ * fresh worker.
+ */
+export class WorkerDbCrashError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkerDbCrashError";
+  }
+}
+
 class WorkerConnection {
-  private worker: Worker;
+  private worker: Worker | null = null;
   private nextId = 1;
   private pending = new Map<
     number,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
   >();
+  private closed = false;
 
-  constructor(options: {
-    dbPath: string;
-    readonly: boolean;
-    busyTimeoutMs: number;
-    driverPath: string | null;
-    useNodeSqlite: boolean;
-    stripRowMetadata: boolean;
-  }) {
-    this.worker = new Worker(WORKER_SOURCE, { eval: true, workerData: options });
-    this.worker.on("message", (reply: WorkerReply) => {
+  constructor(
+    private readonly options: {
+      dbPath: string;
+      readonly: boolean;
+      busyTimeoutMs: number;
+      driverPath: string | null;
+      useNodeSqlite: boolean;
+      stripRowMetadata: boolean;
+    }
+  ) {}
+
+  /**
+   * Spawn (or respawn) the worker and wire its lifecycle. Lazy: a crashed
+   * worker is only recreated when the next request arrives, so a permanently
+   * failing DB doesn't spin in a respawn loop while idle.
+   */
+  private ensureWorker(): Worker {
+    if (this.worker) return this.worker;
+    const worker = new Worker(WORKER_SOURCE, { eval: true, workerData: this.options });
+    worker.on("message", (reply: WorkerReply) => {
       const entry = this.pending.get(reply.id);
       if (!entry) return;
       this.pending.delete(reply.id);
-      if (this.pending.size === 0) this.worker.unref();
+      if (this.pending.size === 0) worker.unref();
       if (reply.ok) {
         entry.resolve(reply.result);
       } else {
@@ -176,12 +205,30 @@ class WorkerConnection {
         entry.reject(error);
       }
     });
-    this.worker.on("error", (error) => {
-      for (const entry of this.pending.values()) entry.reject(error as Error);
-      this.pending.clear();
+    worker.on("error", (error) => {
+      this.failInFlight(error instanceof Error ? error : new Error(String(error)));
     });
-    // Never keep the process alive just for an idle DB worker.
-    this.worker.unref();
+    // A crashed or self-exited worker fires `exit` with a non-zero code. Without
+    // this handler, `postMessage` after a crash would enqueue a request that
+    // never settles — a permanent hang. Reject everything in flight and drop the
+    // handle so the next request respawns.
+    worker.on("exit", (code) => {
+      if (this.worker !== worker) return; // already replaced (normal terminate)
+      if (code !== 0 && !this.closed) {
+        this.failInFlight(new WorkerDbCrashError(`DB worker exited unexpectedly (code ${code})`));
+      }
+      this.worker = null;
+    });
+    worker.unref();
+    this.worker = worker;
+    return worker;
+  }
+
+  /** Reject all in-flight requests and drop the dead worker handle. */
+  private failInFlight(error: Error): void {
+    for (const entry of this.pending.values()) entry.reject(error);
+    this.pending.clear();
+    this.worker = null;
   }
 
   request(
@@ -189,17 +236,24 @@ class WorkerConnection {
     sql: string,
     params: unknown[] = []
   ): Promise<unknown> {
+    if (this.closed) {
+      return Promise.reject(new WorkerDbCrashError("DB connection is closed"));
+    }
+    const worker = this.ensureWorker();
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       // Hold the process open while a request is in flight.
-      this.worker.ref();
-      this.worker.postMessage({ id, op, sql, params });
+      worker.ref();
+      worker.postMessage({ id, op, sql, params });
     });
   }
 
   async terminate(): Promise<void> {
-    await this.worker.terminate();
+    this.closed = true;
+    const worker = this.worker;
+    this.worker = null;
+    if (worker) await worker.terminate();
   }
 }
 
@@ -252,6 +306,7 @@ export class WorkerFileDatabase implements DbDatabase {
   private writer: WorkerConnection | null = null;
   private readers: WorkerConnection[] = [];
   private nextReader = 0;
+  private closed = false;
   private readonly gate = new TransactionGate();
   private readonly txContext = new AsyncLocalStorage<boolean>();
 
@@ -273,6 +328,9 @@ export class WorkerFileDatabase implements DbDatabase {
   }
 
   private writerConnection(): WorkerConnection {
+    if (this.closed) {
+      throw new WorkerDbCrashError("DB connection is closed");
+    }
     if (!this.writer) {
       this.writer = new WorkerConnection({
         dbPath: this.dbPath,
@@ -287,6 +345,9 @@ export class WorkerFileDatabase implements DbDatabase {
   }
 
   private readerConnection(): WorkerConnection {
+    if (this.closed) {
+      throw new WorkerDbCrashError("DB connection is closed");
+    }
     if (this.readerCount === 0) return this.writerConnection();
     if (this.readers.length < this.readerCount) {
       this.readers.push(
@@ -336,6 +397,16 @@ export class WorkerFileDatabase implements DbDatabase {
     }
   }
 
+  /**
+   * @internal Test-only: force the writer or a reader worker to crash, to
+   * exercise the supervised-restart path. Returns the promise that rejects with
+   * the crash error. Never called by production code.
+   */
+  __crashWorkerForTest(which: "writer" | "reader"): Promise<unknown> {
+    const conn = which === "writer" ? this.writerConnection() : this.readerConnection();
+    return conn.request("run", "__crash__", []);
+  }
+
   prepare(sql: string): DbStatement {
     return new WorkerStatement(this, sql);
   }
@@ -372,6 +443,7 @@ export class WorkerFileDatabase implements DbDatabase {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
     const connections = [this.writer, ...this.readers].filter(
       (c): c is WorkerConnection => c !== null
     );
