@@ -19,14 +19,15 @@ export function installSubscriptionBridge(): void {
   // Durable event-log retention (#1464 Tier 2): prune on startup and on a slow
   // interval. Best-effort — a prune failure must never affect delivery.
   const runPrune = (): void => {
-    try {
-      const removed = pruneEventLog();
-      if (removed > 0) logger.info("[subscriptions] pruned durable event log", { removed });
-    } catch (err) {
-      logger.warn("[subscriptions] event-log prune failed", {
-        message: err instanceof Error ? err.message : String(err),
+    void pruneEventLog()
+      .then((removed) => {
+        if (removed > 0) logger.info("[subscriptions] pruned durable event log", { removed });
+      })
+      .catch((err: unknown) => {
+        logger.warn("[subscriptions] event-log prune failed", {
+          message: err instanceof Error ? err.message : String(err),
+        });
       });
-    }
   };
   runPrune();
   const timer = setInterval(runPrune, EVENT_LOG_PRUNE_INTERVAL_MS);

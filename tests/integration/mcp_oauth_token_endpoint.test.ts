@@ -34,8 +34,8 @@ describe("MCP OAuth token endpoint", () => {
   it("accepts refresh_token grant for local OAuth sessions", async () => {
     currentTempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-token-endpoint-${Date.now()}`);
     const { oauth, localAuth, app } = await loadLocalModules(currentTempDir);
-    localAuth.createLocalAuthUser("token-endpoint@example.com", "password123");
-    const user = localAuth.getLocalAuthUserByEmail("token-endpoint@example.com");
+    await localAuth.createLocalAuthUser("token-endpoint@example.com", "password123");
+    const user = await localAuth.getLocalAuthUserByEmail("token-endpoint@example.com");
     if (!user) {
       throw new Error("Local auth user not found in test");
     }

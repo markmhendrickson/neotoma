@@ -78,7 +78,7 @@ export async function upsertEntitySnapshotWithEmbedding(
     .from("entity_snapshots")
     .upsert(payload as Record<string, unknown>, { onConflict: "entity_id" });
   if (config.storageBackend === "local" && row.embedding) {
-    storeLocalEntityEmbedding({
+    await storeLocalEntityEmbedding({
       entity_id: row.entity_id,
       embedding: row.embedding,
       user_id: row.user_id,

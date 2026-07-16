@@ -10,7 +10,7 @@
  * the view is always live.
  */
 
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 import { deriveAgentKey } from "./agent_key.js";
 import {
   listRecentRecordActivity,
@@ -225,10 +225,10 @@ function minIso(a: string | null, b: string | null): string | null {
   return a <= b ? a : b;
 }
 
-function fetchAgentRows(userId: string): AgentRow[] {
-  const db = getSqliteDb();
+async function fetchAgentRows(userId: string): Promise<AgentRow[]> {
+  const db = await getDb();
   const stmt = db.prepare(AGENT_ROWS_SQL);
-  return stmt.all(userId, userId, userId, userId, userId) as AgentRow[];
+  return (await stmt.all(userId, userId, userId, userId, userId)) as AgentRow[];
 }
 
 function aggregate(rows: AgentRow[]): Map<string, AgentDirectoryEntry> {
@@ -320,8 +320,8 @@ function aggregate(rows: AgentRow[]): Map<string, AgentDirectoryEntry> {
 }
 
 /** List every agent that has written something for this user. */
-export function listAgents(userId: string): ListAgentsResult {
-  const rows = fetchAgentRows(userId);
+export async function listAgents(userId: string): Promise<ListAgentsResult> {
+  const rows = await fetchAgentRows(userId);
   const byKey = aggregate(rows);
   const agents = [...byKey.values()].sort((a, b) => {
     const lb = b.last_seen_at ?? "";
@@ -332,8 +332,11 @@ export function listAgents(userId: string): ListAgentsResult {
 }
 
 /** Fetch a single agent by key; `null` when the key is unknown. */
-export function getAgent(userId: string, agentKey: string): AgentDirectoryEntry | null {
-  const rows = fetchAgentRows(userId).filter(
+export async function getAgent(
+  userId: string,
+  agentKey: string
+): Promise<AgentDirectoryEntry | null> {
+  const rows = (await fetchAgentRows(userId)).filter(
     (r) =>
       deriveAgentKey({
         agent_thumbprint: r.agent_thumbprint,
@@ -357,6 +360,6 @@ export function listAgentRecords(
   agentKey: string,
   limit: number,
   offset: number
-): { items: RecordActivityItem[]; has_more: boolean; limit: number; offset: number } {
+): Promise<{ items: RecordActivityItem[]; has_more: boolean; limit: number; offset: number }> {
   return listRecentRecordActivity(userId, { limit, offset, agentKey });
 }

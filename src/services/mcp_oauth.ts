@@ -9,7 +9,7 @@ import { getServiceRoleClient, db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
-import { clearSqliteCache, getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { clearDbCache, getDb } from "../repositories/db/connection.js";
 import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
 
 // Cached service role client instance
@@ -113,9 +113,9 @@ function generateLocalToken(prefix: string): string {
   return `${prefix}_${randomBytes(16).toString("hex")}`;
 }
 
-function getLocalOAuthState(state: string): LocalOAuthStateRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalOAuthState(state: string): Promise<LocalOAuthStateRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE state = ?"
     )
@@ -123,9 +123,11 @@ function getLocalOAuthState(state: string): LocalOAuthStateRow | null {
   return row ? (row as LocalOAuthStateRow) : null;
 }
 
-function getLocalOAuthStateForConnection(connectionId: string): LocalOAuthStateRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalOAuthStateForConnection(
+  connectionId: string
+): Promise<LocalOAuthStateRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE connection_id = ?"
     )
@@ -133,25 +135,25 @@ function getLocalOAuthStateForConnection(connectionId: string): LocalOAuthStateR
   return row ? (row as LocalOAuthStateRow) : null;
 }
 
-function deleteLocalOAuthState(state: string): void {
-  const db = getSqliteDb();
-  db.prepare("DELETE FROM mcp_oauth_state WHERE state = ?").run(state);
+async function deleteLocalOAuthState(state: string): Promise<void> {
+  const db = await getDb();
+  await db.prepare("DELETE FROM mcp_oauth_state WHERE state = ?").run(state);
 }
 
-function cleanupExpiredLocalStates(): void {
+async function cleanupExpiredLocalStates(): Promise<void> {
   try {
-    const db = getSqliteDb();
-    db.prepare("DELETE FROM mcp_oauth_state WHERE expires_at < ?").run(nowIso());
+    const db = await getDb();
+    await db.prepare("DELETE FROM mcp_oauth_state WHERE expires_at < ?").run(nowIso());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(
       `[MCP OAuth] Local state cleanup failed (sqlitePath=${config.sqlitePath}): ${msg}. Clearing DB cache so next use will recreate the file if missing.`
     );
-    clearSqliteCache();
+    clearDbCache();
   }
 }
 
-function insertLocalOAuthState(payload: {
+async function insertLocalOAuthState(payload: {
   state: string;
   codeVerifier: string;
   codeChallenge: string | null;
@@ -160,28 +162,30 @@ function insertLocalOAuthState(payload: {
   clientState?: string | null;
   finalRedirectUri?: string | null;
   expiresAt: string;
-}): void {
-  const db = getSqliteDb();
+}): Promise<void> {
+  const db = await getDb();
   const id = randomUUID();
-  db.prepare(
-    "INSERT INTO mcp_oauth_state (id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(
-    id,
-    payload.state,
-    payload.codeVerifier,
-    payload.codeChallenge,
-    payload.connectionId,
-    payload.redirectUri,
-    payload.clientState ?? null,
-    nowIso(),
-    payload.expiresAt,
-    payload.finalRedirectUri ?? null
-  );
+  await db
+    .prepare(
+      "INSERT INTO mcp_oauth_state (id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(
+      id,
+      payload.state,
+      payload.codeVerifier,
+      payload.codeChallenge,
+      payload.connectionId,
+      payload.redirectUri,
+      payload.clientState ?? null,
+      nowIso(),
+      payload.expiresAt,
+      payload.finalRedirectUri ?? null
+    );
 }
 
-function getLocalConnectionById(connectionId: string): LocalConnectionRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalConnectionById(connectionId: string): Promise<LocalConnectionRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL"
     )
@@ -189,9 +193,11 @@ function getLocalConnectionById(connectionId: string): LocalConnectionRow | null
   return row ? (row as LocalConnectionRow) : null;
 }
 
-function getLocalConnectionByAccessToken(accessToken: string): LocalConnectionRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalConnectionByAccessToken(
+  accessToken: string
+): Promise<LocalConnectionRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
     )
@@ -199,9 +205,11 @@ function getLocalConnectionByAccessToken(accessToken: string): LocalConnectionRo
   return row ? (row as LocalConnectionRow) : null;
 }
 
-function getLocalConnectionByRefreshToken(refreshToken: string): LocalConnectionRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalConnectionByRefreshToken(
+  refreshToken: string
+): Promise<LocalConnectionRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL"
     )
@@ -209,59 +217,64 @@ function getLocalConnectionByRefreshToken(refreshToken: string): LocalConnection
   return row ? (row as LocalConnectionRow) : null;
 }
 
-function upsertLocalConnection(payload: {
+async function upsertLocalConnection(payload: {
   userId: string;
   connectionId: string;
   refreshToken: string;
   accessToken: string;
   accessTokenExpiresAt: string;
   clientName?: string | null;
-}): void {
-  const db = getSqliteDb();
-  const existing = getLocalConnectionById(payload.connectionId);
+}): Promise<void> {
+  const db = await getDb();
+  const existing = await getLocalConnectionById(payload.connectionId);
   if (existing) {
-    db.prepare(
-      "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL WHERE connection_id = ?"
-    ).run(
+    await db
+      .prepare(
+        "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL WHERE connection_id = ?"
+      )
+      .run(
+        payload.userId,
+        payload.refreshToken,
+        payload.accessToken,
+        payload.accessTokenExpiresAt,
+        payload.clientName ?? null,
+        nowIso(),
+        payload.connectionId
+      );
+    return;
+  }
+  await db
+    .prepare(
+      "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(
+      randomUUID(),
       payload.userId,
+      payload.connectionId,
       payload.refreshToken,
       payload.accessToken,
       payload.accessTokenExpiresAt,
       payload.clientName ?? null,
       nowIso(),
-      payload.connectionId
+      nowIso(),
+      null
     );
-    return;
-  }
-  db.prepare(
-    "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(
-    randomUUID(),
-    payload.userId,
-    payload.connectionId,
-    payload.refreshToken,
-    payload.accessToken,
-    payload.accessTokenExpiresAt,
-    payload.clientName ?? null,
-    nowIso(),
-    nowIso(),
-    null
-  );
 }
 
-function updateLocalConnectionLastUsed(connectionId: string): void {
-  const db = getSqliteDb();
-  db.prepare("UPDATE mcp_oauth_connections SET last_used_at = ? WHERE connection_id = ?").run(
-    nowIso(),
-    connectionId
-  );
+async function updateLocalConnectionLastUsed(connectionId: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .prepare("UPDATE mcp_oauth_connections SET last_used_at = ? WHERE connection_id = ?")
+    .run(nowIso(), connectionId);
 }
 
-function revokeLocalConnection(connectionId: string, userId: string): void {
-  const db = getSqliteDb();
-  db.prepare(
-    "UPDATE mcp_oauth_connections SET revoked_at = ? WHERE connection_id = ? AND user_id = ?"
-  ).run(nowIso(), connectionId, userId);
+async function revokeLocalConnection(connectionId: string, userId: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .prepare(
+      "UPDATE mcp_oauth_connections SET revoked_at = ? WHERE connection_id = ? AND user_id = ?"
+    )
+    .run(nowIso(), connectionId, userId);
 }
 
 /**
@@ -505,14 +518,16 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
     try {
       if (isLocalBackend) {
         const localClientId = "local_mcp_oauth_client";
-        const db = getSqliteDb();
-        const existing = db
+        const db = await getDb();
+        const existing = await db
           .prepare("SELECT id, client_id FROM mcp_oauth_client_state WHERE client_id = ?")
           .get(localClientId);
         if (!existing) {
-          db.prepare(
-            "INSERT INTO mcp_oauth_client_state (id, client_id, redirect_uri, created_at) VALUES (?, ?, ?, ?)"
-          ).run(randomUUID(), localClientId, redirectUri, nowIso());
+          await db
+            .prepare(
+              "INSERT INTO mcp_oauth_client_state (id, client_id, redirect_uri, created_at) VALUES (?, ?, ?, ?)"
+            )
+            .run(randomUUID(), localClientId, redirectUri, nowIso());
         }
         cachedClientId = localClientId;
         cachedRedirectUri = redirectUri;
@@ -775,7 +790,7 @@ export async function createAuthUrl(
 async function cleanupExpiredStates(): Promise<void> {
   try {
     if (isLocalBackend) {
-      cleanupExpiredLocalStates();
+      await cleanupExpiredLocalStates();
       return;
     }
 
@@ -926,7 +941,7 @@ export async function initiateOAuthFlow(
   const finalRedirectUri = redirectUri ?? `${frontendBase}/oauth`;
 
   if (isLocalBackend) {
-    insertLocalOAuthState({
+    await insertLocalOAuthState({
       state,
       codeVerifier,
       codeChallenge,
@@ -1027,7 +1042,7 @@ export async function createLocalAuthorizationRequest(params: {
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
   const codeVerifier = params.codeVerifier ?? generatePKCE().codeVerifier;
 
-  insertLocalOAuthState({
+  await insertLocalOAuthState({
     state,
     codeVerifier,
     codeChallenge: params.codeChallenge,
@@ -1057,14 +1072,14 @@ export async function completeLocalAuthorization(
   }
 
   validateState(state);
-  const stateData = getLocalOAuthState(state);
+  const stateData = await getLocalOAuthState(state);
   if (!stateData) {
     throw createOAuthError.stateInvalid(
       "This authorization link has expired or was already used. If you have not used it before, more than one server instance may be running and state was stored on a different instance. Use a single instance or enable sticky sessions for /mcp/oauth so the same instance handles the full flow. Otherwise, click Connect again in Cursor to start a new authorization."
     );
   }
 
-  deleteLocalOAuthState(state);
+  await deleteLocalOAuthState(state);
 
   if (new Date(stateData.expires_at) < new Date()) {
     throw createOAuthError.stateExpired(state);
@@ -1079,7 +1094,7 @@ export async function completeLocalAuthorization(
   const encryptedRefreshToken = encryptRefreshTokenForStorage(tokens.refreshToken);
   const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
-  upsertLocalConnection({
+  await upsertLocalConnection({
     userId,
     connectionId: stateData.connection_id,
     refreshToken: encryptedRefreshToken,
@@ -1392,7 +1407,7 @@ export async function getAccessTokenForConnection(
   validateConnectionId(connectionId);
 
   if (isLocalBackend) {
-    const connection = getLocalConnectionById(connectionId);
+    const connection = await getLocalConnectionById(connectionId);
     if (!connection) {
       logger.error(
         `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
@@ -1405,7 +1420,7 @@ export async function getAccessTokenForConnection(
       connection.access_token_expires_at &&
       new Date(connection.access_token_expires_at).getTime() - Date.now() > TOKEN_REFRESH_BUFFER_MS
     ) {
-      updateLocalConnectionLastUsed(connectionId);
+      await updateLocalConnectionLastUsed(connectionId);
       return {
         accessToken: connection.access_token,
         userId: connection.user_id,
@@ -1421,7 +1436,7 @@ export async function getAccessTokenForConnection(
 
     const accessToken = generateLocalToken("local_access");
     const expiresAt = new Date(Date.now() + 3600 * 1000);
-    upsertLocalConnection({
+    await upsertLocalConnection({
       userId: connection.user_id,
       connectionId,
       refreshToken: connection.refresh_token,
@@ -1513,7 +1528,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
   }
 
   if (isLocalBackend) {
-    const connection = getLocalConnectionByRefreshToken(refreshToken);
+    const connection = await getLocalConnectionByRefreshToken(refreshToken);
     if (!connection) {
       throw createOAuthError.connectionNotFound("Connection not found for refresh token");
     }
@@ -1529,7 +1544,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
 
     const accessToken = generateLocalToken("local_access");
     const expiresAt = new Date(Date.now() + 3600 * 1000);
-    upsertLocalConnection({
+    await upsertLocalConnection({
       userId: connection.user_id,
       connectionId: connection.connection_id,
       refreshToken: connection.refresh_token,
@@ -1625,7 +1640,7 @@ export async function getTokenResponseForConnection(
 
   const { accessToken } = await getAccessTokenForConnection(connectionId);
   if (isLocalBackend) {
-    const connection = getLocalConnectionById(connectionId);
+    const connection = await getLocalConnectionById(connectionId);
     const expiresAt = connection?.access_token_expires_at
       ? new Date(connection.access_token_expires_at).getTime()
       : Date.now() + 3600 * 1000;
@@ -1691,7 +1706,7 @@ export async function validateTokenAndGetConnectionId(
   accessToken: string
 ): Promise<{ connectionId: string; userId: string }> {
   if (isLocalBackend) {
-    const connection = getLocalConnectionByAccessToken(accessToken);
+    const connection = await getLocalConnectionByAccessToken(accessToken);
     if (!connection) {
       throw createOAuthError.connectionNotFound("Connection not found for access token");
     }
@@ -1749,11 +1764,11 @@ export async function getConnectionStatus(
   validateConnectionId(connectionId);
 
   if (isLocalBackend) {
-    const connection = getLocalConnectionById(connectionId);
+    const connection = await getLocalConnectionById(connectionId);
     if (connection) {
       return connection.revoked_at ? "expired" : "active";
     }
-    const state = getLocalOAuthStateForConnection(connectionId);
+    const state = await getLocalOAuthStateForConnection(connectionId);
     if (state) {
       return new Date(state.expires_at) > new Date() ? "pending" : "expired";
     }
@@ -1811,8 +1826,8 @@ export async function listConnections(userId: string): Promise<
   }>
 > {
   if (isLocalBackend) {
-    const db = getSqliteDb();
-    const rows = db
+    const db = await getDb();
+    const rows = await db
       .prepare(
         "SELECT connection_id, client_name, created_at, last_used_at FROM mcp_oauth_connections WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC"
       )
@@ -1870,7 +1885,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
   validateConnectionId(connectionId);
 
   if (isLocalBackend) {
-    revokeLocalConnection(connectionId, userId);
+    await revokeLocalConnection(connectionId, userId);
     logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
     auditLog("connection_revoked", {
       connectionId,

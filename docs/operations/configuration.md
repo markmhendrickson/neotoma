@@ -29,6 +29,10 @@ Resolution order for the data directory and variables: a project-local `.env`, t
 | `NEOTOMA_ENV` | `development` or `production` | `development` |
 | `NEOTOMA_DATA_DIR` | Root data directory | local `data/` |
 | `NEOTOMA_SQLITE_PATH` | Explicit database file path | `{dataDir}/neotoma.db` (dev) |
+| `NEOTOMA_DB_BACKEND` | DB driver: `sqlite` (synchronous, zero-config) or `libsql` (concurrent — statements run off the event loop via worker-hosted driver for local files, or @libsql/client for remote sqld/Turso, so slow queries can't freeze the server; recommended for hosted/agent-heavy/shared instances) | `sqlite` |
+| `NEOTOMA_DB_URL` | libsql connection URL (`file:` for embedded local, `http(s)://`/`libsql://` for remote sqld/Turso) | `file:{NEOTOMA_SQLITE_PATH}` |
+| `NEOTOMA_DB_AUTH_TOKEN` | Auth token for remote libsql connections | unset |
+| `NEOTOMA_DB_READER_WORKERS` | Read-only worker connections for the local `libsql` backend (WAL lets them run concurrently with the writer) | `2` |
 | `NEOTOMA_RAW_STORAGE_DIR` | Content-addressed source files | `{dataDir}/sources` |
 | `NEOTOMA_LOGS_DIR` / `NEOTOMA_EVENT_LOG_PATH` | Log directory and event log file | under `{dataDir}/logs` |
 | `NEOTOMA_HOST_URL` / `NEOTOMA_PUBLIC_BASE_URL` | Public URL of this instance | auto-discovered or unset |

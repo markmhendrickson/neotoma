@@ -10,40 +10,40 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { getSqliteDb } from "../../src/repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../src/repositories/db/connection.js";
 
 describe("relationship_snapshots traversal indexes (#1467)", () => {
-  it("creates the source and target composite indexes", () => {
-    const db = getSqliteDb();
-    const rows = db
+  it("creates the source and target composite indexes", async () => {
+    const db = await getDb();
+    const rows = (await db
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'relationship_snapshots'"
       )
-      .all() as Array<{ name: string }>;
+      .all()) as Array<{ name: string }>;
     const names = rows.map((r) => r.name);
     expect(names).toContain("idx_rel_snapshots_source_user");
     expect(names).toContain("idx_rel_snapshots_target_user");
   });
 
-  it("uses the source index for an outbound-hop query (not a full scan)", () => {
-    const db = getSqliteDb();
-    const plan = db
+  it("uses the source index for an outbound-hop query (not a full scan)", async () => {
+    const db = await getDb();
+    const plan = (await db
       .prepare(
         "EXPLAIN QUERY PLAN SELECT * FROM relationship_snapshots WHERE source_entity_id = ? AND user_id = ?"
       )
-      .all("ent_x", "user_y") as Array<{ detail: string }>;
+      .all("ent_x", "user_y")) as Array<{ detail: string }>;
     const detail = plan.map((p) => p.detail).join(" ");
     expect(detail).toMatch(/USING INDEX idx_rel_snapshots_source_user/);
     expect(detail).not.toMatch(/SCAN relationship_snapshots\b(?!.*USING INDEX)/);
   });
 
-  it("uses the target index for an inbound-hop query (not a full scan)", () => {
-    const db = getSqliteDb();
-    const plan = db
+  it("uses the target index for an inbound-hop query (not a full scan)", async () => {
+    const db = await getDb();
+    const plan = (await db
       .prepare(
         "EXPLAIN QUERY PLAN SELECT * FROM relationship_snapshots WHERE target_entity_id = ? AND user_id = ?"
       )
-      .all("ent_x", "user_y") as Array<{ detail: string }>;
+      .all("ent_x", "user_y")) as Array<{ detail: string }>;
     const detail = plan.map((p) => p.detail).join(" ");
     expect(detail).toMatch(/USING INDEX idx_rel_snapshots_target_user/);
   });
