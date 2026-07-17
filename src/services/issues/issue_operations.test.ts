@@ -523,6 +523,8 @@ describe("Issue Operations (Neotoma-canonical)", () => {
               title: "Guest issue",
               body: "Guest body",
               visibility: "private",
+              // Reporter provenance is required on the guest path too (#1953).
+              reporter_app_version: "0.0.0-test",
             })
         );
 
