@@ -107,6 +107,7 @@ Both envelopes are declared in `openapi.yaml` `components/schemas`. Any new fiel
 | `VALIDATION_MISSING_FIELD` | Required field missing | 400 | No |
 | `VALIDATION_INVALID_FORMAT` | Invalid field format | 400 | No |
 | `ERR_UNKNOWN_FIELD` | Request body contained a top-level field not declared by the operation's closed schema (`additionalProperties: false`). `details` carries `unknown_fields`, `json_paths`, `allowed_fields`, and `operation`. | 400 | No |
+| `CURSOR_OFFSET_CONFLICT` | CLI-only (`neotoma entities list`): `--cursor` and `--offset` were both supplied explicitly. They are mutually exclusive ways to state where a page starts, so the CLI rejects the pair rather than silently dropping one. Surfaced as `hint.code` in `--json` output. The equivalent server-side rejection is `VALIDATION_INVALID_FORMAT`. | n/a (CLI) | No |
 | `INVALID_CURSOR` | Pagination `cursor` is malformed, carries an unsupported version, or was minted under a different `sort_order` than the current request (#1943). `details` carries `code`, `message`, and a flat `hint`. Not retryable with the same token: drop the cursor and restart the walk from the first page. | 400 | No |
 ### Resource Errors
 | Code | Meaning | HTTP | Retry? |

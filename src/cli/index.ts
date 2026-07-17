@@ -12227,9 +12227,19 @@ entitiesCommand
     // to surface.
     const offsetWasSupplied = cmd.getOptionValueSource("offset") === "cli";
     if (opts.cursor && offsetWasSupplied) {
-      throw new Error(
+      // Structured, not a bare Error: every other rejection this feature adds
+      // (INVALID_CURSOR, the offset-depth and snapshot-page caps, the server-side
+      // cursor+offset check) carries a machine-readable `code`. An agent driving
+      // `--json` and branching on `hint.code` — which the MCP/REST docs teach it
+      // to do — must get the same contract here rather than prose on stderr.
+      throw new CliHintError(
         "--cursor and --offset cannot be combined; use one or the other. " +
-          "Prefer --cursor: it pages in constant time at any depth."
+          "Prefer --cursor: it pages in constant time at any depth.",
+        {
+          code: "CURSOR_OFFSET_CONFLICT",
+          message: "cursor and offset are mutually exclusive ways to say where to start",
+          hint: "Drop --offset and page with --cursor: read next_cursor from the previous response and pass it back.",
+        }
       );
     }
 

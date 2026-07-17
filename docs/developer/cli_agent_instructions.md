@@ -130,12 +130,34 @@ Use narrow queries first, then expand only if needed.
 
 **Deep pagination:** use `--cursor`, not `--offset`. Offset paging re-scans every prior row, so deep pages get slower the further you go and are rejected past a bounded depth (2000). Pass the `next_cursor` from the previous response to `--cursor` to page in constant time at any depth:
 
+A full walk, including the error branch — this is the canonical shape:
+
 ```bash
-neotoma entities list --type contact --limit 100 --json          # → { "entities": [...], "next_cursor": "eyJ2..." }
-neotoma entities list --type contact --limit 100 --cursor eyJ2...  # next page
+cursor=""
+while :; do
+  if [ -z "$cursor" ]; then
+    out=$(neotoma entities list --type contact --limit 100 --json)
+  else
+    out=$(neotoma entities list --type contact --limit 100 --cursor "$cursor" --json)
+  fi
+
+  # Every rejection carries a machine-readable code — branch on it, never on prose.
+  code=$(jq -r '.hint.code // empty' <<<"$out")
+  case "$code" in
+    INVALID_CURSOR)          cursor=""; continue ;;  # stale/malformed token: restart the walk
+    CURSOR_OFFSET_CONFLICT)  echo "bug: passed --offset alongside --cursor" >&2; exit 1 ;;
+    "")                      : ;;                     # no error
+    *)                       echo "unexpected: $code" >&2; exit 1 ;;
+  esac
+
+  jq -c '.entities[]' <<<"$out"                       # ... process the page ...
+
+  cursor=$(jq -r '.next_cursor // empty' <<<"$out")
+  [ -z "$cursor" ] && break                           # absent next_cursor = listing exhausted
+done
 ```
 
-Treat the cursor as opaque and pass it back verbatim. It is absent from the response once the listing is exhausted. Only valid with the default `entity_id` sort; cannot be combined with `--offset` or `--search`. If a cursor is rejected (`INVALID_CURSOR`), drop it and restart the walk from the first page — do not hand-edit the token. Same `cursor` / `next_cursor` contract as MCP `retrieve_entities` and the HTTP API — see `docs/developer/mcp/instructions.md` (search "Deep pagination").
+Treat the cursor as opaque and pass it back verbatim. It is absent from the response once the listing is exhausted — that absence is the terminator, so stop rather than re-sending the last cursor. Only valid with the default `entity_id` sort; cannot be combined with `--offset` or `--search`. On `INVALID_CURSOR` (stale token, or the sort changed mid-walk) drop the cursor and restart from the first page — never hand-edit the token. Same `cursor` / `next_cursor` contract as MCP `retrieve_entities` and the HTTP API — see `docs/developer/mcp/instructions.md` (search "Deep pagination").
 
 ## Inspector link origin (CLI backup)
 
