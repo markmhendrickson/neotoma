@@ -93,9 +93,14 @@ export async function callMcp(
   params: unknown
 ): Promise<Record<string, unknown>> {
   const methodName = actionName.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
-  const result = (await (server as unknown as Record<string, (p: unknown) => Promise<{
-    content: Array<{ type: string; text: string }>;
-  }>>)[methodName](params)) as { content: Array<{ type: string; text: string }> };
+  const result = (await (
+    server as unknown as Record<
+      string,
+      (p: unknown) => Promise<{
+        content: Array<{ type: string; text: string }>;
+      }>
+    >
+  )[methodName](params)) as { content: Array<{ type: string; text: string }> };
   return JSON.parse(result.content[0]!.text) as Record<string, unknown>;
 }
 
@@ -285,7 +290,8 @@ export const TRANSPORT_PARITY_MATRIX: TransportParityScenario[] = [
   {
     id: "store_dedup_observation_count",
     issue: "#1840",
-    label: "identical re-store deduplicates (observation count stays 1; reduced snapshot stays populated)",
+    label:
+      "identical re-store deduplicates (observation count stays 1; reduced snapshot stays populated)",
     transports: ["mcp", "offline"],
     note:
       "Parity invariant asserted on BOTH transports: an identical re-store creates no new " +
@@ -310,13 +316,20 @@ export const TRANSPORT_PARITY_MATRIX: TransportParityScenario[] = [
   {
     id: "issue_submit_local_auth_fallback",
     issue: "#1842",
-    label: "issue-submit: local no-bearer allowed, remote no-bearer still rejected",
+    label:
+      "issue-submit: local no-bearer allowed, remote no-bearer opens an issue but cannot append",
     transports: ["offline"],
     note:
       "Single-transport BY DESIGN. The local-loopback auth fallback is an HTTP transport-layer " +
       "concern (Express middleware decides whether a no-Bearer request resolves to the local user " +
       "based on request locality). The MCP submit_issue handler receives an ALREADY-resolved userId " +
       "and performs no such gating, so the remote-vs-local distinction does not exist on the MCP " +
-      "surface. This cell asserts both sides of the gate on the offline path.",
+      "surface. This cell asserts both sides of the gate on the offline path. " +
+      "AMENDED by #1953: 'remote no-bearer still rejected' no longer holds for POST /issues/submit " +
+      "itself — a third party's agent must be able to OPEN an issue with no prior identity, since " +
+      "the guest access token is minted BY the submit rather than required for it. The boundary is " +
+      "now drawn at add_message: an unidentified caller may open a thread but not write into an " +
+      "existing one (by then they hold the token their submit returned). Gated by the `issue` " +
+      "access policy — NEOTOMA_ACCESS_POLICY_ISSUE=closed restores the pre-#1953 posture.",
   },
 ];
