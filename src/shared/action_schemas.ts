@@ -1,9 +1,33 @@
 import { z } from "zod";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
+import { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "../services/entity_query_limits.js";
 
 export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
 export const RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE = "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+
+/**
+ * #1943 tightenings on the entity-query surface. Both shapes below were accepted
+ * before #1943 and now return a 400, so each ships a structured migration `hint`
+ * alongside the tightening (docs/subsystems/errors.md § Tightening-change hint
+ * obligation) and a matching legacy-payload fixture under
+ * `tests/contract/legacy_payloads/v0.18.x/`.
+ *
+ * Hint text is surfaced to callers verbatim — it carries the upgrade path, not
+ * diagnostic jargon about why the bound exists.
+ */
+export const ERR_OFFSET_TOO_DEEP_ISSUE_CODE = "ERR_OFFSET_TOO_DEEP";
+export const OFFSET_TOO_DEEP_HINT =
+  "Deep `offset` paging is no longer accepted past 2000: it re-scans every prior row, " +
+  "so cost grows with depth. Page with `cursor` instead — read `next_cursor` from the " +
+  "previous response and pass it back as `cursor` (drop `offset` entirely). Cursor paging " +
+  "runs in constant time at any depth.";
+
+export const ERR_SNAPSHOT_PAGE_TOO_LARGE_ISSUE_CODE = "ERR_SNAPSHOT_PAGE_TOO_LARGE";
+export const SNAPSHOT_PAGE_TOO_LARGE_HINT =
+  "`limit` above 500 is no longer accepted while `include_snapshots` is true: each snapshot " +
+  "is hydrated synchronously. Either request 500 or fewer per page (use `cursor` to walk the " +
+  "rest), or set `include_snapshots: false` if you only need identity fields, which lifts the cap.";
 
 export const EntityIdSchema = z.object({
   entity_id: z.string(),
@@ -226,6 +250,10 @@ function validateEntityQueryCombinations(
     published?: boolean;
     published_after?: string;
     published_before?: string;
+    cursor?: string;
+    offset?: number;
+    limit?: number;
+    include_snapshots?: boolean;
   },
   ctx: z.RefinementCtx
 ): void {
@@ -238,6 +266,79 @@ function validateEntityQueryCombinations(
   const hasNonDefaultSort =
     (value.sort_by && value.sort_by !== "entity_id") ||
     (value.sort_order && value.sort_order !== "asc");
+
+  // #1943: cursor pagination.
+  const hasCursor = typeof value.cursor === "string" && value.cursor.length > 0;
+
+  // Cursor and a non-zero offset are two mutually exclusive ways to say "where to
+  // start"; accepting both silently would hide a caller mistake. Offset defaults
+  // to 0, so a bare cursor (offset omitted / 0) is fine.
+  if (hasCursor && typeof value.offset === "number" && value.offset > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cursor and offset cannot be combined; use one or the other",
+      path: ["cursor"],
+    });
+  }
+
+  // Keyset cursors are only sound for the default `entity_id` sort (unique,
+  // index-backed key). Reject a cursor paired with any other sort rather than
+  // silently falling back to offset (which would return results the caller
+  // didn't ask to page this way). `undefined` is the entity_id default.
+  if (hasCursor && value.sort_by !== undefined && value.sort_by !== "entity_id") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cursor is only supported with the default sort_by=entity_id",
+      path: ["cursor"],
+    });
+  }
+
+  // Search reorders results by relevance (semantic/lexical), not by entity_id,
+  // so a keyset cursor cannot page a search result set. Reject the combination
+  // rather than return a page that ignores one of the two.
+  if (hasCursor && hasSearch) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cursor cannot be combined with search",
+      path: ["cursor"],
+    });
+  }
+
+  // Bound the legacy offset path: deep offset is O(offset) and blocks the event
+  // loop (#1943). Point callers at cursor for deep pagination.
+  //
+  // This is a tightening — `offset: 3000` was accepted before #1943 — so it ships
+  // a structured `hint` carrying the migration path, per docs/subsystems/errors.md
+  // § Tightening-change hint obligation. The hint text is surfaced to callers
+  // verbatim, so it states what to do, not why the bound exists.
+  if (typeof value.offset === "number" && value.offset > MAX_QUERY_OFFSET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `offset must not exceed ${MAX_QUERY_OFFSET}; use cursor for deep pagination`,
+      path: ["offset"],
+      params: {
+        code: ERR_OFFSET_TOO_DEEP_ISSUE_CODE,
+        hint: OFFSET_TOO_DEEP_HINT,
+      },
+    });
+  }
+
+  // Bound synchronous snapshot hydration: a large include_snapshots page
+  // materializes an unbounded number of full snapshots on the event loop.
+  // Also a tightening (`limit: 1000` with snapshots was accepted pre-#1943) —
+  // same hint obligation applies.
+  const includeSnapshots = value.include_snapshots !== false; // defaults true
+  if (includeSnapshots && typeof value.limit === "number" && value.limit > MAX_SNAPSHOT_PAGE_SIZE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `limit must not exceed ${MAX_SNAPSHOT_PAGE_SIZE} when include_snapshots is true; request fewer per page (optionally with cursor) or set include_snapshots=false`,
+      path: ["limit"],
+      params: {
+        code: ERR_SNAPSHOT_PAGE_TOO_LARGE_ISSUE_CODE,
+        hint: SNAPSHOT_PAGE_TOO_LARGE_HINT,
+      },
+    });
+  }
 
   if (hasSearch && hasPublishedFilters) {
     ctx.addIssue({
@@ -303,6 +404,14 @@ const EntitiesQueryRequestBaseSchema = z
     search: z.string().optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
+    /**
+     * #1943: Opaque keyset pagination cursor. Pass the `next_cursor` from a
+     * prior response to fetch the next page in O(page size) time regardless of
+     * depth (offset pagination is O(offset) and blocks the event loop on deep
+     * pages). Treat it as opaque and pass it back verbatim. Only valid with the
+     * default `sort_by=entity_id`; cannot be combined with a non-zero `offset`.
+     */
+    cursor: z.string().optional(),
     sort_by: EntityQuerySortBySchema,
     sort_order: EntityQuerySortOrderSchema,
     published: z.boolean().optional(),
@@ -381,6 +490,15 @@ const RetrieveEntitiesRequestBaseSchema = z
     similarity_threshold: z.number().min(0).max(2).optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
+    /**
+     * #1943: Opaque keyset pagination cursor. Pass the `next_cursor` from a
+     * prior response to fetch the next page in O(page size) time regardless of
+     * depth (offset pagination is O(offset) and blocks the event loop on deep
+     * pages). Treat it as opaque and pass it back verbatim. Only valid with the
+     * default `sort_by=entity_id`; cannot be combined with a non-zero `offset`
+     * or with `search`.
+     */
+    cursor: z.string().optional(),
     sort_by: EntityQuerySortBySchema,
     sort_order: EntityQuerySortOrderSchema,
     published: z.boolean().optional(),

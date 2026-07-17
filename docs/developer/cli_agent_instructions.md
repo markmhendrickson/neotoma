@@ -128,6 +128,15 @@ Use narrow queries first, then expand only if needed.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
 
+**Deep pagination:** use `--cursor`, not `--offset`. Offset paging re-scans every prior row, so deep pages get slower the further you go and are rejected past a bounded depth (2000). Pass the `next_cursor` from the previous response to `--cursor` to page in constant time at any depth:
+
+```bash
+neotoma entities list --type contact --limit 100 --json          # → { "entities": [...], "next_cursor": "eyJ2..." }
+neotoma entities list --type contact --limit 100 --cursor eyJ2...  # next page
+```
+
+Treat the cursor as opaque and pass it back verbatim. It is absent from the response once the listing is exhausted. Only valid with the default `entity_id` sort; cannot be combined with `--offset` or `--search`. If a cursor is rejected (`INVALID_CURSOR`), drop it and restart the walk from the first page — do not hand-edit the token. Same `cursor` / `next_cursor` contract as MCP `retrieve_entities` and the HTTP API — see `docs/developer/mcp/instructions.md` (search "Deep pagination").
+
 ## Inspector link origin (CLI backup)
 
 When rendering Neotoma Inspector links from CLI-backed memory operations, first run `neotoma auth session` (or call `GET /session`) and use `origins.inspector_origin` when it is present. If the session response has no `origins.inspector_origin`, do not guess `sandbox.neotoma.io`, localhost, or any other default host; render unlinked entity labels/ids instead. This mirrors the MCP display rule and prevents wrong-instance links.

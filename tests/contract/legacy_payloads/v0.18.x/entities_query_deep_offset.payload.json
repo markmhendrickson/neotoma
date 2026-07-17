@@ -1,0 +1,6 @@
+{
+  "entity_type": "contact",
+  "include_snapshots": true,
+  "limit": 100,
+  "offset": 3000
+}

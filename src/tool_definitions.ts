@@ -169,12 +169,20 @@ export function buildToolDefinitions(
           limit: {
             type: "integer",
             minimum: 1,
-            description: "Maximum number of entities to return (default 100).",
+            description:
+              "Maximum number of entities to return (default 100). Capped at 500 when `include_snapshots` is true (the default), since each snapshot is hydrated synchronously; lower the page size or set `include_snapshots=false` for larger pages.",
           },
           offset: {
             type: "integer",
             minimum: 0,
-            description: "Pagination offset (default 0).",
+            description:
+              "Deprecated in favor of `cursor`. Still accepted for back-compat but internally bounded: values above 2000 are rejected with a structured hint pointing to `cursor`. Supplying a non-zero `offset` together with `cursor` is rejected as a validation error; use one or the other. (default 0).",
+            deprecated: true,
+          },
+          cursor: {
+            type: "string",
+            description:
+              "Opaque keyset pagination cursor from a previous response's `next_cursor`. Returns the next page in O(page size) time regardless of position, unlike `offset` which is bounded and deprecated. Only supported with the default `sort_by=entity_id`; cannot be combined with `search` or a non-zero `offset`. Reusing a cursor after changing `sort_order` returns a structured error.",
           },
           sort_by: {
             type: "string",

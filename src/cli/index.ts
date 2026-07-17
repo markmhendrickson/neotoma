@@ -12116,7 +12116,15 @@ entitiesCommand
   .option("--search <query>", "Search by canonical name")
   .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
-  .option("--offset <n>", "Offset", "0")
+  .option(
+    "--offset <n>",
+    "Deprecated in favor of --cursor: offset paging re-scans every prior row, so deep pages are slow. Rejected above 2000. Cannot be combined with --cursor.",
+    "0"
+  )
+  .option(
+    "--cursor <token>",
+    "Opaque pagination cursor from a previous response's next_cursor. Pages in constant time regardless of depth. Only valid with the default entity_id sort; cannot be combined with --offset or --search."
+  )
   .option("--include-merged", "Include merged entities")
   .option(
     "--since <iso>",
@@ -12148,6 +12156,7 @@ entitiesCommand
       userId?: string;
       limit?: string;
       offset?: string;
+      cursor?: string;
       includeMerged?: boolean;
       since?: string;
       updatedSince?: string;
@@ -12208,13 +12217,29 @@ entitiesCommand
     const entityType = opts.entityType ?? opts.type ?? positionalEntityType ?? undefined;
     const updatedSince = opts.updatedSince ?? opts.since;
     const effectiveUserId = resolveEffectiveUserId(opts.userId);
+
+    // #1943: cursor and offset are mutually exclusive. `--offset` carries a "0"
+    // default, so "was it supplied?" has to come from Commander's option source
+    // rather than the value — otherwise the default would look like a real offset
+    // on every cursor call. Reject the combination here rather than silently
+    // dropping one: quietly ignoring an explicit --offset would hand back a page
+    // the caller didn't ask for, which is the mistake the server-side rule exists
+    // to surface.
+    const offsetWasSupplied = cmd.getOptionValueSource("offset") === "cli";
+    if (opts.cursor && offsetWasSupplied) {
+      throw new Error(
+        "--cursor and --offset cannot be combined; use one or the other. " +
+          "Prefer --cursor: it pages in constant time at any depth."
+      );
+    }
+
     const { data, error, response } = await api.POST("/entities/query", {
       body: {
         entity_type: entityType,
         search: opts.search,
         user_id: effectiveUserId,
         limit: Number(opts.limit ?? "100"),
-        offset: Number(opts.offset ?? "0"),
+        ...(opts.cursor ? { cursor: opts.cursor } : { offset: Number(opts.offset ?? "0") }),
         include_merged: Boolean(opts.includeMerged),
         ...(updatedSince ? { updated_since: updatedSince } : {}),
         ...(opts.createdSince ? { created_since: opts.createdSince } : {}),

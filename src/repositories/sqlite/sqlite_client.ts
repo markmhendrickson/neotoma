@@ -421,6 +421,15 @@ function ensureSchema(db: SqliteDatabase): void {
     db.prepare(
       "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
     ).run();
+    // Deleted-entity resolution (#1943): getDeletedEntityIds queries observations
+    // by entity_id ordered by (source_priority DESC, observed_at DESC) to find the
+    // highest-priority observation per entity. Without this index every call was
+    // an unindexed scan of the whole observations table, and the old chunked-scan
+    // pagination called it once per chunk — compounding into the reported
+    // event-loop freeze at deep offsets. Matches the query's own ordering.
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_observations_entity_id ON observations(entity_id, source_priority, observed_at)"
+    ).run();
     addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");

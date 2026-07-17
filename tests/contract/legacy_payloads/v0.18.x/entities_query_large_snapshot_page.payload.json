@@ -1,0 +1,5 @@
+{
+  "entity_type": "contact",
+  "include_snapshots": true,
+  "limit": 1000
+}

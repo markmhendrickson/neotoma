@@ -4475,7 +4475,23 @@ export interface operations {
         /** @description Compatibility alias for `search`. */
         search_query?: string;
         limit?: number;
+        /**
+         * @deprecated
+         * @description Deprecated in favor of `cursor`. Still accepted for back-compat but
+         *     internally bounded: values above 2000 are rejected with a structured
+         *     hint pointing to `cursor`. Supplying a non-zero `offset` together
+         *     with `cursor` is rejected as a validation error; use one or the other.
+         */
         offset?: number;
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's
+         *     `next_cursor`. Returns the next page in O(page size) time regardless
+         *     of position, unlike `offset` which is bounded and deprecated. Only
+         *     supported with the default `sort_by=entity_id`; cannot be combined
+         *     with `search` or a non-zero `offset`. Reusing a cursor after changing
+         *     `sort_order` returns a structured error.
+         */
+        cursor?: string;
         /**
          * @description Sort field. Non-default values cannot be combined with `search`.
          *     Mirrors the `sort_by` body field of `POST /entities/query`.
@@ -4532,6 +4548,13 @@ export interface operations {
             total?: number;
             limit?: number;
             offset?: number;
+            /**
+             * @description Opaque keyset cursor for the next page, or `null`/omitted
+             *     when this page returned fewer than `limit` rows. Pass back
+             *     as the `cursor` query parameter to continue pagination in
+             *     O(page size) time.
+             */
+            next_cursor?: string | null;
             applied_search_strategies?: (
               | "strict"
               | "semantic"
@@ -4582,8 +4605,32 @@ export interface operations {
           query?: string;
           /** @description Compatibility alias for `search`. */
           search_query?: string;
+          /**
+           * @description Page size. Capped at 500 when `include_snapshots` is true
+           *     (the default), since each snapshot is hydrated synchronously;
+           *     lower the page size or set `include_snapshots=false` for
+           *     larger pages.
+           */
           limit?: number;
+          /**
+           * @deprecated
+           * @description Deprecated in favor of `cursor`. Still accepted for back-compat
+           *     but internally bounded: values above 2000 are rejected with a
+           *     structured hint pointing to `cursor`. Supplying a non-zero
+           *     `offset` together with `cursor` is rejected as a validation
+           *     error; use one or the other.
+           */
           offset?: number;
+          /**
+           * @description Opaque keyset pagination cursor from a previous response's
+           *     `next_cursor`. Returns the next page in O(page size) time
+           *     regardless of position, unlike `offset` which is bounded and
+           *     deprecated. Only supported with the default
+           *     `sort_by=entity_id`; cannot be combined with `search` or a
+           *     non-zero `offset`. Reusing a cursor after changing
+           *     `sort_order` returns a structured error.
+           */
+          cursor?: string;
           /**
            * @description Sort field. Non-default values cannot be combined with `search`.
            *     Predefined values: `entity_id`, `canonical_name`, `observation_count`,
@@ -4676,6 +4723,13 @@ export interface operations {
             limit?: number;
             offset?: number;
             /**
+             * @description Opaque keyset cursor for the next page, or `null`/omitted
+             *     when this page returned fewer than `limit` rows. Pass back
+             *     as the `cursor` request field to continue pagination in
+             *     O(page size) time regardless of position.
+             */
+            next_cursor?: string | null;
+            /**
              * @description Which non-strict retrieval strategies contributed to this
              *     result set, so callers can tell when a match came from a
              *     relaxed pass rather than exact token matching. Present only
@@ -4705,6 +4759,27 @@ export interface operations {
              */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
           };
+        };
+      };
+      /**
+       * @description Invalid request. Error codes:
+       *
+       *     - `INVALID_CURSOR` — the `cursor` is malformed, carries an
+       *       unsupported version, or was minted under a different `sort_order`
+       *       than this request (#1943). `details` carries `code`, `message`,
+       *       and a flat `hint`. Not retryable with the same token: drop the
+       *       cursor and restart the walk from the first page.
+       *     - `VALIDATION_INVALID_FORMAT` — the request violated a parameter
+       *       rule, e.g. `cursor` combined with `search`, a non-default
+       *       `sort_by`, or a non-zero `offset`; `offset` above 2000; or `limit`
+       *       above 500 while `include_snapshots` is true.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
