@@ -37,11 +37,13 @@ export interface EntityQueryOptions {
   /**
    * #1943: Opaque keyset cursor. When set, pagination seeks directly past the
    * cursor's last row (`entity_id > :cursor`) instead of scanning+discarding
-   * `offset` rows, so cost is O(page size) at any depth. Honored for the
-   * keyset-eligible sorts (`entity_id`, `canonical_name`; see
-   * {@link isCursorEligibleSort}); ignored — with offset used instead — on other
-   * sorts. When both a cursor and a non-zero `offset` are supplied, the cursor
-   * WINS and offset is treated as 0.
+   * `offset` rows, so cost is O(page size) at any depth.
+   *
+   * Honored ONLY for the default `entity_id` sort — the one ordering with a
+   * unique, index-backed key (see {@link isCursorEligibleSort}). Every other
+   * sort, and any `search`, keeps bounded offset. A cursor paired with a
+   * non-default sort, with `search`, or with a non-zero `offset` is rejected at
+   * the request-schema layer rather than silently resolved.
    */
   cursor?: string;
   /** When provided, fetch only these entity IDs (e.g. from semantic search) */
