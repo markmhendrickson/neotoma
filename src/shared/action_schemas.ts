@@ -254,6 +254,7 @@ function validateEntityQueryCombinations(
     offset?: number;
     limit?: number;
     include_snapshots?: boolean;
+    snapshot_filters?: Record<string, unknown>;
   },
   ctx: z.RefinementCtx
 ): void {
@@ -300,6 +301,24 @@ function validateEntityQueryCombinations(
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "cursor cannot be combined with search",
+      path: ["cursor"],
+    });
+  }
+
+  // Published filters and snapshot_filters route the query into the
+  // snapshot-driven scan (see `shouldUseSnapshotDrivenScan` in
+  // entity_queries.ts), which paginates its own `snapshotQuery` by offset and
+  // never applies the keyset seek. Accepting a cursor there would silently
+  // ignore it and re-return the first page — the exact "returns a wrong page
+  // instead of a structured error" failure the search/sort guards above exist
+  // to prevent. Reject the combination for the same reason (#1943, qa lens).
+  const hasSnapshotFilters =
+    value.snapshot_filters != null && Object.keys(value.snapshot_filters).length > 0;
+  if (hasCursor && (hasPublishedFilters || hasSnapshotFilters)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "cursor cannot be combined with published filters or snapshot_filters (they use a non-keyset scan); page those with offset, or remove the filters to use cursor",
       path: ["cursor"],
     });
   }

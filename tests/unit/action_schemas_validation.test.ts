@@ -103,6 +103,30 @@ describe("#1943 cursor + pagination bounds", () => {
         expect(parsed.success).toBe(false);
       });
 
+      // #1943 (qa lens): published filters and snapshot_filters route into the
+      // snapshot-driven scan, which ignores the keyset cursor and would silently
+      // re-return page 1. Reject, matching the search/sort guards.
+      it("rejects cursor combined with published", () => {
+        expect(Schema.safeParse({ cursor, published: true }).success).toBe(false);
+      });
+
+      it("rejects cursor combined with published_after / published_before", () => {
+        expect(Schema.safeParse({ cursor, published_after: "2026-01-01" }).success).toBe(false);
+        expect(Schema.safeParse({ cursor, published_before: "2026-12-31" }).success).toBe(false);
+      });
+
+      it("rejects cursor combined with non-empty snapshot_filters", () => {
+        const parsed = Schema.safeParse({
+          cursor,
+          snapshot_filters: { status: { op: "eq", value: "live" } },
+        });
+        expect(parsed.success).toBe(false);
+      });
+
+      it("accepts cursor with an EMPTY snapshot_filters (no scan diversion)", () => {
+        expect(Schema.safeParse({ cursor, snapshot_filters: {} }).success).toBe(true);
+      });
+
       it("rejects offset above the deep-scan bound", () => {
         const parsed = Schema.safeParse({ offset: 2001 });
         expect(parsed.success).toBe(false);

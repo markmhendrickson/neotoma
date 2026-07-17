@@ -22,7 +22,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { app } from "../../src/actions.js";
 import { NeotomaServer } from "../../src/server.js";
 import { db, getServiceRoleClient } from "../../src/db.js";
-import { queryEntities } from "../../src/services/entity_queries.js";
+import { queryEntities, computeNextCursor } from "../../src/services/entity_queries.js";
 import { queryEntitiesWithCount } from "../../src/shared/action_handlers/entity_handlers.js";
 import {
   EntitiesQueryRequestSchema,
@@ -214,6 +214,38 @@ describe("#1943 keyset cursor pagination", () => {
     // strictly ascending, unique
     const unique = new Set(ours);
     expect(unique.size).toBe(TOTAL);
+    for (let i = 1; i < ours.length; i++) {
+      expect(ours[i] > ours[i - 1]).toBe(true);
+    }
+  });
+
+  it("cursor walks correctly through the includeDeleted range branch", async () => {
+    // #1943 (qa lens, non-blocking): includeDeleted takes a DIFFERENT code path
+    // in queryEntities — the `else if (includeDeleted)` range branch, which
+    // special-cases the cursor as rangeStart=0 because the seek is already on
+    // entityQuery. Correct but untested; pin it given the adjacent published bug.
+    // Driven through queryEntities directly: includeDeleted is an
+    // EntityQueryOptions field, not surfaced by queryEntitiesWithCount.
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < TOTAL / PAGE + 5; guard++) {
+      const rows = await queryEntities({
+        userId: TEST_USER_ID,
+        entityType: TEST_TYPE,
+        includeSnapshots: false,
+        includeDeleted: true,
+        limit: PAGE,
+        cursor,
+      });
+      for (const r of rows) seen.push(r.entity_id);
+      cursor = computeNextCursor(rows, { sortBy: "entity_id", sortOrder: "asc", limit: PAGE }) ?? undefined;
+      if (!cursor || rows.length === 0) break;
+    }
+    const ours = seen.filter((id) => id.startsWith("ent_cursor1943_"));
+    // No entity in this fixture is deleted, so the range branch covers the full
+    // set, ascending, no dupes — same invariant, different branch.
+    expect(ours.length).toBe(TOTAL);
+    expect(new Set(ours).size).toBe(TOTAL);
     for (let i = 1; i < ours.length; i++) {
       expect(ours[i] > ours[i - 1]).toBe(true);
     }
