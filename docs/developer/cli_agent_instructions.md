@@ -157,7 +157,7 @@ while :; do
 done
 ```
 
-Treat the cursor as opaque and pass it back verbatim. It is absent from the response once the listing is exhausted — that absence is the terminator, so stop rather than re-sending the last cursor. Only valid with the default `entity_id` sort; cannot be combined with `--offset` or `--search`. On `INVALID_CURSOR` (stale token, or the sort changed mid-walk) drop the cursor and restart from the first page — never hand-edit the token. Same `cursor` / `next_cursor` contract as MCP `retrieve_entities` and the HTTP API — see `docs/developer/mcp/instructions.md` (search "Deep pagination").
+Treat the cursor as opaque and pass it back verbatim. It is absent from the response once the listing is exhausted — that absence is the terminator, so stop rather than re-sending the last cursor. Only valid with the default `entity_id` sort; cannot be combined with `--offset` or `--search`. On `INVALID_CURSOR` (stale token, or the sort changed mid-walk) drop the cursor and restart from the first page — never hand-edit the token. If you pass `--sort-order` explicitly on the first call, pass the same value on every page; omitting it after having set it explicitly counts as changing the sort and will be rejected. (The loop above sidesteps this by never passing `--sort-order`, relying on the default.) Same `cursor` / `next_cursor` contract as MCP `retrieve_entities` and the HTTP API — see `docs/developer/mcp/instructions.md` (search "Deep pagination").
 
 ## Inspector link origin (CLI backup)
 

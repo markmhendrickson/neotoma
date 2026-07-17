@@ -4489,7 +4489,10 @@ export interface operations {
          *     of position, unlike `offset` which is bounded and deprecated. Only
          *     supported with the default `sort_by=entity_id`; cannot be combined
          *     with `search` or a non-zero `offset`. Reusing a cursor after changing
-         *     `sort_order` returns a structured error.
+         *     `sort_order` returns a structured error — so if you set `sort_order`
+         *     explicitly on the first call of a walk, pass the same value on every
+         *     page (omitting it after having set it explicitly counts as changing
+         *     it).
          */
         cursor?: string;
         /**
@@ -4628,7 +4631,10 @@ export interface operations {
            *     deprecated. Only supported with the default
            *     `sort_by=entity_id`; cannot be combined with `search` or a
            *     non-zero `offset`. Reusing a cursor after changing
-           *     `sort_order` returns a structured error.
+           *     `sort_order` returns a structured error — so if you set
+           *     `sort_order` explicitly on the first call of a walk, pass the
+           *     same value on every page (omitting it after having set it
+           *     explicitly counts as changing it).
            */
           cursor?: string;
           /**
