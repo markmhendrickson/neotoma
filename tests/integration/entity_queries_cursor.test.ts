@@ -219,6 +219,64 @@ describe("#1943 keyset cursor pagination", () => {
     }
   });
 
+  it("descending cursor pages tile the set in reverse with no duplicates or gaps", async () => {
+    // The desc seek is a SEPARATE branch (`.lt("id", …)` vs `.gt(…)` in
+    // entity_queries.ts) and had only codec round-trip coverage — nothing proved
+    // it returns correct pages. A wrong comparison operator here would silently
+    // return the SAME page forever or skip the whole listing, and every other
+    // integration test walks ascending, so neither would have been caught.
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < TOTAL / PAGE + 5; guard++) {
+      const res = await queryEntitiesWithCount({
+        userId: TEST_USER_ID,
+        entityType: TEST_TYPE,
+        includeSnapshots: false,
+        sortOrder: "desc",
+        limit: PAGE,
+        cursor,
+      });
+      for (const e of res.entities) seen.push(e.entity_id);
+      if (!res.next_cursor || res.entities.length === 0) break;
+      cursor = res.next_cursor;
+    }
+
+    const ours = seen.filter((id) => id.startsWith("ent_cursor1943_"));
+    expect(ours.length).toBe(TOTAL);
+    expect(new Set(ours).size).toBe(TOTAL); // no duplicates
+    // strictly DESCENDING — the inverse of the asc walk above
+    for (let i = 1; i < ours.length; i++) {
+      expect(ours[i] < ours[i - 1]).toBe(true);
+    }
+    // and it is exactly the ascending walk reversed — no gaps
+    const asc = await walkByCursor(false);
+    expect(ours).toEqual(asc.filter((id) => id.startsWith("ent_cursor1943_")).reverse());
+  });
+
+  it("rejects a cursor replayed under the opposite sort_order", async () => {
+    // Guards the decode-time sort_order check: an asc cursor seeks with `>`, so
+    // replaying it under desc would seek the wrong direction and silently return
+    // rows already served rather than the next page.
+    const first = await queryEntitiesWithCount({
+      userId: TEST_USER_ID,
+      entityType: TEST_TYPE,
+      includeSnapshots: false,
+      limit: PAGE,
+    });
+    expect(first.next_cursor).toBeDefined();
+
+    await expect(
+      queryEntitiesWithCount({
+        userId: TEST_USER_ID,
+        entityType: TEST_TYPE,
+        includeSnapshots: false,
+        sortOrder: "desc", // cursor was minted asc
+        limit: PAGE,
+        cursor: first.next_cursor,
+      })
+    ).rejects.toThrow(/sort_order/i);
+  });
+
   it("cursor paging matches offset paging over the same window", async () => {
     // First two pages via offset...
     const viaOffset: string[] = [];
