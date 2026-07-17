@@ -1371,6 +1371,39 @@ export function writeCliError(err: unknown): void {
   if (recoveryHint) process.stderr.write(`tip: ${recoveryHint}\n`);
 }
 
+/**
+ * #1943: extract the server's `error_code` from a standard ErrorEnvelope so the
+ * CLI can re-surface it as a machine-readable `hint.code` in `--json` output.
+ * Returns undefined for non-envelope errors (network, parse), which keep the
+ * plain-Error path.
+ */
+export function errorCodeOf(error: unknown): string | undefined {
+  if (error && typeof error === "object") {
+    const code = (error as { error_code?: unknown }).error_code;
+    if (typeof code === "string" && code.length > 0) return code;
+  }
+  return undefined;
+}
+
+/**
+ * #1943: extract the flat `details.hint` an ErrorEnvelope carries (the caller-
+ * facing recovery path — see docs/subsystems/errors.md § Tightening-change hint
+ * obligation). String-shaped hints only; the R4 structured `{text, …}` form is
+ * reduced to its text.
+ */
+export function hintOf(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const details = (error as { details?: unknown }).details;
+  if (!details || typeof details !== "object") return undefined;
+  const hint = (details as { hint?: unknown }).hint;
+  if (typeof hint === "string" && hint.length > 0) return hint;
+  if (hint && typeof hint === "object") {
+    const text = (hint as { text?: unknown }).text;
+    if (typeof text === "string" && text.length > 0) return text;
+  }
+  return undefined;
+}
+
 function formatApiError(error: unknown): string {
   if (error && typeof error === "object") {
     const o = error as Record<string, unknown>;
@@ -12265,6 +12298,20 @@ entitiesCommand
         ? `Failed to list entities: ${status} ${detail}`
         : `Failed to list entities: ${detail}`;
       if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+      // #1943: preserve the server's structured error rather than flattening it
+      // to prose. The server sends `error_code` + `details.hint` (e.g.
+      // INVALID_CURSOR); throwing a bare Error drops both, so an agent paging
+      // with --json sees no `hint.code` AND no `next_cursor` — and a recovery
+      // loop that branches on those reads a REJECTED cursor as a COMPLETED
+      // walk, silently processing a partial dataset and reporting success.
+      const serverCode = errorCodeOf(error);
+      if (serverCode) {
+        throw new CliHintError(msg, {
+          code: serverCode,
+          message: detail,
+          ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+        });
+      }
       throw new Error(msg);
     }
     writeOutput(data, outputMode);
