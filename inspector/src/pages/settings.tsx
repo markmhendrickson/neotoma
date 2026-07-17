@@ -30,10 +30,11 @@ import { areDestructiveActionsHidden, isApiUrlOverrideDisabled } from "@/lib/san
 import { readStoredSandboxSession } from "@/lib/sandbox_session";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Circle, RefreshCw } from "lucide-react";
+import { Circle, LogIn, RefreshCw } from "lucide-react";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { InspectorThemeToggle } from "@/components/shared/inspector_theme_toggle";
+import { isOAuthSignInSupported, startOAuthSignIn } from "@/lib/oauth_signin";
 
 const LOCAL_PROXY_PLACEHOLDER = "/api";
 
@@ -50,7 +51,7 @@ function ConnectHarnessCard({ mcpUrl }: { mcpUrl: string }) {
       },
     },
     null,
-    2,
+    2
   );
 
   return (
@@ -104,6 +105,7 @@ export default function SettingsPage() {
   const [token, setTokenLocal] = useState(getAuthToken() || "");
   const activeSandboxSession = readStoredSandboxSession();
   const [showAdvanced, setShowAdvanced] = useState(activeSandboxSession === null);
+  const [signingIn, setSigningIn] = useState(false);
 
   const health = useHealthCheck();
   const serverInfo = useServerInfo();
@@ -111,7 +113,7 @@ export default function SettingsPage() {
   const snapshotHealth = useHealthCheckSnapshots();
   const connectionEnvBadge = resolveInspectorBadgeEnvironment(
     serverInfo.data?.neotoma_env,
-    inspectorEnvironment,
+    inspectorEnvironment
   );
 
   function handleSaveConnection() {
@@ -127,6 +129,23 @@ export default function SettingsPage() {
     }
     qc.invalidateQueries();
     toast.success(apiUrl.trim() ? "Connection override saved" : "Using default connection");
+  }
+
+  async function handleSignIn() {
+    // Persist any pending API Base URL override first so sign-in targets
+    // the instance the user actually typed, not a stale default.
+    if (apiUrl.trim()) {
+      setApiUrl(apiUrl);
+    }
+    setSigningIn(true);
+    try {
+      // Navigates the browser away to /mcp/oauth/authorize; only returns
+      // (via a thrown Error) if the flow could not even start.
+      await startOAuthSignIn({ returnPath: "/settings" });
+    } catch (err) {
+      setSigningIn(false);
+      toast.error(err instanceof Error ? err.message : "Could not start sign-in");
+    }
   }
 
   return (
@@ -182,13 +201,18 @@ export default function SettingsPage() {
                 {serverInfo.data.version && (
                   <div className="flex min-w-0 justify-between gap-2">
                     <span className="shrink-0 text-muted-foreground">Version</span>
-                    <span className="min-w-0 text-right font-mono text-xs">{serverInfo.data.version}</span>
+                    <span className="min-w-0 text-right font-mono text-xs">
+                      {serverInfo.data.version}
+                    </span>
                   </div>
                 )}
                 {serverInfo.data.git_sha && (
                   <div className="flex min-w-0 justify-between gap-2">
                     <span className="shrink-0 text-muted-foreground">Git SHA</span>
-                    <span className="min-w-0 truncate text-right font-mono text-xs" title={serverInfo.data.git_sha}>
+                    <span
+                      className="min-w-0 truncate text-right font-mono text-xs"
+                      title={serverInfo.data.git_sha}
+                    >
                       {serverInfo.data.git_sha.slice(0, 12)}
                     </span>
                   </div>
@@ -201,12 +225,14 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="min-w-0">
-          <CardHeader><CardTitle className="text-base">API Connection</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">API Connection</CardTitle>
+          </CardHeader>
           <CardContent className="min-w-0 space-y-4">
             {activeSandboxSession ? (
               <div className="min-w-0 break-words rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
-                A redeemed sandbox session is driving this connection
-                (<span className="font-mono">{activeSandboxSession.apiBase}</span>, pack{" "}
+                A redeemed sandbox session is driving this connection (
+                <span className="font-mono">{activeSandboxSession.apiBase}</span>, pack{" "}
                 <span className="font-mono">{activeSandboxSession.packId || "unknown"}</span>). The
                 manual overrides below are collapsed by default — expand them only if you need to
                 point the app at a different Neotoma instance.
@@ -223,7 +249,9 @@ export default function SettingsPage() {
                   Show advanced connection settings
                 </Button>
                 <div className="flex items-center gap-2 text-sm">
-                  <Circle className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-success" : "text-destructive"}`} />
+                  <Circle
+                    className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-success" : "text-destructive"}`}
+                  />
                   <span>{health.data?.ok ? "Connected" : "Disconnected"}</span>
                 </div>
               </div>
@@ -248,6 +276,24 @@ export default function SettingsPage() {
                       : `Default for the current Neotoma environment (${connectionEnvBadge}): ${defaultApiUrl}`}
                   </p>
                 </div>
+                {isOAuthSignInSupported() ? (
+                  <div className="min-w-0 space-y-2">
+                    <Button
+                      variant="default"
+                      className="w-fit max-w-full shrink-0"
+                      onClick={handleSignIn}
+                      disabled={isApiUrlOverrideDisabled() || signingIn}
+                    >
+                      <LogIn className="h-4 w-4" />
+                      {signingIn ? "Redirecting…" : "Sign in"}
+                    </Button>
+                    <p className="min-w-0 break-words text-xs text-muted-foreground">
+                      Opens this server&apos;s sign-in page (private key, mnemonic, or Google —
+                      whichever the server has configured). Preferred over pasting a bearer token
+                      below.
+                    </p>
+                  </div>
+                ) : null}
                 <div className="min-w-0">
                   <Label>Bearer Token</Label>
                   <Input
@@ -258,6 +304,10 @@ export default function SettingsPage() {
                     placeholder="Optional auth token"
                     disabled={isApiUrlOverrideDisabled()}
                   />
+                  <p className="mt-2 min-w-0 break-words text-xs text-muted-foreground">
+                    Power-user / break-glass path. Use Sign in above unless you need to paste a
+                    token directly.
+                  </p>
                 </div>
                 <div className="flex min-w-0 flex-col gap-2">
                   <div className="flex min-w-0 flex-wrap gap-2">
@@ -283,7 +333,9 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <Circle className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-success" : "text-destructive"}`} />
+                    <Circle
+                      className={`h-2.5 w-2.5 shrink-0 fill-current ${health.data?.ok ? "text-success" : "text-destructive"}`}
+                    />
                     <span>{health.data?.ok ? "Connected" : "Disconnected"}</span>
                   </div>
                 </div>
@@ -321,10 +373,18 @@ export default function SettingsPage() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                {me.data.email && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{me.data.email}</span></div>}
+                {me.data.email && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Email</span>
+                    <span>{me.data.email}</span>
+                  </div>
+                )}
                 {me.data.storage && (
                   <>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Backend</span><Badge variant="secondary">{me.data.storage.storage_backend}</Badge></div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Backend</span>
+                      <Badge variant="secondary">{me.data.storage.storage_backend}</Badge>
+                    </div>
                     <div className="space-y-1">
                       <span className="text-muted-foreground">Data Dir</span>
                       <p className="font-mono text-xs break-all">{me.data.storage.data_dir}</p>
@@ -337,54 +397,59 @@ export default function SettingsPage() {
                 )}
               </>
             ) : (
-              <span className="text-muted-foreground">Not authenticated or unable to fetch user info.</span>
+              <span className="text-muted-foreground">
+                Not authenticated or unable to fetch user info.
+              </span>
             )}
           </CardContent>
         </Card>
 
         {areDestructiveActionsHidden() ? null : (
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle className="text-base flex min-w-0 flex-wrap items-center justify-between gap-2">
-              Snapshot Health
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => snapshotHealth.mutate(false)}
-                disabled={snapshotHealth.isPending}
-              >
-                <RefreshCw className={`h-3 w-3 mr-1 ${snapshotHealth.isPending ? "animate-spin" : ""}`} />
-                Check
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {snapshotHealth.data ? (
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Stale Snapshots</span>
-                  <span className="font-medium">{snapshotHealth.data.stale_snapshots ?? 0}</span>
+          <Card className="min-w-0">
+            <CardHeader>
+              <CardTitle className="text-base flex min-w-0 flex-wrap items-center justify-between gap-2">
+                Snapshot Health
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => snapshotHealth.mutate(false)}
+                  disabled={snapshotHealth.isPending}
+                >
+                  <RefreshCw
+                    className={`h-3 w-3 mr-1 ${snapshotHealth.isPending ? "animate-spin" : ""}`}
+                  />
+                  Check
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {snapshotHealth.data ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Stale Snapshots</span>
+                    <span className="font-medium">{snapshotHealth.data.stale_snapshots ?? 0}</span>
+                  </div>
+                  {snapshotHealth.data.stale_snapshots &&
+                    snapshotHealth.data.stale_snapshots > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => snapshotHealth.mutate(true)}
+                        disabled={snapshotHealth.isPending}
+                      >
+                        Auto-fix Stale Snapshots
+                      </Button>
+                    )}
+                  {snapshotHealth.data.details && <JsonViewer data={snapshotHealth.data.details} />}
                 </div>
-                {snapshotHealth.data.stale_snapshots && snapshotHealth.data.stale_snapshots > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => snapshotHealth.mutate(true)}
-                    disabled={snapshotHealth.isPending}
-                  >
-                    Auto-fix Stale Snapshots
-                  </Button>
-                )}
-                {snapshotHealth.data.details && (
-                  <JsonViewer data={snapshotHealth.data.details} />
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Click Check to run snapshot health analysis.</p>
-            )}
-          </CardContent>
-        </Card>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Click Check to run snapshot health analysis.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         )}
       </div>
 
@@ -406,8 +471,12 @@ export default function SettingsPage() {
                       : path;
                     return (
                       <div key={key} className="flex min-w-0 justify-between gap-2">
-                        <span className="shrink-0 text-muted-foreground">{key.replace(/_/g, " ")}</span>
-                        <span className="min-w-0 break-all text-right font-mono text-xs">{fullUrl}</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {key.replace(/_/g, " ")}
+                        </span>
+                        <span className="min-w-0 break-all text-right font-mono text-xs">
+                          {fullUrl}
+                        </span>
                       </div>
                     );
                   })}
@@ -416,9 +485,7 @@ export default function SettingsPage() {
             )}
 
             {/* Connect your harness card */}
-            {serverInfo.data.mcpUrl && (
-              <ConnectHarnessCard mcpUrl={serverInfo.data.mcpUrl} />
-            )}
+            {serverInfo.data.mcpUrl && <ConnectHarnessCard mcpUrl={serverInfo.data.mcpUrl} />}
           </div>
         </>
       )}

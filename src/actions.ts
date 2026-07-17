@@ -152,6 +152,16 @@ import {
   OAuthKeySessionStore,
 } from "./services/oauth_key_gate.js";
 import {
+  buildGoogleAuthorizeUrl,
+  createGoogleSigninNonce,
+  consumeGoogleSigninNonce,
+  exchangeGoogleAuthorizationCode,
+  getSharedGraphUserId,
+  GoogleIdTokenError,
+  isGoogleSigninEnabled,
+  verifyGoogleIdToken,
+} from "./services/google_oidc.js";
+import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
@@ -1372,6 +1382,17 @@ export function isLocalRequest(req: express.Request): boolean {
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
 const oauthKeySessions = new OAuthKeySessionStore();
 
+/**
+ * Maps an OAuth key-session token to the user_id resolved via Google
+ * sign-in for that browser session. Populated only by the
+ * `/mcp/oauth/google/callback` route; every other credential path
+ * (private key / mnemonic / bearer) never writes here, so
+ * `/mcp/oauth/local-login` falls through to `ensureLocalDevUser()`
+ * exactly as before when this map has no entry — behavior for every
+ * existing deploy (Google flag off) is unchanged.
+ */
+const googleVerifiedUserBySessionToken = new Map<string, string>();
+
 function readCookie(req: express.Request, name: string): string | undefined {
   const header = (req.headers["cookie"] || req.headers["Cookie"] || "") as string;
   if (!header) return undefined;
@@ -1602,7 +1623,7 @@ function hasValidOAuthKeySession(req: express.Request): boolean {
   return oauthKeySessions.isValid(token);
 }
 
-function setOAuthKeySessionCookie(req: express.Request, res: express.Response): void {
+function setOAuthKeySessionCookie(req: express.Request, res: express.Response): string {
   const token = oauthKeySessions.create();
   const forwardedProto =
     ((req.headers["x-forwarded-proto"] || req.headers["X-Forwarded-Proto"]) as string | undefined)
@@ -1617,6 +1638,14 @@ function setOAuthKeySessionCookie(req: express.Request, res: express.Response): 
     path: "/mcp/oauth",
     maxAge: 15 * 60 * 1000,
   });
+  return token;
+}
+
+/** Resolve the local-auth user_id a Google-verified session (if any) mapped to this request. */
+function getGoogleVerifiedUserId(req: express.Request): string | undefined {
+  const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
+  if (!token || !oauthKeySessions.isValid(token)) return undefined;
+  return googleVerifiedUserBySessionToken.get(token);
 }
 
 /**
@@ -2525,11 +2554,22 @@ app.get("/mcp/oauth/key-auth", async (req, res) => {
   const nextPathEscaped = escapeHtml(nextPath);
   const hasBearerFallback = Boolean((process.env.NEOTOMA_BEARER_TOKEN || "").trim());
   const defaultCredentialMode = hasBearerFallback ? "bearer" : "private_key";
+  const googleEnabled = isGoogleSigninEnabled();
+  const googleStartHref = `/mcp/oauth/google/start?next=${encodeURIComponent(nextPath)}`;
   return res.send(
     renderOauthPage({
       title: "Authenticate OAuth preflight",
       subtitle: "Choose one credential path below, then continue to complete OAuth authorization.",
       contentHtml: `
+      ${
+        googleEnabled
+          ? `<div class="actions" style="margin-bottom: 1rem;">
+        <a class="btn-link" href="${escapeHtml(googleStartHref)}">Sign in with Google</a>
+      </div>
+      <div class="notice">Signs you in as your own Neotoma user if your Google account's verified email is on this server's approved list. Doesn't require a private key.</div>
+      <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid hsl(var(--border));" />`
+          : ""
+      }
       <form method="post" action="/mcp/oauth/key-auth" id="oauth-key-auth-form">
         <input type="hidden" name="next" value="${nextPathEscaped}" />
         <input type="hidden" name="credential_mode" id="credential_mode" value="${defaultCredentialMode}" />
@@ -2647,6 +2687,119 @@ app.post("/mcp/oauth/key-auth", express.urlencoded({ extended: true }), async (r
   return res.redirect(nextPath);
 });
 
+/**
+ * "Sign in with Google" entry point. Additive to, and independent of, the
+ * key/mnemonic/bearer credential form above — feature-flagged off unless
+ * NEOTOMA_GOOGLE_CLIENT_ID + NEOTOMA_APPROVED_EMAILS are both configured.
+ * AUTH-LAYER ONLY: this establishes who the person is (their own user_id
+ * via the existing per-email primitive); it does not touch data-sharing or
+ * read-scoping.
+ */
+app.get("/mcp/oauth/google/start", async (req, res) => {
+  if (!isGoogleSigninEnabled()) {
+    return res.status(404).send("Not found");
+  }
+  const nextPath = normalizeOauthNextPath((req.query.next as string | undefined) || undefined);
+  const nonce = createGoogleSigninNonce(nextPath);
+  const redirectUri = `${req.protocol}://${req.get("host") || ""}/mcp/oauth/google/callback`;
+  try {
+    const authorizeUrl = buildGoogleAuthorizeUrl({ redirectUri, nonce });
+    return res.redirect(authorizeUrl);
+  } catch (error: any) {
+    logError("GoogleOAuthStart", req, error);
+    return res.status(500).send(error?.message ?? "Failed to start Google sign-in");
+  }
+});
+
+app.get("/mcp/oauth/google/callback", async (req, res) => {
+  if (!isGoogleSigninEnabled()) {
+    return res.status(404).send("Not found");
+  }
+
+  const errorParam = (req.query.error as string | undefined)?.trim();
+  const code = (req.query.code as string | undefined)?.trim();
+  const nonceParam = (req.query.state as string | undefined)?.trim();
+
+  const failWith = (subtitle: string) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(401).send(
+      renderOauthPage({
+        title: "Google sign-in failed",
+        subtitle,
+        contentHtml: `<div class="actions">
+          <a class="btn-link secondary" href="/mcp/oauth/key-auth">Back to authentication</a>
+        </div>`,
+      })
+    );
+  };
+
+  if (errorParam) {
+    logger.warn("[Google OAuth] Callback returned an error", { error: errorParam });
+    return failWith("Google sign-in was cancelled or denied.");
+  }
+  if (!code || !nonceParam) {
+    return failWith("Missing code or state from Google callback.");
+  }
+
+  const nonceEntry = consumeGoogleSigninNonce(nonceParam);
+  if (!nonceEntry) {
+    return failWith("This sign-in link has expired or was already used. Please try again.");
+  }
+  // Same nextPath contract as the key/mnemonic/bearer path above: normalized
+  // back to a /mcp/oauth/* path (typically /mcp/oauth/authorize?...), never
+  // an external URL.
+  const nextPath = normalizeOauthNextPath(nonceEntry.next);
+
+  const redirectUri = `${req.protocol}://${req.get("host") || ""}/mcp/oauth/google/callback`;
+
+  try {
+    const { idToken } = await exchangeGoogleAuthorizationCode({ code, redirectUri });
+    const { email } = await verifyGoogleIdToken(idToken);
+
+    // Resolve the verified email to a stable user_id via the EXISTING per-email
+    // primitive (local_auth.ts) — the same primitive createLocalAuthUser /
+    // hashEmailToUserId already uses elsewhere. By default this person is
+    // admitted as their own isolated user_id, same as any other local-auth user.
+    const { createLocalAuthUser } = await import("./services/local_auth.js");
+    const { randomBytes } = await import("node:crypto");
+    // Password is unused for Google-authenticated users (they never log in
+    // with it) — generate an unguessable throwaway so createLocalAuthUser's
+    // shared code path is satisfied without weakening any other account.
+    const throwawayPassword = randomBytes(32).toString("hex");
+    const perEmailUser = createLocalAuthUser(email, throwawayPassword);
+
+    // Shared-graph opt-in: when NEOTOMA_SHARED_GRAPH_USER_ID is set, an
+    // approved teammate (the email already passed the allowlist inside
+    // verifyGoogleIdToken) is bound to the shared graph's user_id instead of
+    // their isolated per-email one — so the whole allowlisted team, plus the
+    // bearer/MCP identity that owns the data, share one populated graph. Unset
+    // → isolated per-email behavior (unchanged). See getSharedGraphUserId.
+    const resolvedUserId = getSharedGraphUserId() ?? perEmailUser.id;
+
+    // Mark this browser session as Google-verified and bound to the resolved
+    // user_id, exactly the same OAuth key-session cookie the private-key/
+    // mnemonic/bearer path sets. `/mcp/oauth/authorize` -> `/mcp/oauth/
+    // local-login` then runs completely unmodified, except local-login now
+    // resolves the user via this session instead of always ensureLocalDevUser().
+    const sessionToken = setOAuthKeySessionCookie(req, res);
+    googleVerifiedUserBySessionToken.set(sessionToken, resolvedUserId);
+
+    return res.redirect(nextPath);
+  } catch (error: any) {
+    logError("GoogleOAuthCallback", req, error);
+    if (error instanceof GoogleIdTokenError) {
+      if (error.code === "EMAIL_NOT_APPROVED") {
+        return failWith("Your Google account is not on the approved list for this server.");
+      }
+      if (error.code === "EMAIL_NOT_VERIFIED") {
+        return failWith("Your Google account's email is not verified.");
+      }
+      return failWith("Google sign-in could not be verified.");
+    }
+    return failWith(error?.message ?? "Google sign-in failed.");
+  }
+});
+
 // RFC 8414 authorization endpoint (GET) for Cursor and other OAuth clients
 app.get("/mcp/oauth/authorize", async (req, res) => {
   try {
@@ -2701,7 +2854,10 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       // When reached via tunnel, only allow redirect_uri to localhost, app schemes, or OpenAI Custom GPT
       if (!isLocalRequest(req)) {
         const { isRedirectUriAllowedForTunnel } = await import("./services/mcp_oauth.js");
-        if (!isRedirectUriAllowedForTunnel(redirect_uri)) {
+        // Public host as seen from outside the tunnel (x-forwarded-host set by the
+        // proxy) so an Inspector callback on this instance's own origin is allowed.
+        const selfHost = req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.get("host");
+        if (!isRedirectUriAllowedForTunnel(redirect_uri, selfHost)) {
           logger.warn("[MCP OAuth] Authorize rejected: redirect_uri not allowed for tunnel", {
             redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
           });
@@ -2840,11 +2996,17 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
   }
 
   try {
-    const devUser = ensureLocalDevUser();
+    // If this browser session was admitted via Google sign-in (see
+    // /mcp/oauth/google/callback), complete authorization as THAT verified
+    // user's own user_id instead of the shared dev user. Every other path
+    // (no Google session on this cookie — the default, and the only
+    // possibility when the Google feature flag is off) is unchanged.
+    const googleUserId = getGoogleVerifiedUserId(req);
+    const resolvedUserId = googleUserId ?? ensureLocalDevUser().id;
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
     const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
       state,
-      devUser.id
+      resolvedUserId
     );
     const frontendBase =
       process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
@@ -7304,6 +7466,7 @@ export async function storeStructuredForApi(params: {
             schema: schemaEntry.schema_definition,
             userId,
             sourceId: observationSourceId,
+            commit,
           });
         }
       } catch (linkErr) {

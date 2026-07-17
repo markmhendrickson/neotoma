@@ -306,7 +306,7 @@ function validateRedirectUri(redirectUri: string): void {
  * Prevents sending the authorization code to a third-party site. Allows localhost, loopback,
  * known app schemes, and trusted hosted OAuth callbacks (OpenAI/Claude).
  */
-export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
+export function isRedirectUriAllowedForTunnel(redirectUri: string, selfHost?: string): boolean {
   if (!redirectUri || typeof redirectUri !== "string") return false;
   try {
     const url = new URL(redirectUri);
@@ -316,6 +316,15 @@ export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
     if (protocol !== "http:" && protocol !== "https:") return false;
     if (host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1")
       return true;
+    // Same-origin callback: the Inspector SPA served by *this* instance registering
+    // its own `${origin}/oauth/callback`. The authorization code is handed back to
+    // the very server that issued it, so there is no third-party exfiltration risk
+    // (the exact threat this allowlist exists to prevent). Requires https to match
+    // how the instance is publicly served behind the tunnel.
+    if (selfHost && protocol === "https:") {
+      const self = selfHost.toLowerCase().replace(/:\d+$/, "");
+      if (host === self) return true;
+    }
     if (host === "chatgpt.com" || host === "chat.openai.com") return true;
     if (
       (host === "claude.ai" || host === "www.claude.ai") &&

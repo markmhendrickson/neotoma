@@ -21,7 +21,7 @@ export function getInspectorEnvironment(): InspectorEnvironment {
  */
 export function resolveInspectorBadgeEnvironment(
   apiNeotomaEnv: string | undefined,
-  viteInspectorEnv: InspectorEnvironment,
+  viteInspectorEnv: InspectorEnvironment
 ): InspectorEnvironment {
   if (apiNeotomaEnv == null || !String(apiNeotomaEnv).trim()) {
     return viteInspectorEnv;
@@ -161,9 +161,44 @@ export function clearAuthToken() {
   localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
 }
 
-function formatHttpErrorMessage(status: number, body: string, requestPath?: string): string {
+/**
+ * Server-side auth failures are reported with mechanism-specific wording
+ * ("Missing Bearer token", "Authorization header required", ...) because the
+ * server itself only knows about bearer tokens. The Inspector now offers a
+ * mechanism-agnostic Sign in path too (OAuth or bearer), so rewrite those
+ * strings here — the one place every HTTP error, JSON or plain text, passes
+ * through — rather than special-casing each call site that renders
+ * `error.message`.
+ */
+const AUTH_REQUIRED_MESSAGE = "Authentication required. Sign in from Settings.";
+const AUTH_INVALID_MESSAGE = "Your session is no longer valid. Sign in again from Settings.";
+
+function rewriteAuthMessage(raw: string): string | null {
+  if (/missing bearer token/i.test(raw) || /authorization header required/i.test(raw)) {
+    return AUTH_REQUIRED_MESSAGE;
+  }
+  if (/invalid (authentication )?token/i.test(raw) || /invalid.*bearer/i.test(raw)) {
+    return AUTH_INVALID_MESSAGE;
+  }
+  return null;
+}
+
+/** Exported for tests — pure formatting, safe to call directly. */
+export function formatHttpErrorMessage(status: number, body: string, requestPath?: string): string {
   const raw = body.trim();
-  if (!raw) return `HTTP ${status}`;
+  if (!raw) return status === 401 ? AUTH_REQUIRED_MESSAGE : `HTTP ${status}`;
+
+  if (status === 401 || status === 403) {
+    const rewritten = rewriteAuthMessage(raw);
+    if (rewritten) return rewritten;
+    try {
+      const json = JSON.parse(raw) as { message?: string; error?: string };
+      const fromJson = rewriteAuthMessage(json.message || json.error || "");
+      if (fromJson) return fromJson;
+    } catch {
+      // not JSON; fall through to generic handling below
+    }
+  }
 
   const cannotRoute = raw.match(/Cannot (GET|POST|PUT|PATCH|DELETE)\s+(\S+)/);
   if (cannotRoute) {
@@ -230,13 +265,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function get<T>(
   path: string,
   params?: Record<string, string | number | boolean | undefined>,
-  fetch?: FetchOptions,
+  fetch?: FetchOptions
 ): Promise<T> {
   let queryString = "";
   if (params) {
     const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
     if (entries.length) {
-      queryString = "?" + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&");
+      queryString =
+        "?" +
+        entries
+          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+          .join("&");
     }
   }
   return request<T>(path + queryString, { signal: fetch?.signal });
@@ -246,10 +285,16 @@ function buildQueryString(params?: Record<string, string | number | boolean | un
   if (!params) return "";
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
   if (!entries.length) return "";
-  return "?" + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&");
+  return (
+    "?" +
+    entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&")
+  );
 }
 
-export function buildApiUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
+export function buildApiUrl(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>
+): string {
   const base = requireApiBase();
   return `${base}${path}${buildQueryString(params)}`;
 }
@@ -261,7 +306,7 @@ export function buildApiUrl(path: string, params?: Record<string, string | numbe
 export async function getText(
   path: string,
   params?: Record<string, string | number | boolean | undefined>,
-  fetchOpts?: FetchOptions,
+  fetchOpts?: FetchOptions
 ): Promise<string> {
   const url = buildApiUrl(path, params);
   const token = getAuthToken();
@@ -281,7 +326,7 @@ export async function getText(
 export async function getBlob(
   path: string,
   params?: Record<string, string | number | boolean | undefined>,
-  fetchOpts?: FetchOptions,
+  fetchOpts?: FetchOptions
 ): Promise<Blob> {
   const url = buildApiUrl(path, params);
   const token = getAuthToken();
@@ -327,11 +372,7 @@ export function del<T>(path: string, fetch?: FetchOptions): Promise<T> {
 // with a `WithBase` suffix so the existing API surface is untouched.
 // ---------------------------------------------------------------------------
 
-async function requestWithBase<T>(
-  apiBase: string,
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+async function requestWithBase<T>(apiBase: string, path: string, init?: RequestInit): Promise<T> {
   const base = apiBase.replace(/\/$/, "");
   if (!base) {
     throw new Error("requestWithBase: apiBase must not be empty");
@@ -365,7 +406,7 @@ export function postWithBase<T>(
   apiBase: string,
   path: string,
   body?: unknown,
-  fetchOpts?: FetchOptions,
+  fetchOpts?: FetchOptions
 ): Promise<T> {
   return requestWithBase<T>(apiBase, path, {
     method: "POST",

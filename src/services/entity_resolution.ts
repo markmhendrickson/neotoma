@@ -339,7 +339,14 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
   if (entityType === "company" || entityType === "organization") {
     normalized = normalized
       .replace(
-        /\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|sa|ag|pty|pvt)\.?$/i,
+        // `sa` / `ag` deliberately excluded: as bare (unpunctuated) 2-letter
+        // tokens they collide with real company-name endings across locales
+        // (Spanish "Banco SA" vs German "Banco AG" are different companies,
+        // not suffix variants of one), and this exact-match path isn't gated
+        // by the fuzzy-match threshold — an incorrect strip here is an
+        // ungated false merge, not just a missed collapse. See
+        // company_entity_resolution_leads.test.ts.
+        /\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|pty|pvt)\.?$/i,
         ""
       )
       .trim();
@@ -375,11 +382,10 @@ export function formatCanonicalNameForStorage(entityType: string, raw: string): 
   }
 
   if (entityType === "company" || entityType === "organization") {
+    // Keep in sync with normalizeEntityValue above — see the comment there
+    // for why `sa` / `ag` are deliberately excluded from this list.
     s = s
-      .replace(
-        /\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|sa|ag|pty|pvt)\.?$/i,
-        ""
-      )
+      .replace(/\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|pty|pvt)\.?$/i, "")
       .trim();
   }
 

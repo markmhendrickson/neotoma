@@ -991,6 +991,19 @@
       ]
     },
     {
+      "path": "/query_contacts_at_company",
+      "method": "POST",
+      "operation_id": "queryContactsAtCompany",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/recent_conversations",
       "method": "GET",
       "operation_id": "getRecentConversations",

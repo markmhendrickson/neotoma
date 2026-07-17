@@ -1710,7 +1710,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   contact: {
     entity_type: "contact",
-    schema_version: "1.0",
+    schema_version: "1.1",
     metadata: {
       label: "Contact",
       description: "People and organization records.",
@@ -1725,6 +1725,15 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         phone: { type: "string", required: false },
         organization: { type: "string", required: false },
         role: { type: "string", required: false },
+        // v1.1: leads-graph enrichment from LinkedIn/Gmail exports. `title`
+        // (position), `linkedin_url` (profile), and `connected_on` (LinkedIn
+        // connection date) were previously dropped to raw fragments; declared
+        // here so they surface on the snapshot for who-do-we-know-at-X queries.
+        title: { type: "string", required: false },
+        linkedin_url: { type: "string", required: false },
+        connected_on: { type: "date", required: false },
+        data_source: { type: "string", required: false },
+        source_owner: { type: "string", required: false },
         type: { type: "string", required: false },
         contact_type: { type: "string", required: false },
         category: { type: "string", required: false },
@@ -1744,6 +1753,20 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // identifiers depending on source (CRM export, email signature, chat
       // mention), so each strong identifier is a single-field rule.
       canonical_name_fields: ["email", "phone", "external_id", "contact_id", "name"],
+      // `organization` becomes a reliable join key: resolve (fuzzy, get-or-
+      // create) a canonical `company` entity and link this contact to it via
+      // `works_at`. `resolve_target: true` opts into
+      // `resolveCompanyEntity` (company_resolution.ts) instead of the default
+      // skip-if-missing reference-field behavior — see
+      // docs/foundation/entity_resolution.md#15.4-company-entity-resolution-leads-graph-join-key.
+      reference_fields: [
+        {
+          field: "organization",
+          target_entity_type: "company",
+          relationship_type: "works_at",
+          resolve_target: true,
+        },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -1751,6 +1774,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         email: { strategy: "highest_priority" },
         phone: { strategy: "highest_priority" },
         external_id: { strategy: "highest_priority" },
+        title: { strategy: "highest_priority" },
+        linkedin_url: { strategy: "highest_priority" },
+        connected_on: { strategy: "last_write" },
         last_contact_date: { strategy: "last_write" },
         updated_date: { strategy: "last_write" },
       },
