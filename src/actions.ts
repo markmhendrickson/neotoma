@@ -3452,6 +3452,19 @@ async function resolveGuestScopedEntityAccess(
     );
   }
 
+  // An entity-scoped, valid, unexpired guest_access_token that names this
+  // exact entityId is a deliberate per-entity grant and takes precedence over
+  // the type-level policy for THIS entity only. The type-level policy still
+  // governs every path below where no token is present or the token does not
+  // name this entityId (see resolveGuestReadAccess call further down for the
+  // undifferentiated-access case).
+  if (principal.guestId.accessToken) {
+    const { tokenGrantsAccessTo } = await import("./services/guest_access_token.js");
+    if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
+      return { userId: entity.user_id, entityType: entity.entity_type };
+    }
+  }
+
   const { resolveGuestReadAccess } = await import("./services/access_policy.js");
   const decision = await resolveGuestReadAccess(entity.entity_type, principal.guestId);
   if (!decision.allowed) {
@@ -3467,9 +3480,6 @@ async function resolveGuestScopedEntityAccess(
     if (principal.guestId.accessToken) {
       const { tokenGrantsAccessTo, hashGuestAccessToken } =
         await import("./services/guest_access_token.js");
-      if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
-        return { userId: entity.user_id, entityType: entity.entity_type };
-      }
       if (entity.entity_type === "issue") {
         const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
         const { data: issueObservations } = await db
@@ -4355,6 +4365,9 @@ app.get("/entities/:id/html", async (req, res) => {
         hint: "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. Create a grant via Inspector → Agents → Grants.",
         sandbox: { available: false },
       });
+    }
+    if (error instanceof AccessPolicyError) {
+      return sendError(res, 403, error.code, error.message, error.toErrorEnvelope());
     }
     logError("APIError:entity_html", req, error);
     const message = error instanceof Error ? error.message : "Failed to render entity HTML";
