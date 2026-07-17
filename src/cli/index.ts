@@ -9009,6 +9009,26 @@ skillsCommand
       "Creates and populates the skills directory for any harness whose base directory exists."
   )
   .option("--scope <scope>", "Mirror at user or project level", "user")
+  .option(
+    "--include-instance-skills",
+    "Also fetch `enabled` skill entities from the connected instance and materialize them " +
+      "under ~/.neotoma/instance-skills/<host>/, linked into harnesses alongside package skills " +
+      "(package skills win on name collision). See docs/skills/skill_strategy.md.",
+    false
+  )
+  .option(
+    "--include-instance-scripts",
+    "Also fetch script attachments (file_asset entities EMBEDS'd by instance skills), verify " +
+      "their content_hash, and write them to <skill>/scripts/ — gated by the hash-pin consent " +
+      "manifest (~/.neotoma/instance-skills/approvals.json). Implies --include-instance-skills.",
+    false
+  )
+  .option(
+    "--approve",
+    "Record any new or changed instance-script hashes as approved before writing them. " +
+      "Without this flag, unapproved or changed-hash scripts are not written.",
+    false
+  )
   .action(async (opts) => {
     const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
     const scope = opts.scope === "project" ? "project" : "user";
@@ -9020,8 +9040,30 @@ skillsCommand
       scope,
       onLog: json ? undefined : (msg) => console.log(`  ${msg}`),
     });
+
+    const includeInstanceScripts = Boolean(opts.includeInstanceScripts);
+    const includeInstanceSkills = Boolean(opts.includeInstanceSkills) || includeInstanceScripts;
+
+    let instanceReport: Awaited<
+      ReturnType<typeof import("./instance_skills_sync.js").runInstanceSkillsSync>
+    > | null = null;
+    if (includeInstanceSkills) {
+      const { runInstanceSkillsSync } = await import("./instance_skills_sync.js");
+      const config = await readConfig();
+      const token = await getCliToken();
+      const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+      const api = createApiClient({ baseUrl, token });
+      instanceReport = await runInstanceSkillsSync(api, {
+        includeInstanceSkills,
+        includeInstanceScripts,
+        approve: Boolean(opts.approve),
+        baseUrl,
+        scope,
+      });
+    }
+
     if (json) {
-      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+      process.stdout.write(JSON.stringify({ ...report, instance: instanceReport }, null, 2) + "\n");
       if (!report.source_present || report.has_errors) process.exitCode = 1;
       return;
     }
@@ -9048,6 +9090,48 @@ skillsCommand
     if (report.has_errors) {
       console.error("Some skills failed to link; see warnings above.");
       process.exitCode = 1;
+    }
+
+    if (instanceReport?.ran) {
+      console.log(
+        `Instance skills: ${instanceReport.skillsFetched} fetched → ${instanceReport.root}`
+      );
+      for (const c of instanceReport.skippedCollisions) {
+        console.log(`  ⚠ skipped '${c.name}': ${c.reason}`);
+      }
+      if (instanceReport.written.length > 0) {
+        console.log(`  updated: ${instanceReport.written.join(", ")}`);
+      }
+      if (instanceReport.pruned.length > 0) {
+        console.log(`  pruned: ${instanceReport.pruned.join(", ")}`);
+      }
+      for (const r of instanceReport.harnessResults) {
+        if (r.skipped) continue;
+        console.log(`  ${r.tool}: ${r.linked.length} instance skill link(s) → ${r.target}`);
+      }
+      if (instanceReport.scripts) {
+        const s = instanceReport.scripts;
+        for (const w of s.written) {
+          console.log(`  script written: ${w.skill}/scripts/${w.filename}`);
+        }
+        for (const b of s.blockedUnapproved) {
+          console.log(
+            `  ⚠ script not written (unapproved): ${b.skill}/${b.filename} (sha256:${b.hash.slice(0, 12)}) — re-run with --approve after review`
+          );
+        }
+        for (const b of s.blockedHashChanged) {
+          console.log(
+            `  ⚠ script not written (hash changed since approval): ${b.skill}/${b.filename} ` +
+              `(approved sha256:${b.approvedHash.slice(0, 12)}, new sha256:${b.newHash.slice(0, 12)}) — re-run with --approve after review`
+          );
+        }
+        for (const m of s.hashMismatches) {
+          console.error(
+            `  ✗ content_hash mismatch for ${m.skill}/${m.filename}: expected ${m.expected}, got ${m.actual} — refusing to write`
+          );
+          process.exitCode = 1;
+        }
+      }
     }
   });
 
