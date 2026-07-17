@@ -9131,6 +9131,12 @@ skillsCommand
           );
           process.exitCode = 1;
         }
+        for (const r of s.rejectedFilenames) {
+          console.error(
+            `  ✗ script filename rejected for ${r.skill}: ${JSON.stringify(r.filename)} — ${r.reason}`
+          );
+          process.exitCode = 1;
+        }
       }
     }
   });

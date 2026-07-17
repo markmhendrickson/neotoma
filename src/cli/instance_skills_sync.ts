@@ -63,6 +63,7 @@ export interface InstanceSkillsSyncReport {
       key: string;
     }>;
     hashMismatches: Array<{ skill: string; filename: string; expected: string; actual: string }>;
+    rejectedFilenames: Array<{ skill: string; filename: string; reason: string }>;
   };
 }
 
@@ -134,6 +135,7 @@ export async function runInstanceSkillsSync(
     expected: string;
     actual: string;
   }> = [];
+  const rejectedFilenames: Array<{ skill: string; filename: string; reason: string }> = [];
 
   // Package-collision rows were never materialized — skip their scripts too.
   const collisionNames = new Set(materialized.skippedCollisions.map((c) => c.name));
@@ -191,6 +193,13 @@ export async function runInstanceSkillsSync(
             actual: outcome.actual,
           });
           break;
+        case "rejected_filename":
+          rejectedFilenames.push({
+            skill: skillDirName,
+            filename: outcome.filename,
+            reason: outcome.reason,
+          });
+          break;
       }
     }
   }
@@ -204,6 +213,7 @@ export async function runInstanceSkillsSync(
     blockedUnapproved,
     blockedHashChanged,
     hashMismatches,
+    rejectedFilenames,
   };
   return report;
 }
