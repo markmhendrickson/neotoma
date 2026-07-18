@@ -1,0 +1,126 @@
+{
+  "meta": {
+    "id": "agent_initiated_file_read_provenance_noncompliant",
+    "description": "Companion to agent_initiated_file_read_provenance: scripts the NON-compliant call shape the 'Agent-initiated file reads' clause forbids \u2014 mcp_neotoma_store called with a bare source_file citation and no file_path/asset_entity_id, no EMBEDS relationship ever created for the read file. This is the failure mode issue #1933 reports (dangling source_file citation, file_urls resolves to []). NOTE (per PR #1934 qa-lens review, Phoenicurus): as of this fixture, packages/cursor-hooks/hooks/_common.ts has no detection logic for this case \u2014 missed_steps/turn_diagnosis are populated by the hook's own diagnosis code, which does not yet classify a dangling source_file citation. This fixture intentionally does NOT assert a turn_compliance/turn_diagnosis flag for that reason; it pins only the harness-plumbing behavior that is true today \u2014 the non-compliant mcp_neotoma_store call (bare source_file, no file_path, no asset_entity_id) is captured verbatim in the tool_invocation's input_summary/output. It deliberately does not assert an exact /create_relationship request count, since any such count would reflect incidental hook bookkeeping (REFERS_TO/PART_OF for message linking), not a semantic check for the missing EMBEDS link. Asserting behavioral detection of the missing EMBEDS link is deferred to the schema_registry.ts soft guard tracked in the eval-coverage fast-follow issue linked from PR #1934.",
+    "harnesses": [
+      "cursor-hooks"
+    ],
+    "models": [
+      "composer-2",
+      "gpt-5.5-fast",
+      "claude-haiku-4",
+      "claude-sonnet-4.5",
+      "gpt-5.5-medium"
+    ],
+    "tags": [
+      "provenance",
+      "source-file",
+      "turn-lifecycle",
+      "regression-gap"
+    ]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Read /Users/agent/workspace/lab_results.pdf and store the lab readings you find in it."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_parse_file",
+        "tool_input": {
+          "file_path": "/Users/agent/workspace/lab_results.pdf"
+        },
+        "tool_output": {
+          "text": "Glucose: 95 mg/dL\nCholesterol: 180 mg/dL",
+          "pages": 1
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "entities": [
+            {
+              "entity_type": "lab_reading",
+              "test_name": "Glucose",
+              "value": "95 mg/dL",
+              "source_file": "lab_results.pdf"
+            },
+            {
+              "entity_type": "lab_reading",
+              "test_name": "Cholesterol",
+              "value": "180 mg/dL",
+              "source_file": "lab_results.pdf"
+            }
+          ],
+          "idempotency_key": "agent-read-eval-noncompliant-001"
+        },
+        "tool_output": {
+          "entities": [
+            {
+              "entity_id": "ent_lab_glucose_noncompliant_001",
+              "entity_type": "lab_reading",
+              "unknown_fields_count": 0
+            },
+            {
+              "entity_id": "ent_lab_cholesterol_noncompliant_001",
+              "entity_type": "lab_reading",
+              "unknown_fields_count": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "Stored 2 lab readings from lab_results.pdf (Glucose 95 mg/dL, Cholesterol 180 mg/dL)."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": {
+          "role": "user"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": {
+          "role": "assistant"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "mcp_neotoma_parse_file"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "mcp_neotoma_store"
+        }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "input_summary",
+        "where": {
+          "tool_name": "mcp_neotoma_store"
+        }
+      }
+    ]
+  }
+}

@@ -27,6 +27,27 @@ describe("mcp_instruction_doc", () => {
     expect(body).toMatch(/heuristic title\/name matching/i);
   });
 
+  it("requires provenance for agent-initiated file reads, not just user-attached files", () => {
+    const root = resolveNeotomaPackageRoot();
+    const raw = readMcpInstructionsMarkdown(root);
+    const body = extractFirstFencedCodeBlock(raw!);
+    expect(body).toMatch(/Agent-initiated file reads/);
+    expect(body).toMatch(/the persistence obligation is identical to a user-attached file/);
+    expect(body).toMatch(
+      /FORBIDDEN: storing entities with a `source_file`\/`source_document`-style field when no corresponding file asset was stored/
+    );
+    expect(body).toMatch(/synthesizing, re-generating, or re-typing a replacement asset.*FORBIDDEN/);
+  });
+
+  it("includes the dangling source-file citation self-audit check", () => {
+    const root = resolveNeotomaPackageRoot();
+    const raw = readMcpInstructionsMarkdown(root);
+    const body = extractFirstFencedCodeBlock(raw!);
+    expect(body).toMatch(/Dangling source-file citation check/);
+    expect(body).toMatch(/retrieve_field_provenance.*list_relationships.*EMBEDS/);
+    expect(body).toMatch(/One shared file asset satisfies the check for multiple entities/);
+  });
+
   it("instructions path is under docs/developer/mcp", () => {
     const p = mcpInstructionsPath(resolveNeotomaPackageRoot());
     expect(p).toMatch(/instructions\.md$/);
