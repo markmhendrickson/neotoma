@@ -9401,6 +9401,52 @@ issuesCommand
     );
   });
 
+// ─── Digest commands ───────────────────────────────────────────────────────
+const digestCommand = program
+  .command("digest")
+  .description("Consume and manage usage_digest entities from observer NDJSON feeds.");
+
+digestCommand
+  .command("import")
+  .description(
+    "Import a usage_digest NDJSON feed into the local Neotoma instance. " +
+      "Each line must be a JSON object conforming to the usage_digest schema " +
+      "(schema_version, period_start, period_end, reporter_channel required). " +
+      "Idempotent: re-running against the same file is safe; the store seam " +
+      "deduplicates by (reporter_channel, period_end)."
+  )
+  .requiredOption("--from-ndjson <path>", "Path to the NDJSON digest feed file to import")
+  .option("--since <iso8601>", "Only import rows whose period_end >= this ISO 8601 date")
+  .option("--until <iso8601>", "Only import rows whose period_end <= this ISO 8601 date")
+  .option(
+    "--reporter-channel <label>",
+    "Override reporter_channel for every row (use when the feed omits it)"
+  )
+  .option("--dry-run", "Parse and validate all rows but store nothing; outputs a JSON report")
+  .option("--limit <n>", "Stop after storing this many digests", parseInt)
+  .action(async (opts) => {
+    const { digestImport } = await import("./digest.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    await digestImport(
+      {
+        fromNdjson: opts.fromNdjson,
+        since: opts.since,
+        until: opts.until,
+        reporterChannel: opts.reporterChannel,
+        dryRun: Boolean(opts.dryRun),
+        limit:
+          typeof opts.limit === "number" && Number.isFinite(opts.limit) ? opts.limit : undefined,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api
+    );
+  });
+
 // ─── Plans commands ────────────────────────────────────────────────────────
 const plansCommand = program
   .command("plans")
