@@ -496,6 +496,18 @@ entries:
     supporting_source: inspector/src/pages/embed_graph.tsx
     notes: "Developer/embedder guide for the chrome-less /embed/graph iframe route (phases 1-2 of #1606). Sources: inspector/src/pages/embed_graph.tsx, inspector/src/contexts/api_base_context.tsx, v0.17.0 release supplement. Closes #1760 doc-coverage gap."
 
+  - repo_path: docs/site/pages/en/usage-telemetry.mdx
+    status: canonical_site_page
+    canonical_site_path: /usage-telemetry
+    supporting_source: src/services/schema_definitions.ts
+    notes: "Reference guide for the usage_digest entity type and how agents/observers report periodic aggregate telemetry. Sources: src/services/schema_definitions.ts usage_digest block, src/actions.ts usage_digest redaction guard, docs/subsystems/usage_digest.md. Closes partnership-hub doc-link audit gap."
+
+  - repo_path: docs/site/pages/en/rendered-pages.mdx
+    status: canonical_site_page
+    canonical_site_path: /rendered-pages
+    supporting_source: src/tool_definitions.ts
+    notes: "Reference guide for publish_rendered_page — publishing rendered_page entities as guest-accessible share URLs. Sources: src/tool_definitions.ts publish_rendered_page, src/services/rendered_page/publish.ts, src/actions.ts GET /entities/:id/html route. Closes partnership-hub doc-link audit gap."
+
 # ============================================================================
 # /docs index — category tree and featured list
 # ============================================================================

@@ -1,0 +1,111 @@
+---
+path: /rendered-pages
+locale: en
+page_title: Rendered pages
+shell: detail
+translation_status: canonical
+nav_group: reference
+nav_order: 117
+---
+
+`publish_rendered_page` turns a `rendered_page` entity into a shareable, guest-accessible URL in a single call. It is the primary way to deliver a Neotoma-authored HTML page to non-authenticated viewers — reports, one-pagers, agent-generated summaries — without granting the reader any write access to your instance.
+
+## What a rendered page is
+
+A `rendered_page` entity stores the full HTML of a standalone page. It has four content fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `title` | string | Rendered into `<title>` and the page `<h1>` when no heading appears in `html_body`. |
+| `html_body` | string | The page body HTML, injected verbatim into a server template. Do NOT include `<html>`, `<head>`, or `<body>` wrappers. |
+| `custom_css` | string | Optional CSS injected as an inline `<style>` in the document `<head>`. |
+| `meta_description` | string | Optional `<meta name="description">` value, escaped on render. |
+
+## Publishing a rendered page
+
+`publish_rendered_page` accepts either an existing `rendered_page` entity ID **or** inline content to create one on the fly.
+
+### Using an existing entity
+
+```json
+{
+  "entity_id": "<entity_id>"
+}
+```
+
+### Creating a new page inline
+
+```json
+{
+  "title": "Q2 Summary",
+  "html_body": "<h2>Key results</h2><p>Details go here.</p>",
+  "meta_description": "Q2 operational summary"
+}
+```
+
+To avoid duplicates on retry, pass `idempotency_key` on the inline-create path:
+
+```json
+{
+  "title": "Q2 Summary",
+  "html_body": "<h2>Key results</h2><p>Details go here.</p>",
+  "idempotency_key": "q2-summary-2026-06"
+}
+```
+
+The same key with the same content reuses the existing `rendered_page` rather than creating a duplicate. The idempotency key is ignored when `entity_id` is supplied.
+
+## The response
+
+A successful call returns:
+
+```json
+{
+  "entity_id": "<entity_id>",
+  "share_url": "https://<host>/entities/<entity_id>/html?access_token=<access_token>",
+  "access_token": "<access_token>",
+  "ttl_seconds": 2592000,
+  "created": true
+}
+```
+
+| Field | Notes |
+|---|---|
+| `entity_id` | The `rendered_page` entity ID (new or existing). |
+| `share_url` | Absolute URL usable by non-authenticated viewers. |
+| `access_token` | The raw guest token (only returned once — not stored in recoverable form). |
+| `ttl_seconds` | Token lifetime in seconds (default 30 days; configurable via `NEOTOMA_GUEST_TOKEN_TTL_SECONDS`). |
+| `created` | `true` when a new `rendered_page` was created inline; `false` when publishing an existing entity. |
+
+## Guest URL shape
+
+The URL pattern is:
+
+```
+/entities/<entity_id>/html?access_token=<access_token>
+```
+
+A non-authenticated viewer opening this URL sees the rendered page without needing a Neotoma account. The token is scoped to that specific entity — it grants read access to that page only.
+
+**Tokens are not stored in recoverable form.** Only a hash of the token is persisted. Each `publish_rendered_page` call mints a fresh token. If you need to share a new link, call `publish_rendered_page` again — repeated calls for the same entity are safe.
+
+## Updating a live page
+
+To update the content of a page that has already been shared, use `correct` to update the entity's fields:
+
+```json
+{
+  "entity_id": "<entity_id>",
+  "field": "html_body",
+  "value": "<h2>Updated results</h2><p>New details.</p>",
+  "idempotency_key": "q2-summary-2026-06-html-body-update-1"
+}
+```
+
+The existing share URL continues to work — `GET /entities/<id>/html?access_token=<token>` always renders the current snapshot. A correction to the entity's `html_body`, `title`, `custom_css`, or `meta_description` is reflected immediately on the next page load.
+
+## Conformance checks
+
+`publish_rendered_page` runs a non-blocking conformance check on the page's HTML and CSS before returning. If any advisory issues are detected (theming inconsistencies, tokenless cross-links), they appear in `conformance_warnings` alongside the normal response. Publishing never fails on conformance warnings — they are advisory.
+
+See the [changelog](/changelog) for release notes, and [agent auth](/agent-auth) for configuring guest access tokens and AAuth grants.
