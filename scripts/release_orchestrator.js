@@ -1461,13 +1461,7 @@ async function main() {
     console.error(`[ERROR] Unknown execution mode: ${executionMode}`);
     process.exit(1);
   }
-
-  // Initialize or load status
-  let status = await loadStatus();
-  if (!status) {
-    status = await initializeStatus(RELEASE_ID, batches);
-    console.log("[INFO] Initialized status file");
-  }
+}
 
 // Execute multi-agent parallel execution
 async function executeMultiAgent(manifest, batches, status, releaseId) {
