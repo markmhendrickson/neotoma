@@ -9321,10 +9321,19 @@ issuesCommand
   .action(async (opts) => {
     const { issuesSync } = await import("./issues.js");
     const config = await readConfig();
-    const token = await getCliToken();
+    // Prefer per-agent AAuth signing when a CLI AAuth key is configured via env
+    // (NEOTOMA_AAUTH_PRIVATE_JWK_PATH). This lets the issues-sync LaunchAgent /
+    // neotoma-agent daemon authenticate with a signed request instead of a
+    // bearer token (bearer-token retirement). Drop the bearer so the signature
+    // is the sole credential, and force the HTTP transport — the in-process
+    // local transport bypasses signing (and also avoids the dev/prod local
+    // transport env-mismatch). Falls back to bearer when AAuth is not configured.
+    const useAAuth = Boolean(process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH);
+    const token = useAAuth ? undefined : await getCliToken();
     const api = createApiClient({
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
+      ...(useAAuth ? { signWithCliAAuth: true, forceHttpTransport: true } : {}),
     });
     await issuesSync({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
   });
