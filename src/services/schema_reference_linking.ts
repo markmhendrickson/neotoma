@@ -12,6 +12,14 @@
  * `resolve_target: true`, in which case a resolver may create the target
  * (see the `resolve_target` branch below and `company_resolution.ts`).
  *
+ * When a reference field's resolved target changes across observations (e.g.
+ * a contact's `organization` moves from Company A to Company B), the
+ * previously auto-linked edge for that field is retracted in the same
+ * reduction that creates the new one, so a stale duplicate edge never
+ * accumulates (#1963). Only edges this mechanism created
+ * (`metadata.auto_linked === true` for the same field) are retracted;
+ * manually-created edges are never touched.
+ *
  * This is the schema-agnostic replacement for hardcoded
  * "if entity.category === 'foo', link to Foo" logic.
  */
@@ -20,6 +28,22 @@ import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import type { RelationshipType } from "./relationships.js";
 import type { SchemaDefinition } from "./schema_registry.js";
+
+/** Metadata shape written onto relationships created by this service. */
+export interface AutoLinkMetadata {
+  auto_linked: true;
+  auto_link_field: string;
+  auto_link_entity_type: string;
+}
+
+function isAutoLinkMetadataForField(
+  metadata: Record<string, unknown> | null | undefined,
+  field: string
+): boolean {
+  return (
+    !!metadata && metadata.auto_linked === true && metadata.auto_link_field === field
+  );
+}
 
 export interface AutoLinkReferenceFieldsParams {
   entityId: string;
@@ -65,6 +89,93 @@ function normalizeCandidate(value: unknown): string | null {
   return null;
 }
 
+/** Live edges this mechanism previously created for one entity+field+type. */
+async function findPriorAutoLinkedEdges(
+  relationshipsService: (typeof import("./relationships.js"))["relationshipsService"],
+  entityId: string,
+  relationshipType: RelationshipType,
+  field: string,
+  userId: string
+): Promise<Array<{ relationship_key: string; target_entity_id: string }>> {
+  const existing = await relationshipsService.getRelationshipsForEntity(
+    entityId,
+    "outgoing",
+    false,
+    userId
+  );
+  return existing
+    .filter(
+      (rel) =>
+        rel.relationship_type === relationshipType &&
+        isAutoLinkMetadataForField(rel.snapshot, field)
+    )
+    .map((rel) => ({
+      relationship_key: rel.relationship_key,
+      target_entity_id: rel.target_entity_id,
+    }));
+}
+
+/** Retract a set of stale auto-linked edges via softDeleteRelationship. */
+async function retractStaleAutoLinkedEdges(
+  stale: Array<{ relationship_key: string; target_entity_id: string }>,
+  relationshipType: RelationshipType,
+  entityId: string,
+  field: string,
+  entityType: string,
+  userId: string
+): Promise<void> {
+  if (stale.length === 0) return;
+  const { softDeleteRelationship } = await import("./deletion.js");
+  for (const edge of stale) {
+    const retraction = await softDeleteRelationship(
+      edge.relationship_key,
+      relationshipType,
+      entityId,
+      edge.target_entity_id,
+      userId,
+      `auto_link_retraction:${field}`
+    );
+    if (!retraction.success) {
+      logger.warn(
+        `[SCHEMA_REF_LINK] Failed to retract stale auto-linked edge ` +
+          `${edge.relationship_key} for ${entityType}.${field}: ${retraction.error}`
+      );
+    }
+  }
+}
+
+/**
+ * Find and retract every live auto-linked edge for one entity+field+type,
+ * swallowing lookup/retraction failures as warnings (never throws). Used on
+ * every path where this field no longer resolves to a linkable target this
+ * reduction — cleared, unresolvable, or self-referencing — so a stale edge
+ * from a prior resolution never survives (#1963).
+ */
+async function retractPriorAutoLinkedEdgesSafely(
+  relationshipsService: (typeof import("./relationships.js"))["relationshipsService"],
+  relationshipType: RelationshipType,
+  entityId: string,
+  field: string,
+  entityType: string,
+  userId: string
+): Promise<void> {
+  try {
+    const stale = await findPriorAutoLinkedEdges(
+      relationshipsService,
+      entityId,
+      relationshipType,
+      field,
+      userId
+    );
+    await retractStaleAutoLinkedEdges(stale, relationshipType, entityId, field, entityType, userId);
+  } catch (err) {
+    logger.warn(
+      `[SCHEMA_REF_LINK] Failed to retract prior auto-linked edges for ` +
+        `${entityType}.${field}: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
 export async function autoLinkReferenceFields(
   params: AutoLinkReferenceFieldsParams
 ): Promise<AutoLinkResult> {
@@ -77,7 +188,21 @@ export async function autoLinkReferenceFields(
   for (const ref of refs) {
     const rawValue = params.fields[ref.field];
     const candidate = normalizeCandidate(rawValue);
-    if (!candidate) continue;
+    const relationshipTypeForField = (ref.relationship_type || "REFERS_TO") as RelationshipType;
+
+    if (!candidate) {
+      // Field cleared (null/empty): retract any prior auto-linked edge for
+      // this field so the snapshot and its live edge don't disagree (#1963).
+      await retractPriorAutoLinkedEdgesSafely(
+        relationshipsService,
+        relationshipTypeForField,
+        params.entityId,
+        ref.field,
+        params.entityType,
+        params.userId
+      );
+      continue;
+    }
 
     // Resolve target entity by canonical_name or display name of the declared
     // target entity type. We check entity_snapshots for an exact canonical
@@ -151,6 +276,17 @@ export async function autoLinkReferenceFields(
     }
 
     if (!targetEntityId) {
+      // Target no longer resolves (e.g. organization renamed to a company
+      // not yet in the graph): retract any prior auto-linked edge for this
+      // field so it doesn't survive as a stale duplicate (#1963).
+      await retractPriorAutoLinkedEdgesSafely(
+        relationshipsService,
+        relationshipTypeForField,
+        params.entityId,
+        ref.field,
+        params.entityType,
+        params.userId
+      );
       result.skipped++;
       result.details.push({
         field: ref.field,
@@ -164,12 +300,63 @@ export async function autoLinkReferenceFields(
     }
 
     if (targetEntityId === params.entityId) {
-      // No self-loops.
+      // No self-loops, but still retract any prior auto-linked edge for this
+      // field — the field's resolved target changed even though we don't
+      // link to it (#1963).
+      await retractPriorAutoLinkedEdgesSafely(
+        relationshipsService,
+        relationshipTypeForField,
+        params.entityId,
+        ref.field,
+        params.entityType,
+        params.userId
+      );
       result.skipped++;
       continue;
     }
 
-    const relationshipType = (ref.relationship_type || "REFERS_TO") as RelationshipType;
+    const relationshipType = relationshipTypeForField;
+
+    // Find any live edges this mechanism previously created for this field,
+    // so a changed resolution target (e.g. contact.organization moving from
+    // Company A to Company B) retracts the stale edge instead of
+    // accumulating a duplicate (#1963). Manually-created edges (no
+    // auto_linked metadata, or a different field) are left untouched.
+    let priorAutoLinked: Array<{ relationship_key: string; target_entity_id: string }> = [];
+    try {
+      priorAutoLinked = await findPriorAutoLinkedEdges(
+        relationshipsService,
+        params.entityId,
+        relationshipType,
+        ref.field,
+        params.userId
+      );
+    } catch (err) {
+      logger.warn(
+        `[SCHEMA_REF_LINK] Failed to look up existing auto-linked edges for ` +
+          `${params.entityType}.${ref.field}: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    const alreadyLinkedToTarget = priorAutoLinked.some(
+      (rel) => rel.target_entity_id === targetEntityId
+    );
+    const staleAutoLinked = priorAutoLinked.filter(
+      (rel) => rel.target_entity_id !== targetEntityId
+    );
+
+    if (alreadyLinkedToTarget) {
+      // Target unchanged: no-op, avoid a redundant create + retraction pair.
+      result.details.push({
+        field: ref.field,
+        target_entity_type: ref.target_entity_type,
+        target_canonical_name: candidate,
+        target_entity_id: targetEntityId,
+        relationship_type: relationshipType,
+        linked: true,
+      });
+      continue;
+    }
 
     try {
       await relationshipsService.createRelationship({
@@ -181,9 +368,19 @@ export async function autoLinkReferenceFields(
           auto_linked: true,
           auto_link_field: ref.field,
           auto_link_entity_type: params.entityType,
-        },
+        } satisfies AutoLinkMetadata,
         user_id: params.userId,
       });
+
+      await retractStaleAutoLinkedEdges(
+        staleAutoLinked,
+        relationshipType,
+        params.entityId,
+        ref.field,
+        params.entityType,
+        params.userId
+      );
+
       result.created++;
       result.details.push({
         field: ref.field,
