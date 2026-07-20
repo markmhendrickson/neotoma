@@ -67,6 +67,8 @@ export interface AutoLinkReferenceFieldsParams {
 export interface AutoLinkResult {
   created: number;
   skipped: number;
+  retracted: number;
+  retraction_failures: number;
   details: Array<{
     field: string;
     target_entity_type: string;
@@ -74,6 +76,7 @@ export interface AutoLinkResult {
     target_entity_id: string | null;
     relationship_type: string;
     linked: boolean;
+    retracted_target_entity_id?: string;
   }>;
 }
 
@@ -115,6 +118,13 @@ async function findPriorAutoLinkedEdges(
     }));
 }
 
+/** Result of attempting to retract a set of stale auto-linked edges. */
+export interface RetractStaleEdgesResult {
+  retracted: number;
+  failed: number;
+  retractedTargetEntityIds: string[];
+}
+
 /** Retract a set of stale auto-linked edges via softDeleteRelationship. */
 async function retractStaleAutoLinkedEdges(
   stale: Array<{ relationship_key: string; target_entity_id: string }>,
@@ -123,8 +133,9 @@ async function retractStaleAutoLinkedEdges(
   field: string,
   entityType: string,
   userId: string
-): Promise<void> {
-  if (stale.length === 0) return;
+): Promise<RetractStaleEdgesResult> {
+  const result: RetractStaleEdgesResult = { retracted: 0, failed: 0, retractedTargetEntityIds: [] };
+  if (stale.length === 0) return result;
   const { softDeleteRelationship } = await import("./deletion.js");
   for (const edge of stale) {
     const retraction = await softDeleteRelationship(
@@ -135,13 +146,18 @@ async function retractStaleAutoLinkedEdges(
       userId,
       `auto_link_retraction:${field}`
     );
-    if (!retraction.success) {
-      logger.warn(
+    if (retraction.success) {
+      result.retracted++;
+      result.retractedTargetEntityIds.push(edge.target_entity_id);
+    } else {
+      result.failed++;
+      logger.error(
         `[SCHEMA_REF_LINK] Failed to retract stale auto-linked edge ` +
           `${edge.relationship_key} for ${entityType}.${field}: ${retraction.error}`
       );
     }
   }
+  return result;
 }
 
 /**
@@ -158,7 +174,7 @@ async function retractPriorAutoLinkedEdgesSafely(
   field: string,
   entityType: string,
   userId: string
-): Promise<void> {
+): Promise<RetractStaleEdgesResult> {
   try {
     const stale = await findPriorAutoLinkedEdges(
       relationshipsService,
@@ -167,19 +183,26 @@ async function retractPriorAutoLinkedEdgesSafely(
       field,
       userId
     );
-    await retractStaleAutoLinkedEdges(stale, relationshipType, entityId, field, entityType, userId);
+    return await retractStaleAutoLinkedEdges(stale, relationshipType, entityId, field, entityType, userId);
   } catch (err) {
-    logger.warn(
+    logger.error(
       `[SCHEMA_REF_LINK] Failed to retract prior auto-linked edges for ` +
         `${entityType}.${field}: ${err instanceof Error ? err.message : String(err)}`
     );
+    return { retracted: 0, failed: 1, retractedTargetEntityIds: [] };
   }
 }
 
 export async function autoLinkReferenceFields(
   params: AutoLinkReferenceFieldsParams
 ): Promise<AutoLinkResult> {
-  const result: AutoLinkResult = { created: 0, skipped: 0, details: [] };
+  const result: AutoLinkResult = {
+    created: 0,
+    skipped: 0,
+    retracted: 0,
+    retraction_failures: 0,
+    details: [],
+  };
   const refs = params.schema?.reference_fields;
   if (!refs || refs.length === 0) return result;
 
@@ -193,7 +216,7 @@ export async function autoLinkReferenceFields(
     if (!candidate) {
       // Field cleared (null/empty): retract any prior auto-linked edge for
       // this field so the snapshot and its live edge don't disagree (#1963).
-      await retractPriorAutoLinkedEdgesSafely(
+      const clearedRetraction = await retractPriorAutoLinkedEdgesSafely(
         relationshipsService,
         relationshipTypeForField,
         params.entityId,
@@ -201,6 +224,19 @@ export async function autoLinkReferenceFields(
         params.entityType,
         params.userId
       );
+      result.retracted += clearedRetraction.retracted;
+      result.retraction_failures += clearedRetraction.failed;
+      for (const retractedTargetEntityId of clearedRetraction.retractedTargetEntityIds) {
+        result.details.push({
+          field: ref.field,
+          target_entity_type: ref.target_entity_type,
+          target_canonical_name: "",
+          target_entity_id: null,
+          relationship_type: ref.relationship_type || "REFERS_TO",
+          linked: false,
+          retracted_target_entity_id: retractedTargetEntityId,
+        });
+      }
       continue;
     }
 
@@ -279,7 +315,7 @@ export async function autoLinkReferenceFields(
       // Target no longer resolves (e.g. organization renamed to a company
       // not yet in the graph): retract any prior auto-linked edge for this
       // field so it doesn't survive as a stale duplicate (#1963).
-      await retractPriorAutoLinkedEdgesSafely(
+      const unresolvedRetraction = await retractPriorAutoLinkedEdgesSafely(
         relationshipsService,
         relationshipTypeForField,
         params.entityId,
@@ -287,15 +323,31 @@ export async function autoLinkReferenceFields(
         params.entityType,
         params.userId
       );
+      result.retracted += unresolvedRetraction.retracted;
+      result.retraction_failures += unresolvedRetraction.failed;
       result.skipped++;
-      result.details.push({
-        field: ref.field,
-        target_entity_type: ref.target_entity_type,
-        target_canonical_name: candidate,
-        target_entity_id: null,
-        relationship_type: ref.relationship_type || "REFERS_TO",
-        linked: false,
-      });
+      if (unresolvedRetraction.retractedTargetEntityIds.length > 0) {
+        for (const retractedTargetEntityId of unresolvedRetraction.retractedTargetEntityIds) {
+          result.details.push({
+            field: ref.field,
+            target_entity_type: ref.target_entity_type,
+            target_canonical_name: candidate,
+            target_entity_id: null,
+            relationship_type: ref.relationship_type || "REFERS_TO",
+            linked: false,
+            retracted_target_entity_id: retractedTargetEntityId,
+          });
+        }
+      } else {
+        result.details.push({
+          field: ref.field,
+          target_entity_type: ref.target_entity_type,
+          target_canonical_name: candidate,
+          target_entity_id: null,
+          relationship_type: ref.relationship_type || "REFERS_TO",
+          linked: false,
+        });
+      }
       continue;
     }
 
@@ -303,7 +355,7 @@ export async function autoLinkReferenceFields(
       // No self-loops, but still retract any prior auto-linked edge for this
       // field — the field's resolved target changed even though we don't
       // link to it (#1963).
-      await retractPriorAutoLinkedEdgesSafely(
+      const selfLoopRetraction = await retractPriorAutoLinkedEdgesSafely(
         relationshipsService,
         relationshipTypeForField,
         params.entityId,
@@ -311,7 +363,31 @@ export async function autoLinkReferenceFields(
         params.entityType,
         params.userId
       );
+      result.retracted += selfLoopRetraction.retracted;
+      result.retraction_failures += selfLoopRetraction.failed;
       result.skipped++;
+      if (selfLoopRetraction.retractedTargetEntityIds.length > 0) {
+        for (const retractedTargetEntityId of selfLoopRetraction.retractedTargetEntityIds) {
+          result.details.push({
+            field: ref.field,
+            target_entity_type: ref.target_entity_type,
+            target_canonical_name: candidate,
+            target_entity_id: null,
+            relationship_type: relationshipTypeForField,
+            linked: false,
+            retracted_target_entity_id: retractedTargetEntityId,
+          });
+        }
+      } else {
+        result.details.push({
+          field: ref.field,
+          target_entity_type: ref.target_entity_type,
+          target_canonical_name: candidate,
+          target_entity_id: null,
+          relationship_type: relationshipTypeForField,
+          linked: false,
+        });
+      }
       continue;
     }
 
@@ -372,7 +448,7 @@ export async function autoLinkReferenceFields(
         user_id: params.userId,
       });
 
-      await retractStaleAutoLinkedEdges(
+      const changedTargetRetraction = await retractStaleAutoLinkedEdges(
         staleAutoLinked,
         relationshipType,
         params.entityId,
@@ -380,16 +456,32 @@ export async function autoLinkReferenceFields(
         params.entityType,
         params.userId
       );
+      result.retracted += changedTargetRetraction.retracted;
+      result.retraction_failures += changedTargetRetraction.failed;
 
       result.created++;
-      result.details.push({
-        field: ref.field,
-        target_entity_type: ref.target_entity_type,
-        target_canonical_name: candidate,
-        target_entity_id: targetEntityId,
-        relationship_type: relationshipType,
-        linked: true,
-      });
+      if (changedTargetRetraction.retractedTargetEntityIds.length > 0) {
+        for (const retractedTargetEntityId of changedTargetRetraction.retractedTargetEntityIds) {
+          result.details.push({
+            field: ref.field,
+            target_entity_type: ref.target_entity_type,
+            target_canonical_name: candidate,
+            target_entity_id: targetEntityId,
+            relationship_type: relationshipType,
+            linked: true,
+            retracted_target_entity_id: retractedTargetEntityId,
+          });
+        }
+      } else {
+        result.details.push({
+          field: ref.field,
+          target_entity_type: ref.target_entity_type,
+          target_canonical_name: candidate,
+          target_entity_id: targetEntityId,
+          relationship_type: relationshipType,
+          linked: true,
+        });
+      }
     } catch (err) {
       result.skipped++;
       logger.warn(

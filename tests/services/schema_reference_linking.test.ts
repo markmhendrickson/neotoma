@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  ObservationReducer,
+  type Observation,
+} from "../../src/reducers/observation_reducer.js";
 
 vi.mock("../../src/db.js", () => {
   const snapshots: Array<Record<string, unknown>> = [];
@@ -59,6 +63,34 @@ vi.mock("../../src/services/company_resolution.js", () => {
     resolveCompanyEntity: (...args: unknown[]) => resolveCompanyEntityMock(...args),
   };
 });
+
+// Used only by the replay/out-of-order delivery test below, which drives the
+// real ObservationReducer to prove last-write-wins is order-independent.
+const loadActiveSchemaMock = vi.fn();
+vi.mock("../../src/services/schema_registry.js", () => ({
+  DEFAULT_OBSERVATION_SOURCE_PRIORITY: [
+    "sensor",
+    "workflow_state",
+    "llm_summary",
+    "human",
+    "import",
+  ] as const,
+  schemaRegistry: {
+    loadActiveSchema: (...args: unknown[]) => loadActiveSchemaMock(...args),
+  },
+}));
+vi.mock("../../src/services/schema_definitions.js", () => ({
+  getSchemaDefinition: vi.fn().mockReturnValue(null),
+}));
+vi.mock("../../src/services/field_validation.js", () => ({
+  validateFieldWithConverters: vi
+    .fn()
+    .mockImplementation((_field: string, value: unknown) => ({
+      isValid: true,
+      value,
+      shouldRouteToRawFragments: false,
+    })),
+}));
 
 describe("autoLinkReferenceFields", () => {
   beforeEach(() => {
@@ -331,9 +363,12 @@ describe("autoLinkReferenceFields", () => {
         expect.stringContaining("organization")
       );
       expect(result.created).toBe(1);
+      expect(result.retracted).toBe(1);
+      expect(result.retraction_failures).toBe(0);
       expect(result.details[0]).toMatchObject({
         target_entity_id: "ent_company_stripe",
         linked: true,
+        retracted_target_entity_id: "ent_company_dust",
       });
     });
 
@@ -454,6 +489,12 @@ describe("autoLinkReferenceFields", () => {
         expect.any(String)
       );
       expect(result.created).toBe(0);
+      expect(result.retracted).toBe(1);
+      expect(result.retraction_failures).toBe(0);
+      expect(result.details[0]).toMatchObject({
+        linked: false,
+        retracted_target_entity_id: "ent_company_stripe",
+      });
     });
 
     it("does not retract when the target resolves to the same company despite casing/whitespace differences", async () => {
@@ -552,7 +593,12 @@ describe("autoLinkReferenceFields", () => {
       );
       expect(result.created).toBe(0);
       expect(result.skipped).toBe(1);
-      expect(result.details[0].linked).toBe(false);
+      expect(result.retracted).toBe(1);
+      expect(result.retraction_failures).toBe(0);
+      expect(result.details[0]).toMatchObject({
+        linked: false,
+        retracted_target_entity_id: "ent_company_dust",
+      });
     });
 
     it("retracts the prior auto-linked edge when the field resolves to a self-loop", async () => {
@@ -595,6 +641,183 @@ describe("autoLinkReferenceFields", () => {
       );
       expect(result.created).toBe(0);
       expect(result.skipped).toBe(1);
+      expect(result.retracted).toBe(1);
+      expect(result.retraction_failures).toBe(0);
+      expect(result.details[0]).toMatchObject({
+        linked: false,
+        retracted_target_entity_id: "ent_company_dust",
+      });
+    });
+
+    it("surfaces retraction failures on the result instead of only logging, and escalates to logger.error", async () => {
+      // ux review acceptance check: mock softDeleteRelationship to fail and
+      // assert (a) logger.error was called, not logger.warn, and (b)
+      // result.retraction_failures reflects the failure count.
+      const { logger } = await import("../../src/utils/logger.js");
+      const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => undefined);
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+
+      getRelationshipsForEntityMock.mockResolvedValueOnce([
+        {
+          relationship_key: "works_at:ent_contact_1:ent_company_dust",
+          relationship_type: "works_at",
+          source_entity_id: "ent_contact_1",
+          target_entity_id: "ent_company_dust",
+          snapshot: {
+            auto_linked: true,
+            auto_link_field: "organization",
+            auto_link_entity_type: "contact",
+          },
+        },
+      ]);
+      softDeleteRelationshipMock.mockResolvedValueOnce({
+        success: false,
+        error: "db unavailable",
+      });
+      mockCompanyResolution("ent_company_stripe", "Stripe");
+
+      const { autoLinkReferenceFields } =
+        await import("../../src/services/schema_reference_linking.js");
+      const result = await autoLinkReferenceFields({
+        entityId: "ent_contact_1",
+        entityType: "contact",
+        fields: { organization: "Stripe" },
+        schema: orgSchema,
+        userId: "u1",
+      });
+
+      expect(result.created).toBe(1);
+      expect(result.retracted).toBe(0);
+      expect(result.retraction_failures).toBe(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to retract stale auto-linked edge")
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("Failed to retract stale auto-linked edge")
+      );
+
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it("survives out-of-order delivery: the last-write-winning organization value wins even when the older observation is stored second", async () => {
+      // Regression for the PM review on #1970: autoLinkReferenceFields treats
+      // params.fields[ref.field] as an opaque given value with no internal
+      // awareness of observation timestamps or delivery order. That is by
+      // design — ordering is the reducer's job, not this function's. This
+      // test proves the full contract end to end: (1) the reducer's
+      // last-write-wins merge is order-independent (sorts by observed_at
+      // DESC regardless of array/delivery order), and (2) whatever value the
+      // reducer resolves is exactly what autoLinkReferenceFields acts on.
+      //
+      // Delivery order: the NEWER observation (Stripe, 2025-02-01) is stored
+      // in the array BEFORE the OLDER observation (Dust, 2025-01-01) — i.e.
+      // the older observation is "delivered second" (a backfill/replay
+      // scenario). last_write must still resolve to Stripe.
+      loadActiveSchemaMock.mockResolvedValueOnce({
+        id: "schema-contact",
+        entity_type: "contact",
+        schema_version: "1.0.0",
+        schema_definition: {
+          fields: { organization: { type: "string" as const, required: false } },
+          identity_opt_out: "heuristic_canonical_name",
+        },
+        reducer_config: {
+          merge_policies: { organization: { strategy: "last_write" as const } },
+        },
+        active: true,
+      });
+
+      const observations: Observation[] = [
+        {
+          id: "obs_newer_stripe",
+          entity_id: "ent_contact_1",
+          entity_type: "contact",
+          schema_version: "1.0",
+          source_id: "src_1",
+          observed_at: "2025-02-01T00:00:00Z",
+          specificity_score: 1.0,
+          source_priority: 100,
+          fields: { organization: "Stripe" },
+          created_at: "2025-02-01T00:00:00Z",
+          user_id: "u1",
+        },
+        {
+          id: "obs_older_dust",
+          entity_id: "ent_contact_1",
+          entity_type: "contact",
+          schema_version: "1.0",
+          source_id: "src_1",
+          observed_at: "2025-01-01T00:00:00Z",
+          specificity_score: 1.0,
+          source_priority: 100,
+          fields: { organization: "Dust" },
+          created_at: "2025-01-01T00:00:00Z",
+          user_id: "u1",
+        },
+      ];
+
+      const reducer = new ObservationReducer();
+      const snap = await reducer.computeSnapshot("ent_contact_1", observations);
+      expect(snap).not.toBeNull();
+      // The older observation was stored/delivered second (later array
+      // position corresponds to earlier observed_at is irrelevant here —
+      // observations[0] IS the newer one; what matters is the reducer sorts
+      // by observed_at, not array position). Assert last-write-wins picked
+      // the later observed_at value regardless of array order.
+      expect(snap!.snapshot.organization).toBe("Stripe");
+      expect(snap!.provenance.organization).toBe("obs_newer_stripe");
+
+      // Now feed the reducer's resolved (winning) value into
+      // autoLinkReferenceFields, proving it links/retracts against the
+      // correct last-write-winning value rather than an intermediate one.
+      getRelationshipsForEntityMock.mockResolvedValueOnce([
+        {
+          relationship_key: "works_at:ent_contact_1:ent_company_dust",
+          relationship_type: "works_at",
+          source_entity_id: "ent_contact_1",
+          target_entity_id: "ent_company_dust",
+          snapshot: {
+            auto_linked: true,
+            auto_link_field: "organization",
+            auto_link_entity_type: "contact",
+          },
+        },
+      ]);
+      mockCompanyResolution("ent_company_stripe", "Stripe");
+
+      const { autoLinkReferenceFields } =
+        await import("../../src/services/schema_reference_linking.js");
+      const result = await autoLinkReferenceFields({
+        entityId: "ent_contact_1",
+        entityType: "contact",
+        fields: snap!.snapshot,
+        schema: orgSchema,
+        userId: "u1",
+      });
+
+      expect(createRelationshipMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relationship_type: "works_at",
+          source_entity_id: "ent_contact_1",
+          target_entity_id: "ent_company_stripe",
+        })
+      );
+      expect(softDeleteRelationshipMock).toHaveBeenCalledWith(
+        "works_at:ent_contact_1:ent_company_dust",
+        "works_at",
+        "ent_contact_1",
+        "ent_company_dust",
+        "u1",
+        expect.any(String)
+      );
+      expect(result.created).toBe(1);
+      expect(result.retracted).toBe(1);
+      expect(result.details[0]).toMatchObject({
+        target_entity_id: "ent_company_stripe",
+        linked: true,
+        retracted_target_entity_id: "ent_company_dust",
+      });
     });
   });
 });
