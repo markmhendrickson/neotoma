@@ -40,9 +40,7 @@ function isAutoLinkMetadataForField(
   metadata: Record<string, unknown> | null | undefined,
   field: string
 ): boolean {
-  return (
-    !!metadata && metadata.auto_linked === true && metadata.auto_link_field === field
-  );
+  return !!metadata && metadata.auto_linked === true && metadata.auto_link_field === field;
 }
 
 export interface AutoLinkReferenceFieldsParams {
@@ -183,7 +181,14 @@ async function retractPriorAutoLinkedEdgesSafely(
       field,
       userId
     );
-    return await retractStaleAutoLinkedEdges(stale, relationshipType, entityId, field, entityType, userId);
+    return await retractStaleAutoLinkedEdges(
+      stale,
+      relationshipType,
+      entityId,
+      field,
+      entityType,
+      userId
+    );
   } catch (err) {
     logger.error(
       `[SCHEMA_REF_LINK] Failed to retract prior auto-linked edges for ` +
