@@ -77,6 +77,22 @@ function warnOnEnvMismatch(target: { sqlite_path: string; env_flag_mismatch: boo
   }
 }
 
+/**
+ * Resolve the write target once per command invocation and warn on mismatch.
+ * Shared by every mutating helper (setViaMetadata/resetViaMetadata) so
+ * accessSet, accessReset, accessEnableIssues, and accessDisableIssues all get
+ * the same DB-target visibility, instead of only accessSet (#1979 follow-up).
+ */
+async function resolveTargetAndWarnOnce(): Promise<{
+  sqlite_path: string;
+  environment: string;
+  env_flag_mismatch: boolean;
+}> {
+  const target = await resolveAccessTarget();
+  warnOnEnvMismatch(target);
+  return target;
+}
+
 function output(data: unknown, json: boolean): void {
   if (json) {
     process.stdout.write(JSON.stringify(data, null, 2) + "\n");
@@ -139,7 +155,7 @@ export async function accessSet(
 
   await setViaMetadata(entityType, mode as AccessPolicyMode);
 
-  const target = await resolveAccessTarget();
+  const target = await resolveTargetAndWarnOnce();
   if (opts.json) {
     output(
       {
@@ -158,7 +174,6 @@ export async function accessSet(
         `(${target.environment} DB: ${target.sqlite_path}).\n`
     );
   }
-  warnOnEnvMismatch(target);
 }
 
 export async function accessList(opts: AccessListOpts): Promise<void> {
@@ -191,6 +206,7 @@ export async function accessList(opts: AccessListOpts): Promise<void> {
 
 export async function accessReset(entityType: string, opts: AccessResetOpts): Promise<void> {
   const effective = await resetViaMetadata(entityType);
+  const target = await resolveTargetAndWarnOnce();
 
   if (opts.json) {
     output(
@@ -200,18 +216,23 @@ export async function accessReset(entityType: string, opts: AccessResetOpts): Pr
         status: "reset",
         effective_mode: effective.mode,
         effective_source: effective.source,
+        sqlite_path: target.sqlite_path,
+        environment: target.environment,
+        env_flag_mismatch: target.env_flag_mismatch,
       },
       true
     );
   } else {
     if (effective.mode === DEFAULT_MODE) {
       process.stdout.write(
-        `Access policy for "${entityType}" reset to default ("${DEFAULT_MODE}").\n`
+        `Access policy for "${entityType}" reset to default ("${DEFAULT_MODE}") ` +
+          `(${target.environment} DB: ${target.sqlite_path}).\n`
       );
     } else {
       process.stdout.write(
         `Access policy for "${entityType}" reset, but effective policy remains ` +
-          `"${effective.mode}" from ${effective.source}.\n`
+          `"${effective.mode}" from ${effective.source} ` +
+          `(${target.environment} DB: ${target.sqlite_path}).\n`
       );
     }
   }
@@ -222,6 +243,7 @@ export async function accessEnableIssues(opts: AccessIssuesOpts): Promise<void> 
   for (const et of ISSUE_SUBMISSION_ENTITY_TYPES) {
     await setViaMetadata(et, mode);
   }
+  const target = await resolveTargetAndWarnOnce();
 
   if (opts.json) {
     output(
@@ -229,12 +251,16 @@ export async function accessEnableIssues(opts: AccessIssuesOpts): Promise<void> 
         entity_types: [...ISSUE_SUBMISSION_ENTITY_TYPES],
         mode,
         status: "set",
+        sqlite_path: target.sqlite_path,
+        environment: target.environment,
+        env_flag_mismatch: target.env_flag_mismatch,
       },
       true
     );
   } else {
     process.stdout.write(
-      `Access policies set to "${mode}" for: ${ISSUE_SUBMISSION_ENTITY_TYPES.join(", ")}.\n` +
+      `Access policies set to "${mode}" for: ${ISSUE_SUBMISSION_ENTITY_TYPES.join(", ")} ` +
+        `(${target.environment} DB: ${target.sqlite_path}).\n` +
         "External agents can now submit issues to this instance.\n"
     );
   }
@@ -244,6 +270,7 @@ export async function accessDisableIssues(opts: AccessIssuesOpts): Promise<void>
   for (const et of ISSUE_SUBMISSION_ENTITY_TYPES) {
     await resetViaMetadata(et);
   }
+  const target = await resolveTargetAndWarnOnce();
 
   if (opts.json) {
     output(
@@ -251,12 +278,16 @@ export async function accessDisableIssues(opts: AccessIssuesOpts): Promise<void>
         entity_types: [...ISSUE_SUBMISSION_ENTITY_TYPES],
         mode: DEFAULT_MODE,
         status: "reset",
+        sqlite_path: target.sqlite_path,
+        environment: target.environment,
+        env_flag_mismatch: target.env_flag_mismatch,
       },
       true
     );
   } else {
     process.stdout.write(
-      `Access policies reset to "${DEFAULT_MODE}" for: ${ISSUE_SUBMISSION_ENTITY_TYPES.join(", ")}.\n` +
+      `Access policies reset to "${DEFAULT_MODE}" for: ${ISSUE_SUBMISSION_ENTITY_TYPES.join(", ")} ` +
+        `(${target.environment} DB: ${target.sqlite_path}).\n` +
         "External agents can no longer submit issues to this instance.\n"
     );
   }
