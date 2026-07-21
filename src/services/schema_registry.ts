@@ -913,6 +913,32 @@ export class SchemaRegistryService {
 
     const scope = config.user_specific ? "user" : "global";
 
+    // When reactivating over an existing active version and the caller didn't
+    // pass metadata explicitly, carry the prior active row's metadata forward.
+    // Without this, reactivating via register_schema (unlike
+    // updateSchemaIncremental, which already does this carry-forward) resets
+    // metadata to {}, silently dropping guest_access_policy and other
+    // schema-level settings. (#1977)
+    let metadata = config.metadata;
+    if (config.activate && metadata === undefined) {
+      let priorActiveQuery = db
+        .from("schema_registry")
+        .select("metadata")
+        .eq("entity_type", config.entity_type)
+        .eq("active", true);
+
+      if (scope === "user" && config.user_specific && config.user_id) {
+        priorActiveQuery = priorActiveQuery.eq("scope", "user").eq("user_id", config.user_id);
+      } else {
+        priorActiveQuery = priorActiveQuery.eq("scope", "global").is("user_id", null);
+      }
+
+      const { data: priorActive } = await priorActiveQuery.single();
+      if (priorActive?.metadata) {
+        metadata = priorActive.metadata as SchemaMetadata;
+      }
+    }
+
     const { data, error } = await db
       .from("schema_registry")
       .insert({
@@ -923,7 +949,7 @@ export class SchemaRegistryService {
         active: config.activate || false, // New schemas start inactive unless specified
         user_id: config.user_specific ? config.user_id || null : null,
         scope: scope,
-        metadata: config.metadata || {},
+        metadata: metadata || {},
       })
       .select()
       .single();
@@ -964,7 +990,7 @@ export class SchemaRegistryService {
     }
 
     // Auto-generate icon if not provided (non-blocking)
-    this.generateIconAsync(registeredSchema.entity_type, config.metadata);
+    this.generateIconAsync(registeredSchema.entity_type, metadata);
 
     // Automatically export schema snapshots (non-blocking)
     this.exportSnapshotsAsync();
@@ -1401,7 +1427,16 @@ export class SchemaRegistryService {
       delete preserved.content_field;
     }
 
-    // 5. Register new version (start inactive, we'll activate separately if needed)
+    // 5. Register new version (start inactive, we'll activate separately if needed).
+    // Carry the prior active row's SchemaMetadata forward. register() defaults
+    // metadata to {} when omitted, which silently dropped schema-level settings
+    // that live in metadata rather than schema_definition — most importantly
+    // guest_access_policy. Losing it on a version bump reset the whole entity
+    // type to the "closed" default and 500'd every guest/token read of that type
+    // (e.g. all rendered_page share links). Metadata (guest_access_policy, label,
+    // description, category, icon, bundle) is orthogonal to field evolution and
+    // must survive it. (Fixes #1977)
+    const carriedMetadata: SchemaMetadata = { ...(currentSchema.metadata ?? {}) };
     const newSchema = await this.register({
       entity_type: options.entity_type,
       schema_version: newVersion,
@@ -1409,6 +1444,7 @@ export class SchemaRegistryService {
       reducer_config: { merge_policies: mergedReducerPolicies },
       user_id: userId,
       user_specific: options.user_specific,
+      metadata: carriedMetadata,
       activate: false, // Register as inactive first
     });
 
