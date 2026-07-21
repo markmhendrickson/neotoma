@@ -40,7 +40,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         mock[key].mockReturnValue(mock);
       }
     });
-    
+
     // Make the mock awaitable (thenable) - DB queries are awaitable
     mock.then = vi.fn((resolve) => {
       // Default resolution if no custom then handler
@@ -50,13 +50,13 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       return Promise.resolve({ data: null, error: null }).then(resolve);
     });
     mock.catch = vi.fn((reject) => Promise.reject(reject));
-    
+
     // Override with provided methods AFTER setting up defaults
     // This ensures methods like 'then' can override, but others like 'update' still chain
     Object.keys(methods).forEach((key) => {
-      if (key !== 'then' && key !== 'catch') {
+      if (key !== "then" && key !== "catch") {
         // For non-then/catch methods, merge with existing mock
-        if (typeof methods[key] === 'function') {
+        if (typeof methods[key] === "function") {
           mock[key] = methods[key];
         } else {
           mock[key] = methods[key];
@@ -65,14 +65,14 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         mock[key] = methods[key];
       }
     });
-    
+
     // Ensure update/insert/select/eq/is/range/not still return mock for chaining (unless overridden)
-    ['update', 'insert', 'select', 'eq', 'is', 'range', 'not'].forEach((method) => {
-      if (!methods[method] || typeof methods[method] !== 'function') {
+    ["update", "insert", "select", "eq", "is", "range", "not"].forEach((method) => {
+      if (!methods[method] || typeof methods[method] !== "function") {
         // Only set if not already a function that returns something
-        if (typeof mock[method] === 'function' && !mock[method].mock) {
+        if (typeof mock[method] === "function" && !mock[method].mock) {
           // Already set up
-        } else if (typeof mock[method] !== 'function') {
+        } else if (typeof mock[method] !== "function") {
           mock[method] = vi.fn().mockReturnValue(mock);
         } else {
           // It's a vi.fn(), ensure it returns mock
@@ -82,7 +82,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }
       }
     });
-    
+
     return mock;
   };
 
@@ -93,7 +93,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         data: { scope: "global", user_id: null },
       }),
     });
-    
+
     // For deactivate: create chainable query where update() returns the query itself
     const mockUpdateDeactivate: any = {
       update: vi.fn(),
@@ -106,7 +106,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     mockUpdateDeactivate.update.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.eq.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.is.mockReturnValue(mockUpdateDeactivate);
-    
+
     // For activate: similar setup
     const mockUpdateActivate: any = {
       update: vi.fn(),
@@ -116,7 +116,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     };
     mockUpdateActivate.update.mockReturnValue(mockUpdateActivate);
     mockUpdateActivate.eq.mockReturnValue(mockUpdateActivate);
-    
+
     return { mockSelect, mockUpdateDeactivate, mockUpdateActivate };
   };
 
@@ -198,9 +198,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       };
 
-      mockFrom
-        .mockReturnValueOnce(mockUserSchema)
-        .mockReturnValueOnce(mockGlobalSchema);
+      mockFrom.mockReturnValueOnce(mockUserSchema).mockReturnValueOnce(mockGlobalSchema);
 
       const result = await service.loadActiveSchema("transaction", "test-user-id");
 
@@ -229,9 +227,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       };
 
-      mockFrom
-        .mockReturnValueOnce(mockUserSchema)
-        .mockReturnValueOnce(mockGlobalSchema);
+      mockFrom.mockReturnValueOnce(mockUserSchema).mockReturnValueOnce(mockGlobalSchema);
 
       const result = await service.loadActiveSchema("transaction", "test-user-id");
 
@@ -365,9 +361,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       const result = await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "new_field", field_type: "string" },
-        ],
+        fields_to_add: [{ field_name: "new_field", field_type: "string" }],
       });
 
       expect(service.loadActiveSchema).toHaveBeenCalledWith("transaction", undefined);
@@ -389,8 +383,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           },
         }),
       });
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } =
-        mockActivateCalls();
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
@@ -400,9 +393,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       const result = await service.updateSchemaIncremental({
         entity_type: "conversation_message",
-        fields_to_add: [
-          { field_name: "raw_fragment_promoted_field", field_type: "string" },
-        ],
+        fields_to_add: [{ field_name: "raw_fragment_promoted_field", field_type: "string" }],
         migrate_existing: false,
       });
 
@@ -443,9 +434,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       const result = await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "new_field", field_type: "string" },
-        ],
+        fields_to_add: [{ field_name: "new_field", field_type: "string" }],
       });
 
       expect(result.schema_version).toBe("1.1");
@@ -498,14 +487,62 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       const result = await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "new_field", field_type: "number" },
-        ],
+        fields_to_add: [{ field_name: "new_field", field_type: "number" }],
       });
 
       const insertedData = mockInsert.insert.mock.calls[0][0];
       expect(insertedData.schema_definition.fields.existing_field).toBeDefined();
       expect(insertedData.schema_definition.fields.new_field).toBeDefined();
+    });
+
+    it("carries prior SchemaMetadata (guest_access_policy) forward to the new version (#1977)", async () => {
+      // Regression: adding a field must NOT reset schema-level metadata. Before
+      // the fix, register() was called without metadata, defaulting it to {},
+      // which dropped guest_access_policy → the type fell back to the "closed"
+      // default and every guest/token read of that type 500'd.
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "rendered_page",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: { html_body: { type: "string" } },
+          identity_opt_out: "heuristic_canonical_name",
+        },
+        reducer_config: { merge_policies: { html_body: { strategy: "last_write" } } },
+        active: true,
+        scope: "global",
+        user_id: null,
+        metadata: {
+          label: "Rendered page",
+          description: "A bespoke HTML expression.",
+          category: "knowledge",
+          guest_access_policy: "submitter_scoped",
+        },
+      };
+
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({ data: currentSchema }),
+      });
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      await service.updateSchemaIncremental({
+        entity_type: "rendered_page",
+        fields_to_add: [{ field_name: "markdown_source", field_type: "string" }],
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.metadata).toBeDefined();
+      expect(insertedData.metadata.guest_access_policy).toBe("submitter_scoped");
+      // The rest of the descriptor metadata should survive too.
+      expect(insertedData.metadata.label).toBe("Rendered page");
+      expect(insertedData.metadata.category).toBe("knowledge");
     });
 
     it("should skip fields that already exist", async () => {
@@ -550,14 +587,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "existing_field", field_type: "string" },
-        ],
+        fields_to_add: [{ field_name: "existing_field", field_type: "string" }],
       });
 
-      expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining("already exists in schema"),
-      );
+      expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining("already exists in schema"));
 
       stderrSpy.mockRestore();
     });
@@ -593,9 +626,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       const result = await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "new_field", field_type: "string" },
-        ],
+        fields_to_add: [{ field_name: "new_field", field_type: "string" }],
       });
 
       // Verify activate was called (indirectly via the update calls)
@@ -628,9 +659,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "new_field", field_type: "string" },
-        ],
+        fields_to_add: [{ field_name: "new_field", field_type: "string" }],
         activate: false,
       });
 
@@ -676,9 +705,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "new_field", field_type: "string" },
-        ],
+        fields_to_add: [{ field_name: "new_field", field_type: "string" }],
         migrate_existing: true,
       });
 
@@ -695,11 +722,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       await expect(
         service.updateSchemaIncremental({
           entity_type: "no_such_builtin_type_xyz",
-          fields_to_add: [
-            { field_name: "new_field", field_type: "string" },
-          ],
+          fields_to_add: [{ field_name: "new_field", field_type: "string" }],
           force: true,
-        }),
+        })
       ).rejects.toThrow("No active schema found");
     });
   });
@@ -887,9 +912,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         fields_to_remove: ["nonexistent_field"],
       });
 
-      expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining("not found in schema"),
-      );
+      expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining("not found in schema"));
 
       stderrSpy.mockRestore();
     });
@@ -919,7 +942,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         service.updateSchemaIncremental({
           entity_type: "transaction",
           fields_to_remove: ["only_field"],
-        }),
+        })
       ).rejects.toThrow("Cannot remove all fields");
     });
 
@@ -962,9 +985,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       await service.updateSchemaIncremental({
         entity_type: "transaction",
-        fields_to_add: [
-          { field_name: "new_field", field_type: "number" },
-        ],
+        fields_to_add: [{ field_name: "new_field", field_type: "number" }],
         fields_to_remove: ["old_field"],
       });
 
@@ -982,14 +1003,15 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       // Mock batch 1 - range() returns mock, mock is awaitable
       const mockBatch1 = createChainableQuery({
         range: vi.fn().mockReturnValue(undefined),
-        then: (resolve: any) => Promise.resolve({
-          data: Array(100).fill({
-            id: "frag-id",
-            fragment_key: "field1",
-            fragment_value: "value1",
-          }),
-          error: null,
-        }).then(resolve),
+        then: (resolve: any) =>
+          Promise.resolve({
+            data: Array(100).fill({
+              id: "frag-id",
+              fragment_key: "field1",
+              fragment_value: "value1",
+            }),
+            error: null,
+          }).then(resolve),
       });
       mockBatch1.range.mockReturnValue(mockBatch1);
 
@@ -1000,9 +1022,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       });
       mockBatch2.range.mockReturnValue(mockBatch2);
 
-      mockFrom
-        .mockReturnValueOnce(mockBatch1)
-        .mockReturnValueOnce(mockBatch2);
+      mockFrom.mockReturnValueOnce(mockBatch1).mockReturnValueOnce(mockBatch2);
 
       const result = await service.migrateRawFragmentsToObservations({
         entity_type: "transaction",
@@ -1039,10 +1059,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         range: vi.fn().mockReturnValue(undefined), // Will be overridden below
         then: (resolve: any) => Promise.resolve({ data: [], error: null }).then(resolve),
       });
-      
+
       // Override range to return the mock itself (for chaining)
       mockQuery.range.mockReturnValue(mockQuery);
-      
+
       // Ensure eq() returns the same mock (for query reassignment: query = query.eq(...))
       mockQuery.eq.mockImplementation((...args) => {
         // Return the same mock so reassignment works
@@ -1179,7 +1199,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const mockDeactivate = createChainableQuery({});
 
       mockFrom
-        .mockReturnValueOnce(mockInsert)     // insert call
+        .mockReturnValueOnce(mockInsert) // insert call
         .mockReturnValueOnce(mockDeactivate); // deactivate prior active versions
 
       const result = await service.register({

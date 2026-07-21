@@ -1388,7 +1388,16 @@ export class SchemaRegistryService {
       delete preserved.content_field;
     }
 
-    // 5. Register new version (start inactive, we'll activate separately if needed)
+    // 5. Register new version (start inactive, we'll activate separately if needed).
+    // Carry the prior active row's SchemaMetadata forward. register() defaults
+    // metadata to {} when omitted, which silently dropped schema-level settings
+    // that live in metadata rather than schema_definition — most importantly
+    // guest_access_policy. Losing it on a version bump reset the whole entity
+    // type to the "closed" default and 500'd every guest/token read of that type
+    // (e.g. all rendered_page share links). Metadata (guest_access_policy, label,
+    // description, category, icon, bundle) is orthogonal to field evolution and
+    // must survive it. (Fixes #1977)
+    const carriedMetadata: SchemaMetadata = { ...(currentSchema.metadata ?? {}) };
     const newSchema = await this.register({
       entity_type: options.entity_type,
       schema_version: newVersion,
@@ -1396,6 +1405,7 @@ export class SchemaRegistryService {
       reducer_config: { merge_policies: mergedReducerPolicies },
       user_id: userId,
       user_specific: options.user_specific,
+      metadata: carriedMetadata,
       activate: false, // Register as inactive first
     });
 

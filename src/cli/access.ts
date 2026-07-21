@@ -37,6 +37,46 @@ export interface AccessIssuesOpts {
   json?: boolean;
 }
 
+/**
+ * Resolve which DB file and environment these `access` mutations actually
+ * target. `access set/reset` write to the local store selected by config, which
+ * keys the DB filename off `NEOTOMA_ENV` (production → neotoma.prod.db, else
+ * neotoma.db). The CLI `--env prod` transport flag does NOT set `NEOTOMA_ENV`,
+ * so `neotoma --env prod access set …` silently writes the *dev* file while a
+ * prod server serves from neotoma.prod.db — the write looks successful but has
+ * no effect on prod. Surfacing the target path (and warning on the mismatch)
+ * makes that trap visible. (#1977)
+ */
+async function resolveAccessTarget(): Promise<{
+  sqlite_path: string;
+  environment: string;
+  env_flag_mismatch: boolean;
+}> {
+  const { config } = await import("../config.js");
+  const envFlagPassed = process.argv.some(
+    (a) => a === "--env" || a === "prod" || a === "production"
+  );
+  const isProd = config.environment === "production";
+  return {
+    sqlite_path: config.sqlitePath,
+    environment: config.environment,
+    // The trap: caller signalled prod intent but config did not resolve to prod,
+    // so the write targets the dev DB the prod server does not read.
+    env_flag_mismatch: envFlagPassed && !isProd,
+  };
+}
+
+function warnOnEnvMismatch(target: { sqlite_path: string; env_flag_mismatch: boolean }): void {
+  if (target.env_flag_mismatch) {
+    process.stderr.write(
+      `Warning: this wrote to "${target.sqlite_path}" (development DB). The ` +
+        `--env/prod flag does not select the production DB for local access ` +
+        `commands — set NEOTOMA_ENV=production to target neotoma.prod.db, then ` +
+        `re-run. As written, a production server will NOT see this change.\n`
+    );
+  }
+}
+
 function output(data: unknown, json: boolean): void {
   if (json) {
     process.stdout.write(JSON.stringify(data, null, 2) + "\n");
@@ -99,11 +139,26 @@ export async function accessSet(
 
   await setViaMetadata(entityType, mode as AccessPolicyMode);
 
+  const target = await resolveAccessTarget();
   if (opts.json) {
-    output({ entity_type: entityType, mode, status: "set" }, true);
+    output(
+      {
+        entity_type: entityType,
+        mode,
+        status: "set",
+        sqlite_path: target.sqlite_path,
+        environment: target.environment,
+        env_flag_mismatch: target.env_flag_mismatch,
+      },
+      true
+    );
   } else {
-    process.stdout.write(`Access policy for "${entityType}" set to "${mode}".\n`);
+    process.stdout.write(
+      `Access policy for "${entityType}" set to "${mode}" ` +
+        `(${target.environment} DB: ${target.sqlite_path}).\n`
+    );
   }
+  warnOnEnvMismatch(target);
 }
 
 export async function accessList(opts: AccessListOpts): Promise<void> {
