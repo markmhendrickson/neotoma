@@ -1194,11 +1194,18 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
+      // When activate: true and no metadata is passed, register() first looks
+      // up the prior active row's metadata to carry it forward (#1977).
+      const mockPriorActiveLookup = createChainableQuery({
+        single: vi.fn().mockResolvedValue({ data: null }),
+      });
+
       // When activate: true, register() also calls db.from("schema_registry").update(...)
       // to deactivate prior active schemas. Provide a mock for that call.
       const mockDeactivate = createChainableQuery({});
 
       mockFrom
+        .mockReturnValueOnce(mockPriorActiveLookup) // prior-active metadata lookup
         .mockReturnValueOnce(mockInsert) // insert call
         .mockReturnValueOnce(mockDeactivate); // deactivate prior active versions
 
@@ -1214,6 +1221,82 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       expect(insertedData.active).toBe(true);
       // Verify deactivation was attempted for prior active schemas
       expect(mockDeactivate.update).toHaveBeenCalledWith({ active: false });
+    });
+
+    it("carries prior active row's metadata forward when reactivating with no explicit metadata (register_schema / register(), #1979 finding 2)", async () => {
+      // Regression: register_schema (the MCP tool / CLI entry point) calls
+      // register() directly with activate: true and no metadata when
+      // reactivating an existing entity_type. Before this fix, that dropped
+      // guest_access_policy just like the updateSchemaIncremental bug did,
+      // just via a different call path.
+      const mockPriorActiveLookup = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { metadata: { guest_access_policy: "submitter_scoped", label: "Rendered page" } },
+        }),
+      });
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: "schema-id",
+            entity_type: "rendered_page",
+            schema_version: "1.1",
+            active: true,
+          },
+        }),
+      });
+
+      const mockDeactivate = createChainableQuery({});
+
+      mockFrom
+        .mockReturnValueOnce(mockPriorActiveLookup)
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockDeactivate);
+
+      await service.register({
+        entity_type: "rendered_page",
+        schema_version: "1.1",
+        schema_definition: {
+          fields: { html_body: { type: "string" } },
+          identity_opt_out: "heuristic_canonical_name",
+        },
+        reducer_config: { merge_policies: { html_body: { strategy: "last_write" } } },
+        activate: true,
+        // No metadata passed — this is the exact shape register_schema uses.
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.metadata.guest_access_policy).toBe("submitter_scoped");
+      expect(insertedData.metadata.label).toBe("Rendered page");
+    });
+
+    it("does not override explicitly-passed metadata when reactivating", async () => {
+      // When metadata IS explicitly passed, register() must skip the
+      // prior-active lookup entirely (no extra db.from() call) and use the
+      // caller's metadata as-is.
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { id: "schema-id", entity_type: "rendered_page", schema_version: "1.1", active: true },
+        }),
+      });
+      const mockDeactivate = createChainableQuery({});
+
+      mockFrom.mockReturnValueOnce(mockInsert).mockReturnValueOnce(mockDeactivate);
+
+      await service.register({
+        entity_type: "rendered_page",
+        schema_version: "1.1",
+        schema_definition: {
+          fields: { html_body: { type: "string" } },
+          identity_opt_out: "heuristic_canonical_name",
+        },
+        reducer_config: { merge_policies: { html_body: { strategy: "last_write" } } },
+        activate: true,
+        metadata: { guest_access_policy: "closed" },
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.metadata.guest_access_policy).toBe("closed");
     });
 
     it("should not activate by default", async () => {

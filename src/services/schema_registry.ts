@@ -900,6 +900,32 @@ export class SchemaRegistryService {
 
     const scope = config.user_specific ? "user" : "global";
 
+    // When reactivating over an existing active version and the caller didn't
+    // pass metadata explicitly, carry the prior active row's metadata forward.
+    // Without this, reactivating via register_schema (unlike
+    // updateSchemaIncremental, which already does this carry-forward) resets
+    // metadata to {}, silently dropping guest_access_policy and other
+    // schema-level settings. (#1977)
+    let metadata = config.metadata;
+    if (config.activate && metadata === undefined) {
+      let priorActiveQuery = db
+        .from("schema_registry")
+        .select("metadata")
+        .eq("entity_type", config.entity_type)
+        .eq("active", true);
+
+      if (scope === "user" && config.user_specific && config.user_id) {
+        priorActiveQuery = priorActiveQuery.eq("scope", "user").eq("user_id", config.user_id);
+      } else {
+        priorActiveQuery = priorActiveQuery.eq("scope", "global").is("user_id", null);
+      }
+
+      const { data: priorActive } = await priorActiveQuery.single();
+      if (priorActive?.metadata) {
+        metadata = priorActive.metadata as SchemaMetadata;
+      }
+    }
+
     const { data, error } = await db
       .from("schema_registry")
       .insert({
@@ -910,7 +936,7 @@ export class SchemaRegistryService {
         active: config.activate || false, // New schemas start inactive unless specified
         user_id: config.user_specific ? config.user_id || null : null,
         scope: scope,
-        metadata: config.metadata || {},
+        metadata: metadata || {},
       })
       .select()
       .single();
@@ -951,7 +977,7 @@ export class SchemaRegistryService {
     }
 
     // Auto-generate icon if not provided (non-blocking)
-    this.generateIconAsync(registeredSchema.entity_type, config.metadata);
+    this.generateIconAsync(registeredSchema.entity_type, metadata);
 
     // Automatically export schema snapshots (non-blocking)
     this.exportSnapshotsAsync();
