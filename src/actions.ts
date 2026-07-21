@@ -7897,7 +7897,6 @@ export async function storeStructuredForApi(params: {
   // store reporting success, so it is emitted as its own actionable warning.
   for (const [obsIndex, rec] of autoLinkRetractionByObsIndex) {
     if (rec.retraction_failures > 0) {
-      const targets = rec.failed_target_entity_ids.join(", ");
       schemaStoreWarnings.push({
         code: "AUTO_LINK_RETRACTION_FAILED",
         message:
