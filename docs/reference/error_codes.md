@@ -335,9 +335,31 @@ the snapshot and its live edge were kept consistent — no caller action require
 retracted but the underlying `softDeleteRelationship` failed. Unlike the success case,
 this is _actionable_: the superseded edge may still be live even though the store
 returned `HTTP 200`, so a company-neighborhood query could still surface the stale link.
-The message enumerates the stale `target_entity_id`(s); the caller should retract each via
-`delete_relationship` (`source_entity_id` = the stored entity, `target_entity_id` = the
-listed target, `relationship_type` = the reference field's type) or re-run the store.
+The warning carries a structured `details.stale_edges` array — each entry is a ready-to-use
+`delete_relationship` argument set (`source_entity_id`, `target_entity_id`,
+`relationship_type`, `field_name`), so a caller can remediate programmatically without
+knowing its own schema, or re-run the store. Example:
+
+```json
+{
+  "code": "AUTO_LINK_RETRACTION_FAILED",
+  "entity_type": "contact",
+  "entity_id": "ent_abc…",
+  "observation_index": 0,
+  "message": "Auto-link retraction failed for 1 stale reference-field edge(s) …",
+  "details": {
+    "stale_edges": [
+      {
+        "source_entity_id": "ent_abc…",
+        "target_entity_id": "ent_dust…",
+        "relationship_type": "works_at",
+        "field_name": "organization"
+      }
+    ]
+  }
+}
+```
+
 This code exists so the retraction failure is never silent — a silently-surviving edge is
 the exact bug #1963 was filed to fix.
 

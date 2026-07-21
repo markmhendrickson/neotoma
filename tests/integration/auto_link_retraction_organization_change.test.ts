@@ -17,7 +17,30 @@
 
 import { createServer } from "node:http";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+// The failure-path tests below force softDeleteRelationship to fail so we can
+// assert the AUTO_LINK_RETRACTION_FAILED store_warning reaches each response.
+// The mock is a passthrough by default (real soft-delete, so the success-path
+// tests are unaffected) and only fails when `forceRetractionFailure` is set.
+// This intercepts the dynamic `import("./deletion.js")` inside
+// schema_reference_linking.ts — the same technique the unit test uses.
+let forceRetractionFailure = false;
+const { softDeleteRelationship: realSoftDelete } = await vi.importActual<
+  typeof import("../../src/services/deletion.js")
+>("../../src/services/deletion.js");
+vi.mock("../../src/services/deletion.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/services/deletion.js")>(
+    "../../src/services/deletion.js"
+  );
+  return {
+    ...actual,
+    softDeleteRelationship: (...args: Parameters<typeof actual.softDeleteRelationship>) =>
+      forceRetractionFailure
+        ? Promise.resolve({ success: false as const, error: "forced failure (test)" })
+        : realSoftDelete(...args),
+  };
+});
 
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -313,5 +336,137 @@ describe("auto-link retraction on organization change (#1963)", () => {
     expect(afterChangeTargets).not.toContain(
       beforeChange.find((r) => r.target_entity_id !== manualCompanyId)?.target_entity_id
     );
+  });
+
+  // Blocking qa finding on #1970: the AUTO_LINK_RETRACTION_FAILED warning — the
+  // PR's own "never silent" safety addition — must be proven to reach BOTH store
+  // responses. Force softDeleteRelationship to fail, then assert the warning (with
+  // the stale target ids) surfaces on the MCP and REST /store response bodies.
+  describe("retraction failure surfaces on the store response (both surfaces)", () => {
+    afterEach(() => {
+      forceRetractionFailure = false;
+    });
+
+    it("MCP store: AUTO_LINK_RETRACTION_FAILED with target ids when soft-delete fails", async () => {
+      const idempotencyKeyBase = `issue-1963-mcp-fail-${Date.now()}`;
+      const storeFn = (
+        mcpServer as unknown as {
+          store: (params: Record<string, unknown>) => Promise<StoreResponse>;
+        }
+      ).store.bind(mcpServer);
+
+      // First store links the contact to Dust (soft-delete not exercised).
+      const first = await storeFn({
+        user_id: TEST_USER_ID,
+        idempotency_key: `${idempotencyKeyBase}-1`,
+        commit: true,
+        entities: [
+          {
+            entity_type: "contact",
+            name: "Retract Fail MCP",
+            email: `retract.fail.mcp.${idempotencyKeyBase}@example.com`,
+            organization: "Dust",
+          },
+        ],
+      });
+      const contactEntityId = (
+        JSON.parse(first.content[0].text) as { entities?: Array<{ entity_id: string }> }
+      ).entities?.[0]?.entity_id;
+      if (!contactEntityId) throw new Error("contact entity id missing");
+      const [dustEdge] = await getLiveWorksAtEdges(contactEntityId);
+
+      // Second store changes org → retraction is attempted and forced to fail.
+      forceRetractionFailure = true;
+      const second = await storeFn({
+        user_id: TEST_USER_ID,
+        idempotency_key: `${idempotencyKeyBase}-2`,
+        commit: true,
+        entities: [
+          {
+            entity_type: "contact",
+            name: "Retract Fail MCP",
+            email: `retract.fail.mcp.${idempotencyKeyBase}@example.com`,
+            organization: "Stripe",
+          },
+        ],
+      });
+      const body = JSON.parse(second.content[0].text) as {
+        store_warnings?: Array<{
+          code: string;
+          entity_id: string;
+          details?: {
+            stale_edges?: Array<{ target_entity_id: string; relationship_type: string }>;
+          };
+        }>;
+      };
+      const warn = (body.store_warnings ?? []).find(
+        (w) => w.code === "AUTO_LINK_RETRACTION_FAILED" && w.entity_id === contactEntityId
+      );
+      expect(warn).toBeDefined();
+      // The stale target id is exposed as a structured, delete_relationship-ready field.
+      expect(warn?.details?.stale_edges?.[0]?.target_entity_id).toBe(dustEdge.target_entity_id);
+      expect(warn?.details?.stale_edges?.[0]?.relationship_type).toBe("works_at");
+    });
+
+    it("REST POST /store: AUTO_LINK_RETRACTION_FAILED with target ids when soft-delete fails", async () => {
+      const idempotencyKeyBase = `issue-1963-rest-fail-${Date.now()}`;
+
+      const firstResp = await fetch(`${API_BASE}/store`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: TEST_USER_ID,
+          idempotency_key: `${idempotencyKeyBase}-1`,
+          commit: true,
+          entities: [
+            {
+              entity_type: "contact",
+              name: "Retract Fail REST",
+              email: `retract.fail.rest.${idempotencyKeyBase}@example.com`,
+              organization: "Stripe",
+            },
+          ],
+        }),
+      });
+      const contactEntityId = (
+        (await firstResp.json()) as { entities?: Array<{ entity_id: string }> }
+      ).entities?.[0]?.entity_id;
+      if (!contactEntityId) throw new Error("contact entity id missing");
+      const [stripeEdge] = await getLiveWorksAtEdges(contactEntityId);
+
+      forceRetractionFailure = true;
+      const secondResp = await fetch(`${API_BASE}/store`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: TEST_USER_ID,
+          idempotency_key: `${idempotencyKeyBase}-2`,
+          commit: true,
+          entities: [
+            {
+              entity_type: "contact",
+              name: "Retract Fail REST",
+              email: `retract.fail.rest.${idempotencyKeyBase}@example.com`,
+              organization: "Zuqca",
+            },
+          ],
+        }),
+      });
+      const body = (await secondResp.json()) as {
+        store_warnings?: Array<{
+          code: string;
+          entity_id: string;
+          details?: {
+            stale_edges?: Array<{ target_entity_id: string; relationship_type: string }>;
+          };
+        }>;
+      };
+      const warn = (body.store_warnings ?? []).find(
+        (w) => w.code === "AUTO_LINK_RETRACTION_FAILED" && w.entity_id === contactEntityId
+      );
+      expect(warn).toBeDefined();
+      expect(warn?.details?.stale_edges?.[0]?.target_entity_id).toBe(stripeEdge.target_entity_id);
+      expect(warn?.details?.stale_edges?.[0]?.relationship_type).toBe("works_at");
+    });
   });
 });

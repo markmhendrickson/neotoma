@@ -75,6 +75,16 @@ export interface AutoLinkResult {
    * type + the source entity) to `delete_relationship` to clean up manually.
    */
   failed_retraction_target_entity_ids: string[];
+  /**
+   * Structured detail for each failed retraction, so a caller can build the
+   * exact `delete_relationship` call without knowing its own schema: the
+   * reference `field`, its `relationship_type`, and the stale `target_entity_id`.
+   */
+  failed_retractions: Array<{
+    field: string;
+    relationship_type: string;
+    target_entity_id: string;
+  }>;
   details: Array<{
     field: string;
     target_entity_type: string;
@@ -130,6 +140,7 @@ export interface RetractStaleEdgesResult {
   failed: number;
   retractedTargetEntityIds: string[];
   failedTargetEntityIds: string[];
+  failedRetractions: Array<{ field: string; relationship_type: string; target_entity_id: string }>;
 }
 
 /** Retract a set of stale auto-linked edges via softDeleteRelationship. */
@@ -146,6 +157,7 @@ async function retractStaleAutoLinkedEdges(
     failed: 0,
     retractedTargetEntityIds: [],
     failedTargetEntityIds: [],
+    failedRetractions: [],
   };
   if (stale.length === 0) return result;
   const { softDeleteRelationship } = await import("./deletion.js");
@@ -164,6 +176,11 @@ async function retractStaleAutoLinkedEdges(
     } else {
       result.failed++;
       result.failedTargetEntityIds.push(edge.target_entity_id);
+      result.failedRetractions.push({
+        field,
+        relationship_type: relationshipType,
+        target_entity_id: edge.target_entity_id,
+      });
       logger.error(
         `[SCHEMA_REF_LINK] Failed to retract stale auto-linked edge ` +
           `${edge.relationship_key} for ${entityType}.${field} ` +
@@ -210,7 +227,13 @@ async function retractPriorAutoLinkedEdgesSafely(
       `[SCHEMA_REF_LINK] Failed to retract prior auto-linked edges for ` +
         `${entityType}.${field}: ${err instanceof Error ? err.message : String(err)}`
     );
-    return { retracted: 0, failed: 1, retractedTargetEntityIds: [], failedTargetEntityIds: [] };
+    return {
+      retracted: 0,
+      failed: 1,
+      retractedTargetEntityIds: [],
+      failedTargetEntityIds: [],
+      failedRetractions: [],
+    };
   }
 }
 
@@ -224,6 +247,7 @@ export async function autoLinkReferenceFields(
     retraction_failures: 0,
     retracted_target_entity_ids: [],
     failed_retraction_target_entity_ids: [],
+    failed_retractions: [],
     details: [],
   };
   const refs = params.schema?.reference_fields;
@@ -251,6 +275,7 @@ export async function autoLinkReferenceFields(
       result.retraction_failures += clearedRetraction.failed;
       result.retracted_target_entity_ids.push(...clearedRetraction.retractedTargetEntityIds);
       result.failed_retraction_target_entity_ids.push(...clearedRetraction.failedTargetEntityIds);
+      result.failed_retractions.push(...clearedRetraction.failedRetractions);
       for (const retractedTargetEntityId of clearedRetraction.retractedTargetEntityIds) {
         result.details.push({
           field: ref.field,
@@ -354,6 +379,7 @@ export async function autoLinkReferenceFields(
       result.failed_retraction_target_entity_ids.push(
         ...unresolvedRetraction.failedTargetEntityIds
       );
+      result.failed_retractions.push(...unresolvedRetraction.failedRetractions);
       result.skipped++;
       if (unresolvedRetraction.retractedTargetEntityIds.length > 0) {
         for (const retractedTargetEntityId of unresolvedRetraction.retractedTargetEntityIds) {
@@ -396,6 +422,7 @@ export async function autoLinkReferenceFields(
       result.retraction_failures += selfLoopRetraction.failed;
       result.retracted_target_entity_ids.push(...selfLoopRetraction.retractedTargetEntityIds);
       result.failed_retraction_target_entity_ids.push(...selfLoopRetraction.failedTargetEntityIds);
+      result.failed_retractions.push(...selfLoopRetraction.failedRetractions);
       result.skipped++;
       if (selfLoopRetraction.retractedTargetEntityIds.length > 0) {
         for (const retractedTargetEntityId of selfLoopRetraction.retractedTargetEntityIds) {
@@ -493,6 +520,7 @@ export async function autoLinkReferenceFields(
       result.failed_retraction_target_entity_ids.push(
         ...changedTargetRetraction.failedTargetEntityIds
       );
+      result.failed_retractions.push(...changedTargetRetraction.failedRetractions);
 
       result.created++;
       if (changedTargetRetraction.retractedTargetEntityIds.length > 0) {

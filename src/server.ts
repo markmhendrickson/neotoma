@@ -5963,6 +5963,11 @@ export class NeotomaServer {
         retracted: number;
         retraction_failures: number;
         failed_target_entity_ids: string[];
+        failed_retractions: Array<{
+          field: string;
+          relationship_type: string;
+          target_entity_id: string;
+        }>;
       }
     >();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
@@ -6130,6 +6135,7 @@ export class NeotomaServer {
                   retracted: autoLinkResult.retracted,
                   retraction_failures: autoLinkResult.retraction_failures,
                   failed_target_entity_ids: autoLinkResult.failed_retraction_target_entity_ids,
+                  failed_retractions: autoLinkResult.failed_retractions,
                 });
               }
             } catch (linkErr) {
@@ -6207,6 +6213,10 @@ export class NeotomaServer {
       observation_index: number;
       entity_type: string;
       entity_id: string;
+      // Optional structured payload for codes whose remediation needs machine-
+      // readable fields (e.g. AUTO_LINK_RETRACTION_FAILED lists the stale edges
+      // to delete_relationship). Omitted by codes that carry no extra data.
+      details?: Record<string, unknown>;
     }> = [];
     // Issue #1559: surface a non-fatal signal when a stored observation omits a
     // field its schema marks `required: true`. Mirror of the unknown_fields
@@ -6425,7 +6435,6 @@ export class NeotomaServer {
       const rec = autoLinkRetractionByEntityId.get(createdEntities[i].entityId);
       if (!rec) continue;
       if (rec.retraction_failures > 0) {
-        const targets = rec.failed_target_entity_ids.join(", ");
         schemaStoreWarnings.push({
           code: "AUTO_LINK_RETRACTION_FAILED",
           message:
@@ -6433,11 +6442,18 @@ export class NeotomaServer {
             `reference-field edge(s) on ${rec.entity_type}/${createdEntities[i].entityId}. ` +
             `A superseded edge (e.g. a prior works_at) may still be live even though ` +
             `the store succeeded. To clean up, call delete_relationship for each stale ` +
-            `target (source_entity_id=${createdEntities[i].entityId}, target_entity_id in ` +
-            `[${targets}], relationship_type of the reference field), or re-run the store.`,
+            `edge in details.stale_edges, or re-run the store.`,
           observation_index: i,
           entity_type: rec.entity_type,
           entity_id: createdEntities[i].entityId,
+          details: {
+            stale_edges: rec.failed_retractions.map((f) => ({
+              source_entity_id: createdEntities[i].entityId,
+              target_entity_id: f.target_entity_id,
+              relationship_type: f.relationship_type,
+              field_name: f.field,
+            })),
+          },
         });
       } else if (rec.retracted > 0) {
         schemaStoreWarnings.push({

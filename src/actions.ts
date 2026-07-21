@@ -7383,6 +7383,11 @@ export async function storeStructuredForApi(params: {
       retracted: number;
       retraction_failures: number;
       failed_target_entity_ids: string[];
+      failed_retractions: Array<{
+        field: string;
+        relationship_type: string;
+        target_entity_id: string;
+      }>;
     }
   >();
 
@@ -7491,6 +7496,7 @@ export async function storeStructuredForApi(params: {
               retracted: autoLinkResult.retracted,
               retraction_failures: autoLinkResult.retraction_failures,
               failed_target_entity_ids: autoLinkResult.failed_retraction_target_entity_ids,
+              failed_retractions: autoLinkResult.failed_retractions,
             });
           }
         }
@@ -7657,6 +7663,10 @@ export async function storeStructuredForApi(params: {
     observation_index: number;
     entity_type: string;
     entity_id: string;
+    // Optional structured payload for codes whose remediation needs machine-
+    // readable fields (e.g. AUTO_LINK_RETRACTION_FAILED lists the stale edges to
+    // delete_relationship). Omitted by codes that carry no extra data.
+    details?: Record<string, unknown>;
   }> = [];
   // Issue #1552 / #1559: surface a non-fatal signal when a stored observation
   // carries fields the schema does not declare (dropped from the snapshot
@@ -7895,11 +7905,20 @@ export async function storeStructuredForApi(params: {
           `reference-field edge(s) on ${rec.entity_type}/${rec.entity_id}. ` +
           `A superseded edge (e.g. a prior works_at) may still be live even though ` +
           `the store succeeded. To clean up, call delete_relationship for each ` +
-          `stale target (source_entity_id=${rec.entity_id}, target_entity_id in ` +
-          `[${targets}], relationship_type of the reference field), or re-run the store.`,
+          `stale edge in details.stale_edges, or re-run the store.`,
         observation_index: obsIndex,
         entity_type: rec.entity_type,
         entity_id: rec.entity_id,
+        // Structured remediation: each entry is a ready-to-use delete_relationship
+        // argument set, so the caller needs no knowledge of its own schema.
+        details: {
+          stale_edges: rec.failed_retractions.map((f) => ({
+            source_entity_id: rec.entity_id,
+            target_entity_id: f.target_entity_id,
+            relationship_type: f.relationship_type,
+            field_name: f.field,
+          })),
+        },
       });
     } else if (rec.retracted > 0) {
       schemaStoreWarnings.push({

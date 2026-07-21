@@ -763,6 +763,64 @@ describe("autoLinkReferenceFields", () => {
       expect(result.retracted_target_entity_ids).toEqual(["ent_company_dust"]);
     });
 
+    it("partitions results correctly when multiple stale edges retract with mixed success/failure", async () => {
+      // Non-blocking qa finding on #1970: cover >1 stale auto-linked edge for the
+      // same field where one soft-delete succeeds and one fails. The succeeding
+      // and failing target ids must land in the right buckets.
+      getRelationshipsForEntityMock.mockResolvedValueOnce([
+        {
+          relationship_key: "works_at:ent_contact_1:ent_company_dust",
+          relationship_type: "works_at",
+          source_entity_id: "ent_contact_1",
+          target_entity_id: "ent_company_dust",
+          snapshot: {
+            auto_linked: true,
+            auto_link_field: "organization",
+            auto_link_entity_type: "contact",
+          },
+        },
+        {
+          relationship_key: "works_at:ent_contact_1:ent_company_acme",
+          relationship_type: "works_at",
+          source_entity_id: "ent_contact_1",
+          target_entity_id: "ent_company_acme",
+          snapshot: {
+            auto_linked: true,
+            auto_link_field: "organization",
+            auto_link_entity_type: "contact",
+          },
+        },
+      ]);
+      // First retraction (Dust) succeeds; second (Acme) fails.
+      softDeleteRelationshipMock
+        .mockResolvedValueOnce({ success: true, observation_id: "obs_1" })
+        .mockResolvedValueOnce({ success: false, error: "db unavailable" });
+      mockCompanyResolution("ent_company_stripe", "Stripe");
+
+      const { autoLinkReferenceFields } =
+        await import("../../src/services/schema_reference_linking.js");
+      const result = await autoLinkReferenceFields({
+        entityId: "ent_contact_1",
+        entityType: "contact",
+        fields: { organization: "Stripe" },
+        schema: orgSchema,
+        userId: "u1",
+      });
+
+      expect(result.created).toBe(1);
+      expect(result.retracted).toBe(1);
+      expect(result.retraction_failures).toBe(1);
+      expect(result.retracted_target_entity_ids).toEqual(["ent_company_dust"]);
+      expect(result.failed_retraction_target_entity_ids).toEqual(["ent_company_acme"]);
+      expect(result.failed_retractions).toEqual([
+        {
+          field: "organization",
+          relationship_type: "works_at",
+          target_entity_id: "ent_company_acme",
+        },
+      ]);
+    });
+
     it("survives out-of-order delivery: the last-write-winning organization value wins even when the older observation is stored second", async () => {
       // Regression for the PM review on #1970: autoLinkReferenceFields treats
       // params.fields[ref.field] as an opaque given value with no internal
