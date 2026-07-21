@@ -299,9 +299,48 @@ export async function retrieveEntityByIdentifierWithFallback(
   }
 
   if (directEntities.length === 0) {
-    // Snapshot-field pass: walk entity_snapshots (optionally filtered by type)
-    // and JS-match name/title/email/domain/company so identifiers that never
-    // reached canonical_name or aliases still resolve.
+    // Snapshot-field pass: resolve identifiers that never reached
+    // canonical_name or aliases (e.g. an email/phone that isn't the
+    // canonical_name) by matching declared identity fields in the snapshot.
+    //
+    // #1963-adjacent scale bug: the JS scan below loads an *unordered,
+    // 500-row* window of entity_snapshots and filters in memory. On an
+    // instance with thousands of entities, an exact email/phone whose row
+    // sits outside that arbitrary window is never examined, so by="email"
+    // /by="phone" lookups (and identify_entity_by_signals, which sits on
+    // this) silently return nothing even for values present verbatim in a
+    // snapshot. First do a targeted, index-friendly server-side exact match
+    // on the known identity fields via `snapshot->>{field}`, which the DB can
+    // satisfy from any row regardless of the window; keep the bounded JS scan
+    // only as a fuzzy/token fallback.
+    const snapshotMatches: SnapshotRow[] = [];
+
+    // Server-side exact-equality pre-pass. Only fields we know up front are
+    // scanned this way: an explicit `by`, or — when no `by` — the base
+    // identity set (name/full_name/title/email/domain/company). Composite or
+    // schema-declared fields still flow through the JS scan below.
+    const exactFields = explicitFields ?? [...BASE_SNAPSHOT_SEARCH_FIELDS];
+    const exactMatchIds = new Set<string>();
+    for (const field of exactFields) {
+      let exactQuery = db
+        .from("entity_snapshots")
+        .select("entity_id, entity_type, snapshot")
+        .eq("user_id", userId)
+        .eq(`snapshot->>${field}`, identifier.trim());
+      if (entityType) {
+        exactQuery = exactQuery.eq("entity_type", entityType);
+      }
+      const { data: exactRows } = await exactQuery.limit(limit);
+      for (const row of (exactRows as SnapshotRow[] | null) || []) {
+        if (exactMatchIds.has(row.entity_id)) continue;
+        exactMatchIds.add(row.entity_id);
+        snapshotMatches.push(row);
+      }
+    }
+
+    // Bounded JS scan for fuzzy/substring/token matches the exact pre-pass
+    // can't express. Still capped, but now it only needs to catch the
+    // non-exact cases — exact identifiers are already resolved above.
     let snapshotQuery = db
       .from("entity_snapshots")
       .select("entity_id, entity_type, snapshot")
@@ -310,8 +349,8 @@ export async function retrieveEntityByIdentifierWithFallback(
       snapshotQuery = snapshotQuery.eq("entity_type", entityType);
     }
     const { data: snapshotRows } = await snapshotQuery.limit(500);
-    const snapshotMatches: SnapshotRow[] = [];
     for (const row of (snapshotRows as SnapshotRow[] | null) || []) {
+      if (exactMatchIds.has(row.entity_id)) continue;
       const fields = await snapshotFieldsForType(row.entity_type);
       if (snapshotFieldsMatch(row.snapshot, needleLower, fields)) {
         snapshotMatches.push(row);

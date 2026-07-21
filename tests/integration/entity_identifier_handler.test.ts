@@ -177,6 +177,69 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     expect(result.entities[0]?.snapshot).toBeTruthy();
   });
 
+  it("resolves by=email via the server-side exact pass when the email is NOT the canonical_name", async () => {
+    // Regression for the scale bug: the snapshot-field pass previously only
+    // JS-scanned an unordered 500-row window, so an exact email whose row sits
+    // outside that window (or whose canonical_name is something else entirely,
+    // e.g. a title) silently returned nothing — even though the email is
+    // present verbatim in the snapshot. This reproduces the live Bottega8
+    // failure (a contact whose canonical_name is "General Manager" but whose
+    // snapshot email is the real identifier). The server-side snapshot->>email
+    // exact pass must find it regardless of scan-window position.
+    const userId = "identifier-user-email-not-canonical";
+    const entityId = `ent_email_noncanon_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      // canonical_name is a TITLE, not the name or email — so neither the
+      // canonical_name.ilike query nor an aliases match can resolve the email.
+      canonical_name: "General Manager",
+    });
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      schema_version: "1.0",
+      canonical_name: "General Manager",
+      snapshot: {
+        name: "Email Noncanon Person",
+        email: "email.noncanon@example.com",
+        phone: "+15551230000",
+      },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    // by="email" — the exact case that returned zero before the fix.
+    const byEmail = await retrieveEntityByIdentifierWithFallback({
+      identifier: "email.noncanon@example.com",
+      entityType: "contact",
+      userId,
+      by: "email",
+      limit: 100,
+    });
+    expect(byEmail.total).toBe(1);
+    expect(byEmail.entities[0]?.id).toBe(entityId);
+    expect(byEmail.match_mode).toBe("snapshot_field");
+
+    // by="phone" likewise resolves via the exact server-side pass.
+    const byPhone = await retrieveEntityByIdentifierWithFallback({
+      identifier: "+15551230000",
+      entityType: "contact",
+      userId,
+      by: "phone",
+      limit: 100,
+    });
+    expect(byPhone.total).toBe(1);
+    expect(byPhone.entities[0]?.id).toBe(entityId);
+  });
+
   it("#1495 resolves via the snapshot-field pass when canonical_name omits the institution token", async () => {
     // Hardest #1495 case: the canonical_name carries no institution/account
     // token at all (an opaque id), so the only path to the row is the
