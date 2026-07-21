@@ -5951,6 +5951,15 @@ export class NeotomaServer {
     // incoming null clearing a prior non-null value under highest_priority).
     const priorSnapshotByEntityId = new Map<string, Record<string, unknown>>();
     const newSnapshotByEntityId = new Map<string, Record<string, unknown>>();
+    // #1963: auto-link may retract a stale reference-field edge when a field's
+    // resolved target changes. A retraction *failure* must reach the caller —
+    // otherwise a stale duplicate edge can survive while store reports success,
+    // the exact silent-drift class this fix closes. Keyed by entity_id; the
+    // store_warnings loop below emits these onto the response.
+    const autoLinkRetractionByEntityId = new Map<
+      string,
+      { entity_type: string; retracted: number; retraction_failures: number }
+    >();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
     for (const createdEntity of createdEntities) {
       try {
@@ -6101,7 +6110,7 @@ export class NeotomaServer {
             try {
               const { autoLinkReferenceFields } =
                 await import("./services/schema_reference_linking.js");
-              await autoLinkReferenceFields({
+              const autoLinkResult = await autoLinkReferenceFields({
                 entityId: snapshot.entity_id,
                 entityType: snapshot.entity_type,
                 fields: (snapshot.snapshot as Record<string, unknown>) || {},
@@ -6110,6 +6119,13 @@ export class NeotomaServer {
                 sourceId: storageResult.sourceId,
                 commit,
               });
+              if (autoLinkResult.retracted > 0 || autoLinkResult.retraction_failures > 0) {
+                autoLinkRetractionByEntityId.set(snapshot.entity_id, {
+                  entity_type: snapshot.entity_type,
+                  retracted: autoLinkResult.retracted,
+                  retraction_failures: autoLinkResult.retraction_failures,
+                });
+              }
             } catch (linkErr) {
               logger.warn(
                 `[STORE] Auto-link reference fields failed for ` +
@@ -6392,6 +6408,40 @@ export class NeotomaServer {
             if (nullWarn) schemaStoreWarnings.push(nullWarn);
           }
         }
+      }
+    }
+
+    // #1963: surface auto-link edge retractions on the MCP store response so a
+    // retraction — and especially a retraction *failure* — is never silent. A
+    // failure means a superseded reference-field edge may still be live despite
+    // store reporting success.
+    for (let i = 0; i < createdEntities.length; i++) {
+      const rec = autoLinkRetractionByEntityId.get(createdEntities[i].entityId);
+      if (!rec) continue;
+      if (rec.retraction_failures > 0) {
+        schemaStoreWarnings.push({
+          code: "AUTO_LINK_RETRACTION_FAILED",
+          message:
+            `Auto-link retraction failed for ${rec.retraction_failures} stale ` +
+            `reference-field edge(s) on ${rec.entity_type}/${createdEntities[i].entityId}. ` +
+            `A superseded edge (e.g. a prior works_at) may still be live even though ` +
+            `the store succeeded; re-run the store or retract the stale edge manually ` +
+            `via delete_relationship.`,
+          observation_index: i,
+          entity_type: rec.entity_type,
+          entity_id: createdEntities[i].entityId,
+        });
+      } else if (rec.retracted > 0) {
+        schemaStoreWarnings.push({
+          code: "AUTO_LINK_EDGE_RETRACTED",
+          message:
+            `Retracted ${rec.retracted} stale auto-linked reference-field edge(s) on ` +
+            `${rec.entity_type}/${createdEntities[i].entityId} because the field's ` +
+            `resolved target changed (#1963).`,
+          observation_index: i,
+          entity_type: rec.entity_type,
+          entity_id: createdEntities[i].entityId,
+        });
       }
     }
 

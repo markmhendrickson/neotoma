@@ -67,8 +67,7 @@ describe("auto-link retraction on organization change (#1963)", () => {
     });
 
     mcpServer = new NeotomaServer();
-    (mcpServer as unknown as { authenticatedUserId: string }).authenticatedUserId =
-      TEST_USER_ID;
+    (mcpServer as unknown as { authenticatedUserId: string }).authenticatedUserId = TEST_USER_ID;
 
     // The reference_fields-driven auto-link hook reads the schema via
     // schemaRegistry.loadActiveSchema, which is DB-backed only — a dev DB may
@@ -117,7 +116,9 @@ describe("auto-link retraction on organization change (#1963)", () => {
         },
       ],
     })) as StoreResponse;
-    const firstBody = JSON.parse(first.content[0].text) as { entities?: Array<{ entity_id: string }> };
+    const firstBody = JSON.parse(first.content[0].text) as {
+      entities?: Array<{ entity_id: string }>;
+    };
     const contactEntityId = firstBody.entities?.[0]?.entity_id;
     expect(typeof contactEntityId).toBe("string");
     if (!contactEntityId) throw new Error("contact entity id missing from store response");
@@ -214,6 +215,17 @@ describe("auto-link retraction on organization change (#1963)", () => {
     });
     expect(secondResp.status).toBe(200);
 
+    // #1963: the retraction must not be silent — the store response surfaces it
+    // via store_warnings so a caller can observe that a stale edge was cleaned
+    // up (and, in the failure case, that one may still be live).
+    const secondBody = (await secondResp.json()) as {
+      store_warnings?: Array<{ code: string; entity_id: string }>;
+    };
+    const retractionWarning = (secondBody.store_warnings ?? []).find(
+      (w) => w.code === "AUTO_LINK_EDGE_RETRACTED" && w.entity_id === contactEntityId
+    );
+    expect(retractionWarning).toBeDefined();
+
     const afterSecond = await getLiveWorksAtEdges(contactEntityId);
     expect(afterSecond).toHaveLength(1);
     expect(afterSecond[0].target_entity_id).not.toBe(stripeEdge.target_entity_id);
@@ -298,6 +310,8 @@ describe("auto-link retraction on organization change (#1963)", () => {
     const afterChangeTargets = afterChange.map((r) => r.target_entity_id).sort();
     expect(afterChange).toHaveLength(2); // new auto-linked Stripe edge + preserved manual edge
     expect(afterChangeTargets).toContain(manualCompanyId);
-    expect(afterChangeTargets).not.toContain(beforeChange.find((r) => r.target_entity_id !== manualCompanyId)?.target_entity_id);
+    expect(afterChangeTargets).not.toContain(
+      beforeChange.find((r) => r.target_entity_id !== manualCompanyId)?.target_entity_id
+    );
   });
 });
