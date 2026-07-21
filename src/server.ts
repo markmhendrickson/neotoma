@@ -5958,7 +5958,12 @@ export class NeotomaServer {
     // store_warnings loop below emits these onto the response.
     const autoLinkRetractionByEntityId = new Map<
       string,
-      { entity_type: string; retracted: number; retraction_failures: number }
+      {
+        entity_type: string;
+        retracted: number;
+        retraction_failures: number;
+        failed_target_entity_ids: string[];
+      }
     >();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
     for (const createdEntity of createdEntities) {
@@ -6124,6 +6129,7 @@ export class NeotomaServer {
                   entity_type: snapshot.entity_type,
                   retracted: autoLinkResult.retracted,
                   retraction_failures: autoLinkResult.retraction_failures,
+                  failed_target_entity_ids: autoLinkResult.failed_retraction_target_entity_ids,
                 });
               }
             } catch (linkErr) {
@@ -6419,14 +6425,16 @@ export class NeotomaServer {
       const rec = autoLinkRetractionByEntityId.get(createdEntities[i].entityId);
       if (!rec) continue;
       if (rec.retraction_failures > 0) {
+        const targets = rec.failed_target_entity_ids.join(", ");
         schemaStoreWarnings.push({
           code: "AUTO_LINK_RETRACTION_FAILED",
           message:
             `Auto-link retraction failed for ${rec.retraction_failures} stale ` +
             `reference-field edge(s) on ${rec.entity_type}/${createdEntities[i].entityId}. ` +
             `A superseded edge (e.g. a prior works_at) may still be live even though ` +
-            `the store succeeded; re-run the store or retract the stale edge manually ` +
-            `via delete_relationship.`,
+            `the store succeeded. To clean up, call delete_relationship for each stale ` +
+            `target (source_entity_id=${createdEntities[i].entityId}, target_entity_id in ` +
+            `[${targets}], relationship_type of the reference field), or re-run the store.`,
           observation_index: i,
           entity_type: rec.entity_type,
           entity_id: createdEntities[i].entityId,

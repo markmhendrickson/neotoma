@@ -7377,7 +7377,13 @@ export async function storeStructuredForApi(params: {
   // schemaStoreWarnings pass below can surface them on the store response.
   const autoLinkRetractionByObsIndex = new Map<
     number,
-    { entity_type: string; entity_id: string; retracted: number; retraction_failures: number }
+    {
+      entity_type: string;
+      entity_id: string;
+      retracted: number;
+      retraction_failures: number;
+      failed_target_entity_ids: string[];
+    }
   >();
 
   for (const r of resolved) {
@@ -7484,6 +7490,7 @@ export async function storeStructuredForApi(params: {
               entity_id: r.entity_id,
               retracted: autoLinkResult.retracted,
               retraction_failures: autoLinkResult.retraction_failures,
+              failed_target_entity_ids: autoLinkResult.failed_retraction_target_entity_ids,
             });
           }
         }
@@ -7880,14 +7887,16 @@ export async function storeStructuredForApi(params: {
   // store reporting success, so it is emitted as its own actionable warning.
   for (const [obsIndex, rec] of autoLinkRetractionByObsIndex) {
     if (rec.retraction_failures > 0) {
+      const targets = rec.failed_target_entity_ids.join(", ");
       schemaStoreWarnings.push({
         code: "AUTO_LINK_RETRACTION_FAILED",
         message:
           `Auto-link retraction failed for ${rec.retraction_failures} stale ` +
           `reference-field edge(s) on ${rec.entity_type}/${rec.entity_id}. ` +
           `A superseded edge (e.g. a prior works_at) may still be live even though ` +
-          `the store succeeded; re-run the store or retract the stale edge manually ` +
-          `via delete_relationship.`,
+          `the store succeeded. To clean up, call delete_relationship for each ` +
+          `stale target (source_entity_id=${rec.entity_id}, target_entity_id in ` +
+          `[${targets}], relationship_type of the reference field), or re-run the store.`,
         observation_index: obsIndex,
         entity_type: rec.entity_type,
         entity_id: rec.entity_id,

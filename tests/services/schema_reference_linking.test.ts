@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  ObservationReducer,
-  type Observation,
-} from "../../src/reducers/observation_reducer.js";
+import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
 
 vi.mock("../../src/db.js", () => {
   const snapshots: Array<Record<string, unknown>> = [];
@@ -83,13 +80,11 @@ vi.mock("../../src/services/schema_definitions.js", () => ({
   getSchemaDefinition: vi.fn().mockReturnValue(null),
 }));
 vi.mock("../../src/services/field_validation.js", () => ({
-  validateFieldWithConverters: vi
-    .fn()
-    .mockImplementation((_field: string, value: unknown) => ({
-      isValid: true,
-      value,
-      shouldRouteToRawFragments: false,
-    })),
+  validateFieldWithConverters: vi.fn().mockImplementation((_field: string, value: unknown) => ({
+    isValid: true,
+    value,
+    shouldRouteToRawFragments: false,
+  })),
 }));
 
 describe("autoLinkReferenceFields", () => {
@@ -689,6 +684,10 @@ describe("autoLinkReferenceFields", () => {
       expect(result.created).toBe(1);
       expect(result.retracted).toBe(0);
       expect(result.retraction_failures).toBe(1);
+      // The failed target id must be surfaced so a caller can follow the
+      // remediation (delete_relationship needs the target_entity_id).
+      expect(result.failed_retraction_target_entity_ids).toEqual(["ent_company_dust"]);
+      expect(result.retracted_target_entity_ids).toEqual([]);
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining("Failed to retract stale auto-linked edge")
       );
@@ -698,6 +697,70 @@ describe("autoLinkReferenceFields", () => {
 
       errorSpy.mockRestore();
       warnSpy.mockRestore();
+    });
+
+    it("retracts on target change keyed on the field, not hardcoded to organization (generic reference field)", async () => {
+      // PM review on #1970: the fix is generic to any schema-declared reference
+      // field, but coverage only exercised the `organization`/`works_at` pair.
+      // This proves the retraction is keyed on `auto_link_field` (the schema's
+      // field name), not the literal string "organization": a differently-named
+      // reference field (`primary_employer`) with a different relationship_type
+      // (`member_of`) retracts its own prior edge and leaves nothing else.
+      const employerSchema = {
+        fields: {},
+        reference_fields: [
+          {
+            field: "primary_employer",
+            target_entity_type: "company",
+            relationship_type: "member_of" as const,
+            resolve_target: true,
+          },
+        ],
+      };
+
+      getRelationshipsForEntityMock.mockResolvedValueOnce([
+        {
+          relationship_key: "member_of:ent_contact_1:ent_company_dust",
+          relationship_type: "member_of",
+          source_entity_id: "ent_contact_1",
+          target_entity_id: "ent_company_dust",
+          snapshot: {
+            auto_linked: true,
+            auto_link_field: "primary_employer",
+            auto_link_entity_type: "contact",
+          },
+        },
+      ]);
+      mockCompanyResolution("ent_company_stripe", "Stripe");
+
+      const { autoLinkReferenceFields } =
+        await import("../../src/services/schema_reference_linking.js");
+      const result = await autoLinkReferenceFields({
+        entityId: "ent_contact_1",
+        entityType: "contact",
+        fields: { primary_employer: "Stripe" },
+        schema: employerSchema,
+        userId: "u1",
+      });
+
+      expect(createRelationshipMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relationship_type: "member_of",
+          source_entity_id: "ent_contact_1",
+          target_entity_id: "ent_company_stripe",
+        })
+      );
+      expect(softDeleteRelationshipMock).toHaveBeenCalledWith(
+        "member_of:ent_contact_1:ent_company_dust",
+        "member_of",
+        "ent_contact_1",
+        "ent_company_dust",
+        "u1",
+        expect.stringContaining("primary_employer")
+      );
+      expect(result.created).toBe(1);
+      expect(result.retracted).toBe(1);
+      expect(result.retracted_target_entity_ids).toEqual(["ent_company_dust"]);
     });
 
     it("survives out-of-order delivery: the last-write-winning organization value wins even when the older observation is stored second", async () => {
