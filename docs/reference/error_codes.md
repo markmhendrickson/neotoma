@@ -49,14 +49,14 @@ interface ErrorEnvelope {
 
 ## Authentication Errors
 
-| Code             | HTTP | Retry? | Description                                     |
-| ---------------- | ---- | ------ | ----------------------------------------------- |
-| `AUTH_REQUIRED`  | 401  | No     | No bearer token provided                        |
-| `AUTH_INVALID`   | 401  | No     | Bearer token is invalid                         |
-| `AUTH_EXPIRED`   | 401  | No     | Bearer token has expired                        |
-| `AUTH_MALFORMED` | 401  | No     | Bearer token format is invalid                  |
-| `FORBIDDEN`      | 403  | No     | Insufficient permissions (RLS policy violation) |
-| `OVERRIDE_POLICY_VIOLATION` | 403 | No | Write to a policy-protected field on an `agent_definition` entity denied for the calling agent role (see `src/services/override_validation.ts`; details carry `field_name`, `agent_role`, `entity_id`) |
+| Code                        | HTTP | Retry? | Description                                                                                                                                                                                            |
+| --------------------------- | ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AUTH_REQUIRED`             | 401  | No     | No bearer token provided                                                                                                                                                                               |
+| `AUTH_INVALID`              | 401  | No     | Bearer token is invalid                                                                                                                                                                                |
+| `AUTH_EXPIRED`              | 401  | No     | Bearer token has expired                                                                                                                                                                               |
+| `AUTH_MALFORMED`            | 401  | No     | Bearer token format is invalid                                                                                                                                                                         |
+| `FORBIDDEN`                 | 403  | No     | Insufficient permissions (RLS policy violation)                                                                                                                                                        |
+| `OVERRIDE_POLICY_VIOLATION` | 403  | No     | Write to a policy-protected field on an `agent_definition` entity denied for the calling agent role (see `src/services/override_validation.ts`; details carry `field_name`, `agent_role`, `entity_id`) |
 
 **Common Causes:**
 
@@ -108,10 +108,10 @@ They use the canonical standard error envelope (`{ error: { error_code,
 message, hint, details } }`, see `docs/subsystems/errors.md`) so CLI/MCP error
 handlers can pattern-match the code uniformly.
 
-| Code                              | HTTP | Retry? | Description                                                                          |
-| --------------------------------- | ---- | ------ | ------------------------------------------------------------------------------------ |
-| `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`   | 200  | No     | No registered or code-defined schema exists for the given `entity_type`              |
-| `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 200 | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out`            |
+| Code                                 | HTTP | Retry? | Description                                                               |
+| ------------------------------------ | ---- | ------ | ------------------------------------------------------------------------- |
+| `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`      | 200  | No     | No registered or code-defined schema exists for the given `entity_type`   |
+| `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 200  | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out` |
 
 **`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`** — raised by `update_schema_incremental` when
 the target `entity_type` has no schema registered in `schema_registry` and no
@@ -255,14 +255,16 @@ agents should address. Switch on the `code` field. All ride on a successful
 `HTTP 200` store response (the write completed); `Retry?` is always `No` — the
 caller repairs in-turn via `correct` rather than re-submitting the same payload.
 
-| Code                      | HTTP | Retry? | Description                                                                                  |
-| ------------------------- | ---- | ------ | -------------------------------------------------------------------------------------------- |
-| `MISSING_CONTENT_FIELD`   | 200  | No     | A schema declares `content_field` and the stored observation omits or empties that field.    |
-| `MISSING_IDENTITY_FIELDS` | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.|
-| `UNKNOWN_FIELD`           | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema. |
-| `MISSING_REQUIRED_FIELD`  | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete. |
-| `CONSTRAINT_VIOLATION`    | 200  | No     | An observation fails a declarative write-time value constraint whose `policy` is `"warn"`. The write is accepted and the violating value is stored as-is. |
-| `SOURCE_PRIORITY_IGNORED` | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot. |
+| Code                          | HTTP | Retry? | Description                                                                                                                                                                                                                                                    |
+| ----------------------------- | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MISSING_CONTENT_FIELD`       | 200  | No     | A schema declares `content_field` and the stored observation omits or empties that field.                                                                                                                                                                      |
+| `MISSING_IDENTITY_FIELDS`     | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.                                                                                                                                                                  |
+| `UNKNOWN_FIELD`               | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema.                                                                      |
+| `MISSING_REQUIRED_FIELD`      | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete.                                                                                                                                    |
+| `CONSTRAINT_VIOLATION`        | 200  | No     | An observation fails a declarative write-time value constraint whose `policy` is `"warn"`. The write is accepted and the violating value is stored as-is.                                                                                                      |
+| `SOURCE_PRIORITY_IGNORED`     | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot.                                                          |
+| `AUTO_LINK_EDGE_RETRACTED`    | 200  | No     | A schema-declared reference field's resolved target changed, so a stale auto-linked edge (e.g. a prior `works_at`) was retracted in the same reduction that created the new one (#1963). Positive signal; no action needed.                                    |
+| `AUTO_LINK_RETRACTION_FAILED` | 200  | No     | A stale auto-linked edge should have been retracted but the soft-delete failed. The superseded edge may still be live despite the store succeeding. The message lists the stale `target_entity_id`s; clean up via `delete_relationship` (or re-run the store). |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -311,15 +313,65 @@ value is stored on the observation but has no effect on the projected snapshot.
 `tie_breaker: "source_priority"`. To make priority effective, register (or update) the
 schema so the relevant fields use one of those strategies.
 
+**`AUTO_LINK_EDGE_RETRACTED`** — fired when a schema-declared `reference_fields` entry
+(e.g. `contact.organization → works_at → company`) resolves to a _different_ target than
+a prior observation did, so the previously auto-linked edge is retracted in the same
+reduction that creates the replacement (#1963). Only edges this mechanism created
+(`metadata.auto_linked === true` for the same field) are retracted; manual edges are
+untouched, and re-observing the same target is a no-op. This is a positive signal that
+the snapshot and its live edge were kept consistent — no caller action required. Example:
+
+```json
+{
+  "code": "AUTO_LINK_EDGE_RETRACTED",
+  "entity_type": "contact",
+  "entity_id": "ent_abc…",
+  "observation_index": 0,
+  "message": "Retracted 1 stale auto-linked reference-field edge(s) … (#1963)."
+}
+```
+
+**`AUTO_LINK_RETRACTION_FAILED`** — fired when a stale auto-linked edge should have been
+retracted but the underlying `softDeleteRelationship` failed. Unlike the success case,
+this is _actionable_: the superseded edge may still be live even though the store
+returned `HTTP 200`, so a company-neighborhood query could still surface the stale link.
+The warning carries a structured `details.stale_edges` array — each entry is a ready-to-use
+`delete_relationship` argument set (`source_entity_id`, `target_entity_id`,
+`relationship_type`, `field_name`), so a caller can remediate programmatically without
+knowing its own schema, or re-run the store. Example:
+
+```json
+{
+  "code": "AUTO_LINK_RETRACTION_FAILED",
+  "entity_type": "contact",
+  "entity_id": "ent_abc…",
+  "observation_index": 0,
+  "message": "Auto-link retraction failed for 1 stale reference-field edge(s) …",
+  "details": {
+    "stale_edges": [
+      {
+        "source_entity_id": "ent_abc…",
+        "target_entity_id": "ent_dust…",
+        "relationship_type": "works_at",
+        "field_name": "organization"
+      }
+    ]
+  }
+}
+```
+
+This code exists so the retraction failure is never silent — a silently-surviving edge is
+the exact bug #1963 was filed to fix.
+
 ## ERR_CONSTRAINT_VIOLATION
 
 Hard-rejection error returned by `/store` when one or more observations fail a
 declarative write-time value constraint whose `policy` is `"reject"`. No partial
 write is performed — the entire request is rejected atomically.
 
-| Code                       | HTTP | Retry? | Description                                                                               |
-| -------------------------- | ---- | ------ | ----------------------------------------------------------------------------------------- |
-| `ERR_CONSTRAINT_VIOLATION` | 400  | No     | One or more observations failed a `policy: "reject"` write-time value constraint check.  |
+| Code                       | HTTP | Retry? | Description                                                                             |
+| -------------------------- | ---- | ------ | --------------------------------------------------------------------------------------- |
+| `ERR_CONSTRAINT_VIOLATION` | 400  | No     | One or more observations failed a `policy: "reject"` write-time value constraint check. |
 
 Response shape (`ConstraintViolationErrorEnvelope`):
 

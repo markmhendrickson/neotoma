@@ -1,10 +1,12 @@
 # Entity Resolution Doctrine
+
 ## 15.1 Entity ID Generation (Deterministic)
+
 ```typescript
 function generateEntityId(
   entityType: string,
   canonicalName: string,
-  tenantSalt?: string, // optional — see tenant-scoping below
+  tenantSalt?: string // optional — see tenant-scoping below
 ): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
   const basis = tenantSalt
@@ -17,30 +19,32 @@ function normalizeEntityValue(entityType: string, raw: string): string {
   let normalized = raw.trim().toLowerCase();
   if (entityType === "company") {
     // Remove common suffixes deterministically
-    normalized = normalized.replace(
-      /\s+(inc|llc|ltd|corp|corporation)\.?$/i,
-      ""
-    );
+    normalized = normalized.replace(/\s+(inc|llc|ltd|corp|corporation)\.?$/i, "");
   }
   return normalized;
 }
 ```
+
 **Default (single-tenant): same name → same ID, globally. No duplicates.** Persisted `canonical_name` is produced by `formatCanonicalNameForStorage` in `src/services/entity_resolution.ts` (same structural rules as `normalizeEntityValue`, casing preserved); entity IDs still hash `normalizeEntityValue` only.
 
 **Tenant-scoped ids (opt-in).** `entities.id` is a global primary key, so without a salt two tenants writing the same `(entity_type, canonical_name)` collide on one row. For multi-tenant deployments (the public sandbox) `generateEntityId` accepts an optional `tenantSalt`, supplied by `entityIdTenantSalt(userId)` at every recompute site (resolver, identifier lookup, snapshot collision guard, entity split). The salt is applied when `isSandboxMode()` is true **or** `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` is truthy (`1`/`true`/`yes`), and omitted otherwise — so single-tenant prod ids are unchanged (no migration, no id churn). Toggling the gate on a persistent store would strand existing rows, so it is intended to be set once per deployment. See [`docs/subsystems/sandbox_deployment.md`](../subsystems/sandbox_deployment.md).
+
 ## 15.2 Entity Rules
+
 Entity IDs MUST be:
+
 - Canonical (globally unique representation)
 - Stable (never change once created)
 - Deduplicated (same name → same entity)
 - Rule-based (deterministic normalization)
 - Traced to observed text (not inferred)
-Entities MUST NOT:
+  Entities MUST NOT:
 - Be inferred (only extracted from fields)
 - Be LLM-generated
 - Be renamed post-creation
 - Mutate types (person → company forbidden)
-**Entities survive across documents and sessions.**
+  **Entities survive across documents and sessions.**
+
 ## 15.3 Single-Token Prefix-Match Pass
 
 When an entity is resolved and its canonical name reduces to a **single token** (e.g. `"Simon"`), the resolver runs an additional scan against same-type entities in the database before returning.
@@ -68,7 +72,9 @@ When an entity is resolved and its canonical name reduces to a **single token** 
 
 **Threshold calibration** (measured against the Levenshtein-normalized `stringSimilarity`): `"northgate"` vs `"north gate"` (space-separated near-duplicate) scores `0.900` — collapses. `"northgate"` vs `"eastgate"` (a genuinely different company) scores `0.556` — stays separate. The 0.88 floor sits directly between these two measured cases.
 
-**Contact -> company linking.** The `contact` schema declares `organization` as a `reference_fields` entry with `target_entity_type: "company"`, `relationship_type: "works_at"`, and `resolve_target: true` (`schema_definitions.ts`). `resolve_target: true` is a general opt-in on `SchemaDefinition.reference_fields` (`schema_registry.ts`): a plain reference field only links to an *existing* target and skips when none is found ("we do not invent targets" — the pre-existing default); `resolve_target: true` instead calls a resolver that may create the target. Today only `target_entity_type: "company"` has a resolver wired (`resolveCompanyEntity`); other target types with `resolve_target: true` fall back to skip-if-missing with a one-time warning so a misconfigured schema fails loud in logs. The auto-link hook (`schema_reference_linking.ts#autoLinkReferenceFields`, invoked from both `actions.ts#storeStructuredForApi` and `server.ts#storeStructuredInternal`) only resolves/creates the target when the store call actually commits (`commit: true`) — a `store --plan`/dry-run never writes a company entity.
+**Contact -> company linking.** The `contact` schema declares `organization` as a `reference_fields` entry with `target_entity_type: "company"`, `relationship_type: "works_at"`, and `resolve_target: true` (`schema_definitions.ts`). `resolve_target: true` is a general opt-in on `SchemaDefinition.reference_fields` (`schema_registry.ts`): a plain reference field only links to an _existing_ target and skips when none is found ("we do not invent targets" — the pre-existing default); `resolve_target: true` instead calls a resolver that may create the target. Today only `target_entity_type: "company"` has a resolver wired (`resolveCompanyEntity`); other target types with `resolve_target: true` fall back to skip-if-missing with a one-time warning so a misconfigured schema fails loud in logs. The auto-link hook (`schema_reference_linking.ts#autoLinkReferenceFields`, invoked from both `actions.ts#storeStructuredForApi` and `server.ts#storeStructuredInternal`) only resolves/creates the target when the store call actually commits (`commit: true`) — a `store --plan`/dry-run never writes a company entity.
+
+**Stale-edge retraction (#1963).** Auto-linked edges are maintained, not just created. When a reference field's resolved target changes across observations (e.g. a contact's `organization` moves from company A to company B, or is cleared, or renamed to a company not yet in the graph), `autoLinkReferenceFields` retracts the prior auto-linked edge for that field in the same reduction that creates the replacement, so the snapshot and its live edge never disagree. Only edges this mechanism created (`metadata.auto_linked === true` for the same field) are retracted — manually created edges are never touched — and re-observing the same target is a no-op (no retract-and-recreate thrash). The retraction outcome is surfaced on the `store` response (both MCP `store` and REST `POST /store`) via `store_warnings`: an `AUTO_LINK_EDGE_RETRACTED` entry when a stale edge was cleaned up, and an actionable `AUTO_LINK_RETRACTION_FAILED` entry when a retraction failed — in the failure case a superseded edge may still be live despite the store succeeding, so the caller should re-run the store or retract manually via `delete_relationship`. Failures are deliberately not silent: the whole point of #1963 was that silent edge accumulation is the bug.
 
 **Company query (read path).** `src/services/company_query.ts#queryContactsAtCompany` answers "who do we have connected at company X": it resolves the company name read-only (exact-normalized, then the same fuzzy pass — never creating), then reads live `works_at` edges pointing at that company entity (`relationshipsService.getRelationshipsForEntity(companyId, "incoming")`) and returns the linked contacts. Read-only by design: a query that silently minted a company entity would violate the State-Layer rule against inference on a read path. When no company matches (exact or fuzzy), the result reports `company: null` and an empty contact list rather than guessing.
 
