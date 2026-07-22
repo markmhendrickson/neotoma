@@ -323,6 +323,126 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "retrieve_entities_by_identifiers",
+      description: desc(
+        "retrieve_entities_by_identifiers",
+        "Resolve MANY identifiers (names, emails, domains) to entities in ONE call, instead of looping retrieve_entity_by_identifier. Returns one result per input, in input order, each tagged status=resolved|ambiguous|not_found|error so you can tell exactly which inputs failed: 'resolved' has a single `entity`, 'ambiguous' lists `candidates` you must disambiguate (never assume the first is correct), 'not_found' matched nothing. Use before bulk-storing to check which records already exist and avoid creating duplicates. Max 100 identifiers per call; chunk larger lists."
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          identifiers: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 1,
+            maxItems: 100,
+            description:
+              "Identifiers to resolve (max 100). Each is normalized and matched like retrieve_entity_by_identifier. Duplicates are resolved once and reported at every position.",
+          },
+          entity_type: {
+            type: "string",
+            description:
+              "Optional: limit all lookups to one entity type (e.g. 'company', 'person').",
+          },
+          by: {
+            type: "string",
+            description:
+              "Restrict snapshot-field matching to a single field (e.g. 'email', 'domain', 'company'). When omitted, checks a default identity-bearing set (name, full_name, title, email, domain, company).",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            description: "Max matching entities considered PER identifier (default 100).",
+          },
+          include_observations: {
+            type: "boolean",
+            description: "When true, include recent observations per matched entity.",
+            default: false,
+          },
+          observations_limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 200,
+            description: "Max observations per entity when include_observations is true.",
+            default: 20,
+          },
+        },
+        required: ["identifiers"],
+      },
+    },
+    {
+      name: "aggregate_entity_field",
+      description: desc(
+        "aggregate_entity_field",
+        "Count or list DISTINCT values of a snapshot field for an entity type — e.g. 'how many contacts per organization?' or 'what values does status take?'. Runs as a SQL GROUP BY inside the database and returns only the bucket rows, so it stays fast on large graphs. ALWAYS prefer this over paging retrieve_entities and counting yourself, which is slow and can overload the server. Returns buckets [{value, count}] plus distinct_count and total_matching for the whole result, so you can page buckets without recounting. Buckets default to 50, max 1000 — use offset/sort_by to page a high-cardinality field."
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          field: {
+            type: "string",
+            description:
+              "Snapshot field to group by, e.g. 'organization', 'status', 'city'. Plain field name only (letters/digits/underscore), not a path.",
+          },
+          entity_type: {
+            type: "string",
+            description:
+              "Optional but recommended: restrict to one entity type (e.g. 'contact'). Omit to aggregate the field across all types.",
+          },
+          op: {
+            type: "string",
+            enum: ["count", "distinct"],
+            description:
+              "'count' (default) returns each value with its entity count; 'distinct' is the same grouping when you only care about which values exist.",
+            default: "count",
+          },
+          filters: {
+            type: "object",
+            description:
+              "Optional snapshot-field filters applied BEFORE grouping, as {field: {op, value}} with op one of eq|in|contains. Example: {\"status\": {\"op\": \"eq\", \"value\": \"active\"}}.",
+            additionalProperties: {
+              type: "object",
+              properties: {
+                op: { type: "string", enum: ["eq", "in", "contains"] },
+                value: {},
+              },
+              required: ["op"],
+            },
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 1000,
+            description: "Max buckets returned (default 50, max 1000).",
+          },
+          offset: {
+            type: "integer",
+            minimum: 0,
+            description: "Bucket offset for paging a high-cardinality group-by.",
+          },
+          include_null: {
+            type: "boolean",
+            description:
+              "When true, entities missing the field are counted in a null bucket. Default false (missing values excluded).",
+            default: false,
+          },
+          sort_by: {
+            type: "string",
+            enum: ["count", "value"],
+            description: "Order buckets by count (default) or by value.",
+            default: "count",
+          },
+          sort_order: {
+            type: "string",
+            enum: ["asc", "desc"],
+            description: "Sort direction (default desc, i.e. largest bucket first).",
+            default: "desc",
+          },
+        },
+        required: ["field"],
+      },
+    },
+    {
       name: "identify_entity_by_signals",
       description: desc(
         "identify_entity_by_signals",
@@ -1501,6 +1621,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "retrieve_entities",
   "list_timeline_events",
   "retrieve_entity_by_identifier",
+  "retrieve_entities_by_identifiers",
+  "aggregate_entity_field",
   "identify_entity_by_signals",
   "retrieve_related_entities",
   "retrieve_graph_neighborhood",

@@ -419,3 +419,146 @@ export async function retrieveEntityByIdentifierWithFallback(
     match_mode: "direct",
   };
 }
+
+/**
+ * Maximum identifiers accepted in one batch call (#1967).
+ *
+ * Each identifier runs the full resolution ladder (direct → snapshot-field →
+ * semantic), and the semantic leg can hit the embedding backend, so the batch
+ * is bounded to keep a single call's worst case predictable. Callers with more
+ * than this should chunk. Exceeding the cap is a hard validation error rather
+ * than a silent truncation — a silently dropped identifier would read as
+ * "not found" and cause an agent to create a duplicate entity.
+ */
+export const MAX_BATCH_IDENTIFIERS = 100;
+
+/**
+ * Per-input outcome of a batch resolution (#1967).
+ * - `resolved`  — exactly one entity matched.
+ * - `ambiguous` — several entities matched; caller must disambiguate.
+ * - `not_found` — nothing matched.
+ * - `error`     — resolution threw for this identifier alone.
+ *
+ * `ambiguous` is deliberately distinct from `resolved`: an agent that treats a
+ * multi-match as a hit silently picks an arbitrary entity.
+ */
+export type BatchResolutionStatus = "resolved" | "ambiguous" | "not_found" | "error";
+
+export interface BatchIdentifierResult {
+  /** Echoed input, so callers can zip results back to their source list. */
+  identifier: string;
+  /** Position in the caller's input array; stable even though order is preserved. */
+  index: number;
+  status: BatchResolutionStatus;
+  /** The single match when status is "resolved"; otherwise null. */
+  entity: RetrievedEntity | null;
+  /** All matches when status is "ambiguous"; capped by `limit`. */
+  candidates?: RetrievedEntity[];
+  match_count: number;
+  match_mode: IdentifierMatchMode;
+  hint?: string;
+  /** Present only when status is "error". */
+  error?: string;
+}
+
+export interface BatchRetrieveByIdentifierResult {
+  results: BatchIdentifierResult[];
+  summary: {
+    requested: number;
+    resolved: number;
+    ambiguous: number;
+    not_found: number;
+    errors: number;
+  };
+}
+
+export interface BatchRetrieveByIdentifierParams
+  extends Omit<RetrieveEntityByIdentifierParams, "identifier"> {
+  identifiers: string[];
+}
+
+/**
+ * Resolve many identifiers in one call (#1967).
+ *
+ * Delegates each identifier to {@link retrieveEntityByIdentifierWithFallback},
+ * so single- and batch-resolution semantics cannot drift: the batch form is a
+ * strict fan-out over the existing, unchanged path.
+ *
+ * A failure for one identifier is captured as that entry's `error` status and
+ * never aborts the batch — the point of the call is to learn the fate of every
+ * input. Duplicate identifiers are resolved once and the result fanned back
+ * out to each position.
+ */
+export async function retrieveEntitiesByIdentifiers(
+  params: BatchRetrieveByIdentifierParams
+): Promise<BatchRetrieveByIdentifierResult> {
+  const { identifiers, ...rest } = params;
+
+  if (!Array.isArray(identifiers) || identifiers.length === 0) {
+    throw new Error("identifiers must be a non-empty array");
+  }
+  if (identifiers.length > MAX_BATCH_IDENTIFIERS) {
+    throw new Error(
+      `Too many identifiers: ${identifiers.length} exceeds the ${MAX_BATCH_IDENTIFIERS} cap; ` +
+        `split the request into chunks of at most ${MAX_BATCH_IDENTIFIERS}`
+    );
+  }
+
+  // Resolve each distinct identifier once. Agents building a batch from a
+  // document routinely repeat the same name.
+  const distinct = [...new Set(identifiers)];
+  const byIdentifier = new Map<string, Omit<BatchIdentifierResult, "index" | "identifier">>();
+
+  for (const identifier of distinct) {
+    try {
+      const { entities, match_mode, hint } = await retrieveEntityByIdentifierWithFallback({
+        ...rest,
+        identifier,
+      });
+
+      const matches = entities ?? [];
+      let status: BatchResolutionStatus;
+      if (matches.length === 1) {
+        status = "resolved";
+      } else if (matches.length > 1) {
+        status = "ambiguous";
+      } else {
+        status = "not_found";
+      }
+
+      byIdentifier.set(identifier, {
+        status,
+        entity: status === "resolved" ? matches[0] : null,
+        ...(status === "ambiguous" ? { candidates: matches } : {}),
+        match_count: matches.length,
+        match_mode,
+        ...(hint ? { hint } : {}),
+      });
+    } catch (error) {
+      byIdentifier.set(identifier, {
+        status: "error",
+        entity: null,
+        match_count: 0,
+        match_mode: "none",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const results: BatchIdentifierResult[] = identifiers.map((identifier, index) => ({
+    identifier,
+    index,
+    ...byIdentifier.get(identifier)!,
+  }));
+
+  return {
+    results,
+    summary: {
+      requested: results.length,
+      resolved: results.filter((r) => r.status === "resolved").length,
+      ambiguous: results.filter((r) => r.status === "ambiguous").length,
+      not_found: results.filter((r) => r.status === "not_found").length,
+      errors: results.filter((r) => r.status === "error").length,
+    },
+  };
+}

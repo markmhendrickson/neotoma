@@ -47,6 +47,8 @@ import {
   RelationshipSnapshotRequestSchema,
   RetrieveEntitiesRequestSchema,
   RetrieveEntityByIdentifierSchema,
+  RetrieveEntitiesByIdentifiersSchema,
+  AggregateEntityFieldSchema,
   IdentifyEntityBySignalsSchema,
   RetrieveGraphNeighborhoodSchema,
   RetrieveRelatedEntitiesSchema,
@@ -2041,6 +2043,10 @@ export class NeotomaServer {
         return await this.listTimelineEvents(args);
       case "retrieve_entity_by_identifier":
         return await this.retrieveEntityByIdentifier(args);
+      case "retrieve_entities_by_identifiers":
+        return await this.retrieveEntitiesByIdentifiers(args);
+      case "aggregate_entity_field":
+        return await this.aggregateEntityField(args);
       case "identify_entity_by_signals":
         return await this.identifyEntityBySignals(args);
       case "retrieve_related_entities":
@@ -3736,6 +3742,58 @@ export class NeotomaServer {
       response.hint = hint;
     }
     return this.buildTextResponse(response);
+  }
+
+  /** #1967: resolve up to 100 identifiers in one call. */
+  private async retrieveEntitiesByIdentifiers(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = RetrieveEntitiesByIdentifiersSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const { retrieveEntitiesByIdentifiers } = await import(
+      "./shared/action_handlers/entity_identifier_handler.js"
+    );
+    const result = await retrieveEntitiesByIdentifiers({
+      identifiers: parsed.identifiers,
+      entityType: parsed.entity_type,
+      userId,
+      limit: parsed.limit ?? 100,
+      by: parsed.by,
+      includeObservations: parsed.include_observations,
+      observationsLimit: parsed.observations_limit,
+    });
+    return this.buildTextResponse(result);
+  }
+
+  /** #1967: SQL GROUP BY aggregation over a snapshot field. */
+  private async aggregateEntityField(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = AggregateEntityFieldSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const { aggregateEntityField } = await import("./services/entity_aggregation.js");
+    try {
+      const result = await aggregateEntityField({
+        userId,
+        entityType: parsed.entity_type,
+        field: parsed.field,
+        op: parsed.op,
+        filters: parsed.filters as
+          | Record<string, { op: "eq" | "in" | "contains"; value?: unknown }>
+          | undefined,
+        limit: parsed.limit,
+        offset: parsed.offset,
+        includeNull: parsed.include_null,
+        sortBy: parsed.sort_by,
+        sortOrder: parsed.sort_order,
+      });
+      return this.buildTextResponse(result);
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Failed to aggregate entity field: ${error.message}`
+      );
+    }
   }
 
   private async identifyEntityBySignals(
