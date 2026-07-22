@@ -329,18 +329,16 @@ describe("CLI `skills sync` instance-skills/instance-scripts action closure", ()
     });
   });
 
-  it("GAP: --json mode does NOT set a nonzero exit code on a content_hash mismatch (json branch returns before the exit-code loop runs)", async () => {
+  it("sets a nonzero exit code on a content_hash mismatch in --json mode", async () => {
     await withTempHome(async () => {
-      // Documents a real behavioral gap found while writing this coverage,
-      // beyond what the qa review named: `if (json) { print; return; }` in
+      // Regression guard for a gap found while writing this coverage, beyond
+      // what the qa review named: `if (json) { print; return; }` in
       // src/cli/index.ts precedes the `for (const m of s.hashMismatches)`
-      // loop that sets process.exitCode = 1, so a --json invocation reports
-      // the mismatch in its own JSON body but exits 0. A CI pipeline
-      // scripting against --json output would not detect the failure via
-      // exit code -- only by parsing the JSON body itself. Not fixed here
-      // (out of the requested scope); asserting the CURRENT behavior so a
-      // future fix intentionally flips this test rather than silently
-      // regressing further.
+      // loop that sets process.exitCode = 1, so a --json invocation used to
+      // report the mismatch in its own JSON body while exiting 0 — a CI
+      // pipeline scripting against `$?` would have read a data-integrity
+      // failure as a clean sync. The json branch now checks the instance
+      // report's integrity failures directly.
       const bytes = Buffer.from("print('hello')\n");
       const fetchMock = makeInstanceFetchMock({
         scriptBytes: bytes,
@@ -366,8 +364,43 @@ describe("CLI `skills sync` instance-skills/instance-scripts action closure", ()
 
       const printed = JSON.parse(stdout.output.join(""));
       expect(printed.instance.scripts.hashMismatches).toHaveLength(1);
-      // Current (arguably buggy) behavior: exit code is NOT set in --json mode.
-      expect(process.exitCode).toBeUndefined();
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  it("sets a nonzero exit code on a rejected filename in --json mode", async () => {
+    await withTempHome(async () => {
+      // The other integrity-failure class alongside a hash mismatch: a
+      // traversal-bearing original_filename is refused by
+      // sanitizeScriptFilename. Same CI concern — the JSON body reports it,
+      // so the exit code must too.
+      const bytes = Buffer.from("print('hello')\n");
+      const fetchMock = makeInstanceFetchMock({
+        scriptBytes: bytes,
+        originalFilename: "../../../../../../.zshrc",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli([
+          "node",
+          "cli",
+          "skills",
+          "sync",
+          "--include-instance-scripts",
+          "--approve-scripts",
+          "--json",
+        ]);
+      } finally {
+        stdout.restore();
+      }
+
+      const printed = JSON.parse(stdout.output.join(""));
+      expect(printed.instance.scripts.rejectedFilenames).toHaveLength(1);
+      expect(printed.instance.scripts.written).toHaveLength(0);
+      expect(process.exitCode).toBe(1);
     });
   });
 

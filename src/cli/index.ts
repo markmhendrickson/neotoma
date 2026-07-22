@@ -9070,7 +9070,20 @@ skillsCommand
 
     if (json) {
       process.stdout.write(JSON.stringify({ ...report, instance: instanceReport }, null, 2) + "\n");
-      if (!report.source_present || report.has_errors) process.exitCode = 1;
+      // Integrity failures must fail the exit code in JSON mode too: a CI
+      // pipeline scripting off `$?` (rather than parsing the body) would
+      // otherwise treat a content_hash mismatch or a rejected filename as a
+      // clean sync. Consent-blocked scripts are deliberately NOT counted —
+      // they are the expected, recoverable state, matching the `⚠` vs `✗`
+      // severity split the console renderer uses below.
+      const instanceIntegrityFailure = Boolean(
+        instanceReport?.scripts &&
+        (instanceReport.scripts.hashMismatches.length > 0 ||
+          instanceReport.scripts.rejectedFilenames.length > 0)
+      );
+      if (!report.source_present || report.has_errors || instanceIntegrityFailure) {
+        process.exitCode = 1;
+      }
       return;
     }
     if (!report.source_present) {
