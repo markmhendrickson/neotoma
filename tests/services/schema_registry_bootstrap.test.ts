@@ -21,10 +21,7 @@ import { describe, it, expect, afterAll, beforeEach } from "vitest";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { seedSchemaRegistryIfEmpty } from "../../src/services/schema_registry_bootstrap.js";
 import { db } from "../../src/db.js";
-import type {
-  SchemaDefinition,
-  SchemaRegistryEntry,
-} from "../../src/services/schema_registry.js";
+import type { SchemaDefinition, SchemaRegistryEntry } from "../../src/services/schema_registry.js";
 
 const BUILTIN_TYPE = "bootstrap_test_builtin_type";
 const CUSTOM_TYPE = "bootstrap_test_custom_type";
@@ -154,9 +151,7 @@ describe("schema registry bootstrap seeding (#1968)", () => {
     expect(after.id).toBe(before.id);
     expect(after.active).toBe(true);
     expect(after.schema_definition.fields).toHaveProperty("operator_custom_field");
-    expect(after.schema_definition.reference_fields).toEqual(
-      customDefinition.reference_fields
-    );
+    expect(after.schema_definition.reference_fields).toEqual(customDefinition.reference_fields);
     // The built-in's field was NOT merged in, and no built-in row was added.
     expect(after.schema_definition.fields).not.toHaveProperty("builtin_only_field");
     expect(await schemaRegistry.getSchemaVersions(CUSTOM_TYPE)).toHaveLength(1);
