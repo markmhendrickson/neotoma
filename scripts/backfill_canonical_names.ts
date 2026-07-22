@@ -51,19 +51,50 @@ const onlyType = typeArgIdx !== -1 ? process.argv[typeArgIdx + 1] : null;
 
 /**
  * Which snapshot field currently supplies this entity's canonical_name?
- * Compared case-insensitively and whitespace-normalized, since the stored name
- * passes through formatCanonicalNameForStorage.
+ *
+ * Matching must tolerate the normalization `formatCanonicalNameForStorage`
+ * applies on the way to storage — it strips apostrophes, parentheses, commas
+ * and corporate suffixes. An exact comparison therefore fails on perfectly
+ * legitimate rows and, because an unattributable value is treated as a field
+ * change, the guard would skip exactly the names most worth repairing:
+ *
+ *   snapshot "James O'Brien"          -> derived "James O Brien"
+ *   snapshot "Vlad (Volodymyr) Pavlov"-> derived "Vlad Volodymyr Pavlov"
+ *   snapshot "Lauren Piche, PHR"      -> derived "Lauren Piche PHR"
+ *   snapshot "Sea Waves Inc"          -> derived "Sea Waves"
+ *
+ * So compare on a punctuation-insensitive key, and additionally accept a
+ * derived value that is a leading subset of the field's words (the suffix-strip
+ * case). This only ever widens attribution to the correct field — it cannot
+ * attribute a name to `email` or `organization`, because those values differ in
+ * their words, not merely their punctuation.
  */
 export function sourceFieldOf(
   canonicalName: string,
   snapshot: Record<string, unknown>
 ): string | null {
-  const norm = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  const target = norm(canonicalName);
-  if (!target) return null;
+  const words = (s: unknown) =>
+    String(s ?? "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+  const target = words(canonicalName);
+  if (target.length === 0) return null;
+  const targetKey = target.join(" ");
+
+  // Exact (punctuation-insensitive) match first.
   for (const [k, v] of Object.entries(snapshot)) {
     if (typeof v !== "string") continue;
-    if (norm(v) === target) return k;
+    if (words(v).join(" ") === targetKey) return k;
+  }
+  // Then leading-subset, covering suffix/honorific stripping.
+  for (const [k, v] of Object.entries(snapshot)) {
+    if (typeof v !== "string") continue;
+    const fw = words(v);
+    if (fw.length > target.length && fw.slice(0, target.length).join(" ") === targetKey) return k;
   }
   return null;
 }
