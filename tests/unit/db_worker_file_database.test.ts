@@ -134,4 +134,24 @@ describe("WorkerFileDatabase (local-file libsql backend)", () => {
     await db.close();
     await expect(db.prepare("SELECT 1 AS ok").get()).rejects.toBeInstanceOf(WorkerDbCrashError);
   });
+
+  it("transparently retries on the writer when a read-only reader rejects a read that writes", async () => {
+    const db = makeDb(2); // reader pool on, so routeRead tries a reader first
+    try {
+      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)");
+
+      // .get() issuing an INSERT ... RETURNING is a read-shaped call that
+      // mutates — SQLite rejects it on a read-only reader connection, which
+      // is exactly the isReadonlyRejection/retry path in routeRead().
+      const row = await db.prepare("INSERT INTO t (id, v) VALUES (1, 'x') RETURNING id, v").get();
+
+      expect(row).toEqual({ id: 1, v: "x" });
+
+      // Confirm it actually landed (retried on the writer, not silently dropped).
+      const persisted = await db.prepare("SELECT COUNT(*) AS n FROM t").get();
+      expect(persisted).toEqual({ n: 1 });
+    } finally {
+      await db.close();
+    }
+  }, 30_000);
 });
