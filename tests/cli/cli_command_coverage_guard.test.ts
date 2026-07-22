@@ -36,7 +36,14 @@ describe("CLI command coverage guard", () => {
       "schemas",
       "servers",
       "setup",
-      "skills", // `skills sync` reconciler covered by tests/cli/skills_mirror.test.ts
+      // `skills sync`: package-skill mirror reconciler covered by
+      // tests/cli/skills_mirror.test.ts; the `--include-instance-skills` /
+      // `--include-instance-scripts` / `--approve-scripts` (and its
+      // deprecated `--approve` alias) action-closure behavior
+      // (implies-boolean flag coercion, hash-mismatch/rejected-filename exit
+      // codes, blocked-vs-failed severity split, --json `instance` report
+      // key) covered by tests/cli/skills_sync_instance_cli.test.ts.
+      "skills",
       "snapshots",
       "sources",
       "stats",
