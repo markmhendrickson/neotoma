@@ -54,7 +54,7 @@ const onlyType = typeArgIdx !== -1 ? process.argv[typeArgIdx + 1] : null;
  * Compared case-insensitively and whitespace-normalized, since the stored name
  * passes through formatCanonicalNameForStorage.
  */
-function sourceFieldOf(
+export function sourceFieldOf(
   canonicalName: string,
   snapshot: Record<string, unknown>
 ): string | null {
@@ -74,7 +74,7 @@ function sourceFieldOf(
  * organization, title, or other non-name field, however the schema's
  * canonical_name_fields precedence happens to rank them.
  */
-const NAME_FIELDS = ["name", "full_name", "display_name", "canonical_name"];
+export const NAME_FIELDS = ["name", "full_name", "display_name", "canonical_name"];
 
 /**
  * True when rewriting `before` -> `after` would change WHICH field supplies the
@@ -87,7 +87,7 @@ const NAME_FIELDS = ["name", "full_name", "display_name", "canonical_name"];
  * treated as a field change and skipped. Being wrong here renames real people
  * to their employer, so the default is to do nothing.
  */
-function changesSourceField(
+export function changesSourceField(
   before: string,
   after: string,
   snapshot: Record<string, unknown>
@@ -296,7 +296,10 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const isMainModule = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

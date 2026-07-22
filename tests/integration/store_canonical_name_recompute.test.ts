@@ -200,6 +200,31 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
     expect(row?.canonical_name).not.toContain("🐚");
   });
 
+  it("refuses to rename a row owned by a different, non-null user_id", async () => {
+    await registerSchema();
+
+    const created = await storeEntity({ name: "🦊 Other Tenant Contact" });
+    const entityId = created.entities[0].entity_id;
+
+    // Simulate a row genuinely owned by a different tenant (distinct from the
+    // NULL-user_id legacy-row case above, which the rewrite is meant to keep
+    // processable). This is the tenancy-guard branch: rowUserId !== null &&
+    // rowUserId !== userId.
+    const otherUserId = randomUUID();
+    await db.from("entities").update({ user_id: otherUserId }).eq("id", entityId);
+    expect((await db.from("entities").select("user_id").eq("id", entityId).maybeSingle()).data)
+      .toEqual({ user_id: otherUserId });
+
+    // Corrective observation under TEST_USER_ID's session — acting user does
+    // not own this row.
+    const corrected = await storeEntity({ target_id: entityId, name: "Renamed Contact" });
+    expect(corrected.entities[0].action).toBe("extended");
+
+    // The refusal is deliberate: canonical_name must stay unchanged.
+    const row = await readEntityRow(entityId);
+    expect(row?.canonical_name).toBe("🦊 Other Tenant Contact");
+  });
+
   it("HTTP store path keeps entities.canonical_name fresh too (transport parity)", async () => {
     await registerSchema();
 
