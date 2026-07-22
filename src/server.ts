@@ -6086,9 +6086,8 @@ export class NeotomaServer {
           // and canonical_name is what entity lists and search display.
           // Non-fatal by design: a store must not fail over a display name.
           try {
-            const { maybeRederiveCanonicalName } = await import(
-              "./services/snapshot_computation.js"
-            );
+            const { maybeRederiveCanonicalName } =
+              await import("./services/snapshot_computation.js");
             await maybeRederiveCanonicalName({
               entityId: snapshot.entity_id,
               entityType: snapshot.entity_type,

@@ -177,6 +177,29 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
     expect((await readEntityRow(entityId))?.canonical_name).toBe("🌊 Ben Billups");
   });
 
+  it("still re-derives canonical_name for a legacy row with NULL user_id", async () => {
+    await registerSchema();
+
+    const created = await storeEntity({ name: "🐚 Legacy Contact" });
+    const entityId = created.entities[0].entity_id;
+
+    // Simulate a legacy row written before user_id was stamped on entities —
+    // the exact condition this PR's rewrite is meant to keep processable
+    // (as distinct from a row owned by a genuinely different, non-null user).
+    await db.from("entities").update({ user_id: null }).eq("id", entityId);
+    expect((await db.from("entities").select("user_id").eq("id", entityId).maybeSingle()).data)
+      .toEqual({ user_id: null });
+
+    // Corrective observation under TEST_USER_ID's session — the acting user
+    // is not the row's user_id, because the row has none.
+    const corrected = await storeEntity({ target_id: entityId, name: "Legacy Contact" });
+    expect(corrected.entities[0].action).toBe("extended");
+
+    const row = await readEntityRow(entityId);
+    expect(row?.canonical_name).toBe("Legacy Contact");
+    expect(row?.canonical_name).not.toContain("🐚");
+  });
+
   it("HTTP store path keeps entities.canonical_name fresh too (transport parity)", async () => {
     await registerSchema();
 
