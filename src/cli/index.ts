@@ -9024,11 +9024,14 @@ skillsCommand
     false
   )
   .option(
-    "--approve",
-    "Record any new or changed instance-script hashes as approved before writing them. " +
-      "Without this flag, unapproved or changed-hash scripts are not written.",
+    "--approve-scripts",
+    "Trust these specific instance-script hashes to be written to disk and pin them as " +
+      "approved for future syncs (a hash-pinned execution-trust decision, not a generic sync " +
+      "confirmation). Without this flag, unapproved or changed-hash scripts are reported as " +
+      "blocked and not written.",
     false
   )
+  .addOption(new Option("--approve", "Deprecated alias for --approve-scripts").hideHelp())
   .action(async (opts) => {
     const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
     const scope = opts.scope === "project" ? "project" : "user";
@@ -9043,6 +9046,9 @@ skillsCommand
 
     const includeInstanceScripts = Boolean(opts.includeInstanceScripts);
     const includeInstanceSkills = Boolean(opts.includeInstanceSkills) || includeInstanceScripts;
+    // --approve is a hidden, deprecated alias for --approve-scripts (Commander gives each
+    // flag its own camelCase key, so both are read and OR'd rather than unified upstream).
+    const approveScripts = Boolean(opts.approveScripts) || Boolean(opts.approve);
 
     let instanceReport: Awaited<
       ReturnType<typeof import("./instance_skills_sync.js").runInstanceSkillsSync>
@@ -9056,7 +9062,7 @@ skillsCommand
       instanceReport = await runInstanceSkillsSync(api, {
         includeInstanceSkills,
         includeInstanceScripts,
-        approve: Boolean(opts.approve),
+        approve: approveScripts,
         baseUrl,
         scope,
       });
@@ -9112,17 +9118,18 @@ skillsCommand
       if (instanceReport.scripts) {
         const s = instanceReport.scripts;
         for (const w of s.written) {
-          console.log(`  script written: ${w.skill}/scripts/${w.filename}`);
+          const suffix = w.newlyApproved ? " (hash approved and recorded)" : "";
+          console.log(`  script written: ${w.skill}/scripts/${w.filename}${suffix}`);
         }
         for (const b of s.blockedUnapproved) {
           console.log(
-            `  ⚠ script not written (unapproved): ${b.skill}/${b.filename} (sha256:${b.hash.slice(0, 12)}) — re-run with --approve after review`
+            `  ⚠ script not written (unapproved): ${b.skill}/${b.filename} (sha256:${b.hash.slice(0, 12)}) — re-run with --approve-scripts after review`
           );
         }
         for (const b of s.blockedHashChanged) {
           console.log(
             `  ⚠ script not written (hash changed since approval): ${b.skill}/${b.filename} ` +
-              `(approved sha256:${b.approvedHash.slice(0, 12)}, new sha256:${b.newHash.slice(0, 12)}) — re-run with --approve after review`
+              `(approved sha256:${b.approvedHash.slice(0, 12)}, new sha256:${b.newHash.slice(0, 12)}) — re-run with --approve-scripts after review`
           );
         }
         for (const m of s.hashMismatches) {

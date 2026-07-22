@@ -783,7 +783,41 @@ The mirror is a derived artifact: SQLite is the only source of truth. Mirror fil
   - Exit code `1` when the source is missing or any per-skill link fails (errors are surfaced per harness in both pretty and `--json` output); otherwise `0`.
   - `--include-instance-skills`: Opt-in, **CLI-only** capability with no MCP equivalent (materialization writes to the invoking machine's local filesystem, which has no server-side analog). Also fetch every `enabled: true` `skill` entity visible to the authenticated user on the connected instance and materialize them as real `SKILL.md` files under `~/.neotoma/instance-skills/<instance-host>/`, then link them into harnesses via the same per-skill-symlink mechanism as package skills. Package-shipped skills always win on a name collision — an instance skill whose slug collides is skipped with a warning, never overwritten. Idempotent: re-running updates changed rows and prunes materialized dirs whose row is gone or disabled, but only dirs carrying Neotoma's own provenance marker, so a user-authored directory that happens to share a slug is never touched. See [`docs/skills/skill_strategy.md`](../skills/skill_strategy.md) for the full design.
   - `--include-instance-scripts` (implies `--include-instance-skills`): Additionally fetch script attachments (`file_asset` entities a skill row `EMBEDS`), verify each download's SHA-256 against the recorded `content_hash`, and write approved ones to `<skill>/scripts/<filename>`. Gated by a hash-pin consent manifest at `~/.neotoma/instance-skills/approvals.json` (`<instance>/<skill>/<filename>` → approved sha256): a script whose hash is not yet approved, or whose hash changed since a prior approval, is refused (not written) and reported, not silently skipped. `original_filename` is treated as hostile input at this boundary — it is rejected outright (never rewritten) if it is empty, absolute, contains a path separator, is `.`/`..`, or contains a null byte, and the write additionally asserts the resolved path stays inside the skill's `scripts/` directory before writing.
-  - `--approve`: Record any new or changed instance-script hash as approved before writing it, for the current `--include-instance-scripts` run. Without this flag, unapproved or changed-hash scripts are reported as blocked and not written. This module only downloads, verifies, and writes files — it never executes, spawns, or evaluates anything.
+  - `--approve-scripts`: Trust these specific instance-script hashes to be written to disk and pin them as approved for future `--include-instance-scripts` runs. This is the one flag in `skills sync` that changes a security posture — it is not a generic "confirm the sync" switch, it is an execution-trust decision scoped to the exact script bytes hashed on this run. Without this flag, unapproved or changed-hash scripts are reported as blocked and not written. This module only downloads, verifies, and writes files — it never executes, spawns, or evaluates anything. (`--approve` is a deprecated, hidden alias kept for backward compatibility; prefer `--approve-scripts`.)
+
+**Worked example: the two-step consent flow**
+
+A collaborator on a shared instance runs `skills sync` with instance scripts enabled for the first time. The script is blocked pending review; after reading it, they re-run with `--approve-scripts` to pin the hash and write the file.
+
+```bash
+# Step 1: fetch instance skills and their script attachments. First run: nothing is
+# approved yet, so any script attachment is reported as blocked, not written to
+# <skill>/scripts/ — the bytes are downloaded only in-memory to compute the hash below.
+neotoma skills sync --include-instance-scripts
+
+# Skills source: /usr/local/lib/node_modules/neotoma/skills (scope=user)
+#   claude-code: up-to-date (whole-dir-symlink, dir-symlink) → ~/.claude/skills
+# All harnesses already up-to-date.
+# Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
+#   updated: deploy-helper
+#   claude-code: 3 instance skill link(s) → ~/.claude/skills
+#   ⚠ script not written (unapproved): deploy-helper/scripts/rollout.sh (sha256:9f86d081884c) — re-run with --approve-scripts after review
+
+# Step 2: review the script's content before trusting it. The blocked message names the
+# skill and the file_asset's originating entity; look it up on the graph to read the
+# script bytes before deciding to approve (e.g. via the Inspector, or
+# `neotoma entities get <file_asset-entity-id>` for the entity's own metadata).
+neotoma entities get <file_asset-entity-id>
+
+# Step 3: satisfied it's safe, re-run with --approve-scripts to pin the hash and write the file.
+neotoma skills sync --include-instance-scripts --approve-scripts
+
+# Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
+#   claude-code: 3 instance skill link(s) → ~/.claude/skills
+#   script written: deploy-helper/scripts/rollout.sh (hash approved and recorded)
+```
+
+On every later sync, as long as the script's content hasn't changed, it is written silently (no re-approval needed — the `(hash approved and recorded)` suffix only appears the run a hash is newly pinned). If the script's content ever changes, the new hash is blocked again with the same two-step flow: review, then re-run with `--approve-scripts`.
 
 For continuous mirroring, install the `com.neotoma.skills-sync` LaunchAgent with `npm run setup:launchd-skills-sync` (macOS; watches `skills/` and re-runs `neotoma skills sync` on change). See [`npm_scripts.md`](npm_scripts.md#macos-launchagents).
 

@@ -3,7 +3,7 @@
  * materialize them to disk, link into harnesses, and — opt-in — fetch and
  * write their EMBEDS'd script attachments under the hash-pin consent gate
  * (#1951). Called by `neotoma skills sync --include-instance-skills
- * [--include-instance-scripts] [--approve]`.
+ * [--include-instance-scripts] [--approve-scripts]`.
  *
  * Kept thin and imperative on purpose: all decision logic (rendering,
  * pruning, collision precedence, hash verification, consent) lives in the
@@ -53,7 +53,7 @@ export interface InstanceSkillsSyncReport {
   skippedCollisions: Array<{ name: string; reason: string }>;
   harnessResults: ReturnType<typeof linkInstanceSkillsToHarnesses>;
   scripts?: {
-    written: Array<{ skill: string; filename: string; path: string }>;
+    written: Array<{ skill: string; filename: string; path: string; newlyApproved: boolean }>;
     blockedUnapproved: Array<{ skill: string; filename: string; hash: string; key: string }>;
     blockedHashChanged: Array<{
       skill: string;
@@ -119,7 +119,12 @@ export async function runInstanceSkillsSync(
   const manifest = loadApprovalsManifest(manifestPath);
   let manifestChanged = false;
 
-  const scriptsWritten: Array<{ skill: string; filename: string; path: string }> = [];
+  const scriptsWritten: Array<{
+    skill: string;
+    filename: string;
+    path: string;
+    newlyApproved: boolean;
+  }> = [];
   const blockedUnapproved: Array<{ skill: string; filename: string; hash: string; key: string }> =
     [];
   const blockedHashChanged: Array<{
@@ -165,6 +170,7 @@ export async function runInstanceSkillsSync(
             skill: skillDirName,
             filename: attachment.original_filename,
             path: outcome.path,
+            newlyApproved: outcome.newlyApproved,
           });
           manifestChanged = true;
           break;

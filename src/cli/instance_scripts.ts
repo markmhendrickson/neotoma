@@ -13,11 +13,14 @@
  *   - `~/.neotoma/instance-skills/approvals.json` maps
  *     `<instance>/<skill-dir>/<filename>` -> approved sha256.
  *   - A script whose hash is NOT in the manifest is not written unless the
- *     run passes `--approve` (which records the hash as approved).
+ *     run passes `--approve-scripts` (which records the hash as approved).
  *   - A script whose hash CHANGED since approval is not written; a warning
- *     tells the operator to re-run with `--approve` after reviewing the diff.
+ *     tells the operator to re-run with `--approve-scripts` after reviewing
+ *     the diff.
  *   - Writer (whoever authored the skill row) proposes; the local operator's
- *     `--approve` run is the only thing that grants execution materialization.
+ *     `--approve-scripts` run is the only thing that grants execution
+ *     materialization. (`--approve` is a deprecated, hidden alias for
+ *     `--approve-scripts`.)
  *
  * Hard constraints (per #1951 design decision — no server-side execution,
  * no dependency resolution): this module only downloads, verifies, and
@@ -105,7 +108,7 @@ export function sanitizeScriptFilename(filename: string): string | null {
 }
 
 export type ScriptWriteOutcome =
-  | { status: "written"; path: string; hash: string }
+  | { status: "written"; path: string; hash: string; newlyApproved: boolean }
   | { status: "hash_mismatch"; expected: string; actual: string }
   | { status: "blocked_unapproved"; hash: string; key: string }
   | { status: "blocked_hash_changed"; approvedHash: string; newHash: string; key: string }
@@ -115,7 +118,10 @@ export type ScriptWriteOutcome =
  * Verify downloaded bytes against the recorded `content_hash`, check the
  * hash-pin manifest, and write to `<skillDir>/scripts/<filename>` only when
  * approved. `approve: true` records the (verified) hash as approved before
- * writing — this is the CLI's `--approve` flag.
+ * writing — this is the CLI's `--approve-scripts` flag. The `"written"`
+ * outcome's `newlyApproved` flag distinguishes a hash recorded on THIS run
+ * from one that was already approved by a prior run, so callers can report
+ * the consent side effect only when it actually happened.
  *
  * Never writes on a content_hash mismatch, regardless of approval state:
  * that is a data-integrity failure, not a consent decision.
@@ -156,12 +162,18 @@ export function verifyAndWriteInstanceScript(params: {
   // if sanitization above were ever weakened or bypassed upstream.
   const key = approvalKey(instanceHost, skillDirName, safeFilename);
   const approvedHash = manifest[key];
+  // Tracks whether THIS run is the one that newly recorded the hash as
+  // approved (new key, or a changed hash re-approved) vs. the hash already
+  // being approved from a prior run — lets callers report the consent side
+  // effect only when it actually happened, not on every write.
+  let newlyApproved = false;
 
   if (approvedHash === undefined) {
     if (!approve) {
       return { status: "blocked_unapproved", hash: actualHash, key };
     }
     manifest[key] = actualHash;
+    newlyApproved = true;
   } else if (approvedHash !== actualHash) {
     if (!approve) {
       return {
@@ -172,6 +184,7 @@ export function verifyAndWriteInstanceScript(params: {
       };
     }
     manifest[key] = actualHash;
+    newlyApproved = true;
   }
   // approvedHash === actualHash: already approved, nothing to update.
 
@@ -194,5 +207,5 @@ export function verifyAndWriteInstanceScript(params: {
   }
 
   writeFileSync(outPath, bytes);
-  return { status: "written", path: outPath, hash: actualHash };
+  return { status: "written", path: outPath, hash: actualHash, newlyApproved };
 }

@@ -134,7 +134,8 @@ skill" above) rather than letting every instance reinvent it locally.
   content-addressed via `raw_storage.ts`), verify each download's SHA-256 against the
   recorded `content_hash`, and write it to `<skill>/scripts/<original_filename>` — subject to
   the hash-pin consent gate below.
-- `--approve` — record any new or changed instance-script hash as approved before writing it.
+- `--approve-scripts` — trust these specific instance-script hashes to be written to disk and
+  pin them as approved for future syncs. (`--approve` is a deprecated, hidden alias.)
 
 ### Package wins on collision
 
@@ -154,12 +155,15 @@ materialization.
 - `~/.neotoma/instance-skills/approvals.json` maps `<instance>/<skill>/<filename>` to an
   approved SHA-256 hash.
 - A script whose hash is **not** in the manifest is not written unless the run passes
-  `--approve` (which records the hash as approved).
+  `--approve-scripts` (which records the hash as approved).
 - A script whose hash has **changed** since it was approved is not written; the run prints a
   warning naming the approved and new hashes and instructs the operator to re-run with
-  `--approve` after reviewing the diff.
+  `--approve-scripts` after reviewing the diff.
 - A content-hash mismatch against the recorded `content_hash` (a data-integrity failure, not
-  a consent decision) is refused unconditionally, `--approve` or not.
+  a consent decision) is refused unconditionally, `--approve-scripts` or not.
+- When a hash IS newly recorded as approved on a run (not merely re-confirmed from a prior
+  approval), the written-script output line is suffixed `(hash approved and recorded)` so the
+  consent side effect is visible, not just the file write.
 
 ### Zero-dependency, single-file ceiling
 
