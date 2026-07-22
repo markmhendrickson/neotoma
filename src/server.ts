@@ -431,7 +431,7 @@ export class NeotomaServer {
 
         // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
         if (connectionId === "dev-local") {
-          const devUser = ensureLocalDevUser();
+          const devUser = await ensureLocalDevUser();
           this.authenticatedUserId = devUser.id;
           this.requestAuth.set(requestId, {
             userId: this.authenticatedUserId,
@@ -475,7 +475,7 @@ export class NeotomaServer {
             logger.info(
               "[MCP Server] Stdio with encryption off: falling back to dev-local (no auth required)."
             );
-            const devUser = ensureLocalDevUser();
+            const devUser = await ensureLocalDevUser();
             this.authenticatedUserId = devUser.id;
             this.requestAuth.set(requestId, {
               userId: this.authenticatedUserId,
@@ -1041,7 +1041,7 @@ export class NeotomaServer {
     const parsed = schema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
     const { listRecentRecordActivity } = await import("./services/recent_record_activity.js");
-    const result = listRecentRecordActivity(userId, parsed.limit, parsed.offset);
+    const result = await listRecentRecordActivity(userId, parsed.limit, parsed.offset);
     return this.buildTextResponse(result);
   }
 
@@ -1815,7 +1815,7 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             if (connectionId === "dev-local") {
-              userId = ensureLocalDevUser().id;
+              userId = (await ensureLocalDevUser()).id;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
@@ -2169,7 +2169,7 @@ export class NeotomaServer {
         if (connectionId) {
           try {
             if (connectionId === "dev-local") {
-              userId = ensureLocalDevUser().id;
+              userId = (await ensureLocalDevUser()).id;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
               const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);

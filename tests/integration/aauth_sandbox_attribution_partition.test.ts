@@ -100,15 +100,19 @@ function makeSandboxBypassApp(): express.Application {
       }
     ).aauth;
     if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
-      const aauthUser = ensureSandboxAauthUser(aauthCtx.thumbprint);
-      (req as express.Request & { authenticatedUserId?: string }).authenticatedUserId =
-        aauthUser.id;
-      return next();
+      void ensureSandboxAauthUser(aauthCtx.thumbprint).then((aauthUser) => {
+        (req as express.Request & { authenticatedUserId?: string }).authenticatedUserId =
+          aauthUser.id;
+        next();
+      }, next);
+      return;
     }
-    const sandboxUser = ensureSandboxPublicUser();
-    (req as express.Request & { authenticatedUserId?: string }).authenticatedUserId =
-      sandboxUser.id;
-    return next();
+    void ensureSandboxPublicUser().then((sandboxUser) => {
+      (req as express.Request & { authenticatedUserId?: string }).authenticatedUserId =
+        sandboxUser.id;
+      next();
+    }, next);
+    return;
   });
   app.get("/probe", (req, res) => {
     const userId = (req as express.Request & { authenticatedUserId?: string })
@@ -244,9 +248,9 @@ describe("sandbox attribution partitioning (Option α)", () => {
 });
 
 describe("ensureSandboxAauthUser (deterministic provisioning)", () => {
-  it("produces a stable UUID-shaped id for the same thumbprint", () => {
-    const a = ensureSandboxAauthUser("tp-stable-1");
-    const b = ensureSandboxAauthUser("tp-stable-1");
+  it("produces a stable UUID-shaped id for the same thumbprint", async () => {
+    const a = await ensureSandboxAauthUser("tp-stable-1");
+    const b = await ensureSandboxAauthUser("tp-stable-1");
     expect(a.id).toBe(b.id);
     expect(a.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -255,14 +259,14 @@ describe("ensureSandboxAauthUser (deterministic provisioning)", () => {
     expect(a.email.endsWith("@sandbox.neotoma.local")).toBe(true);
   });
 
-  it("produces distinct ids for distinct thumbprints", () => {
-    const a = ensureSandboxAauthUser("tp-distinct-A");
-    const b = ensureSandboxAauthUser("tp-distinct-B");
+  it("produces distinct ids for distinct thumbprints", async () => {
+    const a = await ensureSandboxAauthUser("tp-distinct-A");
+    const b = await ensureSandboxAauthUser("tp-distinct-B");
     expect(a.id).not.toBe(b.id);
   });
 
-  it("rejects empty / non-string thumbprints", () => {
-    expect(() => ensureSandboxAauthUser("")).toThrow();
-    expect(() => ensureSandboxAauthUser(undefined as unknown as string)).toThrow();
+  it("rejects empty / non-string thumbprints", async () => {
+    await expect(ensureSandboxAauthUser("")).rejects.toThrow();
+    await expect(ensureSandboxAauthUser(undefined as unknown as string)).rejects.toThrow();
   });
 });

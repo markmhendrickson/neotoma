@@ -19,7 +19,7 @@ import {
   type Stats,
 } from "node:fs";
 import * as readline from "node:readline";
-import Database, { type SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
+import { AsyncSqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
@@ -2853,9 +2853,9 @@ async function backupFilesWithTimestamp(filePaths: string[], ts: string): Promis
   return backups;
 }
 
-function checkpointWal(db: SqliteDatabase): void {
+async function checkpointWal(db: AsyncSqliteDatabase): Promise<void> {
   try {
-    db.pragma("wal_checkpoint(FULL)");
+    await db.pragma("wal_checkpoint(FULL)");
   } catch {
     // Ignore checkpoint failures for non-WAL or read-only databases.
   }
@@ -2868,15 +2868,15 @@ function stableValueSignature(value: unknown): string {
   return `${typeof value}:${String(value)}`;
 }
 
-function mergeSqliteDatabase(
+async function mergeSqliteDatabase(
   sourceDbPath: string,
   targetDbPath: string,
   options?: DbMergeOptions
-): DbMergeStats {
+): Promise<DbMergeStats> {
   const mode: DbMergeMode = options?.mode ?? "keep-target";
   const dryRun = options?.dryRun === true;
-  let sourceDb: SqliteDatabase | null = null;
-  let targetDb: SqliteDatabase | null = null;
+  let sourceDb: AsyncSqliteDatabase | null = null;
+  let targetDb: AsyncSqliteDatabase | null = null;
   let attached = false;
   const stats: DbMergeStats = {
     source_db: sourceDbPath,
@@ -2891,23 +2891,23 @@ function mergeSqliteDatabase(
     conflict_samples: [],
   };
   try {
-    sourceDb = new Database(sourceDbPath);
-    targetDb = new Database(targetDbPath);
-    checkpointWal(sourceDb);
-    checkpointWal(targetDb);
-    targetDb.prepare("ATTACH DATABASE ? AS src").run(sourceDbPath);
+    sourceDb = new AsyncSqliteDatabase(sourceDbPath);
+    targetDb = new AsyncSqliteDatabase(targetDbPath);
+    await checkpointWal(sourceDb);
+    await checkpointWal(targetDb);
+    await targetDb.prepare("ATTACH DATABASE ? AS src").run(sourceDbPath);
     attached = true;
 
-    const targetTables = targetDb
+    const targetTables = (await targetDb
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .all() as Array<{ name: string }>;
+      .all()) as Array<{ name: string }>;
     const sourceTableSet = new Set(
       (
-        targetDb
+        (await targetDb
           .prepare(
             "SELECT name FROM src.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
           )
-          .all() as Array<{ name: string }>
+          .all()) as Array<{ name: string }>
       ).map((row) => row.name)
     );
 
@@ -2929,16 +2929,18 @@ function mergeSqliteDatabase(
       const tableName = table.name;
       if (!sourceTableSet.has(tableName)) continue;
 
-      const targetCols = targetDb
+      const targetCols = (await targetDb
         .prepare(`PRAGMA table_info(${quoteSqlIdent(tableName)})`)
-        .all() as Array<{
+        .all()) as Array<{
         name: string;
         pk?: number;
       }>;
       const targetColNames = targetCols.map((row) => row.name);
       const sourceCols = new Set(
         (
-          targetDb.prepare(`PRAGMA src.table_info(${quoteSqlIdent(tableName)})`).all() as Array<{
+          (await targetDb
+            .prepare(`PRAGMA src.table_info(${quoteSqlIdent(tableName)})`)
+            .all()) as Array<{
             name: string;
           }>
         ).map((row) => row.name)
@@ -2948,9 +2950,9 @@ function mergeSqliteDatabase(
 
       const quotedCols = sharedCols.map((name) => quoteSqlIdent(name)).join(", ");
       const quotedTable = quoteSqlIdent(tableName);
-      const sourceCountRow = targetDb
+      const sourceCountRow = (await targetDb
         .prepare(`SELECT COUNT(*) as count FROM src.${quotedTable}`)
-        .get() as { count?: number };
+        .get()) as { count?: number };
       const sourceCount = Number(sourceCountRow?.count ?? 0);
 
       let conflictCount = 0;
@@ -2972,11 +2974,11 @@ function mergeSqliteDatabase(
           const diffCond = nonPkSharedCols
             .map((col) => `NOT (t.${quoteSqlIdent(col)} IS s.${quoteSqlIdent(col)})`)
             .join(" OR ");
-          const conflictCountRow = targetDb
+          const conflictCountRow = (await targetDb
             .prepare(
               `SELECT COUNT(*) as count FROM src.${quotedTable} s JOIN ${quotedTable} t ON ${joinCond} WHERE ${diffCond}`
             )
-            .get() as { count?: number };
+            .get()) as { count?: number };
           conflictCount = Number(conflictCountRow?.count ?? 0);
           if (conflictCount > 0) {
             const selectPk = pkCols
@@ -2988,11 +2990,11 @@ function mergeSqliteDatabase(
                   `s.${quoteSqlIdent(col)} AS s_${col.replace(/"/g, "_")}, t.${quoteSqlIdent(col)} AS t_${col.replace(/"/g, "_")}`
               )
               .join(", ");
-            const sampleRows = targetDb
+            const sampleRows = (await targetDb
               .prepare(
                 `SELECT ${selectPk}, ${selectVals} FROM src.${quotedTable} s JOIN ${quotedTable} t ON ${joinCond} WHERE ${diffCond} LIMIT 25`
               )
-              .all() as Array<Record<string, unknown>>;
+              .all()) as Array<Record<string, unknown>>;
             for (const row of sampleRows) {
               const differingColumns = nonPkSharedCols.filter((col) => {
                 const sKey = `s_${col.replace(/"/g, "_")}`;
@@ -3034,9 +3036,9 @@ function mergeSqliteDatabase(
 
     if (!dryRun) {
       const insertPrefix = mode === "keep-source" ? "INSERT OR REPLACE" : "INSERT OR IGNORE";
-      const writeTx = targetDb.transaction((mergePlans: TablePlan[]) => {
-        for (const plan of mergePlans) {
-          const insertResult = targetDb!
+      await targetDb.transaction(async (tx) => {
+        for (const plan of plans) {
+          const insertResult = await tx
             .prepare(
               `${insertPrefix} INTO ${plan.quotedTable} (${plan.quotedCols}) SELECT ${plan.quotedCols} FROM src.${plan.quotedTable}`
             )
@@ -3050,18 +3052,17 @@ function mergeSqliteDatabase(
           }
         }
       });
-      writeTx(plans);
     }
   } finally {
     if (targetDb) {
       try {
-        if (attached) targetDb.prepare("DETACH DATABASE src").run();
+        if (attached) await targetDb.prepare("DETACH DATABASE src").run();
       } catch {
         // ignore detach failures
       }
-      targetDb.close();
+      await targetDb.close();
     }
-    if (sourceDb) sourceDb.close();
+    if (sourceDb) await sourceDb.close();
   }
   return stats;
 }
@@ -3089,18 +3090,21 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     entity_snapshot_recompute_errors: 0,
     relationship_snapshot_recompute_errors: 0,
   };
-  const db = new Database(targetDbPath);
+  const db = new AsyncSqliteDatabase(targetDbPath);
   try {
-    const tableExists = (tableName: string): boolean => {
-      const row = db
+    const tableExists = async (tableName: string): Promise<boolean> => {
+      const row = (await db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
-        .get(tableName) as { name?: string } | undefined;
+        .get(tableName)) as { name?: string } | undefined;
       return row?.name === tableName;
     };
-    if (!tableExists("entity_snapshots") || !tableExists("relationship_snapshots")) {
+    if (
+      !(await tableExists("entity_snapshots")) ||
+      !(await tableExists("relationship_snapshots"))
+    ) {
       return stats;
     }
-    if (!tableExists("observations") || !tableExists("relationship_observations")) {
+    if (!(await tableExists("observations")) || !(await tableExists("relationship_observations"))) {
       return stats;
     }
 
@@ -3110,34 +3114,37 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     const relationshipReducer = new RelationshipReducer();
 
     const entityIds = (
-      db
+      (await db
         .prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL")
-        .all() as Array<{
+        .all()) as Array<{
         entity_id: string;
       }>
     ).map((row) => row.entity_id);
     const relationshipKeys = (
-      db
+      (await db
         .prepare(
           "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
         )
-        .all() as Array<{ relationship_key: string }>
+        .all()) as Array<{ relationship_key: string }>
     ).map((row) => row.relationship_key);
 
-    db.prepare("DELETE FROM entity_snapshots").run();
-    db.prepare("DELETE FROM relationship_snapshots").run();
+    await db.prepare("DELETE FROM entity_snapshots").run();
+    await db.prepare("DELETE FROM relationship_snapshots").run();
 
     for (const entityId of entityIds) {
-      const observations = db
-        .prepare("SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC")
-        .all(entityId)
-        .map((row) => {
-          const observation = row as Record<string, unknown>;
-          if ("fields" in observation) {
-            observation.fields = parseJsonLike(observation.fields);
-          }
-          return observation;
-        });
+      const observations = (
+        await db
+          .prepare(
+            "SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC"
+          )
+          .all(entityId)
+      ).map((row) => {
+        const observation = row as Record<string, unknown>;
+        if ("fields" in observation) {
+          observation.fields = parseJsonLike(observation.fields);
+        }
+        return observation;
+      });
       if (observations.length === 0) continue;
       try {
         const snapshot = (await observationReducer.computeSnapshot(
@@ -3151,9 +3158,11 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
         const cols = Object.keys(payload);
         const placeholders = cols.map(() => "?").join(", ");
         const vals = cols.map((k) => payload[k]);
-        db.prepare(
-          `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-        ).run(vals);
+        await db
+          .prepare(
+            `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+          )
+          .run(vals);
         stats.entity_snapshots_recomputed += 1;
       } catch {
         stats.entity_snapshot_recompute_errors += 1;
@@ -3161,18 +3170,19 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     }
 
     for (const relationshipKey of relationshipKeys) {
-      const relationshipObservations = db
-        .prepare(
-          "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
-        )
-        .all(relationshipKey)
-        .map((row) => {
-          const observation = row as Record<string, unknown>;
-          if ("metadata" in observation) {
-            observation.metadata = parseJsonLike(observation.metadata);
-          }
-          return observation;
-        });
+      const relationshipObservations = (
+        await db
+          .prepare(
+            "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
+          )
+          .all(relationshipKey)
+      ).map((row) => {
+        const observation = row as Record<string, unknown>;
+        if ("metadata" in observation) {
+          observation.metadata = parseJsonLike(observation.metadata);
+        }
+        return observation;
+      });
       if (relationshipObservations.length === 0) continue;
       try {
         const snapshot = (await relationshipReducer.computeSnapshot(
@@ -3186,16 +3196,18 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
         const cols = Object.keys(payload);
         const placeholders = cols.map(() => "?").join(", ");
         const vals = cols.map((k) => payload[k]);
-        db.prepare(
-          `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-        ).run(vals);
+        await db
+          .prepare(
+            `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+          )
+          .run(vals);
         stats.relationship_snapshots_recomputed += 1;
       } catch {
         stats.relationship_snapshot_recompute_errors += 1;
       }
     }
   } finally {
-    db.close();
+    await db.close();
   }
   return stats;
 }
@@ -3768,19 +3780,21 @@ async function startSessionWatch(
     }
   }
   type DbInstance = {
-    close: () => void;
-    prepare: (sql: string) => { all: (...args: unknown[]) => unknown[] };
-    pragma: (s: string) => void;
+    close: () => Promise<void>;
+    prepare: (sql: string) => { all: (...args: unknown[]) => Promise<unknown[]> };
+    pragma: (s: string) => Promise<unknown[]>;
   };
   const sqlite3Mod = await import("../repositories/sqlite/sqlite_driver.js");
-  const Database = (sqlite3Mod as unknown as { default: new (path: string) => DbInstance }).default;
+  const Database = (
+    sqlite3Mod as unknown as { AsyncSqliteDatabase: new (path: string) => DbInstance }
+  ).AsyncSqliteDatabase;
   const dbs: { path: string; label: string; db: DbInstance; cursors: Record<string, string> }[] =
     [];
   const nowIso = new Date().toISOString();
   try {
     await fs.access(dbPath);
     const db = new Database(dbPath);
-    db.pragma("busy_timeout = 2000");
+    await db.pragma("busy_timeout = 2000");
     const cursors: Record<string, string> = {};
     for (const { table } of WATCH_TABLE_DEFS) cursors[table] = nowIso;
     dbs.push({ path: dbPath, label: preferredEnv, db, cursors });
@@ -3789,11 +3803,11 @@ async function startSessionWatch(
   }
   if (dbs.length === 0) return () => {};
 
-  function fetchEntityNames(
+  async function fetchEntityNames(
     db: DbInstance,
     entityIds: Set<string>,
     forUserId: string
-  ): Map<string, string> {
+  ): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     if (entityIds.size === 0 || !forUserId) return map;
     try {
@@ -3803,7 +3817,7 @@ async function startSessionWatch(
       const stmt = db.prepare(
         `SELECT id, canonical_name, entity_type FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
       );
-      const rows = stmt.all(...entityIds, forUserId) as {
+      const rows = (await stmt.all(...entityIds, forUserId)) as {
         id: string;
         canonical_name: string;
         entity_type?: string;
@@ -3816,11 +3830,11 @@ async function startSessionWatch(
   }
 
   /** Entity id -> entity_type for Type column and entity_merges. */
-  function fetchEntityTypes(
+  async function fetchEntityTypes(
     db: DbInstance,
     entityIds: Set<string>,
     forUserId: string
-  ): Map<string, string> {
+  ): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     if (entityIds.size === 0 || !forUserId) return map;
     try {
@@ -3830,7 +3844,10 @@ async function startSessionWatch(
       const stmt = db.prepare(
         `SELECT id, entity_type FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
       );
-      const rows = stmt.all(...entityIds, forUserId) as { id: string; entity_type: string }[];
+      const rows = (await stmt.all(...entityIds, forUserId)) as {
+        id: string;
+        entity_type: string;
+      }[];
       for (const r of rows) if (r.entity_type) map.set(r.id, r.entity_type);
     } catch {
       // ignore
@@ -3895,7 +3912,7 @@ async function startSessionWatch(
   const ENTITY_SNAPSHOT_EMIT_WINDOW_MS = 2000;
   const lastEmittedEntitySnapshot: Record<string, number> = {};
 
-  function pollOne(db: DbInstance, cursors: Record<string, string>): void {
+  async function pollOne(db: DbInstance, cursors: Record<string, string>): Promise<void> {
     for (const { table, idCol, tsCol, userFilter } of WATCH_TABLE_DEFS) {
       try {
         const cursor = cursors[table] ?? "1970-01-01T00:00:00Z";
@@ -3906,10 +3923,10 @@ async function startSessionWatch(
         const stmt = db.prepare(
           `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${tsCol} > ? AND ${userClause} ORDER BY ${tsCol} ASC LIMIT 100`
         );
-        const rows = stmt.all(cursor, userId) as Record<string, unknown>[];
+        const rows = (await stmt.all(cursor, userId)) as Record<string, unknown>[];
         const entityIds = collectEntityIds(table, rows);
-        const entityNames = fetchEntityNames(db, entityIds, userId);
-        const entityTypes = fetchEntityTypes(db, entityIds, userId);
+        const entityNames = await fetchEntityNames(db, entityIds, userId);
+        const entityTypes = await fetchEntityTypes(db, entityIds, userId);
         for (const row of rows) {
           const ts = String(row[tsCol] ?? "");
           if (ts && (!cursors[table] || ts > cursors[table])) cursors[table] = ts;
@@ -3946,11 +3963,13 @@ async function startSessionWatch(
 
   const intervalMs = 400;
   const id = setInterval(() => {
-    for (const { db, cursors } of dbs) pollOne(db, cursors);
+    void (async () => {
+      for (const { db, cursors } of dbs) await pollOne(db, cursors);
+    })();
   }, intervalMs);
   return () => {
     clearInterval(id);
-    for (const { db } of dbs) db.close();
+    for (const { db } of dbs) void db.close();
   };
 }
 
@@ -5632,8 +5651,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         }
         const dbFiles = ["neotoma.db", "neotoma.prod.db"] as const;
         if (!opts.skipDb) {
-          const { ensureSqliteDbInitialized } =
-            await import("../repositories/sqlite/sqlite_client.js");
+          const { ensureDbInitialized } = await import("../repositories/db/connection.js");
           const recoverSqliteSidecars = async (dbPath: string): Promise<void> => {
             const suffix = `.stale-${Date.now()}`;
             const sidecars = [`${dbPath}-wal`, `${dbPath}-shm`];
@@ -5652,14 +5670,14 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           };
           const ensureSqliteDbInitializedWithRetry = async (dbPath: string): Promise<void> => {
             try {
-              ensureSqliteDbInitialized(dbPath);
+              await ensureDbInitialized(dbPath);
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               if (!/disk i\/o error/i.test(message)) {
                 throw error;
               }
               await recoverSqliteSidecars(dbPath);
-              ensureSqliteDbInitialized(dbPath);
+              await ensureDbInitialized(dbPath);
             }
           };
           for (const dbFile of dbFiles) {
@@ -8759,9 +8777,9 @@ program
 
       // Open read-write so we can attach to WAL/shm; we only run SELECT. Opening readonly
       // while the API has the DB in WAL mode often causes "disk I/O error" (readers need shm access).
-      const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-      const db = new Database(resolvedPath);
-      db.pragma("busy_timeout = 2000");
+      const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+      const db = new AsyncSqliteDatabase(resolvedPath);
+      await db.pragma("busy_timeout = 2000");
 
       type TableDef = {
         table: string;
@@ -8795,7 +8813,10 @@ program
         relationship_snapshots: "🔗",
       };
 
-      function fetchEntityNames(entityIds: Set<string>, forUserId: string): Map<string, string> {
+      async function fetchEntityNames(
+        entityIds: Set<string>,
+        forUserId: string
+      ): Promise<Map<string, string>> {
         const map = new Map<string, string>();
         if (entityIds.size === 0) return map;
         try {
@@ -8805,7 +8826,7 @@ program
           const stmt = db.prepare(
             `SELECT id, canonical_name FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
           );
-          const rows = stmt.all(...entityIds, forUserId) as {
+          const rows = (await stmt.all(...entityIds, forUserId)) as {
             id: string;
             canonical_name: string;
           }[];
@@ -8930,7 +8951,7 @@ program
         return ids;
       }
 
-      function poll(): void {
+      async function poll(): Promise<void> {
         for (const { table, idCol, tsCol, userFilter } of tableDefs) {
           try {
             const cursor = cursors[table] ?? "1970-01-01T00:00:00Z";
@@ -8941,8 +8962,8 @@ program
             const stmt = db.prepare(
               `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${tsCol} > ? AND ${userClause} ORDER BY ${tsCol} ASC LIMIT 100`
             );
-            const rows = stmt.all(cursor, userId) as Record<string, unknown>[];
-            const entityNames = fetchEntityNames(collectEntityIds(table, rows), userId);
+            const rows = (await stmt.all(cursor, userId)) as Record<string, unknown>[];
+            const entityNames = await fetchEntityNames(collectEntityIds(table, rows), userId);
 
             for (const row of rows) {
               const ts = String(row[tsCol] ?? "");
@@ -8984,11 +9005,13 @@ program
         }
       }
 
-      poll();
-      const interval = setInterval(poll, intervalMs);
+      await poll();
+      const interval = setInterval(() => {
+        void poll();
+      }, intervalMs);
       const onExit = () => {
         clearInterval(interval);
-        db.close();
+        void db.close();
         process.exit(0);
       };
       process.on("SIGINT", onExit);
@@ -10321,7 +10344,7 @@ storageCommand
             const sourceDbPath = path.join(currentDataDir, baseName);
             const targetDbPath = path.join(targetDataDir, baseName);
             if (!(await pathExists(sourceDbPath)) || !(await pathExists(targetDbPath))) continue;
-            const stats = mergeSqliteDatabase(sourceDbPath, targetDbPath);
+            const stats = await mergeSqliteDatabase(sourceDbPath, targetDbPath);
             mergeStats.push(stats);
           }
         }
@@ -10425,7 +10448,7 @@ storageCommand
         throw new Error("Invalid --mode value. Expected one of: safe, keep-target, keep-source.");
       }
 
-      const mergeStats = mergeSqliteDatabase(sourcePath, targetPath, {
+      const mergeStats = await mergeSqliteDatabase(sourcePath, targetPath, {
         mode,
         dryRun: opts.dryRun === true,
       });
@@ -14838,7 +14861,7 @@ program
           const { storeRawContent } = await import("../services/raw_storage.js");
           const { ensureLocalDevUser } = await import("../services/local_auth.js");
 
-          const userRow = ensureLocalDevUser();
+          const userRow = await ensureLocalDevUser();
           const userId = userRow.id;
 
           const idempotencyKey =
@@ -16364,43 +16387,45 @@ async function getLocalIntroStats(
     return null;
   }
   type DbInstance = {
-    close: () => void;
-    prepare: (sql: string) => { get: (...args: unknown[]) => { "count(*)": number } | undefined };
-    pragma: (s: string) => void;
+    close: () => Promise<void>;
+    prepare: (sql: string) => {
+      get: (...args: unknown[]) => Promise<{ "count(*)": number } | undefined>;
+    };
+    pragma: (s: string) => Promise<unknown[]>;
   };
   try {
-    const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-    const db = new Database(dbPath) as unknown as DbInstance;
-    db.pragma("busy_timeout = 2000");
-    const getCount = (sql: string, ...args: unknown[]): number => {
-      const row = db.prepare(sql).get(...args) as { "count(*)": number } | undefined;
+    const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+    const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+    await db.pragma("busy_timeout = 2000");
+    const getCount = async (sql: string, ...args: unknown[]): Promise<number> => {
+      const row = (await db.prepare(sql).get(...args)) as { "count(*)": number } | undefined;
       return row != null && typeof row["count(*)"] === "number" ? row["count(*)"] : 0;
     };
-    const entities = getCount(
+    const entities = await getCount(
       "SELECT count(*) FROM entities WHERE user_id = ? AND merged_to_entity_id IS NULL",
       userId
     );
-    const relationships = getCount(
+    const relationships = await getCount(
       "SELECT count(*) FROM relationship_snapshots WHERE user_id = ?",
       userId
     );
-    const sources = getCount("SELECT count(*) FROM sources WHERE user_id = ?", userId);
-    const events = getCount(
+    const sources = await getCount("SELECT count(*) FROM sources WHERE user_id = ?", userId);
+    const events = await getCount(
       "SELECT count(*) FROM timeline_events WHERE source_id IN (SELECT id FROM sources WHERE user_id = ?)",
       userId
     );
     let observations = 0;
     let interpretations = 0;
     try {
-      observations = getCount("SELECT count(*) FROM observations WHERE user_id = ?", userId);
-      interpretations = getCount(
+      observations = await getCount("SELECT count(*) FROM observations WHERE user_id = ?", userId);
+      interpretations = await getCount(
         "SELECT count(*) FROM interpretations WHERE source_id IN (SELECT id FROM sources WHERE user_id = ?)",
         userId
       );
     } catch {
       // observations or interpretations table may not exist in older DBs
     }
-    db.close();
+    await db.close();
     return {
       total_entities: entities,
       total_relationships: relationships,
@@ -16434,29 +16459,29 @@ async function getEntityFromLocalDb(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    pragma: (sql: string) => void;
+    close: () => Promise<void>;
+    pragma: (sql: string) => Promise<unknown[]>;
     prepare: (sql: string) => {
-      get: (...args: unknown[]) => Row | undefined;
-      all: (...args: unknown[]) => Row[];
+      get: (...args: unknown[]) => Promise<Row | undefined>;
+      all: (...args: unknown[]) => Promise<Row[]>;
     };
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   try {
-    const entity = db
+    const entity = (await db
       .prepare(
         "SELECT id, entity_type, canonical_name, merged_to_entity_id FROM entities WHERE id = ? AND user_id = ?"
       )
-      .get(entityId, userId) as Row | undefined;
+      .get(entityId, userId)) as Row | undefined;
     if (!entity) return null;
     const resolvedId = (entity.merged_to_entity_id as string) || entityId;
     let snapshot: Record<string, unknown> | null = null;
     try {
-      const snap = db
+      const snap = (await db
         .prepare("SELECT snapshot FROM entity_snapshots WHERE entity_id = ? AND user_id = ?")
-        .get(resolvedId, userId) as { snapshot?: unknown } | undefined;
+        .get(resolvedId, userId)) as { snapshot?: unknown } | undefined;
       if (snap?.snapshot && typeof snap.snapshot === "object" && !Array.isArray(snap.snapshot)) {
         snapshot = snap.snapshot as Record<string, unknown>;
       }
@@ -16470,7 +16495,7 @@ async function getEntityFromLocalDb(
       ...(snapshot ? { snapshot } : {}),
     };
   } finally {
-    db.close();
+    await db.close();
   }
 }
 
@@ -16494,20 +16519,20 @@ async function getSourceFromLocalDb(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    pragma: (sql: string) => void;
-    prepare: (sql: string) => { get: (...args: unknown[]) => Row | undefined };
+    close: () => Promise<void>;
+    pragma: (sql: string) => Promise<unknown[]>;
+    prepare: (sql: string) => { get: (...args: unknown[]) => Promise<Row | undefined> };
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   try {
-    const source = db
+    const source = (await db
       .prepare("SELECT * FROM sources WHERE id = ? AND user_id = ?")
-      .get(sourceId, userId) as Row | undefined;
+      .get(sourceId, userId)) as Row | undefined;
     return source ?? null;
   } finally {
-    db.close();
+    await db.close();
   }
 }
 
@@ -16531,27 +16556,27 @@ async function getRelationshipFromLocalDb(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    pragma: (sql: string) => void;
-    prepare: (sql: string) => { get: (...args: unknown[]) => Row | undefined };
+    close: () => Promise<void>;
+    pragma: (sql: string) => Promise<unknown[]>;
+    prepare: (sql: string) => { get: (...args: unknown[]) => Promise<Row | undefined> };
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   try {
-    const snapshot = db
+    const snapshot = (await db
       .prepare("SELECT * FROM relationship_snapshots WHERE relationship_key = ? AND user_id = ?")
-      .get(relationshipKey, userId) as Row | undefined;
+      .get(relationshipKey, userId)) as Row | undefined;
     if (snapshot) return snapshot;
 
-    const lastObservation = db
+    const lastObservation = (await db
       .prepare(
         "SELECT relationship_key, relationship_type, source_entity_id, target_entity_id, observed_at, created_at, source_id, interpretation_id, user_id FROM relationship_observations WHERE relationship_key = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1"
       )
-      .get(relationshipKey, userId) as Row | undefined;
+      .get(relationshipKey, userId)) as Row | undefined;
     return lastObservation ?? null;
   } finally {
-    db.close();
+    await db.close();
   }
 }
 
@@ -16580,13 +16605,13 @@ async function getLastNWatchEntries(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    prepare: (sql: string) => { all: (...args: unknown[]) => Row[] };
-    pragma: (s: string) => void;
+    close: () => Promise<void>;
+    prepare: (sql: string) => { all: (...args: unknown[]) => Promise<Row[]> };
+    pragma: (s: string) => Promise<unknown[]>;
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   const merged: { table: string; ts: string; id: string; row: Row }[] = [];
   try {
     for (const { table, idCol, tsCol, userFilter } of WATCH_ENTRY_TABLE_DEFS) {
@@ -16597,7 +16622,7 @@ async function getLastNWatchEntries(
             : "user_id = ?";
         const perTable = Math.max(5, Math.ceil(limit / WATCH_ENTRY_TABLE_DEFS.length) + 2);
         const sql = `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${userClause} ORDER BY ${tsCol} DESC LIMIT ${perTable}`;
-        const rows = db.prepare(sql).all(userId) as Row[];
+        const rows = (await db.prepare(sql).all(userId)) as Row[];
         for (const row of rows) {
           const ts = String(row[tsCol] ?? "");
           const id = String(row[idCol] ?? "");
@@ -16631,20 +16656,24 @@ async function getLastNWatchEntries(
       const ph = Array.from(entityIds)
         .map(() => "?")
         .join(",");
-      const entityRows = db
+      const entityRows = (await db
         .prepare(
           `SELECT id, entity_type, canonical_name FROM entities WHERE id IN (${ph}) AND user_id = ?`
         )
-        .all(...entityIds, userId) as { id: string; entity_type: string; canonical_name: string }[];
+        .all(...entityIds, userId)) as {
+        id: string;
+        entity_type: string;
+        canonical_name: string;
+      }[];
       for (const r of entityRows) {
         entityMeta.set(r.id, { entity_type: r.entity_type, canonical_name: r.canonical_name });
       }
       try {
-        const snapshotRows = db
+        const snapshotRows = (await db
           .prepare(
             `SELECT entity_id, snapshot FROM entity_snapshots WHERE entity_id IN (${ph}) AND user_id = ?`
           )
-          .all(...entityIds, userId) as { entity_id: string; snapshot: unknown }[];
+          .all(...entityIds, userId)) as { entity_id: string; snapshot: unknown }[];
         for (const r of snapshotRows) {
           if (r.snapshot && typeof r.snapshot === "object" && !Array.isArray(r.snapshot)) {
             entitySnapshot.set(r.entity_id, r.snapshot as Record<string, unknown>);
@@ -16716,7 +16745,7 @@ async function getLastNWatchEntries(
       return out;
     });
   } finally {
-    db.close();
+    await db.close();
   }
 }
 

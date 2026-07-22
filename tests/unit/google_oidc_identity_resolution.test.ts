@@ -95,7 +95,10 @@ describe("Google identity resolution (auth-layer only)", () => {
 
     // This is the exact call the callback route makes: resolve the
     // verified email to a user_id via the EXISTING per-email primitive.
-    const user = localAuth.createLocalAuthUser(verified.email, "unused-throwaway-password");
+    const user = await localAuth.createLocalAuthUser(
+      verified.email,
+      "unused-throwaway-password"
+    );
 
     expect(user.id).not.toBe(localAuth.LOCAL_DEV_USER_ID);
     expect(user.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
@@ -104,7 +107,7 @@ describe("Google identity resolution (auth-layer only)", () => {
     // SAME user_id (same person signing in again gets the same identity).
     const tokenAgain = await signIdToken("person@example.com");
     const verifiedAgain = await googleOidc.verifyGoogleIdToken(tokenAgain);
-    const userAgain = localAuth.createLocalAuthUser(
+    const userAgain = await localAuth.createLocalAuthUser(
       verifiedAgain.email,
       "different-unused-password"
     );
@@ -137,8 +140,8 @@ describe("Google identity resolution (auth-layer only)", () => {
     // Confirm no local_auth user was created for the rejected email, and
     // that the shared dev user (what the OLD hardwired path always used)
     // remains untouched/distinct.
-    expect(localAuth.getLocalAuthUserByEmail("stranger@example.com")).toBeNull();
-    const devUser = localAuth.ensureLocalDevUser();
+    expect(await localAuth.getLocalAuthUserByEmail("stranger@example.com")).toBeNull();
+    const devUser = await localAuth.ensureLocalDevUser();
     expect(devUser.id).toBe(localAuth.LOCAL_DEV_USER_ID);
 
     rmSync(tempDir, { recursive: true, force: true });

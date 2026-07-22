@@ -2,10 +2,11 @@
 // Used when storageBackend === "local" and OPENAI_API_KEY is set
 
 import { createRequire } from "node:module";
-import type { SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
+import { AsyncSqliteDatabase, type SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
+import type { DbDatabase } from "../repositories/db/driver.js";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 
 const createRequireFromMeta = createRequire(import.meta.url);
 const EMBEDDING_DIM = 1536;
@@ -33,6 +34,15 @@ export function ensureSqliteVecLoaded(db: SqliteDatabase): boolean {
 }
 
 /**
+ * Extract the raw synchronous SQLite handle needed by sqlite-vec's `load()`.
+ * Returns null for backends without one (e.g. libSQL), where sqlite-vec is
+ * unavailable — same degradation as a failed extension load.
+ */
+function rawSqliteHandle(db: DbDatabase): SqliteDatabase | null {
+  return db instanceof AsyncSqliteDatabase ? db.rawDb() : null;
+}
+
+/**
  * Ensure vec0 virtual table exists. Call after ensureSqliteVecLoaded.
  * entity_embedding_rows is created by sqlite_client schema.
  */
@@ -48,13 +58,13 @@ function ensureVecSchema(db: SqliteDatabase): void {
  * Store or update entity embedding in local vec0 table.
  * Call when entity_snapshots upsert succeeds and row has embedding.
  */
-export function storeLocalEntityEmbedding(row: {
+export async function storeLocalEntityEmbedding(row: {
   entity_id: string;
   embedding?: number[] | null;
   user_id: string;
   entity_type: string;
   merged?: boolean;
-}): void {
+}): Promise<void> {
   if (!row.embedding || row.embedding.length !== EMBEDDING_DIM) {
     return;
   }
@@ -62,43 +72,45 @@ export function storeLocalEntityEmbedding(row: {
     return;
   }
 
-  const db = getSqliteDb();
-  if (!ensureSqliteVecLoaded(db)) {
+  const db = await getDb();
+  const rawDb = rawSqliteHandle(db);
+  if (!rawDb || !ensureSqliteVecLoaded(rawDb)) {
     return;
   }
-  ensureVecSchema(db);
+  ensureVecSchema(rawDb);
 
   const merged = row.merged ? 1 : 0;
 
   // Upsert: delete existing row for entity_id if any, then insert
-  const existing = db
+  const existing = (await db
     .prepare("SELECT rowid FROM entity_embedding_rows WHERE entity_id = ?")
-    .get(row.entity_id) as { rowid: number } | undefined;
+    .get(row.entity_id)) as { rowid: number } | undefined;
 
   if (existing) {
-    db.prepare("DELETE FROM entity_embeddings_vec WHERE rowid = ?").run(existing.rowid);
-    db.prepare("DELETE FROM entity_embedding_rows WHERE rowid = ?").run(existing.rowid);
+    await db.prepare("DELETE FROM entity_embeddings_vec WHERE rowid = ?").run(existing.rowid);
+    await db.prepare("DELETE FROM entity_embedding_rows WHERE rowid = ?").run(existing.rowid);
   }
 
   const embeddingBlob = new Float32Array(row.embedding);
-  db.prepare("INSERT INTO entity_embeddings_vec(rowid, embedding) VALUES (?, ?)").run(
-    null,
-    embeddingBlob
-  );
+  await db
+    .prepare("INSERT INTO entity_embeddings_vec(rowid, embedding) VALUES (?, ?)")
+    .run(null, embeddingBlob);
 
-  const rowid = db.prepare("SELECT last_insert_rowid() as id").get() as {
+  const rowid = (await db.prepare("SELECT last_insert_rowid() as id").get()) as {
     id: number;
   };
-  db.prepare(
-    "INSERT INTO entity_embedding_rows(rowid, entity_id, user_id, entity_type, merged) VALUES (?, ?, ?, ?, ?)"
-  ).run(rowid.id, row.entity_id, row.user_id, row.entity_type, merged);
+  await db
+    .prepare(
+      "INSERT INTO entity_embedding_rows(rowid, entity_id, user_id, entity_type, merged) VALUES (?, ?, ?, ?, ?)"
+    )
+    .run(rowid.id, row.entity_id, row.user_id, row.entity_type, merged);
 }
 
 /**
  * Semantic search over local entity embeddings.
  * Returns entity IDs ordered by similarity.
  */
-export function searchLocalEntityEmbeddings(options: {
+export async function searchLocalEntityEmbeddings(options: {
   queryEmbedding: number[];
   userId: string;
   entityType?: string | null;
@@ -116,7 +128,7 @@ export function searchLocalEntityEmbeddings(options: {
   distanceThreshold?: number;
   limit: number;
   offset: number;
-}): { entityIds: string[]; total: number } {
+}): Promise<{ entityIds: string[]; total: number }> {
   const {
     queryEmbedding,
     userId,
@@ -153,24 +165,29 @@ export function searchLocalEntityEmbeddings(options: {
     return { entityIds: [], total: 0 };
   }
 
-  const db = getSqliteDb();
-  if (!ensureSqliteVecLoaded(db)) {
+  const db = await getDb();
+  const rawDb = rawSqliteHandle(db);
+  if (!rawDb || !ensureSqliteVecLoaded(rawDb)) {
     logger.warn("[searchLocalEntityEmbeddings] sqlite-vec not loaded");
     return { entityIds: [], total: 0 };
   }
-  ensureVecSchema(db);
+  ensureVecSchema(rawDb);
 
   // Debug: row counts for userId
   const totalRows = (
-    db.prepare("SELECT COUNT(*) as c FROM entity_embedding_rows").get() as { c: number }
+    (await db.prepare("SELECT COUNT(*) as c FROM entity_embedding_rows").get()) as { c: number }
   ).c;
   const userRows = (
-    db.prepare("SELECT COUNT(*) as c FROM entity_embedding_rows WHERE user_id = ?").get(userId) as {
+    (await db
+      .prepare("SELECT COUNT(*) as c FROM entity_embedding_rows WHERE user_id = ?")
+      .get(userId)) as {
       c: number;
     }
   ).c;
   const distinctUsers = (
-    db.prepare("SELECT DISTINCT user_id FROM entity_embedding_rows").all() as { user_id: string }[]
+    (await db.prepare("SELECT DISTINCT user_id FROM entity_embedding_rows").all()) as {
+      user_id: string;
+    }[]
   ).map((r) => r.user_id);
   if (userRows === 0) {
     logger.warn(
@@ -192,7 +209,7 @@ export function searchLocalEntityEmbeddings(options: {
         ? "r.entity_type = ?"
         : `r.entity_type IN (${typeFilter.map(() => "?").join(", ")})`;
 
-  const rows = db
+  const rows = (await db
     .prepare(
       `
     SELECT r.entity_id, v.distance
@@ -211,7 +228,7 @@ export function searchLocalEntityEmbeddings(options: {
       userId,
       ...typeFilter,
       includeMerged ? 1 : 0 /* includeMerged=1: all rows; =0: only non-merged (r.merged=0) */
-    ) as Array<{ entity_id: string; distance: number }>;
+    )) as Array<{ entity_id: string; distance: number }>;
 
   const filtered =
     distanceThreshold !== undefined ? rows.filter((r) => r.distance < distanceThreshold) : rows;

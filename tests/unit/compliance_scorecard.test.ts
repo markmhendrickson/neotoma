@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getSqliteDb } from "../../src/repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../src/repositories/db/connection.js";
 import {
   buildComplianceScorecard,
   resolveScorecardWindow,
@@ -8,7 +8,7 @@ import {
 
 const TEST_USER_ID = `compliance-sc-${randomUUID().slice(0, 8)}`;
 
-function seedTurn(input: {
+async function seedTurn(input: {
   session_id: string;
   turn_id: string;
   harness: string;
@@ -18,7 +18,7 @@ function seedTurn(input: {
   started_at: string;
   ended_at: string;
 }) {
-  const db = getSqliteDb();
+  const db = await getDb();
   const turnKey = `${input.session_id}:${input.turn_id}`;
   const id = `ent_comp_${input.session_id}_${input.turn_id}`;
   const snapshot = {
@@ -33,20 +33,22 @@ function seedTurn(input: {
     started_at: input.started_at,
     ended_at: input.ended_at,
   };
-  db.prepare(
-    `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    "conversation_turn",
-    turnKey,
-    JSON.stringify([]),
-    input.started_at,
-    input.ended_at,
-    TEST_USER_ID,
-    input.started_at,
-    input.ended_at,
-  );
-  db.prepare(
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      "conversation_turn",
+      turnKey,
+      JSON.stringify([]),
+      input.started_at,
+      input.ended_at,
+      TEST_USER_ID,
+      input.started_at,
+      input.ended_at,
+    );
+  await db.prepare(
     `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
@@ -64,8 +66,8 @@ function seedTurn(input: {
 describe("compliance scorecard", () => {
   const refMs = Date.parse("2026-04-28T15:00:00.000Z");
 
-  beforeAll(() => {
-    seedTurn({
+  beforeAll(async () => {
+    await seedTurn({
       session_id: "s1",
       turn_id: "t1",
       harness: "cursor",
@@ -74,7 +76,7 @@ describe("compliance scorecard", () => {
       started_at: "2026-04-27T10:00:00.000Z",
       ended_at: "2026-04-27T10:05:00.000Z",
     });
-    seedTurn({
+    await seedTurn({
       session_id: "s1",
       turn_id: "t2",
       harness: "cursor",
@@ -84,7 +86,7 @@ describe("compliance scorecard", () => {
       started_at: "2026-04-27T11:00:00.000Z",
       ended_at: "2026-04-27T11:05:00.000Z",
     });
-    seedTurn({
+    await seedTurn({
       session_id: "s2",
       turn_id: "t1",
       harness: "claude-code",
@@ -95,12 +97,12 @@ describe("compliance scorecard", () => {
     });
   });
 
-  afterAll(() => {
-    const db = getSqliteDb();
+  afterAll(async () => {
+    const db = await getDb();
     const ids = ["ent_comp_s1_t1", "ent_comp_s1_t2", "ent_comp_s2_t1"];
     for (const id of ids) {
-      db.prepare(`DELETE FROM entity_snapshots WHERE entity_id = ?`).run(id);
-      db.prepare(`DELETE FROM entities WHERE id = ?`).run(id);
+      await db.prepare(`DELETE FROM entity_snapshots WHERE entity_id = ?`).run(id);
+      await db.prepare(`DELETE FROM entities WHERE id = ?`).run(id);
     }
   });
 
@@ -111,8 +113,8 @@ describe("compliance scorecard", () => {
     expect(refMs - sinceT).toBe(7 * 86400000);
   });
 
-  it("aggregates model+harness cells and summary", () => {
-    const card = buildComplianceScorecard(TEST_USER_ID, {
+  it("aggregates model+harness cells and summary", async () => {
+    const card = await buildComplianceScorecard(TEST_USER_ID, {
       since: "7d",
       until: "2026-04-28T23:59:59.999Z",
       group_by: "model+harness",
@@ -132,8 +134,8 @@ describe("compliance scorecard", () => {
     expect(cursorA!.top_missed_steps[0]?.step).toBe("user_phase_store");
   });
 
-  it("respects min_turns filter", () => {
-    const card = buildComplianceScorecard(TEST_USER_ID, {
+  it("respects min_turns filter", async () => {
+    const card = await buildComplianceScorecard(TEST_USER_ID, {
       since: "7d",
       until: "2026-04-28T23:59:59.999Z",
       group_by: "model+harness",

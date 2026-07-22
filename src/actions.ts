@@ -144,7 +144,7 @@ import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
 import type { SandboxReportReason } from "./services/sandbox/types.js";
 import type { SubstrateEvent } from "./events/types.js";
-import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
+import { getDb } from "./repositories/db/connection.js";
 import { getMcpAuthToken } from "./crypto/mcp_auth_token.js";
 import {
   isOauthKeyCredentialValid,
@@ -442,7 +442,7 @@ if (isSandboxMode()) {
   const createAndSeedSession = async (
     packId: string
   ): Promise<{ session: SandboxSession; seedStatus: SeedStatus }> => {
-    const session = createSandboxSession(packId);
+    const session = await createSandboxSession(packId);
     const pack = getSandboxPack(session.packId);
     // Packs with seedPolicy "none" (e.g. the empty pack) legitimately seed
     // nothing — that is "skipped", not a failure.
@@ -492,14 +492,14 @@ if (isSandboxMode()) {
     }
   });
 
-  app.post("/sandbox/session/redeem", (req, res) => {
+  app.post("/sandbox/session/redeem", async (req, res) => {
     try {
       const code = typeof req.body?.code === "string" ? req.body.code : "";
       if (!code) {
         res.status(400).json({ error_code: "MISSING_CODE", message: "code is required" });
         return;
       }
-      const result = redeemOneTimeCode(code);
+      const result = await redeemOneTimeCode(code);
       if (!result) {
         res
           .status(404)
@@ -526,8 +526,8 @@ if (isSandboxMode()) {
     }
   });
 
-  app.get("/sandbox/session", (req, res) => {
-    const session = resolveSessionFromRequest(req);
+  app.get("/sandbox/session", async (req, res) => {
+    const session = await resolveSessionFromRequest(req);
     if (!session) {
       res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
       return;
@@ -541,13 +541,13 @@ if (isSandboxMode()) {
   });
 
   app.post("/sandbox/session/reset", async (req, res) => {
-    const session = resolveSessionFromRequest(req);
+    const session = await resolveSessionFromRequest(req);
     if (!session) {
       res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
       return;
     }
     const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : undefined;
-    purgeSessionUserData(session.userId);
+    await purgeSessionUserData(session.userId);
     const { session: newSession, seedStatus } = await createAndSeedSession(
       packId ?? session.packId
     );
@@ -565,24 +565,29 @@ if (isSandboxMode()) {
     });
   });
 
-  app.delete("/sandbox/session", (req, res) => {
-    const session = resolveSessionFromRequest(req);
+  app.delete("/sandbox/session", async (req, res) => {
+    const session = await resolveSessionFromRequest(req);
     if (!session) {
       res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
       return;
     }
-    revokeSession(session.userId);
-    purgeSessionUserData(session.userId);
+    await revokeSession(session.userId);
+    await purgeSessionUserData(session.userId);
     res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
     res.json({ ok: true });
   });
 
   setInterval(
     () => {
-      const purged = sweepExpiredSessions();
-      if (purged > 0) {
-        logger.info(`[Sandbox] Swept ${purged} expired session(s)`);
-      }
+      sweepExpiredSessions()
+        .then((purged) => {
+          if (purged > 0) {
+            logger.info(`[Sandbox] Swept ${purged} expired session(s)`);
+          }
+        })
+        .catch((err) => {
+          logger.error(`[Sandbox] session sweep failed: ${(err as Error).message}`);
+        });
     },
     15 * 60 * 1000
   );
@@ -2766,7 +2771,7 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // with it) — generate an unguessable throwaway so createLocalAuthUser's
     // shared code path is satisfied without weakening any other account.
     const throwawayPassword = randomBytes(32).toString("hex");
-    const perEmailUser = createLocalAuthUser(email, throwawayPassword);
+    const perEmailUser = await createLocalAuthUser(email, throwawayPassword);
 
     // Shared-graph opt-in: when NEOTOMA_SHARED_GRAPH_USER_ID is set, an
     // approved teammate (the email already passed the allowlist inside
@@ -3002,7 +3007,7 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     // (no Google session on this cookie — the default, and the only
     // possibility when the Google feature flag is off) is unchanged.
     const googleUserId = getGoogleVerifiedUserId(req);
-    const resolvedUserId = googleUserId ?? ensureLocalDevUser().id;
+    const resolvedUserId = googleUserId ?? (await ensureLocalDevUser()).id;
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
     const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
       state,
@@ -3249,10 +3254,10 @@ app.get("/mcp/oauth/authorization-details", async (req, res) => {
     const { validateSessionToken } = await import("./services/mcp_auth.js");
     await validateSessionToken(token);
 
-    const db = getSqliteDb();
-    const stateData = db
+    const db = await getDb();
+    const stateData = (await db
       .prepare("SELECT redirect_uri FROM mcp_oauth_state WHERE state = ?")
-      .get(authorization_id) as { redirect_uri?: string } | undefined;
+      .get(authorization_id)) as { redirect_uri?: string } | undefined;
 
     if (!stateData?.redirect_uri) {
       return res.status(404).json({
@@ -3508,7 +3513,9 @@ async function resolveRoutePrincipal(
       isLocalRequest(req) &&
       !headerAuth.startsWith("Bearer ")
     ) {
-      const userId = _localSandboxActive ? ensureLocalSandboxUser().id : ensureLocalDevUser().id;
+      const userId = _localSandboxActive
+        ? (await ensureLocalSandboxUser()).id
+        : (await ensureLocalDevUser()).id;
       // Stamp the principal so a later `getAuthenticatedUserId` in the handler
       // resolves the same local user without re-tripping the missing-Bearer gate.
       stampUserPrincipal(req, userId);
@@ -3574,9 +3581,9 @@ export async function resolveGuestUserId(
     // shared nil-UUID LOCAL_DEV_USER_ID. Outside local_sandbox mode (e.g. pure
     // dev with explicit auth configured) continue to use the nil-UUID fallback.
     if (_localSandboxActive) {
-      return ensureLocalSandboxUser().id;
+      return (await ensureLocalSandboxUser()).id;
     }
-    return ensureLocalDevUser().id;
+    return (await ensureLocalDevUser()).id;
   }
 
   throw new Error(
@@ -3736,14 +3743,14 @@ app.use(async (req, res, next) => {
       return next();
     }
     if (_localSandboxActive) {
-      const sandboxUser = ensureLocalSandboxUser();
+      const sandboxUser = await ensureLocalSandboxUser();
       stampUserPrincipal(req, sandboxUser.id);
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
       );
       return next();
     }
-    const devUser = ensureLocalDevUser();
+    const devUser = await ensureLocalDevUser();
     stampUserPrincipal(req, devUser.id);
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
@@ -3754,7 +3761,7 @@ app.use(async (req, res, next) => {
   // Sandbox ephemeral session: resolve from cookie or Bearer token before
   // falling back to the shared public user. Expired/revoked sessions 401.
   if (isSandboxMode()) {
-    const sessionInfo = resolveSessionFromRequest(req);
+    const sessionInfo = await resolveSessionFromRequest(req);
     if (sessionInfo) {
       stampUserPrincipal(req, sessionInfo.userId);
       logger.info(
@@ -3781,14 +3788,14 @@ app.use(async (req, res, next) => {
       req as express.Request & { aauth?: { verified?: boolean; thumbprint?: string } }
     ).aauth;
     if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
-      const aauthUser = ensureSandboxAauthUser(aauthCtx.thumbprint);
+      const aauthUser = await ensureSandboxAauthUser(aauthCtx.thumbprint);
       stampUserPrincipal(req, aauthUser.id);
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=sandbox_aauth user_id=${aauthUser.id} thumbprint=${aauthCtx.thumbprint}`
       );
       return next();
     }
-    const sandboxUser = ensureSandboxPublicUser();
+    const sandboxUser = await ensureSandboxPublicUser();
     stampUserPrincipal(req, sandboxUser.id);
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=sandbox_public user_id=${sandboxUser.id}`
@@ -3804,7 +3811,7 @@ app.use(async (req, res, next) => {
   if (headerAuth.startsWith("Bearer ") && mcpExpectedToken) {
     const token = headerAuth.slice(7).trim();
     if (safeCompareTokens(token, mcpExpectedToken)) {
-      const devUser = ensureLocalDevUser();
+      const devUser = await ensureLocalDevUser();
       stampUserPrincipal(req, devUser.id);
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=bearer_mcp_token user_id=${devUser.id}`
@@ -3823,14 +3830,14 @@ app.use(async (req, res, next) => {
       }
       if (isLocalRequest(req)) {
         if (_localSandboxActive) {
-          const sandboxUser = ensureLocalSandboxUser();
+          const sandboxUser = await ensureLocalSandboxUser();
           stampUserPrincipal(req, sandboxUser.id);
           logger.info(
             `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
           );
           return next();
         }
-        const devUser = ensureLocalDevUser();
+        const devUser = await ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
@@ -3841,7 +3848,7 @@ app.use(async (req, res, next) => {
     if (headerAuth.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
       const token = headerAuth.slice(7).trim();
       if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
-        const devUser = ensureLocalDevUser();
+        const devUser = await ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=bearer_env user_id=${devUser.id}`
@@ -3959,7 +3966,7 @@ app.use(async (req, res, next) => {
       // sandboxDestructiveGuard, and AAuth-only routes by aauthRequired.
       if (isSandboxMode()) {
         res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
-        const sandboxUser = ensureSandboxPublicUser();
+        const sandboxUser = await ensureSandboxPublicUser();
         stampUserPrincipal(req, sandboxUser.id);
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=sandbox_public_stale_bearer user_id=${sandboxUser.id}`
@@ -5363,7 +5370,7 @@ app.get("/record_activity", async (req, res) => {
     const limit = parseInt(String(req.query.limit ?? "50"), 10) || 50;
     const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
     const recordTypes = parseRecordActivityTypesQuery(req.query.record_types);
-    const result = listRecentRecordActivity(userId, {
+    const result = await listRecentRecordActivity(userId, {
       limit,
       offset,
       ...(recordTypes?.length ? { recordTypes } : {}),
@@ -5386,7 +5393,7 @@ app.get("/record_activity", async (req, res) => {
 app.get("/agents", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
-    const result = listAgents(userId);
+    const result = await listAgents(userId);
     return res.json(result);
   } catch (error) {
     return handleApiError(
@@ -5589,7 +5596,7 @@ app.get("/agents/:key", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
     const agentKey = decodeURIComponent(req.params.key);
-    const agent = getAgent(userId, agentKey);
+    const agent = await getAgent(userId, agentKey);
     if (!agent) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", `Agent not found: ${agentKey}`);
     }
@@ -5616,7 +5623,7 @@ app.get("/agents/:key/records", async (req, res) => {
     const agentKey = decodeURIComponent(req.params.key);
     const limit = parseInt(String(req.query.limit ?? "50"), 10) || 50;
     const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
-    const result = listAgentRecords(userId, agentKey, limit, offset);
+    const result = await listAgentRecords(userId, agentKey, limit, offset);
     return res.json(result);
   } catch (error) {
     return handleApiError(
@@ -5635,7 +5642,7 @@ app.get("/recent_conversations/:conversation_id", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
     const conversationId = String(req.params.conversation_id ?? "").trim();
-    const item = getRecentConversationById(userId, conversationId);
+    const item = await getRecentConversationById(userId, conversationId);
     if (!item) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Conversation not found");
     }
@@ -5668,7 +5675,7 @@ app.get("/recent_conversations", async (req, res) => {
     // UI and bookmarks may send agent_key=all; never treat that as a real deriveAgentKey value.
     const agent_key =
       agentKeyRaw.length > 0 && agentKeyRaw.toLowerCase() !== "all" ? agentKeyRaw : null;
-    const result = listRecentConversations(userId, limit, offset, {
+    const result = await listRecentConversations(userId, limit, offset, {
       activity_after,
       activity_before,
       agent_key,
@@ -5750,7 +5757,7 @@ app.get("/turns", async (req, res) => {
       typeof req.query.activity_before === "string"
         ? req.query.activity_before.trim() || null
         : null;
-    const result = listConversationTurns(userId, limit, offset, {
+    const result = await listConversationTurns(userId, limit, offset, {
       harness,
       status,
       activity_after,
@@ -5774,7 +5781,7 @@ app.get("/turns/:turn_key", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
     const turnKey = decodeURIComponent(req.params.turn_key);
-    const result = getConversationTurn(userId, turnKey);
+    const result = await getConversationTurn(userId, turnKey);
     if (!result) {
       return res.status(404).json({ error: "Turn not found", code: "NOT_FOUND" });
     }
@@ -5805,7 +5812,7 @@ app.get("/admin/compliance/scorecard", async (req, res) => {
       req.query.include_synthetic === "1" ||
       String(req.query.include_synthetic).toLowerCase() === "true";
 
-    const result = buildComplianceScorecard(userId, {
+    const result = await buildComplianceScorecard(userId, {
       since,
       until,
       group_by,
@@ -9910,7 +9917,7 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
     );
     const userId =
       principal.kind === "guest" && !principal.accessToken
-        ? ensureLocalDevUser().id
+        ? (await ensureLocalDevUser()).id
         : principal.kind === "guest" || guestSubmitPayload
           ? ((await resolveGuestUserId(req, principal)) ??
             (await getAuthenticatedUserId(req, parsed.data.user_id)))
@@ -11180,7 +11187,7 @@ app.get("/events/stream", async (req, res) => {
 
     if (lastEventId !== undefined && !ringHasId(lastEventId)) {
       const cursorSeq = Number(lastEventId);
-      if (Number.isFinite(cursorSeq) && hasDurableCursor(userId, cursorSeq)) {
+      if (Number.isFinite(cursorSeq) && (await hasDurableCursor(userId, cursorSeq))) {
         // Recoverable from durable storage: replay from the log, paging until
         // drained, then continue from the ring tail for anything newer.
         // Push the subscription's column-backed predicates into SQL so a narrow
@@ -11193,7 +11200,7 @@ app.get("/events/stream", async (req, res) => {
         };
         let after = cursorSeq;
         for (;;) {
-          const batch = getEventsAfterSeq(userId, after, 1000, durableFilter);
+          const batch = await getEventsAfterSeq(userId, after, 1000, durableFilter);
           if (batch.length === 0) break;
           for (const d of batch) {
             if (subscriptionMatchesEvent(sub, d.event)) writeEvent(String(d.seq), d.event);
@@ -11820,7 +11827,7 @@ export async function startHTTPServer() {
       // user rather than the shared nil-UUID LOCAL_DEV_USER_ID fallback.
       _localSandboxActive = true;
       try {
-        const sandboxUser = ensureLocalSandboxUser();
+        const sandboxUser = await ensureLocalSandboxUser();
         logger.info(`[sandbox_mode] local_sandbox principal provisioned: ${sandboxUser.id}`);
       } catch (err) {
         // DB may not be initialised yet on very first boot; the principal will

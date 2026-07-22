@@ -633,7 +633,7 @@ flyctl releases rollback
 
 ## SQLite concurrency and the multi-writer model
 
-Neotoma's default storage backend is SQLite (`better-sqlite3`), configured in `src/repositories/sqlite/sqlite_client.ts`. For anyone running a single hosted instance that serves multiple users, the concurrency envelope is:
+Neotoma's default storage backend is SQLite (`better-sqlite3` / `node:sqlite`), configured in `src/repositories/sqlite/sqlite_client.ts`. For hosted or agent-heavy instances, set `NEOTOMA_DB_BACKEND=libsql` to switch to the concurrent backend (same on-disk format — validate with `scripts/validate_libsql_migration.ts`, then flip the env var): statements execute off the Node event loop (worker-hosted driver for local files: one writer plus `NEOTOMA_DB_READER_WORKERS` read-only readers under WAL; genuinely-async @libsql/client for remote sqld/Turso URLs), so one slow query no longer blocks health checks, the web UI, or other callers' requests. For anyone running a single hosted instance that serves multiple users on the default backend, the concurrency envelope is:
 
 **What is configured today**
 

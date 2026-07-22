@@ -1,7 +1,4 @@
-import { mkdirSync } from "fs";
-import path from "path";
-import { config } from "../../config.js";
-import Database, { type SqliteDatabase } from "./sqlite_driver.js";
+import type { DbConnection, DbDatabase } from "../db/driver.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -22,13 +19,11 @@ export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
  * concurrent readers alongside a single writer, foreign-key enforcement, and a
  * busy_timeout so lock contention waits rather than throwing immediately.
  */
-function applyConnectionPragmas(db: SqliteDatabase): void {
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+export async function applyConnectionPragmas(db: DbDatabase): Promise<void> {
+  await db.pragma("journal_mode = WAL");
+  await db.pragma("foreign_keys = ON");
+  await db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
 }
-
-let cachedDb: SqliteDatabase | null = null;
 
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS sources (
@@ -361,86 +356,100 @@ const DEPRECATED_TABLES = [
 ];
 
 /** Add a column to a table if it does not exist (for existing SQLite DBs). */
-function addColumnIfMissing(db: SqliteDatabase, table: string, column: string, type: string): void {
-  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+async function addColumnIfMissing(
+  db: DbConnection,
+  table: string,
+  column: string,
+  type: string
+): Promise<void> {
+  const rows = (await db.prepare(`PRAGMA table_info(${table})`).all()) as { name: string }[];
   if (rows.some((r) => r.name === column)) return;
-  db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+  await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
 }
 
-function ensureSchema(db: SqliteDatabase): void {
-  const transaction = db.transaction(() => {
-    db.pragma("foreign_keys = OFF");
+export async function ensureSchema(database: DbDatabase): Promise<void> {
+  await database.transaction(async (db) => {
+    await db.exec("PRAGMA foreign_keys = OFF");
     for (const table of DEPRECATED_TABLES) {
-      db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
+      await db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
     }
-    db.pragma("foreign_keys = ON");
+    await db.exec("PRAGMA foreign_keys = ON");
 
     for (const statement of SCHEMA_STATEMENTS) {
-      db.prepare(statement).run();
+      await db.prepare(statement).run();
     }
 
     // Add columns if missing (existing DBs created before these columns existed)
-    addColumnIfMissing(db, "sources", "source_type", "TEXT");
-    addColumnIfMissing(db, "sources", "original_filename", "TEXT");
-    addColumnIfMissing(db, "sources", "mime_type", "TEXT");
-    addColumnIfMissing(db, "sources", "storage_url", "TEXT");
-    addColumnIfMissing(db, "sources", "file_size", "INTEGER");
-    addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
-    addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
-    addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
-    addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
-    addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
-    addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
-    addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
-    addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
-    addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
+    await addColumnIfMissing(db, "sources", "source_type", "TEXT");
+    await addColumnIfMissing(db, "sources", "original_filename", "TEXT");
+    await addColumnIfMissing(db, "sources", "mime_type", "TEXT");
+    await addColumnIfMissing(db, "sources", "storage_url", "TEXT");
+    await addColumnIfMissing(db, "sources", "file_size", "INTEGER");
+    await addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
+    await addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
+    await addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
+    await addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
+    await addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
     // Agent attribution (Phase 1 AAuth integration). `provenance` is a JSON
     // blob containing AAuth fields, fallback clientInfo, and trust tier; see
     // src/crypto/agent_identity.ts AttributionProvenance shape. Adding via
     // the soft-migration helper keeps existing databases backward-compatible.
-    addColumnIfMissing(db, "observations", "provenance", "TEXT");
+    await addColumnIfMissing(db, "observations", "provenance", "TEXT");
     // Write-kind classification (sensor / llm_summary / workflow_state /
     // human / import), orthogonal to numeric `source_priority` and to the
     // `provenance` attribution blob. Soft migration keeps pre-existing
     // rows at NULL so historical data round-trips intact.
-    addColumnIfMissing(db, "observations", "observation_source", "TEXT");
+    await addColumnIfMissing(db, "observations", "observation_source", "TEXT");
     // Cross-instance sync (Phase 5): originating peer id stamped on
     // observations created from peer webhook replay; drives subscription
     // loop prevention on the event bus.
-    addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
+    await addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
     // Sighting deduplication (#1604): canonical_key groups N reports of the
     // same event into one logical signal; sighting_source_id is the origin
     // record (e.g. a webhook event id) that produced this observation. Together
     // they form a stable compound key for upsert idempotency. Indexed to
     // support fast collapse_by grouping on retrieve_entities.
-    addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
-    addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
-    ).run();
-    addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
-    addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
-    addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
-    addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
-    addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
-    addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
-    addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
-    addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
-    addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
-    addColumnIfMissing(db, "auto_enhancement_queue", "priority", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "retry_count", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "job_type", "TEXT DEFAULT 'auto_enhance'");
+    await addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
+    await addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
+      )
+      .run();
+    await addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
+    await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
+    await addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
+    await addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
+    await addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
+    await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
+    await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
+    await addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "priority", "INTEGER");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "retry_count", "INTEGER");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
+    await addColumnIfMissing(
+      db,
+      "auto_enhancement_queue",
+      "job_type",
+      "TEXT DEFAULT 'auto_enhance'"
+    );
 
-    addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
 
     // Materialized relationship liveness (#1570). Derived from the
     // highest-priority `relationship_observations` row's `metadata._deleted`
@@ -452,19 +461,20 @@ function ensureSchema(db: SqliteDatabase): void {
     // backfill below recomputes them; the value is re-stamped on every
     // snapshot recompute (computeRelationshipSnapshot), so observations remain
     // the source of truth and the column self-heals.
-    addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
+    await addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
 
     // By-reference source storage (#1775): path-only ingestion mode where bytes
     // remain on disk. Additive columns; existing rows default storage_mode='inline'
     // so all pre-existing sources behave identically without migration work.
-    addColumnIfMissing(db, "sources", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'");
-    addColumnIfMissing(db, "sources", "reference_path", "TEXT");
-    addColumnIfMissing(db, "sources", "host_id", "TEXT");
-    addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
-    addColumnIfMissing(db, "sources", "mtime", "TEXT");
+    await addColumnIfMissing(db, "sources", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'");
+    await addColumnIfMissing(db, "sources", "reference_path", "TEXT");
+    await addColumnIfMissing(db, "sources", "host_id", "TEXT");
+    await addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
+    await addColumnIfMissing(db, "sources", "mtime", "TEXT");
 
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS sandbox_sessions (
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS sandbox_sessions (
       user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
       bearer_token_hash TEXT NOT NULL,
       one_time_code_hash TEXT,
@@ -473,13 +483,18 @@ function ensureSchema(db: SqliteDatabase): void {
       expires_at TEXT NOT NULL,
       revoked_at TEXT
     )`
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
-    ).run();
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
+      )
+      .run();
 
     // Graph-traversal indexes (#1467): every hop of retrieve_related_entities /
     // retrieve_graph_neighborhood filters relationship_snapshots by
@@ -488,36 +503,50 @@ function ensureSchema(db: SqliteDatabase): void {
     // traversal cost grows with total table size. Composite indexes turn each
     // hop into an indexed lookup, flattening traversal latency vs graph size
     // (measured: 3-hop over 50k relationships dropped from ~777ms to ~6ms).
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
-    ).run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
+      )
+      .run();
     // Liveness-aware composites (#1570): the default list_relationships read
     // filters by (source|target entity, user_id, is_live) before paginating at
     // the DB. Including is_live in the index keeps that access path covered so
     // the live-edge filter never falls back to a table scan.
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
-    ).run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
+      )
+      .run();
 
     // Durable substrate-event log (#1464 Tier 2): resume queries read by
     // (user_id, seq); pruning reads by created_at.
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
-    ).run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
+      )
+      .run();
 
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
-    ).run();
+    await db
+      .prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
+      )
+      .run();
 
     // One-time backfill of relationship_snapshots.is_live (#1570). New rows are
     // stamped at write time by computeRelationshipSnapshot, but pre-existing
@@ -528,9 +557,8 @@ function ensureSchema(db: SqliteDatabase): void {
     // materialized is_live disagrees with the observation-derived value, so it
     // is a no-op once converged. Guarded so it only runs when there is at least
     // one deletion observation to reconcile (the common case has none).
-    backfillRelationshipLiveness(db);
+    await backfillRelationshipLiveness(db);
   });
-  transaction();
 }
 
 /**
@@ -541,10 +569,10 @@ function ensureSchema(db: SqliteDatabase): void {
  * inside `ensureSchema`'s transaction; idempotent and cheap when no deletion
  * observations exist.
  */
-function backfillRelationshipLiveness(db: SqliteDatabase): void {
+async function backfillRelationshipLiveness(db: DbConnection): Promise<void> {
   // Fast exit: if no deletion observations exist, every snapshot is live and
   // the column default (1) is already correct — nothing to reconcile.
-  const deletionProbe = db
+  const deletionProbe = await db
     .prepare(
       `SELECT 1 FROM relationship_observations
        WHERE json_extract(metadata, '$._deleted') = 1
@@ -557,7 +585,7 @@ function backfillRelationshipLiveness(db: SqliteDatabase): void {
   // Derive the dead set: relationship_keys whose highest-priority (source_priority
   // DESC, then observed_at DESC) observation is a deletion. SQLite window-function
   // ranking selects one winning observation per key, matching the app-side rule.
-  const deadRows = db
+  const deadRows = (await db
     .prepare(
       `WITH ranked AS (
          SELECT relationship_key,
@@ -573,7 +601,7 @@ function backfillRelationshipLiveness(db: SqliteDatabase): void {
          AND (json_extract(metadata, '$._deleted') = 1
               OR json_extract(metadata, '$._deleted') = 'true')`
     )
-    .all() as { relationship_key: string }[];
+    .all()) as { relationship_key: string }[];
 
   const deadKeys = new Set(deadRows.map((r) => r.relationship_key));
 
@@ -587,63 +615,20 @@ function backfillRelationshipLiveness(db: SqliteDatabase): void {
     "UPDATE relationship_snapshots SET is_live = 1 WHERE relationship_key = ? AND is_live <> 1"
   );
 
-  const allKeys = db.prepare("SELECT relationship_key FROM relationship_snapshots").all() as {
+  const allKeys = (await db
+    .prepare("SELECT relationship_key FROM relationship_snapshots")
+    .all()) as {
     relationship_key: string;
   }[];
   for (const { relationship_key } of allKeys) {
     if (deadKeys.has(relationship_key)) {
-      setDead.run(relationship_key);
+      await setDead.run(relationship_key);
     } else {
-      setLive.run(relationship_key);
+      await setLive.run(relationship_key);
     }
   }
 }
 
-/**
- * Clear the cached SQLite connection. Next getSqliteDb() will open a new
- * connection (and create the DB file if missing). Call this after I/O errors
- * (e.g. disk I/O error, DB file deleted while server was running).
- */
-export function clearSqliteCache(): void {
-  if (cachedDb) {
-    try {
-      cachedDb.close();
-    } catch {
-      // Ignore close errors (e.g. file already deleted)
-    }
-    cachedDb = null;
-  }
-}
-
-export function getSqliteDb(): SqliteDatabase {
-  if (cachedDb) {
-    return cachedDb;
-  }
-
-  const dbPath = config.sqlitePath;
-  const dir = path.dirname(dbPath);
-  mkdirSync(dir, { recursive: true });
-
-  const db = new Database(dbPath);
-  applyConnectionPragmas(db);
-
-  ensureSchema(db);
-  cachedDb = db;
-  return db;
-}
-
-/**
- * Ensure a SQLite database file exists with Neotoma schema initialized.
- * Used by init to eagerly provision both dev and prod databases.
- */
-export function ensureSqliteDbInitialized(dbPath: string): void {
-  const dir = path.dirname(dbPath);
-  mkdirSync(dir, { recursive: true });
-  const db = new Database(dbPath);
-  try {
-    applyConnectionPragmas(db);
-    ensureSchema(db);
-  } finally {
-    db.close();
-  }
-}
+// Connection lifecycle (open/cache/clear/init) lives in
+// src/repositories/db/connection.ts, which selects the backend
+// (NEOTOMA_DB_BACKEND) and runs applyConnectionPragmas + ensureSchema on open.

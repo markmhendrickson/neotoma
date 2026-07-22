@@ -15,16 +15,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  getSqliteDb,
-  SQLITE_BUSY_TIMEOUT_MS,
-} from "../../src/repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../src/repositories/db/connection.js";
+import { SQLITE_BUSY_TIMEOUT_MS } from "../../src/repositories/sqlite/sqlite_client.js";
 
 /** Read a single-value PRAGMA back through the driver wrapper, or null if the
  *  active driver does not expose pragma readback (returns no rows). */
-function readPragma(command: string): number | string | null {
-  const db = getSqliteDb();
-  const rows = db.pragma(command) as Array<Record<string, unknown>>;
+async function readPragma(command: string): Promise<number | string | null> {
+  const db = await getDb();
+  const rows = (await db.pragma(command)) as Array<Record<string, unknown>>;
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const first = rows[0];
   const values = Object.values(first);
@@ -32,21 +30,21 @@ function readPragma(command: string): number | string | null {
 }
 
 describe("SQLite connection PRAGMAs", () => {
-  it("applies WAL journal mode on open", () => {
-    const mode = readPragma("journal_mode");
+  it("applies WAL journal mode on open", async () => {
+    const mode = await readPragma("journal_mode");
     if (mode === null) return; // driver without pragma readback
     expect(String(mode).toLowerCase()).toBe("wal");
   });
 
-  it("applies a non-zero busy_timeout on open (not the better-sqlite3 default of 0)", () => {
-    const timeout = readPragma("busy_timeout");
+  it("applies a non-zero busy_timeout on open (not the better-sqlite3 default of 0)", async () => {
+    const timeout = await readPragma("busy_timeout");
     if (timeout === null) return; // driver without pragma readback
     expect(Number(timeout)).toBeGreaterThan(0);
     expect(Number(timeout)).toBe(SQLITE_BUSY_TIMEOUT_MS);
   });
 
-  it("enforces foreign keys on open", () => {
-    const fk = readPragma("foreign_keys");
+  it("enforces foreign keys on open", async () => {
+    const fk = await readPragma("foreign_keys");
     if (fk === null) return; // driver without pragma readback
     expect(Number(fk)).toBe(1);
   });
