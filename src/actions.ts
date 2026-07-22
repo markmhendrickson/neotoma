@@ -11674,6 +11674,41 @@ export async function startHTTPServer() {
   // Initialize encryption service
   await initServerKeys();
 
+  // Seed the built-in schema registry from ENTITY_SCHEMAS (issue #1968).
+  //
+  // Runs FIRST among the boot-time seeders so an unseeded instance has its
+  // core types registered before the service-specific seeders below extend
+  // them. `loadActiveSchema` is DB-only with no code fallback, so without this
+  // a fresh instance silently loses store-time auto-linking. Seeding here (as
+  // opposed to only in a Fly `release_command` or the RC redeploy script)
+  // covers every deploy path, including ones not yet written.
+  //
+  // Strictly additive: entity types that already have an active global schema
+  // are left untouched, so an operator's custom schema is never reverted.
+  try {
+    const { seedSchemaRegistryIfEmpty } = await import("./services/schema_registry_bootstrap.js");
+    const summary = await seedSchemaRegistryIfEmpty();
+    if (summary.registered.length > 0) {
+      logger.info(
+        `[SchemaRegistry] registry empty for ${summary.registered.length} type(s) → seeding: ` +
+          `${summary.registered.join(", ")} (preserved ${summary.preserved.length} existing)`
+      );
+    } else {
+      logger.info(
+        `[SchemaRegistry] all ${summary.preserved.length} built-in schema(s) already registered; nothing to seed`
+      );
+    }
+    if (summary.failed.length > 0) {
+      logger.warn(
+        `[SchemaRegistry] ${summary.failed.length} schema(s) failed to seed: ` +
+          summary.failed.map((f) => `${f.entity_type} (${f.error})`).join("; ")
+      );
+    }
+  } catch (err) {
+    // Never block boot — a briefly-unavailable DB must not stop the server.
+    logger.warn(`[SchemaRegistry] failed to seed built-in schemas: ${(err as Error).message}`);
+  }
+
   // Seed `issue` schema for the GitHub Issues integration.
   try {
     const { seedIssueSchema } = await import("./services/issues/seed_schema.js");

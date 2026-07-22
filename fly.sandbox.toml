@@ -21,6 +21,13 @@ primary_region = 'lhr'
 [build]
   dockerfile = "Dockerfile"
 
+# Seed the schema_registry on every deploy, before the new release takes
+# traffic (issue #1968). Complements the idempotent boot-time seeding in
+# src/services/schema_registry_bootstrap.ts by surfacing a seeding failure in
+# the deploy log. Skips any entity type that already has an active schema.
+[deploy]
+  release_command = "node dist/seed_schemas_entry.js"
+
 [build.args]
   VITE_NEOTOMA_SANDBOX_UI = "1"
   # The sandbox serves the Inspector SPA at the site root, so build it with a
