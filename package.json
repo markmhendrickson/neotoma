@@ -205,6 +205,7 @@
     "check:snapshots": "tsx scripts/check_stale_snapshots.ts",
     "check:timeline": "tsx scripts/check_timeline_health.ts",
     "backfill:timeline": "tsx scripts/backfill_timeline_via_recompute.ts",
+    "backfill:canonical-names": "tsx scripts/backfill_canonical_names.ts",
     "simulate:install": "node scripts/simulate_npm_install.js",
     "check:bundlephobia": "node scripts/check_bundlephobia.js",
     "validate:locales": "tsx --tsconfig frontend/tsconfig.json scripts/validate_locale_parity.ts",

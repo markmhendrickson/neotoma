@@ -128,7 +128,17 @@ export async function recomputeSnapshot(
   return computed as SnapshotRecord;
 }
 
-async function maybeRederiveCanonicalName(params: {
+/**
+ * Re-derive `entities.canonical_name` from a freshly merged snapshot.
+ *
+ * Exported because the MCP `store` path computes and upserts snapshots inline
+ * rather than going through {@link recomputeSnapshot}, and would otherwise
+ * leave the entity-level canonical_name frozen at its creation-time value
+ * while the snapshot moved on (issue: stale canonical_name after a corrective
+ * observation). Callers MUST treat failure as non-fatal — a store must not
+ * fail because a display name could not be refreshed.
+ */
+export async function maybeRederiveCanonicalName(params: {
   entityId: string;
   entityType: string;
   userId: string;
@@ -159,6 +169,14 @@ async function maybeRederiveCanonicalName(params: {
     .maybeSingle();
   if (fetchError) return;
   if (!entityRow) return;
+
+  // Tenancy guard. Rows written by paths that don't stamp user_id carry NULL;
+  // those are still ours to rename (the entity was reached via this user's
+  // observations). Refuse only when the row is explicitly owned by someone
+  // else. This replaces a `.eq("user_id", userId)` filter on the UPDATE below,
+  // which silently matched zero rows for NULL-owned entities.
+  const rowUserId = entityRow.user_id ?? null;
+  if (rowUserId !== null && rowUserId !== userId) return;
 
   const currentCanonicalName = String(entityRow.canonical_name ?? "").trim();
   if (!currentCanonicalName || currentCanonicalName === newCanonicalName) return;
@@ -202,6 +220,11 @@ async function maybeRederiveCanonicalName(params: {
     ? existingAliases
     : [...existingAliases, currentCanonicalName];
 
+  // Scope the update by id alone. The row was already fetched and validated
+  // above, and adding `.eq("user_id", userId)` here silently matches zero rows
+  // whenever entities.user_id is NULL (rows written by paths that don't stamp
+  // it) — the update then no-ops with no error, which is precisely how the
+  // stale-canonical_name bug hid.
   const { error: updateError } = await db
     .from("entities")
     .update({
@@ -209,8 +232,7 @@ async function maybeRederiveCanonicalName(params: {
       aliases: nextAliases,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", entityId)
-    .eq("user_id", userId);
+    .eq("id", entityId);
 
   if (updateError) {
     logger.warn(`[SNAPSHOT] canonical_name rename failed for ${entityId}: ${updateError.message}`);

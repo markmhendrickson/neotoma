@@ -6078,6 +6078,31 @@ export class NeotomaServer {
             schema: timelineSchema,
           });
 
+          // This path computes and upserts the snapshot inline instead of going
+          // through recomputeSnapshot(), so it must re-derive the entity-level
+          // canonical_name itself. Without this, a corrective observation (e.g.
+          // stripping an emoji from `name` via target_id) updates the snapshot
+          // while entities.canonical_name stays frozen at its creation value —
+          // and canonical_name is what entity lists and search display.
+          // Non-fatal by design: a store must not fail over a display name.
+          try {
+            const { maybeRederiveCanonicalName } = await import(
+              "./services/snapshot_computation.js"
+            );
+            await maybeRederiveCanonicalName({
+              entityId: snapshot.entity_id,
+              entityType: snapshot.entity_type,
+              userId: snapshot.user_id || userId,
+              snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
+              schema: timelineSchema,
+            });
+          } catch (err) {
+            logger.warn(
+              `[STORE] Failed to re-derive canonical_name for ${snapshot.entity_id}: ` +
+                (err instanceof Error ? err.message : String(err))
+            );
+          }
+
           const newSnapshot =
             (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
           const emitTs = snapshot.computed_at || new Date().toISOString();
