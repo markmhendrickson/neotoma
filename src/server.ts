@@ -38,6 +38,8 @@ import {
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   QueryContactsAtCompanyRequestSchema,
+  FindPathsRequestSchema,
+  ShortestPathRequestSchema,
   MergeEntitiesRequestSchema,
   SplitEntityRequestSchema,
   DeleteEntityRequestSchema,
@@ -2033,6 +2035,10 @@ export class NeotomaServer {
         return await this.listRelationships(args);
       case "query_contacts_at_company":
         return await this.queryContactsAtCompanyTool(args);
+      case "find_paths":
+        return await this.findPathsTool(args);
+      case "shortest_path":
+        return await this.shortestPathTool(args);
       case "get_relationship_snapshot":
         return await this.getRelationshipSnapshot(args);
       case "retrieve_entities":
@@ -3453,6 +3459,61 @@ export class NeotomaServer {
         ErrorCode.InternalError,
         `Failed to query contacts at company: ${error.message}`
       );
+    }
+  }
+
+  /**
+   * "How does our network reach X?" (#1969) — warm-path lookup returning the
+   * full entity/edge chain to a target company or fund, not just the
+   * endpoints. Bounded BFS with cycle protection; see services/path_finding.ts
+   * for the traversal bounds and why they are enforced (#1945).
+   */
+  private async findPathsTool(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = FindPathsRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.owner_user_id);
+
+    try {
+      const { findPaths } = await import("./services/path_finding.js");
+      const result = await findPaths({
+        targetName: parsed.target_name,
+        targetKind: parsed.target_kind,
+        userId,
+        maxHops: parsed.max_hops,
+        maxPaths: parsed.max_paths,
+        relationshipTypes: parsed.relationship_types,
+      });
+
+      return this.buildTextResponse(result);
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, `Failed to find paths: ${error.message}`);
+    }
+  }
+
+  /**
+   * Shortest path between two known entities (#1969). Reuses the same bounded
+   * BFS as {@link findPathsTool}, stopping at first arrival.
+   */
+  private async shortestPathTool(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = ShortestPathRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.owner_user_id);
+
+    try {
+      const { findShortestPath } = await import("./services/path_finding.js");
+      const result = await findShortestPath({
+        fromEntityId: parsed.from_entity_id,
+        toEntityId: parsed.to_entity_id,
+        userId,
+        maxHops: parsed.max_hops,
+        relationshipTypes: parsed.relationship_types,
+      });
+
+      return this.buildTextResponse(result);
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, `Failed to find shortest path: ${error.message}`);
     }
   }
 

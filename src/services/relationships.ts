@@ -76,7 +76,15 @@ export type RelationshipType =
   | "competitor_of"
   | "supplies_to"
   | "contracted_with"
-  | "invested_in";
+  | "invested_in"
+  /**
+   * Person-to-person acquaintance (#1969). ASSERTED-BY directionality:
+   * `source knows target` means the source asserts acquaintance with the
+   * target. Not symmetric and never auto-reciprocated — see
+   * RelationshipTypeSchema in shared/action_schemas.ts and
+   * docs/foundation/relationships.md.
+   */
+  | "knows";
 
 export interface Relationship {
   id: string;
@@ -135,6 +143,7 @@ export class RelationshipsService {
     "supplies_to",
     "contracted_with",
     "invested_in",
+    "knows",
   ]);
 
   /**

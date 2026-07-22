@@ -1389,6 +1389,83 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/find_paths": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Find warm-intro paths to a target company or fund
+     * @description Answer "how does our network reach X?" in one call. Resolves
+     *     `target_name` to a `company` (or fund) entity read-only — exact
+     *     normalized match first, then a conservative fuzzy pass, the same
+     *     resolution order as `/query_contacts_at_company` — then runs a bounded
+     *     breadth-first traversal and returns the **paths** that reach it.
+     *
+     *     The difference from `/query_contacts_at_company` is the path: this
+     *     returns the ordered chain of entities and edges traversed
+     *     (e.g. `Ana -knows-> Bruno -works_at-> Acme`), not only the directly
+     *     linked contacts. Multi-hop reach through `knows` edges is what makes a
+     *     warm intro actionable.
+     *
+     *     Traversal is bounded on every dimension because the server uses a
+     *     synchronous DB driver on the main thread (#1945): depth is capped at 5
+     *     hops, the per-hop frontier at 500 nodes, total nodes expanded at 2000,
+     *     and returned paths at 200. Each node is expanded at most once (visited
+     *     set), which provides cycle protection. When any bound fires,
+     *     `stats.truncated` is true and `stats.truncation_reasons` names it — so
+     *     an incomplete answer is never presented as a complete one.
+     *
+     *     Read-only: never creates a company, fund, or edge.
+     *
+     *     NOTE: `target_kind: fund` traverses `invested_in` / `funded_by` edges.
+     *     Those relationship types exist but no writer currently populates them,
+     *     so a fund query may legitimately return zero paths on real data. The
+     *     response carries a `notes` entry saying so, to distinguish "no edges
+     *     recorded" from "no path exists".
+     */
+    post: operations["findPaths"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/shortest_path": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Find the shortest path between two entities
+     * @description Generic shortest-path query between two known entity ids, by hop count.
+     *
+     *     Uses the same bounded breadth-first traversal as `/find_paths` and
+     *     stops as soon as the destination is discovered, since BFS guarantees
+     *     the first arrival is a shortest path. Traversal is undirected by
+     *     default (each edge records whether it was followed along or against its
+     *     stored direction) and each node is expanded at most once, giving cycle
+     *     protection.
+     *
+     *     Returns `found: false` rather than an error when the destination is
+     *     unreachable within `max_hops`. Check `stats.truncated` to distinguish
+     *     "genuinely unreachable" from "a bound cut the search short".
+     */
+    post: operations["shortestPath"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/retrieve_entity_by_identifier": {
     parameters: {
       query?: never;
@@ -3162,7 +3239,8 @@ export interface components {
             | "competitor_of"
             | "supplies_to"
             | "contracted_with"
-            | "invested_in";
+            | "invested_in"
+            | "knows";
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Index into the entities array for the target entity. */
@@ -3201,7 +3279,8 @@ export interface components {
             | "competitor_of"
             | "supplies_to"
             | "contracted_with"
-            | "invested_in";
+            | "invested_in"
+            | "knows";
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Existing target entity ID. */
@@ -3240,7 +3319,8 @@ export interface components {
             | "competitor_of"
             | "supplies_to"
             | "contracted_with"
-            | "invested_in";
+            | "invested_in"
+            | "knows";
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Index into the entities array for the target entity. */
@@ -3279,7 +3359,8 @@ export interface components {
             | "competitor_of"
             | "supplies_to"
             | "contracted_with"
-            | "invested_in";
+            | "invested_in"
+            | "knows";
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Existing target entity ID. */
@@ -3889,7 +3970,8 @@ export interface components {
         | "competitor_of"
         | "supplies_to"
         | "contracted_with"
-        | "invested_in";
+        | "invested_in"
+        | "knows";
       source_entity_id: string;
       target_entity_id: string;
       /** @description Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md. */
@@ -6083,7 +6165,8 @@ export interface operations {
             | "competitor_of"
             | "supplies_to"
             | "contracted_with"
-            | "invested_in";
+            | "invested_in"
+            | "knows";
           /** @description Existing entity id at the source end of the edge. */
           source_entity_id: string;
           /** @description Existing entity id at the target end of the edge. */
@@ -6160,7 +6243,8 @@ export interface operations {
               | "competitor_of"
               | "supplies_to"
               | "contracted_with"
-              | "invested_in";
+              | "invested_in"
+              | "knows";
             source_entity_id: string;
             target_entity_id: string;
             source_id?: string;
@@ -6258,7 +6342,8 @@ export interface operations {
                 | "competitor_of"
                 | "supplies_to"
                 | "contracted_with"
-                | "invested_in";
+                | "invested_in"
+                | "knows";
               /**
                * @description Maximum number of relationships to return.
                * @default 100
@@ -6407,6 +6492,258 @@ export interface operations {
             total_contacts?: number;
             /** @description Echo of the requested (or default) `limit`. */
             limit?: number;
+          };
+        };
+      };
+    };
+  };
+  findPaths: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /**
+           * @description Free-text name of the company or fund to reach, e.g.
+           *     "Acme" or "Northgate Capital". Resolved exact-normalized
+           *     first, then fuzzy.
+           */
+          target_name: string;
+          /**
+           * @description Which kind of target to resolve and which default edge set
+           *     to traverse. `company` traverses works_at/knows plus
+           *     org-structure edges; `fund` additionally traverses
+           *     invested_in/funded_by. Because no `fund` entity schema
+           *     exists yet, a fund target resolves against `fund` first and
+           *     falls back to `company`.
+           * @default company
+           * @enum {string}
+           */
+          target_kind?: "company" | "fund";
+          /**
+           * @description Optional user_id override scoping the query to a specific
+           *     partner's network. Must equal the authenticated user's id
+           *     today (no cross-tenant admission yet); omit to search the
+           *     authenticated user's own graph.
+           */
+          owner_user_id?: string;
+          /**
+           * @description Maximum path length in edges. Clamped to 5 (MAX_HOPS_CEILING).
+           * @default 3
+           */
+          max_hops?: number;
+          /**
+           * @description Maximum number of paths returned, shortest-first.
+           *     `total_paths` reports the true pre-truncation count.
+           * @default 25
+           */
+          max_paths?: number;
+          /**
+           * @description Restrict traversal to these relationship types. Defaults to
+           *     a curated set per `target_kind`.
+           */
+          relationship_types?: (
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in"
+            | "knows"
+          )[];
+        };
+      };
+    };
+    responses: {
+      /** @description Resolved target (or none) and the paths reaching it */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @description The `target_name` as given by the caller, unmodified. */
+            queried_name?: string;
+            /** @enum {string} */
+            target_kind?: "company" | "fund";
+            /**
+             * @description The resolved target entity, or `null` when no
+             *     exact/fuzzy match exists. Never created by this
+             *     read-only query.
+             */
+            target?: {
+              entity_id?: string;
+              canonical_name?: string;
+              /** @enum {string} */
+              basis?: "exact_normalized" | "fuzzy_match";
+              fuzzy_score?: number;
+            } | null;
+            /**
+             * @description Paths reaching the target, shortest-first then ordered by
+             *     origin entity_id for determinism. Each path reads
+             *     origin-first, target-last: `edges[i]` connects `nodes[i]`
+             *     to `nodes[i + 1]`.
+             */
+            paths?: {
+              nodes?: {
+                entity_id?: string;
+                canonical_name?: string;
+                entity_type?: string;
+              }[];
+              edges?: {
+                relationship_type?: string;
+                source_entity_id?: string;
+                target_entity_id?: string;
+                relationship_key?: string;
+                /**
+                 * @description Whether the edge was followed along its
+                 *     stored direction or against it. Traversal is
+                 *     undirected; this preserves the stored
+                 *     orientation.
+                 * @enum {string}
+                 */
+                traversed?: "outbound" | "inbound";
+                last_observation_at?: string;
+              }[];
+              hops?: number;
+            }[];
+            /** @description Total paths found before `max_paths` truncation. */
+            total_paths?: number;
+            /** @description The effective (post-clamp) traversal bounds. */
+            bounds?: {
+              [key: string]: unknown;
+            };
+            /**
+             * @description Traversal accounting. `truncated` is true when a bound cut
+             *     the search short, meaning the result may be incomplete.
+             */
+            stats?: {
+              [key: string]: unknown;
+            };
+            notes?: string[];
+          };
+        };
+      };
+    };
+  };
+  shortestPath: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Entity id to start from. */
+          from_entity_id: string;
+          /** @description Entity id to reach. */
+          to_entity_id: string;
+          /**
+           * @description Optional user_id override; must equal the authenticated
+           *     user's id today. Omit to search the caller's own graph.
+           */
+          owner_user_id?: string;
+          /**
+           * @description Maximum path length in edges. Clamped to 5.
+           * @default 4
+           */
+          max_hops?: number;
+          /**
+           * @description Restrict traversal to these relationship types. Defaults to
+           *     all types.
+           */
+          relationship_types?: (
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in"
+            | "knows"
+          )[];
+        };
+      };
+    };
+    responses: {
+      /** @description The shortest path, or a not-found result */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            from_entity_id?: string;
+            to_entity_id?: string;
+            found?: boolean;
+            /**
+             * @description The shortest path by hop count, or `null` when
+             *     unreachable within bounds.
+             */
+            path?: {
+              nodes?: {
+                [key: string]: unknown;
+              }[];
+              edges?: {
+                [key: string]: unknown;
+              }[];
+              hops?: number;
+            } | null;
+            bounds?: {
+              [key: string]: unknown;
+            };
+            stats?: {
+              [key: string]: unknown;
+            };
           };
         };
       };
@@ -7117,7 +7454,8 @@ export interface operations {
             | "competitor_of"
             | "supplies_to"
             | "contracted_with"
-            | "invested_in";
+            | "invested_in"
+            | "knows";
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
@@ -7192,7 +7530,8 @@ export interface operations {
             | "competitor_of"
             | "supplies_to"
             | "contracted_with"
-            | "invested_in";
+            | "invested_in"
+            | "knows";
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
