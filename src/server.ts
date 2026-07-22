@@ -3750,9 +3750,8 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntitiesByIdentifiersSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(parsed.user_id);
-    const { retrieveEntitiesByIdentifiers } = await import(
-      "./shared/action_handlers/entity_identifier_handler.js"
-    );
+    const { retrieveEntitiesByIdentifiers } =
+      await import("./shared/action_handlers/entity_identifier_handler.js");
     const result = await retrieveEntitiesByIdentifiers({
       identifiers: parsed.identifiers,
       entityType: parsed.entity_type,

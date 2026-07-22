@@ -472,8 +472,10 @@ export interface BatchRetrieveByIdentifierResult {
   };
 }
 
-export interface BatchRetrieveByIdentifierParams
-  extends Omit<RetrieveEntityByIdentifierParams, "identifier"> {
+export interface BatchRetrieveByIdentifierParams extends Omit<
+  RetrieveEntityByIdentifierParams,
+  "identifier"
+> {
   identifiers: string[];
 }
 

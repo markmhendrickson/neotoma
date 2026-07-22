@@ -340,7 +340,11 @@ describe("aggregateEntityField (#1967)", () => {
         200,
         "2026-02-01T00:00:00Z"
       );
-      const afterRestore = await aggregateEntityField({ userId, entityType, field: "organization" });
+      const afterRestore = await aggregateEntityField({
+        userId,
+        entityType,
+        field: "organization",
+      });
       expect(afterRestore.buckets.find((b) => b.value === "Umbrella")?.count).toBe(1);
 
       await db.from("observations").delete().eq("entity_id", delId);

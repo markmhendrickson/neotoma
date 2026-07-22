@@ -399,7 +399,7 @@ export function buildToolDefinitions(
           filters: {
             type: "object",
             description:
-              "Optional snapshot-field filters applied BEFORE grouping, as {field: {op, value}} with op one of eq|in|contains. Example: {\"status\": {\"op\": \"eq\", \"value\": \"active\"}}.",
+              'Optional snapshot-field filters applied BEFORE grouping, as {field: {op, value}} with op one of eq|in|contains. Example: {"status": {"op": "eq", "value": "active"}}.',
             additionalProperties: {
               type: "object",
               properties: {
