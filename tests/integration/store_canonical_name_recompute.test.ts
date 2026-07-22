@@ -14,15 +14,12 @@
  * entities.canonical_name indefinitely — and canonical_name is the field
  * entity lists and search display, so the stale value is what users see.
  *
- * Two independent causes were found, both of which had to be fixed for the
- * MCP path to work:
- *   1. The MCP store never called the re-derive at all.
- *   2. The re-derive's own UPDATE was scoped `.eq("user_id", userId)`, which
- *      silently matched zero rows for entities whose user_id is NULL — so it
- *      no-opped without error even when it was reached.
+ * Root cause: the MCP store path never called the re-derive at all. The helper
+ * (maybeRederiveCanonicalName) lives inside recomputeSnapshot(), which that
+ * path doesn't call — it computes and upserts the snapshot inline instead.
  *
- * The HTTP path (storeStructuredForApi) remains broken for a third, separate
- * reason — see the skipped test at the bottom.
+ * Both transports are covered: the MCP `store` handler and the HTTP
+ * `storeStructuredForApi` entry point.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -180,35 +177,50 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
     expect((await readEntityRow(entityId))?.canonical_name).toBe("🌊 Ben Billups");
   });
 
-  // KNOWN GAP (separate defect, not fixed here): storeStructuredForApi writes
-  // observations with a NULL user_id, so recomputeSnapshot's
-  // `.eq("user_id", userId)` observation filter matches nothing and returns
-  // early — the re-derive is never reached on that path. Fixing that means
-  // correcting user_id stamping across the HTTP store, which carries tenancy
-  // implications well beyond canonical_name. Tracked separately; unskip once
-  // that lands.
-  it.skip("HTTP store path keeps entities.canonical_name fresh too (transport parity)", async () => {
+  it("HTTP store path keeps entities.canonical_name fresh too (transport parity)", async () => {
     await registerSchema();
 
     const { storeStructuredForApi } = await import("../../src/actions.js");
 
-    const createRes: any = await storeStructuredForApi({
-      user_id: TEST_USER_ID,
-      idempotency_key: `test-canonical-http-${randomUUID()}`,
+    // NOTE: this helper takes camelCase `userId` / `idempotencyKey` /
+    // `sourcePriority`. Passing snake_case (and silencing it with `as any`)
+    // leaves userId undefined, which writes observations with a NULL user_id
+    // and makes recomputeSnapshot's observation filter match nothing — the
+    // symptom looks exactly like a product bug in the recompute path. Keep
+    // these typed so a rename can't reintroduce that confusion silently.
+    const createRes = await storeStructuredForApi({
+      userId: TEST_USER_ID,
+      idempotencyKey: `test-canonical-http-${randomUUID()}`,
+      sourcePriority: 100,
       entities: [{ entity_type: entityType, schema_version: "1.0", name: "🚀 Rupert Barksfield" }],
-    } as any);
-    const entityId = createRes.entities[0].entity_id;
+    });
+    const entityId = (createRes as { entities: Array<{ entity_id: string }> }).entities[0]
+      .entity_id;
     createdEntityIds.push(entityId);
-    if (createRes.source_id) createdSourceIds.push(createRes.source_id);
 
-    const updateRes: any = await storeStructuredForApi({
-      user_id: TEST_USER_ID,
-      idempotency_key: `test-canonical-http-${randomUUID()}`,
+    // Observations must carry the caller's user_id; a NULL here silently
+    // disables snapshot recompute for this entity.
+    const { data: obs } = await db
+      .from("observations")
+      .select("user_id")
+      .eq("entity_id", entityId);
+    expect((obs ?? []).every((o) => (o as { user_id: string }).user_id === TEST_USER_ID)).toBe(
+      true
+    );
+
+    await storeStructuredForApi({
+      userId: TEST_USER_ID,
+      idempotencyKey: `test-canonical-http-${randomUUID()}`,
+      sourcePriority: 100,
       entities: [
-        { entity_type: entityType, schema_version: "1.0", target_id: entityId, name: "Rupert Barksfield" },
+        {
+          entity_type: entityType,
+          schema_version: "1.0",
+          target_id: entityId,
+          name: "Rupert Barksfield",
+        },
       ],
-    } as any);
-    if (updateRes.source_id) createdSourceIds.push(updateRes.source_id);
+    });
 
     expect((await readEntityRow(entityId))?.canonical_name).toBe("Rupert Barksfield");
   });

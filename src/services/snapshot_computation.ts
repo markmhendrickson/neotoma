@@ -170,11 +170,13 @@ export async function maybeRederiveCanonicalName(params: {
   if (fetchError) return;
   if (!entityRow) return;
 
-  // Tenancy guard. Rows written by paths that don't stamp user_id carry NULL;
-  // those are still ours to rename (the entity was reached via this user's
-  // observations). Refuse only when the row is explicitly owned by someone
-  // else. This replaces a `.eq("user_id", userId)` filter on the UPDATE below,
-  // which silently matched zero rows for NULL-owned entities.
+  // Tenancy guard: refuse to rename a row owned by a different user.
+  //
+  // This is checked here rather than as a `.eq("user_id", userId)` filter on
+  // the UPDATE below, because that form fails *silently* — a mismatch (or a
+  // legacy row with NULL user_id) matches zero rows and no-ops with no error,
+  // which is indistinguishable from "nothing to do". An explicit check makes
+  // the refusal deliberate and keeps the UPDATE's outcome meaningful.
   const rowUserId = entityRow.user_id ?? null;
   if (rowUserId !== null && rowUserId !== userId) return;
 
