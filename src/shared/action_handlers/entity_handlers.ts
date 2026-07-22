@@ -13,7 +13,7 @@ import type { EntityWithProvenance } from "../../services/entity_queries.js";
 import { normalizeSearchText } from "../search_normalization.js";
 
 export interface SnapshotFilter {
-  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
   value?: unknown;
 }
 

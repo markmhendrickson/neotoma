@@ -317,6 +317,75 @@ function normalizeColumnName(table: string, column: string): string {
   return column;
 }
 
+/**
+ * Separator characters treated as word boundaries by {@link wordBoundaryHaystackSql}.
+ *
+ * Deliberately a fixed allowlist of ASCII punctuation/whitespace rather than a
+ * regex class: the set is baked into generated SQL, so it must never depend on
+ * user input. Alphanumerics are intentionally absent — they are what a "word"
+ * is made of. `%` and `_` are included so LIKE metacharacters embedded in the
+ * *stored* value cannot survive into the comparison.
+ */
+const WORD_BOUNDARY_SEPARATORS = [
+  "&",
+  ",",
+  ".",
+  "/",
+  "(",
+  ")",
+  "-",
+  ":",
+  ";",
+  "|",
+  "+",
+  "@",
+  '"',
+  "'",
+  "!",
+  "?",
+  "[",
+  "]",
+  "{",
+  "}",
+  "*",
+  "#",
+  "_",
+  "%",
+  "\\",
+  "=",
+  "<",
+  ">",
+  "~",
+  "`",
+  "$",
+  "^",
+  "\n",
+  "\t",
+  "\r",
+];
+
+/**
+ * Build a SQL expression that rewrites `columnSql` into a space-delimited
+ * haystack suitable for whole-word `LIKE '% term %'` matching.
+ *
+ * Every separator is replaced with a space via nested `replace()` (SQLite has
+ * no `translate()`), then the result is padded so terms at the very start or
+ * end of the value still sit between two spaces.
+ *
+ * All literals here are compile-time constants from
+ * {@link WORD_BOUNDARY_SEPARATORS}; `columnSql` is adapter-generated. No user
+ * input reaches this string — the search term is always a bound parameter.
+ */
+function wordBoundaryHaystackSql(columnSql: string): string {
+  let expr = columnSql;
+  for (const separator of WORD_BOUNDARY_SEPARATORS) {
+    // Escape single quotes for the SQL string literal.
+    const literal = separator === "'" ? "''" : separator === "\\" ? "\\" : separator;
+    expr = `replace(${expr}, '${literal}', ' ')`;
+  }
+  return `(' ' || ${expr} || ' ')`;
+}
+
 function deriveCanonicalName(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   return null;
@@ -563,6 +632,31 @@ class LocalQueryBuilder {
     const col = normalizeColumnName(this.table, column);
     this.filters.push(`${col} LIKE ? COLLATE NOCASE`);
     this.filterValues.push(pattern);
+    return this;
+  }
+
+  /**
+   * Case-insensitive WHOLE-WORD containment (#1966).
+   *
+   * SQLite has no REGEXP function by default (better-sqlite3 registers none),
+   * so `\b`-style boundaries are unavailable. Instead we normalize the haystack
+   * in SQL — every separator character is rewritten to a space and the value is
+   * padded with a leading/trailing space — then test for `% <term> %`. A term
+   * therefore matches only when delimited by separators or string boundaries:
+   * "CTO" hits "VP, CTO" and "Acme/CTO" but not "director" or "CTOs".
+   *
+   * The term is bound as a parameter (never interpolated) and its LIKE
+   * metacharacters are escaped by the caller, so `%`/`_` in user input are
+   * matched literally rather than acting as wildcards.
+   *
+   * Case folding uses SQLite's NOCASE collation, which is ASCII-only, so a
+   * non-ASCII term matches only with identical casing. Callers escape the term
+   * via `escapeLikeTerm` in src/services/entity_queries.ts.
+   */
+  ilikeWord(column: string, term: string): this {
+    const col = normalizeColumnName(this.table, column);
+    this.filters.push(`${wordBoundaryHaystackSql(col)} LIKE ? ESCAPE '\\' COLLATE NOCASE`);
+    this.filterValues.push(`% ${term} %`);
     return this;
   }
 

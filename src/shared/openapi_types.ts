@@ -4656,7 +4656,7 @@ export interface operations {
           snapshot_filters?: {
             [key: string]: {
               /** @enum {string} */
-              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
               value?: unknown;
             };
           };

@@ -270,7 +270,7 @@ function validateEntityQueryCombinations(
 }
 
 const SnapshotFilterSchema = z.object({
-  op: z.enum(["eq", "in", "gt", "lt", "gte", "lte", "contains"]),
+  op: z.enum(["eq", "in", "gt", "lt", "gte", "lte", "contains", "contains_word"]),
   value: z.any(),
 });
 

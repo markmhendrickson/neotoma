@@ -243,14 +243,22 @@ export function buildToolDefinitions(
               "are applied server-side via `snapshot->>{field}` JSONB extraction, so only entities whose " +
               "snapshot contains a matching value are returned. Example: " +
               '`{ "status": { "op": "eq", "value": "active" } }` returns only entities with ' +
-              '`snapshot.status === "active"`. Supported ops: `eq`, `in`, `gt`, `lt`, `gte`, `lte`, `contains`.',
+              '`snapshot.status === "active"`. Supported ops: `eq`, `in`, `gt`, `lt`, `gte`, `lte`, ' +
+              "`contains`, `contains_word`. " +
+              "`contains` is a raw case-insensitive SUBSTRING match — " +
+              '`{ "title": { "op": "contains", "value": "CTO" } }` also matches "director" and ' +
+              '"doctor", and `"COO"` matches "coordinator". Prefer `contains_word` when you mean a ' +
+              "whole word/token: it matches only when the value appears as a complete token " +
+              'delimited by punctuation or whitespace, so `"CTO"` matches "VP, CTO" and ' +
+              '"CTO & Co-founder" but not "director"; `"Care"` does not match "Careers". ' +
+              "Case-insensitivity for `contains_word` is ASCII-only.",
             additionalProperties: {
               type: "object",
               required: ["op"],
               properties: {
                 op: {
                   type: "string",
-                  enum: ["eq", "in", "gt", "lt", "gte", "lte", "contains"],
+                  enum: ["eq", "in", "gt", "lt", "gte", "lte", "contains", "contains_word"],
                 },
                 value: {},
               },
