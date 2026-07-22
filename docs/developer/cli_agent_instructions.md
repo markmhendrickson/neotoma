@@ -135,10 +135,14 @@ A full walk, including the error branch — this is the canonical shape:
 ```bash
 cursor=""
 while :; do
+  # NOTE the `2>&1`: with --json, SUCCESS goes to stdout but the ERROR envelope
+  # goes to stderr. Capturing stdout alone would read an empty `.hint.code` on a
+  # rejection, treat it as "no error", and silently report a completed walk over
+  # a truncated dataset. Merge both streams so the error branch below can see it.
   if [ -z "$cursor" ]; then
-    out=$(neotoma entities list --type contact --limit 100 --json)
+    out=$(neotoma entities list --type contact --limit 100 --json 2>&1)
   else
-    out=$(neotoma entities list --type contact --limit 100 --cursor "$cursor" --json)
+    out=$(neotoma entities list --type contact --limit 100 --cursor "$cursor" --json 2>&1)
   fi
 
   # Every rejection carries a machine-readable code — branch on it, never on prose.
@@ -156,6 +160,8 @@ while :; do
   [ -z "$cursor" ] && break                           # absent next_cursor = listing exhausted
 done
 ```
+
+**Stream discipline:** with `--json`, a successful response is written to **stdout** and an error envelope to **stderr**. Any capture that reads stdout only (`out=$(cmd)`) will see an empty string on a rejection and — if it branches on `.hint.code` — mistake it for success. Always capture both (`2>&1`), as the loop above does, or check the exit status before parsing.
 
 Treat the cursor as opaque and pass it back verbatim. It is absent from the response once the listing is exhausted — that absence is the terminator, so stop rather than re-sending the last cursor. Only valid with the default `entity_id` sort; cannot be combined with `--offset` or `--search`. On `INVALID_CURSOR` (stale token, or the sort changed mid-walk) drop the cursor and restart from the first page — never hand-edit the token. If you pass `--sort-order` explicitly on the first call, pass the same value on every page; omitting it after having set it explicitly counts as changing the sort and will be rejected. (The loop above sidesteps this by never passing `--sort-order`, relying on the default.) Same `cursor` / `next_cursor` contract as MCP `retrieve_entities` and the HTTP API — see `docs/developer/mcp/instructions.md` (search "Deep pagination").
 

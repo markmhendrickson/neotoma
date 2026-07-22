@@ -23,7 +23,19 @@
 // — a mismatch returns a structured error rather than a wrong page.
 
 export interface CursorPayload {
-  /** Cursor format version, so the encoding can evolve without silently misreading old tokens. */
+  /**
+   * Cursor format version, so the encoding can evolve without silently
+   * misreading old tokens.
+   *
+   * Bump policy (arch lens, #1946): a `v` bump is a TIGHTENING, not a grace
+   * period — an old token starts returning `INVALID_CURSOR` immediately, and
+   * `decodeCursor` rejects any unrecognized version rather than guessing. That
+   * is safe because a cursor is ephemeral (valid only for the duration of one
+   * walk) and the documented recovery is already "drop it and restart from the
+   * first page". So a bump needs the structured `hint` per
+   * docs/subsystems/errors.md § Tightening-change hint obligation, but NOT a
+   * dual-read compatibility window.
+   */
   v: 1;
   /** Only the `entity_id` keyset is supported in this interim fix. */
   sort_by: "entity_id";
