@@ -2771,7 +2771,7 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // with it) — generate an unguessable throwaway so createLocalAuthUser's
     // shared code path is satisfied without weakening any other account.
     const throwawayPassword = randomBytes(32).toString("hex");
-    const perEmailUser = createLocalAuthUser(email, throwawayPassword);
+    const perEmailUser = await createLocalAuthUser(email, throwawayPassword);
 
     // Shared-graph opt-in: when NEOTOMA_SHARED_GRAPH_USER_ID is set, an
     // approved teammate (the email already passed the allowlist inside

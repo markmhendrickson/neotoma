@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **532**
-- Backend and repo Vitest files: **497**
+- Total automated test files: **541**
+- Backend and repo Vitest files: **506**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 149 |
-| Vitest service tests | 36 |
+| Vitest unit tests | 153 |
+| Vitest service tests | 39 |
 | Source-adjacent tests | 64 |
-| Vitest integration tests | 153 |
+| Vitest integration tests | 155 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (149):**
+**Files (153):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -157,7 +157,9 @@ flowchart TD
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
 - `tests/unit/db_driver_contract.test.ts`
+- `tests/unit/db_idempotency_concurrency.test.ts`
 - `tests/unit/db_libsql_nonblocking.test.ts`
+- `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`
@@ -179,6 +181,8 @@ flowchart TD
 - `tests/unit/github_mirror_guidance.test.ts`
 - `tests/unit/github_pages_asset_paths.test.ts`
 - `tests/unit/github_webhook.test.ts`
+- `tests/unit/google_oidc_identity_resolution.test.ts`
+- `tests/unit/google_oidc.test.ts`
 - `tests/unit/hook_feedback_accumulator.test.ts`
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
@@ -265,10 +269,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (36):**
+**Files (39):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
+- `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
@@ -296,8 +301,10 @@ flowchart TD
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
 - `tests/services/schema_recommendation.test.ts`
+- `tests/services/schema_reference_fields_resolve_target_validation.test.ts`
 - `tests/services/schema_reference_linking.test.ts`
 - `tests/services/schema_registry_incremental.test.ts`
+- `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
 - `tests/services/sync_webhook_inbound.test.ts`
@@ -379,7 +386,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (153):**
+**Files (155):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -397,12 +404,14 @@ flowchart TD
 - `tests/integration/agents_directory_api.test.ts`
 - `tests/integration/anonymous_write_policy.test.ts`
 - `tests/integration/attribution_parity.test.ts`
+- `tests/integration/auto_link_retraction_organization_change.test.ts`
 - `tests/integration/cli_init_bootstrap.test.ts`
 - `tests/integration/cli_to_mcp_entities.test.ts`
 - `tests/integration/cli_to_mcp_relationships.test.ts`
 - `tests/integration/cli_to_mcp_schemas.test.ts`
 - `tests/integration/cli_to_mcp_stats_snapshots.test.ts`
 - `tests/integration/cli_to_mcp_store.test.ts`
+- `tests/integration/company_entity_resolution_leads.test.ts`
 - `tests/integration/conversation_turn_accrual.test.ts`
 - `tests/integration/conversation_turn_index.test.ts`
 - `tests/integration/correct_http_mcp_parity.test.ts`
