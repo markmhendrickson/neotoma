@@ -589,6 +589,16 @@ export async function submitGuestIssue(
         ? params.local_issue_id.trim()
         : localIssueId(config.repo, params.title, now);
   const visibility = params.visibility ?? "public";
+
+  // Same public-body redaction backstop as the authenticated path (submitIssue,
+  // above): guests default to public visibility and are now reachable
+  // anonymously, so a submitter-side redaction bug here would leak PII
+  // straight into the public GitHub mirror or the operator instance.
+  if (visibility === "public") {
+    const guarded = runRedactionGuard({ title: params.title, body: params.body, mode: "scan" });
+    params = { ...params, title: guarded.title, body: guarded.body };
+  }
+
   const author =
     typeof params.author === "string" && params.author.trim().length > 0
       ? params.author.trim()
@@ -619,6 +629,10 @@ export async function submitGuestIssue(
       closed_at: null,
       sync_pending: false,
       data_source: `neotoma-issue-submission ${now.slice(0, 10)}`,
+      reporter_git_sha: params.reporter_git_sha,
+      reporter_git_ref: params.reporter_git_ref,
+      reporter_channel: params.reporter_channel,
+      reporter_app_version: params.reporter_app_version,
     } as StoreEntityInput,
     {
       entity_type: "conversation",
