@@ -7403,6 +7403,27 @@ export async function storeStructuredForApi(params: {
   const priorSnapshotByEntityId = new Map<string, Record<string, unknown>>();
   const newSnapshotByEntityId = new Map<string, Record<string, unknown>>();
 
+  // #1963: auto-link may retract a stale reference-field edge (e.g. a contact's
+  // organization moved companies). A retraction *failure* must not be silent —
+  // that would reproduce the very silent-drift bug this fix exists to close, one
+  // layer up. Accumulate per-observation retraction outcomes here so the
+  // schemaStoreWarnings pass below can surface them on the store response.
+  const autoLinkRetractionByObsIndex = new Map<
+    number,
+    {
+      entity_type: string;
+      entity_id: string;
+      retracted: number;
+      retraction_failures: number;
+      failed_target_entity_ids: string[];
+      failed_retractions: Array<{
+        field: string;
+        relationship_type: string;
+        target_entity_id: string;
+      }>;
+    }
+  >();
+
   for (const r of resolved) {
     let observation_id: string | null = null;
     let snapshotAfter: Record<string, unknown> | null = null;
@@ -7492,7 +7513,7 @@ export async function storeStructuredForApi(params: {
         if (schemaEntry?.schema_definition?.reference_fields?.length) {
           const { autoLinkReferenceFields } =
             await import("./services/schema_reference_linking.js");
-          await autoLinkReferenceFields({
+          const autoLinkResult = await autoLinkReferenceFields({
             entityId: r.entity_id,
             entityType: r.entity_type,
             fields: r.fields,
@@ -7501,6 +7522,16 @@ export async function storeStructuredForApi(params: {
             sourceId: observationSourceId,
             commit,
           });
+          if (autoLinkResult.retracted > 0 || autoLinkResult.retraction_failures > 0) {
+            autoLinkRetractionByObsIndex.set(r.observation_index, {
+              entity_type: r.entity_type,
+              entity_id: r.entity_id,
+              retracted: autoLinkResult.retracted,
+              retraction_failures: autoLinkResult.retraction_failures,
+              failed_target_entity_ids: autoLinkResult.failed_retraction_target_entity_ids,
+              failed_retractions: autoLinkResult.failed_retractions,
+            });
+          }
         }
       } catch (linkErr) {
         logger.warn(
@@ -7665,6 +7696,10 @@ export async function storeStructuredForApi(params: {
     observation_index: number;
     entity_type: string;
     entity_id: string;
+    // Optional structured payload for codes whose remediation needs machine-
+    // readable fields (e.g. AUTO_LINK_RETRACTION_FAILED lists the stale edges to
+    // delete_relationship). Omitted by codes that carry no extra data.
+    details?: Record<string, unknown>;
   }> = [];
   // Issue #1552 / #1559: surface a non-fatal signal when a stored observation
   // carries fields the schema does not declare (dropped from the snapshot
@@ -7886,6 +7921,48 @@ export async function storeStructuredForApi(params: {
           }
         }
       }
+    }
+  }
+
+  // #1963: surface auto-link edge retractions on the store response so a
+  // retraction — and especially a retraction *failure* — is never silent. A
+  // failure means a stale reference-field edge may still be live despite the
+  // store reporting success, so it is emitted as its own actionable warning.
+  for (const [obsIndex, rec] of autoLinkRetractionByObsIndex) {
+    if (rec.retraction_failures > 0) {
+      schemaStoreWarnings.push({
+        code: "AUTO_LINK_RETRACTION_FAILED",
+        message:
+          `Auto-link retraction failed for ${rec.retraction_failures} stale ` +
+          `reference-field edge(s) on ${rec.entity_type}/${rec.entity_id}. ` +
+          `A superseded edge (e.g. a prior works_at) may still be live even though ` +
+          `the store succeeded. To clean up, call delete_relationship for each ` +
+          `stale edge in details.stale_edges, or re-run the store.`,
+        observation_index: obsIndex,
+        entity_type: rec.entity_type,
+        entity_id: rec.entity_id,
+        // Structured remediation: each entry is a ready-to-use delete_relationship
+        // argument set, so the caller needs no knowledge of its own schema.
+        details: {
+          stale_edges: rec.failed_retractions.map((f) => ({
+            source_entity_id: rec.entity_id,
+            target_entity_id: f.target_entity_id,
+            relationship_type: f.relationship_type,
+            field_name: f.field,
+          })),
+        },
+      });
+    } else if (rec.retracted > 0) {
+      schemaStoreWarnings.push({
+        code: "AUTO_LINK_EDGE_RETRACTED",
+        message:
+          `Retracted ${rec.retracted} stale auto-linked reference-field edge(s) on ` +
+          `${rec.entity_type}/${rec.entity_id} because the field's resolved target ` +
+          `changed (#1963).`,
+        observation_index: obsIndex,
+        entity_type: rec.entity_type,
+        entity_id: rec.entity_id,
+      });
     }
   }
 
