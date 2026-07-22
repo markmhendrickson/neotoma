@@ -2,7 +2,7 @@
 // Embeds structured output (entity_type + canonical_name + snapshot) at upsert time
 
 import { config } from "../config.js";
-import { generateEmbedding, getEntitySearchableText } from "../embeddings.js";
+import { generateEmbedding, getEntitySearchableText, hasEmbeddingProvider } from "../embeddings.js";
 import { db } from "../db.js";
 import { storeLocalEntityEmbedding } from "./local_entity_embedding.js";
 
@@ -49,6 +49,14 @@ export async function prepareEntitySnapshotWithEmbedding(
 ): Promise<EntitySnapshotRowWithEmbedding> {
   // Generate embedding for both pgvector and local (sqlite-vec)
   // Skip only when OPENAI_API_KEY is not configured
+  if (!hasEmbeddingProvider()) {
+    // No provider: short-circuit before the canonical_name lookup and the
+    // snapshot JSON serialization, both of which exist only to build text for
+    // an embedding that would be null anyway. Keeps the no-provider store path
+    // at the same cost as the pre-embedding raw upsert.
+    return { ...snapshotRow, embedding: null };
+  }
+
   const name = canonicalName ?? (await fetchCanonicalName(snapshotRow.entity_id));
   const effectiveName = name ?? snapshotRow.entity_id;
 
@@ -71,12 +79,19 @@ export async function prepareEntitySnapshotWithEmbedding(
  * Single entry point for all entity_snapshots upserts to ensure local embedding storage.
  */
 export async function upsertEntitySnapshotWithEmbedding(
-  row: EntitySnapshotRowWithEmbedding
+  row: EntitySnapshotRowWithEmbedding,
+  options?: { throwOnError?: boolean }
 ): Promise<void> {
   const payload = getEntitySnapshotUpsertPayload(row);
-  await db
+  const { error } = await db
     .from("entity_snapshots")
     .upsert(payload as Record<string, unknown>, { onConflict: "entity_id" });
+  // Existing repair-loop callers relied on this never throwing; only the
+  // primary store path opts into strict error propagation, which is what the
+  // raw upsert it replaced already did.
+  if (error && options?.throwOnError) {
+    throw new Error(error.message);
+  }
   if (config.storageBackend === "local" && row.embedding) {
     storeLocalEntityEmbedding({
       entity_id: row.entity_id,
