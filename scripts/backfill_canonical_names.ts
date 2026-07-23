@@ -33,9 +33,13 @@
  * always --dry-run first).
  *
  * Usage:
- *   NEOTOMA_ENV=production npx tsx scripts/backfill_canonical_names.ts --dry-run
- *   NEOTOMA_ENV=production npx tsx scripts/backfill_canonical_names.ts
- *   NEOTOMA_ENV=production npx tsx scripts/backfill_canonical_names.ts --entity-type contact
+ *   NEOTOMA_ENV=production npx tsx scripts/backfill_canonical_names.ts --user-id <uuid> --dry-run
+ *   NEOTOMA_ENV=production npx tsx scripts/backfill_canonical_names.ts --user-id <uuid>
+ *   NEOTOMA_ENV=production npx tsx scripts/backfill_canonical_names.ts --user-id <uuid> --entity-type contact
+ *
+ * TENANCY: --user-id is REQUIRED (it is both the row filter and the actor
+ * identity). Pass --all-tenants to explicitly opt into rewriting rows across
+ * every tenant; there is no unscoped default, because this rewrites PII.
  */
 
 import { db } from "../src/db.js";
@@ -129,11 +133,46 @@ export function changesSourceField(
 }
 
 const userArgIdx = process.argv.indexOf("--user-id");
-const userId = userArgIdx !== -1 ? process.argv[userArgIdx + 1] : DEFAULT_USER;
+const explicitUserId = userArgIdx !== -1 ? process.argv[userArgIdx + 1] : undefined;
+const allTenants = process.argv.includes("--all-tenants");
+
+// TENANCY: this script rewrites canonical_name/aliases — i.e. PII — in place.
+// The paging query below must be scoped to a tenant, otherwise a single run
+// mutates rows belonging to every tenant on the instance. `--user-id` was
+// previously used only as *actor identity* (schema resolution and observation
+// attribution) and never as a row filter, so the default silently meant
+// "rewrite everyone's rows". Require the operator to say which tenant they mean,
+// or to opt in explicitly to a cross-tenant run.
+/**
+ * Validate tenant arguments. Called from main() rather than at module scope so
+ * importing this file (e.g. from unit tests that exercise its pure helpers)
+ * does not terminate the process.
+ */
+function assertTenantScope(): void {
+  if (!explicitUserId && !allTenants) {
+    console.error(
+      "Refusing to run without an explicit tenant.\n" +
+        "  --user-id <uuid>   scope the backfill to one tenant (recommended)\n" +
+        "  --all-tenants      opt in to rewriting rows across ALL tenants\n" +
+        "Note: --user-id is both the row filter and the actor identity."
+    );
+    process.exit(1);
+  }
+  if (explicitUserId && allTenants) {
+    console.error("Pass either --user-id or --all-tenants, not both.");
+    process.exit(1);
+  }
+}
+
+// Actor identity for schema resolution / observation attribution. In an
+// --all-tenants run there is no single owner, so fall back to DEFAULT_USER for
+// attribution only — row selection is handled separately below.
+const userId = explicitUserId ?? DEFAULT_USER;
 
 const BATCH = 500;
 
 async function main() {
+  assertTenantScope();
   const schemaCache = new Map<string, SchemaDefinition | null>();
   async function loadSchema(entityType: string): Promise<SchemaDefinition | null> {
     if (schemaCache.has(entityType)) return schemaCache.get(entityType) ?? null;
@@ -163,6 +202,10 @@ async function main() {
       .select("id, entity_type, canonical_name")
       .range(offset, offset + BATCH - 1);
     if (onlyType) q = q.eq("entity_type", onlyType);
+    // Scope rows to the requested tenant unless the operator explicitly opted
+    // into a cross-tenant run. Without this the script rewrites PII belonging
+    // to every tenant on the instance regardless of --user-id.
+    if (!allTenants) q = q.eq("user_id", userId);
 
     const { data, error } = await q;
     if (error) throw new Error(`Failed to page entities: ${error.message}`);
