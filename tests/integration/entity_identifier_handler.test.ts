@@ -4,6 +4,7 @@ import {
   ENTITY_ID_NOT_FOUND_HINT,
   retrieveEntityByIdentifierWithFallback,
 } from "../../src/shared/action_handlers/entity_identifier_handler.js";
+import { identifyEntityBySignals } from "../../src/services/entity_signal_resolver.js";
 
 const serviceRoleClient = getServiceRoleClient();
 
@@ -238,6 +239,170 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     });
     expect(byPhone.total).toBe(1);
     expect(byPhone.entities[0]?.id).toBe(entityId);
+  });
+
+  it("resolves by=email via the exact pass case-insensitively", async () => {
+    // Regression for the case-sensitivity divergence flagged on PR review:
+    // the exact-equality pre-pass previously used raw `.eq()` on
+    // `snapshot->>email`, which is case-sensitive, while the JS-scan
+    // fallback (`snapshotFieldsMatch`) lowercases both sides before
+    // comparing. A snapshot email stored with different casing than the
+    // query would silently resolve only via the (window-capped) JS scan and
+    // not the exact pass — regressing the scale guarantee for mixed-case
+    // data, which GDPR accuracy concerns tie to duplicate PII records.
+    const userId = "identifier-user-email-case-insensitive";
+    const entityId = `ent_email_case_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      canonical_name: "Case Sensitivity Person",
+    });
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      schema_version: "1.0",
+      canonical_name: "Case Sensitivity Person",
+      snapshot: {
+        name: "Case Sensitivity Person",
+        // Mixed-case email stored in the snapshot.
+        email: "Mixed.Case@Example.com",
+      },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    // Query with a different case than stored — must still resolve via the
+    // exact pass (match_mode: "snapshot_field"), not fall through to
+    // semantic search.
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: "mixed.case@example.com",
+      entityType: "contact",
+      userId,
+      by: "email",
+      limit: 100,
+    });
+    expect(result.total).toBe(1);
+    expect(result.entities[0]?.id).toBe(entityId);
+    expect(result.match_mode).toBe("snapshot_field");
+  });
+
+  it("no-`by` exact pass resolves a type-declared identity field (financial_account institution) via resolveIdentitySearchFields, not just the base field set", async () => {
+    // Regression for the eng-lens finding: the exact pre-pass's no-`by`
+    // field resolution previously used the hardcoded BASE_SNAPSHOT_SEARCH_
+    // FIELDS regardless of entity_type, bypassing resolveIdentitySearchFields
+    // — the same mechanism the JS-scan fallback already used via
+    // snapshotFieldsForType. This meant a type with declared identity_
+    // search_fields (e.g. financial_account's institution/account_name,
+    // #1495) lost exact-pass coverage for those fields whenever no `by` was
+    // given, silently falling back to the capped 500-row JS scan and
+    // reintroducing the scale bug for that narrower field set.
+    const userId = "identifier-user-no-by-institution";
+    const entityId = `ent_fa_no_by_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      // canonical_name carries no institution token, so neither
+      // canonical_name.ilike nor the base snapshot fields (name/full_name/
+      // title/email/domain/company) can resolve "institution" — only the
+      // type-declared identity_search_fields path can.
+      canonical_name: "Primary Checking",
+    });
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      schema_version: "1.0",
+      canonical_name: "Primary Checking",
+      snapshot: {
+        account_name: "Primary Checking",
+        institution: "Ibercaja Regular",
+      },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    // No `by` — entityType is given so the fix's known-type branch resolves
+    // identity_search_fields (institution/account_name) for the exact pass.
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: "Ibercaja Regular",
+      entityType: "financial_account",
+      userId,
+      limit: 100,
+    });
+    expect(result.total).toBe(1);
+    expect(result.entities[0]?.id).toBe(entityId);
+    expect(result.match_mode).toBe("snapshot_field");
+  });
+
+  it("identify_entity_by_signals resolves email + company signals against a real (unmocked) handler when canonical_name carries neither", async () => {
+    // Effect-level regression for the issue's second reported symptom:
+    // identify_entity_by_signals sits on retrieveEntityByIdentifierWithFallback,
+    // so the scale bug degraded multi-signal resolution to name-only (email/
+    // company contributions never registered). This exercises the real
+    // handler (no mocks) end-to-end, unlike entity_signal_resolver.test.ts's
+    // scoring-table unit tests, which mock the handler and only verify
+    // corroboration math in isolation.
+    const userId = "identifier-user-multisignal";
+    const entityId = `ent_multisignal_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      // canonical_name is a title again — email/company only live in the
+      // snapshot, so only the exact-pass fix makes them resolvable at all.
+      canonical_name: "VP of Sales",
+    });
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      schema_version: "1.0",
+      canonical_name: "VP of Sales",
+      snapshot: {
+        name: "Multisignal Person",
+        email: "multisignal.person@example.com",
+        company: "Acme Corp",
+      },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    const result = await identifyEntityBySignals({
+      signals: {
+        name: "Multisignal Person",
+        email: "multisignal.person@example.com",
+        company: "Acme Corp",
+      },
+      entity_type: "contact",
+      userId,
+    });
+
+    expect(result.best_match).not.toBeNull();
+    expect(result.best_match?.entity_id).toBe(entityId);
+    // Before the fix, email/company never resolved (name-only via
+    // canonical_name), so matched_signals would be ["name"] and band "low".
+    // After the fix, email and company both contribute.
+    expect(result.best_match?.matched_signals).toContain("email");
+    expect(result.best_match?.matched_signals).toContain("company");
+    expect(result.resolution_band).not.toBe("unresolved");
   });
 
   it("#1495 resolves via the snapshot-field pass when canonical_name omits the institution token", async () => {

@@ -315,26 +315,75 @@ export async function retrieveEntityByIdentifierWithFallback(
     // only as a fuzzy/token fallback.
     const snapshotMatches: SnapshotRow[] = [];
 
-    // Server-side exact-equality pre-pass. Only fields we know up front are
-    // scanned this way: an explicit `by`, or — when no `by` — the base
-    // identity set (name/full_name/title/email/domain/company). Composite or
-    // schema-declared fields still flow through the JS scan below.
-    const exactFields = explicitFields ?? [...BASE_SNAPSHOT_SEARCH_FIELDS];
+    // Server-side exact-equality pre-pass. When an explicit `by` is given,
+    // only that field is scanned. Otherwise the field set must go through the
+    // same per-type resolution as the JS-scan fallback (`snapshotFieldsForType`)
+    // so type-declared identity_search_fields (e.g. financial_account's
+    // institution/account_name, #1495) get exact-pass coverage too — not just
+    // the generic base set. When `entityType` is filtered, the type is known
+    // up front and its fields are resolved once; when it is not, the fields
+    // are resolved per matched row's entity_type after fetching.
+    //
+    // Case-insensitive match: compares `lower(snapshot->>field)` against the
+    // lowercased identifier so this pre-pass has the same case-insensitive
+    // contract as the JS-scan fallback (`snapshotFieldsMatch` lowercases both
+    // sides). Without this, a snapshot value stored with different casing
+    // than the query (e.g. `Mixed.Case@Example.com` vs a lowercase query)
+    // would silently fail to resolve via the exact pass, regressing the
+    // scale-safety this fix exists to provide for mixed-case data (#1981).
     const exactMatchIds = new Set<string>();
-    for (const field of exactFields) {
-      let exactQuery = db
-        .from("entity_snapshots")
-        .select("entity_id, entity_type, snapshot")
-        .eq("user_id", userId)
-        .eq(`snapshot->>${field}`, identifier.trim());
-      if (entityType) {
-        exactQuery = exactQuery.eq("entity_type", entityType);
+    if (explicitFields) {
+      for (const field of explicitFields) {
+        let exactQuery = db
+          .from("entity_snapshots")
+          .select("entity_id, entity_type, snapshot")
+          .eq("user_id", userId)
+          .eq(`lower(snapshot->>${field})`, needleLower);
+        if (entityType) {
+          exactQuery = exactQuery.eq("entity_type", entityType);
+        }
+        const { data: exactRows } = await exactQuery.limit(limit);
+        for (const row of (exactRows as SnapshotRow[] | null) || []) {
+          if (exactMatchIds.has(row.entity_id)) continue;
+          exactMatchIds.add(row.entity_id);
+          snapshotMatches.push(row);
+        }
       }
-      const { data: exactRows } = await exactQuery.limit(limit);
-      for (const row of (exactRows as SnapshotRow[] | null) || []) {
-        if (exactMatchIds.has(row.entity_id)) continue;
-        exactMatchIds.add(row.entity_id);
-        snapshotMatches.push(row);
+    } else if (entityType) {
+      // Known type up front: resolve its identity_search_fields once and
+      // query only those fields, exactly like the JS-scan fallback does.
+      const fields = await snapshotFieldsForType(entityType);
+      for (const field of fields) {
+        const { data: exactRows } = await db
+          .from("entity_snapshots")
+          .select("entity_id, entity_type, snapshot")
+          .eq("user_id", userId)
+          .eq("entity_type", entityType)
+          .eq(`lower(snapshot->>${field})`, needleLower)
+          .limit(limit);
+        for (const row of (exactRows as SnapshotRow[] | null) || []) {
+          if (exactMatchIds.has(row.entity_id)) continue;
+          exactMatchIds.add(row.entity_id);
+          snapshotMatches.push(row);
+        }
+      }
+    } else {
+      // No `by`, no entityType filter: the base set is queried directly
+      // (cheap, index-friendly), but any row that only matches on a
+      // type-declared field (not in the base set) is picked up by the
+      // bounded JS-scan fallback below via snapshotFieldsForType per row.
+      for (const field of BASE_SNAPSHOT_SEARCH_FIELDS) {
+        const { data: exactRows } = await db
+          .from("entity_snapshots")
+          .select("entity_id, entity_type, snapshot")
+          .eq("user_id", userId)
+          .eq(`lower(snapshot->>${field})`, needleLower)
+          .limit(limit);
+        for (const row of (exactRows as SnapshotRow[] | null) || []) {
+          if (exactMatchIds.has(row.entity_id)) continue;
+          exactMatchIds.add(row.entity_id);
+          snapshotMatches.push(row);
+        }
       }
     }
 
