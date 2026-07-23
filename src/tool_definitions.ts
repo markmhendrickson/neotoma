@@ -532,9 +532,17 @@ export function buildToolDefinitions(
       name: "merge_entities",
       description: desc(
         "merge_entities",
-        "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged."
+        "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged. Reversible — see unmerge_entities. The response's merge_id is required to undo this merge later."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("merge_entities"),
+    },
+    {
+      name: "unmerge_entities",
+      description: desc(
+        "unmerge_entities",
+        "Reverses a prior merge_entities call: restores the source entity, repoints its observations, and restores any relationship rows the merge deleted or repointed. Requires the merge_id returned by merge_entities, not entity ids."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("unmerge_entities"),
     },
     {
       name: "split_entity",
@@ -1508,6 +1516,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "parse_file",
   "correct",
   "merge_entities",
+  "unmerge_entities",
   "split_entity",
   "list_potential_duplicates",
   "delete_entity",

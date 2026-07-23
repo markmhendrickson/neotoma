@@ -451,8 +451,42 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Merge duplicate entities */
+    /**
+     * Merge duplicate entities. Reversible — see `unmerge_entities`.
+     * @description Rewrites observations from the source entity (`from_entity_id`) onto
+     *     the target entity (`to_entity_id`) and tombstones the source. The
+     *     merge is reversible: every moved observation id and the full content
+     *     of every relationship row this merge deletes or repoints is captured
+     *     onto the returned `merge_id`, so `unmerge_entities(merge_id)` can undo
+     *     it later. See `unmerge_entities` for the inverse operation.
+     */
     post: operations["mergeEntities"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/unmerge": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reverse a prior merge_entities call
+     * @description Reverses a prior `merge_entities` call: restores the source entity,
+     *     repoints its observations, and restores any relationship rows the
+     *     merge deleted or repointed. Requires the `merge_id` returned by
+     *     `merge_entities` — not the entity ids, since a source entity may have
+     *     been merged more than once and the merge id is the only handle on the
+     *     specific inverse payload. See `merge_entities` for the forward
+     *     operation.
+     */
+    post: operations["unmergeEntities"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2392,6 +2426,66 @@ export interface components {
        *     identical split (same `user_id` + `idempotency_key` + predicate).
        */
       replayed: boolean;
+    };
+    MergeEntitiesRequest: {
+      /** @description Entity absorbed by the merge; tombstoned on success. */
+      from_entity_id: string;
+      /** @description Entity that survives the merge. */
+      to_entity_id: string;
+      /** @description Free-text rationale recorded on the audit row. */
+      merge_reason?: string;
+      /**
+       * @description Optional (omitted requests keep today's behavior — additive, not
+       *     breaking). Reuse with a different from_entity_id/to_entity_id pair
+       *     returns `ERR_IDEMPOTENCY_MISMATCH`; reuse with the same pair
+       *     replays the original merge result (`replayed: true`).
+       */
+      idempotency_key?: string;
+      user_id?: string;
+    };
+    MergeEntitiesResponse: {
+      /**
+       * @description Reversible — see `unmerge_entities`. Pass this id to
+       *     `unmerge_entities` to undo this merge. Echoed at the top level
+       *     (not buried in an audit object) so the caller does not need a
+       *     follow-up retrieve to find it.
+       */
+      merge_id: string;
+      observations_moved: number;
+      relationships_repointed: number;
+      /** Format: date-time */
+      merged_at: string;
+      /**
+       * @description `true` when the response is an idempotent replay of a prior
+       *     identical merge (same `user_id` + `idempotency_key` + pair).
+       */
+      replayed: boolean;
+    };
+    UnmergeEntitiesRequest: {
+      /**
+       * @description The `merge_id` returned by the original `merge_entities` call.
+       *     Not an entity id — a source entity may have been merged more
+       *     than once, so the merge id is the only handle on the specific
+       *     inverse payload to replay.
+       */
+      merge_id: string;
+      idempotency_key?: string;
+      user_id?: string;
+    };
+    UnmergeEntitiesResponse: {
+      /** @description The entity un-tombstoned by this unmerge (the original merge's from_entity_id). */
+      restored_entity_id: string;
+      to_entity_id: string;
+      observations_restored: number;
+      relationships_restored: number;
+      /** Format: date-time */
+      unmerged_at: string;
+      /**
+       * @description `true` when this merge was already unmerged; this response
+       *     echoes the original unmerge rather than performing a new one
+       *     (idempotent no-op read, not an error).
+       */
+      already_reversed: boolean;
     };
     /**
      * @description Agent-identity provenance recorded on every durable write-path record
@@ -4867,28 +4961,84 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": {
-          from_entity_id?: string;
-          to_entity_id?: string;
-          merge_reason?: string;
-          user_id?: string;
-        };
+        "application/json": components["schemas"]["MergeEntitiesRequest"];
       };
     };
     responses: {
-      /** @description Merge result */
+      /** @description Merge result (or idempotent replay). */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            observations_moved?: number;
-            /** @description Number of relationship_observations rows repointed from the merged-away entity to the survivor. Self-loops and duplicates already present on the survivor are deleted and not counted here. */
-            relationships_repointed?: number;
-            /** Format: date-time */
-            merged_at?: string;
-          };
+          "application/json": components["schemas"]["MergeEntitiesResponse"];
+        };
+      };
+      /** @description Invalid parameters, one of the entities already merged, or idempotency mismatch. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Source or target entity not found. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  unmergeEntities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UnmergeEntitiesRequest"];
+      };
+    };
+    responses: {
+      /**
+       * @description Unmerge result. `already_reversed: true` when this merge was
+       *     already unmerged (idempotent no-op read, not an error).
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UnmergeEntitiesResponse"];
+        };
+      };
+      /**
+       * @description Invalid parameter shape (e.g. entity ids instead of `merge_id`),
+       *     the merge cannot be safely reversed (chained/superseding merge),
+       *     or its inverse record predates reversible-merge support.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description No merge found with the given `merge_id`. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

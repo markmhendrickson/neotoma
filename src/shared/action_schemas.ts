@@ -597,6 +597,18 @@ export const MergeEntitiesRequestSchema = z.object({
   from_entity_id: z.string(),
   to_entity_id: z.string(),
   merge_reason: z.string().optional(),
+  idempotency_key: z.string().optional(),
+  user_id: z.string().optional(),
+});
+
+/**
+ * #2004: keyed on `merge_id` (the `entity_merges` row id), not entity ids —
+ * a source entity may have been merged more than once, so the merge id is
+ * the only handle on the specific inverse payload to replay.
+ */
+export const UnmergeEntitiesRequestSchema = z.object({
+  merge_id: z.string().min(1),
+  idempotency_key: z.string().optional(),
   user_id: z.string().optional(),
 });
 

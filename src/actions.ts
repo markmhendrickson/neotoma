@@ -182,6 +182,7 @@ import {
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   MergeEntitiesRequestSchema,
+  UnmergeEntitiesRequestSchema,
   SplitEntityRequestSchema,
   ObservationsQueryRequestSchema,
   RegisterSchemaRequestSchema,
@@ -8853,7 +8854,13 @@ app.post("/entities/merge", async (req, res) => {
   try {
     const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { from_entity_id, to_entity_id, merge_reason, user_id: providedUserId } = parsed.data;
+    const {
+      from_entity_id,
+      to_entity_id,
+      merge_reason,
+      idempotency_key,
+      user_id: providedUserId,
+    } = parsed.data;
     const user_id = providedUserId || authenticatedUserId;
 
     if (providedUserId && providedUserId !== authenticatedUserId) {
@@ -8867,11 +8874,12 @@ app.post("/entities/merge", async (req, res) => {
       userId: user_id,
       mergeReason: merge_reason,
       mergedBy: "http_api",
+      idempotencyKey: idempotency_key,
     });
 
     return res.json(result);
   } catch (error) {
-    const { EntityNotFoundError, EntityAlreadyMergedError } =
+    const { EntityNotFoundError, EntityAlreadyMergedError, IdempotencyMismatchError } =
       await import("./services/entity_merge.js");
     if (error instanceof EntityNotFoundError) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
@@ -8879,8 +8887,58 @@ app.post("/entities/merge", async (req, res) => {
     if (error instanceof EntityAlreadyMergedError) {
       return sendError(res, 400, "VALIDATION_INVALID_FORMAT", error.message);
     }
+    if (error instanceof IdempotencyMismatchError) {
+      return sendError(res, 400, "ERR_IDEMPOTENCY_MISMATCH", error.message);
+    }
     logError("APIError:entities_merge", req, error);
     const message = error instanceof Error ? error.message : "Failed to merge entities";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// POST /api/entities/unmerge - Reverse a prior /entities/merge call (#2004).
+// REQUIRES AUTHENTICATION - merge_id lookup is scoped by user_id so
+// MERGE_NOT_FOUND fires identically whether the id doesn't exist or belongs
+// to another tenant (never leaking cross-tenant existence).
+app.post("/entities/unmerge", async (req, res) => {
+  const parsed = UnmergeEntitiesRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:entities_unmerge", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const providedUserId = parsed.data.user_id;
+    if (providedUserId && providedUserId !== authenticatedUserId) {
+      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
+    }
+    const userId = providedUserId || authenticatedUserId;
+
+    const { unmergeEntities } = await import("./services/entity_merge.js");
+    const result = await unmergeEntities({
+      mergeId: parsed.data.merge_id,
+      userId,
+      unmergedBy: "http_api",
+    });
+
+    return res.json(result);
+  } catch (error) {
+    const { MergeNotFoundError, MergeSupersededError, MergeNotReversibleError } =
+      await import("./services/entity_merge.js");
+    if (error instanceof MergeNotFoundError) {
+      return sendError(res, 404, "ERR_MERGE_NOT_FOUND", error.message);
+    }
+    if (error instanceof MergeSupersededError) {
+      return sendError(res, 400, "ERR_MERGE_SUPERSEDED", error.message);
+    }
+    if (error instanceof MergeNotReversibleError) {
+      return sendError(res, 400, "ERR_MERGE_NOT_REVERSIBLE", error.message);
+    }
+    logError("APIError:entities_unmerge", req, error);
+    const message = error instanceof Error ? error.message : "Failed to unmerge entities";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
