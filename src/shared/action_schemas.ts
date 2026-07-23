@@ -79,6 +79,16 @@ export const RelationshipTypeSchema = z.enum([
   "supplies_to",
   "contracted_with",
   "invested_in",
+  // Person-to-person acquaintance edge (#1969). Directionality is
+  // ASSERTED-BY, not symmetric: `knows` records that source_entity_id
+  // asserts acquaintance with target_entity_id. Reciprocity is NOT implied
+  // and is never auto-created — store the reverse edge explicitly when the
+  // other side is independently observed. Warm-path readers
+  // (`find_paths`, `shortest_path`) therefore traverse `knows` in BOTH
+  // directions by default, treating a single asserted edge as a usable
+  // (weaker) connection while keeping the observation log honest about who
+  // claimed what.
+  "knows",
 ]);
 
 export const CreateRelationshipRequestSchema = z.object({
@@ -190,6 +200,34 @@ export const QueryContactsAtCompanyRequestSchema = z.object({
    */
   owner_user_id: z.string().optional(),
   limit: z.number().int().positive().optional().default(100),
+});
+
+/**
+ * `find_paths` (#1969): warm-path lookup to a target company or fund.
+ *
+ * Depth and result size are bounded at the service layer (see
+ * MAX_HOPS_CEILING / MAX_PATHS_CEILING in services/path_finding.ts); the
+ * ceilings here mirror those so an over-large request is rejected at the edge
+ * rather than silently clamped.
+ */
+export const FindPathsRequestSchema = z.object({
+  target_name: z.string().min(1, "target_name must not be empty"),
+  target_kind: z.enum(["company", "fund"]).optional().default("company"),
+  /** See owner_user_id on QueryContactsAtCompanyRequestSchema. */
+  owner_user_id: z.string().optional(),
+  max_hops: z.number().int().positive().max(5).optional().default(3),
+  max_paths: z.number().int().positive().max(200).optional().default(25),
+  relationship_types: z.array(RelationshipTypeSchema).optional(),
+});
+
+/** `shortest_path` (#1969): generic shortest path between two known entities. */
+export const ShortestPathRequestSchema = z.object({
+  from_entity_id: z.string().min(1, "from_entity_id must not be empty"),
+  to_entity_id: z.string().min(1, "to_entity_id must not be empty"),
+  /** See owner_user_id on QueryContactsAtCompanyRequestSchema. */
+  owner_user_id: z.string().optional(),
+  max_hops: z.number().int().positive().max(5).optional().default(4),
+  relationship_types: z.array(RelationshipTypeSchema).optional(),
 });
 
 export const TimelineEventsRequestSchema = z.object({

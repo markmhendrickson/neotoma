@@ -103,6 +103,22 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("query_contacts_at_company"),
     },
     {
+      name: "find_paths",
+      description: desc(
+        "find_paths",
+        'Answer "how does our network reach X?" in ONE call. Resolves target_name to a company (or fund) entity read-only — exact-normalized match first, then a conservative fuzzy pass — then runs a bounded breadth-first traversal and returns the PATHS that reach it. Unlike query_contacts_at_company (direct works_at employees only), each result is the full ordered chain of entities and edges traversed, e.g. "Ana -knows-> Bruno -works_at-> Acme", which is what makes a warm intro actionable. Traversal is undirected but records whether each edge was followed along or against its stored direction. Bounded on every dimension (max 5 hops, 500-node frontier, 2000 nodes expanded, 200 paths) with a visited set for cycle protection; when a bound fires, stats.truncated is true and stats.truncation_reasons names it, so an incomplete answer is never presented as complete. Read-only: never creates entities or edges. NOTE: target_kind "fund" traverses invested_in/funded_by edges, which no writer currently populates — a fund query may return zero paths on real data, and the response says so in notes.'
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("find_paths"),
+    },
+    {
+      name: "shortest_path",
+      description: desc(
+        "shortest_path",
+        'Find the shortest path (by hop count) between two known entity ids. Uses the same bounded breadth-first traversal as find_paths and stops at the first arrival, which BFS guarantees is shortest. Returns the full ordered chain of nodes and edges. Traversal is undirected by default and each node is expanded at most once (cycle protection); depth is clamped to 5 hops. Returns found:false rather than an error when the destination is unreachable within bounds — check stats.truncated to tell "genuinely unreachable" from "a bound cut the search short". Read-only.'
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("shortest_path"),
+    },
+    {
       name: "get_relationship_snapshot",
       description: desc(
         "get_relationship_snapshot",
@@ -1498,6 +1514,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "create_relationships",
   "list_relationships",
   "query_contacts_at_company",
+  "find_paths",
+  "shortest_path",
   "get_relationship_snapshot",
   "retrieve_entities",
   "list_timeline_events",
