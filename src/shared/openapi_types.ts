@@ -4667,11 +4667,20 @@ export interface operations {
            *     extraction, so only entities whose snapshot contains a
            *     matching value are returned. Example:
            *     `{"status": {"op": "eq", "value": "active"}}`.
+           *
+           *     `contains` is a raw case-insensitive SUBSTRING match, so
+           *     `{"title": {"op": "contains", "value": "CTO"}}` also matches
+           *     "director" and "doctor". Use `contains_word` for
+           *     whole-word matching: it matches only when the value appears
+           *     as a complete token delimited by punctuation or whitespace
+           *     (matches "VP, CTO" and "CTO & Co-founder"; not "director",
+           *     "coordinator", or "Careers"). Case-insensitivity for
+           *     `contains_word` is ASCII-only.
            */
           snapshot_filters?: {
             [key: string]: {
               /** @enum {string} */
-              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
               value?: unknown;
             };
           };
