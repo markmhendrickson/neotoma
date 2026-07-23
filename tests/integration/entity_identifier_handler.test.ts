@@ -669,4 +669,89 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     expect(result.entities[0]?.id).toBe(entityId);
     expect(result.hint).toBeUndefined();
   });
+
+  it("rejects a malformed `by` field name instead of interpolating it into SQL", async () => {
+    // SECURITY regression. `by` is caller-supplied at the MCP surface and is
+    // interpolated into a SQL column path (`lower(snapshot->>${field})`) by the
+    // exact pre-pass. The sqlite adapter's normalizeColumnName only recognises
+    // that shape for plain identifiers and otherwise returns the string
+    // unchanged, which is spliced raw into the filter clause (only the compared
+    // value is parameterised). Without validation, a `by` carrying SQL
+    // metacharacters would reach the query builder verbatim.
+    const userId = "identifier-user-malformed-by";
+
+    const malformed = [
+      "email) OR 1=1 --",
+      "email; DROP TABLE entities",
+      "email'",
+      "email field",
+      "",
+      "snapshot->>email",
+    ];
+
+    for (const by of malformed) {
+      await expect(
+        retrieveEntityByIdentifierWithFallback({
+          identifier: "someone@example.com",
+          entityType: "contact",
+          userId,
+          by,
+          limit: 100,
+        })
+      ).rejects.toThrow(/Invalid `by` field name/);
+    }
+
+    // A well-formed field name still works (guard is not over-broad).
+    const ok = await retrieveEntityByIdentifierWithFallback({
+      identifier: "someone@example.com",
+      entityType: "contact",
+      userId,
+      by: "email",
+      limit: 100,
+    });
+    expect(ok.match_mode).toBe("none");
+  });
+
+  it("dedupes a single entity that matches the needle on two snapshot fields at once", async () => {
+    // The no-`by` exact pass runs one query per field and dedupes via
+    // exactMatchIds. An entity whose snapshot matches the same needle on two of
+    // those fields (here `name` and `company`) must appear exactly once — a
+    // regression would surface silently as a duplicate row and inflated total.
+    const userId = "identifier-user-crossfield-dedupe";
+    const entityId = `ent_crossfield_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+    const needle = "Northgate";
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      canonical_name: "opaque-canonical-crossfield",
+    });
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "contact",
+      schema_version: "1.0",
+      canonical_name: "opaque-canonical-crossfield",
+      // Same value in two scanned fields.
+      snapshot: { name: needle, company: needle, email: "crossfield@example.com" },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: needle,
+      entityType: "contact",
+      userId,
+      limit: 100,
+    });
+
+    const occurrences = result.entities.filter((e) => e.id === entityId).length;
+    expect(occurrences).toBe(1);
+    expect(result.total).toBe(1);
+  });
 });

@@ -110,6 +110,22 @@ type SnapshotRow = {
   snapshot: Record<string, unknown> | null;
 };
 
+/**
+ * Field names that may be interpolated into a SQL column path.
+ *
+ * The exact pre-pass builds `lower(snapshot->>${field})` and hands it to the
+ * query builder, which splices the column side into SQL literally (only the
+ * compared *value* is parameterised). Any field name reaching that path must
+ * therefore be a plain SQL identifier. This mirrors the pattern the sqlite
+ * adapter's `normalizeColumnName` recognises — names outside it fall through
+ * that function unchanged and would be interpolated raw.
+ */
+const SAFE_SNAPSHOT_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function isSafeSnapshotFieldName(field: unknown): field is string {
+  return typeof field === "string" && SAFE_SNAPSHOT_FIELD_PATTERN.test(field);
+}
+
 function snapshotFieldsMatch(
   snapshot: Record<string, unknown> | null,
   needleLower: string,
@@ -239,6 +255,25 @@ export async function retrieveEntityByIdentifierWithFallback(
   // during the snapshot-field pass below (generic base + declared
   // identity_search_fields), so a financial_account's institution/account_name
   // are scanned without hardcoding finance fields here (#1495).
+  //
+  // SECURITY: `by` is caller-supplied at the MCP surface and is interpolated
+  // into a SQL column path (`lower(snapshot->>${field})`) by the exact pre-pass
+  // below. The sqlite adapter's normalizeColumnName only recognises that shape
+  // for `[A-Za-z_][A-Za-z0-9_]*` field names and otherwise returns the string
+  // unchanged, which is then spliced raw into the filter clause (only the
+  // *value* side is parameterised). An unvalidated `by` is therefore a SQL
+  // injection vector. Reject anything that is not a plain identifier before it
+  // can reach a query builder — the exact-pass is the only place `by` becomes
+  // a column expression, so validating here covers every downstream use.
+  // Validate on `by` itself rather than on the derived array: `by: ""` is
+  // falsy, so a truthiness check would skip validation and silently fall
+  // through to the no-`by` path instead of rejecting a malformed pin.
+  if (by !== undefined && by !== null && !isSafeSnapshotFieldName(by)) {
+    throw new Error(
+      `Invalid \`by\` field name: ${JSON.stringify(by)}. ` +
+        `Must match ${SAFE_SNAPSHOT_FIELD_PATTERN.source}.`
+    );
+  }
   const explicitFields = by ? [by] : null;
   // Cache resolved field sets per entity_type for the duration of one call so
   // a cross-type snapshot scan does not re-load the same schema repeatedly.
@@ -352,7 +387,11 @@ export async function retrieveEntityByIdentifierWithFallback(
     } else if (entityType) {
       // Known type up front: resolve its identity_search_fields once and
       // query only those fields, exactly like the JS-scan fallback does.
-      const fields = await snapshotFieldsForType(entityType);
+      // Defence in depth: these come from the schema registry rather than the
+      // caller, but they still become SQL column paths, so any name that isn't
+      // a plain identifier is skipped here and left to the JS-scan fallback
+      // (which does a safe in-memory property lookup) rather than interpolated.
+      const fields = (await snapshotFieldsForType(entityType)).filter(isSafeSnapshotFieldName);
       for (const field of fields) {
         const { data: exactRows } = await db
           .from("entity_snapshots")
