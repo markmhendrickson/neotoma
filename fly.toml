@@ -18,9 +18,20 @@ primary_region = 'lhr'
 [http_service]
   internal_port = 3180
   force_https = true
-  auto_stop_machines = 'stop'
+  # Keep one machine running. MCP-over-HTTP transport sessions are held in
+  # process memory (`mcpTransports` in src/actions.ts), so ANY machine
+  # stop/start silently invalidates every live session. Idle clients then hit
+  # "MCP session is unknown or expired on this API instance" and have to
+  # re-initialize — which surfaces to a user as an unexplained auth/session
+  # timeout after a quiet period. Letting the last machine stop trades a
+  # trivial amount of compute for a client-visible failure.
+  #
+  # fly.sandbox.toml already runs min_machines_running = 1 for this reason;
+  # this aligns the default so any instance deployed from this config inherits
+  # the safe behavior instead of having to rediscover it.
+  auto_stop_machines = 'off'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ['app']
 
 [[vm]]
