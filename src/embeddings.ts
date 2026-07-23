@@ -4,6 +4,19 @@ import { config } from "./config.js";
 const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
 /**
+ * Whether any embedding provider is configured.
+ *
+ * Lets hot paths (notably the store-path snapshot upsert) skip the work that
+ * only exists to feed `generateEmbedding` — canonical_name lookup and JSON
+ * serialization of the snapshot — instead of paying for it and discarding a
+ * guaranteed null. `generateEmbedding` remains safe to call regardless; this
+ * is purely an optimization guard.
+ */
+export function hasEmbeddingProvider(): boolean {
+  return openai !== null;
+}
+
+/**
  * Generate an embedding vector from text.
  *
  * Supports multiple providers (priority order):
