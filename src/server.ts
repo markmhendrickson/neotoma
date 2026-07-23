@@ -3026,12 +3026,25 @@ export class NeotomaServer {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
 
+    // A tombstoned entity's pre-deletion observations still carry the full
+    // snapshot `fields`, so returning them would make deleted content
+    // recoverable verbatim. Only the tombstone observation(s) are surfaced,
+    // preserving the audit trail without the content. Mirrors the HTTP
+    // /list_observations handler in actions.ts.
+    const { getDeletedEntityIds } = await import("./services/entity_queries.js");
+    const deletedEntityIds = await getDeletedEntityIds([parsed.entity_id], userId);
+
     let obsQuery = db
       .from("observations")
       .select("*", { count: "exact" })
       .eq("entity_id", parsed.entity_id)
       .eq("user_id", userId);
 
+    if (deletedEntityIds.has(parsed.entity_id)) {
+      // DB predicate, not a post-filter, so limit/offset paginate over the
+      // tombstone-only set rather than over withheld rows.
+      obsQuery = obsQuery.eq("fields->>_deleted", "true");
+    }
     if (parsed.updated_since) {
       obsQuery = obsQuery.gte("observed_at", parsed.updated_since);
     }
@@ -3759,6 +3772,22 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    const { getDeletedEntityIds } = await import("./services/entity_queries.js");
+
+    // Soft-deleted entities must not be readable through the graph. Traversing
+    // FROM a tombstoned root would leak its edges and children, so the root is
+    // checked before any relationship lookup. Mirrors the HTTP
+    // /retrieve_related_entities handler in actions.ts.
+    const rootDeleted = await getDeletedEntityIds([parsed.entity_id], userId);
+    if (rootDeleted.has(parsed.entity_id)) {
+      return this.buildTextResponse({
+        entities: [],
+        relationships: [],
+        total_entities: 0,
+        total_relationships: 0,
+        hops_traversed: 0,
+      });
+    }
 
     const visited = new Set<string>([parsed.entity_id]);
     const relatedEntityIds = new Set<string>();
@@ -3829,8 +3858,36 @@ export class NeotomaServer {
       // This hop produced at least one relationship lookup over a non-empty
       // frontier, so count it as traversed.
       hopsTraversed = hop + 1;
-      if (nextLevel.length === 0) break;
-      currentLevel = nextLevel;
+
+      // Tombstoned neighbours are dropped from the frontier so the next hop
+      // never expands through them and leaks their onward edges.
+      const deletedInLevel = await getDeletedEntityIds(nextLevel, userId);
+      for (const id of deletedInLevel) {
+        relatedEntityIds.delete(id);
+      }
+      const liveNextLevel = nextLevel.filter((id) => !deletedInLevel.has(id));
+
+      if (liveNextLevel.length === 0) break;
+      currentLevel = liveNextLevel;
+    }
+
+    // Relationships touching a tombstoned entity are withheld even when the
+    // tombstone was discovered on the final hop (whose frontier is not walked).
+    const deletedEndpointIds = await getDeletedEntityIds(
+      Array.from(
+        new Set(
+          allRelationships.flatMap((rel: any) => [rel.source_entity_id, rel.target_entity_id])
+        )
+      ),
+      userId
+    );
+    const liveRelationships = allRelationships.filter(
+      (rel: any) =>
+        !deletedEndpointIds.has(rel.source_entity_id) &&
+        !deletedEndpointIds.has(rel.target_entity_id)
+    );
+    for (const id of deletedEndpointIds) {
+      relatedEntityIds.delete(id);
     }
 
     // Get entity details if requested
@@ -3868,9 +3925,9 @@ export class NeotomaServer {
 
     return this.buildTextResponse({
       entities,
-      relationships: allRelationships,
+      relationships: liveRelationships,
       total_entities: entities.length,
-      total_relationships: allRelationships.length,
+      total_relationships: liveRelationships.length,
       hops_traversed: hopsTraversed,
     });
   }

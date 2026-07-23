@@ -122,16 +122,40 @@ export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: str
   return [...types].sort();
 }
 
-async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
+/**
+ * Resolve which of `entityIds` are tombstoned — i.e. whose highest-priority
+ * observation carries `fields._deleted === true`.
+ *
+ * This is the single source of truth for tombstone checks. EVERY read path that
+ * returns entities (or relationships between them) must consult it before
+ * emitting a row, so soft-deleted content cannot be recovered through a
+ * secondary endpoint. Enforcing deletion per-endpoint is how
+ * `/retrieve_related_entities` and `/list_observations` leaked deleted content.
+ *
+ * @param entityIds - Candidate entity IDs to test.
+ * @param userId - Optional tenant scope. When provided, only that user's
+ *   observations are considered; omitted for callers that already constrained
+ *   the candidate set to a single tenant.
+ */
+export async function getDeletedEntityIds(
+  entityIds: string[],
+  userId?: string
+): Promise<Set<string>> {
   const deletedEntityIds = new Set<string>();
   if (entityIds.length === 0) {
     return deletedEntityIds;
   }
 
-  const { data: deletionObservations } = await db
+  let observationsQuery = db
     .from("observations")
     .select("entity_id, source_priority, observed_at, fields")
-    .in("entity_id", entityIds)
+    .in("entity_id", entityIds);
+
+  if (userId) {
+    observationsQuery = observationsQuery.eq("user_id", userId);
+  }
+
+  const { data: deletionObservations } = await observationsQuery
     .order("source_priority", { ascending: false })
     .order("observed_at", { ascending: false });
 

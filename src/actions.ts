@@ -9104,8 +9104,21 @@ app.post("/list_observations", async (req, res) => {
 
   const { entity_id, limit = 100, offset = 0, updated_since, created_since } = parsed.data;
 
+  // A tombstoned entity's pre-deletion observations still carry the full
+  // snapshot `fields`, so returning them would make deleted content recoverable
+  // verbatim. Only the tombstone observation(s) are surfaced, preserving the
+  // audit trail (that it was deleted, when, by whom, why) without the content.
+  const { getDeletedEntityIds } = await import("./services/entity_queries.js");
+  const deletedEntityIds = await getDeletedEntityIds([entity_id]);
+  const tombstonedOnly = deletedEntityIds.has(entity_id);
+
   let query = db.from("observations").select("*").eq("entity_id", entity_id);
 
+  if (tombstonedOnly) {
+    // Applied as a DB predicate (not a post-filter) so limit/offset paginate
+    // over the tombstone-only set rather than over withheld rows.
+    query = query.eq("fields->>_deleted", "true");
+  }
   if (updated_since) {
     query = query.gte("observed_at", updated_since);
   }
@@ -9528,6 +9541,16 @@ app.post("/retrieve_related_entities", async (req, res) => {
       include_entities = true,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
+    const { getDeletedEntityIds } = await import("./services/entity_queries.js");
+
+    // Soft-deleted entities must not be readable through the graph. Traversing
+    // FROM a tombstoned root would leak its edges and children, so the root is
+    // checked before any relationship lookup.
+    const rootDeleted = await getDeletedEntityIds([entity_id], userId);
+    if (rootDeleted.has(entity_id)) {
+      logDebug("Success:retrieve_related_entities:deleted_root", req, { entity_id });
+      return res.json({ relationships: [], entities: [] });
+    }
 
     // Breadth-first traversal up to max_hops. Mirrors the MCP handler
     // (server.ts retrieveRelatedEntities): a visited set provides cycle
@@ -9595,8 +9618,33 @@ app.post("/retrieve_related_entities", async (req, res) => {
         }
       }
 
-      if (nextLevel.length === 0) break;
-      currentLevel = nextLevel;
+      // Tombstoned neighbours are dropped from the frontier so the next hop
+      // never expands through them and leaks their onward edges.
+      const deletedInLevel = await getDeletedEntityIds(nextLevel, userId);
+      for (const id of deletedInLevel) {
+        relatedIds.delete(id);
+      }
+      const liveNextLevel = nextLevel.filter((id) => !deletedInLevel.has(id));
+
+      if (liveNextLevel.length === 0) break;
+      currentLevel = liveNextLevel;
+    }
+
+    // Relationships touching a tombstoned entity are withheld even when the
+    // tombstone was discovered on the final hop (whose frontier is not walked).
+    const deletedEndpointIds = await getDeletedEntityIds(
+      Array.from(
+        new Set(relationships.flatMap((rel: any) => [rel.source_entity_id, rel.target_entity_id]))
+      ),
+      userId
+    );
+    const liveRelationships = relationships.filter(
+      (rel: any) =>
+        !deletedEndpointIds.has(rel.source_entity_id) &&
+        !deletedEndpointIds.has(rel.target_entity_id)
+    );
+    for (const id of deletedEndpointIds) {
+      relatedIds.delete(id);
     }
 
     // Get entities if requested
@@ -9617,10 +9665,10 @@ app.post("/retrieve_related_entities", async (req, res) => {
 
     logDebug("Success:retrieve_related_entities", req, {
       entity_id,
-      count: relationships.length,
+      count: liveRelationships.length,
       max_hops,
     });
-    return res.json({ relationships, entities });
+    return res.json({ relationships: liveRelationships, entities });
   } catch (error) {
     return handleApiError(
       req,
