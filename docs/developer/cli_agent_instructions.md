@@ -24,6 +24,8 @@ When a Neotoma CLI session starts (dev or prod), applied rule files (e.g. `.curs
 
 Skill auto-loading at session start: on every MCP `initialize`, the harness detects and registers available workspace skills (`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`); this is idempotent and applies every session. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md`); this is a transport-layer pointer only.
 
+Instance data policy: an instance may declare what it is for and what it will hold. Read it with `neotoma instance-policy show` (or the `describe_instance_policy` MCP tool); it is also appended to `neotoma instructions print` as a `## Instance Data Policy` section. A store or correct refused by that policy returns `ERR_STORE_POLICY_DENIED` — the whole request is rejected, nothing is persisted, and the payload must be fixed rather than retried unmodified. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md` → `[INSTANCE DATA POLICY]`); this is a transport-layer pointer only.
+
 Index and dual-host notes: `docs/developer/agent_instructions.md`.
 
 Peer sync (peers, `/sync/webhook`, env `NEOTOMA_PUBLIC_BASE_URL` / `NEOTOMA_LOCAL_PEER_ID`, `get_peer_status` remote_health): `docs/subsystems/peer_sync.md`. CLI `neotoma compat` uses the same semver rules as `remote_health.compatible`.

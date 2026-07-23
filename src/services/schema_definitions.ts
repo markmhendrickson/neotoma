@@ -3546,6 +3546,63 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+  instance_policy: {
+    entity_type: "instance_policy",
+    schema_version: "1.0.0",
+    metadata: {
+      label: "Instance Data Policy",
+      description:
+        "The instance-wide data policy (#1974/#1975): what this instance is for and what it is allowed to hold. Rendered into the client instructions served at connect time so cooperating agents can self-comply, and evaluated server-side on every store/correct when enforcement is 'enforced' so non-cooperating agents are rejected. Instance-scoped by design: one policy governs every write regardless of which user issued it. An instance should hold exactly one of these. Set enforcement to 'enforced' to opt into rejection; the default 'advisory' declares the policy without rejecting violating writes.",
+      category: "agent_runtime",
+      aliases: ["data_policy", "store_policy"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        policy_id: { type: "string", required: true, preserveCase: true },
+        purpose: { type: "string", required: false, preserveCase: true },
+        in_scope_entity_types: { type: "array", required: false },
+        out_of_scope_entity_types: { type: "array", required: false },
+        sensitivity_rules: { type: "array", required: false, preserveCase: true },
+        require_lawful_basis: { type: "boolean", required: false },
+        require_provenance: { type: "boolean", required: false },
+        max_sensitivity_class: {
+          type: "string",
+          required: false,
+          constraints: {
+            enum: ["public", "internal", "sensitive", "restricted"],
+          },
+        },
+        enforcement: {
+          type: "string",
+          required: false,
+          constraints: { enum: ["advisory", "enforced"] },
+        },
+        updated_at: { type: "date", required: false },
+        updated_by: { type: "string", required: false },
+      },
+      canonical_name_fields: ["policy_id"],
+      // reject, not merge: two operators each storing a policy must not have
+      // their rules silently merged into one incoherent policy. A collision
+      // should surface rather than quietly change what the instance enforces.
+      name_collision_policy: "reject",
+    },
+    reducer_config: {
+      merge_policies: {
+        policy_id: { strategy: "last_write" },
+        purpose: { strategy: "last_write" },
+        in_scope_entity_types: { strategy: "last_write" },
+        out_of_scope_entity_types: { strategy: "last_write" },
+        sensitivity_rules: { strategy: "last_write" },
+        require_lawful_basis: { strategy: "last_write" },
+        require_provenance: { strategy: "last_write" },
+        max_sensitivity_class: { strategy: "last_write" },
+        enforcement: { strategy: "last_write" },
+        updated_at: { strategy: "last_write" },
+        updated_by: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
