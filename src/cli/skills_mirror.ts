@@ -103,8 +103,11 @@ export function getPublishedSkillsSource(): string {
 /**
  * List skill subdirectory names in the source, sorted for deterministic
  * output across filesystems, or [] when unreadable.
+ *
+ * Exported so the instance-skills reconciler (#1950) can compute package-name
+ * collisions ("package skills win") without re-implementing directory listing.
  */
-function listSkillNames(sourceDir: string): string[] {
+export function listSkillNames(sourceDir: string): string[] {
   try {
     return readdirSync(sourceDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
@@ -216,8 +219,13 @@ function mirrorWholeDir(
  * Mirror each source skill into `targetDir` as an individual symlink, and
  * prune our own stale skill links whose source skill no longer exists. Foreign
  * entries are left untouched.
+ *
+ * Exported for reuse by the instance-skills reconciler (#1950): it needs the
+ * exact same per-skill-symlink mechanism to link materialized instance-skill
+ * directories (`~/.neotoma/instance-skills/<host>/<slug>/`) into harness skill
+ * dirs, with package-shipped skills taking precedence on name collision.
  */
-function mirrorPerSkill(
+export function mirrorPerSkill(
   targetDir: string,
   sourceDir: string,
   skillNames: string[]
