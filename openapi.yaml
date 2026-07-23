@@ -5968,10 +5968,25 @@ paths:
       description: |
         Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
         to the configured operator instance (same flow as MCP submit_issue).
-        Authenticated users use the normal user scope. AAuth-signed guest
-        submitters may create operator-side issues when the `issue`,
-        `conversation`, and `conversation_message` guest access policies allow
-        writes; the response includes a guest read-back token.
+        Authenticated users use the normal user scope. Guest submitters may create
+        operator-side issues when the `issue`, `conversation`, and
+        `conversation_message` guest access policies allow writes; the response
+        includes a guest read-back token.
+
+        **No prior identity is required to submit.** A remote caller with no Bearer
+        token, no AAuth signature, and no guest access token may open an issue on
+        this route whenever the `issue` guest access policy permits guest writes
+        (`submit_only`, `submitter_scoped`, or `open`). This is deliberate: the
+        guest read-back token is an **output** of a successful submit, so requiring
+        one as input would make a third party's first contact impossible. AAuth
+        signing remains supported and, when present, partitions the submitter by
+        thumbprint. Operators can close the inbox with
+        `NEOTOMA_ACCESS_POLICY_ISSUE=closed`, which restores `AUTH_REQUIRED` for
+        unauthenticated callers.
+
+        Anonymous access is scoped to **this route only**: `POST /issues/add_message`
+        still requires authentication, since a reporter appending to a thread already
+        holds the token their submit returned.
 
         **Reporter environment is required.** Callers MUST supply at least
         one of `reporter_git_sha` or `reporter_app_version`. Submissions

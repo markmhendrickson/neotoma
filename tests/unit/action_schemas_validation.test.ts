@@ -106,6 +106,35 @@ describe("#1943 cursor + pagination bounds", () => {
       // #1943 (qa lens): published filters and snapshot_filters route into the
       // snapshot-driven scan, which ignores the keyset cursor and would silently
       // re-return page 1. Reject, matching the search/sort guards.
+      // #1943 (qa lens, round 10): the existing assertions only checked
+      // `success === false`, so a regression that dropped the structured
+      // params would pass green. Pin the payload itself — this is what makes
+      // the error machine-branchable rather than prose.
+      it("every cursor-combination rejection carries ERR_CURSOR_COMBINATION + a hint", () => {
+        const combos: Array<[string, Record<string, unknown>]> = [
+          ["offset", { cursor, offset: 10 }],
+          ["sort_by", { cursor, sort_by: "canonical_name" }],
+          ["search", { cursor, search: "acme" }],
+          ["published", { cursor, published: true }],
+          ["snapshot_filters", { cursor, snapshot_filters: { s: { op: "eq", value: "x" } } }],
+        ];
+        for (const [name, input] of combos) {
+          const parsed = Schema.safeParse(input);
+          expect(parsed.success, `${name} should be rejected`).toBe(false);
+          if (parsed.success) continue;
+          const structured = parsed.error.issues.find(
+            (i) => (i as { params?: { code?: string } }).params?.code
+          ) as { params?: { code?: string; hint?: string } } | undefined;
+          expect(structured?.params?.code, `${name} missing code`).toBe(
+            "ERR_CURSOR_COMBINATION"
+          );
+          expect(
+            typeof structured?.params?.hint,
+            `${name} missing hint`
+          ).toBe("string");
+        }
+      });
+
       it("rejects cursor combined with published", () => {
         expect(Schema.safeParse({ cursor, published: true }).success).toBe(false);
       });

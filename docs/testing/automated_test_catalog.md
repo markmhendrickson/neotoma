@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **541**
-- Backend and repo Vitest files: **506**
+- Total automated test files: **544**
+- Backend and repo Vitest files: **509**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 149 |
+| Vitest unit tests | 151 |
 | Vitest service tests | 39 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 156 |
+| Vitest integration tests | 157 |
 | Vitest CLI tests | 67 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (149):**
+**Files (151):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -132,6 +132,7 @@ flowchart TD
 - `tests/unit/agents_grants_import.test.ts`
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
+- `tests/unit/backfill_canonical_names_field_guard.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
 - `tests/unit/bundles_activation.test.ts`
@@ -241,6 +242,7 @@ flowchart TD
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
+- `tests/unit/sign_in_session_wiring.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
 - `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
@@ -383,7 +385,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (156):**
+**Files (157):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -514,6 +516,7 @@ flowchart TD
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
+- `tests/integration/store_canonical_name_recompute.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
 - `tests/integration/store_dedup_snapshot_after.test.ts`

@@ -1972,6 +1972,32 @@ export class NeotomaServer {
           // src/services/entity_cursor.ts).
           throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
         }
+        if (error instanceof z.ZodError) {
+          // Request-schema rejections (`ctx.addIssue` in
+          // validateEntityQueryCombinations) carry their machine-readable
+          // `code`/`hint` under the issue's `params`. Without this branch a
+          // ZodError fell through to the generic handler below and surfaced as
+          // InternalError with the structured payload dropped — a validation
+          // failure misreported as a server fault, and the same
+          // structured-error-loss class this PR fixed for INVALID_CURSOR
+          // (ux lens, #1946). Lift the first issue carrying params, mirroring
+          // REST's `firstIssueHint` in actions.ts so both transports agree.
+          const structured = error.issues.find(
+            (issue) => (issue as { params?: { code?: unknown } }).params?.code
+          ) as { params?: { code?: string; hint?: string } } | undefined;
+          const first = error.issues[0];
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            first?.message ?? "Invalid request payload.",
+            structured?.params
+              ? {
+                  code: structured.params.code,
+                  message: first?.message ?? "Invalid request payload.",
+                  hint: structured.params.hint,
+                }
+              : { code: "VALIDATION_INVALID_FORMAT", issues: error.issues }
+          );
+        }
         // Safely extract error message, handling BigInt values
         let errorMessage = "Unknown error";
         if (error instanceof Error) {
@@ -6093,6 +6119,30 @@ export class NeotomaServer {
             sameTypeInSourceBatch: sameTypeInBatch,
             schema: timelineSchema,
           });
+
+          // This path computes and upserts the snapshot inline instead of going
+          // through recomputeSnapshot(), so it must re-derive the entity-level
+          // canonical_name itself. Without this, a corrective observation (e.g.
+          // stripping an emoji from `name` via target_id) updates the snapshot
+          // while entities.canonical_name stays frozen at its creation value —
+          // and canonical_name is what entity lists and search display.
+          // Non-fatal by design: a store must not fail over a display name.
+          try {
+            const { maybeRederiveCanonicalName } =
+              await import("./services/snapshot_computation.js");
+            await maybeRederiveCanonicalName({
+              entityId: snapshot.entity_id,
+              entityType: snapshot.entity_type,
+              userId: snapshot.user_id || userId,
+              snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
+              schema: timelineSchema,
+            });
+          } catch (err) {
+            logger.warn(
+              `[STORE] Failed to re-derive canonical_name for ${snapshot.entity_id}: ` +
+                (err instanceof Error ? err.message : String(err))
+            );
+          }
 
           const newSnapshot =
             (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};

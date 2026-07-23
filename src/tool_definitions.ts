@@ -1094,7 +1094,8 @@ export function buildToolDefinitions(
           "When the operator accepts the issue, the response includes guest_access_token for token-scoped get_issue_status / add_issue_message read-back when the local snapshot does not already carry the token. " +
           "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps. " +
           "To file issues about a repo other than the one Neotoma is globally configured for, pass `target_repo` in `owner/repo` format. This overrides the GitHub mirror destination only — the Neotoma authoring home remains unchanged. " +
-          "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`."
+          "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`. " +
+          "No prior identity is required to submit: a remote caller with no Bearer token, no AAuth signature and no guest access token may open an issue whenever the operator instance's `issue` guest access policy permits guest writes. The `guest_access_token` is an OUTPUT of a successful submit, not a precondition for it, so first contact needs no credential. Anonymity covers submission ONLY — use the returned token for `add_issue_message` / `get_issue_status`. An operator can close the inbox with `NEOTOMA_ACCESS_POLICY_ISSUE=closed`, after which unauthenticated submits are rejected with `AUTH_REQUIRED`."
       ),
       inputSchema: {
         type: "object",

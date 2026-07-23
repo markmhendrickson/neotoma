@@ -613,6 +613,47 @@ describe("#1943 keyset cursor pagination", () => {
       expect(body.details?.hint).toMatch(/cursor/i);
     });
 
+    it("MCP retrieve_entities surfaces ERR_CURSOR_COMBINATION with its hint over a real transport", async () => {
+      // #1943 (ux lens, round 10): a Zod request-schema rejection used to fall
+      // through the MCP catch block to a generic InternalError, dropping
+      // `code`/`hint` and misreporting a caller mistake as a server fault. This
+      // drives the REAL client/transport pair — an in-process safeParse would
+      // pass even with the ZodError branch removed, which is the whole point.
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const mcpServer = new NeotomaServer();
+      (mcpServer as unknown as { authenticatedUserId: string }).authenticatedUserId = TEST_USER_ID;
+
+      const client = new Client(
+        { name: "cursor-combination-test", version: "1.0.0" },
+        { capabilities: {} }
+      );
+      await Promise.all([
+        (
+          mcpServer as unknown as {
+            mcpServer: { server: { connect: (t: unknown) => Promise<void> } };
+          }
+        ).mcpServer.server.connect(serverTransport),
+        client.connect(clientTransport),
+      ]);
+
+      try {
+        const call = client.callTool({
+          name: "retrieve_entities",
+          arguments: { entity_type: TEST_TYPE, limit: PAGE, cursor: MALFORMED_CURSOR, offset: 10 },
+        });
+        await expect(call).rejects.toThrow();
+
+        const err = await call.catch((e: unknown) => e);
+        const data = (err as { data?: { code?: string; hint?: string } }).data;
+        expect(data?.code).toBe("ERR_CURSOR_COMBINATION");
+        expect(typeof data?.hint).toBe("string");
+        // Must NOT be misclassified as an internal server fault.
+        expect(String((err as { message?: string }).message ?? "")).not.toMatch(/internal/i);
+      } finally {
+        await client.close();
+      }
+    });
+
     it("MCP retrieve_entities returns an INVALID_CURSOR error over a real client/transport pair", async () => {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       const mcpServer = new NeotomaServer();
