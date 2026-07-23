@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **540**
-- Backend and repo Vitest files: **505**
+- Total automated test files: **544**
+- Backend and repo Vitest files: **509**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -71,9 +71,9 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 151 |
 | Vitest service tests | 39 |
-| Source-adjacent tests | 64 |
-| Vitest integration tests | 156 |
-| Vitest CLI tests | 65 |
+| Source-adjacent tests | 65 |
+| Vitest integration tests | 157 |
+| Vitest CLI tests | 67 |
 | Vitest contract tests | 14 |
 | Vitest security tests | 4 |
 | Vitest subscription tests | 5 |
@@ -313,7 +313,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (64):**
+**Files (65):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -349,6 +349,7 @@ flowchart TD
 - `src/services/docs/markdown_render.test.ts`
 - `src/services/docs/render.test.ts`
 - `src/services/docs/visibility.test.ts`
+- `src/services/entity_cursor.test.ts`
 - `src/services/entity_signal_resolver.test.ts`
 - `src/services/entity_submission/submission_service.test.ts`
 - `src/services/guest_access_token.test.ts`
@@ -384,7 +385,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (156):**
+**Files (157):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -422,6 +423,7 @@ flowchart TD
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
+- `tests/integration/entity_queries_cursor.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/entity_search_mode.test.ts`
@@ -547,7 +549,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (65):**
+**Files (67):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -558,6 +560,7 @@ flowchart TD
 - `tests/cli/cli_auth_commands.test.ts`
 - `tests/cli/cli_command_coverage_guard.test.ts`
 - `tests/cli/cli_correction_commands.test.ts`
+- `tests/cli/cli_cursor_offset_conflict.test.ts`
 - `tests/cli/cli_direct_invocation_parity.test.ts`
 - `tests/cli/cli_doctor_setup.test.ts`
 - `tests/cli/cli_edit_commands.test.ts`
@@ -565,6 +568,7 @@ flowchart TD
 - `tests/cli/cli_entities_import.test.ts`
 - `tests/cli/cli_entity_commands.test.ts`
 - `tests/cli/cli_entity_subcommands.test.ts`
+- `tests/cli/cli_error_envelope_preservation.test.ts`
 - `tests/cli/cli_infra_commands.test.ts`
 - `tests/cli/cli_ingest_remote_upload.test.ts`
 - `tests/cli/cli_init_commands.test.ts`

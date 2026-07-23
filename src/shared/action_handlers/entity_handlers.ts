@@ -1,5 +1,9 @@
 import { db } from "../../db.js";
-import { queryEntities, normalizeEntityTypeFilter } from "../../services/entity_queries.js";
+import {
+  queryEntities,
+  normalizeEntityTypeFilter,
+  computeNextCursor,
+} from "../../services/entity_queries.js";
 import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
@@ -38,6 +42,8 @@ interface QueryEntitiesParams {
   similarityThreshold?: number;
   limit?: number;
   offset?: number;
+  /** #1943: opaque keyset cursor; see EntityQueryOptions.cursor. */
+  cursor?: string;
   updatedSince?: string;
   createdSince?: string;
   /** R3: filter entities by the identity_basis carried on their observations. */
@@ -852,6 +858,13 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
    */
   applied_search_strategies?: SearchStrategy[];
   search_mode: EntitySearchMode;
+  /**
+   * #1943: opaque keyset cursor to fetch the next page, present only on the
+   * plain-listing path (default `entity_id` sort, no `search`) when a full page
+   * was returned. `undefined` when there is no next page or the query is not
+   * cursor-eligible.
+   */
+  next_cursor?: string;
 }> {
   const {
     userId,
@@ -868,6 +881,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     similarityThreshold,
     limit = 100,
     offset = 0,
+    cursor,
     updatedSince,
     createdSince,
     identityBasis,
@@ -1013,6 +1027,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       publishedBefore,
       limit,
       offset,
+      cursor,
       updatedSince,
       createdSince,
       identityBasis,
@@ -1057,12 +1072,20 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     }
   }
 
+  // #1943: only the plain-listing path (no search) supports keyset cursors;
+  // search reorders by relevance so an entity_id cursor is meaningless there.
+  const nextCursor =
+    searchMode === "none"
+      ? (computeNextCursor(entities, { sortBy, sortOrder, limit }) ?? undefined)
+      : undefined;
+
   return {
     entities,
     total,
     excluded_merged: !includeMerged,
     applied_search_strategies: appliedStrategies ? [...appliedStrategies].sort() : undefined,
     search_mode: searchMode,
+    next_cursor: nextCursor,
   };
 }
 

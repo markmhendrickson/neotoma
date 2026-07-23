@@ -85,6 +85,7 @@ import {
 import { getActiveStandingRules, type StandingRule } from "./services/standing_rules.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { CursorError } from "./services/entity_cursor.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
@@ -1965,6 +1966,38 @@ export class NeotomaServer {
           // field (see src/services/override_validation.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
+        if (error instanceof CursorError) {
+          // Same structured-envelope contract for cursor rejections: clients
+          // branch on `INVALID_CURSOR` via the MCP `data` field (see
+          // src/services/entity_cursor.ts).
+          throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof z.ZodError) {
+          // Request-schema rejections (`ctx.addIssue` in
+          // validateEntityQueryCombinations) carry their machine-readable
+          // `code`/`hint` under the issue's `params`. Without this branch a
+          // ZodError fell through to the generic handler below and surfaced as
+          // InternalError with the structured payload dropped — a validation
+          // failure misreported as a server fault, and the same
+          // structured-error-loss class this PR fixed for INVALID_CURSOR
+          // (ux lens, #1946). Lift the first issue carrying params, mirroring
+          // REST's `firstIssueHint` in actions.ts so both transports agree.
+          const structured = error.issues.find(
+            (issue) => (issue as { params?: { code?: unknown } }).params?.code
+          ) as { params?: { code?: string; hint?: string } } | undefined;
+          const first = error.issues[0];
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            first?.message ?? "Invalid request payload.",
+            structured?.params
+              ? {
+                  code: structured.params.code,
+                  message: first?.message ?? "Invalid request payload.",
+                  hint: structured.params.hint,
+                }
+              : { code: "VALIDATION_INVALID_FORMAT", issues: error.issues }
+          );
+        }
         // Safely extract error message, handling BigInt values
         let errorMessage = "Unknown error";
         if (error instanceof Error) {
@@ -3516,28 +3549,35 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
-    const { entities, total, excluded_merged, applied_search_strategies, search_mode } =
-      await queryEntitiesWithCount({
-        userId,
-        entityType: parsed.entity_type,
-        entityTypes: parsed.entity_types,
-        includeMerged: parsed.include_merged,
-        includeSnapshots: parsed.include_snapshots,
-        sortBy: parsed.sort_by,
-        sortOrder: parsed.sort_order,
-        published: parsed.published,
-        publishedAfter: parsed.published_after,
-        publishedBefore: parsed.published_before,
-        search: parsed.search,
-        similarityThreshold: parsed.similarity_threshold,
-        limit: parsed.limit,
-        offset: parsed.offset,
-        updatedSince: parsed.updated_since,
-        createdSince: parsed.created_since,
-        identityBasis: parsed.identity_basis,
-        snapshotFilters: parsed.snapshot_filters,
-        excludeBookkeeping: parsed.exclude_bookkeeping,
-      });
+    const {
+      entities,
+      total,
+      excluded_merged,
+      applied_search_strategies,
+      search_mode,
+      next_cursor,
+    } = await queryEntitiesWithCount({
+      userId,
+      entityType: parsed.entity_type,
+      entityTypes: parsed.entity_types,
+      includeMerged: parsed.include_merged,
+      includeSnapshots: parsed.include_snapshots,
+      sortBy: parsed.sort_by,
+      sortOrder: parsed.sort_order,
+      published: parsed.published,
+      publishedAfter: parsed.published_after,
+      publishedBefore: parsed.published_before,
+      search: parsed.search,
+      similarityThreshold: parsed.similarity_threshold,
+      limit: parsed.limit,
+      offset: parsed.offset,
+      cursor: parsed.cursor,
+      updatedSince: parsed.updated_since,
+      createdSince: parsed.created_since,
+      identityBasis: parsed.identity_basis,
+      snapshotFilters: parsed.snapshot_filters,
+      excludeBookkeeping: parsed.exclude_bookkeeping,
+    });
 
     // collapse_by=canonical_key: group entities sharing a canonical_key snapshot
     // field into one synthesized result per key (#1604). Entities without a
@@ -3600,6 +3640,7 @@ export class NeotomaServer {
         collapse_groups: collapsed.length,
         ...(applied_search_strategies ? { applied_search_strategies } : {}),
         search_mode,
+        ...(next_cursor ? { next_cursor } : {}),
       });
     }
 
@@ -3609,6 +3650,7 @@ export class NeotomaServer {
       excluded_merged,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
+      ...(next_cursor ? { next_cursor } : {}),
     });
   }
 

@@ -66,6 +66,119 @@ describe("Entity query schema validation", () => {
   });
 });
 
+describe("#1943 cursor + pagination bounds", () => {
+  // A well-formed opaque cursor for the default entity_id/asc ordering.
+  const cursor = Buffer.from(
+    JSON.stringify({ v: 1, sort_by: "entity_id", sort_order: "asc", entity_id: "ent_x" }),
+    "utf8"
+  ).toString("base64url");
+
+  for (const [name, Schema] of [
+    ["EntitiesQueryRequestSchema", EntitiesQueryRequestSchema],
+    ["RetrieveEntitiesRequestSchema", RetrieveEntitiesRequestSchema],
+  ] as const) {
+    describe(name, () => {
+      it("accepts a bare cursor (default sort, no offset)", () => {
+        const parsed = Schema.safeParse({ entity_type: "contact", cursor });
+        expect(parsed.success).toBe(true);
+      });
+
+      it("rejects cursor combined with a non-zero offset", () => {
+        const parsed = Schema.safeParse({ cursor, offset: 100 });
+        expect(parsed.success).toBe(false);
+      });
+
+      it("accepts cursor with offset explicitly 0", () => {
+        const parsed = Schema.safeParse({ cursor, offset: 0 });
+        expect(parsed.success).toBe(true);
+      });
+
+      it("rejects cursor combined with a non-default sort_by", () => {
+        const parsed = Schema.safeParse({ cursor, sort_by: "canonical_name" });
+        expect(parsed.success).toBe(false);
+      });
+
+      it("rejects cursor combined with search", () => {
+        const parsed = Schema.safeParse({ cursor, search: "acme" });
+        expect(parsed.success).toBe(false);
+      });
+
+      // #1943 (qa lens): published filters and snapshot_filters route into the
+      // snapshot-driven scan, which ignores the keyset cursor and would silently
+      // re-return page 1. Reject, matching the search/sort guards.
+      // #1943 (qa lens, round 10): the existing assertions only checked
+      // `success === false`, so a regression that dropped the structured
+      // params would pass green. Pin the payload itself — this is what makes
+      // the error machine-branchable rather than prose.
+      it("every cursor-combination rejection carries ERR_CURSOR_COMBINATION + a hint", () => {
+        const combos: Array<[string, Record<string, unknown>]> = [
+          ["offset", { cursor, offset: 10 }],
+          ["sort_by", { cursor, sort_by: "canonical_name" }],
+          ["search", { cursor, search: "acme" }],
+          ["published", { cursor, published: true }],
+          ["snapshot_filters", { cursor, snapshot_filters: { s: { op: "eq", value: "x" } } }],
+        ];
+        for (const [name, input] of combos) {
+          const parsed = Schema.safeParse(input);
+          expect(parsed.success, `${name} should be rejected`).toBe(false);
+          if (parsed.success) continue;
+          const structured = parsed.error.issues.find(
+            (i) => (i as { params?: { code?: string } }).params?.code
+          ) as { params?: { code?: string; hint?: string } } | undefined;
+          expect(structured?.params?.code, `${name} missing code`).toBe(
+            "ERR_CURSOR_COMBINATION"
+          );
+          expect(
+            typeof structured?.params?.hint,
+            `${name} missing hint`
+          ).toBe("string");
+        }
+      });
+
+      it("rejects cursor combined with published", () => {
+        expect(Schema.safeParse({ cursor, published: true }).success).toBe(false);
+      });
+
+      it("rejects cursor combined with published_after / published_before", () => {
+        expect(Schema.safeParse({ cursor, published_after: "2026-01-01" }).success).toBe(false);
+        expect(Schema.safeParse({ cursor, published_before: "2026-12-31" }).success).toBe(false);
+      });
+
+      it("rejects cursor combined with non-empty snapshot_filters", () => {
+        const parsed = Schema.safeParse({
+          cursor,
+          snapshot_filters: { status: { op: "eq", value: "live" } },
+        });
+        expect(parsed.success).toBe(false);
+      });
+
+      it("accepts cursor with an EMPTY snapshot_filters (no scan diversion)", () => {
+        expect(Schema.safeParse({ cursor, snapshot_filters: {} }).success).toBe(true);
+      });
+
+      it("rejects offset above the deep-scan bound", () => {
+        const parsed = Schema.safeParse({ offset: 2001 });
+        expect(parsed.success).toBe(false);
+      });
+
+      it("accepts offset at the deep-scan bound", () => {
+        const parsed = Schema.safeParse({ offset: 2000 });
+        expect(parsed.success).toBe(true);
+      });
+
+      it("rejects a large limit when include_snapshots is true (default)", () => {
+        const parsed = Schema.safeParse({ limit: 501 });
+        expect(parsed.success).toBe(false);
+      });
+
+      it("accepts a large limit when include_snapshots is false", () => {
+        const parsed = Schema.safeParse({ limit: 5000, include_snapshots: false });
+        expect(parsed.success).toBe(true);
+      });
+    });
+  }
+});
+
 describe("snapshot_filters field-name guard", () => {
   it("accepts snake_case field names", () => {
     const parsed = EntitiesQueryRequestSchema.safeParse({

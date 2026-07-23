@@ -2,6 +2,12 @@
 // Provenance chain, merged entity exclusion
 
 import { db } from "../db.js";
+import {
+  decodeCursor,
+  encodeCursor,
+  isCursorEligibleSort,
+  type CursorPayload,
+} from "./entity_cursor.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
@@ -28,6 +34,18 @@ export interface EntityQueryOptions {
   publishedBefore?: string;
   limit?: number;
   offset?: number;
+  /**
+   * #1943: Opaque keyset cursor. When set, pagination seeks directly past the
+   * cursor's last row (`entity_id > :cursor`) instead of scanning+discarding
+   * `offset` rows, so cost is O(page size) at any depth.
+   *
+   * Honored ONLY for the default `entity_id` sort — the one ordering with a
+   * unique, index-backed key (see {@link isCursorEligibleSort}). Every other
+   * sort, and any `search`, keeps bounded offset. A cursor paired with a
+   * non-default sort, with `search`, or with a non-zero `offset` is rejected at
+   * the request-schema layer rather than silently resolved.
+   */
+  cursor?: string;
   /** When provided, fetch only these entity IDs (e.g. from semantic search) */
   entityIds?: string[];
   /** ISO 8601 timestamp; return entities whose updated_at is >= this value. */
@@ -97,6 +115,11 @@ interface EntitySnapshotRow {
   computed_at?: string;
   [key: string]: unknown;
 }
+
+// #1943: pagination bounds live in a dependency-free module so the request
+// schema can import them without pulling in `db`. Re-exported here for callers
+// that already import from entity_queries.
+export { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "./entity_query_limits.js";
 
 const ENTITY_BASE_SELECT =
   "id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at, created_at";
@@ -176,12 +199,25 @@ export async function queryEntities(
     publishedBefore,
     limit = 100,
     offset = 0,
+    cursor,
     entityIds: filterEntityIds,
     updatedSince,
     createdSince,
     identityBasis,
     snapshotFilters,
   } = options;
+
+  // #1943: keyset seek. Only the default `entity_id` sort has a unique,
+  // SQL-comparable key, so a cursor is honored only there; on any other sort a
+  // supplied cursor is ignored and bounded offset is used instead (the request
+  // schema rejects cursor + non-default sort before we get here, so in practice
+  // `cursorEligible` is true whenever a cursor is present). Decoding validates
+  // the cursor against the request's sort_order and throws CursorError
+  // (surfaced as a 400 / InvalidParams) on a stale/malformed token. A cursor and
+  // a non-zero offset are mutually exclusive (also enforced at the schema layer).
+  const cursorEligible = isCursorEligibleSort(sortBy);
+  const decodedCursor: CursorPayload | null =
+    cursor && cursorEligible ? decodeCursor(cursor, { sortOrder }) : null;
 
   // Union of singular + plural type filters. Empty → no type filter.
   const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
@@ -271,6 +307,18 @@ export async function queryEntities(
     entityQuery = entityQuery.order("canonical_name", { ascending });
   } else {
     entityQuery = entityQuery.order("id", { ascending: sortBy === "entity_id" ? ascending : true });
+  }
+
+  // #1943: apply the keyset seek to the base entity query. For ascending order
+  // the next page starts strictly after the cursor's id (`id > :id`); for
+  // descending, strictly before (`id < :id`). This is what makes deep pages
+  // O(page) — the DB seeks past prior rows on the primary key instead of the
+  // scan-and-discard loop below re-reading them. Only reachable for the
+  // entity_id sort (cursor is entity_id-only; see decode above).
+  if (decodedCursor) {
+    entityQuery = ascending
+      ? entityQuery.gt("id", decodedCursor.entity_id)
+      : entityQuery.lt("id", decodedCursor.entity_id);
   }
 
   const isSnapshotFieldSort = typeof sortBy === "string" && sortBy.startsWith("snapshot.");
@@ -424,9 +472,12 @@ export async function queryEntities(
       }
     }
   } else if (includeDeleted) {
+    // #1943: with an entity_id cursor the keyset seek is already applied to
+    // entityQuery, and cursor is mutually exclusive with offset, so range from 0.
+    const rangeStart = decodedCursor ? 0 : offset;
     const { data: pagedEntities, error: entitiesError } = await entityQuery.range(
-      offset,
-      offset + limit - 1
+      rangeStart,
+      rangeStart + limit - 1
     );
     if (entitiesError) {
       throw new Error(`Failed to query entities: ${entitiesError.message}`);
@@ -463,6 +514,9 @@ export async function queryEntities(
         if (chunkDeletedEntityIds.has(row.id)) {
           continue;
         }
+        // #1943: with an entity_id cursor the keyset seek already positioned the
+        // scan and offset is 0 (mutually exclusive), so this skip naturally
+        // no-ops; it still applies the legacy offset when no cursor is present.
         if (visibleSkipped < offset) {
           visibleSkipped += 1;
           continue;
@@ -694,6 +748,37 @@ export async function queryEntities(
       merged_to_entity_id: entity.merged_to_entity_id,
       merged_at: entity.merged_at,
     };
+  });
+}
+
+/**
+ * #1943: derive the opaque `next_cursor` for a returned page, or `null` when
+ * there is no next page or the query is not cursor-eligible.
+ *
+ * A cursor is minted only for the default `entity_id` sort (the only ordering
+ * whose keyset seek is sound — see {@link isCursorEligibleSort}) and only when
+ * the page came back full (`entities.length >= limit`), the signal that more
+ * rows may follow. A partial page means the listing is exhausted, so no cursor
+ * is returned. Callers pass the token back as `cursor` to fetch the next page in
+ * O(page) time regardless of depth.
+ *
+ * Note: a full final page yields a non-null cursor whose next fetch returns zero
+ * rows (and no further cursor) — the standard keyset terminal condition.
+ */
+export function computeNextCursor(
+  entities: EntityWithProvenance[],
+  opts: { sortBy?: string; sortOrder?: "asc" | "desc"; limit?: number }
+): string | null {
+  const limit = opts.limit ?? 100;
+  if (!isCursorEligibleSort(opts.sortBy)) return null;
+  if (entities.length < limit) return null;
+  const last = entities[entities.length - 1];
+  if (!last) return null;
+  return encodeCursor({
+    v: 1,
+    sort_by: "entity_id",
+    sort_order: opts.sortOrder === "desc" ? "desc" : "asc",
+    entity_id: last.entity_id,
   });
 }
 
