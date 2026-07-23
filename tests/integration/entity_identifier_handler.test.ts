@@ -754,4 +754,63 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     expect(occurrences).toBe(1);
     expect(result.total).toBe(1);
   });
+
+  it("no-`by`/no-`entityType` exact pass defers a type-declared identity field (financial_account institution) to the JS-scan fallback", async () => {
+    // QA regression (review round 2, ent_db0b7855d47012084477fb00 /
+    // ent_2ad0677fe23c0c1878ae43e8): every existing institution-field test
+    // passes entityType explicitly, which resolves the known-type branch
+    // (snapshotFieldsForType(entityType) queried directly). When BOTH `by`
+    // and `entityType` are omitted, the exact pre-pass only queries
+    // BASE_SNAPSHOT_SEARCH_FIELDS (the `else` branch) and leaves
+    // type-declared fields like financial_account's `institution` to the
+    // bounded JS-scan fallback below it. This test pins that the deferral
+    // still resolves the entity at all — match_mode can't distinguish
+    // "resolved by exact pass" from "resolved by JS-scan fallback" here,
+    // since both merge into the same snapshotMatches array and report
+    // match_mode "snapshot_field". The real value of this test is coverage
+    // of the previously-untested no-`by`/no-`entityType` code path, not a
+    // precise assertion on which pass produced the hit.
+    const userId = "identifier-user-no-by-no-entitytype";
+    const entityId = `ent_fa_no_by_no_type_${Date.now()}`;
+    testEntityIds.push(entityId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert({
+      id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      // canonical_name carries no institution token, so neither
+      // canonical_name.ilike nor the base snapshot fields (name/full_name/
+      // title/email/domain/company) can resolve "institution".
+      canonical_name: "Secondary Checking",
+    });
+    await serviceRoleClient.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      user_id: userId,
+      entity_type: "financial_account",
+      schema_version: "1.0",
+      canonical_name: "Secondary Checking",
+      snapshot: {
+        account_name: "Secondary Checking",
+        institution: "Ibercaja Regular",
+      },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+
+    // No `by`, no `entityType`: the exact pre-pass's else branch queries
+    // only BASE_SNAPSHOT_SEARCH_FIELDS, so this row must be picked up by the
+    // bounded JS-scan fallback (which resolves per-row identity_search_fields
+    // via snapshotFieldsForType) instead.
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier: "Ibercaja Regular",
+      userId,
+      limit: 100,
+    });
+    expect(result.total).toBe(1);
+    expect(result.entities[0]?.id).toBe(entityId);
+    expect(result.match_mode).toBe("snapshot_field");
+  });
 });
