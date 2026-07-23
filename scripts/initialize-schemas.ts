@@ -1,53 +1,36 @@
 #!/usr/bin/env tsx
 /**
  * Initialize Schema Registry from schema_definitions.ts
- * 
+ *
  * Loads all entity schemas from src/services/schema_definitions.ts into the
  * schema_registry database table. This makes schemas available in the database
  * instead of relying on runtime fallbacks.
- * 
+ *
  * Usage:
  *   npm run schema:init
  *   tsx scripts/initialize-schemas.ts [--dry-run] [--force]
- * 
+ *
+ * Safe to re-run, including on an instance carrying CUSTOM schemas: an entity
+ * type that already has an active global registration is SKIPPED outright —
+ * not re-registered and not re-activated (issue #1968). Use --force to
+ * deliberately re-register built-ins over whatever is currently active.
+ *
  * Options:
  *   --dry-run    Show what would be registered without making changes
- *   --force      Re-register and activate schemas even if they exist
+ *   --force      Re-register and activate schemas even if they exist.
+ *                WARNING: this overrides the skip-if-present guard and will
+ *                deactivate an operator-registered custom schema in favor of
+ *                the built-in.
  */
 
 // Use dynamic imports to handle missing database config gracefully
-import {
-  ENTITY_SCHEMAS,
-  type EntitySchema,
-} from "../src/services/schema_definitions.js";
+import { ENTITY_SCHEMAS, type EntitySchema } from "../src/services/schema_definitions.js";
 
 interface RegistrationResult {
   entity_type: string;
   schema_version: string;
   action: "registered" | "activated" | "skipped" | "error";
   error?: string;
-}
-
-async function checkSchemaExists(
-  schemaRegistry: any,
-  entityType: string,
-  version: string
-): Promise<boolean | null> {
-  try {
-    const versions = await schemaRegistry.getSchemaVersions(entityType);
-    return versions.some((v) => v.schema_version === version);
-  } catch (error: any) {
-    // If error is due to missing config, return null to indicate unknown
-    if (
-      error.message?.includes("Missing database") ||
-      error.message?.includes("configuration") ||
-      error.code === "PGRST301" // Connection error
-    ) {
-      return null; // Unknown - database not accessible
-    }
-    // Other errors - assume it doesn't exist
-    return false;
-  }
 }
 
 async function registerSchema(
@@ -60,11 +43,7 @@ async function registerSchema(
   const { entity_type, schema_version } = schema;
 
   try {
-    // Check if schema already exists (only if database is accessible)
-    let exists: boolean | null = false;
-    if (dbAccessible && schemaRegistry) {
-      exists = await checkSchemaExists(schemaRegistry, entity_type, schema_version);
-    } else {
+    if (!dbAccessible || !schemaRegistry) {
       // Database not accessible - return early to show what would be registered
       return {
         entity_type,
@@ -73,47 +52,25 @@ async function registerSchema(
       };
     }
 
-    // If database check returned null (unknown), assume schema needs to be registered
-    if (exists === null) {
-      return {
-        entity_type,
-        schema_version,
-        action: "registered",
-      };
-    }
-
-    if (exists && !force) {
-      // Check if it's active (only if database is accessible)
-      if (dbAccessible && schemaRegistry) {
-        try {
-          const activeSchema = await schemaRegistry.loadActiveSchema(entity_type);
-          if (activeSchema?.schema_version === schema_version) {
-            return {
-              entity_type,
-              schema_version,
-              action: "skipped",
-            };
-          } else {
-            // Exists but not active - activate it
-            if (!dryRun) {
-              await schemaRegistry.activate(entity_type, schema_version);
-            }
-            return {
-              entity_type,
-              schema_version,
-              action: "activated",
-            };
-          }
-        } catch (error: any) {
-          // If we can't check active status, assume needs activation
-          if (!dryRun && dbAccessible && schemaRegistry) {
-            try {
-              await schemaRegistry.activate(entity_type, schema_version);
-            } catch (activateError) {
-              // Ignore activation errors in dry-run or if db not accessible
-            }
-          }
-        }
+    // Skip-if-present, keyed on whatever is ACTIVE rather than on a
+    // schema_version string match (issue #1968).
+    //
+    // Previously this activated the built-in version whenever it was
+    // registered-but-inactive. On an instance where an operator had
+    // deliberately registered and activated a CUSTOM schema for this entity
+    // type, that call flipped the built-in back to active — and activate()
+    // deactivates every other version for the type, so the operator's schema
+    // was silently switched off. Reading the active row and leaving it alone
+    // removes that hazard; `--force` remains the explicit opt-in for
+    // re-registering built-ins over whatever is present.
+    if (!force && dbAccessible && schemaRegistry) {
+      const activeSchema = await schemaRegistry.loadGlobalSchema(entity_type);
+      if (activeSchema) {
+        return {
+          entity_type,
+          schema_version,
+          action: "skipped",
+        };
       }
     }
 
@@ -169,10 +126,7 @@ async function loadSchemaRegistry(): Promise<any | null> {
     const { schemaRegistry } = await import("../src/services/schema_registry.js");
     return schemaRegistry;
   } catch (error: any) {
-    if (
-      error.message?.includes("Missing database") ||
-      error.message?.includes("configuration")
-    ) {
+    if (error.message?.includes("Missing database") || error.message?.includes("configuration")) {
       return null;
     }
     throw error;
@@ -214,43 +168,21 @@ async function initializeSchemas(dryRun: boolean, force: boolean): Promise<void>
   // Try to load schema registry (may fail if DB config missing)
   const schemaRegistry = await loadSchemaRegistry();
   const dbAccessible = await checkDatabaseAccessible(schemaRegistry);
-  
+
   if (!dbAccessible) {
     if (dryRun) {
-      console.log(
-        "⚠️  Database not accessible - showing all schemas that would be registered\n"
-      );
-      console.log(
-        "   (Configure NEOTOMA_DATA_DIR to check existing schemas)\n"
-      );
+      console.log("⚠️  Database not accessible - showing all schemas that would be registered\n");
+      console.log("   (Configure NEOTOMA_DATA_DIR to check existing schemas)\n");
     } else {
-      console.error(
-        "❌ Error: Database not accessible. Please configure NEOTOMA_DATA_DIR.\n"
-      );
-      console.error(
-        "   Required environment variables:\n"
-      );
-      console.error(
-        "   - NEOTOMA_DATA_DIR (for local SQLite)\n"
-      );
-      console.error(
-        "\n   Options to configure:\n"
-      );
-      console.error(
-        "   1. Sync from 1Password (recommended):\n"
-      );
-      console.error(
-        "      npm run sync:env\n"
-      );
-      console.error(
-        "      (Requires 1Password CLI and mappings configured)\n"
-      );
-      console.error(
-        "   2. Manually add to .env file:\n"
-      );
-      console.error(
-        "      NEOTOMA_DATA_DIR=./data\n"
-      );
+      console.error("❌ Error: Database not accessible. Please configure NEOTOMA_DATA_DIR.\n");
+      console.error("   Required environment variables:\n");
+      console.error("   - NEOTOMA_DATA_DIR (for local SQLite)\n");
+      console.error("\n   Options to configure:\n");
+      console.error("   1. Sync from 1Password (recommended):\n");
+      console.error("      npm run sync:env\n");
+      console.error("      (Requires 1Password CLI and mappings configured)\n");
+      console.error("   2. Manually add to .env file:\n");
+      console.error("      NEOTOMA_DATA_DIR=./data\n");
       console.error(
         "\n   💡 Tip: Run 'npm run schema:init:dry-run' to preview schemas without database access.\n"
       );
@@ -264,9 +196,7 @@ async function initializeSchemas(dryRun: boolean, force: boolean): Promise<void>
   console.log("Processing schemas...");
   for (const schema of Object.values(ENTITY_SCHEMAS)) {
     if (!schema.entity_type || !schema.schema_version) {
-      console.warn(
-        `⚠️  Skipping invalid schema: missing entity_type or schema_version`
-      );
+      console.warn(`⚠️  Skipping invalid schema: missing entity_type or schema_version`);
       continue;
     }
 
@@ -296,9 +226,7 @@ async function initializeSchemas(dryRun: boolean, force: boolean): Promise<void>
             ? "skipped (already active)"
             : `error: ${result.error}`;
 
-    console.log(
-      `  ${icon} ${schema.entity_type} v${schema.schema_version} - ${actionLabel}`
-    );
+    console.log(`  ${icon} ${schema.entity_type} v${schema.schema_version} - ${actionLabel}`);
   }
 
   // Summary
