@@ -10,6 +10,7 @@ export type SubstrateEventType =
   | "entity.restored"
   | "entity.merged"
   | "entity.split"
+  | "entity.unmerged"
   | "relationship.created"
   | "relationship.deleted"
   | "relationship.restored"

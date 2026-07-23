@@ -229,7 +229,8 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   }
   if ((sourceEntity as { merged_to_entity_id?: string | null }).merged_to_entity_id) {
     throw new EntityAlreadyMergedError(
-      "Source entity is already merged; unmerge or split the merge target instead."
+      "Source entity is already merged; call unmerge_entities on the original merge_id " +
+        "to reverse it, or split the merge target instead."
     );
   }
 
