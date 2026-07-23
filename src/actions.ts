@@ -1383,15 +1383,20 @@ const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
 const oauthKeySessions = new OAuthKeySessionStore();
 
 /**
- * Maps an OAuth key-session token to the user_id resolved via Google
- * sign-in for that browser session. Populated only by the
- * `/mcp/oauth/google/callback` route; every other credential path
- * (private key / mnemonic / bearer) never writes here, so
- * `/mcp/oauth/local-login` falls through to `ensureLocalDevUser()`
- * exactly as before when this map has no entry — behavior for every
- * existing deploy (Google flag off) is unchanged.
+ * Lifetime of a SIGN-IN session (Google). Distinct from the key-entry gate's
+ * short default: a user who signs in expects to stay signed in, whereas the
+ * key-entry gate deliberately closes fast. Reusing the 15-minute gate TTL for
+ * sign-in is what logged hosted-instance users out every quarter hour (#2005).
+ *
+ * Override with NEOTOMA_SIGN_IN_SESSION_TTL_MIN (minutes). Default 7 days.
  */
-const googleVerifiedUserBySessionToken = new Map<string, string>();
+const SIGN_IN_SESSION_TTL_MS =
+  Math.max(
+    1,
+    Number.parseInt(process.env.NEOTOMA_SIGN_IN_SESSION_TTL_MIN || "", 10) || 7 * 24 * 60
+  ) *
+  60 *
+  1000;
 
 function readCookie(req: express.Request, name: string): string | undefined {
   const header = (req.headers["cookie"] || req.headers["Cookie"] || "") as string;
@@ -1623,8 +1628,19 @@ function hasValidOAuthKeySession(req: express.Request): boolean {
   return oauthKeySessions.isValid(token);
 }
 
-function setOAuthKeySessionCookie(req: express.Request, res: express.Response): string {
-  const token = oauthKeySessions.create();
+/**
+ * Issue an OAuth key-session cookie. `ttlMs` covers BOTH the server-side
+ * session and the cookie's own maxAge — they must agree, or the browser keeps
+ * presenting a cookie the server has already forgotten (or vice versa).
+ * Omit it for the short key-entry gate; pass SIGN_IN_SESSION_TTL_MS for
+ * sign-in (#2005).
+ */
+function setOAuthKeySessionCookie(
+  req: express.Request,
+  res: express.Response,
+  ttlMs?: number
+): string {
+  const token = oauthKeySessions.create(Date.now(), ttlMs);
   const forwardedProto =
     ((req.headers["x-forwarded-proto"] || req.headers["X-Forwarded-Proto"]) as string | undefined)
       ?.split(",")[0]
@@ -1636,7 +1652,7 @@ function setOAuthKeySessionCookie(req: express.Request, res: express.Response): 
     sameSite: "lax",
     secure,
     path: "/mcp/oauth",
-    maxAge: 15 * 60 * 1000,
+    maxAge: ttlMs != null && ttlMs > 0 ? ttlMs : 15 * 60 * 1000,
   });
   return token;
 }
@@ -1644,8 +1660,9 @@ function setOAuthKeySessionCookie(req: express.Request, res: express.Response): 
 /** Resolve the local-auth user_id a Google-verified session (if any) mapped to this request. */
 function getGoogleVerifiedUserId(req: express.Request): string | undefined {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
-  if (!token || !oauthKeySessions.isValid(token)) return undefined;
-  return googleVerifiedUserBySessionToken.get(token);
+  // getBoundUser enforces session validity itself, so an expired session can
+  // never resolve a user even if a binding is still in memory.
+  return oauthKeySessions.getBoundUser(token);
 }
 
 /**
@@ -2781,8 +2798,10 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // mnemonic/bearer path sets. `/mcp/oauth/authorize` -> `/mcp/oauth/
     // local-login` then runs completely unmodified, except local-login now
     // resolves the user via this session instead of always ensureLocalDevUser().
-    const sessionToken = setOAuthKeySessionCookie(req, res);
-    googleVerifiedUserBySessionToken.set(sessionToken, resolvedUserId);
+    // Sign-in gets the long session TTL, not the key-entry gate's 15 minutes,
+    // and the user binding lives in the same store so it expires with it (#2005).
+    const sessionToken = setOAuthKeySessionCookie(req, res, SIGN_IN_SESSION_TTL_MS);
+    oauthKeySessions.bindUser(sessionToken, resolvedUserId);
 
     return res.redirect(nextPath);
   } catch (error: any) {
