@@ -704,6 +704,52 @@ export const RetrieveEntityByIdentifierSchema = z.object({
   observations_limit: z.number().int().positive().max(200).optional().default(20),
 });
 
+/**
+ * #1967: batch identifier resolution. Mirrors
+ * {@link RetrieveEntityByIdentifierSchema} but takes an array. The 100-item cap
+ * is enforced here so an oversized batch fails validation rather than being
+ * silently truncated (a dropped identifier reads as "not found" downstream).
+ */
+export const RetrieveEntitiesByIdentifiersSchema = z.object({
+  identifiers: z.array(z.string()).min(1).max(100),
+  entity_type: z.string().optional(),
+  user_id: z.string().optional(),
+  by: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+  include_observations: z.boolean().optional().default(false),
+  observations_limit: z.number().int().positive().max(200).optional().default(20),
+});
+
+/**
+ * #1967: field-level aggregation over snapshot values. `field` and any filter
+ * keys are identifier-shaped because they are interpolated into a SQL json
+ * path; the service re-validates, this is the first gate.
+ */
+const AggregationFieldName = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "field must be a plain snapshot field name");
+
+export const AggregateEntityFieldSchema = z.object({
+  field: AggregationFieldName,
+  entity_type: z.string().optional(),
+  user_id: z.string().optional(),
+  op: z.enum(["count", "distinct"]).optional().default("count"),
+  filters: z
+    .record(
+      AggregationFieldName,
+      z.object({
+        op: z.enum(["eq", "in", "contains"]),
+        value: z.unknown().optional(),
+      })
+    )
+    .optional(),
+  limit: z.number().int().positive().max(1000).optional(),
+  offset: z.number().int().min(0).optional(),
+  include_null: z.boolean().optional().default(false),
+  sort_by: z.enum(["count", "value"]).optional().default("count"),
+  sort_order: z.enum(["asc", "desc"]).optional().default("desc"),
+});
+
 export const RetrieveRelatedEntitiesSchema = z.object({
   entity_id: z.string(),
   relationship_types: z.array(RelationshipTypeSchema).optional(),
