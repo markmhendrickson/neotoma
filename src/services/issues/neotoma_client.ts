@@ -134,11 +134,16 @@ export async function submitIssueToRemote(params: {
   })) as SubmitResponse;
 
   if (error) {
-    // The remote `/issues/submit` handler accepts unsigned guest submissions for
-    // payloads carrying `local_issue_id` or `submission_timestamp` (both
-    // present here). When AAuth signing produces a signature the remote cannot
-    // verify (e.g. no agent grant), retry once as an unsigned guest before
-    // surfacing AUTH_REQUIRED. (closes #936)
+    // The remote `/issues/submit` handler accepts unsigned guest submissions.
+    // When AAuth signing produces a signature the remote cannot verify (e.g. no
+    // agent grant), retry once as an unsigned guest before surfacing
+    // AUTH_REQUIRED. (closes #936)
+    //
+    // Since #1953 the unsigned retry also works against a remote that has never
+    // seen this caller: anonymous submission no longer depends on the payload
+    // carrying `local_issue_id`/`submission_timestamp`, and the remote mints the
+    // guest access token in its response. A remote whose operator set
+    // NEOTOMA_ACCESS_POLICY_ISSUE=closed still rejects, which is intended.
     const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
     if (errObj?.["error_code"] === "AUTH_REQUIRED") {
       const signingDisabled = process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1";

@@ -3434,6 +3434,29 @@ function guestWriteRateLimit(
   void guestWriteRateLimitMiddleware(req, res, next);
 }
 
+/**
+ * Issue *submission* is the one route a third party may reach with no identity
+ * at all: the guest access token is minted BY the submit, so requiring one to
+ * perform it is a chicken-and-egg that closes the inbox to first contact.
+ *
+ * Deliberately submit-only. `add_message` stays authenticated: by the time a
+ * reporter has a thread to append to, they hold the token returned by their
+ * submit, so anonymity buys nothing there — and letting an unidentified caller
+ * write into an existing thread is a strictly wider blast radius than letting
+ * them open a new one. The token is what proves "I opened this thread".
+ */
+export function routeAcceptsAnonymousIssueSubmit(
+  req: Pick<express.Request, "method" | "path">
+): boolean {
+  return (
+    req.method === "POST" && (req.path === "/issues/submit" || req.path === "/api/issues/submit")
+  );
+}
+
+function buildAnonymousGuestPrincipal(): GuestPrincipal {
+  return { kind: "guest", guestId: {}, agentIdentity: null, accessToken: undefined };
+}
+
 function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | null {
   const agentIdentity = getCurrentAgentIdentity();
   const accessToken = guestAccessTokenFromRequest(req);
@@ -3457,7 +3480,20 @@ function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | 
 async function maybeStampGuestPrincipal(req: express.Request): Promise<boolean> {
   if (!routeAcceptsGuestPrincipal(req)) return false;
   const guestPrincipal = buildGuestPrincipalFromRequest(req);
-  if (!guestPrincipal) return false;
+  if (!guestPrincipal) {
+    // No AAuth signature and no guest token: for issue submission this is the
+    // NORMAL first contact from a third party's agent, since the token is an
+    // OUTPUT of the submit rather than a precondition for it (#1953). Remains
+    // the operator's switch — NEOTOMA_ACCESS_POLICY_ISSUE=closed shuts it.
+    if (!routeAcceptsAnonymousIssueSubmit(req)) return false;
+    const { resolveAccessPolicy } = await import("./services/access_policy.js");
+    const mode = await resolveAccessPolicy("issue");
+    if (mode !== "submit_only" && mode !== "submitter_scoped" && mode !== "open") {
+      return false;
+    }
+    stampGuestPrincipal(req, buildAnonymousGuestPrincipal());
+    return true;
+  }
 
   const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
   if (headerAuth.startsWith("Bearer ") && guestPrincipal.accessToken) {
@@ -9934,6 +9970,10 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
             author: parsed.data.author,
             local_issue_id: parsed.data.local_issue_id,
             submission_timestamp: parsed.data.submission_timestamp,
+            reporter_git_sha: parsed.data.reporter_git_sha,
+            reporter_git_ref: parsed.data.reporter_git_ref,
+            reporter_channel: parsed.data.reporter_channel,
+            reporter_app_version: parsed.data.reporter_app_version,
           });
           return {
             issue_number: 0,

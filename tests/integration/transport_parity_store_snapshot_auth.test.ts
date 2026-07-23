@@ -22,7 +22,8 @@
  *   3. dedup store: identical re-store keeps obs count = 1  (#1840) — MCP + offline
  *      (MCP additionally returns deduplicated:true + populated snapshot_after)
  *   4. NULL_CLEARED_FIELD warning under highest_priority    (#1839) — offline (by design)
- *   5. issue-submit local-loopback auth fallback            (#1842) — offline (by design)
+ *   5. issue-submit auth: local fallback + anonymous remote (#1842, amended by
+ *      #1953) — offline (by design)
  *
  * Behaviors 1–3 are true cross-transport parity cells (identical effect on both).
  * Behaviors 4–5 are single-transport BY DESIGN; each documents in the matrix WHY
@@ -198,7 +199,10 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
       entity_type: baseType,
       schema_version: "1.0",
       schema_definition: {
-        fields: { value: { type: "number", required: false }, label: { type: "string", required: true } },
+        fields: {
+          value: { type: "number", required: false },
+          label: { type: "string", required: true },
+        },
         identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
@@ -212,7 +216,12 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
 
     // ---- MCP transport ----
     const mcpKey = `parity-dedup-mcp-${randomUUID()}`;
-    const mcpEntity = { entity_type: baseType, canonical_name: `mcp-${Date.now()}`, label: "t", value: 42 };
+    const mcpEntity = {
+      entity_type: baseType,
+      canonical_name: `mcp-${Date.now()}`,
+      label: "t",
+      value: 42,
+    };
     const mcpStoreArgs = {
       user_id: PARITY_USER_ID,
       idempotency_key: mcpKey,
@@ -233,7 +242,12 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
 
     // ---- Offline/HTTP transport ----
     const offKey = `parity-dedup-off-${randomUUID()}`;
-    const offEntity = { entity_type: baseType, canonical_name: `off-${Date.now()}`, label: "t", value: 42 };
+    const offEntity = {
+      entity_type: baseType,
+      canonical_name: `off-${Date.now()}`,
+      label: "t",
+      value: 42,
+    };
     const offBody = {
       idempotency_key: offKey,
       commit: true,
@@ -297,7 +311,10 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
       entity_type: nullType,
       schema_version: "1.0",
       schema_definition: {
-        fields: { label: { type: "string", required: false }, value: { type: "number", required: false } },
+        fields: {
+          label: { type: "string", required: false },
+          value: { type: "number", required: false },
+        },
         identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: { merge_policies: { value: { strategy: "highest_priority" } } },
@@ -341,12 +358,14 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
 
     // The warning fires with the correct shape.
     const warnings =
-      (cleared.json.store_warnings as Array<{
-        code: string;
-        message: string;
-        entity_type: string;
-        entity_id: string;
-      }> | undefined) ?? [];
+      (cleared.json.store_warnings as
+        | Array<{
+            code: string;
+            message: string;
+            entity_type: string;
+            entity_id: string;
+          }>
+        | undefined) ?? [];
     const warn = warnings.find((w) => w.code === "NULL_CLEARED_FIELD");
     expect(warn).toBeDefined();
     expect(warn!.entity_type).toBe(nullType);
@@ -362,7 +381,9 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
   // -------------------------------------------------------------------------
   it("issue-submit: local no-bearer allowed, remote no-bearer still rejected (#1842)", async () => {
     // The fallback is scoped to exactly the issue-write routes.
-    expect(routeAllowsLocalIssueWriteFallback({ method: "POST", path: "/issues/submit" })).toBe(true);
+    expect(routeAllowsLocalIssueWriteFallback({ method: "POST", path: "/issues/submit" })).toBe(
+      true
+    );
     expect(routeAllowsLocalIssueWriteFallback({ method: "POST", path: "/store" })).toBe(false);
 
     // Local request, NO Authorization header → must clear the auth gate.
@@ -390,18 +411,41 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
     expect(localJson.code).not.toBe("AUTH_REQUIRED");
     expect(localJson.error ?? "").not.toMatch(/AUTH_REQUIRED/);
 
-    // Remote request (untrusted X-Forwarded-For), NO Bearer → must be rejected.
-    const remote = await callHttp(
+    // Remote request (untrusted X-Forwarded-For), NO Bearer → since #1953 this
+    // is ALLOWED on /issues/submit specifically: a third party's agent must be
+    // able to open an issue with no prior identity, because the guest access
+    // token is minted BY the submit rather than required for it. The rest of
+    // #1842's boundary is unchanged and asserted below.
+    const remoteSubmit = await callHttp(
       offline.base,
       "/issues/submit",
       {
-        title: `parity remote issue ${Date.now()}`,
-        body: "Remote caller with no Bearer must still get AUTH_REQUIRED.",
+        title: `parity remote anonymous issue ${Date.now()}`,
+        body: "Anonymous remote first contact must be able to open an issue.",
         visibility: "private",
+        reporter_app_version: "0.0.0-test",
       },
       { "X-Forwarded-For": "203.0.113.7" }
     );
-    expect(remote.status).toBe(401);
-    expect(remote.text).toMatch(/AUTH_REQUIRED/);
+    expect(remoteSubmit.status).not.toBe(401);
+    const remoteJson = remoteSubmit.json as { entity_id?: string; code?: string };
+    expect(remoteJson.entity_id).toBeTruthy();
+    expect(remoteJson.code).not.toBe("AUTH_REQUIRED");
+
+    // ...but a remote no-Bearer caller still cannot append to an EXISTING
+    // thread: by then they hold the token their submit returned, so anonymity
+    // buys nothing, while writing into someone else's thread is a strictly
+    // wider blast radius than opening a new one (#1953).
+    const remoteAppend = await callHttp(
+      offline.base,
+      "/issues/add_message",
+      {
+        entity_id: "ent_0000000000000000000000ff",
+        body: "An unidentified caller must not append to an existing thread.",
+      },
+      { "X-Forwarded-For": "203.0.113.7" }
+    );
+    expect(remoteAppend.status).toBe(401);
+    expect(remoteAppend.text).toMatch(/AUTH_REQUIRED/);
   });
 });
