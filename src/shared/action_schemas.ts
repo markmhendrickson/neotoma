@@ -23,6 +23,16 @@ export const OFFSET_TOO_DEEP_HINT =
   "previous response and pass it back as `cursor` (drop `offset` entirely). Cursor paging " +
   "runs in constant time at any depth.";
 
+/**
+ * #1943: a `cursor` paired with a parameter whose query shape cannot honour a
+ * keyset seek (offset, a non-entity_id sort, search, published filters,
+ * snapshot_filters). Distinct from the two tightenings above: these combinations
+ * were never valid, so this is a coherence guard, not a migration. Callers get a
+ * structured `hint` naming the way out, matching the pattern this file already
+ * sets for the tightenings (ux lens, #1946).
+ */
+export const ERR_CURSOR_COMBINATION_ISSUE_CODE = "ERR_CURSOR_COMBINATION";
+
 export const ERR_SNAPSHOT_PAGE_TOO_LARGE_ISSUE_CODE = "ERR_SNAPSHOT_PAGE_TOO_LARGE";
 export const SNAPSHOT_PAGE_TOO_LARGE_HINT =
   "`limit` above 500 is no longer accepted while `include_snapshots` is true: each snapshot " +
@@ -279,6 +289,10 @@ function validateEntityQueryCombinations(
       code: z.ZodIssueCode.custom,
       message: "cursor and offset cannot be combined; use one or the other",
       path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "Pass `cursor` alone. It already encodes where the walk resumes, so `offset` is redundant — drop `offset` entirely.",
+      },
     });
   }
 
@@ -291,6 +305,10 @@ function validateEntityQueryCombinations(
       code: z.ZodIssueCode.custom,
       message: "cursor is only supported with the default sort_by=entity_id",
       path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "Keyset paging is only sound on the unique `entity_id` key. Either drop `sort_by` (the default is `entity_id`), or page this sort with `offset` instead of `cursor`.",
+      },
     });
   }
 
@@ -302,6 +320,10 @@ function validateEntityQueryCombinations(
       code: z.ZodIssueCode.custom,
       message: "cursor cannot be combined with search",
       path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "Search orders by relevance, not by `entity_id`, so a keyset cursor cannot resume it. Page search results with `offset`.",
+      },
     });
   }
 
@@ -320,6 +342,10 @@ function validateEntityQueryCombinations(
       message:
         "cursor cannot be combined with published filters or snapshot_filters (they use a non-keyset scan); page those with offset, or remove the filters to use cursor",
       path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "These filters route the query into a snapshot-driven scan that cannot honour a keyset seek. Either drop the filters to use `cursor`, or page the filtered listing with `offset`.",
+      },
     });
   }
 
