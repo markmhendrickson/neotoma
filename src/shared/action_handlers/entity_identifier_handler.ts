@@ -110,6 +110,22 @@ type SnapshotRow = {
   snapshot: Record<string, unknown> | null;
 };
 
+/**
+ * Field names that may be interpolated into a SQL column path.
+ *
+ * The exact pre-pass builds `lower(snapshot->>${field})` and hands it to the
+ * query builder, which splices the column side into SQL literally (only the
+ * compared *value* is parameterised). Any field name reaching that path must
+ * therefore be a plain SQL identifier. This mirrors the pattern the sqlite
+ * adapter's `normalizeColumnName` recognises — names outside it fall through
+ * that function unchanged and would be interpolated raw.
+ */
+const SAFE_SNAPSHOT_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function isSafeSnapshotFieldName(field: unknown): field is string {
+  return typeof field === "string" && SAFE_SNAPSHOT_FIELD_PATTERN.test(field);
+}
+
 function snapshotFieldsMatch(
   snapshot: Record<string, unknown> | null,
   needleLower: string,
@@ -239,6 +255,25 @@ export async function retrieveEntityByIdentifierWithFallback(
   // during the snapshot-field pass below (generic base + declared
   // identity_search_fields), so a financial_account's institution/account_name
   // are scanned without hardcoding finance fields here (#1495).
+  //
+  // SECURITY: `by` is caller-supplied at the MCP surface and is interpolated
+  // into a SQL column path (`lower(snapshot->>${field})`) by the exact pre-pass
+  // below. The sqlite adapter's normalizeColumnName only recognises that shape
+  // for `[A-Za-z_][A-Za-z0-9_]*` field names and otherwise returns the string
+  // unchanged, which is then spliced raw into the filter clause (only the
+  // *value* side is parameterised). An unvalidated `by` is therefore a SQL
+  // injection vector. Reject anything that is not a plain identifier before it
+  // can reach a query builder — the exact-pass is the only place `by` becomes
+  // a column expression, so validating here covers every downstream use.
+  // Validate on `by` itself rather than on the derived array: `by: ""` is
+  // falsy, so a truthiness check would skip validation and silently fall
+  // through to the no-`by` path instead of rejecting a malformed pin.
+  if (by !== undefined && by !== null && !isSafeSnapshotFieldName(by)) {
+    throw new Error(
+      `Invalid \`by\` field name: ${JSON.stringify(by)}. ` +
+        `Must match ${SAFE_SNAPSHOT_FIELD_PATTERN.source}.`
+    );
+  }
   const explicitFields = by ? [by] : null;
   // Cache resolved field sets per entity_type for the duration of one call so
   // a cross-type snapshot scan does not re-load the same schema repeatedly.
@@ -299,9 +334,101 @@ export async function retrieveEntityByIdentifierWithFallback(
   }
 
   if (directEntities.length === 0) {
-    // Snapshot-field pass: walk entity_snapshots (optionally filtered by type)
-    // and JS-match name/title/email/domain/company so identifiers that never
-    // reached canonical_name or aliases still resolve.
+    // Snapshot-field pass: resolve identifiers that never reached
+    // canonical_name or aliases (e.g. an email/phone that isn't the
+    // canonical_name) by matching declared identity fields in the snapshot.
+    //
+    // #1963-adjacent scale bug: the JS scan below loads an *unordered,
+    // 500-row* window of entity_snapshots and filters in memory. On an
+    // instance with thousands of entities, an exact email/phone whose row
+    // sits outside that arbitrary window is never examined, so by="email"
+    // /by="phone" lookups (and identify_entity_by_signals, which sits on
+    // this) silently return nothing even for values present verbatim in a
+    // snapshot. First do a targeted, index-friendly server-side exact match
+    // on the known identity fields via `snapshot->>{field}`, which the DB can
+    // satisfy from any row regardless of the window; keep the bounded JS scan
+    // only as a fuzzy/token fallback.
+    const snapshotMatches: SnapshotRow[] = [];
+
+    // Server-side exact-equality pre-pass. When an explicit `by` is given,
+    // only that field is scanned. Otherwise the field set must go through the
+    // same per-type resolution as the JS-scan fallback (`snapshotFieldsForType`)
+    // so type-declared identity_search_fields (e.g. financial_account's
+    // institution/account_name, #1495) get exact-pass coverage too — not just
+    // the generic base set. When `entityType` is filtered, the type is known
+    // up front and its fields are resolved once; when it is not, the fields
+    // are resolved per matched row's entity_type after fetching.
+    //
+    // Case-insensitive match: compares `lower(snapshot->>field)` against the
+    // lowercased identifier so this pre-pass has the same case-insensitive
+    // contract as the JS-scan fallback (`snapshotFieldsMatch` lowercases both
+    // sides). Without this, a snapshot value stored with different casing
+    // than the query (e.g. `Mixed.Case@Example.com` vs a lowercase query)
+    // would silently fail to resolve via the exact pass, regressing the
+    // scale-safety this fix exists to provide for mixed-case data (#1981).
+    const exactMatchIds = new Set<string>();
+    if (explicitFields) {
+      for (const field of explicitFields) {
+        let exactQuery = db
+          .from("entity_snapshots")
+          .select("entity_id, entity_type, snapshot")
+          .eq("user_id", userId)
+          .eq(`lower(snapshot->>${field})`, needleLower);
+        if (entityType) {
+          exactQuery = exactQuery.eq("entity_type", entityType);
+        }
+        const { data: exactRows } = await exactQuery.limit(limit);
+        for (const row of (exactRows as SnapshotRow[] | null) || []) {
+          if (exactMatchIds.has(row.entity_id)) continue;
+          exactMatchIds.add(row.entity_id);
+          snapshotMatches.push(row);
+        }
+      }
+    } else if (entityType) {
+      // Known type up front: resolve its identity_search_fields once and
+      // query only those fields, exactly like the JS-scan fallback does.
+      // Defence in depth: these come from the schema registry rather than the
+      // caller, but they still become SQL column paths, so any name that isn't
+      // a plain identifier is skipped here and left to the JS-scan fallback
+      // (which does a safe in-memory property lookup) rather than interpolated.
+      const fields = (await snapshotFieldsForType(entityType)).filter(isSafeSnapshotFieldName);
+      for (const field of fields) {
+        const { data: exactRows } = await db
+          .from("entity_snapshots")
+          .select("entity_id, entity_type, snapshot")
+          .eq("user_id", userId)
+          .eq("entity_type", entityType)
+          .eq(`lower(snapshot->>${field})`, needleLower)
+          .limit(limit);
+        for (const row of (exactRows as SnapshotRow[] | null) || []) {
+          if (exactMatchIds.has(row.entity_id)) continue;
+          exactMatchIds.add(row.entity_id);
+          snapshotMatches.push(row);
+        }
+      }
+    } else {
+      // No `by`, no entityType filter: the base set is queried directly
+      // (cheap, index-friendly), but any row that only matches on a
+      // type-declared field (not in the base set) is picked up by the
+      // bounded JS-scan fallback below via snapshotFieldsForType per row.
+      for (const field of BASE_SNAPSHOT_SEARCH_FIELDS) {
+        const { data: exactRows } = await db
+          .from("entity_snapshots")
+          .select("entity_id, entity_type, snapshot")
+          .eq("user_id", userId)
+          .eq(`lower(snapshot->>${field})`, needleLower)
+          .limit(limit);
+        for (const row of (exactRows as SnapshotRow[] | null) || []) {
+          if (exactMatchIds.has(row.entity_id)) continue;
+          exactMatchIds.add(row.entity_id);
+          snapshotMatches.push(row);
+        }
+      }
+    }
+
+    // Bounded JS scan for fuzzy/substring/token matches the exact pre-pass
+    // can't express. Still capped, but now it only needs to catch the
+    // non-exact cases — exact identifiers are already resolved above.
     let snapshotQuery = db
       .from("entity_snapshots")
       .select("entity_id, entity_type, snapshot")
@@ -310,8 +437,8 @@ export async function retrieveEntityByIdentifierWithFallback(
       snapshotQuery = snapshotQuery.eq("entity_type", entityType);
     }
     const { data: snapshotRows } = await snapshotQuery.limit(500);
-    const snapshotMatches: SnapshotRow[] = [];
     for (const row of (snapshotRows as SnapshotRow[] | null) || []) {
+      if (exactMatchIds.has(row.entity_id)) continue;
       const fields = await snapshotFieldsForType(row.entity_type);
       if (snapshotFieldsMatch(row.snapshot, needleLower, fields)) {
         snapshotMatches.push(row);
