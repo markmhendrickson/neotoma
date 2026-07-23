@@ -3,6 +3,16 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { deriveMcpAuthToken, hexToKey, mnemonicToSeed } from "../crypto/key_derivation.js";
 
+/**
+ * Default lifetime for a KEY-ENTRY gate session — the short window in which a
+ * user pastes a private key / mnemonic / bearer token. Deliberately brief.
+ *
+ * Sign-in sessions are a different concern with a different expectation (a user
+ * signed in with Google expects to stay signed in), so callers pass their own
+ * TTL rather than inheriting this one. See SIGN_IN_SESSION_TTL_MS in actions.ts
+ * and issue #2005 — reusing this 15-minute default for Google sign-in is what
+ * logged hosted-instance users out every quarter hour.
+ */
 const DEFAULT_SESSION_TTL_MS = 15 * 60 * 1000;
 
 export type OAuthKeyCredentials = {
@@ -14,16 +24,25 @@ export type OAuthKeyCredentials = {
 
 export class OAuthKeySessionStore {
   private readonly sessions = new Map<string, number>();
+  /**
+   * Optional user binding for a session (set by the Google sign-in callback).
+   * Kept in the SAME store as the expiry so a bound user can never outlive its
+   * session — a separate module-level map had no TTL and grew unbounded (#2005).
+   */
+  private readonly boundUsers = new Map<string, string>();
   private readonly ttlMs: number;
 
   constructor(ttlMs: number = DEFAULT_SESSION_TTL_MS) {
     this.ttlMs = ttlMs;
   }
 
-  create(nowMs: number = Date.now()): string {
+  /** Create a session. `ttlMsOverride` lets a caller (e.g. sign-in) use a
+   *  longer lifetime than the short key-entry default. */
+  create(nowMs: number = Date.now(), ttlMsOverride?: number): string {
     this.cleanup(nowMs);
     const token = randomUUID();
-    this.sessions.set(token, nowMs + this.ttlMs);
+    const ttl = ttlMsOverride != null && ttlMsOverride > 0 ? ttlMsOverride : this.ttlMs;
+    this.sessions.set(token, nowMs + ttl);
     return token;
   }
 
@@ -33,14 +52,34 @@ export class OAuthKeySessionStore {
     if (expiresAt == null) return false;
     if (expiresAt <= nowMs) {
       this.sessions.delete(token);
+      this.boundUsers.delete(token);
       return false;
     }
     return true;
   }
 
+  /** Bind a resolved user_id to a live session. No-op for an invalid token, so
+   *  a binding can never resurrect or outlast an expired session. */
+  bindUser(token: string, userId: string, nowMs: number = Date.now()): boolean {
+    if (!this.isValid(token, nowMs)) return false;
+    this.boundUsers.set(token, userId);
+    return true;
+  }
+
+  /** Resolve the bound user for a session, or undefined when the session is
+   *  absent/expired. Expiry is enforced here, not just at write time. */
+  getBoundUser(token: string | undefined, nowMs: number = Date.now()): string | undefined {
+    if (!token) return undefined;
+    if (!this.isValid(token, nowMs)) return undefined;
+    return this.boundUsers.get(token);
+  }
+
   cleanup(nowMs: number = Date.now()): void {
     for (const [token, expiresAt] of this.sessions.entries()) {
-      if (expiresAt <= nowMs) this.sessions.delete(token);
+      if (expiresAt <= nowMs) {
+        this.sessions.delete(token);
+        this.boundUsers.delete(token);
+      }
     }
   }
 }
