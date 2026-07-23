@@ -1380,7 +1380,9 @@ export function isLocalRequest(req: express.Request): boolean {
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
-const oauthKeySessions = new OAuthKeySessionStore();
+/** Exported for tests asserting the cookie maxAge and the server-side session
+ *  expiry agree — the invariant setOAuthKeySessionCookie's docstring names. */
+export const oauthKeySessions = new OAuthKeySessionStore();
 
 /**
  * Lifetime of a SIGN-IN session (Google). Distinct from the key-entry gate's
@@ -1390,13 +1392,27 @@ const oauthKeySessions = new OAuthKeySessionStore();
  *
  * Override with NEOTOMA_SIGN_IN_SESSION_TTL_MIN (minutes). Default 7 days.
  */
-const SIGN_IN_SESSION_TTL_MS =
-  Math.max(
-    1,
-    Number.parseInt(process.env.NEOTOMA_SIGN_IN_SESSION_TTL_MIN || "", 10) || 7 * 24 * 60
-  ) *
-  60 *
-  1000;
+export const DEFAULT_SIGN_IN_SESSION_TTL_MIN = 7 * 24 * 60;
+
+/**
+ * Parse NEOTOMA_SIGN_IN_SESSION_TTL_MIN into milliseconds. Exported (and pure)
+ * so the override's precedence and malformed-input behavior are directly
+ * testable — a silently-wrong TTL here reintroduces exactly the desync class
+ * this change fixes.
+ *
+ * Precedence: a positive integer wins; unset / non-numeric / zero / negative
+ * all fall back to the 7-day default rather than producing a degenerate
+ * (e.g. 1-minute) session.
+ */
+export function resolveSignInSessionTtlMs(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw || "", 10);
+  const minutes = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SIGN_IN_SESSION_TTL_MIN;
+  return minutes * 60 * 1000;
+}
+
+const SIGN_IN_SESSION_TTL_MS = resolveSignInSessionTtlMs(
+  process.env.NEOTOMA_SIGN_IN_SESSION_TTL_MIN
+);
 
 function readCookie(req: express.Request, name: string): string | undefined {
   const header = (req.headers["cookie"] || req.headers["Cookie"] || "") as string;
@@ -1635,7 +1651,7 @@ function hasValidOAuthKeySession(req: express.Request): boolean {
  * Omit it for the short key-entry gate; pass SIGN_IN_SESSION_TTL_MS for
  * sign-in (#2005).
  */
-function setOAuthKeySessionCookie(
+export function setOAuthKeySessionCookie(
   req: express.Request,
   res: express.Response,
   ttlMs?: number
@@ -1658,7 +1674,7 @@ function setOAuthKeySessionCookie(
 }
 
 /** Resolve the local-auth user_id a Google-verified session (if any) mapped to this request. */
-function getGoogleVerifiedUserId(req: express.Request): string | undefined {
+export function getGoogleVerifiedUserId(req: express.Request): string | undefined {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
   // getBoundUser enforces session validity itself, so an expired session can
   // never resolve a user even if a binding is still in memory.
