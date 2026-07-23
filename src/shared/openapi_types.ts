@@ -1109,6 +1109,43 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/instance-policy": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Describe this instance's data policy
+     * @description Return the instance-level data policy (#1974/#1975): what this instance
+     *     is for, which entity types are in or out of scope, and which
+     *     person-data gates it enforces. Exposed over MCP as the
+     *     `describe_instance_policy` tool and over the CLI as
+     *     `neotoma instance-policy show`.
+     *
+     *     Call this before writing to an unfamiliar instance. Policy that is only
+     *     discoverable by being rejected is a worse experience than no policy at
+     *     all — this endpoint lets a cooperating client comply on the first
+     *     attempt rather than learning the rules through repeated denials.
+     *
+     *     Read-only: creates no sources, observations, or entities. Returns
+     *     `{"policy": null}` when no policy is configured — never a 404, and never
+     *     an empty object, so "unset" is never mistaken for "denies everything".
+     *
+     *     Requires a normal authenticated session. Policy shape can itself reveal
+     *     what kind of data an instance handles, so it is not exposed
+     *     unauthenticated.
+     */
+    get: operations["describeInstancePolicy"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/interpretations": {
     parameters: {
       query?: never;
@@ -2325,6 +2362,161 @@ export interface components {
           /** @description Human-readable description of the constraint violation. */
           message?: string;
         }[];
+      };
+    };
+    /**
+     * @description Instance-level data policy (#1974/#1975). Declares what this instance is
+     *     *for* and what it is allowed to hold. Instance-wide by design: a single
+     *     policy governs every write on the instance regardless of which
+     *     authenticated user issued it — the predicate evaluates the write's
+     *     content against the instance's stated purpose, not the caller's
+     *     identity. This is a deliberate, documented exception to per-user
+     *     scoping (`docs/subsystems/auth.md`), because an instance shared by
+     *     several operators must not enforce silently different rules per
+     *     operator.
+     *
+     *     Two layers consume this record. The advisory layer (#1974) renders it
+     *     into the client instructions served at connect time so a cooperating
+     *     agent can self-comply. The enforcement layer (#1975) evaluates it
+     *     server-side on every write, so a non-cooperating agent is rejected
+     *     regardless. Declaration improves the happy path; enforcement is the
+     *     guarantee.
+     */
+    InstancePolicy: {
+      /**
+       * @description Free text: what this instance is for. Rendered verbatim into the
+       *     served client instructions. Operator-authored and broadcast to every
+       *     connecting agent, so it MUST NOT contain secrets or PII.
+       */
+      purpose?: string;
+      /**
+       * @description Allow-list. When non-empty, ONLY these entity types may be written;
+       *     every other type is denied with `entity_type_denied`. When absent or
+       *     empty, no allow-list constraint applies (all types permitted subject
+       *     to the deny-list). An empty array is therefore NOT "deny all" — see
+       *     `enforcement` for how an unset policy is distinguished from an empty
+       *     one.
+       */
+      in_scope_entity_types?: string[];
+      /**
+       * @description Deny-list, evaluated after the allow-list. A type present here is
+       *     denied even if it also appears in `in_scope_entity_types`
+       *     (deny wins, so a mistaken overlap fails closed).
+       */
+      out_of_scope_entity_types?: string[];
+      /**
+       * @description Free-text minimization/lawful-basis statements rendered into the
+       *     served instructions. Advisory only — these strings are not parsed or
+       *     enforced. Machine-enforced predicates are the typed fields above
+       *     plus `require_lawful_basis` / `max_sensitivity_class`.
+       */
+      sensitivity_rules?: string[];
+      /**
+       * @description When true, a write of an entity whose schema declares
+       *     `person_data: true` must carry a non-empty lawful-basis field, or it
+       *     is denied with `pii_gate_missing_basis`. A present-but-blank value
+       *     is treated as missing (fails closed).
+       */
+      require_lawful_basis?: boolean;
+      /**
+       * @description When true, a write of a `person_data` entity must carry attribution/
+       *     consent metadata, or it is denied with `provenance_required`.
+       */
+      require_provenance?: boolean;
+      /**
+       * @description Highest field-level `sensitivity_class` this instance will hold. A
+       *     field whose schema declares a class above this threshold is denied
+       *     with `field_sensitivity_exceeded`. Read from the schema declaration,
+       *     never from a hardcoded per-type list.
+       * @enum {string|null}
+       */
+      max_sensitivity_class?: "public" | "internal" | "sensitive" | "restricted" | null;
+      /**
+       * @description `advisory` (#1974 only): the policy is declared in the served client
+       *     instructions but violating writes are still accepted. `enforced`
+       *     (#1975): violating writes are rejected with
+       *     `ERR_STORE_POLICY_DENIED`. Defaults to `advisory` so that adding a
+       *     policy record is not itself a breaking change for existing callers;
+       *     an operator opts into rejection explicitly.
+       * @enum {string}
+       */
+      enforcement?: "advisory" | "enforced";
+      /**
+       * @description Opaque short identifier (e.g. `pol_9f2a`) echoed in denial envelopes
+       *     so an operator can correlate a rejection with the policy revision
+       *     that caused it. Deliberately opaque: it describes no policy content.
+       */
+      policy_id?: string;
+      /** Format: date-time */
+      updated_at?: string;
+      /** @description Opaque actor identifier. Never an email address or name. */
+      updated_by?: string;
+    };
+    /**
+     * @description Response shape for `describe_instance_policy`. `policy` is explicitly
+     *     `null` when no policy is configured — never a 404 and never `{}`, so a
+     *     caller can distinguish "this instance has no policy" from "this instance
+     *     denies everything". Read-only; the call creates no observations.
+     */
+    InstancePolicyResponse: {
+      /** @description The configured instance policy, or `null` when unset. */
+      policy: components["schemas"]["InstancePolicy"] | null;
+    };
+    /**
+     * @description A single per-entity policy denial inside an `ERR_STORE_POLICY_DENIED`
+     *     response. Sibling to `StoreResolutionIssue`: that type means "malformed",
+     *     this one means "well-formed but not allowed here".
+     */
+    StorePolicyDenial: {
+      /** @description Zero-based index of the denied entity in the request `entities[]` array. */
+      entity_index: number;
+      entity_type?: string;
+      /**
+       * @description Machine-readable denial reason. Clients MUST treat an unrecognized
+       *     value as a hard denial and surface `hint` verbatim rather than
+       *     failing to parse — the enum is extensible by design.
+       * @enum {string}
+       */
+      reason_code:
+        | "entity_type_denied"
+        | "pii_gate_missing_basis"
+        | "field_sensitivity_exceeded"
+        | "provenance_required";
+      /**
+       * @description Actionable next step, naming the tool to call or the field to fix.
+       *     PII-free by construction: interpolated values are schema-declared
+       *     field *names* and configured policy values, never any fragment of the
+       *     submitted payload (guardrails MUST NOT 11).
+       */
+      hint: string;
+      /** @description Opaque identifier of the policy revision that produced this denial. */
+      policy_id?: string;
+    };
+    /**
+     * @description 400 response shape for `ERR_STORE_POLICY_DENIED`. Returned by `/store`
+     *     and `/correct` when a well-formed write is refused by the instance's
+     *     configured data policy.
+     *
+     *     Whole-request reject: NO entity in the request is persisted, even if only
+     *     one violated. `denied[]` enumerates every violating entity in the batch —
+     *     not just the first — so a caller discovers all violations in one round
+     *     trip. There is deliberately no `accepted[]` field: partial persistence
+     *     would introduce a mixed-commit state the ingestion path does not
+     *     otherwise have to reason about. If bulk-import callers need it later, an
+     *     opt-in `allow_partial: true` request flag is a backward-compatible
+     *     addition.
+     */
+    StorePolicyDeniedErrorEnvelope: {
+      error?: {
+        /** @enum {string} */
+        code?: "ERR_STORE_POLICY_DENIED";
+        /**
+         * @description States how many entities were denied and that zero were
+         *     persisted. Carries no upgrade text — actionable guidance belongs
+         *     in each denial's structured `hint` (guardrails MUST NOT 7).
+         */
+        message?: string;
+        denied?: components["schemas"]["StorePolicyDenial"][];
       };
     };
     /**
@@ -5724,6 +5916,26 @@ export interface operations {
       };
     };
   };
+  describeInstancePolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The configured instance policy, or null when unset. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InstancePolicyResponse"];
+        };
+      };
+    };
+  };
   listInterpretations: {
     parameters: {
       query?: {
@@ -5891,7 +6103,11 @@ export interface operations {
        *     a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
        *     `ERR_IDEMPOTENCY_MISMATCH` is returned when the same `idempotency_key`
        *     is reused with materially different content — use a new key for a
-       *     different payload. Other validation errors fall back to the generic
+       *     different payload. `ERR_STORE_POLICY_DENIED` is returned when the
+       *     write is well-formed but refused by this instance's configured data
+       *     policy; the whole request is rejected and `denied[]` enumerates every
+       *     violating entity — call `describe_instance_policy` to read the policy
+       *     before retrying. Other validation errors fall back to the generic
        *     `ErrorEnvelope`.
        */
       400: {
@@ -5902,6 +6118,7 @@ export interface operations {
           "application/json":
             | components["schemas"]["StoreResolutionErrorEnvelope"]
             | components["schemas"]["ConstraintViolationErrorEnvelope"]
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
             | components["schemas"]["ErrorEnvelope"];
         };
       };
@@ -7487,6 +7704,25 @@ export interface operations {
               field?: string;
             };
           };
+        };
+      };
+      /**
+       * @description Correction rejected. `ERR_STORE_POLICY_DENIED` is returned when the
+       *     correction is well-formed but refused by this instance's configured
+       *     data policy — for example correcting a field whose schema-declared
+       *     `sensitivity_class` exceeds the instance's configured maximum. No
+       *     observation is written. Call `describe_instance_policy` to read the
+       *     policy before retrying. Other validation errors use the generic
+       *     `ErrorEnvelope`.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
         };
       };
       /**

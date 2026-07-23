@@ -165,6 +165,49 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
     await cleanupUserData(userB);
   });
 
+  describe("/instance-policy", () => {
+    // MUST 5 requires a row for every new authenticated endpoint. This one is
+    // deliberately the INVERSE of the usual assertion, and the distinction is
+    // the whole point of the feature (#1974/#1975):
+    //
+    // `instance_policy` is instance-scoped state, not user-owned data. A single
+    // policy answers "may THIS INSTANCE hold this?" — a question about the
+    // instance's purpose, not the caller's identity. On a shared, multi-operator
+    // instance (the exact case the feature targets), two operators must not get
+    // silently different enforcement. So every authenticated caller correctly
+    // sees the same policy.
+    //
+    // The isolation risk here is therefore under-scoping, not over-scoping: the
+    // bug to guard against is someone "fixing" this into a per-user_id lookup,
+    // which would let each operator set their own rules and defeat the control.
+    // The endpoint accepts no user_id or instance identifier at all, so there is
+    // no parameter through which one caller could address another scope.
+    it("returns the same instance-wide policy to every authenticated caller", async () => {
+      const asA = await callGet("/instance-policy", { user_id: userA.userId });
+      const asB = await callGet("/instance-policy", { user_id: userB.userId });
+
+      expect(asA.status).toBe(200);
+      expect(asB.status).toBe(200);
+      // Identical payload regardless of caller. On an instance with no policy
+      // configured this is `{ policy: null }` for both — still a meaningful
+      // assertion, since a per-user implementation would be free to diverge.
+      expect(asA.json).toEqual(asB.json);
+      expect(asA.json).toHaveProperty("policy");
+    });
+
+    it("never leaks user-owned rows through the policy surface", async () => {
+      // Whatever it returns must be policy config, never entity data — a
+      // regression here would mean the read path had been pointed at the
+      // entity graph without instance scoping.
+      const { json } = await callGet("/instance-policy", { user_id: userA.userId });
+      const serialized = JSON.stringify(json);
+      expect(serialized).not.toContain(userA.entityId);
+      expect(serialized).not.toContain(userB.entityId);
+      expect(serialized).not.toContain(userA.sourceId);
+      expect(serialized).not.toContain(userB.sourceId);
+    });
+  });
+
   describe("/list_relationships", () => {
     it("user A querying their own entity_id returns scoped result", async () => {
       const { status, json } = await callEndpoint("/list_relationships", {

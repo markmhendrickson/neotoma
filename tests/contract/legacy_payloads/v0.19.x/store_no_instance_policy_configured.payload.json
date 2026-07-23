@@ -1,0 +1,10 @@
+{
+  "entities": [
+    {
+      "entity_type": "payment_profile",
+      "provider": "legacy-corpus-provider",
+      "account_label": "legacy-corpus-account"
+    }
+  ],
+  "idempotency_key": "legacy-corpus-store-no-instance-policy-v019"
+}
