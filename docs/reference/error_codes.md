@@ -397,6 +397,73 @@ identifies the observation by its zero-based `observation_index` in the request
 which constraint rule was violated. Callers MUST NOT retry the same payload —
 fix the offending field value(s) first, then re-submit.
 
+## ERR_STORE_POLICY_DENIED
+
+Hard-rejection error returned by `/store` and `/correct` when a write is
+**well-formed but not allowed on this instance** — refused by the instance data
+policy (#1974/#1975). This is the schema-vs-policy distinction: schema
+validation asks "is this shape valid?"; store policy asks "is this instance
+allowed to hold this, given what it is for?" A payload that is perfectly valid
+against its schema can still be denied here.
+
+Only returned when the instance policy sets `enforcement: "enforced"`. Under the
+default `advisory` posture the policy is declared to agents but violating writes
+are accepted.
+
+| Code                      | HTTP | Retry? | Description                                                              |
+| ------------------------- | ---- | ------ | ------------------------------------------------------------------------ |
+| `ERR_STORE_POLICY_DENIED` | 400  | No     | One or more entities were refused by this instance's configured data policy. |
+
+**Whole-request reject.** NOTHING is persisted, including entities in the batch
+that did not themselves violate. `denied[]` enumerates every violating entity —
+not just the first — so a caller discovers all problems in one round trip. There
+is deliberately no `accepted[]` field: partial persistence would create a mixed
+commit state, and the store path has no transaction to roll back with.
+
+Response shape (`StorePolicyDeniedErrorEnvelope`):
+
+```json
+{
+  "error": {
+    "code": "ERR_STORE_POLICY_DENIED",
+    "message": "1 entity rejected by instance policy; 0 persisted",
+    "denied": [
+      {
+        "entity_index": 1,
+        "entity_type": "payment_profile",
+        "reason_code": "entity_type_denied",
+        "hint": "This instance's policy denies entity_type 'payment_profile'. Call describe_instance_policy to see the allow/deny list before retrying.",
+        "policy_id": "pol_9f2a"
+      }
+    ]
+  }
+}
+```
+
+`reason_code` values:
+
+| `reason_code`                | Meaning                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `entity_type_denied`         | The entity type is deny-listed, or absent from a configured allow-list.     |
+| `pii_gate_missing_basis`     | A `person_data` type was written without its lawful-basis/purpose field.    |
+| `provenance_required`        | A `person_data` type was written without attribution/consent metadata.      |
+| `field_sensitivity_exceeded` | A field's declared `sensitivity_class` exceeds the instance's configured maximum. |
+
+Callers MUST NOT retry the same payload. Read each entry's `hint` — it names the
+field to add or the tool to call — then fix the payload, drop the out-of-scope
+entities, or route that data to an instance whose policy permits it. Call
+`describe_instance_policy` (MCP), `GET /instance-policy` (REST), or
+`neotoma instance-policy show` (CLI) to read the policy up front and avoid the
+rejection entirely.
+
+Treat an **unrecognized `reason_code`** as a hard denial and surface
+`message`/`hint` verbatim rather than failing to parse — the taxonomy is
+extensible by design.
+
+No PII appears in this envelope: interpolated values are schema-declared field
+*names* and configured policy values, never any fragment of the submitted
+payload.
+
 ## Validation Errors
 
 | Code                        | HTTP | Retry? | Description                          |
