@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SIGN_IN_SESSION_TTL_MIN,
+  MAX_SIGN_IN_SESSION_TTL_MIN,
   getGoogleVerifiedUserId,
   oauthKeySessions,
   resolveSignInSessionTtlMs,
@@ -60,6 +61,24 @@ describe("sign-in session TTL wiring (#2005)", () => {
       // have produced a near-unusable session from a typo'd env value.
       expect(resolveSignInSessionTtlMs("0")).toBe(defaultMs);
       expect(resolveSignInSessionTtlMs("-5")).toBe(defaultMs);
+    });
+
+    // The low end was guarded but the high end was not (#2007 qa lens): without
+    // a ceiling, an extra zero produced a session outliving the server itself.
+    it("falls back to the default above the ceiling rather than an unbounded session", () => {
+      expect(resolveSignInSessionTtlMs(String(MAX_SIGN_IN_SESSION_TTL_MIN))).toBe(
+        MAX_SIGN_IN_SESSION_TTL_MIN * 60 * 1000
+      );
+      expect(resolveSignInSessionTtlMs(String(MAX_SIGN_IN_SESSION_TTL_MIN + 1))).toBe(defaultMs);
+      // ~19 million years before the ceiling existed.
+      expect(resolveSignInSessionTtlMs("9999999999999")).toBe(defaultMs);
+    });
+
+    it("documents parseInt semantics for decimals and scientific notation", () => {
+      // Both are in-range integers after parsing, so they are accepted as-is.
+      // Asserted so the behavior is documented rather than incidental.
+      expect(resolveSignInSessionTtlMs("7.5")).toBe(7 * 60 * 1000);
+      expect(resolveSignInSessionTtlMs("1e10")).toBe(60 * 1000);
     });
   });
 

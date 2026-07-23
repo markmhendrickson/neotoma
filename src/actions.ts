@@ -1394,19 +1394,33 @@ export const oauthKeySessions = new OAuthKeySessionStore();
  */
 export const DEFAULT_SIGN_IN_SESSION_TTL_MIN = 7 * 24 * 60;
 
+/** Upper bound for the sign-in TTL override: 365 days in minutes. A value past
+ *  this is a typo (an extra zero), not an intent — without a ceiling,
+ *  "9999999999999" yields a ~19-million-year session. Mirrors the low-end
+ *  guard rather than guarding only one side (#2007 qa lens). */
+export const MAX_SIGN_IN_SESSION_TTL_MIN = 365 * 24 * 60;
+
 /**
  * Parse NEOTOMA_SIGN_IN_SESSION_TTL_MIN into milliseconds. Exported (and pure)
  * so the override's precedence and malformed-input behavior are directly
  * testable — a silently-wrong TTL here reintroduces exactly the desync class
  * this change fixes.
  *
- * Precedence: a positive integer wins; unset / non-numeric / zero / negative
- * all fall back to the 7-day default rather than producing a degenerate
- * (e.g. 1-minute) session.
+ * Precedence: an integer within (0, MAX_SIGN_IN_SESSION_TTL_MIN] wins.
+ * Everything else — unset, non-numeric, zero, negative, or above the ceiling —
+ * falls back to the 7-day default rather than producing a degenerate session.
+ *
+ * Note on parseInt semantics, deliberately kept: "7.5" truncates to 7 minutes
+ * and "1e10" parses as 1 minute (parseInt stops at the 'e'). Both are accepted
+ * as-is because they are in-range integers after parsing; the fallback exists
+ * for values that are absent, unparseable, or out of range, not to second-guess
+ * a caller who wrote a decimal. Asserted in tests so the behavior is documented
+ * rather than incidental.
  */
 export function resolveSignInSessionTtlMs(raw: string | undefined): number {
   const parsed = Number.parseInt(raw || "", 10);
-  const minutes = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SIGN_IN_SESSION_TTL_MIN;
+  const inRange = Number.isFinite(parsed) && parsed > 0 && parsed <= MAX_SIGN_IN_SESSION_TTL_MIN;
+  const minutes = inRange ? parsed : DEFAULT_SIGN_IN_SESSION_TTL_MIN;
   return minutes * 60 * 1000;
 }
 
