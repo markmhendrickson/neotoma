@@ -185,6 +185,41 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(result.guest_access_token).toBe("token-abc");
     });
 
+    // Regression for #2014: submitIssue's remote leg silently dropped all five
+    // reporter-provenance fields when calling submitIssueToRemote, so the remote
+    // rejected with ERR_REPORTER_ENVIRONMENT_REQUIRED even though the caller
+    // supplied them. Assert the fields actually reach submitIssueToRemote's
+    // params (camelCase), not just that local storage keeps them.
+    it("forwards all five reporter provenance fields to submitIssueToRemote", async () => {
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["remote-issue-1", "remote-conv-1"],
+        issue_entity_id: "remote-issue-1",
+        conversation_id: "remote-conv-1",
+        access_token: "token-abc",
+      });
+
+      await submitIssue(ops, {
+        title: "Public Bug",
+        body: "Something broke",
+        visibility: "public",
+        reporter_git_sha: "fdbd27f",
+        reporter_app_version: "0.18.8",
+        reporter_git_ref: "refs/heads/main",
+        reporter_channel: "stable",
+        reporter_ci_run_id: "run-42",
+      });
+
+      expect(mockSubmitIssueToRemote).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reporterGitSha: "fdbd27f",
+          reporterAppVersion: "0.18.8",
+          reporterGitRef: "refs/heads/main",
+          reporterChannel: "stable",
+          reporterCiRunId: "run-42",
+        })
+      );
+    });
+
     it("does NOT push to GitHub when Neotoma submission fails", async () => {
       // Neotoma fails → GitHub must NOT be published (resolves #944)
       mockSubmitIssueToRemote.mockRejectedValue(new Error("Remote submission failed"));
