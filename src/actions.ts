@@ -1380,18 +1380,53 @@ export function isLocalRequest(req: express.Request): boolean {
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
-const oauthKeySessions = new OAuthKeySessionStore();
+/** Exported for tests asserting the cookie maxAge and the server-side session
+ *  expiry agree — the invariant setOAuthKeySessionCookie's docstring names. */
+export const oauthKeySessions = new OAuthKeySessionStore();
 
 /**
- * Maps an OAuth key-session token to the user_id resolved via Google
- * sign-in for that browser session. Populated only by the
- * `/mcp/oauth/google/callback` route; every other credential path
- * (private key / mnemonic / bearer) never writes here, so
- * `/mcp/oauth/local-login` falls through to `ensureLocalDevUser()`
- * exactly as before when this map has no entry — behavior for every
- * existing deploy (Google flag off) is unchanged.
+ * Lifetime of a SIGN-IN session (Google). Distinct from the key-entry gate's
+ * short default: a user who signs in expects to stay signed in, whereas the
+ * key-entry gate deliberately closes fast. Reusing the 15-minute gate TTL for
+ * sign-in is what logged hosted-instance users out every quarter hour (#2005).
+ *
+ * Override with NEOTOMA_SIGN_IN_SESSION_TTL_MIN (minutes). Default 7 days.
  */
-const googleVerifiedUserBySessionToken = new Map<string, string>();
+export const DEFAULT_SIGN_IN_SESSION_TTL_MIN = 7 * 24 * 60;
+
+/** Upper bound for the sign-in TTL override: 365 days in minutes. A value past
+ *  this is a typo (an extra zero), not an intent — without a ceiling,
+ *  "9999999999999" yields a ~19-million-year session. Mirrors the low-end
+ *  guard rather than guarding only one side (#2007 qa lens). */
+export const MAX_SIGN_IN_SESSION_TTL_MIN = 365 * 24 * 60;
+
+/**
+ * Parse NEOTOMA_SIGN_IN_SESSION_TTL_MIN into milliseconds. Exported (and pure)
+ * so the override's precedence and malformed-input behavior are directly
+ * testable — a silently-wrong TTL here reintroduces exactly the desync class
+ * this change fixes.
+ *
+ * Precedence: an integer within (0, MAX_SIGN_IN_SESSION_TTL_MIN] wins.
+ * Everything else — unset, non-numeric, zero, negative, or above the ceiling —
+ * falls back to the 7-day default rather than producing a degenerate session.
+ *
+ * Note on parseInt semantics, deliberately kept: "7.5" truncates to 7 minutes
+ * and "1e10" parses as 1 minute (parseInt stops at the 'e'). Both are accepted
+ * as-is because they are in-range integers after parsing; the fallback exists
+ * for values that are absent, unparseable, or out of range, not to second-guess
+ * a caller who wrote a decimal. Asserted in tests so the behavior is documented
+ * rather than incidental.
+ */
+export function resolveSignInSessionTtlMs(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw || "", 10);
+  const inRange = Number.isFinite(parsed) && parsed > 0 && parsed <= MAX_SIGN_IN_SESSION_TTL_MIN;
+  const minutes = inRange ? parsed : DEFAULT_SIGN_IN_SESSION_TTL_MIN;
+  return minutes * 60 * 1000;
+}
+
+const SIGN_IN_SESSION_TTL_MS = resolveSignInSessionTtlMs(
+  process.env.NEOTOMA_SIGN_IN_SESSION_TTL_MIN
+);
 
 function readCookie(req: express.Request, name: string): string | undefined {
   const header = (req.headers["cookie"] || req.headers["Cookie"] || "") as string;
@@ -1623,8 +1658,19 @@ function hasValidOAuthKeySession(req: express.Request): boolean {
   return oauthKeySessions.isValid(token);
 }
 
-function setOAuthKeySessionCookie(req: express.Request, res: express.Response): string {
-  const token = oauthKeySessions.create();
+/**
+ * Issue an OAuth key-session cookie. `ttlMs` covers BOTH the server-side
+ * session and the cookie's own maxAge — they must agree, or the browser keeps
+ * presenting a cookie the server has already forgotten (or vice versa).
+ * Omit it for the short key-entry gate; pass SIGN_IN_SESSION_TTL_MS for
+ * sign-in (#2005).
+ */
+export function setOAuthKeySessionCookie(
+  req: express.Request,
+  res: express.Response,
+  ttlMs?: number
+): string {
+  const token = oauthKeySessions.create(Date.now(), ttlMs);
   const forwardedProto =
     ((req.headers["x-forwarded-proto"] || req.headers["X-Forwarded-Proto"]) as string | undefined)
       ?.split(",")[0]
@@ -1636,16 +1682,17 @@ function setOAuthKeySessionCookie(req: express.Request, res: express.Response): 
     sameSite: "lax",
     secure,
     path: "/mcp/oauth",
-    maxAge: 15 * 60 * 1000,
+    maxAge: ttlMs != null && ttlMs > 0 ? ttlMs : 15 * 60 * 1000,
   });
   return token;
 }
 
 /** Resolve the local-auth user_id a Google-verified session (if any) mapped to this request. */
-function getGoogleVerifiedUserId(req: express.Request): string | undefined {
+export function getGoogleVerifiedUserId(req: express.Request): string | undefined {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
-  if (!token || !oauthKeySessions.isValid(token)) return undefined;
-  return googleVerifiedUserBySessionToken.get(token);
+  // getBoundUser enforces session validity itself, so an expired session can
+  // never resolve a user even if a binding is still in memory.
+  return oauthKeySessions.getBoundUser(token);
 }
 
 /**
@@ -2781,8 +2828,10 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // mnemonic/bearer path sets. `/mcp/oauth/authorize` -> `/mcp/oauth/
     // local-login` then runs completely unmodified, except local-login now
     // resolves the user via this session instead of always ensureLocalDevUser().
-    const sessionToken = setOAuthKeySessionCookie(req, res);
-    googleVerifiedUserBySessionToken.set(sessionToken, resolvedUserId);
+    // Sign-in gets the long session TTL, not the key-entry gate's 15 minutes,
+    // and the user binding lives in the same store so it expires with it (#2005).
+    const sessionToken = setOAuthKeySessionCookie(req, res, SIGN_IN_SESSION_TTL_MS);
+    oauthKeySessions.bindUser(sessionToken, resolvedUserId);
 
     return res.redirect(nextPath);
   } catch (error: any) {
@@ -3434,6 +3483,29 @@ function guestWriteRateLimit(
   void guestWriteRateLimitMiddleware(req, res, next);
 }
 
+/**
+ * Issue *submission* is the one route a third party may reach with no identity
+ * at all: the guest access token is minted BY the submit, so requiring one to
+ * perform it is a chicken-and-egg that closes the inbox to first contact.
+ *
+ * Deliberately submit-only. `add_message` stays authenticated: by the time a
+ * reporter has a thread to append to, they hold the token returned by their
+ * submit, so anonymity buys nothing there — and letting an unidentified caller
+ * write into an existing thread is a strictly wider blast radius than letting
+ * them open a new one. The token is what proves "I opened this thread".
+ */
+export function routeAcceptsAnonymousIssueSubmit(
+  req: Pick<express.Request, "method" | "path">
+): boolean {
+  return (
+    req.method === "POST" && (req.path === "/issues/submit" || req.path === "/api/issues/submit")
+  );
+}
+
+function buildAnonymousGuestPrincipal(): GuestPrincipal {
+  return { kind: "guest", guestId: {}, agentIdentity: null, accessToken: undefined };
+}
+
 function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | null {
   const agentIdentity = getCurrentAgentIdentity();
   const accessToken = guestAccessTokenFromRequest(req);
@@ -3457,7 +3529,20 @@ function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | 
 async function maybeStampGuestPrincipal(req: express.Request): Promise<boolean> {
   if (!routeAcceptsGuestPrincipal(req)) return false;
   const guestPrincipal = buildGuestPrincipalFromRequest(req);
-  if (!guestPrincipal) return false;
+  if (!guestPrincipal) {
+    // No AAuth signature and no guest token: for issue submission this is the
+    // NORMAL first contact from a third party's agent, since the token is an
+    // OUTPUT of the submit rather than a precondition for it (#1953). Remains
+    // the operator's switch — NEOTOMA_ACCESS_POLICY_ISSUE=closed shuts it.
+    if (!routeAcceptsAnonymousIssueSubmit(req)) return false;
+    const { resolveAccessPolicy } = await import("./services/access_policy.js");
+    const mode = await resolveAccessPolicy("issue");
+    if (mode !== "submit_only" && mode !== "submitter_scoped" && mode !== "open") {
+      return false;
+    }
+    stampGuestPrincipal(req, buildAnonymousGuestPrincipal());
+    return true;
+  }
 
   const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
   if (headerAuth.startsWith("Bearer ") && guestPrincipal.accessToken) {
@@ -9934,6 +10019,10 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
             author: parsed.data.author,
             local_issue_id: parsed.data.local_issue_id,
             submission_timestamp: parsed.data.submission_timestamp,
+            reporter_git_sha: parsed.data.reporter_git_sha,
+            reporter_git_ref: parsed.data.reporter_git_ref,
+            reporter_channel: parsed.data.reporter_channel,
+            reporter_app_version: parsed.data.reporter_app_version,
           });
           return {
             issue_number: 0,
