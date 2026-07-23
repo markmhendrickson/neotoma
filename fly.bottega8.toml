@@ -1,0 +1,66 @@
+# Fly.io config for a dedicated per-client hosted instance.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# The repo's default `fly.toml` declares `app = 'neotoma-sandbox'`, so a client
+# instance deployed with it inherits the SANDBOX's machine policy by accident —
+# including `min_machines_running = 0`. That is wrong for a client instance and
+# caused a real outage class: MCP-over-HTTP sessions are held IN MEMORY, so when
+# the single machine idled down, clients got
+#   "Service Unavailable: MCP session is unknown"
+# and had to re-authenticate. The fix was originally made on a feature branch
+# (`fix(deploy): keep bottega8 machine always-on so MCP sessions survive`) but
+# was dropped by the squash-merge of #1924 — the squash carried the code and not
+# the fly.toml change — so `main` silently regressed to the idling config.
+#
+# Setting autostop on the machine alone is NOT durable: `flyctl deploy` applies
+# the config file to machines, so a deploy with the default `fly.toml` re-asserts
+# `auto_stop_machines`. The policy has to live in the config the deploy uses.
+#
+# USAGE
+#   flyctl deploy -c fly.bottega8.toml \
+#     --app bottega8-neotoma \
+#     --build-arg VITE_NEOTOMA_SANDBOX_UI="" \
+#     --build-arg VITE_PUBLIC_BASE_PATH="/" \
+#     --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)" \
+#     --no-cache
+#
+# `--app` is still passed explicitly so a wrong-file invocation cannot silently
+# retarget another app. See docs/infrastructure/client_instance_deployment.md.
+#
+# NOTE: this file is intentionally client-agnostic in content — it carries no
+# secrets and no client data. Secrets are set with `flyctl secrets set` and
+# materialize from the private encrypted store, never from this repo.
+
+app = 'bottega8-neotoma'
+primary_region = 'iad'
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  NEOTOMA_ENV = "production"
+  # Must match internal_port (Fly routes to this port on the machine)
+  HTTP_PORT = "3180"
+  NEOTOMA_HTTP_PORT = "3180"
+
+[http_service]
+  internal_port = 3180
+  force_https = true
+  # Always-on. Do NOT set this back to 'stop'/0: MCP sessions are in-memory and
+  # are wiped on any stop/start, which surfaces to the client as an auth/session
+  # timeout after an idle period. Single small machine; the cost is trivial next
+  # to a client-visible session drop.
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[[mounts]]
+  source = "data"
+  destination = "/app/data"
