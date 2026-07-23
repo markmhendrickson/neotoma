@@ -4,6 +4,10 @@ One entry per payload whose declared `outcome` changed in a release. The release
 
 Format: one bullet per flip, keyed by the Neotoma version that introduced the new outcome. Name the fixture path and the before/after state.
 
+## v0.19.0
+
+- `v0.19.x/store_no_instance_policy_configured` seeded as `valid` (no flip). Instance store-policy enforcement (#1974/#1975) adds a new error code `ERR_STORE_POLICY_DENIED`, but it is **not** a breaking change: an instance with no `instance_policy` entity denies nothing, and a configured policy defaults to `enforcement: "advisory"` (declared to agents, violating writes still accepted). Rejection is operator-activated via `enforcement: "enforced"`, not release-activated. The fixture pins that guarantee by storing a `payment_profile` — the issue's canonical "should be denied on a shared instance" example — and asserting it still succeeds on a policy-free instance. A future release that flips the default to `enforced` would be breaking and must flip this fixture to `rejected`.
+
 ## v0.5.0
 
 - `v0.4.x/store_person_attributes_wrapped` flipped from `valid` → `rejected`. The v0.5.0 reducer refactor removed resolver tolerance for the pre-0.5 `{ entity_type, attributes: { ... } }` shape. Callers now see `ERR_STORE_RESOLUTION_FAILED` → `ERR_CANONICAL_NAME_UNRESOLVED` with `seen_fields: ["attributes"]` (or `["entity_type", "attributes"]`).

@@ -7672,7 +7672,7 @@ instructionsCommand
     "Print the first fenced code block from docs/developer/mcp/instructions.md bundled with this package"
   )
   .option("--format <fmt>", "plain (default) or md (wrap in a markdown fence)", "plain")
-  .action((opts: { format?: string }) => {
+  .action(async (opts: { format?: string }) => {
     const outputMode = resolveOutputMode();
     const pkgRoot = resolveNeotomaPackageRoot();
     const docPath = mcpInstructionsPath(pkgRoot);
@@ -7704,17 +7704,85 @@ instructionsCommand
       process.exitCode = 1;
       return;
     }
+    // Append the configured instance's data policy (#1974) so this surface
+    // matches the MCP handshake and the REST endpoint. Unlike those two, the
+    // CLI reads the instruction doc from local disk, so the policy has to be
+    // fetched from the instance the CLI is pointed at — printing a local file
+    // alone would silently omit the policy that actually governs writes there.
+    // Best-effort: an unreachable or unauthenticated instance degrades to the
+    // global instructions rather than failing the command.
+    let composed = body;
+    try {
+      const { composeClientInstructions } = await import("../mcp_instruction_doc.js");
+      const cliConfig = await readConfig();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
+        token: await getCliToken(),
+      });
+      const { data } = await api.GET("/instance-policy", {});
+      const policy = (data as { policy?: unknown } | undefined)?.policy;
+      if (policy) {
+        const { renderInstancePolicyInstructions } = await import("../services/instance_policy.js");
+        composed = composeClientInstructions(
+          body,
+          renderInstancePolicyInstructions(policy as never)
+        );
+      }
+    } catch {
+      // Leave `composed` as the global instructions.
+    }
+
     if (outputMode === "json") {
-      writeOutput({ path: docPath, body, format: opts.format ?? "plain" }, outputMode);
+      writeOutput({ path: docPath, body: composed, format: opts.format ?? "plain" }, outputMode);
       return;
     }
     const fmt = (opts.format ?? "plain").toLowerCase();
     if (fmt === "md") {
-      process.stdout.write("```\n" + body + "\n```\n");
+      process.stdout.write("```\n" + composed + "\n```\n");
     } else if (fmt === "plain") {
-      process.stdout.write(body + "\n");
+      process.stdout.write(composed + "\n");
     } else {
       process.stderr.write(_errorStyle(`Unknown --format ${opts.format}; use plain or md`) + nl());
+      process.exitCode = 1;
+    }
+  });
+
+const instancePolicyCommand = program
+  .command("instance-policy")
+  .description("Inspect this instance's data policy (what it is for, what it will hold)");
+
+instancePolicyCommand
+  .command("show")
+  .description("Show the instance data policy, or report that none is configured")
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    try {
+      const cliConfig = await readConfig();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
+        token: await getCliToken(),
+      });
+      const { data, error } = await api.GET("/instance-policy", {});
+      if (error) {
+        writeOutput({ error: "instance_policy_unavailable" }, outputMode);
+        process.exitCode = 1;
+        return;
+      }
+      const policy = (data as { policy?: unknown } | undefined)?.policy ?? null;
+      if (outputMode === "json") {
+        writeOutput({ policy }, outputMode);
+        return;
+      }
+      if (!policy) {
+        process.stdout.write(
+          "No instance policy configured. This instance declares no data policy; " +
+            "writes are not policy-restricted.\n"
+        );
+        return;
+      }
+      process.stdout.write(JSON.stringify(policy, null, 2) + "\n");
+    } catch (err) {
+      process.stderr.write(_errorStyle((err as Error).message) + nl());
       process.exitCode = 1;
     }
   });

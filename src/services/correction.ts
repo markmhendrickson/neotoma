@@ -58,6 +58,31 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     userId: params.user_id,
     db,
   });
+
+  // Instance store-policy enforcement (#1975).
+  //
+  // Both transports converge here (unlike `store`, whose two cores each need
+  // their own call), so this single check covers MCP and REST. Runs before the
+  // correction observation row is built, so a denial writes nothing.
+  //
+  // A correction carries exactly one field, so only the gates that can be
+  // judged from a single field apply in practice: entity-type scope and field
+  // sensitivity. The person-data gates read fields the correction does not
+  // carry and so do not fire here — corrections cannot be used to smuggle in a
+  // person-data entity, since the entity itself had to clear the gate at store
+  // time.
+  {
+    const { assertStorePolicyAllows } = await import("./instance_policy.js");
+    const { schemaRegistry } = await import("./schema_registry.js");
+    await assertStorePolicyAllows(
+      [{ entity_type: params.entity_type, fields: { [params.field]: params.value } }],
+      async (entityType) => {
+        const entry = await schemaRegistry.loadActiveSchema(entityType, params.user_id);
+        return entry?.schema_definition ?? null;
+      }
+    );
+  }
+
   const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } = params;
 
   const observationId = generateObservationId(

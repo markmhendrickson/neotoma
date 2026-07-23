@@ -351,6 +351,16 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "schemas get",
   },
   {
+    operationId: "describeInstancePolicy",
+    method: "get",
+    path: "/instance-policy",
+    adapter: "both",
+    mcpTool: "describe_instance_policy",
+    cliCommand: "instance-policy show",
+    notes:
+      "Reads the instance-wide data policy (#1974/#1975). Instance-scoped, not user-scoped: returns the same policy for every authenticated caller.",
+  },
+  {
     operationId: "listInterpretations",
     method: "get",
     path: "/interpretations",
@@ -848,6 +858,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",
   describe_entity_type: "getSchemaByEntityType",
+  describe_instance_policy: "describeInstancePolicy",
   merge_entities: "mergeEntities",
   split_entity: "splitEntity",
   list_potential_duplicates: "listPotentialDuplicates",

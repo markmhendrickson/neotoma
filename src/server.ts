@@ -106,6 +106,7 @@ import {
   type AttributionDecisionDiagnostics,
 } from "./crypto/agent_identity.js";
 import {
+  composeClientInstructions,
   extractFirstFencedCodeBlock,
   readMcpInstructionsMarkdown,
   resolveNeotomaPackageRoot,
@@ -677,9 +678,25 @@ export class NeotomaServer {
   }
 
   private async buildAuthenticatedInitializeResponse(updateNotice: string | null) {
-    const instructions = updateNotice
+    const baseInstructions = updateNotice
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
       : this.getMcpInteractionInstructions();
+
+    // Append this instance's declared data policy (#1974) so a cooperating
+    // agent knows what this instance is for before its first write, rather than
+    // discovering the rules by being rejected. A read failure or an unset
+    // policy yields an empty section, leaving the instructions byte-identical
+    // to what they were before this feature — the handshake must never fail
+    // because a policy lookup did.
+    let policySection = "";
+    try {
+      const { getInstancePolicy, renderInstancePolicyInstructions } =
+        await import("./services/instance_policy.js");
+      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
+    } catch (err) {
+      logger.warn(`[instance_policy] instructions render skipped: ${(err as Error).message}`);
+    }
+    const instructions = composeClientInstructions(baseInstructions, policySection);
 
     // Load standing rules for the authenticated user and inject them so agents
     // apply them from the first turn of the session (issue #184).
@@ -2053,6 +2070,8 @@ export class NeotomaServer {
         return await this.listEntityTypes(args);
       case "describe_entity_type":
         return await this.describeEntityType(args);
+      case "describe_instance_policy":
+        return await this.describeInstancePolicy();
       case "analyze_schema_candidates":
         return await this.analyzeSchemaCandidates(args);
       case "audit_undeclared_fragments":
@@ -4171,6 +4190,27 @@ export class NeotomaServer {
    * before storing — yielding zero unknown_fields / required_fields_missing on
    * the first store. Read-only; no persistence side effects.
    */
+  /**
+   * `describe_instance_policy` — read this instance's data policy (#1974/#1975).
+   *
+   * Takes no arguments by design: the policy is instance-wide, so there is no
+   * scope for a caller to select and no parameter through which one caller
+   * could address another's policy.
+   *
+   * Returns `{"policy": null}` when unset, never an error — "this instance has
+   * no policy" is a normal, useful answer, and must stay distinguishable from
+   * "this instance denies everything".
+   */
+  private async describeInstancePolicy(): Promise<{
+    content: Array<{ type: string; text: string }>;
+  }> {
+    const { getInstancePolicy } = await import("./services/instance_policy.js");
+    const policy = await getInstancePolicy();
+    return {
+      content: [{ type: "text", text: JSON.stringify({ policy: policy ?? null }, null, 2) }],
+    };
+  }
+
   private async describeEntityType(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -5150,6 +5190,38 @@ export class NeotomaServer {
       if (detection.detected) {
         throw new FlatPackedRowsError(detection);
       }
+    }
+
+    // Instance store-policy enforcement (#1975).
+    //
+    // This MCP store core does NOT route through `createObservation` — it
+    // inserts observation rows directly further down — so it also bypasses the
+    // guards that live inside that shared service. A policy check placed only
+    // in the shared write helper would therefore be enforced on REST, CLI, and
+    // sync while silently doing nothing on MCP, which is precisely the
+    // "misconfigured or non-cooperating client" case this feature exists to
+    // close. Hence the explicit call here, mirroring the one in
+    // `storeStructuredForApi`.
+    //
+    // Placed before plan mode and before the source row is written: a store
+    // call is not transactional, so denial must happen before anything is
+    // persisted rather than mid-batch.
+    {
+      const { assertStorePolicyAllows } = await import("./services/instance_policy.js");
+      const candidates = entities.map((entityData) => {
+        const raw = (entityData ?? {}) as Record<string, unknown>;
+        const candidateFields = { ...raw };
+        delete candidateFields.entity_type;
+        delete candidateFields.type;
+        return {
+          entity_type: (raw.entity_type as string) || (raw.type as string) || "generic",
+          fields: candidateFields,
+        };
+      });
+      await assertStorePolicyAllows(candidates, async (entityType) => {
+        const entry = await schemaRegistry.loadActiveSchema(entityType, userId);
+        return entry?.schema_definition ?? null;
+      });
     }
 
     // Plan mode: resolve deterministically, report planned actions per entity,

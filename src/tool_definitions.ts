@@ -738,6 +738,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("describe_entity_type"),
     },
     {
+      name: "describe_instance_policy",
+      description: desc(
+        "describe_instance_policy",
+        'Return this instance\'s data policy: what it is for, which entity types are in or out of scope, and which person-data gates it enforces. Call this on a new session against an unfamiliar instance, before storing, so your first write complies instead of being rejected. Returns {"policy": null} when the instance has no policy configured. Read-only.'
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("describe_instance_policy"),
+    },
+    {
       name: "analyze_schema_candidates",
       description: desc(
         "analyze_schema_candidates",
@@ -1518,6 +1526,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "get_entity_type_counts",
   "list_entity_types",
   "describe_entity_type",
+  "describe_instance_policy",
   "analyze_schema_candidates",
   "audit_undeclared_fragments",
   "get_schema_recommendations",
