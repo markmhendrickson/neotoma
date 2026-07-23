@@ -156,6 +156,11 @@ const SCHEMA_STATEMENTS = [
     user_id TEXT,
     created_at TEXT
   )`,
+  // The `*_json` columns and `unmerged_at` are what make a merge reversible:
+  // `observations_rewritten` is only a COUNT, so without the moved ids and the
+  // full text of every row the merge deleted, there is no way to reconstruct
+  // the pre-merge state. See docs/subsystems/entity_merge.md § 7.5 (inverse
+  // operation via unmerge_entities; split_entity remains for genuine re-splits).
   `CREATE TABLE IF NOT EXISTS entity_merges (
     id TEXT PRIMARY KEY,
     user_id TEXT,
@@ -164,12 +169,21 @@ const SCHEMA_STATEMENTS = [
     reason TEXT,
     merged_by TEXT,
     observations_rewritten INTEGER,
+    moved_observation_ids_json TEXT,
+    deleted_relationship_rows_json TEXT,
+    deleted_relationship_snapshot_rows_json TEXT,
+    deleted_entity_snapshot_rows_json TEXT,
+    repointed_relationship_rows_json TEXT,
+    idempotency_key TEXT,
+    unmerged_at TEXT,
+    unmerged_by TEXT,
     created_at TEXT
   )`,
   // R5: symmetric audit table for split_entity. Mirrors entity_merges exactly
   // (user_id + idempotency_key unique index) so over-merges can be surgically
   // reversed without any content rewrite on observations. See
-  // docs/subsystems/entity_merge.md § 5 (inverse operation).
+  // docs/subsystems/entity_merge.md § 7.5 (inverse operation via
+  // unmerge_entities; split_entity remains for genuine re-splits).
   `CREATE TABLE IF NOT EXISTS entity_splits (
     id TEXT PRIMARY KEY,
     user_id TEXT,
@@ -391,6 +405,25 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
     addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
     addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
+    // Reversible-merge audit columns (#2004). Rows written before this landed
+    // keep NULLs here, which unmergeEntities treats as "not reversible" rather
+    // than guessing at an inverse it cannot reconstruct.
+    addColumnIfMissing(db, "entity_merges", "moved_observation_ids_json", "TEXT");
+    addColumnIfMissing(db, "entity_merges", "deleted_relationship_rows_json", "TEXT");
+    addColumnIfMissing(db, "entity_merges", "deleted_relationship_snapshot_rows_json", "TEXT");
+    addColumnIfMissing(db, "entity_merges", "deleted_entity_snapshot_rows_json", "TEXT");
+    addColumnIfMissing(db, "entity_merges", "repointed_relationship_rows_json", "TEXT");
+    addColumnIfMissing(db, "entity_merges", "idempotency_key", "TEXT");
+    addColumnIfMissing(db, "entity_merges", "unmerged_at", "TEXT");
+    addColumnIfMissing(db, "entity_merges", "unmerged_by", "TEXT");
+    // #2004: unmergeEntities looks up by from_entity_id (chained-merge check)
+    // and by to_entity_id (MERGE_SUPERSEDED detection), both tenant-scoped.
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_entity_merges_from_user ON entity_merges(from_entity_id, user_id)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_entity_merges_to_user ON entity_merges(to_entity_id, user_id)"
+    ).run();
     addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
     addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
     addColumnIfMissing(db, "observations", "identity_rule", "TEXT");

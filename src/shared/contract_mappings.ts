@@ -248,6 +248,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "request --operation mergeEntities",
   },
   {
+    operationId: "unmergeEntities",
+    method: "post",
+    path: "/entities/unmerge",
+    adapter: "both",
+    mcpTool: "unmerge_entities",
+    cliCommand: "request --operation unmergeEntities",
+  },
+  {
     operationId: "splitEntity",
     method: "post",
     path: "/entities/split",
@@ -849,6 +857,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   list_entity_types: "listSchemas",
   describe_entity_type: "getSchemaByEntityType",
   merge_entities: "mergeEntities",
+  unmerge_entities: "unmergeEntities",
   split_entity: "splitEntity",
   list_potential_duplicates: "listPotentialDuplicates",
   store: "store",

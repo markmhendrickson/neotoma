@@ -39,6 +39,7 @@ import {
   ListRelationshipsRequestSchema,
   QueryContactsAtCompanyRequestSchema,
   MergeEntitiesRequestSchema,
+  UnmergeEntitiesRequestSchema,
   SplitEntityRequestSchema,
   DeleteEntityRequestSchema,
   DeleteRelationshipRequestSchema,
@@ -2077,6 +2078,8 @@ export class NeotomaServer {
         return await this.correct(args);
       case "merge_entities":
         return await this.mergeEntities(args);
+      case "unmerge_entities":
+        return await this.unmergeEntities(args);
       case "split_entity":
         return await this.splitEntity(args);
       case "list_potential_duplicates":
@@ -6841,6 +6844,7 @@ export class NeotomaServer {
       mergeEntities: mergeEntitiesService,
       EntityNotFoundError,
       EntityAlreadyMergedError,
+      IdempotencyMismatchError,
     } = await import("./services/entity_merge.js");
 
     try {
@@ -6850,15 +6854,18 @@ export class NeotomaServer {
         userId,
         mergeReason: parsed.merge_reason,
         mergedBy: "mcp",
+        idempotencyKey: parsed.idempotency_key,
       });
 
       return this.buildTextResponse({
+        merge_id: result.merge_id,
         from_entity_id: parsed.from_entity_id,
         to_entity_id: parsed.to_entity_id,
         observations_moved: result.observations_moved,
         relationships_repointed: result.relationships_repointed,
         merged_at: result.merged_at,
         merge_reason: parsed.merge_reason,
+        replayed: result.replayed,
       });
     } catch (err) {
       if (err instanceof EntityNotFoundError) {
@@ -6867,9 +6874,62 @@ export class NeotomaServer {
       if (err instanceof EntityAlreadyMergedError) {
         throw new McpError(ErrorCode.InvalidParams, err.message);
       }
+      if (err instanceof IdempotencyMismatchError) {
+        throw new McpError(ErrorCode.InvalidParams, err.message, {
+          code: "ERR_IDEMPOTENCY_MISMATCH",
+        });
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to merge entities: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  // #2004: MCP unmerge_entities() Tool — reverses a prior merge_entities call.
+  // Keyed on merge_id (the entity_merges row id), not entity ids, because a
+  // source entity may have been merged more than once. Mirrors the HTTP
+  // POST /entities/unmerge handler in actions.ts.
+  private async unmergeEntities(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = UnmergeEntitiesRequestSchema.parse(args);
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const {
+      unmergeEntities: unmergeEntitiesService,
+      MergeNotFoundError,
+      MergeSupersededError,
+      MergeNotReversibleError,
+    } = await import("./services/entity_merge.js");
+
+    try {
+      const result = await unmergeEntitiesService({
+        mergeId: parsed.merge_id,
+        userId,
+        unmergedBy: "mcp",
+      });
+
+      return this.buildTextResponse(result);
+    } catch (err) {
+      if (err instanceof MergeNotFoundError) {
+        throw new McpError(ErrorCode.InvalidParams, err.message, {
+          code: "ERR_MERGE_NOT_FOUND",
+        });
+      }
+      if (err instanceof MergeSupersededError) {
+        throw new McpError(ErrorCode.InvalidParams, err.message, {
+          code: "ERR_MERGE_SUPERSEDED",
+        });
+      }
+      if (err instanceof MergeNotReversibleError) {
+        throw new McpError(ErrorCode.InvalidParams, err.message, {
+          code: "ERR_MERGE_NOT_REVERSIBLE",
+        });
+      }
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to unmerge entities: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
