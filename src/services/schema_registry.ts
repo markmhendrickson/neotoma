@@ -126,7 +126,42 @@ export interface FieldDefinition {
   converters?: ConverterDefinition[]; // Field type converters
   /** Declarative write-time value constraints for this field. See {@link FieldConstraints}. */
   constraints?: FieldConstraints;
+
+  /**
+   * Declarative sensitivity classification for this field (#1975).
+   *
+   * Read by the instance store-policy evaluator: when an instance configures a
+   * `max_sensitivity_class`, a write touching a field classified ABOVE that
+   * threshold is denied with `field_sensitivity_exceeded`. Ordering is
+   * `public < internal < sensitive < restricted`.
+   *
+   * This exists so sensitivity is a property of the *schema* rather than a
+   * hardcoded list of "sensitive types" in the policy code
+   * (`docs/foundation/schema_agnostic_design_rules.md`): a new entity type
+   * becomes governable by declaring this, with no change to `src/`.
+   *
+   * When omitted, the field is treated as `public` — an undeclared field never
+   * trips the gate, so adding the policy engine cannot retroactively reject
+   * writes that schemas never classified.
+   */
+  sensitivity_class?: SensitivityClass;
 }
+
+/**
+ * Field sensitivity levels, ordered least → most sensitive (#1975).
+ *
+ * Used both by `FieldDefinition.sensitivity_class` (what a field *is*) and by
+ * the instance policy's `max_sensitivity_class` (what an instance will *hold*).
+ */
+export type SensitivityClass = "public" | "internal" | "sensitive" | "restricted";
+
+/** Rank of each class for threshold comparison. Higher = more sensitive. */
+export const SENSITIVITY_CLASS_RANK: Record<SensitivityClass, number> = {
+  public: 0,
+  internal: 1,
+  sensitive: 2,
+  restricted: 3,
+};
 
 /**
  * A single identity rule used to derive an entity's canonical_name.
@@ -293,6 +328,51 @@ export interface SchemaDefinition {
    * document the rationale in the schema snapshot README.
    */
   name_collision_policy?: "merge" | "warn" | "reject";
+
+  /**
+   * Declares that entities of this type describe identifiable natural persons
+   * (#1975).
+   *
+   * Read by the instance store-policy evaluator to decide whether the
+   * person-data gates apply: an instance configured with
+   * `require_lawful_basis` or `require_provenance` enforces those gates ONLY
+   * against types declaring `person_data: true`. Declaring it here rather than
+   * branching on `entity_type === "contact"` in the policy code is what keeps
+   * the evaluator schema-agnostic — a new person-bearing type becomes governed
+   * by declaring this flag, with no change to `src/`.
+   *
+   * When omitted, defaults to `false`: the person-data gates never apply to a
+   * type that has not classified itself, so enabling a policy cannot
+   * retroactively reject writes for types that were never marked.
+   */
+  person_data?: boolean;
+
+  /**
+   * Names the field carrying the lawful basis / purpose tag for a
+   * `person_data` type (#1975).
+   *
+   * When an instance sets `require_lawful_basis`, a write of this type must
+   * carry a non-empty value in this field or it is denied with
+   * `pii_gate_missing_basis`. The denial hint interpolates this field *name*
+   * (never its value — guardrails MUST NOT 11).
+   *
+   * Defaults to `"lawful_basis"` when the type declares `person_data: true`
+   * but omits this.
+   */
+  lawful_basis_field?: string;
+
+  /**
+   * Names the field carrying attribution/consent provenance for a
+   * `person_data` type (#1975).
+   *
+   * When an instance sets `require_provenance`, a write of this type must
+   * carry a non-empty value in this field or it is denied with
+   * `provenance_required`.
+   *
+   * Defaults to `"data_source"` when the type declares `person_data: true` but
+   * omits this.
+   */
+  provenance_field?: string;
 
   /**
    * Controls how the store path handles a field-level constraint violation
