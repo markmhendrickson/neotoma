@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **537**
-- Backend and repo Vitest files: **502**
+- Total automated test files: **540**
+- Backend and repo Vitest files: **505**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -71,7 +71,7 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 149 |
 | Vitest service tests | 39 |
-| Source-adjacent tests | 64 |
+| Source-adjacent tests | 67 |
 | Vitest integration tests | 155 |
 | Vitest CLI tests | 65 |
 | Vitest contract tests | 14 |
@@ -311,7 +311,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (64):**
+**Files (67):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -322,6 +322,7 @@ flowchart TD
 - `src/semver_compat.test.ts`
 - `src/services/__tests__/csv_chunking.test.ts`
 - `src/services/__tests__/deletion.test.ts`
+- `src/services/__tests__/entity_aggregation.test.ts`
 - `src/services/__tests__/entity_semantic_search.test.ts`
 - `src/services/__tests__/local_auth.test.ts`
 - `src/services/__tests__/local_entity_embedding.test.ts`
@@ -333,6 +334,7 @@ flowchart TD
 - `src/services/__tests__/raw_storage_reference.test.ts`
 - `src/services/__tests__/schema_icon_service.test.ts`
 - `src/services/__tests__/sightings_schema.test.ts`
+- `src/services/__tests__/tool_registration_1967.test.ts`
 - `src/services/__tests__/tunnel_oauth.test.ts`
 - `src/services/access_policy.test.ts`
 - `src/services/batch_correction.test.ts`
@@ -365,6 +367,7 @@ flowchart TD
 - `src/services/rendered_page/conformance.test.ts`
 - `src/services/rendered_page/publish.test.ts`
 - `src/services/sync/peer_health.test.ts`
+- `src/shared/action_handlers/batch_identifier_handler.test.ts`
 - `src/shared/action_handlers/entity_handlers.test.ts`
 - `src/shared/action_schemas.test.ts`
 - `src/shared/spawn_platform.test.ts`
