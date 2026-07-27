@@ -302,6 +302,7 @@ flowchart TD
 - `tests/services/schema_recommendation.test.ts`
 - `tests/services/schema_reference_fields_resolve_target_validation.test.ts`
 - `tests/services/schema_reference_linking.test.ts`
+- `tests/services/schema_registry_bootstrap.test.ts`
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/summary.test.ts`
