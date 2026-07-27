@@ -3,7 +3,7 @@ name: Claude PR Review
 # DISABLED for automatic PR review (2026-06-24).
 #
 # PR review is now owned by the Ateles swarm review panel (Anthus-dispatched
-# gates: pm/Pavo, ux/Accipiter, arch/Bombycilla, qa/Phoenicurus,
+# gates: pm/Pavo, ux/Accipiter, arch/Waxwing, qa/Phoenicurus,
 # pr_review/Vanellus, legal/Buteo), governed by the neotoma|feature
 # workflow_definition and the `code_review` agent_policy "Swarm PR review: full
 # diff + role-based depth". The swarm reviews every PR in depth by role against
@@ -150,6 +150,22 @@ jobs:
             after the blocking findings were fixed. The non-blocking notes still ship in the
             review body. (Only a true NEEDS-CHANGES verdict — i.e. at least one BLOCKING
             finding — may request changes.)
+
+            Auto-merge on approval: immediately after submitting an APPROVED or
+            APPROVED-WITH-NOTES review (the `--approve` cases ONLY — never after
+            NEEDS-CHANGES), arm GitHub native auto-merge so the PR merges itself once
+            all required gates pass, without a human step:
+              `gh pr merge <PR> --auto --squash`
+            `--auto` only ARMS auto-merge; it does not merge immediately. GitHub still
+            holds the merge until `main`'s branch protection is satisfied — the required
+            approving review (this very review) AND the required status checks
+            (security_gates, graph_render_smoke) all green. So a PR can only auto-merge
+            when the swarm has actually approved the current head and CI is clean; a
+            later `--request-changes` (or a new push that leaves checks pending) keeps it
+            un-merged. If `gh pr merge --auto` errors because auto-merge is disabled on
+            the repo or the PR is already merged/closed, log it and continue — do not
+            fail the review over it. Never pass `--admin` and never merge directly here;
+            arming auto-merge is the only merge action this workflow takes.
             Resolve `<PR>` as `${{ github.event.pull_request.number || github.event.issue.number }}`.
             Include the line `Reviewed commit: <full head SHA>` (from `gh pr view --json headRefOid`)
             at the top of the body, so a later force-push makes it plainly visible that the
