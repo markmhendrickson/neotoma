@@ -6640,8 +6640,9 @@ paths:
                     [{"composite":["linkedin_url"]},"email","name"] keys on
                     linkedin_url when present, else email, else name. Triggers a
                     major version bump; existing reducer_config is preserved.
-                    Omit to keep the current rule; pass [] to clear it. Applies
-                    to new writes only — does not retroactively re-key existing
+                    Omit to keep the current rule. Passing [] clears the rule
+                    but only succeeds if the schema also declares
+                    identity_opt_out. Applies to new writes only — does not retroactively re-key existing
                     entities.
                   items:
                     oneOf:

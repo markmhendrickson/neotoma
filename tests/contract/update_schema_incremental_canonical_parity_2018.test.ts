@@ -26,12 +26,60 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..");
 
 describe("update_schema_incremental canonical_name_fields — cross-surface parity (#2018)", () => {
-  it("Zod request schema accepts canonical_name_fields", () => {
+  it("Zod request schema accepts canonical_name_fields (ordered precedence)", () => {
     const res = UpdateSchemaIncrementalRequestSchema.safeParse({
       entity_type: "contact",
       canonical_name_fields: [{ composite: ["linkedin_url"] }, "email", "name"],
     });
     expect(res.success).toBe(true);
+  });
+
+  it("accepts a canonical_name_fields-only request (no field add/remove)", () => {
+    const parsed = UpdateSchemaIncrementalRequestSchema.parse({
+      entity_type: "contact",
+      canonical_name_fields: ["name"], // legacy flat form
+    });
+    expect(parsed.canonical_name_fields).toEqual(["name"]);
+    expect(parsed.fields_to_add).toBeUndefined();
+    expect(parsed.fields_to_remove).toBeUndefined();
+  });
+
+  it("still rejects a request that changes nothing", () => {
+    expect(UpdateSchemaIncrementalRequestSchema.safeParse({ entity_type: "contact" }).success).toBe(
+      false
+    );
+  });
+
+  it("accepts an empty array at the request layer (service enforces the R2 constraint)", () => {
+    // The Zod contract allows []; whether clearing is legal depends on the
+    // schema's identity_opt_out and is enforced service-side (see
+    // schema_registry_incremental.test.ts), not here.
+    expect(
+      UpdateSchemaIncrementalRequestSchema.safeParse({
+        entity_type: "contact",
+        canonical_name_fields: [],
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects a malformed composite (non-string member), path locatable", () => {
+    const res = UpdateSchemaIncrementalRequestSchema.safeParse({
+      entity_type: "contact",
+      canonical_name_fields: [{ composite: [42] }],
+    });
+    expect(res.success).toBe(false);
+  });
+
+  it("rejects the likely bare-string composite mistake with a locatable path", () => {
+    const res = UpdateSchemaIncrementalRequestSchema.safeParse({
+      entity_type: "contact",
+      canonical_name_fields: [{ composite: "linkedin_url" }],
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const paths = res.error.issues.map((i) => i.path.join("."));
+      expect(paths.some((p) => p.includes("canonical_name_fields"))).toBe(true);
+    }
   });
 
   it("OpenAPI spec declares canonical_name_fields on the request body", () => {
