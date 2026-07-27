@@ -10574,6 +10574,7 @@ app.post("/update_schema_incremental", async (req, res) => {
       entity_type,
       fields_to_add,
       fields_to_remove,
+      canonical_name_fields,
       schema_version,
       user_specific = false,
       activate = true,
@@ -10591,6 +10592,11 @@ app.post("/update_schema_incremental", async (req, res) => {
           typeof schemaRegistry.updateSchemaIncremental
         >[0]["fields_to_add"],
         fields_to_remove: fields_to_remove || [],
+        // #2018: thread the identity-rule change through the HTTP/offline path.
+        // Omitted here originally, so CLI/HTTP callers silently no-op'd the
+        // re-key (the MCP server handler had it, but this Express route — which
+        // the CLI offline transport uses — did not).
+        canonical_name_fields,
         schema_version,
         user_specific,
         user_id: userId,
@@ -10617,6 +10623,11 @@ app.post("/update_schema_incremental", async (req, res) => {
       schema: newSchema,
       schema_version: newSchema.schema_version,
       fields_removed: fields_to_remove || [],
+      // Echo the resolved identity rule so CLI/HTTP callers can confirm the
+      // re-key without a second describe_entity_type round trip (#2020 ux).
+      canonical_name_fields:
+        (newSchema.schema_definition as { canonical_name_fields?: unknown })
+          .canonical_name_fields ?? null,
     });
   } catch (error) {
     return handleApiError(

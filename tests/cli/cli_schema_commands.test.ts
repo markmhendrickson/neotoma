@@ -19,9 +19,7 @@ describe("CLI schema commands", () => {
 
   describe("schemas list", () => {
     it("should list all schemas with --json", async () => {
-      const { stdout, stderr } = await execAsync(
-        `${CLI_PATH} schemas list --json`
-      );
+      const { stdout, stderr } = await execAsync(`${CLI_PATH} schemas list --json`);
 
       expect(stderr).toBe("");
       const result = JSON.parse(stdout);
@@ -31,9 +29,7 @@ describe("CLI schema commands", () => {
     });
 
     it("should filter by --entity-type", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} schemas list --entity-type company --json`
-      );
+      const { stdout } = await execAsync(`${CLI_PATH} schemas list --entity-type company --json`);
 
       const result = JSON.parse(stdout);
       result.schemas.forEach((schema: any) => {
@@ -42,18 +38,14 @@ describe("CLI schema commands", () => {
     });
 
     it("should show user-specific schemas with --user-specific", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} schemas list --user-specific --json`
-      );
+      const { stdout } = await execAsync(`${CLI_PATH} schemas list --user-specific --json`);
 
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("schemas");
     });
 
     it("should paginate with --limit and --offset", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} schemas list --limit 5 --offset 0 --json`
-      );
+      const { stdout } = await execAsync(`${CLI_PATH} schemas list --limit 5 --offset 0 --json`);
 
       const result = JSON.parse(stdout);
       expect(result.schemas.length).toBeLessThanOrEqual(5);
@@ -62,9 +54,7 @@ describe("CLI schema commands", () => {
 
   describe("schemas get", () => {
     it("should get schema for entity type with --json", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} schemas get --entity-type company --json`
-      );
+      const { stdout } = await execAsync(`${CLI_PATH} schemas get --entity-type company --json`);
 
       const result = JSON.parse(stdout);
       expect(result.schema.entity_type).toBe("company");
@@ -73,9 +63,7 @@ describe("CLI schema commands", () => {
 
     it("should handle non-existent entity type", async () => {
       await expect(
-        execAsync(
-          `${CLI_PATH} schemas get --entity-type nonexistent_type_12345 --json`
-        )
+        execAsync(`${CLI_PATH} schemas get --entity-type nonexistent_type_12345 --json`)
       ).rejects.toThrow();
     });
 
@@ -221,9 +209,7 @@ describe("CLI schema commands", () => {
         `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${setupFields}' --user-id "${TEST_USER_ID}" --json`
       );
 
-      const addFields = JSON.stringify([
-        { field_name: "replacement", field_type: "number" },
-      ]);
+      const addFields = JSON.stringify([{ field_name: "replacement", field_type: "number" }]);
       const removeFields = JSON.stringify(["obsolete"]);
       const { stdout } = await execAsync(
         `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${addFields}' --remove-fields '${removeFields}' --user-id "${TEST_USER_ID}" --json`
@@ -233,7 +219,8 @@ describe("CLI schema commands", () => {
       expect(result).toHaveProperty("schema");
     });
 
-    it("should error when neither --fields nor --remove-fields provided", async () => {
+    it("should error when none of --fields, --remove-fields, or --canonical-name-fields provided", async () => {
+      // #2018: the require-one guard is now three-way. Passing none must still error.
       await expect(
         execAsync(
           `${CLI_PATH} schemas update --entity-type "${TEST_ENTITY_TYPE}" --user-id "${TEST_USER_ID}" --json`
@@ -245,6 +232,72 @@ describe("CLI schema commands", () => {
       await expect(
         execAsync(
           `${CLI_PATH} schemas update --entity-type "${TEST_ENTITY_TYPE}" --remove-fields '{"not": "array"}' --user-id "${TEST_USER_ID}" --json`
+        )
+      ).rejects.toThrow();
+    });
+
+    it("should re-key identity via --canonical-name-fields (#2018)", async () => {
+      // Set up a type whose fields include the target of the new rule.
+      const setupType = `${TEST_ENTITY_TYPE}_rekey_${Date.now()}`;
+      const setupFields = JSON.stringify({
+        name: { type: "string", required: false },
+        email: { type: "string", required: false },
+        linkedin_url: { type: "string", required: false },
+      });
+      await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${setupFields}' --user-id "${TEST_USER_ID}" --json`
+      );
+
+      const rule = JSON.stringify([{ composite: ["linkedin_url"] }, "email", "name"]);
+      const { stdout } = await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --canonical-name-fields '${rule}' --user-id "${TEST_USER_ID}" --json`
+      );
+      const result = JSON.parse(stdout);
+      // The registered schema carries the new ordered-precedence rule.
+      const def = result.schema?.schema_definition ?? result.schema;
+      expect(JSON.stringify(def.canonical_name_fields)).toContain("linkedin_url");
+    });
+
+    it("should re-key with --canonical-name-fields as the ONLY operation (no --fields)", async () => {
+      const setupType = `${TEST_ENTITY_TYPE}_rekeyonly_${Date.now()}`;
+      const setupFields = JSON.stringify({
+        name: { type: "string", required: false },
+        email: { type: "string", required: false },
+      });
+      await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${setupFields}' --user-id "${TEST_USER_ID}" --json`
+      );
+
+      // Canonical-only call: exercises the relaxed three-way require-one guard.
+      const rule = JSON.stringify(["email", "name"]);
+      const { stdout } = await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --canonical-name-fields '${rule}' --user-id "${TEST_USER_ID}" --json`
+      );
+      const result = JSON.parse(stdout);
+      const def = result.schema?.schema_definition ?? result.schema;
+      expect(def.canonical_name_fields).toEqual(["email", "name"]);
+    });
+
+    it("should error when --canonical-name-fields is not a JSON array", async () => {
+      await expect(
+        execAsync(
+          `${CLI_PATH} schemas update --entity-type "${TEST_ENTITY_TYPE}" --canonical-name-fields '{"not":"array"}' --user-id "${TEST_USER_ID}" --json`
+        )
+      ).rejects.toThrow();
+    });
+
+    it("should reject a re-key referencing an unknown field (composite form)", async () => {
+      // qa non-blocking: the composite-object "unknown field" rejection — the
+      // PR's primary motivating shape — exercised end-to-end through the CLI.
+      const setupType = `${TEST_ENTITY_TYPE}_badrule_${Date.now()}`;
+      const setupFields = JSON.stringify({ name: { type: "string", required: false } });
+      await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${setupFields}' --user-id "${TEST_USER_ID}" --json`
+      );
+      const badRule = JSON.stringify([{ composite: ["nonexistent_field"] }]);
+      await expect(
+        execAsync(
+          `${CLI_PATH} schemas update --entity-type "${setupType}" --canonical-name-fields '${badRule}' --user-id "${TEST_USER_ID}" --json`
         )
       ).rejects.toThrow();
     });
@@ -312,18 +365,14 @@ describe("CLI schema commands", () => {
 
   describe("output formats", () => {
     it("should output pretty format without --json", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} schemas list`
-      );
+      const { stdout } = await execAsync(`${CLI_PATH} schemas list`);
 
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("schemas");
     });
 
     it("should output JSON with --json flag", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} schemas list --json`
-      );
+      const { stdout } = await execAsync(`${CLI_PATH} schemas list --json`);
 
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("schemas");
@@ -334,9 +383,7 @@ describe("CLI schema commands", () => {
   describe("exit codes", () => {
     it("should return exit code 0 on success", async () => {
       try {
-        await execAsync(
-          `${CLI_PATH} schemas list --json`
-        );
+        await execAsync(`${CLI_PATH} schemas list --json`);
         expect(true).toBe(true);
       } catch {
         throw new Error("Should not throw on success");

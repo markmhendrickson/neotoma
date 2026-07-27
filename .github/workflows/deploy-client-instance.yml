@@ -1,0 +1,162 @@
+name: Deploy client instance
+
+# Deploys a hosted CLIENT instance whenever a GitHub Release is published, so a
+# client instance never silently drifts behind a release.
+#
+# WHY THIS EXISTS: on 2026-07-23 a hosted client instance was found serving a
+# two-week-old feature-branch build, because deploying it was a manual step that
+# lived only in one operator's session memory. The generic method is documented
+# in docs/infrastructure/client_instance_deployment.md; the per-instance binding
+# lives in a Neotoma `deployment_configuration` entity.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# THIS REPO IS PUBLIC. No client-identifying value may appear in this file.
+# ────────────────────────────────────────────────────────────────────────────
+# The Fly app name and the verify host are read from repository SECRETS, never
+# hardcoded. PR #2001 was closed for reintroducing a client app name into this
+# public repo; do not re-add one here in any form (app name, domain, codename).
+#
+# Required repository secrets:
+#   FLY_API_TOKEN            deploy token (already used by deploy-sandbox.yml)
+#   CLIENT_INSTANCE_APP      Fly app name for the client instance
+#   CLIENT_INSTANCE_HOST     hostname to verify (no scheme), e.g. app.fly.dev
+#
+# The job SKIPS cleanly (does not fail) when CLIENT_INSTANCE_APP is unset, so
+# forks and contributors without the secret are unaffected.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (defaults to the workflow ref)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-client-instance
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check instance is configured
+        id: gate
+        env:
+          APP: ${{ secrets.CLIENT_INSTANCE_APP }}
+        run: |
+          if [ -z "$APP" ]; then
+            echo "CLIENT_INSTANCE_APP not set — no client instance configured; skipping."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.configured == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Setup flyctl
+        if: steps.gate.outputs.configured == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # --app is passed EXPLICITLY: the repo's fly.toml declares the sandbox app,
+      # so a bare `flyctl deploy` here would redeploy the SANDBOX over the client.
+      # VITE_NEOTOMA_SANDBOX_UI must stay empty (a client instance must not show
+      # the "Public sandbox" banner) and VITE_PUBLIC_BASE_PATH must be "/" (a
+      # "/inspector/" build renders a blank page while /health still returns ok).
+      - name: Deploy to Fly (client instance)
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP: ${{ secrets.CLIENT_INSTANCE_APP }}
+        run: |
+          flyctl deploy --app "$APP" --remote-only \
+            --build-arg VITE_NEOTOMA_SANDBOX_UI="" \
+            --build-arg VITE_PUBLIC_BASE_PATH="/" \
+            --build-arg NEOTOMA_GIT_SHA="${{ github.sha }}"
+
+      # All four post-deploy checks from the instance's deployment_configuration.
+      # /health alone is NOT sufficient: the blank-page and wrong-banner failure
+      # modes both return a healthy /health.
+      - name: Verify deploy
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          HOST: ${{ secrets.CLIENT_INSTANCE_HOST }}
+          APP: ${{ secrets.CLIENT_INSTANCE_APP }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          export EXPECTED_VERSION="$(node -p "require('./package.json').version")"
+
+          # (a) /health responds ok.
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            "https://$HOST/health" -o /tmp/health.json
+          node -e '
+            const j = require("/tmp/health.json");
+            if (!j.ok) { console.error("FAIL: /health not ok"); process.exit(1); }
+            console.log("OK /health:", JSON.stringify(j));
+          '
+
+          # (b) deployed git_sha matches the released commit (drift detection —
+          #     this is the check that revealed the two-week staleness).
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            -H "Accept: application/json" "https://$HOST/" -o /tmp/root.json
+          node -e '
+            const j = require("/tmp/root.json");
+            const expSha = process.env.EXPECTED_SHA;
+            const expVer = process.env.EXPECTED_VERSION;
+            const fail = (m) => { console.error("FAIL: " + m); process.exit(1); };
+            if (j.version !== expVer) fail(`version ${j.version} != ${expVer}`);
+            if (/^[0-9a-f]{40}$/.test(j.git_sha || "")) {
+              if (j.git_sha !== expSha) fail(`git_sha ${j.git_sha} != ${expSha}`);
+              console.log("OK git_sha:", j.git_sha);
+            } else {
+              fail(`git_sha ${j.git_sha} is not a commit — build arg not applied`);
+            }
+          '
+
+          # (c) the landing page actually RENDERS (non-trivial byte count).
+          #     Catches the blank-page base-path regression that /health misses.
+          BYTES=$(curl -fsS --retry 3 --retry-delay 5 "https://$HOST/" | wc -c | tr -d ' ')
+          echo "landing page bytes: $BYTES"
+          if [ "$BYTES" -lt 1000 ]; then
+            echo "FAIL: landing page is $BYTES bytes — likely a blank-page build"
+            exit 1
+          fi
+
+          # (d) machine is always-on. MCP-over-HTTP sessions live in process
+          #     memory, so an autostop wipes live sessions and surfaces to users
+          #     as an unexplained auth/session timeout.
+          flyctl machine list --app "$APP" --json > /tmp/machines.json
+          node -e '
+            const ms = require("/tmp/machines.json");
+            const stopping = ms.filter(m => m?.config?.auto_destroy || m?.config?.services?.some(s => s.autostop && s.autostop !== "off"));
+            if (stopping.length) {
+              console.error("FAIL: machine(s) not always-on:", stopping.map(m => m.id).join(","));
+              process.exit(1);
+            }
+            console.log("OK always-on:", ms.map(m => m.id).join(","));
+          '
+
+      - name: Notify on failure
+        if: failure() && steps.gate.outputs.configured == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+            curl -fsS -X POST \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d "chat_id=${TELEGRAM_CHAT_ID}" \
+              -d "text=🔴 Client instance deploy FAILED for ${{ github.ref_name }} — the instance may be serving a stale or broken build. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              >/dev/null || true
+          fi

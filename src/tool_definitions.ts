@@ -817,7 +817,7 @@ export function buildToolDefinitions(
       name: "update_schema_incremental",
       description: desc(
         "update_schema_incremental",
-        "Incrementally update a schema by adding or removing fields. Adding fields creates a minor version bump; removing fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. Optionally migrates existing raw_fragments to observations for historical data backfill."
+        "Incrementally update a schema by adding or removing fields, or replacing the entity type's identity rule via canonical_name_fields. Adding fields creates a minor version bump; removing fields or changing canonical_name_fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. canonical_name_fields changes apply to new writes only — they do not retroactively re-key existing entities. Optionally migrates existing raw_fragments to observations for historical data backfill."
       ),
       inputSchema: {
         type: "object",
@@ -851,6 +851,21 @@ export function buildToolDefinitions(
             description:
               "Field names to remove from schema (triggers major version bump). Observation data is preserved; fields can be restored by re-adding them later.",
             items: { type: "string" },
+          },
+          canonical_name_fields: {
+            type: "array",
+            description:
+              'Replace the entity type\'s identity rule (how canonical_name / entity identity is derived). Triggers a major version bump. Each item is a single field name (string) or an all-required composite ({composite:[...]}). Rules are ORDERED PRECEDENCE WITH FALLBACK: the resolver uses the first rule whose fields are all present, not an unordered set. Example: [{"composite":["linkedin_url"]},"email","name"] keys on linkedin_url when present, else email, else name. Omit to keep the current rule. Passing [] clears the rule, but only succeeds when the schema also declares identity_opt_out; otherwise it is rejected (a schema must declare canonical_name_fields OR identity_opt_out). The existing reducer_config is preserved automatically — this is the safe way to re-key a type without reconstructing it. Applies to NEW writes only; it does NOT retroactively re-key existing entities (they keep their stored canonical_name until re-derived), so re-keying will not by itself merge existing duplicates. To see the current rule before replacing it, call describe_entity_type first; the update response also echoes the resolved canonical_name_fields.',
+            items: {
+              oneOf: [
+                { type: "string" },
+                {
+                  type: "object",
+                  properties: { composite: { type: "array", items: { type: "string" } } },
+                  required: ["composite"],
+                },
+              ],
+            },
           },
           schema_version: {
             type: "string",
