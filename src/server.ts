@@ -4421,6 +4421,7 @@ export class NeotomaServer {
         entity_type: parsed.entity_type,
         fields_to_add: parsed.fields_to_add,
         fields_to_remove: parsed.fields_to_remove,
+        canonical_name_fields: parsed.canonical_name_fields,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
         user_id: parsed.user_specific ? userId : undefined,
@@ -4439,6 +4440,13 @@ export class NeotomaServer {
         schema_version: updatedSchema.schema_version,
         fields_added: (parsed.fields_to_add || []).map((f) => f.field_name),
         fields_removed: parsed.fields_to_remove || [],
+        // Echo the resolved identity rule so a caller can confirm what was set
+        // without a second describe_entity_type round trip (#2020 ux review).
+        // Reflects the value actually stored — whether replaced this call or
+        // preserved from the prior version.
+        canonical_name_fields:
+          (updatedSchema.schema_definition as { canonical_name_fields?: unknown })
+            .canonical_name_fields ?? null,
         activated: parsed.activate,
         migrated_existing: parsed.migrate_existing,
         scope: parsed.user_specific ? "user" : "global",

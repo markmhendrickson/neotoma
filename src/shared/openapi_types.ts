@@ -7429,7 +7429,7 @@ export interface operations {
       content: {
         "application/json": {
           entity_type: string;
-          fields_to_add: {
+          fields_to_add?: {
             field_name: string;
             /** @enum {string} */
             field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
@@ -7438,6 +7438,14 @@ export interface operations {
             /** @enum {string} */
             reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
           }[];
+          fields_to_remove?: string[];
+          /** @description Replace the entity type's identity rule (how canonical_name / identity is derived). Each item is a single field name (string) or an all-required composite ({composite:[...]}). Rules are ordered precedence with fallback — the resolver uses the first rule whose fields are all present, not an unordered set. Example: [{"composite":["linkedin_url"]},"email","name"] keys on linkedin_url when present, else email, else name. Triggers a major version bump; existing reducer_config is preserved. Omit to keep the current rule. Passing [] clears the rule but only succeeds if the schema also declares identity_opt_out. Applies to new writes only — does not retroactively re-key existing entities. */
+          canonical_name_fields?: (
+            | string
+            | {
+                composite: string[];
+              }
+          )[];
           schema_version?: string;
           /** @default false */
           user_specific?: boolean;
@@ -7457,6 +7465,24 @@ export interface operations {
         };
         content: {
           "application/json": {
+            success?: boolean;
+            entity_type?: string;
+            schema_version?: string;
+            fields_added?: string[];
+            fields_removed?: string[];
+            /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
+            canonical_name_fields?:
+              | (
+                  | string
+                  | {
+                      composite: string[];
+                    }
+                )[]
+              | null;
+            activated?: boolean;
+            migrated_existing?: boolean;
+            scope?: string;
+          } & {
             [key: string]: unknown;
           };
         };

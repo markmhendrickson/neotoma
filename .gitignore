@@ -1,5 +1,6 @@
 node_modules/
 node_modules
+node_modules.incomplete_bak/
 dist/
 
 # Neotoma plan mirrors (local only, regenerated via `npm run mirror:plans`)

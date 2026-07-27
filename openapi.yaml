@@ -6602,7 +6602,6 @@ paths:
               type: object
               required:
                 - entity_type
-                - fields_to_add
               properties:
                 entity_type:
                   type: string
@@ -6625,6 +6624,36 @@ paths:
                       reducer_strategy:
                         type: string
                         enum: [last_write, highest_priority, most_specific, merge_array]
+                fields_to_remove:
+                  type: array
+                  items:
+                    type: string
+                canonical_name_fields:
+                  type: array
+                  description: >-
+                    Replace the entity type's identity rule (how canonical_name /
+                    identity is derived). Each item is a single field name
+                    (string) or an all-required composite ({composite:[...]}).
+                    Rules are ordered precedence with fallback — the resolver
+                    uses the first rule whose fields are all present, not an
+                    unordered set. Example:
+                    [{"composite":["linkedin_url"]},"email","name"] keys on
+                    linkedin_url when present, else email, else name. Triggers a
+                    major version bump; existing reducer_config is preserved.
+                    Omit to keep the current rule. Passing [] clears the rule
+                    but only succeeds if the schema also declares
+                    identity_opt_out. Applies to new writes only — does not retroactively re-key existing
+                    entities.
+                  items:
+                    oneOf:
+                      - type: string
+                      - type: object
+                        required: [composite]
+                        properties:
+                          composite:
+                            type: array
+                            items:
+                              type: string
                 schema_version:
                   type: string
                 user_specific:
@@ -6645,6 +6674,46 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  success:
+                    type: boolean
+                  entity_type:
+                    type: string
+                  schema_version:
+                    type: string
+                  fields_added:
+                    type: array
+                    items:
+                      type: string
+                  fields_removed:
+                    type: array
+                    items:
+                      type: string
+                  canonical_name_fields:
+                    description: >-
+                      The identity rule as resolved on the registered schema
+                      after this call — the value supplied if replaced, or the
+                      preserved prior rule otherwise; null when the schema
+                      declares none. Lets a caller confirm the rule without a
+                      second describe_entity_type round trip.
+                    type: array
+                    nullable: true
+                    items:
+                      oneOf:
+                        - type: string
+                        - type: object
+                          required: [composite]
+                          properties:
+                            composite:
+                              type: array
+                              items:
+                                type: string
+                  activated:
+                    type: boolean
+                  migrated_existing:
+                    type: boolean
+                  scope:
+                    type: string
                 additionalProperties: true
 
   /register_schema:

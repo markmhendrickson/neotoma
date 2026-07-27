@@ -954,6 +954,12 @@ export const UpdateSchemaIncrementalRequestSchema = z
       )
       .optional(),
     fields_to_remove: z.array(z.string()).optional(),
+    // #2018 — replace the entity's identity rule (canonical_name_fields).
+    // Each rule is either a single field name (string) or an all-required
+    // composite ({composite: [...]}). Omit to preserve the current rule.
+    canonical_name_fields: z
+      .array(z.union([z.string(), z.object({ composite: z.array(z.string()) })]))
+      .optional(),
     schema_version: z.string().optional(),
     user_specific: z.boolean().default(false),
     user_id: z.string().optional(),
@@ -964,8 +970,12 @@ export const UpdateSchemaIncrementalRequestSchema = z
   .refine(
     (data) =>
       (data.fields_to_add && data.fields_to_add.length > 0) ||
-      (data.fields_to_remove && data.fields_to_remove.length > 0),
-    { message: "At least one of fields_to_add or fields_to_remove must be provided and non-empty" }
+      (data.fields_to_remove && data.fields_to_remove.length > 0) ||
+      data.canonical_name_fields !== undefined,
+    {
+      message:
+        "At least one of fields_to_add, fields_to_remove, or canonical_name_fields must be provided",
+    }
   );
 
 export const RegisterSchemaRequestSchema = z.object({

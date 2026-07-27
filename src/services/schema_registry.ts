@@ -1201,6 +1201,18 @@ export class SchemaRegistryService {
       reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
     }>;
     fields_to_remove?: string[];
+    /**
+     * Replace the entity type's identity rule (#2018). When provided, this
+     * value overwrites the preserved `canonical_name_fields` before the new
+     * version is registered; when omitted, the current rule is preserved
+     * verbatim (existing behavior). Accepts both accepted shapes: a legacy
+     * flat `string[]` (single composite) or ordered precedence rules
+     * (`Array<string | {composite: string[]}>`). This is the safe path for
+     * changing an entity's identity key after data exists, because the
+     * existing reducer_config is carried over automatically — callers never
+     * reconstruct it.
+     */
+    canonical_name_fields?: CanonicalNameRule[];
     converters_to_add?: Array<{
       field_name: string;
       converter: {
@@ -1256,6 +1268,7 @@ export class SchemaRegistryService {
       fields_to_add: options.fields_to_add,
       fields_to_remove: options.fields_to_remove,
       converters_to_add: options.converters_to_add,
+      identity_rule_changed: options.canonical_name_fields !== undefined,
     });
     const newVersion =
       options.schema_version || this.incrementVersion(currentSchema.schema_version, changeType);
@@ -1376,6 +1389,17 @@ export class SchemaRegistryService {
         delete preserved.canonical_name_fields;
       } else {
         preserved.canonical_name_fields = prunedRules;
+      }
+    }
+    // Explicit identity-rule change (#2018) takes precedence over the pruned
+    // old rule: a caller asking to re-key the type means to replace it wholesale.
+    // reducer_config is still carried over from currentSchema below, so this is
+    // the safe way to change the identity key without reconstructing it.
+    if (options.canonical_name_fields !== undefined) {
+      if (options.canonical_name_fields.length === 0) {
+        delete preserved.canonical_name_fields;
+      } else {
+        preserved.canonical_name_fields = options.canonical_name_fields;
       }
     }
     if (preserved.temporal_fields) {
@@ -1717,9 +1741,17 @@ export class SchemaRegistryService {
       old_required?: boolean;
       new_required?: boolean;
     }>;
+    identity_rule_changed?: boolean;
   }): "major" | "minor" | "patch" {
     // Breaking changes (major version)
     if (options.fields_to_remove && options.fields_to_remove.length > 0) {
+      return "major";
+    }
+
+    // Changing the identity rule (canonical_name_fields) changes how entities
+    // resolve — the same payload can key to a different entity — so it is
+    // breaking. (#2018)
+    if (options.identity_rule_changed) {
       return "major";
     }
 
