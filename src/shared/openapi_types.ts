@@ -7439,7 +7439,7 @@ export interface operations {
             reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
           }[];
           fields_to_remove?: string[];
-          /** @description Replace the entity type's identity rule. Each item is a single field name (string) or an all-required composite ({composite:[...]}). Triggers a major version bump; existing reducer_config is preserved. Omit to keep the current rule. */
+          /** @description Replace the entity type's identity rule (how canonical_name / identity is derived). Each item is a single field name (string) or an all-required composite ({composite:[...]}). Rules are ordered precedence with fallback — the resolver uses the first rule whose fields are all present, not an unordered set. Example: [{"composite":["linkedin_url"]},"email","name"] keys on linkedin_url when present, else email, else name. Triggers a major version bump; existing reducer_config is preserved. Omit to keep the current rule; pass [] to clear it. Applies to new writes only — does not retroactively re-key existing entities. */
           canonical_name_fields?: (
             | string
             | {

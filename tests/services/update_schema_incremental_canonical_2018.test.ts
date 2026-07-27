@@ -56,13 +56,28 @@ describe("UpdateSchemaIncrementalRequestSchema — canonical_name_fields (#2018)
     expect(parsed.canonical_name_fields).toEqual([]);
   });
 
-  it("rejects a malformed composite rule", () => {
+  it("rejects a malformed composite rule (non-string member)", () => {
     const res = UpdateSchemaIncrementalRequestSchema.safeParse({
       entity_type: "contact",
       // composite must be a string[]; a bare number is invalid
       canonical_name_fields: [{ composite: [42] }],
     });
     expect(res.success).toBe(false);
+  });
+
+  it("rejects the likely mistake of a bare-string composite, with a locatable path", () => {
+    // A plausible caller error: {composite: "linkedin_url"} instead of
+    // {composite: ["linkedin_url"]}. Confirm it's rejected AND that the Zod
+    // issue points at canonical_name_fields so the message is self-correctable.
+    const res = UpdateSchemaIncrementalRequestSchema.safeParse({
+      entity_type: "contact",
+      canonical_name_fields: [{ composite: "linkedin_url" }],
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const paths = res.error.issues.map((i) => i.path.join("."));
+      expect(paths.some((p) => p.includes("canonical_name_fields"))).toBe(true);
+    }
   });
 
   it("still accepts a fields-only request unchanged (no regression)", () => {
