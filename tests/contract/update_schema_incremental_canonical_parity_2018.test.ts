@@ -86,11 +86,26 @@ describe("update_schema_incremental canonical_name_fields — cross-surface pari
     const yaml = readFileSync(join(repoRoot, "openapi.yaml"), "utf8");
     const idx = yaml.indexOf("/update_schema_incremental:");
     expect(idx).toBeGreaterThan(-1);
-    // Look only within a window after the path declaration so we don't match
-    // an unrelated occurrence elsewhere in the spec.
-    const window = yaml.slice(idx, idx + 4000);
-    expect(window).toContain("canonical_name_fields");
-    expect(window).toContain("composite");
+    // Bound to the request-body portion (before the `responses:` marker) so
+    // this asserts the *request* declaration specifically.
+    const opBlock = yaml.slice(idx);
+    const reqBlock = opBlock.slice(0, opBlock.indexOf("\n      responses:"));
+    expect(reqBlock).toContain("canonical_name_fields");
+    expect(reqBlock).toContain("composite");
+  });
+
+  it("OpenAPI spec declares the echoed canonical_name_fields on the response body (MUST #6)", () => {
+    // The handler echoes the resolved rule; the response field this PR adds
+    // must be declared, not left to additionalProperties.
+    const yaml = readFileSync(join(repoRoot, "openapi.yaml"), "utf8");
+    const idx = yaml.indexOf("/update_schema_incremental:");
+    const opBlock = yaml.slice(idx);
+    const respStart = opBlock.indexOf("\n      responses:");
+    expect(respStart).toBeGreaterThan(-1);
+    // Bound the response window to this operation (stop at the next path).
+    const nextPath = opBlock.indexOf("\n  /register_schema:");
+    const respBlock = opBlock.slice(respStart, nextPath > -1 ? nextPath : undefined);
+    expect(respBlock).toContain("canonical_name_fields");
   });
 
   it("CLI 'schemas update' declares the flag and forwards it to the body key", () => {

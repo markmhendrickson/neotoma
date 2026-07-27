@@ -6674,6 +6674,46 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  success:
+                    type: boolean
+                  entity_type:
+                    type: string
+                  schema_version:
+                    type: string
+                  fields_added:
+                    type: array
+                    items:
+                      type: string
+                  fields_removed:
+                    type: array
+                    items:
+                      type: string
+                  canonical_name_fields:
+                    description: >-
+                      The identity rule as resolved on the registered schema
+                      after this call — the value supplied if replaced, or the
+                      preserved prior rule otherwise; null when the schema
+                      declares none. Lets a caller confirm the rule without a
+                      second describe_entity_type round trip.
+                    type: array
+                    nullable: true
+                    items:
+                      oneOf:
+                        - type: string
+                        - type: object
+                          required: [composite]
+                          properties:
+                            composite:
+                              type: array
+                              items:
+                                type: string
+                  activated:
+                    type: boolean
+                  migrated_existing:
+                    type: boolean
+                  scope:
+                    type: string
                 additionalProperties: true
 
   /register_schema:

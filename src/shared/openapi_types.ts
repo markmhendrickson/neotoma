@@ -7465,6 +7465,24 @@ export interface operations {
         };
         content: {
           "application/json": {
+            success?: boolean;
+            entity_type?: string;
+            schema_version?: string;
+            fields_added?: string[];
+            fields_removed?: string[];
+            /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
+            canonical_name_fields?:
+              | (
+                  | string
+                  | {
+                      composite: string[];
+                    }
+                )[]
+              | null;
+            activated?: boolean;
+            migrated_existing?: boolean;
+            scope?: string;
+          } & {
             [key: string]: unknown;
           };
         };
