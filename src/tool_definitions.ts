@@ -817,7 +817,7 @@ export function buildToolDefinitions(
       name: "update_schema_incremental",
       description: desc(
         "update_schema_incremental",
-        "Incrementally update a schema by adding or removing fields. Adding fields creates a minor version bump; removing fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. Optionally migrates existing raw_fragments to observations for historical data backfill."
+        "Incrementally update a schema by adding or removing fields, or replacing the entity type's identity rule via canonical_name_fields. Adding fields creates a minor version bump; removing fields or changing canonical_name_fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. canonical_name_fields changes apply to new writes only — they do not retroactively re-key existing entities. Optionally migrates existing raw_fragments to observations for historical data backfill."
       ),
       inputSchema: {
         type: "object",
