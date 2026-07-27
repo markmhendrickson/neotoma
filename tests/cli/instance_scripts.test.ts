@@ -128,6 +128,14 @@ describe("verifyAndWriteInstanceScript", () => {
     });
 
     expect(outcome.status).toBe("blocked_unapproved");
+    if (outcome.status === "blocked_unapproved") {
+      // sourceId must be threaded through so the CLI can point the operator at
+      // `neotoma sources content <sourceId>` to review before approving (PR #1956
+      // ux/Accipiter BLOCKING finding: the documented review step had no working
+      // CLI path since the blocked message never surfaced an id the review
+      // command could use).
+      expect(outcome.sourceId).toBe(attachment.source_id);
+    }
     expect(fs.existsSync(path.join(skillDir, "scripts", "score.py"))).toBe(false);
     expect(manifest).toEqual({}); // manifest untouched
   });
@@ -201,6 +209,7 @@ describe("verifyAndWriteInstanceScript", () => {
     if (outcome.status === "blocked_hash_changed") {
       expect(outcome.approvedHash).toBe(sha256(oldBytes));
       expect(outcome.newHash).toBe(sha256(newBytes));
+      expect(outcome.sourceId).toBe(attachment.source_id);
     }
     expect(fs.existsSync(path.join(skillDir, "scripts", "score.py"))).toBe(false);
   });

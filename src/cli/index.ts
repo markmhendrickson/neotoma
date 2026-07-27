@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command, Option } from "commander";
+import { isUtf8 } from "node:buffer";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { exec, execFileSync, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -9136,13 +9137,15 @@ skillsCommand
         }
         for (const b of s.blockedUnapproved) {
           console.log(
-            `  ⚠ script not written (unapproved): ${b.skill}/${b.filename} (sha256:${b.hash.slice(0, 12)}) — re-run with --approve-scripts after review`
+            `  ⚠ script not written (unapproved): ${b.skill}/${b.filename} (sha256:${b.hash.slice(0, 12)}) — ` +
+              `review with \`neotoma sources content ${b.sourceId}\`, then re-run with --approve-scripts`
           );
         }
         for (const b of s.blockedHashChanged) {
           console.log(
             `  ⚠ script not written (hash changed since approval): ${b.skill}/${b.filename} ` +
-              `(approved sha256:${b.approvedHash.slice(0, 12)}, new sha256:${b.newHash.slice(0, 12)}) — re-run with --approve-scripts after review`
+              `(approved sha256:${b.approvedHash.slice(0, 12)}, new sha256:${b.newHash.slice(0, 12)}) — ` +
+              `review with \`neotoma sources content ${b.sourceId}\`, then re-run with --approve-scripts`
           );
         }
         for (const m of s.hashMismatches) {
@@ -13002,6 +13005,58 @@ sourcesCommand
     } else {
       writeOutput(data, outputMode);
     }
+  });
+
+sourcesCommand
+  .command("content")
+  .description(
+    "Print a source's raw byte content to stdout. `sources get` returns only the entity's " +
+      "metadata (hash, filename, mime type) — this command downloads and prints the actual " +
+      "bytes via GET /sources/:id/content, e.g. to review a script attachment before " +
+      "`neotoma skills sync --approve-scripts`."
+  )
+  .argument("[id]", "Source ID (or use --source-id)")
+  .option("--source-id <id>", "Source ID (alternative to positional argument)")
+  .action(async (idArg: string | undefined, opts: { sourceId?: string }) => {
+    const id = opts.sourceId ?? idArg;
+    if (!id) throw new Error("Source ID is required (positional argument or --source-id)");
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { downloadSourceBytes } = await import("./instance_skills_client.js");
+    let bytes: Buffer;
+    try {
+      bytes = await downloadSourceBytes(api, id);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to get source content: ${detail}`);
+    }
+    if (outputMode === "json") {
+      process.stdout.write(
+        JSON.stringify({
+          id,
+          size: bytes.length,
+          is_utf8: isUtf8(bytes),
+          content_base64: bytes.toString("base64"),
+        }) + "\n"
+      );
+      return;
+    }
+    // These are meant to be text (scripts, docs), but content is graph-supplied and
+    // therefore untrusted — warn on stderr rather than spewing raw control bytes to a
+    // tty if it isn't valid UTF-8. Bytes are still written to stdout either way so
+    // piping to a file or pager (`neotoma sources content <id> > out.bin`) always works.
+    if (!isUtf8(bytes)) {
+      process.stderr.write(
+        `neotoma: warning: source ${id} content is not valid UTF-8 text; ` +
+          `writing raw bytes to stdout anyway (redirect to a file if your terminal misbehaves)\n`
+      );
+    }
+    process.stdout.write(bytes);
   });
 
 sourcesCommand

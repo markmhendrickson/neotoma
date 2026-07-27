@@ -620,6 +620,8 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--mime-type <mimeType>`
   - `--limit <n>`
   - `--offset <n>`
+- `neotoma sources get <id>` (or `--source-id <id>`): Get a source's **metadata** — `content_hash`, `original_filename`/`mime_type`, `file_size`, etc. Does NOT return the source's byte content; use `sources content` for that.
+- `neotoma sources content <id>` (or `--source-id <id>`): Print a source's **raw byte content** to stdout, via the authenticated `GET /sources/:id/content` endpoint — the same download path `neotoma skills sync --include-instance-scripts` uses internally to fetch script attachments. This is the CLI-native way to review a script's actual bytes (e.g. an instance-script attachment blocked pending `--approve-scripts`) before deciding to trust it; see the worked example under [Skills](#skills) below. Pipe to a pager or file (`neotoma sources content <id> | less`, `neotoma sources content <id> > script.sh`). Content is treated as untrusted: if the bytes are not valid UTF-8, a warning is printed to stderr (not to stdout) before the raw bytes are still written, so redirection/piping is never corrupted by the warning text. `--json` emits `{ id, size, is_utf8, content_base64 }` instead of raw bytes on stdout.
 
 ### Observations
 
@@ -801,13 +803,16 @@ neotoma skills sync --include-instance-scripts
 # Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
 #   updated: deploy-helper
 #   claude-code: 3 instance skill link(s) → ~/.claude/skills
-#   ⚠ script not written (unapproved): deploy-helper/scripts/rollout.sh (sha256:9f86d081884c) — re-run with --approve-scripts after review
+#   ⚠ script not written (unapproved): deploy-helper/scripts/rollout.sh (sha256:9f86d081884c) — review with `neotoma sources content src_a1b2c3d4`, then re-run with --approve-scripts
 
 # Step 2: review the script's content before trusting it. The blocked message names the
-# skill and the file_asset's originating entity; look it up on the graph to read the
-# script bytes before deciding to approve (e.g. via the Inspector, or
-# `neotoma entities get <file_asset-entity-id>` for the entity's own metadata).
-neotoma entities get <file_asset-entity-id>
+# sources.id (`src_a1b2c3d4` above) needed to print the script's actual bytes —
+# `neotoma sources get <id>` only returns metadata (hash, filename); `sources content`
+# downloads and prints the real content to stdout for review:
+neotoma sources content src_a1b2c3d4
+# #!/bin/sh
+# echo "rolling out release..."
+# ...
 
 # Step 3: satisfied it's safe, re-run with --approve-scripts to pin the hash and write the file.
 neotoma skills sync --include-instance-scripts --approve-scripts

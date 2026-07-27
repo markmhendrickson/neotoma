@@ -110,8 +110,14 @@ export function sanitizeScriptFilename(filename: string): string | null {
 export type ScriptWriteOutcome =
   | { status: "written"; path: string; hash: string; newlyApproved: boolean }
   | { status: "hash_mismatch"; expected: string; actual: string }
-  | { status: "blocked_unapproved"; hash: string; key: string }
-  | { status: "blocked_hash_changed"; approvedHash: string; newHash: string; key: string }
+  | { status: "blocked_unapproved"; hash: string; key: string; sourceId: string }
+  | {
+      status: "blocked_hash_changed";
+      approvedHash: string;
+      newHash: string;
+      key: string;
+      sourceId: string;
+    }
   | { status: "rejected_filename"; filename: string; reason: string };
 
 /**
@@ -170,7 +176,12 @@ export function verifyAndWriteInstanceScript(params: {
 
   if (approvedHash === undefined) {
     if (!approve) {
-      return { status: "blocked_unapproved", hash: actualHash, key };
+      return {
+        status: "blocked_unapproved",
+        hash: actualHash,
+        key,
+        sourceId: attachment.source_id,
+      };
     }
     manifest[key] = actualHash;
     newlyApproved = true;
@@ -181,6 +192,7 @@ export function verifyAndWriteInstanceScript(params: {
         approvedHash,
         newHash: actualHash,
         key,
+        sourceId: attachment.source_id,
       };
     }
     manifest[key] = actualHash;

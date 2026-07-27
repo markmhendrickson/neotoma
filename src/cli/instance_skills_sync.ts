@@ -54,13 +54,20 @@ export interface InstanceSkillsSyncReport {
   harnessResults: ReturnType<typeof linkInstanceSkillsToHarnesses>;
   scripts?: {
     written: Array<{ skill: string; filename: string; path: string; newlyApproved: boolean }>;
-    blockedUnapproved: Array<{ skill: string; filename: string; hash: string; key: string }>;
+    blockedUnapproved: Array<{
+      skill: string;
+      filename: string;
+      hash: string;
+      key: string;
+      sourceId: string;
+    }>;
     blockedHashChanged: Array<{
       skill: string;
       filename: string;
       approvedHash: string;
       newHash: string;
       key: string;
+      sourceId: string;
     }>;
     hashMismatches: Array<{ skill: string; filename: string; expected: string; actual: string }>;
     rejectedFilenames: Array<{ skill: string; filename: string; reason: string }>;
@@ -125,14 +132,20 @@ export async function runInstanceSkillsSync(
     path: string;
     newlyApproved: boolean;
   }> = [];
-  const blockedUnapproved: Array<{ skill: string; filename: string; hash: string; key: string }> =
-    [];
+  const blockedUnapproved: Array<{
+    skill: string;
+    filename: string;
+    hash: string;
+    key: string;
+    sourceId: string;
+  }> = [];
   const blockedHashChanged: Array<{
     skill: string;
     filename: string;
     approvedHash: string;
     newHash: string;
     key: string;
+    sourceId: string;
   }> = [];
   const hashMismatches: Array<{
     skill: string;
@@ -180,6 +193,7 @@ export async function runInstanceSkillsSync(
             filename: attachment.original_filename,
             hash: outcome.hash,
             key: outcome.key,
+            sourceId: outcome.sourceId,
           });
           break;
         case "blocked_hash_changed":
@@ -189,6 +203,7 @@ export async function runInstanceSkillsSync(
             approvedHash: outcome.approvedHash,
             newHash: outcome.newHash,
             key: outcome.key,
+            sourceId: outcome.sourceId,
           });
           break;
         case "hash_mismatch":

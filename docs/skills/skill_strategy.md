@@ -159,6 +159,11 @@ materialization.
 - A script whose hash has **changed** since it was approved is not written; the run prints a
   warning naming the approved and new hashes and instructs the operator to re-run with
   `--approve-scripts` after reviewing the diff.
+- The blocked-script warning names the `sources.id` of the attachment (not just the skill and
+  filename); run `neotoma sources content <source-id>` to print the actual script bytes to
+  stdout for review before approving — `neotoma sources get <id>` alone only returns the
+  `file_asset` entity's metadata (hash, filename), not the content. See the worked example in
+  [`cli_reference.md`](../developer/cli_reference.md#skills).
 - A content-hash mismatch against the recorded `content_hash` (a data-integrity failure, not
   a consent decision) is refused unconditionally, `--approve-scripts` or not.
 - When a hash IS newly recorded as approved on a run (not merely re-confirmed from a prior

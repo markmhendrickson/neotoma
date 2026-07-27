@@ -427,6 +427,43 @@ describe("CLI `skills sync` instance-skills/instance-scripts action closure", ()
       expect(printed.instance.scripts.blockedUnapproved).toHaveLength(1);
       expect(printed.instance.scripts.hashMismatches).toHaveLength(0);
       expect(printed.instance.scripts.rejectedFilenames).toHaveLength(0);
+      // PR #1956 ux/Accipiter BLOCKING finding ("broken-trust-workflow"): the
+      // documented review-before-approve step had no CLI path because the
+      // blocked outcome never carried the `sources.id` a reviewer needs to
+      // pass to a content-reading command. Assert it's threaded through.
+      expect(printed.instance.scripts.blockedUnapproved[0].sourceId).toBe(SOURCE_ID);
+      expect(process.exitCode).toBeUndefined();
+    });
+  });
+
+  it("blocked-unapproved console message names the working `neotoma sources content <id>` review command with the real source id", async () => {
+    await withTempHome(async () => {
+      const bytes = Buffer.from("print('hello')\n");
+      const fetchMock = makeInstanceFetchMock({ scriptBytes: bytes });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { runCli } = await loadCli();
+      const console_ = captureConsole();
+      try {
+        await runCli([
+          "node",
+          "cli",
+          "skills",
+          "sync",
+          "--include-instance-scripts",
+          "--no-log-file",
+        ]);
+      } finally {
+        console_.restore();
+      }
+
+      const joined = console_.output.join("\n");
+      expect(joined).toContain("script not written (unapproved)");
+      // The message must name an id-bearing, working review command — not the
+      // old `neotoma entities get <file_asset-entity-id>` doc instruction,
+      // which only ever returned metadata and named the wrong (entity, not
+      // source) id for the command it referenced.
+      expect(joined).toContain(`neotoma sources content ${SOURCE_ID}`);
       expect(process.exitCode).toBeUndefined();
     });
   });
@@ -473,6 +510,7 @@ describe("CLI `skills sync` instance-skills/instance-scripts action closure", ()
       expect(printed.instance.scripts.blockedHashChanged).toHaveLength(1);
       expect(printed.instance.scripts.hashMismatches).toHaveLength(0);
       expect(printed.instance.scripts.rejectedFilenames).toHaveLength(0);
+      expect(printed.instance.scripts.blockedHashChanged[0].sourceId).toBe(SOURCE_ID);
       expect(process.exitCode).toBeUndefined();
     });
   });
