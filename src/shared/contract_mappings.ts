@@ -513,6 +513,24 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
       "Read-only leads-graph lookup: resolve a company name (exact/fuzzy) and return contacts linked via works_at. Never creates a company.",
   },
   {
+    operationId: "findPaths",
+    method: "post",
+    path: "/find_paths",
+    adapter: "mcp",
+    mcpTool: "find_paths",
+    notes:
+      "Read-only warm-path lookup: resolve a target company/fund (exact/fuzzy) and return the bounded BFS paths reaching it, including the full entity/edge chain. Never creates entities or edges.",
+  },
+  {
+    operationId: "shortestPath",
+    method: "post",
+    path: "/shortest_path",
+    adapter: "mcp",
+    mcpTool: "shortest_path",
+    notes:
+      "Read-only shortest path between two entity ids via the same bounded BFS as find_paths. Returns found:false rather than erroring when unreachable within bounds.",
+  },
+  {
     operationId: "recordComparison",
     method: "post",
     path: "/record_comparison",
@@ -844,6 +862,8 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   create_relationships: "createRelationships",
   list_relationships: "listRelationshipsForEntity",
   query_contacts_at_company: "queryContactsAtCompany",
+  find_paths: "findPaths",
+  shortest_path: "shortestPath",
   retrieve_entities: "queryEntities",
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",

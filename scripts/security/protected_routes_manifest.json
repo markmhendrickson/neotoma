@@ -420,6 +420,19 @@
       ]
     },
     {
+      "path": "/find_paths",
+      "method": "POST",
+      "operation_id": "findPaths",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/get_authenticated_user",
       "method": "POST",
       "operation_id": "getAuthenticatedUser",
@@ -1215,6 +1228,19 @@
       "path": "/session",
       "method": "GET",
       "operation_id": "getSessionInfo",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/shortest_path",
+      "method": "POST",
+      "operation_id": "shortestPath",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [
