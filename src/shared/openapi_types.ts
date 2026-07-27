@@ -7429,7 +7429,7 @@ export interface operations {
       content: {
         "application/json": {
           entity_type: string;
-          fields_to_add: {
+          fields_to_add?: {
             field_name: string;
             /** @enum {string} */
             field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
@@ -7438,6 +7438,14 @@ export interface operations {
             /** @enum {string} */
             reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
           }[];
+          fields_to_remove?: string[];
+          /** @description Replace the entity type's identity rule. Each item is a single field name (string) or an all-required composite ({composite:[...]}). Triggers a major version bump; existing reducer_config is preserved. Omit to keep the current rule. */
+          canonical_name_fields?: (
+            | string
+            | {
+                composite: string[];
+              }
+          )[];
           schema_version?: string;
           /** @default false */
           user_specific?: boolean;

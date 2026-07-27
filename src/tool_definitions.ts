@@ -852,6 +852,21 @@ export function buildToolDefinitions(
               "Field names to remove from schema (triggers major version bump). Observation data is preserved; fields can be restored by re-adding them later.",
             items: { type: "string" },
           },
+          canonical_name_fields: {
+            type: "array",
+            description:
+              "Replace the entity type's identity rule (how canonical_name / entity identity is derived). Triggers a major version bump. Each item is either a single field name (string) or an all-required composite ({composite:[...]}); ordered rules use the first whose fields are all present. Omit to keep the current rule. The existing reducer_config is preserved automatically — this is the safe way to re-key a type without reconstructing it. Governs NEW writes; existing rows keep their stored canonical_name until re-derived.",
+            items: {
+              oneOf: [
+                { type: "string" },
+                {
+                  type: "object",
+                  properties: { composite: { type: "array", items: { type: "string" } } },
+                  required: ["composite"],
+                },
+              ],
+            },
+          },
           schema_version: {
             type: "string",
             description: "New schema version (auto-increments if not provided)",

@@ -4421,6 +4421,7 @@ export class NeotomaServer {
         entity_type: parsed.entity_type,
         fields_to_add: parsed.fields_to_add,
         fields_to_remove: parsed.fields_to_remove,
+        canonical_name_fields: parsed.canonical_name_fields,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
         user_id: parsed.user_specific ? userId : undefined,

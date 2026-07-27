@@ -6602,7 +6602,6 @@ paths:
               type: object
               required:
                 - entity_type
-                - fields_to_add
               properties:
                 entity_type:
                   type: string
@@ -6625,6 +6624,27 @@ paths:
                       reducer_strategy:
                         type: string
                         enum: [last_write, highest_priority, most_specific, merge_array]
+                fields_to_remove:
+                  type: array
+                  items:
+                    type: string
+                canonical_name_fields:
+                  type: array
+                  description: >-
+                    Replace the entity type's identity rule. Each item is a
+                    single field name (string) or an all-required composite
+                    ({composite:[...]}). Triggers a major version bump; existing
+                    reducer_config is preserved. Omit to keep the current rule.
+                  items:
+                    oneOf:
+                      - type: string
+                      - type: object
+                        required: [composite]
+                        properties:
+                          composite:
+                            type: array
+                            items:
+                              type: string
                 schema_version:
                   type: string
                 user_specific:
