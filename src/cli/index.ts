@@ -13701,6 +13701,10 @@ schemasCommand
     "--remove-fields <json>",
     "JSON array of field names to remove (triggers major version bump; data preserved in observations)"
   )
+  .option(
+    "--canonical-name-fields <json>",
+    'JSON array replacing the identity rule, e.g. \'[{"composite":["linkedin_url"]},"email","name"]\' (triggers major version bump; existing reducer_config preserved; governs new writes only)'
+  )
   .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
@@ -13713,6 +13717,7 @@ schemasCommand
         entityType?: string;
         fields?: string;
         removeFields?: string;
+        canonicalNameFields?: string;
         userId?: string;
         activate?: boolean;
         migrateExisting?: boolean;
@@ -13730,8 +13735,20 @@ schemasCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
-      if (!opts.fields && !opts.removeFields) {
-        throw new Error("at least one of --fields or --remove-fields is required");
+      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields) {
+        throw new Error(
+          "at least one of --fields, --remove-fields, or --canonical-name-fields is required"
+        );
+      }
+      let canonicalNameFields: unknown[] | undefined;
+      if (opts.canonicalNameFields) {
+        const parsed = JSON.parse(opts.canonicalNameFields);
+        if (!Array.isArray(parsed)) {
+          throw new Error(
+            '--canonical-name-fields must be a JSON array, e.g. \'[{"composite":["linkedin_url"]},"name"]\''
+          );
+        }
+        canonicalNameFields = parsed;
       }
       let fieldsToAdd: any[] | undefined;
       if (opts.fields) {
@@ -13833,6 +13850,7 @@ schemasCommand
       if (opts.activate) body.activate = true;
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
       if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
+      if (canonicalNameFields) body.canonical_name_fields = canonicalNameFields;
       const { data, error } = await api.POST("/update_schema_incremental", {
         body: body as any,
       });
