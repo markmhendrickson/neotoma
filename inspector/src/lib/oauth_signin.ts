@@ -37,7 +37,7 @@
  * needed for that follow-up.
  */
 
-import { setApiUrl, setAuthToken, getApiUrl } from "@/api/client";
+import { setApiUrl, setAuthSession, getApiUrl } from "@/api/client";
 
 const PKCE_STORAGE_KEY = "neotoma_inspector_oauth_pkce";
 const RETURN_PATH_STORAGE_KEY = "neotoma_inspector_oauth_return_path";
@@ -210,7 +210,11 @@ export async function completeOAuthSignIn(search: URLSearchParams): Promise<OAut
       };
     }
 
-    const token = (await tokenRes.json()) as { access_token?: string };
+    const token = (await tokenRes.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
     if (!token.access_token) {
       return {
         kind: "error",
@@ -220,7 +224,14 @@ export async function completeOAuthSignIn(search: URLSearchParams): Promise<OAut
     }
 
     setApiUrl(stored.apiBase);
-    setAuthToken(token.access_token);
+    // Persist the whole bundle (not just the access token): the refresh_token
+    // and expires_in are what let the session renew instead of hard-expiring
+    // after ~1 hour (#2005).
+    setAuthSession({
+      access_token: token.access_token,
+      refresh_token: token.refresh_token,
+      expires_in: token.expires_in,
+    });
     return { kind: "success", returnPath: fallbackReturnPath };
   } catch (err) {
     return {
