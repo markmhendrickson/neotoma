@@ -126,6 +126,9 @@
     "publish_rendered_page": {
       "addedInVersion": "v0.16.0"
     },
+    "query_contacts_at_company": {
+      "addedInVersion": "v0.19.0"
+    },
     "register_schema": {
       "addedInVersion": "v0.4.3"
     },
