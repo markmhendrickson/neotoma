@@ -62,6 +62,19 @@ export function normalizeParams(params: unknown[]): unknown[] {
  * wait for the currently open transaction. Backends compose this with an
  * AsyncLocalStorage check so statements inside the transaction's own async
  * context bypass the gate instead of deadlocking.
+ *
+ * DESIGN NOTE — process-global, NOT per-tenant (arch review, PR #1944): the
+ * single tail-promise queue serializes ALL transactions in this process
+ * against each other, regardless of tenant/user. One caller's slow transaction
+ * queues every other caller's transaction behind it. This is the SAME
+ * global-serial constraint the prior synchronous better-sqlite3 driver had
+ * (single-threaded engine, one writer) — carried forward, just made explicit
+ * and now shared across the worker + reader pools. Do NOT "optimize" this into
+ * per-tenant sharding without preserving the atomicity guarantee entity_merge.ts
+ * relies on: its AsyncLocalStorage-routed statements join the caller's OPEN
+ * transaction, keyed on gate identity (the open BEGIN), not on tenant. A
+ * per-tenant gate would let a second tenant's statement interleave into the
+ * first tenant's transaction window and break that guarantee.
  */
 export class TransactionGate {
   private tail: Promise<void> = Promise.resolve();

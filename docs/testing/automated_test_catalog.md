@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **555**
-- Backend and repo Vitest files: **520**
+- Total automated test files: **551**
+- Backend and repo Vitest files: **516**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 151 |
-| Vitest service tests | 42 |
+| Vitest unit tests | 156 |
+| Vitest service tests | 39 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 159 |
-| Vitest CLI tests | 72 |
+| Vitest integration tests | 157 |
+| Vitest CLI tests | 67 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 4 |
 | Vitest subscription tests | 5 |
@@ -85,7 +85,7 @@ flowchart TD
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 1 |
-| Tests Scripts | 2 |
+| Tests Scripts | 3 |
 
 ## Primary validation commands
 - `npm test`
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (151):**
+**Files (156):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -150,6 +150,7 @@ flowchart TD
 - `tests/unit/client_turn_report.test.ts`
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
+- `tests/unit/config_db_backend.test.ts`
 - `tests/unit/config_sqlite_path.test.ts`
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
@@ -157,6 +158,10 @@ flowchart TD
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
+- `tests/unit/db_driver_contract.test.ts`
+- `tests/unit/db_idempotency_concurrency.test.ts`
+- `tests/unit/db_libsql_nonblocking.test.ts`
+- `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`
@@ -267,13 +272,12 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (42):**
+**Files (39):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
-- `tests/services/deploy_seed_wiring.test.ts`
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
@@ -296,14 +300,12 @@ flowchart TD
 - `tests/services/payload_schema.test.ts`
 - `tests/services/peer_sync_batch.test.ts`
 - `tests/services/raw_fragments_isolation.test.ts`
-- `tests/services/raw_storage_mime_map.test.ts`
 - `tests/services/raw_storage.test.ts`
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
 - `tests/services/schema_recommendation.test.ts`
 - `tests/services/schema_reference_fields_resolve_target_validation.test.ts`
 - `tests/services/schema_reference_linking.test.ts`
-- `tests/services/schema_registry_bootstrap.test.ts`
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/summary.test.ts`
@@ -388,7 +390,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (159):**
+**Files (157):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -426,7 +428,6 @@ flowchart TD
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
-- `tests/integration/entity_queries_contains_word.test.ts`
 - `tests/integration/entity_queries_cursor.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
@@ -517,7 +518,6 @@ flowchart TD
 - `tests/integration/sandbox_seed_token_bypass.test.ts`
 - `tests/integration/sandbox_stale_bearer_fallback.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
-- `tests/integration/seed_then_works_at_e2e.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
@@ -554,7 +554,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (72):**
+**Files (67):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -609,9 +609,6 @@ flowchart TD
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
-- `tests/cli/instance_scripts.test.ts`
-- `tests/cli/instance_skills_client.test.ts`
-- `tests/cli/instance_skills.test.ts`
 - `tests/cli/issues_import.test.ts`
 - `tests/cli/issues_message.test.ts`
 - `tests/cli/onboarding_import_transcripts.test.ts`
@@ -622,8 +619,6 @@ flowchart TD
 - `tests/cli/schemas_describe.test.ts`
 - `tests/cli/schemas_repair_plural_types.test.ts`
 - `tests/cli/skills_mirror.test.ts`
-- `tests/cli/skills_sync_instance_cli.test.ts`
-- `tests/cli/sources_content_cli.test.ts`
 - `tests/cli/test_command_detection.test.ts`
 - `tests/cli/test_debug_tty.test.ts`
 - `tests/cli/transcript_parser.test.ts`
@@ -774,9 +769,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/scripts`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (2):**
+**Files (3):**
 - `tests/scripts/bundles_scaffold.test.ts`
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
+- `tests/scripts/validate_libsql_migration.test.ts`
 
 ### Python unit tests
 **Directory:** `packages/client-python/tests/`
