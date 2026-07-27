@@ -1,0 +1,23 @@
+endpoint: "POST /entities/query"
+outcome: rejected
+error_code: "VALIDATION_INVALID_FORMAT"
+hint_match: "cursor"
+notes: |
+  v0.18.9 tightening (#1943). Deep `offset` paging was accepted on every prior
+  version — the client that triggered the bug walked contacts with
+  `{include_snapshots: true, limit: 100, offset: 1300}` and kept going.
+
+  The offset path is O(offset): the server re-scanned and discarded `offset`
+  visible rows in JS per page, with a deleted-id round trip per chunk. On the
+  synchronous SQLite backend that pinned the single Node event loop — a hosted
+  instance froze for 4.8-7.5s per call, blocking /health and every concurrent
+  request. `offset` is now capped at 2000 and deprecated.
+
+  This payload uses offset:3000 (above the cap) so the fixture pins the
+  rejection. Note offset:1300 — the literal repro depth — still works: the cap
+  sits deliberately above it so the exact reported client keeps functioning on
+  the legacy path while the unbounded case is closed.
+
+  Fix on the caller side: drop `offset` and page with `cursor`. Read
+  `next_cursor` from each response and pass it back as `cursor` on the next
+  call. Cursor paging is constant-time at any depth.

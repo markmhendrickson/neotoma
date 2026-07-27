@@ -2932,7 +2932,27 @@ paths:
         - in: query
           name: offset
           required: false
+          deprecated: true
+          description: |
+            Deprecated in favor of `cursor`. Still accepted for back-compat but
+            internally bounded: values above 2000 are rejected with a structured
+            hint pointing to `cursor`. Supplying a non-zero `offset` together
+            with `cursor` is rejected as a validation error; use one or the other.
           schema: { type: integer }
+        - in: query
+          name: cursor
+          required: false
+          description: |
+            Opaque keyset pagination cursor from a previous response's
+            `next_cursor`. Returns the next page in O(page size) time regardless
+            of position, unlike `offset` which is bounded and deprecated. Only
+            supported with the default `sort_by=entity_id`; cannot be combined
+            with `search` or a non-zero `offset`. Reusing a cursor after changing
+            `sort_order` returns a structured error — so if you set `sort_order`
+            explicitly on the first call of a walk, pass the same value on every
+            page (omitting it after having set it explicitly counts as changing
+            it).
+          schema: { type: string }
         - in: query
           name: sort_by
           required: false
@@ -3030,6 +3050,14 @@ paths:
                     type: integer
                   offset:
                     type: integer
+                  next_cursor:
+                    type: string
+                    nullable: true
+                    description: |
+                      Opaque keyset cursor for the next page, or `null`/omitted
+                      when this page returned fewer than `limit` rows. Pass back
+                      as the `cursor` query parameter to continue pagination in
+                      O(page size) time.
                   applied_search_strategies:
                     type: array
                     items:
@@ -3084,8 +3112,33 @@ paths:
                   description: Compatibility alias for `search`.
                 limit:
                   type: integer
+                  description: |
+                    Page size. Capped at 500 when `include_snapshots` is true
+                    (the default), since each snapshot is hydrated synchronously;
+                    lower the page size or set `include_snapshots=false` for
+                    larger pages.
                 offset:
                   type: integer
+                  deprecated: true
+                  description: |
+                    Deprecated in favor of `cursor`. Still accepted for back-compat
+                    but internally bounded: values above 2000 are rejected with a
+                    structured hint pointing to `cursor`. Supplying a non-zero
+                    `offset` together with `cursor` is rejected as a validation
+                    error; use one or the other.
+                cursor:
+                  type: string
+                  description: |
+                    Opaque keyset pagination cursor from a previous response's
+                    `next_cursor`. Returns the next page in O(page size) time
+                    regardless of position, unlike `offset` which is bounded and
+                    deprecated. Only supported with the default
+                    `sort_by=entity_id`; cannot be combined with `search` or a
+                    non-zero `offset`. Reusing a cursor after changing
+                    `sort_order` returns a structured error — so if you set
+                    `sort_order` explicitly on the first call of a walk, pass the
+                    same value on every page (omitting it after having set it
+                    explicitly counts as changing it).
                 sort_by:
                   type: string
                   description: |
@@ -3197,6 +3250,14 @@ paths:
                     type: integer
                   offset:
                     type: integer
+                  next_cursor:
+                    type: string
+                    nullable: true
+                    description: |
+                      Opaque keyset cursor for the next page, or `null`/omitted
+                      when this page returned fewer than `limit` rows. Pass back
+                      as the `cursor` request field to continue pagination in
+                      O(page size) time regardless of position.
                   applied_search_strategies:
                     type: array
                     description: |
@@ -3228,6 +3289,22 @@ paths:
                       matching answered instead. Lets callers detect a silent
                       semantic→lexical degradation (e.g. embedding provider
                       unavailable). See issue #1506.
+        "400":
+          description: |
+            Invalid request. Error codes:
+
+            - `INVALID_CURSOR` — the `cursor` is malformed, carries an
+              unsupported version, or was minted under a different `sort_order`
+              than this request (#1943). `details` carries `code`, `message`,
+              and a flat `hint`. Not retryable with the same token: drop the
+              cursor and restart the walk from the first page.
+            - `VALIDATION_INVALID_FORMAT` — the request violated a parameter
+              rule, e.g. `cursor` combined with `search`, a non-default
+              `sort_by`, or a non-zero `offset`; `offset` above 2000; or `limit`
+              above 500 while `include_snapshots` is true.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /entities/{id}:
     get:

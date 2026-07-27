@@ -31,6 +31,7 @@ import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth
 import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { CursorError } from "./services/entity_cursor.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
@@ -2320,10 +2321,32 @@ function sendStoreValidationError(res: express.Response, issues: unknown): expre
   return sendValidationError(res, issues);
 }
 
+/**
+ * Lift a structured `hint` off the first Zod issue that carries one.
+ *
+ * Zod nests custom issue metadata under `params`, so a `ctx.addIssue({ params:
+ * { hint } })` lands at `details.issues[].params.hint`. Clients (and the
+ * legacy-payload replay harness, per docs/subsystems/errors.md § Tightening-change
+ * hint obligation) read the migration hint from the flat `details.hint` slot that
+ * every other standard-envelope error uses. Without this lift, a tightening can
+ * populate `hint` exactly as the guardrail requires and still be invisible to the
+ * gate meant to catch it.
+ */
+function firstIssueHint(issues: unknown): string | undefined {
+  if (!Array.isArray(issues)) return undefined;
+  for (const issue of issues) {
+    const hint = (issue as { params?: { hint?: unknown } } | null)?.params?.hint;
+    if (typeof hint === "string" && hint.length > 0) return hint;
+  }
+  return undefined;
+}
+
 function sendValidationError(res: express.Response, issues: unknown): express.Response {
+  const hint = firstIssueHint(issues);
   return res.status(400).json(
     buildErrorEnvelope("VALIDATION_INVALID_FORMAT", "Invalid request payload.", {
       issues,
+      ...(hint ? { hint } : {}),
     })
   );
 }
@@ -4225,6 +4248,12 @@ function handleApiError(
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (error instanceof CursorError) {
+    logWarn(logContext || "CursorRejection", req, error.toErrorEnvelope());
+    return res
+      .status(error.statusCode)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
   if (error instanceof IssueValidationError) {
     logWarn(logContext || "IssueValidationError", req, {
       code: error.code,
@@ -4291,6 +4320,7 @@ async function runEntitiesQuery(
       search,
       limit,
       offset,
+      cursor,
       sort_by,
       sort_order,
       published,
@@ -4304,7 +4334,7 @@ async function runEntitiesQuery(
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, applied_search_strategies, search_mode } =
+    const { entities, total, applied_search_strategies, search_mode, next_cursor } =
       await queryEntitiesWithCount({
         userId,
         entityType: entity_type,
@@ -4319,6 +4349,7 @@ async function runEntitiesQuery(
         search,
         limit,
         offset,
+        cursor,
         updatedSince: updated_since,
         createdSince: created_since,
         identityBasis: identity_basis,
@@ -4333,6 +4364,7 @@ async function runEntitiesQuery(
       offset,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
+      ...(next_cursor ? { next_cursor } : {}),
     });
   } catch (error) {
     return handleApiError(
@@ -4377,6 +4409,7 @@ function coerceEntitiesQueryParams(query: express.Request["query"]): Record<stri
     "updated_since",
     "created_since",
     "identity_basis",
+    "cursor",
   ]) {
     const value = readString(key);
     if (value !== undefined) out[key] = value;
