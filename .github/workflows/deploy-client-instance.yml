@@ -17,7 +17,11 @@ name: Deploy client instance
 # public repo; do not re-add one here in any form (app name, domain, codename).
 #
 # Required repository secrets:
-#   FLY_API_TOKEN            deploy token (already used by deploy-sandbox.yml)
+#   CLIENT_INSTANCE_FLY_TOKEN  Fly deploy token scoped to the CLIENT INSTANCE'S org
+#                              (the client app may live in a DIFFERENT Fly org than the
+#                              sandbox — a neotoma-org FLY_API_TOKEN returns 'unauthorized'
+#                              deploying it). Falls back to FLY_API_TOKEN when unset (works
+#                              only if the client app is in the same org as the sandbox).
 #   CLIENT_INSTANCE_APP      Fly app name for the client instance
 #   CLIENT_INSTANCE_HOST     hostname to verify (no scheme), e.g. app.fly.dev
 #
@@ -75,7 +79,7 @@ jobs:
       - name: Deploy to Fly (client instance)
         if: steps.gate.outputs.configured == 'true'
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.CLIENT_INSTANCE_FLY_TOKEN || secrets.FLY_API_TOKEN }}
           APP: ${{ secrets.CLIENT_INSTANCE_APP }}
         run: |
           flyctl deploy --app "$APP" --remote-only \
@@ -92,7 +96,7 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
           HOST: ${{ secrets.CLIENT_INSTANCE_HOST }}
           APP: ${{ secrets.CLIENT_INSTANCE_APP }}
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.CLIENT_INSTANCE_FLY_TOKEN || secrets.FLY_API_TOKEN }}
         run: |
           set -euo pipefail
           export EXPECTED_VERSION="$(node -p "require('./package.json').version")"
