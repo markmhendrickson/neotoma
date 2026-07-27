@@ -22,6 +22,7 @@
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { AsyncSqliteDatabase } from "../src/repositories/sqlite/sqlite_driver.js";
 import { openLibsqlDatabase } from "../src/repositories/libsql/libsql_driver.js";
 import type { DbDatabase } from "../src/repositories/db/driver.js";
@@ -50,6 +51,71 @@ async function tableCount(db: DbDatabase, table: string): Promise<number | null>
   }
 }
 
+export interface MigrationValidationResult {
+  passed: boolean;
+  messages: string[];
+  /** Tables whose row counts diverged between the sqlite and libsql views. */
+  failedTables: string[];
+}
+
+/**
+ * Runs the integrity check, per-table row-count parity, and snapshot
+ * spot-check against an already-open sqlite/libsql pair. Extracted from
+ * `main()` so tests can inject a deliberately corrupted copy without going
+ * through the CLI/process.exit path.
+ */
+export async function validateMigration(
+  sqlite: DbDatabase,
+  libsql: DbDatabase
+): Promise<MigrationValidationResult> {
+  const messages: string[] = [];
+  const failedTables: string[] = [];
+  let failed = false;
+
+  // 1. Integrity check under libSQL.
+  const integrity = (await libsql.pragma("integrity_check")) as Array<Record<string, unknown>>;
+  const verdict = String(Object.values(integrity[0] ?? {})[0] ?? "");
+  if (verdict === "ok") {
+    messages.push("✅ integrity_check: ok");
+  } else {
+    messages.push(`❌ integrity_check failed: ${JSON.stringify(integrity).slice(0, 500)}`);
+    failed = true;
+  }
+
+  // 2. Row-count parity across core tables.
+  for (const table of TABLES) {
+    const a = await tableCount(sqlite, table);
+    const b = await tableCount(libsql, table);
+    if (a === null && b === null) continue;
+    if (a === b) {
+      messages.push(`✅ ${table}: ${a} rows (parity)`);
+    } else {
+      messages.push(`❌ ${table}: sqlite=${a} libsql=${b}`);
+      failedTables.push(table);
+      failed = true;
+    }
+  }
+
+  // 3. Spot check: newest entity snapshot hydrates identically.
+  const probe = `SELECT entity_id, entity_type, snapshot FROM entity_snapshots
+                 ORDER BY computed_at DESC LIMIT 5`;
+  try {
+    const fromSqlite = (await sqlite.prepare(probe).all()) as Record<string, unknown>[];
+    const fromLibsql = (await libsql.prepare(probe).all()) as Record<string, unknown>[];
+    const same = JSON.stringify(fromSqlite) === JSON.stringify(fromLibsql);
+    if (same) {
+      messages.push(`✅ snapshot spot check: ${fromSqlite.length} rows identical`);
+    } else {
+      messages.push("❌ snapshot spot check: rows differ between drivers");
+      failed = true;
+    }
+  } catch (error) {
+    messages.push(`ℹ️ snapshot spot check skipped: ${(error as Error).message}`);
+  }
+
+  return { passed: !failed, messages, failedTables };
+}
+
 async function main(): Promise<void> {
   const source = process.argv[2];
   if (!source || !existsSync(source)) {
@@ -65,59 +131,20 @@ async function main(): Promise<void> {
     if (existsSync(source + suffix)) copyFileSync(source + suffix, copyPath + suffix);
   }
 
-  let failed = false;
   const sqlite = new AsyncSqliteDatabase(source);
   const libsql = openLibsqlDatabase(`file:${copyPath}`);
+  let result: MigrationValidationResult;
 
   try {
-    // 1. Integrity check under libSQL.
-    const integrity = (await libsql.pragma("integrity_check")) as Array<
-      Record<string, unknown>
-    >;
-    const verdict = String(Object.values(integrity[0] ?? {})[0] ?? "");
-    if (verdict === "ok") {
-      console.log("✅ integrity_check: ok");
-    } else {
-      console.error(`❌ integrity_check failed: ${JSON.stringify(integrity).slice(0, 500)}`);
-      failed = true;
-    }
-
-    // 2. Row-count parity across core tables.
-    for (const table of TABLES) {
-      const a = await tableCount(sqlite, table);
-      const b = await tableCount(libsql, table);
-      if (a === null && b === null) continue;
-      if (a === b) {
-        console.log(`✅ ${table}: ${a} rows (parity)`);
-      } else {
-        console.error(`❌ ${table}: sqlite=${a} libsql=${b}`);
-        failed = true;
-      }
-    }
-
-    // 3. Spot check: newest entity snapshot hydrates identically.
-    const probe = `SELECT entity_id, entity_type, snapshot FROM entity_snapshots
-                   ORDER BY computed_at DESC LIMIT 5`;
-    try {
-      const fromSqlite = (await sqlite.prepare(probe).all()) as Record<string, unknown>[];
-      const fromLibsql = (await libsql.prepare(probe).all()) as Record<string, unknown>[];
-      const same = JSON.stringify(fromSqlite) === JSON.stringify(fromLibsql);
-      if (same) {
-        console.log(`✅ snapshot spot check: ${fromSqlite.length} rows identical`);
-      } else {
-        console.error("❌ snapshot spot check: rows differ between drivers");
-        failed = true;
-      }
-    } catch (error) {
-      console.log(`ℹ️ snapshot spot check skipped: ${(error as Error).message}`);
-    }
+    result = await validateMigration(sqlite, libsql);
+    for (const message of result.messages) console.log(message);
   } finally {
     await sqlite.close();
     await libsql.close();
     rmSync(workDir, { recursive: true, force: true });
   }
 
-  if (failed) {
+  if (!result.passed) {
     console.error("\nValidation FAILED — do not switch this database to libsql yet.");
     process.exit(1);
   }
@@ -126,7 +153,12 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Run only when invoked directly (not when imported by tests).
+const invokedDirectly =
+  process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

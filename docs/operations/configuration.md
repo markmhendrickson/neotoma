@@ -37,6 +37,15 @@ Resolution order for the data directory and variables: a project-local `.env`, t
 | `NEOTOMA_LOGS_DIR` / `NEOTOMA_EVENT_LOG_PATH` | Log directory and event log file | under `{dataDir}/logs` |
 | `NEOTOMA_HOST_URL` / `NEOTOMA_PUBLIC_BASE_URL` | Public URL of this instance | auto-discovered or unset |
 
+### When to opt into `NEOTOMA_DB_BACKEND=libsql`
+
+Stay on the default `sqlite` backend until you have a concrete reason to switch. Switch to `libsql` when **either** of these is true:
+
+- You operate a **hosted, multi-user, or agent-heavy instance** where a single slow query (e.g. a deep-offset paginated query) has been observed to block health checks or other callers — this was the production symptom that motivated the concurrent backend (see `docs/infrastructure/deployment.md` § SQLite concurrency and the multi-writer model).
+- You are moving a database file to a **remote sqld/Turso URL** (`NEOTOMA_DB_URL=libsql://...` or `http(s)://...`), which requires the `libsql` backend regardless of load.
+
+Before flipping the variable on an existing database, run `npx tsx scripts/validate_libsql_migration.ts <path-to-db>` — it proves the file adopts safely under libsql (integrity check, per-table row-count parity, snapshot hydration spot check) without mutating the original file.
+
 ## Server and ports
 
 | Variable | Purpose | Default |
