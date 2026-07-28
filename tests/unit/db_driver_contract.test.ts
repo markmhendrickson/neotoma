@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { DbDatabase } from "../../src/repositories/db/driver.js";
+import { NESTED_TRANSACTION_ERROR } from "../../src/repositories/db/driver.js";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import { openLibsqlDatabase } from "../../src/repositories/libsql/libsql_driver.js";
 
@@ -192,5 +193,28 @@ describe.each(["sqlite", "libsql"] as const)("db driver contract (%s)", (backend
     const db = makeDb(backend);
     const rows = await db.pragma("journal_mode = WAL");
     expect(Array.isArray(rows)).toBe(true);
+  });
+
+  it("throws a clear error on a nested transaction() instead of deadlocking", async () => {
+    const db = makeDb(backend);
+    await db.exec("CREATE TABLE nested (id INTEGER PRIMARY KEY)");
+    // A transaction() issued from inside another transaction's callback would
+    // await the gate tail that only resolves once the outer (waiting)
+    // transaction finishes — a self-deadlock. It must fail fast instead of
+    // hanging. Promise.race with a timer guards the test against a regression
+    // that reintroduces the hang.
+    const attempt = db.transaction(async () => {
+      await db.transaction(async () => {
+        /* unreachable — the outer guard must reject first */
+      });
+    });
+    const timed = Promise.race([
+      attempt.then(
+        () => "resolved",
+        (e: Error) => e.message
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve("DEADLOCK-TIMEOUT"), 3000)),
+    ]);
+    expect(await timed).toContain(NESTED_TRANSACTION_ERROR);
   });
 });

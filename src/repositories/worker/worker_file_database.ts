@@ -33,6 +33,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
 import { Worker } from "node:worker_threads";
 import {
+  NESTED_TRANSACTION_ERROR,
   normalizeParams,
   TransactionGate,
   type DbConnection,
@@ -420,6 +421,9 @@ export class WorkerFileDatabase implements DbDatabase {
   }
 
   transaction<T>(fn: (tx: DbConnection) => Promise<T>): Promise<T> {
+    // Fail loud on nested transaction() — see NESTED_TRANSACTION_ERROR; a
+    // gate-serialized nested call self-deadlocks (qa review, PR #1944).
+    if (this.txContext.getStore()) throw new Error(NESTED_TRANSACTION_ERROR);
     return this.gate.runExclusive(() =>
       this.txContext.run(true, async () => {
         // IMMEDIATE for the same reason as the sqlite backend: acquire the

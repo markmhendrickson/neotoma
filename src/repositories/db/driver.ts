@@ -47,6 +47,22 @@ export interface DbDatabase extends DbConnection {
 }
 
 /**
+ * Thrown when `transaction()` is called from inside another transaction's
+ * callback. Transactions are gate-serialized, so a nested call would await a
+ * queue tail that only resolves after the outer (waiting) transaction finishes
+ * — a self-deadlock. Every backend fails fast with this message instead of
+ * hanging. Statements issued on the db handle inside a transaction callback
+ * join the open transaction and are fine; only a nested `transaction()` is
+ * unsupported.
+ */
+export const NESTED_TRANSACTION_ERROR =
+  "Nested transaction() is not supported: a transaction() call was issued from " +
+  "inside another transaction's callback. Transactions are serialized, so this " +
+  "would deadlock. Issue statements directly on the db handle inside the " +
+  "callback (they join the open transaction), or restructure so the inner work " +
+  "runs outside the outer transaction.";
+
+/**
  * Normalize positional bind params. Callers historically pass either
  * `.run(a, b, c)` or `.run(valuesArray)`; both must bind identically.
  */

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
 import {
+  NESTED_TRANSACTION_ERROR,
   normalizeParams,
   TransactionGate,
   type DbConnection,
@@ -197,6 +198,17 @@ export class AsyncSqliteDatabase implements DbDatabase {
   }
 
   transaction<T>(fn: (tx: DbConnection) => Promise<T>): Promise<T> {
+    // Fail loud, not silent, on nested transaction() (qa review, PR #1944).
+    // The gate serializes transactions against each other, so a transaction()
+    // issued from inside another transaction()'s callback would await a tail
+    // that only resolves once the OUTER transaction finishes — which is itself
+    // waiting on this inner call: a self-deadlock that hangs forever. No current
+    // call site nests, but this throws a clear, actionable error if one ever
+    // does (matching this driver's other fail-loud config guards) instead of
+    // wedging the process. Statements on the db handle inside a transaction
+    // callback join the open transaction (see run/get/all); only a nested
+    // transaction() is unsupported.
+    if (this.txContext.getStore()) throw new Error(NESTED_TRANSACTION_ERROR);
     // Manual BEGIN/COMMIT: the native sync transaction() helper commits when
     // its callback *returns*, which for an async fn would be before any awaited
     // work ran. The gate serializes transactions and holds unrelated statements

@@ -19,6 +19,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createClient, type Client, type InValue, type Transaction } from "@libsql/client";
 import {
+  NESTED_TRANSACTION_ERROR,
   normalizeParams,
   TransactionGate,
   type DbConnection,
@@ -174,6 +175,9 @@ export class LibsqlDatabase implements DbDatabase {
   }
 
   transaction<T>(fn: (tx: DbConnection) => Promise<T>): Promise<T> {
+    // Fail loud on nested transaction() — see NESTED_TRANSACTION_ERROR; a
+    // gate-serialized nested call self-deadlocks (qa review, PR #1944).
+    if (this.txContext.getStore()) throw new Error(NESTED_TRANSACTION_ERROR);
     return this.gate.runExclusive(async () => {
       const tx = await this.client.transaction("write");
       try {
