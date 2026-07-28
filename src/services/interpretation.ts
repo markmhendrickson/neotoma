@@ -824,6 +824,25 @@ export async function runInterpretation(
             schema: timelineSchema,
           });
 
+          // Same inline-snapshot path as MCP store: re-derive the entity-level
+          // canonical_name here, or it stays frozen at its creation value.
+          // Non-fatal by design.
+          try {
+            const { maybeRederiveCanonicalName } = await import("./snapshot_computation.js");
+            await maybeRederiveCanonicalName({
+              entityId: snapshot.entity_id,
+              entityType: snapshot.entity_type,
+              userId: snapshot.user_id || userId,
+              snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
+              schema: timelineSchema,
+            });
+          } catch (err) {
+            console.error(
+              `Failed to re-derive canonical_name for ${snapshot.entity_id}: ` +
+                (err instanceof Error ? err.message : String(err))
+            );
+          }
+
           const newSnapshot =
             (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
           const emitTs = snapshot.computed_at || new Date().toISOString();

@@ -293,6 +293,10 @@ export interface GuestIssueSubmitParams {
   author?: string;
   local_issue_id?: string;
   submission_timestamp?: string;
+  reporter_git_sha?: string;
+  reporter_git_ref?: string;
+  reporter_channel?: string;
+  reporter_app_version?: string;
 }
 
 export interface GuestIssueSubmitResult {
@@ -559,6 +563,13 @@ export async function submitGuestIssue(
 ): Promise<GuestIssueSubmitResult> {
   await assertGuestWriteAllowed(["issue"], {});
 
+  // Same reporter-provenance bar as the authenticated path (#1953). Guests
+  // previously skipped this only because nothing anonymous could reach here;
+  // now that unidentified first contact is allowed, an issue with no idea what
+  // it was reproduced against is the least actionable kind — and the one most
+  // likely to be noise. Documented on `submit_issue`, enforced since v0.12.
+  assertSubmitIssueReporterEnvironment(params);
+
   // Guest submissions arriving directly at the operator endpoint are the only
   // boundary for their body, so decode over-escaped `\n` here too. Idempotent
   // for bodies forwarded from a remote `submitIssue` that already decoded. (#1484)
@@ -578,6 +589,16 @@ export async function submitGuestIssue(
         ? params.local_issue_id.trim()
         : localIssueId(config.repo, params.title, now);
   const visibility = params.visibility ?? "public";
+
+  // Same public-body redaction backstop as the authenticated path (submitIssue,
+  // above): guests default to public visibility and are now reachable
+  // anonymously, so a submitter-side redaction bug here would leak PII
+  // straight into the public GitHub mirror or the operator instance.
+  if (visibility === "public") {
+    const guarded = runRedactionGuard({ title: params.title, body: params.body, mode: "scan" });
+    params = { ...params, title: guarded.title, body: guarded.body };
+  }
+
   const author =
     typeof params.author === "string" && params.author.trim().length > 0
       ? params.author.trim()
@@ -608,6 +629,10 @@ export async function submitGuestIssue(
       closed_at: null,
       sync_pending: false,
       data_source: `neotoma-issue-submission ${now.slice(0, 10)}`,
+      reporter_git_sha: params.reporter_git_sha,
+      reporter_git_ref: params.reporter_git_ref,
+      reporter_channel: params.reporter_channel,
+      reporter_app_version: params.reporter_app_version,
     } as StoreEntityInput,
     {
       entity_type: "conversation",
@@ -790,7 +815,9 @@ async function touchIssueThreadActivity(
   });
 }
 
-function assertSubmitIssueReporterEnvironment(params: IssueCreateParams): void {
+function assertSubmitIssueReporterEnvironment(
+  params: Pick<IssueCreateParams, "reporter_git_sha" | "reporter_app_version">
+): void {
   const sha = typeof params.reporter_git_sha === "string" ? params.reporter_git_sha.trim() : "";
   const version =
     typeof params.reporter_app_version === "string" ? params.reporter_app_version.trim() : "";

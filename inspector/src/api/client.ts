@@ -2,6 +2,12 @@ const LEGACY_API_URL_KEY = "neotoma_inspector_api_url";
 const LEGACY_AUTH_TOKEN_KEY = "neotoma_inspector_auth_token";
 const API_URL_KEY_PREFIX = "neotoma_inspector_api_url";
 const AUTH_TOKEN_KEY_PREFIX = "neotoma_inspector_auth_token";
+// OAuth refresh token + access-token expiry, so a browser session can renew
+// itself instead of hard-expiring when the 1-hour access token dies (#2005 —
+// the Inspector obtained a refresh_token from /mcp/oauth/token but discarded
+// it, so users were signed out every hour with a valid refresh token unused).
+const REFRESH_TOKEN_KEY_PREFIX = "neotoma_inspector_refresh_token";
+const TOKEN_EXPIRES_AT_KEY_PREFIX = "neotoma_inspector_token_expires_at";
 const LOCAL_PROXY_BASE = "/api";
 
 export type InspectorEnvironment = "dev" | "prod";
@@ -156,8 +162,48 @@ export function setAuthToken(token: string) {
   localStorage.setItem(getScopedStorageKey(AUTH_TOKEN_KEY_PREFIX), token);
 }
 
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(getScopedStorageKey(REFRESH_TOKEN_KEY_PREFIX));
+}
+
+/** Epoch ms at which the current access token expires, or null if unknown. */
+export function getTokenExpiresAt(): number | null {
+  const raw = localStorage.getItem(getScopedStorageKey(TOKEN_EXPIRES_AT_KEY_PREFIX));
+  if (!raw) return null;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Persist an OAuth token bundle: the access token, and — when present — the
+ * refresh token and expiry so `request()` can renew before/after a 401. A
+ * response with no refresh_token (e.g. a pasted bearer token) clears any prior
+ * refresh state rather than leaving a stale one that points at the wrong grant.
+ */
+export function setAuthSession(bundle: {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+}) {
+  setAuthToken(bundle.access_token);
+  const refreshKey = getScopedStorageKey(REFRESH_TOKEN_KEY_PREFIX);
+  const expiresKey = getScopedStorageKey(TOKEN_EXPIRES_AT_KEY_PREFIX);
+  if (bundle.refresh_token) {
+    localStorage.setItem(refreshKey, bundle.refresh_token);
+  } else {
+    localStorage.removeItem(refreshKey);
+  }
+  if (bundle.refresh_token && typeof bundle.expires_in === "number" && bundle.expires_in > 0) {
+    localStorage.setItem(expiresKey, String(Date.now() + bundle.expires_in * 1000));
+  } else {
+    localStorage.removeItem(expiresKey);
+  }
+}
+
 export function clearAuthToken() {
   localStorage.removeItem(getScopedStorageKey(AUTH_TOKEN_KEY_PREFIX));
+  localStorage.removeItem(getScopedStorageKey(REFRESH_TOKEN_KEY_PREFIX));
+  localStorage.removeItem(getScopedStorageKey(TOKEN_EXPIRES_AT_KEY_PREFIX));
   localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
 }
 
@@ -235,10 +281,92 @@ export type FetchOptions = {
   signal?: AbortSignal;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * In-flight refresh, shared across concurrent callers. The Inspector fires many
+ * API calls at once (the home screen alone loads several totals), so without a
+ * single-flight guard a burst of 401s would each POST a refresh — spending the
+ * one-time-use refresh token on the first and 401-ing the rest. Resolves to
+ * true when a new access token is now stored, false when refresh is impossible
+ * or failed (caller should surface the original auth error).
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshAccessTokenOnce(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  const base = requireApiBase();
+  try {
+    const res = await fetch(`${base}/mcp/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      credentials: "include",
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }).toString(),
+    });
+    if (!res.ok) {
+      // The refresh token itself is spent/revoked — clear session so the UI
+      // shows a clean "sign in" rather than looping on a dead token.
+      clearAuthToken();
+      return false;
+    }
+    const bundle = (await res.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
+    if (!bundle.access_token) {
+      clearAuthToken();
+      return false;
+    }
+    // A rotated refresh token replaces the old one; when the server omits it,
+    // keep reusing the current refresh token (setAuthSession would otherwise
+    // drop it), so fall back explicitly.
+    setAuthSession({
+      access_token: bundle.access_token,
+      refresh_token: bundle.refresh_token ?? refreshToken,
+      expires_in: bundle.expires_in,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Refresh the access token, coalescing concurrent callers onto one request. */
+function ensureRefreshed(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessTokenOnce().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+/** Refresh proactively when the access token is within this window of expiry. */
+const TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
+
+/**
+ * Resolve the Authorization header for an authed request, refreshing first when
+ * the stored access token is about to expire. This covers request paths that
+ * fetch directly (getText/getBlob) rather than through request<T>'s 401-retry,
+ * so every authed call benefits from renewal, not just the JSON one. A no-op
+ * when there's no token, no refresh token, or expiry is unknown (e.g. a pasted
+ * bearer token, which has no expiry and no refresh path).
+ */
+async function authorizedHeaders(): Promise<Record<string, string>> {
+  const expiresAt = getTokenExpiresAt();
+  if (expiresAt != null && getRefreshToken() && Date.now() >= expiresAt - TOKEN_EXPIRY_SKEW_MS) {
+    await ensureRefreshed();
+  }
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function request<T>(path: string, init?: RequestInit, isRetry = false): Promise<T> {
   const base = requireApiBase();
   const url = `${base}${path}`;
-  const token = getAuthToken();
 
   const headers: Record<string, string> = {
     // MUST set Accept on every API call. With content-negotiation unification
@@ -249,13 +377,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     Accept: "application/json",
     "Content-Type": "application/json",
     ...(init?.headers as Record<string, string>),
+    ...(await authorizedHeaders()),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
 
   const res = await fetch(url, { ...init, headers, credentials: "include", signal: init?.signal });
   if (!res.ok) {
+    // A 401 with a refresh token available is a stale access token, not a dead
+    // session: refresh once and retry transparently before surfacing an error.
+    // Guard on isRetry so a genuinely-invalid session can't loop.
+    if (res.status === 401 && !isRetry && getRefreshToken()) {
+      const refreshed = await ensureRefreshed();
+      if (refreshed) {
+        return request<T>(path, init, true);
+      }
+    }
     const body = await res.text();
     throw new Error(formatHttpErrorMessage(res.status, body, path));
   }
@@ -309,12 +444,13 @@ export async function getText(
   fetchOpts?: FetchOptions
 ): Promise<string> {
   const url = buildApiUrl(path, params);
-  const token = getAuthToken();
   // Markdown-typed endpoints (e.g. /entities/:id/markdown). Setting Accept
   // explicitly so content negotiation can't surface the Inspector SPA shell
   // for these calls.
-  const headers: Record<string, string> = { Accept: "text/markdown, text/plain, */*" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers: Record<string, string> = {
+    Accept: "text/markdown, text/plain, */*",
+    ...(await authorizedHeaders()),
+  };
   const res = await fetch(url, { headers, credentials: "include", signal: fetchOpts?.signal });
   if (!res.ok) {
     const body = await res.text();
@@ -329,12 +465,13 @@ export async function getBlob(
   fetchOpts?: FetchOptions
 ): Promise<Blob> {
   const url = buildApiUrl(path, params);
-  const token = getAuthToken();
   // Binary downloads (files, images). Accept anything except text/html so we
   // cannot accidentally pull the Inspector SPA shell when content-negotiation
   // is active on overlapping routes.
-  const headers: Record<string, string> = { Accept: "application/octet-stream, */*" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers: Record<string, string> = {
+    Accept: "application/octet-stream, */*",
+    ...(await authorizedHeaders()),
+  };
   const res = await fetch(url, { headers, credentials: "include", signal: fetchOpts?.signal });
   if (!res.ok) {
     const body = await res.text();

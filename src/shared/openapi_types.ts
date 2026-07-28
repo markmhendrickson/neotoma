@@ -1558,10 +1558,25 @@ export interface paths {
      * Submit issue
      * @description Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
      *     to the configured operator instance (same flow as MCP submit_issue).
-     *     Authenticated users use the normal user scope. AAuth-signed guest
-     *     submitters may create operator-side issues when the `issue`,
-     *     `conversation`, and `conversation_message` guest access policies allow
-     *     writes; the response includes a guest read-back token.
+     *     Authenticated users use the normal user scope. Guest submitters may create
+     *     operator-side issues when the `issue`, `conversation`, and
+     *     `conversation_message` guest access policies allow writes; the response
+     *     includes a guest read-back token.
+     *
+     *     **No prior identity is required to submit.** A remote caller with no Bearer
+     *     token, no AAuth signature, and no guest access token may open an issue on
+     *     this route whenever the `issue` guest access policy permits guest writes
+     *     (`submit_only`, `submitter_scoped`, or `open`). This is deliberate: the
+     *     guest read-back token is an **output** of a successful submit, so requiring
+     *     one as input would make a third party's first contact impossible. AAuth
+     *     signing remains supported and, when present, partitions the submitter by
+     *     thumbprint. Operators can close the inbox with
+     *     `NEOTOMA_ACCESS_POLICY_ISSUE=closed`, which restores `AUTH_REQUIRED` for
+     *     unauthenticated callers.
+     *
+     *     Anonymous access is scoped to **this route only**: `POST /issues/add_message`
+     *     still requires authentication, since a reporter appending to a thread already
+     *     holds the token their submit returned.
      *
      *     **Reporter environment is required.** Callers MUST supply at least
      *     one of `reporter_git_sha` or `reporter_app_version`. Submissions
@@ -4475,7 +4490,26 @@ export interface operations {
         /** @description Compatibility alias for `search`. */
         search_query?: string;
         limit?: number;
+        /**
+         * @deprecated
+         * @description Deprecated in favor of `cursor`. Still accepted for back-compat but
+         *     internally bounded: values above 2000 are rejected with a structured
+         *     hint pointing to `cursor`. Supplying a non-zero `offset` together
+         *     with `cursor` is rejected as a validation error; use one or the other.
+         */
         offset?: number;
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's
+         *     `next_cursor`. Returns the next page in O(page size) time regardless
+         *     of position, unlike `offset` which is bounded and deprecated. Only
+         *     supported with the default `sort_by=entity_id`; cannot be combined
+         *     with `search` or a non-zero `offset`. Reusing a cursor after changing
+         *     `sort_order` returns a structured error — so if you set `sort_order`
+         *     explicitly on the first call of a walk, pass the same value on every
+         *     page (omitting it after having set it explicitly counts as changing
+         *     it).
+         */
+        cursor?: string;
         /**
          * @description Sort field. Non-default values cannot be combined with `search`.
          *     Mirrors the `sort_by` body field of `POST /entities/query`.
@@ -4532,6 +4566,13 @@ export interface operations {
             total?: number;
             limit?: number;
             offset?: number;
+            /**
+             * @description Opaque keyset cursor for the next page, or `null`/omitted
+             *     when this page returned fewer than `limit` rows. Pass back
+             *     as the `cursor` query parameter to continue pagination in
+             *     O(page size) time.
+             */
+            next_cursor?: string | null;
             applied_search_strategies?: (
               | "strict"
               | "semantic"
@@ -4582,8 +4623,35 @@ export interface operations {
           query?: string;
           /** @description Compatibility alias for `search`. */
           search_query?: string;
+          /**
+           * @description Page size. Capped at 500 when `include_snapshots` is true
+           *     (the default), since each snapshot is hydrated synchronously;
+           *     lower the page size or set `include_snapshots=false` for
+           *     larger pages.
+           */
           limit?: number;
+          /**
+           * @deprecated
+           * @description Deprecated in favor of `cursor`. Still accepted for back-compat
+           *     but internally bounded: values above 2000 are rejected with a
+           *     structured hint pointing to `cursor`. Supplying a non-zero
+           *     `offset` together with `cursor` is rejected as a validation
+           *     error; use one or the other.
+           */
           offset?: number;
+          /**
+           * @description Opaque keyset pagination cursor from a previous response's
+           *     `next_cursor`. Returns the next page in O(page size) time
+           *     regardless of position, unlike `offset` which is bounded and
+           *     deprecated. Only supported with the default
+           *     `sort_by=entity_id`; cannot be combined with `search` or a
+           *     non-zero `offset`. Reusing a cursor after changing
+           *     `sort_order` returns a structured error — so if you set
+           *     `sort_order` explicitly on the first call of a walk, pass the
+           *     same value on every page (omitting it after having set it
+           *     explicitly counts as changing it).
+           */
+          cursor?: string;
           /**
            * @description Sort field. Non-default values cannot be combined with `search`.
            *     Predefined values: `entity_id`, `canonical_name`, `observation_count`,
@@ -4676,6 +4744,13 @@ export interface operations {
             limit?: number;
             offset?: number;
             /**
+             * @description Opaque keyset cursor for the next page, or `null`/omitted
+             *     when this page returned fewer than `limit` rows. Pass back
+             *     as the `cursor` request field to continue pagination in
+             *     O(page size) time regardless of position.
+             */
+            next_cursor?: string | null;
+            /**
              * @description Which non-strict retrieval strategies contributed to this
              *     result set, so callers can tell when a match came from a
              *     relaxed pass rather than exact token matching. Present only
@@ -4705,6 +4780,27 @@ export interface operations {
              */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
           };
+        };
+      };
+      /**
+       * @description Invalid request. Error codes:
+       *
+       *     - `INVALID_CURSOR` — the `cursor` is malformed, carries an
+       *       unsupported version, or was minted under a different `sort_order`
+       *       than this request (#1943). `details` carries `code`, `message`,
+       *       and a flat `hint`. Not retryable with the same token: drop the
+       *       cursor and restart the walk from the first page.
+       *     - `VALIDATION_INVALID_FORMAT` — the request violated a parameter
+       *       rule, e.g. `cursor` combined with `search`, a non-default
+       *       `sort_by`, or a non-zero `offset`; `offset` above 2000; or `limit`
+       *       above 500 while `include_snapshots` is true.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -7333,7 +7429,7 @@ export interface operations {
       content: {
         "application/json": {
           entity_type: string;
-          fields_to_add: {
+          fields_to_add?: {
             field_name: string;
             /** @enum {string} */
             field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
@@ -7342,6 +7438,14 @@ export interface operations {
             /** @enum {string} */
             reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
           }[];
+          fields_to_remove?: string[];
+          /** @description Replace the entity type's identity rule (how canonical_name / identity is derived). Each item is a single field name (string) or an all-required composite ({composite:[...]}). Rules are ordered precedence with fallback — the resolver uses the first rule whose fields are all present, not an unordered set. Example: [{"composite":["linkedin_url"]},"email","name"] keys on linkedin_url when present, else email, else name. Triggers a major version bump; existing reducer_config is preserved. Omit to keep the current rule. Passing [] clears the rule but only succeeds if the schema also declares identity_opt_out. Applies to new writes only — does not retroactively re-key existing entities. */
+          canonical_name_fields?: (
+            | string
+            | {
+                composite: string[];
+              }
+          )[];
           schema_version?: string;
           /** @default false */
           user_specific?: boolean;
@@ -7361,6 +7465,24 @@ export interface operations {
         };
         content: {
           "application/json": {
+            success?: boolean;
+            entity_type?: string;
+            schema_version?: string;
+            fields_added?: string[];
+            fields_removed?: string[];
+            /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
+            canonical_name_fields?:
+              | (
+                  | string
+                  | {
+                      composite: string[];
+                    }
+                )[]
+              | null;
+            activated?: boolean;
+            migrated_existing?: boolean;
+            scope?: string;
+          } & {
             [key: string]: unknown;
           };
         };

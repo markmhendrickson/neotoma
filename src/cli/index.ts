@@ -1372,6 +1372,39 @@ export function writeCliError(err: unknown): void {
   if (recoveryHint) process.stderr.write(`tip: ${recoveryHint}\n`);
 }
 
+/**
+ * #1943: extract the server's `error_code` from a standard ErrorEnvelope so the
+ * CLI can re-surface it as a machine-readable `hint.code` in `--json` output.
+ * Returns undefined for non-envelope errors (network, parse), which keep the
+ * plain-Error path.
+ */
+export function errorCodeOf(error: unknown): string | undefined {
+  if (error && typeof error === "object") {
+    const code = (error as { error_code?: unknown }).error_code;
+    if (typeof code === "string" && code.length > 0) return code;
+  }
+  return undefined;
+}
+
+/**
+ * #1943: extract the flat `details.hint` an ErrorEnvelope carries (the caller-
+ * facing recovery path — see docs/subsystems/errors.md § Tightening-change hint
+ * obligation). String-shaped hints only; the R4 structured `{text, …}` form is
+ * reduced to its text.
+ */
+export function hintOf(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const details = (error as { details?: unknown }).details;
+  if (!details || typeof details !== "object") return undefined;
+  const hint = (details as { hint?: unknown }).hint;
+  if (typeof hint === "string" && hint.length > 0) return hint;
+  if (hint && typeof hint === "object") {
+    const text = (hint as { text?: unknown }).text;
+    if (typeof text === "string" && text.length > 0) return text;
+  }
+  return undefined;
+}
+
 function formatApiError(error: unknown): string {
   if (error && typeof error === "object") {
     const o = error as Record<string, unknown>;
@@ -12229,7 +12262,15 @@ entitiesCommand
   .option("--search <query>", "Search by canonical name")
   .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
-  .option("--offset <n>", "Offset", "0")
+  .option(
+    "--offset <n>",
+    "Deprecated in favor of --cursor: offset paging re-scans every prior row, so deep pages are slow. Rejected above 2000. Cannot be combined with --cursor.",
+    "0"
+  )
+  .option(
+    "--cursor <token>",
+    "Opaque pagination cursor from a previous response's next_cursor. Pages in constant time regardless of depth. Only valid with the default entity_id sort; cannot be combined with --offset or --search."
+  )
   .option("--include-merged", "Include merged entities")
   .option(
     "--since <iso>",
@@ -12261,6 +12302,7 @@ entitiesCommand
       userId?: string;
       limit?: string;
       offset?: string;
+      cursor?: string;
       includeMerged?: boolean;
       since?: string;
       updatedSince?: string;
@@ -12321,13 +12363,39 @@ entitiesCommand
     const entityType = opts.entityType ?? opts.type ?? positionalEntityType ?? undefined;
     const updatedSince = opts.updatedSince ?? opts.since;
     const effectiveUserId = resolveEffectiveUserId(opts.userId);
+
+    // #1943: cursor and offset are mutually exclusive. `--offset` carries a "0"
+    // default, so "was it supplied?" has to come from Commander's option source
+    // rather than the value — otherwise the default would look like a real offset
+    // on every cursor call. Reject the combination here rather than silently
+    // dropping one: quietly ignoring an explicit --offset would hand back a page
+    // the caller didn't ask for, which is the mistake the server-side rule exists
+    // to surface.
+    const offsetWasSupplied = cmd.getOptionValueSource("offset") === "cli";
+    if (opts.cursor && offsetWasSupplied) {
+      // Structured, not a bare Error: every other rejection this feature adds
+      // (INVALID_CURSOR, the offset-depth and snapshot-page caps, the server-side
+      // cursor+offset check) carries a machine-readable `code`. An agent driving
+      // `--json` and branching on `hint.code` — which the MCP/REST docs teach it
+      // to do — must get the same contract here rather than prose on stderr.
+      throw new CliHintError(
+        "--cursor and --offset cannot be combined; use one or the other. " +
+          "Prefer --cursor: it pages in constant time at any depth.",
+        {
+          code: "CURSOR_OFFSET_CONFLICT",
+          message: "cursor and offset are mutually exclusive ways to say where to start",
+          hint: "Drop --offset and page with --cursor: read next_cursor from the previous response and pass it back.",
+        }
+      );
+    }
+
     const { data, error, response } = await api.POST("/entities/query", {
       body: {
         entity_type: entityType,
         search: opts.search,
         user_id: effectiveUserId,
         limit: Number(opts.limit ?? "100"),
-        offset: Number(opts.offset ?? "0"),
+        ...(opts.cursor ? { cursor: opts.cursor } : { offset: Number(opts.offset ?? "0") }),
         include_merged: Boolean(opts.includeMerged),
         ...(updatedSince ? { updated_since: updatedSince } : {}),
         ...(opts.createdSince ? { created_since: opts.createdSince } : {}),
@@ -12343,6 +12411,20 @@ entitiesCommand
         ? `Failed to list entities: ${status} ${detail}`
         : `Failed to list entities: ${detail}`;
       if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+      // #1943: preserve the server's structured error rather than flattening it
+      // to prose. The server sends `error_code` + `details.hint` (e.g.
+      // INVALID_CURSOR); throwing a bare Error drops both, so an agent paging
+      // with --json sees no `hint.code` AND no `next_cursor` — and a recovery
+      // loop that branches on those reads a REJECTED cursor as a COMPLETED
+      // walk, silently processing a partial dataset and reporting success.
+      const serverCode = errorCodeOf(error);
+      if (serverCode) {
+        throw new CliHintError(msg, {
+          code: serverCode,
+          message: detail,
+          ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+        });
+      }
       throw new Error(msg);
     }
     writeOutput(data, outputMode);
@@ -13784,6 +13866,10 @@ schemasCommand
     "--remove-fields <json>",
     "JSON array of field names to remove (triggers major version bump; data preserved in observations)"
   )
+  .option(
+    "--canonical-name-fields <json>",
+    'JSON array replacing the identity rule, e.g. \'[{"composite":["linkedin_url"]},"email","name"]\' (triggers major version bump; existing reducer_config preserved; governs new writes only)'
+  )
   .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
@@ -13796,6 +13882,7 @@ schemasCommand
         entityType?: string;
         fields?: string;
         removeFields?: string;
+        canonicalNameFields?: string;
         userId?: string;
         activate?: boolean;
         migrateExisting?: boolean;
@@ -13813,8 +13900,20 @@ schemasCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
-      if (!opts.fields && !opts.removeFields) {
-        throw new Error("at least one of --fields or --remove-fields is required");
+      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields) {
+        throw new Error(
+          "at least one of --fields, --remove-fields, or --canonical-name-fields is required"
+        );
+      }
+      let canonicalNameFields: unknown[] | undefined;
+      if (opts.canonicalNameFields) {
+        const parsed = JSON.parse(opts.canonicalNameFields);
+        if (!Array.isArray(parsed)) {
+          throw new Error(
+            '--canonical-name-fields must be a JSON array, e.g. \'[{"composite":["linkedin_url"]},"name"]\''
+          );
+        }
+        canonicalNameFields = parsed;
       }
       let fieldsToAdd: any[] | undefined;
       if (opts.fields) {
@@ -13916,6 +14015,7 @@ schemasCommand
       if (opts.activate) body.activate = true;
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
       if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
+      if (canonicalNameFields) body.canonical_name_fields = canonicalNameFields;
       const { data, error } = await api.POST("/update_schema_incremental", {
         body: body as any,
       });

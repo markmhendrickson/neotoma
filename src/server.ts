@@ -85,6 +85,7 @@ import {
 import { getActiveStandingRules, type StandingRule } from "./services/standing_rules.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { CursorError } from "./services/entity_cursor.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
@@ -1965,6 +1966,38 @@ export class NeotomaServer {
           // field (see src/services/override_validation.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
+        if (error instanceof CursorError) {
+          // Same structured-envelope contract for cursor rejections: clients
+          // branch on `INVALID_CURSOR` via the MCP `data` field (see
+          // src/services/entity_cursor.ts).
+          throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof z.ZodError) {
+          // Request-schema rejections (`ctx.addIssue` in
+          // validateEntityQueryCombinations) carry their machine-readable
+          // `code`/`hint` under the issue's `params`. Without this branch a
+          // ZodError fell through to the generic handler below and surfaced as
+          // InternalError with the structured payload dropped — a validation
+          // failure misreported as a server fault, and the same
+          // structured-error-loss class this PR fixed for INVALID_CURSOR
+          // (ux lens, #1946). Lift the first issue carrying params, mirroring
+          // REST's `firstIssueHint` in actions.ts so both transports agree.
+          const structured = error.issues.find(
+            (issue) => (issue as { params?: { code?: unknown } }).params?.code
+          ) as { params?: { code?: string; hint?: string } } | undefined;
+          const first = error.issues[0];
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            first?.message ?? "Invalid request payload.",
+            structured?.params
+              ? {
+                  code: structured.params.code,
+                  message: first?.message ?? "Invalid request payload.",
+                  hint: structured.params.hint,
+                }
+              : { code: "VALIDATION_INVALID_FORMAT", issues: error.issues }
+          );
+        }
         // Safely extract error message, handling BigInt values
         let errorMessage = "Unknown error";
         if (error instanceof Error) {
@@ -3516,28 +3549,35 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
-    const { entities, total, excluded_merged, applied_search_strategies, search_mode } =
-      await queryEntitiesWithCount({
-        userId,
-        entityType: parsed.entity_type,
-        entityTypes: parsed.entity_types,
-        includeMerged: parsed.include_merged,
-        includeSnapshots: parsed.include_snapshots,
-        sortBy: parsed.sort_by,
-        sortOrder: parsed.sort_order,
-        published: parsed.published,
-        publishedAfter: parsed.published_after,
-        publishedBefore: parsed.published_before,
-        search: parsed.search,
-        similarityThreshold: parsed.similarity_threshold,
-        limit: parsed.limit,
-        offset: parsed.offset,
-        updatedSince: parsed.updated_since,
-        createdSince: parsed.created_since,
-        identityBasis: parsed.identity_basis,
-        snapshotFilters: parsed.snapshot_filters,
-        excludeBookkeeping: parsed.exclude_bookkeeping,
-      });
+    const {
+      entities,
+      total,
+      excluded_merged,
+      applied_search_strategies,
+      search_mode,
+      next_cursor,
+    } = await queryEntitiesWithCount({
+      userId,
+      entityType: parsed.entity_type,
+      entityTypes: parsed.entity_types,
+      includeMerged: parsed.include_merged,
+      includeSnapshots: parsed.include_snapshots,
+      sortBy: parsed.sort_by,
+      sortOrder: parsed.sort_order,
+      published: parsed.published,
+      publishedAfter: parsed.published_after,
+      publishedBefore: parsed.published_before,
+      search: parsed.search,
+      similarityThreshold: parsed.similarity_threshold,
+      limit: parsed.limit,
+      offset: parsed.offset,
+      cursor: parsed.cursor,
+      updatedSince: parsed.updated_since,
+      createdSince: parsed.created_since,
+      identityBasis: parsed.identity_basis,
+      snapshotFilters: parsed.snapshot_filters,
+      excludeBookkeeping: parsed.exclude_bookkeeping,
+    });
 
     // collapse_by=canonical_key: group entities sharing a canonical_key snapshot
     // field into one synthesized result per key (#1604). Entities without a
@@ -3600,6 +3640,7 @@ export class NeotomaServer {
         collapse_groups: collapsed.length,
         ...(applied_search_strategies ? { applied_search_strategies } : {}),
         search_mode,
+        ...(next_cursor ? { next_cursor } : {}),
       });
     }
 
@@ -3609,6 +3650,7 @@ export class NeotomaServer {
       excluded_merged,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
+      ...(next_cursor ? { next_cursor } : {}),
     });
   }
 
@@ -4379,6 +4421,7 @@ export class NeotomaServer {
         entity_type: parsed.entity_type,
         fields_to_add: parsed.fields_to_add,
         fields_to_remove: parsed.fields_to_remove,
+        canonical_name_fields: parsed.canonical_name_fields,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
         user_id: parsed.user_specific ? userId : undefined,
@@ -4397,6 +4440,13 @@ export class NeotomaServer {
         schema_version: updatedSchema.schema_version,
         fields_added: (parsed.fields_to_add || []).map((f) => f.field_name),
         fields_removed: parsed.fields_to_remove || [],
+        // Echo the resolved identity rule so a caller can confirm what was set
+        // without a second describe_entity_type round trip (#2020 ux review).
+        // Reflects the value actually stored — whether replaced this call or
+        // preserved from the prior version.
+        canonical_name_fields:
+          (updatedSchema.schema_definition as { canonical_name_fields?: unknown })
+            .canonical_name_fields ?? null,
         activated: parsed.activate,
         migrated_existing: parsed.migrate_existing,
         scope: parsed.user_specific ? "user" : "global",
@@ -5951,6 +6001,25 @@ export class NeotomaServer {
     // incoming null clearing a prior non-null value under highest_priority).
     const priorSnapshotByEntityId = new Map<string, Record<string, unknown>>();
     const newSnapshotByEntityId = new Map<string, Record<string, unknown>>();
+    // #1963: auto-link may retract a stale reference-field edge when a field's
+    // resolved target changes. A retraction *failure* must reach the caller —
+    // otherwise a stale duplicate edge can survive while store reports success,
+    // the exact silent-drift class this fix closes. Keyed by entity_id; the
+    // store_warnings loop below emits these onto the response.
+    const autoLinkRetractionByEntityId = new Map<
+      string,
+      {
+        entity_type: string;
+        retracted: number;
+        retraction_failures: number;
+        failed_target_entity_ids: string[];
+        failed_retractions: Array<{
+          field: string;
+          relationship_type: string;
+          target_entity_id: string;
+        }>;
+      }
+    >();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
     for (const createdEntity of createdEntities) {
       try {
@@ -6059,6 +6128,30 @@ export class NeotomaServer {
             schema: timelineSchema,
           });
 
+          // This path computes and upserts the snapshot inline instead of going
+          // through recomputeSnapshot(), so it must re-derive the entity-level
+          // canonical_name itself. Without this, a corrective observation (e.g.
+          // stripping an emoji from `name` via target_id) updates the snapshot
+          // while entities.canonical_name stays frozen at its creation value —
+          // and canonical_name is what entity lists and search display.
+          // Non-fatal by design: a store must not fail over a display name.
+          try {
+            const { maybeRederiveCanonicalName } =
+              await import("./services/snapshot_computation.js");
+            await maybeRederiveCanonicalName({
+              entityId: snapshot.entity_id,
+              entityType: snapshot.entity_type,
+              userId: snapshot.user_id || userId,
+              snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
+              schema: timelineSchema,
+            });
+          } catch (err) {
+            logger.warn(
+              `[STORE] Failed to re-derive canonical_name for ${snapshot.entity_id}: ` +
+                (err instanceof Error ? err.message : String(err))
+            );
+          }
+
           const newSnapshot =
             (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
           const emitTs = snapshot.computed_at || new Date().toISOString();
@@ -6101,7 +6194,7 @@ export class NeotomaServer {
             try {
               const { autoLinkReferenceFields } =
                 await import("./services/schema_reference_linking.js");
-              await autoLinkReferenceFields({
+              const autoLinkResult = await autoLinkReferenceFields({
                 entityId: snapshot.entity_id,
                 entityType: snapshot.entity_type,
                 fields: (snapshot.snapshot as Record<string, unknown>) || {},
@@ -6110,6 +6203,15 @@ export class NeotomaServer {
                 sourceId: storageResult.sourceId,
                 commit,
               });
+              if (autoLinkResult.retracted > 0 || autoLinkResult.retraction_failures > 0) {
+                autoLinkRetractionByEntityId.set(snapshot.entity_id, {
+                  entity_type: snapshot.entity_type,
+                  retracted: autoLinkResult.retracted,
+                  retraction_failures: autoLinkResult.retraction_failures,
+                  failed_target_entity_ids: autoLinkResult.failed_retraction_target_entity_ids,
+                  failed_retractions: autoLinkResult.failed_retractions,
+                });
+              }
             } catch (linkErr) {
               logger.warn(
                 `[STORE] Auto-link reference fields failed for ` +
@@ -6185,6 +6287,10 @@ export class NeotomaServer {
       observation_index: number;
       entity_type: string;
       entity_id: string;
+      // Optional structured payload for codes whose remediation needs machine-
+      // readable fields (e.g. AUTO_LINK_RETRACTION_FAILED lists the stale edges
+      // to delete_relationship). Omitted by codes that carry no extra data.
+      details?: Record<string, unknown>;
     }> = [];
     // Issue #1559: surface a non-fatal signal when a stored observation omits a
     // field its schema marks `required: true`. Mirror of the unknown_fields
@@ -6392,6 +6498,48 @@ export class NeotomaServer {
             if (nullWarn) schemaStoreWarnings.push(nullWarn);
           }
         }
+      }
+    }
+
+    // #1963: surface auto-link edge retractions on the MCP store response so a
+    // retraction — and especially a retraction *failure* — is never silent. A
+    // failure means a superseded reference-field edge may still be live despite
+    // store reporting success.
+    for (let i = 0; i < createdEntities.length; i++) {
+      const rec = autoLinkRetractionByEntityId.get(createdEntities[i].entityId);
+      if (!rec) continue;
+      if (rec.retraction_failures > 0) {
+        schemaStoreWarnings.push({
+          code: "AUTO_LINK_RETRACTION_FAILED",
+          message:
+            `Auto-link retraction failed for ${rec.retraction_failures} stale ` +
+            `reference-field edge(s) on ${rec.entity_type}/${createdEntities[i].entityId}. ` +
+            `A superseded edge (e.g. a prior works_at) may still be live even though ` +
+            `the store succeeded. To clean up, call delete_relationship for each stale ` +
+            `edge in details.stale_edges, or re-run the store.`,
+          observation_index: i,
+          entity_type: rec.entity_type,
+          entity_id: createdEntities[i].entityId,
+          details: {
+            stale_edges: rec.failed_retractions.map((f) => ({
+              source_entity_id: createdEntities[i].entityId,
+              target_entity_id: f.target_entity_id,
+              relationship_type: f.relationship_type,
+              field_name: f.field,
+            })),
+          },
+        });
+      } else if (rec.retracted > 0) {
+        schemaStoreWarnings.push({
+          code: "AUTO_LINK_EDGE_RETRACTED",
+          message:
+            `Retracted ${rec.retracted} stale auto-linked reference-field edge(s) on ` +
+            `${rec.entity_type}/${createdEntities[i].entityId} because the field's ` +
+            `resolved target changed (#1963).`,
+          observation_index: i,
+          entity_type: rec.entity_type,
+          entity_id: createdEntities[i].entityId,
+        });
       }
     }
 

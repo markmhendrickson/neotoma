@@ -523,6 +523,8 @@ describe("Issue Operations (Neotoma-canonical)", () => {
               title: "Guest issue",
               body: "Guest body",
               visibility: "private",
+              // Reporter provenance is required on the guest path too (#1953).
+              reporter_app_version: "0.0.0-test",
             })
         );
 
@@ -542,6 +544,105 @@ describe("Issue Operations (Neotoma-canonical)", () => {
             guest_access_token: "guest-token",
           })
         );
+      } finally {
+        if (previousIssuePolicy === undefined) {
+          delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
+        } else {
+          process.env.NEOTOMA_ACCESS_POLICY_ISSUE = previousIssuePolicy;
+        }
+        if (previousConversationPolicy === undefined) {
+          delete process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE;
+        } else {
+          process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE = previousConversationPolicy;
+        }
+      }
+    });
+
+    it("persists reporter provenance fields onto the stored issue entity", async () => {
+      const previousIssuePolicy = process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
+      const previousConversationPolicy = process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE;
+      process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "submitter_scoped";
+      process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE = "closed";
+
+      try {
+        await runWithRequestContext(
+          {
+            agentIdentity: { thumbprint: "thumb-456", tier: "software" },
+            aauthAdmission: { admitted: false, reason: "no_match" },
+          },
+          () =>
+            submitGuestIssue(ops, {
+              userId: "operator-user",
+              title: "Guest issue with reporter fields",
+              body: "Guest body",
+              visibility: "private",
+              reporter_git_sha: "cafebabe",
+              reporter_git_ref: "refs/heads/fix/1953-anonymous-remote-issue-submit",
+              reporter_channel: "ci",
+              reporter_app_version: "0.13.0",
+            })
+        );
+
+        const storeInput = mockStore.mock.calls[0]?.[0] as {
+          entities: Array<Record<string, unknown>>;
+        };
+        const issueEntity = storeInput.entities.find((entity) => entity.entity_type === "issue");
+        expect(issueEntity).toEqual(
+          expect.objectContaining({
+            reporter_git_sha: "cafebabe",
+            reporter_git_ref: "refs/heads/fix/1953-anonymous-remote-issue-submit",
+            reporter_channel: "ci",
+            reporter_app_version: "0.13.0",
+          })
+        );
+      } finally {
+        if (previousIssuePolicy === undefined) {
+          delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
+        } else {
+          process.env.NEOTOMA_ACCESS_POLICY_ISSUE = previousIssuePolicy;
+        }
+        if (previousConversationPolicy === undefined) {
+          delete process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE;
+        } else {
+          process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE = previousConversationPolicy;
+        }
+      }
+    });
+
+    it("redacts public issue body before persisting on the guest path", async () => {
+      const previousIssuePolicy = process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
+      const previousConversationPolicy = process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE;
+      process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "submitter_scoped";
+      process.env.NEOTOMA_ACCESS_POLICY_CONVERSATION_MESSAGE = "closed";
+
+      try {
+        await runWithRequestContext(
+          {
+            agentIdentity: { thumbprint: "thumb-789", tier: "software" },
+            aauthAdmission: { admitted: false, reason: "no_match" },
+          },
+          () =>
+            submitGuestIssue(ops, {
+              userId: "operator-user",
+              title: "Guest bug",
+              body: "Reporter alice@example.com hit an error",
+              visibility: "public",
+              reporter_app_version: "0.0.0-test",
+            })
+        );
+
+        const storeInput = mockStore.mock.calls[0]?.[0] as {
+          entities: Array<Record<string, unknown>>;
+        };
+        const issueEntity = storeInput.entities.find((entity) => entity.entity_type === "issue");
+        expect(issueEntity?.body).toMatch(/<EMAIL:[0-9a-f]{4}>/);
+        expect(issueEntity?.body).not.toContain("alice@example.com");
+
+        const messageEntity = storeInput.entities.find(
+          (entity) => entity.entity_type === "conversation_message"
+        );
+        expect(messageEntity?.content).toMatch(/<EMAIL:[0-9a-f]{4}>/);
+        expect(messageEntity?.content).not.toContain("alice@example.com");
       } finally {
         if (previousIssuePolicy === undefined) {
           delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;

@@ -302,6 +302,20 @@ function normalizeColumnName(table: string, column: string): string {
   // Compatibility aliases used by tests and older codepaths.
   if (table === "entities" && column === "merged_into") return "merged_to_entity_id";
   if (table === "observations" && column === "priority") return "source_priority";
+  // `lower(col->>field)` pseudo-column: case-insensitive equality against a
+  // JSONB text projection (e.g. exact-match identifier lookups that must
+  // match the case-insensitive contract of other snapshot-field matching
+  // paths, #1981). Recurses into the same ->> handling below, then wraps in
+  // SQL LOWER() on both the comparison sides; callers must also lowercase
+  // their bound value.
+  const lowerJsonPathMatch = column.match(
+    /^lower\(([A-Za-z_][A-Za-z0-9_]*)->>([A-Za-z_][A-Za-z0-9_]*)\)$/
+  );
+  if (lowerJsonPathMatch) {
+    const [, jsonColumn, jsonField] = lowerJsonPathMatch;
+    const inner = normalizeColumnName(table, `${jsonColumn}->>${jsonField}`);
+    return `LOWER(${inner})`;
+  }
   // PostgREST-style JSON path projection used in query code:
   //   snapshot->>published_date
   // Convert to SQLite-compatible json_extract(snapshot, '$.published_date').

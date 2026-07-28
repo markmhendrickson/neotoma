@@ -169,12 +169,20 @@ export function buildToolDefinitions(
           limit: {
             type: "integer",
             minimum: 1,
-            description: "Maximum number of entities to return (default 100).",
+            description:
+              "Maximum number of entities to return (default 100). Capped at 500 when `include_snapshots` is true (the default), since each snapshot is hydrated synchronously; lower the page size or set `include_snapshots=false` for larger pages.",
           },
           offset: {
             type: "integer",
             minimum: 0,
-            description: "Pagination offset (default 0).",
+            description:
+              "Deprecated in favor of `cursor`. Still accepted for back-compat but internally bounded: values above 2000 are rejected with a structured hint pointing to `cursor`. Supplying a non-zero `offset` together with `cursor` is rejected as a validation error; use one or the other. (default 0).",
+            deprecated: true,
+          },
+          cursor: {
+            type: "string",
+            description:
+              "Opaque keyset pagination cursor from a previous response's `next_cursor`. Returns the next page in O(page size) time regardless of position, unlike `offset` which is bounded and deprecated. Only supported with the default `sort_by=entity_id`; cannot be combined with `search` or a non-zero `offset`. Reusing a cursor after changing `sort_order` returns a structured error.",
           },
           sort_by: {
             type: "string",
@@ -809,7 +817,7 @@ export function buildToolDefinitions(
       name: "update_schema_incremental",
       description: desc(
         "update_schema_incremental",
-        "Incrementally update a schema by adding or removing fields. Adding fields creates a minor version bump; removing fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. Optionally migrates existing raw_fragments to observations for historical data backfill."
+        "Incrementally update a schema by adding or removing fields, or replacing the entity type's identity rule via canonical_name_fields. Adding fields creates a minor version bump; removing fields or changing canonical_name_fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. canonical_name_fields changes apply to new writes only — they do not retroactively re-key existing entities. Optionally migrates existing raw_fragments to observations for historical data backfill."
       ),
       inputSchema: {
         type: "object",
@@ -843,6 +851,21 @@ export function buildToolDefinitions(
             description:
               "Field names to remove from schema (triggers major version bump). Observation data is preserved; fields can be restored by re-adding them later.",
             items: { type: "string" },
+          },
+          canonical_name_fields: {
+            type: "array",
+            description:
+              'Replace the entity type\'s identity rule (how canonical_name / entity identity is derived). Triggers a major version bump. Each item is a single field name (string) or an all-required composite ({composite:[...]}). Rules are ORDERED PRECEDENCE WITH FALLBACK: the resolver uses the first rule whose fields are all present, not an unordered set. Example: [{"composite":["linkedin_url"]},"email","name"] keys on linkedin_url when present, else email, else name. Omit to keep the current rule. Passing [] clears the rule, but only succeeds when the schema also declares identity_opt_out; otherwise it is rejected (a schema must declare canonical_name_fields OR identity_opt_out). The existing reducer_config is preserved automatically — this is the safe way to re-key a type without reconstructing it. Applies to NEW writes only; it does NOT retroactively re-key existing entities (they keep their stored canonical_name until re-derived), so re-keying will not by itself merge existing duplicates. To see the current rule before replacing it, call describe_entity_type first; the update response also echoes the resolved canonical_name_fields.',
+            items: {
+              oneOf: [
+                { type: "string" },
+                {
+                  type: "object",
+                  properties: { composite: { type: "array", items: { type: "string" } } },
+                  required: ["composite"],
+                },
+              ],
+            },
           },
           schema_version: {
             type: "string",
@@ -1086,7 +1109,8 @@ export function buildToolDefinitions(
           "When the operator accepts the issue, the response includes guest_access_token for token-scoped get_issue_status / add_issue_message read-back when the local snapshot does not already carry the token. " +
           "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps. " +
           "To file issues about a repo other than the one Neotoma is globally configured for, pass `target_repo` in `owner/repo` format. This overrides the GitHub mirror destination only — the Neotoma authoring home remains unchanged. " +
-          "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`."
+          "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`. " +
+          "No prior identity is required to submit: a remote caller with no Bearer token, no AAuth signature and no guest access token may open an issue whenever the operator instance's `issue` guest access policy permits guest writes. The `guest_access_token` is an OUTPUT of a successful submit, not a precondition for it, so first contact needs no credential. Anonymity covers submission ONLY — use the returned token for `add_issue_message` / `get_issue_status`. An operator can close the inbox with `NEOTOMA_ACCESS_POLICY_ISSUE=closed`, after which unauthenticated submits are rejected with `AUTH_REQUIRED`."
       ),
       inputSchema: {
         type: "object",
