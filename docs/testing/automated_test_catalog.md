@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **551**
-- Backend and repo Vitest files: **516**
+- Total automated test files: **558**
+- Backend and repo Vitest files: **523**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 156 |
-| Vitest service tests | 39 |
+| Vitest unit tests | 157 |
+| Vitest service tests | 40 |
 | Source-adjacent tests | 65 |
 | Vitest integration tests | 157 |
-| Vitest CLI tests | 67 |
+| Vitest CLI tests | 72 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 4 |
 | Vitest subscription tests | 5 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (156):**
+**Files (157):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -161,6 +161,7 @@ flowchart TD
 - `tests/unit/db_driver_contract.test.ts`
 - `tests/unit/db_idempotency_concurrency.test.ts`
 - `tests/unit/db_libsql_nonblocking.test.ts`
+- `tests/unit/db_url_misconfig_guard.test.ts`
 - `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
@@ -272,7 +273,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (39):**
+**Files (40):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -300,6 +301,7 @@ flowchart TD
 - `tests/services/payload_schema.test.ts`
 - `tests/services/peer_sync_batch.test.ts`
 - `tests/services/raw_fragments_isolation.test.ts`
+- `tests/services/raw_storage_mime_map.test.ts`
 - `tests/services/raw_storage.test.ts`
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
@@ -554,7 +556,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (67):**
+**Files (72):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -609,6 +611,9 @@ flowchart TD
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
+- `tests/cli/instance_scripts.test.ts`
+- `tests/cli/instance_skills_client.test.ts`
+- `tests/cli/instance_skills.test.ts`
 - `tests/cli/issues_import.test.ts`
 - `tests/cli/issues_message.test.ts`
 - `tests/cli/onboarding_import_transcripts.test.ts`
@@ -619,6 +624,8 @@ flowchart TD
 - `tests/cli/schemas_describe.test.ts`
 - `tests/cli/schemas_repair_plural_types.test.ts`
 - `tests/cli/skills_mirror.test.ts`
+- `tests/cli/skills_sync_instance_cli.test.ts`
+- `tests/cli/sources_content_cli.test.ts`
 - `tests/cli/test_command_detection.test.ts`
 - `tests/cli/test_debug_tty.test.ts`
 - `tests/cli/transcript_parser.test.ts`

@@ -26,6 +26,45 @@ function libsqlUrl(): string {
   return config.dbUrl || `file:${config.sqlitePath}`;
 }
 
+/**
+ * NEOTOMA_DB_URL is only honored by the libsql backend. On the default `sqlite`
+ * backend it is otherwise ignored with no signal, so an operator who sets
+ * `NEOTOMA_DB_URL=libsql://...` but forgets `NEOTOMA_DB_BACKEND=libsql` silently
+ * gets the local sqlite file instead of the remote instance they intended (the
+ * silent-misconfiguration gap flagged by the ux review on PR #1944).
+ *
+ * Returns a directive for the sqlite backend to act on:
+ *  - `throw` for a remote URL — unambiguously incompatible with this backend, so
+ *    fail loud at startup rather than open the wrong database.
+ *  - `warn` for a divergent local `file:` URL — ignored but harmless, so surface
+ *    it without hard-failing (a stale env value pointing at the same file, or a
+ *    bare path equal to sqlitePath, is silent — nothing to flag).
+ *  - `null` when there is nothing to flag.
+ */
+export function sqliteUrlMisconfig(
+  dbUrl: string | undefined,
+  sqlitePath: string
+): { level: "throw" | "warn"; message: string } | null {
+  if (!dbUrl) return null;
+  const sameFile = dbUrl === `file:${sqlitePath}` || dbUrl === sqlitePath;
+  if (sameFile) return null;
+  if (/^(libsql|https?|wss?):\/\//i.test(dbUrl)) {
+    return {
+      level: "throw",
+      message:
+        `NEOTOMA_DB_URL is set to "${dbUrl}" but NEOTOMA_DB_BACKEND is "sqlite", ` +
+        `which ignores it and opens the local file ${sqlitePath} instead. ` +
+        `Set NEOTOMA_DB_BACKEND=libsql to use a remote sqld/Turso URL, or unset NEOTOMA_DB_URL.`,
+    };
+  }
+  return {
+    level: "warn",
+    message:
+      `[neotoma] NEOTOMA_DB_URL="${dbUrl}" is ignored on the sqlite backend; ` +
+      `opening ${sqlitePath}. Set NEOTOMA_DB_BACKEND=libsql to honor NEOTOMA_DB_URL.`,
+  };
+}
+
 function ensureParentDirForFileUrl(url: string): void {
   if (!url.startsWith("file:")) return;
   const filePath = url.slice("file:".length).replace(/^\/\//, "/");
@@ -49,6 +88,12 @@ async function openDb(): Promise<DbDatabase> {
     await ensureSchema(db);
     return db;
   }
+
+  // Guard the silent-misconfiguration footgun (ux review, PR #1944): see
+  // sqliteUrlMisconfig() below.
+  const misconfig = sqliteUrlMisconfig(config.dbUrl, config.sqlitePath);
+  if (misconfig?.level === "throw") throw new Error(misconfig.message);
+  if (misconfig?.level === "warn") console.warn(misconfig.message);
 
   const dbPath = config.sqlitePath;
   mkdirSync(path.dirname(dbPath), { recursive: true });
