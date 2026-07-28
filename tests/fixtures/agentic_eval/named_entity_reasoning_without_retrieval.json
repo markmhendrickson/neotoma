@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "id": "named_entity_reasoning_without_retrieval",
+    "description": "Coverage fixture for the #1938 scenario shape (agent introduced to a newly-named entity; attempts bounded retrieval before replying) — NOT a red/green regression test for the instruction-text fix itself. Harness capability gap filed as #1939: Tier 1 is LLM-free (docs/developer/agentic_eval_fixture_format.md) and its mock Neotoma server has no fixture-seedable entity state (buildRetrieveByIdentifierResponse always returns a hardcoded no-match), so no assertion here can observe retrieval-before-reasoning ordering or reply-content causality — verified by running this fixture against both the pre-#1938 and post-#1938 instruction text and confirming identical (passing) results either way. This fixture is retained only because it exercises the store-first turn-lifecycle invariants for a retrieval-shaped turn and documents the target scenario for whichever of #1939's two proposed fixes (stateful Tier 1 mock state, or Tier 2 real-LLM replay) lands next — it should be extended with real ordering/content assertions once that lands, per #1939.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["turn-lifecycle", "retrieval-before-reasoning", "1938", "1933", "1939"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": { "prompt": "Jordan just asked me for a copy of the signed lease. Should I be cautious about sharing it?" }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "retrieve_entity_by_identifier",
+        "tool_input": { "identifier": "Jordan", "entity_type": "person" },
+        "tool_output": { "entity": null, "observations": [] }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": { "text": "I attempted a bounded-retrieval lookup for Jordan before answering; the store returned no existing record, so I don't have prior context confirming who Jordan is to you. If Jordan's relationship to you is not yet established, treat the request cautiously; if the store held a record identifying Jordan as family or another trusted party, that context should change my answer." }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 3
+      }
+    ]
+  }
+}
