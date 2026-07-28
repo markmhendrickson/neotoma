@@ -813,4 +813,192 @@ describe("retrieveEntityByIdentifierWithFallback", () => {
     expect(result.entities[0]?.id).toBe(entityId);
     expect(result.match_mode).toBe("snapshot_field");
   });
+
+  // Follow-up to the #1981/#1982 review (flagged NON-BLOCKING): the exact
+  // pre-pass and the JS-scan fallback are bounded independently — each
+  // per-field exact query carries `.limit(limit)`, while the JS scan is capped
+  // at a fixed 500 rows and appends every additional match it finds. Nothing
+  // between them re-applies `limit` to the merged `snapshotMatches` array, so
+  // the caller-facing bound rests entirely on the final `queryEntities({limit})`
+  // call. This pins that the combined result is correctly bounded AND
+  // deterministic across the two passes.
+  it("#1982 bounds and deterministically orders results across the exact and JS-scan passes", async () => {
+    const userId = "identifier-user-limit-boundary";
+    const now = new Date().toISOString();
+    // Fixed (not Date.now()-derived) ids so the expected ordering is explicit:
+    // queryEntities' default sort is `.order("id", { ascending: true })`, so
+    // the bounded slice must be the lowest ids, in ascending order.
+    const idA = "ent_limit_boundary_aaa0000000";
+    const idB = "ent_limit_boundary_bbb0000000";
+    const idC = "ent_limit_boundary_ccc0000000";
+    testEntityIds.push(idA, idB, idC);
+    // One shared email across all three contacts: more matches than `limit`.
+    const sharedEmail = "limit.boundary@example.com";
+
+    await serviceRoleClient.from("entities").insert(
+      [idA, idB, idC].map((id, index) => ({
+        id,
+        user_id: userId,
+        // canonical_name deliberately does NOT contain the email, so the
+        // canonical/alias stage misses and resolution goes through the
+        // snapshot-field passes under test.
+        canonical_name: `Limit Boundary Person ${index}`,
+        entity_type: "contact",
+      }))
+    );
+    await serviceRoleClient.from("entity_snapshots").upsert(
+      [idA, idB, idC].map((id, index) => ({
+        entity_id: id,
+        user_id: userId,
+        entity_type: "contact",
+        schema_version: "1.0",
+        canonical_name: `Limit Boundary Person ${index}`,
+        snapshot: { name: `Limit Boundary Person ${index}`, email: sharedEmail },
+        provenance: {},
+        observation_count: 1,
+        last_observation_at: now,
+        computed_at: now,
+      }))
+    );
+
+    const callWithLimit = (limit: number) =>
+      retrieveEntityByIdentifierWithFallback({
+        identifier: sharedEmail,
+        entityType: "contact",
+        userId,
+        by: "email",
+        limit,
+      });
+
+    // Sanity: unbounded, all three resolve — so a capped call below is really
+    // exercising the bound, not a seeding failure.
+    const uncapped = await callWithLimit(100);
+    expect(uncapped.match_mode).toBe("snapshot_field");
+    expect(uncapped.entities).toHaveLength(3);
+    expect(uncapped.total).toBe(3);
+
+    const capped = await callWithLimit(1);
+    expect(capped.match_mode).toBe("snapshot_field");
+    // The caller-facing bound holds even though 3 rows matched.
+    expect(capped.entities.length).toBeLessThanOrEqual(1);
+    expect(capped.entities).toHaveLength(1);
+
+    // `total` SEMANTICS (caller-facing contract, verified here rather than
+    // assumed): for the snapshot-field pass, `total` is the size of the
+    // CAPPED, returned set — NOT the true number of matching entities. The
+    // handler returns `total: withObservations.length`, so `limit: 1` against
+    // 3 genuine matches reports `total: 1`, and `limit: 2` reports `total: 2`.
+    // Callers therefore CANNOT use `total` to detect truncation or to
+    // paginate: `total === limit` is indistinguishable from "exactly `limit`
+    // matches exist". (This differs from the `semantic` pass, which returns
+    // the search's own `total` and can exceed `entities.length`.)
+    expect(capped.total).toBe(1);
+    expect(capped.total).toBe(capped.entities.length);
+
+    const cappedAtTwo = await callWithLimit(2);
+    expect(cappedAtTwo.entities).toHaveLength(2);
+    expect(cappedAtTwo.total).toBe(2);
+
+    // Determinism: the capped set must be a stable, ordered prefix — not an
+    // arbitrary subset that varies per call. Repeated identical calls return
+    // identical ids, and the bounded slice is the ascending-id prefix.
+    const repeat = await callWithLimit(1);
+    expect(repeat.entities.map((entity) => entity.id)).toEqual(
+      capped.entities.map((entity) => entity.id)
+    );
+    expect(capped.entities[0]?.id).toBe(idA);
+    expect(cappedAtTwo.entities.map((entity) => entity.id)).toEqual([idA, idB]);
+    expect(uncapped.entities.map((entity) => entity.id)).toEqual([idA, idB, idC]);
+  });
+
+  // Follow-up to the #1981/#1982 review (flagged NON-BLOCKING). An identifier
+  // that trims to empty is not a meaningful lookup key and must resolve to
+  // nothing. Two distinct ways it can wrongly match:
+  //   1. The canonical/alias stage builds `canonical_name.ilike.%${normalized}%`
+  //      — with an empty needle that degrades to `%%`, which matches EVERY
+  //      entity row for the user.
+  //   2. The exact pre-pass runs `.eq(lower(snapshot->>field), "")`, which
+  //      matches any snapshot row storing that field as an empty string.
+  // Seeds one contact with `email: ""` plus a normal contact and asserts the
+  // correct contract: an empty/whitespace identifier resolves to nothing.
+  it("#1982 does not match anything for an empty or whitespace-only identifier", async () => {
+    const userId = "identifier-user-empty-identifier";
+    const emptyFieldId = `ent_empty_field_${Date.now()}`;
+    const normalId = `ent_empty_normal_${Date.now()}`;
+    testEntityIds.push(emptyFieldId, normalId);
+    const now = new Date().toISOString();
+
+    await serviceRoleClient.from("entities").insert([
+      {
+        id: emptyFieldId,
+        user_id: userId,
+        entity_type: "contact",
+        canonical_name: "Empty Email Person",
+      },
+      {
+        id: normalId,
+        user_id: userId,
+        entity_type: "contact",
+        canonical_name: "Normal Person",
+      },
+    ]);
+    await serviceRoleClient.from("entity_snapshots").upsert([
+      {
+        entity_id: emptyFieldId,
+        user_id: userId,
+        entity_type: "contact",
+        schema_version: "1.0",
+        canonical_name: "Empty Email Person",
+        // The false-positive bait: `email` stored as an empty string, which
+        // `.eq(lower(snapshot->>email), "")` would match for an empty needle.
+        snapshot: { name: "Empty Email Person", email: "" },
+        provenance: {},
+        observation_count: 1,
+        last_observation_at: now,
+        computed_at: now,
+      },
+      {
+        entity_id: normalId,
+        user_id: userId,
+        entity_type: "contact",
+        schema_version: "1.0",
+        canonical_name: "Normal Person",
+        snapshot: { name: "Normal Person", email: "normal.person@example.com" },
+        provenance: {},
+        observation_count: 1,
+        last_observation_at: now,
+        computed_at: now,
+      },
+    ]);
+
+    for (const identifier of ["", "   "]) {
+      const result = await retrieveEntityByIdentifierWithFallback({
+        identifier,
+        entityType: "contact",
+        userId,
+        limit: 100,
+      });
+
+      // An empty identifier must never resolve the empty-string-field contact.
+      expect(result.entities.some((entity) => entity.id === emptyFieldId)).toBe(false);
+      // Nor may it act as a wildcard that dumps every entity for the user.
+      expect(result.entities.some((entity) => entity.id === normalId)).toBe(false);
+      expect(result.total).toBe(0);
+      expect(result.entities).toHaveLength(0);
+      expect(result.match_mode).toBe("none");
+    }
+
+    // Pinning the same contract when the field is explicitly pinned via `by`,
+    // which routes straight to the `.eq(lower(snapshot->>email), "")` query.
+    const byEmail = await retrieveEntityByIdentifierWithFallback({
+      identifier: "",
+      entityType: "contact",
+      userId,
+      by: "email",
+      limit: 100,
+    });
+    expect(byEmail.entities.some((entity) => entity.id === emptyFieldId)).toBe(false);
+    expect(byEmail.total).toBe(0);
+    expect(byEmail.match_mode).toBe("none");
+  });
 });
