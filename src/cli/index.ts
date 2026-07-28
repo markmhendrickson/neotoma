@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command, Option } from "commander";
+import { isUtf8 } from "node:buffer";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { exec, execFileSync, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -9042,6 +9043,29 @@ skillsCommand
       "Creates and populates the skills directory for any harness whose base directory exists."
   )
   .option("--scope <scope>", "Mirror at user or project level", "user")
+  .option(
+    "--include-instance-skills",
+    "Also fetch `enabled` skill entities from the connected instance and materialize them " +
+      "under ~/.neotoma/instance-skills/<host>/, linked into harnesses alongside package skills " +
+      "(package skills win on name collision). See docs/skills/skill_strategy.md.",
+    false
+  )
+  .option(
+    "--include-instance-scripts",
+    "Also fetch script attachments (file_asset entities EMBEDS'd by instance skills), verify " +
+      "their content_hash, and write them to <skill>/scripts/ — gated by the hash-pin consent " +
+      "manifest (~/.neotoma/instance-skills/approvals.json). Implies --include-instance-skills.",
+    false
+  )
+  .option(
+    "--approve-scripts",
+    "Trust these specific instance-script hashes to be written to disk and pin them as " +
+      "approved for future syncs (a hash-pinned execution-trust decision, not a generic sync " +
+      "confirmation). Without this flag, unapproved or changed-hash scripts are reported as " +
+      "blocked and not written.",
+    false
+  )
+  .addOption(new Option("--approve", "Deprecated alias for --approve-scripts").hideHelp())
   .action(async (opts) => {
     const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
     const scope = opts.scope === "project" ? "project" : "user";
@@ -9053,9 +9077,47 @@ skillsCommand
       scope,
       onLog: json ? undefined : (msg) => console.log(`  ${msg}`),
     });
+
+    const includeInstanceScripts = Boolean(opts.includeInstanceScripts);
+    const includeInstanceSkills = Boolean(opts.includeInstanceSkills) || includeInstanceScripts;
+    // --approve is a hidden, deprecated alias for --approve-scripts (Commander gives each
+    // flag its own camelCase key, so both are read and OR'd rather than unified upstream).
+    const approveScripts = Boolean(opts.approveScripts) || Boolean(opts.approve);
+
+    let instanceReport: Awaited<
+      ReturnType<typeof import("./instance_skills_sync.js").runInstanceSkillsSync>
+    > | null = null;
+    if (includeInstanceSkills) {
+      const { runInstanceSkillsSync } = await import("./instance_skills_sync.js");
+      const config = await readConfig();
+      const token = await getCliToken();
+      const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+      const api = createApiClient({ baseUrl, token });
+      instanceReport = await runInstanceSkillsSync(api, {
+        includeInstanceSkills,
+        includeInstanceScripts,
+        approve: approveScripts,
+        baseUrl,
+        scope,
+      });
+    }
+
     if (json) {
-      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-      if (!report.source_present || report.has_errors) process.exitCode = 1;
+      process.stdout.write(JSON.stringify({ ...report, instance: instanceReport }, null, 2) + "\n");
+      // Integrity failures must fail the exit code in JSON mode too: a CI
+      // pipeline scripting off `$?` (rather than parsing the body) would
+      // otherwise treat a content_hash mismatch or a rejected filename as a
+      // clean sync. Consent-blocked scripts are deliberately NOT counted —
+      // they are the expected, recoverable state, matching the `⚠` vs `✗`
+      // severity split the console renderer uses below.
+      const instanceIntegrityFailure = Boolean(
+        instanceReport?.scripts &&
+        (instanceReport.scripts.hashMismatches.length > 0 ||
+          instanceReport.scripts.rejectedFilenames.length > 0)
+      );
+      if (!report.source_present || report.has_errors || instanceIntegrityFailure) {
+        process.exitCode = 1;
+      }
       return;
     }
     if (!report.source_present) {
@@ -9081,6 +9143,57 @@ skillsCommand
     if (report.has_errors) {
       console.error("Some skills failed to link; see warnings above.");
       process.exitCode = 1;
+    }
+
+    if (instanceReport?.ran) {
+      console.log(
+        `Instance skills: ${instanceReport.skillsFetched} fetched → ${instanceReport.root}`
+      );
+      for (const c of instanceReport.skippedCollisions) {
+        console.log(`  ⚠ skipped '${c.name}': ${c.reason}`);
+      }
+      if (instanceReport.written.length > 0) {
+        console.log(`  updated: ${instanceReport.written.join(", ")}`);
+      }
+      if (instanceReport.pruned.length > 0) {
+        console.log(`  pruned: ${instanceReport.pruned.join(", ")}`);
+      }
+      for (const r of instanceReport.harnessResults) {
+        if (r.skipped) continue;
+        console.log(`  ${r.tool}: ${r.linked.length} instance skill link(s) → ${r.target}`);
+      }
+      if (instanceReport.scripts) {
+        const s = instanceReport.scripts;
+        for (const w of s.written) {
+          const suffix = w.newlyApproved ? " (hash approved and recorded)" : "";
+          console.log(`  script written: ${w.skill}/scripts/${w.filename}${suffix}`);
+        }
+        for (const b of s.blockedUnapproved) {
+          console.log(
+            `  ⚠ script not written (unapproved): ${b.skill}/${b.filename} (sha256:${b.hash.slice(0, 12)}) — ` +
+              `review with \`neotoma sources content ${b.sourceId}\`, then re-run with --approve-scripts`
+          );
+        }
+        for (const b of s.blockedHashChanged) {
+          console.log(
+            `  ⚠ script not written (hash changed since approval): ${b.skill}/${b.filename} ` +
+              `(approved sha256:${b.approvedHash.slice(0, 12)}, new sha256:${b.newHash.slice(0, 12)}) — ` +
+              `review with \`neotoma sources content ${b.sourceId}\`, then re-run with --approve-scripts`
+          );
+        }
+        for (const m of s.hashMismatches) {
+          console.error(
+            `  ✗ content_hash mismatch for ${m.skill}/${m.filename}: expected ${m.expected}, got ${m.actual} — refusing to write`
+          );
+          process.exitCode = 1;
+        }
+        for (const r of s.rejectedFilenames) {
+          console.error(
+            `  ✗ script filename rejected for ${r.skill}: ${JSON.stringify(r.filename)} — ${r.reason}`
+          );
+          process.exitCode = 1;
+        }
+      }
     }
   });
 
@@ -12974,6 +13087,58 @@ sourcesCommand
     } else {
       writeOutput(data, outputMode);
     }
+  });
+
+sourcesCommand
+  .command("content")
+  .description(
+    "Print a source's raw byte content to stdout. `sources get` returns only the entity's " +
+      "metadata (hash, filename, mime type) — this command downloads and prints the actual " +
+      "bytes via GET /sources/:id/content, e.g. to review a script attachment before " +
+      "`neotoma skills sync --approve-scripts`."
+  )
+  .argument("[id]", "Source ID (or use --source-id)")
+  .option("--source-id <id>", "Source ID (alternative to positional argument)")
+  .action(async (idArg: string | undefined, opts: { sourceId?: string }) => {
+    const id = opts.sourceId ?? idArg;
+    if (!id) throw new Error("Source ID is required (positional argument or --source-id)");
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { downloadSourceBytes } = await import("./instance_skills_client.js");
+    let bytes: Buffer;
+    try {
+      bytes = await downloadSourceBytes(api, id);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to get source content: ${detail}`);
+    }
+    if (outputMode === "json") {
+      process.stdout.write(
+        JSON.stringify({
+          id,
+          size: bytes.length,
+          is_utf8: isUtf8(bytes),
+          content_base64: bytes.toString("base64"),
+        }) + "\n"
+      );
+      return;
+    }
+    // These are meant to be text (scripts, docs), but content is graph-supplied and
+    // therefore untrusted — warn on stderr rather than spewing raw control bytes to a
+    // tty if it isn't valid UTF-8. Bytes are still written to stdout either way so
+    // piping to a file or pager (`neotoma sources content <id> > out.bin`) always works.
+    if (!isUtf8(bytes)) {
+      process.stderr.write(
+        `neotoma: warning: source ${id} content is not valid UTF-8 text; ` +
+          `writing raw bytes to stdout anyway (redirect to a file if your terminal misbehaves)\n`
+      );
+    }
+    process.stdout.write(bytes);
   });
 
 sourcesCommand
