@@ -155,5 +155,5 @@ When `NEOTOMA_HOSTED_MODE=1`, `sync_webhook_inbound` rejects any `sender_peer_ur
 - `scripts/security/ai_review.js` — G4 prompt + scaffold.
 - `scripts/security/deployed_probes.sh` — G5 live runner.
 - `.github/workflows/ci_test_lanes.yml` § `security_gates` job — CI wiring.
-- `.github/workflows/sandbox-weekly-reset.yml` — weekly G5 check on the live sandbox.
+- `.github/workflows/sandbox-weekly-security-probes.yml` — weekly G5 check on the live sandbox.
 - `docs/security/advisories/` — disclosed advisories indexed by `README.md`.

@@ -16,8 +16,8 @@
 #   NEOTOMA_SANDBOX_RESET_BASE_URL  URL the seeder uses (default http://127.0.0.1:3180)
 #   NEOTOMA_SANDBOX_POST_WIPE_DELAY_MS  pause after deleting sqlite before HTTP seed (default 3000)
 #
-# Automation: prefer GitHub Actions (`.github/workflows/sandbox-weekly-reset.yml`)
-# on a weekly cron with repository secrets `FLY_API_TOKEN`.
+# Automation: manual operator reset via `.github/workflows/sandbox-weekly-reset.yml`
+# (workflow_dispatch). Weekly security probes: `sandbox-weekly-security-probes.yml`.
 
 set -euo pipefail
 
