@@ -131,6 +131,17 @@ jobs:
       - name: Run cross-surface contract-parity integration tests
         run: npm run test:contract-parity
 
+      # Concurrent-backend (PR #1944) effect-verified regressions. These two
+      # tests existed but ran in NO PR lane (test:unit excludes tests/integration
+      # and tests/scripts; only a hand-picked contract-parity subset ran here),
+      # so the async-transaction-rollback proof for entity_merge.ts and the
+      # libsql migration-validator's own detection logic passed locally but never
+      # gated a merge. Wiring them here closes that gap under the same
+      # fixed_means_behavior_verified_not_contract_accepted policy
+      # (ent_db0b7855d47012084477fb00) this lane already enforces.
+      - name: Run concurrent-backend effect-verified regressions (merge rollback + migration validator)
+        run: npx vitest run --no-file-parallelism tests/integration/merge_repoint_relationship_edges.test.ts tests/scripts/validate_libsql_migration.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline
