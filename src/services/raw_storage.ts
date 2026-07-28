@@ -319,6 +319,38 @@ export interface ReferenceStorageResult {
 }
 
 /**
+ * Minimal extension → MIME map (common document types, plus script
+ * extensions for instance-script attachments, #1951 — `.ts` deliberately maps
+ * to `text/typescript` rather than the IANA "MPEG transport stream" trap for
+ * `video/mp2t`). Extracted as a standalone pure function so it is unit-
+ * testable without touching the database `storeRawReference` otherwise
+ * requires.
+ */
+export function resolveMimeTypeFromExtension(ext: string): string {
+  const extMap: Record<string, string> = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".mp3": "audio/mpeg",
+    ".mp4": "video/mp4",
+    ".zip": "application/zip",
+    ".py": "text/x-python",
+    ".sh": "application/x-sh",
+    ".js": "text/javascript",
+    ".ts": "text/typescript",
+    ".rb": "application/x-ruby",
+    ".sql": "application/sql",
+  };
+  return extMap[ext.toLowerCase()] ?? "application/octet-stream";
+}
+
+/**
  * Store a file by reference — read it once to compute content_hash + metadata,
  * persist the `sources` row with storage_mode='reference' (no blob bytes).
  *
@@ -348,26 +380,7 @@ export async function storeRawReference(
 
   // Auto-detect MIME type from extension when not provided
   const ext = path.extname(absolutePath).toLowerCase();
-  const resolvedMime =
-    options.mimeType ||
-    (() => {
-      // Minimal extension → MIME map (common document types)
-      const extMap: Record<string, string> = {
-        ".pdf": "application/pdf",
-        ".txt": "text/plain",
-        ".md": "text/markdown",
-        ".csv": "text/csv",
-        ".json": "application/json",
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".mp3": "audio/mpeg",
-        ".mp4": "video/mp4",
-        ".zip": "application/zip",
-      };
-      return extMap[ext] ?? "application/octet-stream";
-    })();
+  const resolvedMime = options.mimeType || resolveMimeTypeFromExtension(ext);
 
   // Check idempotency key first
   if (idempotencyKey) {
