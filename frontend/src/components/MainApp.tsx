@@ -191,6 +191,8 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/capability-delta", element: <MdxSitePage canonicalPath="/capability-delta" /> },
   { path: "/high-velocity-intake", element: <MdxSitePage canonicalPath="/high-velocity-intake" /> },
   { path: "/embed-graph", element: <MdxSitePage canonicalPath="/embed-graph" /> },
+  { path: "/usage-telemetry", element: <MdxSitePage canonicalPath="/usage-telemetry" /> },
+  { path: "/rendered-pages", element: <MdxSitePage canonicalPath="/rendered-pages" /> },
   { path: "/inspector", element: <InspectorReferencePage /> },
   { path: "/inspector/dashboard", element: <InspectorDashboardPage /> },
   { path: "/inspector/entities", element: <InspectorEntitiesPage /> },

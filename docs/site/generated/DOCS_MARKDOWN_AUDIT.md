@@ -2,17 +2,17 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **707**
+Total files: **717**
 
 ## By top-level folder under docs/
 
-- **site**: 177
+- **site**: 181
 - **developer**: 122
 - **plans**: 69
 - **subsystems**: 49
 - **reports**: 48
 - **ui**: 42
-- **foundation**: 24
+- **foundation**: 25
 - **architecture**: 20
 - **feature_units**: 20
 - **use_cases**: 17
@@ -26,7 +26,9 @@ Total files: **707**
 - **legal**: 8
 - **security**: 6
 - **getting_started**: 4
+- **skills**: 4
 - **observability**: 3
+- **bundles**: 2
 - **implementation**: 2
 - **infrastructure**: 2
 - **migration**: 2
@@ -41,4 +43,3 @@ Total files: **707**
 - **reference**: 1
 - **rendered_page.md**: 1
 - **research**: 1
-- **skills**: 1

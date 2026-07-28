@@ -87,12 +87,14 @@
 | `/primitives/timeline-events` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/privacy` | en | 2026-05-07 | canonical |
 | `/procurement` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/rendered-pages` | en | 2026-06-26 | canonical |
 | `/replayable-timeline` | en | 2026-05-07 | canonical |
 | `/reproducible-state-reconstruction` | en | 2026-05-07 | canonical |
 | `/sandbox` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schema-constraints` | en | 2026-05-07 | canonical |
 | `/schema-management` | en | 2026-05-07 | canonical |
 | `/schemas` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/schemas/locked-vs-evolving` | en | 2026-05-20 | canonical |
 | `/schemas/merge-policies` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/registry` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/storage-layers` | en, es | 2026-05-07 | canonical, machine_draft |
@@ -109,6 +111,7 @@
 | `/trading` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/transactional-writes` | en | 2026-05-08 | canonical |
 | `/troubleshooting` | en | 2026-05-07 | canonical |
+| `/usage-telemetry` | en | 2026-06-26 | canonical |
 | `/versioned-history` | en | 2026-05-07 | canonical |
 | `/zero-setup-onboarding` | en | 2026-05-07 | canonical |
 

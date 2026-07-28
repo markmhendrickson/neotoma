@@ -823,6 +823,30 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Embeddable graph", path: "/embed-graph" },
     ],
   },
+  "/usage-telemetry": {
+    title: "Usage telemetry | Neotoma",
+    description:
+      "How agents and observer processes submit periodic, PII-safe aggregate telemetry via the usage_digest entity type — fields, authentication (AAuth grant or keyless guest), idempotency, time-series retrieval, and server-side redaction.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Usage telemetry", path: "/usage-telemetry" },
+    ],
+  },
+  "/rendered-pages": {
+    title: "Rendered pages | Neotoma",
+    description:
+      "Publish a rendered_page entity as a shareable guest URL with publish_rendered_page. Covers html_body/custom_css/title/meta_description fields, guest access tokens, the /entities/<id>/html URL shape, and live updates via correct.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Rendered pages", path: "/rendered-pages" },
+    ],
+  },
   "/aauth/spec": {
     title: "AAuth wire format and verification | Neotoma",
     description:
