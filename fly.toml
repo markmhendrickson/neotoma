@@ -8,6 +8,16 @@ primary_region = 'lhr'
 
 [build]
 
+# Seed the schema_registry on every deploy, before the new release takes
+# traffic (issue #1968). The server also seeds idempotently at boot
+# (src/services/schema_registry_bootstrap.ts); this makes the step explicit
+# and surfaces a seeding failure in the deploy log rather than a warn line.
+#
+# Safe to re-run: seed_schemas_entry.js skips entity types that already have
+# an active registration and never overwrites a custom operator schema.
+[deploy]
+  release_command = "node dist/seed_schemas_entry.js"
+
 [env]
   NODE_ENV = "production"
   NEOTOMA_ENV = "production"

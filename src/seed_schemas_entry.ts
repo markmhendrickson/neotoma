@@ -14,12 +14,20 @@
  * tsconfig.scripts.json with rootDir: ./scripts, which cannot resolve deep
  * src/ import chains — see initialize-schemas.ts's failed migration there).
  *
- * Intended to run as a Fly.io `release_command` on every deploy, against
- * the target machine's database, after the image is built. Mirrors the
- * registration logic of scripts/initialize-schemas.ts and is safe to run
- * repeatedly: schemas already registered+active are skipped, schemas
- * registered but not active are activated, and anything missing is
- * registered then activated.
+ * Wired as the Fly.io `release_command` in fly.toml / fly.sandbox.toml, so it
+ * runs on every deploy against the target machine's database after the image
+ * is built (issue #1968). The server ALSO seeds idempotently at boot via
+ * src/services/schema_registry_bootstrap.ts, which covers deploy paths that
+ * do not go through Fly (e.g. scripts/redeploy_rc_from_main.sh) as well as
+ * ones not yet written. Running both is harmless — whichever gets there first
+ * registers, and the other skips.
+ *
+ * Safe to run repeatedly, and safe on an instance carrying CUSTOM schemas:
+ * an entity type that already has an active global registration is skipped
+ * outright — not re-registered, not re-activated, not merged. Only types with
+ * nothing active are registered. This deliberately does NOT "activate the
+ * built-in version if it is registered but inactive": doing so used to revert
+ * an operator's deliberately-activated custom schema on every deploy.
  *
  * Usage:
  *   node dist/seed_schemas_entry.js
@@ -41,57 +49,58 @@ async function seedSchema(
   const { entity_type, schema_version } = schema;
 
   try {
-    let versions: Array<{ schema_version: string }> = [];
+    // Skip-if-present, keyed on the ACTIVE GLOBAL row rather than on a
+    // schema_version string match (issue #1968).
+    //
+    // The previous implementation compared `schema_version` strings from
+    // getSchemaVersions() and called activate() whenever the built-in version
+    // was registered-but-inactive. On an instance where an operator had
+    // deliberately registered and activated a CUSTOM schema for an entity
+    // type, that flipped the built-in row back to active and deactivated the
+    // operator's — silently reverting their customization on every deploy.
+    // Reading whatever is currently active, and leaving it alone, removes the
+    // whole class of hazard: a custom schema is preserved regardless of what
+    // version string it carries.
+    let activeSchema: { schema_version: string } | null = null;
     try {
-      versions = await schemaRegistry.getSchemaVersions(entity_type);
+      activeSchema = await schemaRegistry.loadGlobalSchema(entity_type);
     } catch (error: any) {
       return {
         entity_type,
         schema_version,
         action: "error",
-        error: `getSchemaVersions failed: ${error.message || String(error)}`,
+        error: `loadGlobalSchema failed: ${error.message || String(error)}`,
       };
     }
 
-    const exists = versions.some((v) => v.schema_version === schema_version);
-
-    if (exists) {
-      // Already registered - check if it's the active version.
-      try {
-        const activeSchema = await schemaRegistry.loadActiveSchema(entity_type);
-        if (activeSchema?.schema_version === schema_version) {
-          return { entity_type, schema_version, action: "skipped" };
-        }
-        // Registered but not active - activate it.
-        await schemaRegistry.activate(entity_type, schema_version);
-        return { entity_type, schema_version, action: "activated" };
-      } catch {
-        // Could not determine active status - attempt activation anyway.
-        await schemaRegistry.activate(entity_type, schema_version);
-        return { entity_type, schema_version, action: "activated" };
-      }
+    if (activeSchema) {
+      return { entity_type, schema_version, action: "skipped" };
     }
 
-    // Not registered yet - register then activate.
+    // Nothing active for this type - register and activate in one call.
     try {
       await schemaRegistry.register({
         entity_type,
         schema_version,
         schema_definition: schema.schema_definition,
         reducer_config: schema.reducer_config,
+        user_specific: false,
+        activate: true,
+        ...(schema.metadata ? { metadata: schema.metadata } : {}),
       });
-      await schemaRegistry.activate(entity_type, schema_version);
       return { entity_type, schema_version, action: "registered" };
     } catch (error: any) {
-      // Race with a concurrent registration (e.g. duplicate key) - fall
-      // back to activation so a re-run stays idempotent.
+      // Race with a concurrent registration (e.g. another machine's release
+      // command, or a second instance booting). Someone else already put a
+      // row in place, so treat it as done and leave whatever they activated
+      // alone — deliberately NOT calling activate() here, which would risk
+      // overriding a concurrently-registered custom schema.
       if (
         error.message?.includes("duplicate key") ||
         error.message?.includes("unique constraint") ||
         error.message?.includes("already exists")
       ) {
-        await schemaRegistry.activate(entity_type, schema_version);
-        return { entity_type, schema_version, action: "activated" };
+        return { entity_type, schema_version, action: "skipped" };
       }
       throw error;
     }
