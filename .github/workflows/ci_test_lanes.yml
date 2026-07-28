@@ -393,3 +393,45 @@ jobs:
         run: |
           echo "Security-sensitive diff: ${SECURITY_SENSITIVE:-unknown}"
           echo "Per docs/security/threat_model.md, sensitive PRs MUST land with a Security hardening supplement section and a same-release security_review.md."
+
+  catalog_union_merge_repro:
+    # Issue #2036: generated-and-committed test catalog conflicts on every
+    # concurrent test-adding PR (rebase treadmill). Path-scoped to only run
+    # when .gitattributes or the two generator/validator scripts change, so
+    # unrelated PRs don't pay for this lane's git-clone-based repro.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check whether this PR touches catalog-merging-relevant files
+        id: filter
+        run: |
+          BASE_REF="origin/main"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="origin/${{ github.event.pull_request.base.ref }}"
+          fi
+          git fetch origin "${BASE_REF#origin/}" --depth=200 || true
+          CHANGED=$(git diff --name-only "$BASE_REF"...HEAD -- .gitattributes scripts/generate-automated-test-catalog.ts scripts/generate-capability-manifest.ts scripts/repro/test-catalog-union-merge.sh)
+          if [ -n "$CHANGED" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.filter.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        if: steps.filter.outputs.run == 'true'
+        run: npm ci
+
+      - name: Run catalog union-merge repro
+        if: steps.filter.outputs.run == 'true'
+        run: bash scripts/repro/test-catalog-union-merge.sh
