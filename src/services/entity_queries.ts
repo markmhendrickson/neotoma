@@ -21,10 +21,12 @@ export interface SnapshotFilter {
  * the escape character itself cannot be smuggled in.
  *
  * Note for `contains_word`: separator characters (including `%` and `_`) are
- * normalized to spaces in the haystack, so a term that still contains one can
- * never align as a single token and the filter returns nothing. That is the
- * intended fail-closed behavior — a stray wildcard yields an empty result
- * rather than matching every row.
+ * normalized to spaces in BOTH the haystack and the term (see
+ * `normalizeWordBoundaryTerm` in the sqlite adapter), so a term containing
+ * punctuation — "O'Brien", "R&D", "100%" — matches its stored value rather than
+ * silently returning nothing. Escaping here still prevents `%`/`_` from acting
+ * as LIKE wildcards; the adapter's normalization then rewrites those (now
+ * literal) separators to spaces to line up with the haystack.
  */
 export function escapeLikeTerm(term: string): string {
   return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");

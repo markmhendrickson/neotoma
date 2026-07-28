@@ -192,27 +192,36 @@ describe("queryEntities snapshot_filters contains_word (#1966)", () => {
       expect(await titlesMatching("contains_word", "_TO")).toEqual([]);
     });
 
-    it("does not error or over-match on quote characters in the term", async () => {
+    it("matches a quoted name and does not over-match or error", async () => {
       await seedTitles(["O'Brien", "CTO"]);
 
-      // Must not throw (SQL injection guard) and must not over-match.
-      expect(await titlesMatching("contains_word", "O'Brien")).toEqual([]);
+      // Must not throw (SQL injection guard). The term is separator-normalized
+      // the same way as the haystack, so "O'Brien" matches its stored value.
+      expect(await titlesMatching("contains_word", "O'Brien")).toEqual(["O'Brien"]);
     });
   });
 
-  describe("documented limitation: separators inside the term", () => {
-    it("a term containing a separator matches nothing (fails closed, never over-matches)", async () => {
-      await seedTitles(["100% Remote", "O'Brien", "Head_of_Data"]);
+  describe("separators inside the term are normalized (not a footgun)", () => {
+    it("a term containing a separator matches its stored value instead of failing closed", async () => {
+      await seedTitles(["100% Remote", "O'Brien", "R&D Lead", "Head_of_Data"]);
 
-      // Separators are normalized to spaces in the HAYSTACK, so a term that
-      // still contains one can never line up as a single token. This fails
-      // closed (empty result) rather than silently widening the match.
-      expect(await titlesMatching("contains_word", "100%")).toEqual([]);
-      expect(await titlesMatching("contains_word", "Head_of_Data")).toEqual([]);
+      // Separators in the TERM are rewritten to spaces just like the haystack,
+      // so punctuation-bearing terms match rather than silently returning [].
+      expect(await titlesMatching("contains_word", "100%")).toEqual(["100% Remote"]);
+      expect(await titlesMatching("contains_word", "O'Brien")).toEqual(["O'Brien"]);
+      expect(await titlesMatching("contains_word", "R&D")).toEqual(["R&D Lead"]);
+      expect(await titlesMatching("contains_word", "Head_of_Data")).toEqual(["Head_of_Data"]);
 
-      // The tokenized form does match, which is the documented workaround.
+      // The tokenized spelling still works too — both forms are equivalent.
       expect(await titlesMatching("contains_word", "O Brien")).toEqual(["O'Brien"]);
       expect(await titlesMatching("contains_word", "Head of Data")).toEqual(["Head_of_Data"]);
+    });
+
+    it("still fails closed (no over-match) when the normalized term is not a whole-word run", async () => {
+      // "R&D" normalizes to "R D"; it must NOT match a title where R and D are
+      // non-adjacent tokens, only where they appear consecutively.
+      await seedTitles(["R&D Lead", "R Senior D Engineer"]);
+      expect(await titlesMatching("contains_word", "R&D")).toEqual(["R&D Lead"]);
     });
   });
 });

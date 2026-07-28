@@ -259,7 +259,9 @@ export function buildToolDefinitions(
               "whole word/token: it matches only when the value appears as a complete token " +
               'delimited by punctuation or whitespace, so `"CTO"` matches "VP, CTO" and ' +
               '"CTO & Co-founder" but not "director"; `"Care"` does not match "Careers". ' +
-              "Case-insensitivity for `contains_word` is ASCII-only.",
+              'Punctuation inside the term is handled: `"O\'Brien"`, `"R&D"`, and `"100%"` ' +
+              "match their stored values (separators in the term are normalized the same way " +
+              "as the stored value). Case-insensitivity for `contains_word` is ASCII-only.",
             additionalProperties: {
               type: "object",
               required: ["op"],
