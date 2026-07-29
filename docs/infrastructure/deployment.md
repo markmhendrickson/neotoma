@@ -21,18 +21,22 @@ This document covers:
 
 The static marketing site is built with `npm run build:site:pages` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`).
 
-- **Prod:** Push to **main** (or run the workflow manually). Served at **https://neotoma.io** (root).
-- **Dev preview:** Push to **dev** and deploy to a **separate repository** via `.github/workflows/deploy-pages-dev-site.yml`. Served at **https://dev.neotoma.io**.
+- **Prod:** Publishing a **release** deploys the site from that release's tag (or run the workflow
+  manually, optionally naming a `ref`). Served at **https://neotoma.io** (root). Release-gated so the
+  public site ships on the same human-gated boundary as the client instance, sandbox, and npm
+  publish. Note: site content merged to `main` after the last release does **not** appear on
+  neotoma.io until the next release is published — use the manual dispatch for an urgent fix.
+- **Dev preview:** Push to **dev** and deploy to a **separate repository** via `.github/workflows/deploy-pages-dev-site.yml`. Served at **https://dev.neotoma.io**. This tier tracks `dev` continuously.
 
 ### One-time: Enable GitHub Pages from Actions
 
 1. In the repo on GitHub: **Settings → Pages** (under "Code and automation").
 2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not "Deploy from a branch"). Save.
-3. The prod workflow runs on push to **main** or when run manually (Actions → "Deploy site (GitHub Pages)" → Run workflow).
+3. The prod workflow runs when a **release is published**, or when run manually (Actions → "Deploy site (GitHub Pages)" → Run workflow).
 
 ### Deploy
 
-No extra secrets: the prod workflow uses the repo’s GitHub Pages environment. Push to **main** (or run the workflow manually from the Actions tab) to build and deploy production at **https://neotoma.io**.
+No extra secrets: the prod workflow uses the repo’s GitHub Pages environment. **Publish a release** to build and deploy production at **https://neotoma.io** from that release's tag. To ship a site change between releases, run the workflow manually from the Actions tab (optionally passing a `ref`).
 
 ### Dev preview site (dev.neotoma.io, isolated from prod)
 
