@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **558**
-- Backend and repo Vitest files: **523**
+- Total automated test files: **563**
+- Backend and repo Vitest files: **528**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 157 |
-| Vitest service tests | 40 |
+| Vitest unit tests | 158 |
+| Vitest service tests | 42 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 157 |
+| Vitest integration tests | 159 |
 | Vitest CLI tests | 72 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 4 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (157):**
+**Files (158):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -161,6 +161,7 @@ flowchart TD
 - `tests/unit/db_driver_contract.test.ts`
 - `tests/unit/db_idempotency_concurrency.test.ts`
 - `tests/unit/db_libsql_nonblocking.test.ts`
+- `tests/unit/db_libsql_remote_class.test.ts`
 - `tests/unit/db_url_misconfig_guard.test.ts`
 - `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
@@ -273,12 +274,13 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (40):**
+**Files (42):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
+- `tests/services/deploy_seed_wiring.test.ts`
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
@@ -308,6 +310,7 @@ flowchart TD
 - `tests/services/schema_recommendation.test.ts`
 - `tests/services/schema_reference_fields_resolve_target_validation.test.ts`
 - `tests/services/schema_reference_linking.test.ts`
+- `tests/services/schema_registry_bootstrap.test.ts`
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/summary.test.ts`
@@ -392,7 +395,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (157):**
+**Files (159):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -430,6 +433,7 @@ flowchart TD
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
+- `tests/integration/entity_queries_contains_word.test.ts`
 - `tests/integration/entity_queries_cursor.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
@@ -520,6 +524,7 @@ flowchart TD
 - `tests/integration/sandbox_seed_token_bypass.test.ts`
 - `tests/integration/sandbox_stale_bearer_fallback.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
+- `tests/integration/seed_then_works_at_e2e.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
