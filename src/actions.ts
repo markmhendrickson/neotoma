@@ -11026,13 +11026,7 @@ app.post("/correct", async (req, res) => {
         denied_count: error.denied.length,
         reason_codes: [...new Set(error.denied.map((d) => d.reason_code))].sort(),
       });
-      return res.status(400).json({
-        error: {
-          code: "ERR_STORE_POLICY_DENIED",
-          message: error.message,
-          denied: error.denied,
-        },
-      });
+      return res.status(400).json({ error: error.toErrorEnvelope() });
     }
     return handleApiError(
       req,

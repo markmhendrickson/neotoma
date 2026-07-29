@@ -226,3 +226,44 @@ describe("instance policy is served on every client-instructions surface (#1974)
     expect(read("src/cli/index.ts").includes(COMPOSE)).toBe(true);
   });
 });
+
+describe("ERR_STORE_POLICY_DENIED keeps its structured envelope on every surface", () => {
+  // A rejection must carry `code` / `denied[]` / `reason_code` / `hint` on BOTH
+  // transports. The first cut of this feature returned the full envelope on REST
+  // but let the error fall through to MCP's generic `InternalError` handler,
+  // which keeps only `message` — so a client on MCP saw a server fault where a
+  // REST client saw an actionable policy denial. That is the single-surface
+  // drift the cross-surface parity policy exists to catch, and it is invisible
+  // to any test that exercises only one transport.
+
+  it("the MCP tool-call catch block branches on StorePolicyDeniedError", () => {
+    const src = stripComments(read("src/server.ts"));
+    expect(
+      src.includes("error instanceof StorePolicyDeniedError"),
+      "src/server.ts must branch on StorePolicyDeniedError in the CallToolRequestSchema " +
+        "catch block, alongside AttributionPolicyError and OverridePolicyViolationError. " +
+        "Without it the error falls through to the generic InternalError path and the " +
+        "structured envelope is lost on MCP only."
+    ).toBe(true);
+  });
+
+  it("both transports build the envelope from the error itself, not by hand", () => {
+    // Sharing one builder is what makes parity structural: a field added to the
+    // envelope reaches both surfaces at once. Hand-rolled object literals are how
+    // the two drifted in the first place.
+    const errorSrc = stripComments(read("src/services/instance_policy.ts"));
+    expect(
+      errorSrc.includes("toErrorEnvelope"),
+      "StorePolicyDeniedError must expose toErrorEnvelope() as the single definition " +
+        "of the ERR_STORE_POLICY_DENIED envelope"
+    ).toBe(true);
+
+    for (const surface of ["src/server.ts", "src/actions.ts"]) {
+      expect(
+        stripComments(read(surface)).includes("toErrorEnvelope()"),
+        `${surface} must render the denial via error.toErrorEnvelope() rather than ` +
+          `rebuilding the envelope inline`
+      ).toBe(true);
+    }
+  });
+});
