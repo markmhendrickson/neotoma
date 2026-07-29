@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **554**
-- Backend and repo Vitest files: **519**
+- Total automated test files: **555**
+- Backend and repo Vitest files: **520**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 151 |
 | Vitest service tests | 42 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 158 |
+| Vitest integration tests | 159 |
 | Vitest CLI tests | 72 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 4 |
@@ -388,7 +388,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (158):**
+**Files (159):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -426,6 +426,7 @@ flowchart TD
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
+- `tests/integration/entity_queries_contains_word.test.ts`
 - `tests/integration/entity_queries_cursor.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
