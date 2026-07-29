@@ -153,10 +153,36 @@ function discoverTunnelUrl(httpPort: number, allowAutoDiscovery: boolean): strin
   return `http://localhost:${httpPort}`;
 }
 
+/**
+ * DB backend selection (concurrent-backend plan). `sqlite` (default) keeps the
+ * zero-config synchronous better-sqlite3/node:sqlite path. `libsql` opts into
+ * the concurrent backend — statements run off the Node event loop, so slow
+ * queries cannot freeze the whole server. For local `file:` URLs that is
+ * delivered by worker threads hosting the synchronous libSQL driver (a writer
+ * plus a read-only reader pool under WAL — every local Node binding is
+ * synchronous on the calling thread, so "async" local libSQL alone would not
+ * fix blocking); remote URLs (sqld/Turso) use the genuinely-async
+ * @libsql/client. The trigger for opting in is genuine multi-writer/hosted
+ * contention (agent-heavy or shared instances), not data size. Same file
+ * format and SQL dialect; a `file:` URL derived from sqlitePath is used
+ * unless NEOTOMA_DB_URL points at a remote instance.
+ */
+const dbBackend = (process.env.NEOTOMA_DB_BACKEND || "sqlite").toLowerCase();
+if (dbBackend !== "sqlite" && dbBackend !== "libsql") {
+  throw new Error(
+    `Invalid NEOTOMA_DB_BACKEND "${process.env.NEOTOMA_DB_BACKEND}": expected "sqlite" or "libsql"`
+  );
+}
+
 export const config = {
   projectRoot,
   storageBackend,
   dataDir,
+  dbBackend: dbBackend as "sqlite" | "libsql",
+  /** Connection URL for non-file backends (e.g. libsql://…, http(s)://… for sqld/Turso). */
+  dbUrl: process.env.NEOTOMA_DB_URL || "",
+  /** Auth token for remote libSQL (sqld/Turso) connections. */
+  dbAuthToken: process.env.NEOTOMA_DB_AUTH_TOKEN || "",
   sqlitePath:
     process.env.NEOTOMA_SQLITE_PATH ||
     join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),

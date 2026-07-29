@@ -22,11 +22,13 @@
  * `npm run test:integration`.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { repointRelationshipObservations } from "../../src/services/observation_storage.js";
 import { createRelationshipObservations } from "../../src/services/interpretation.js";
 import { mergeEntities } from "../../src/services/entity_merge.js";
+import { getDb } from "../../src/repositories/db/connection.js";
+import type { DbConnection } from "../../src/repositories/db/driver.js";
 
 const TEST_USER = "test-merge-repoint-1507";
 
@@ -469,5 +471,101 @@ describe("mergeEntities() — round-trip integration (#1507 transaction wrap)", 
 
     expect(tombstone).toBeDefined();
     expect((tombstone as { merged_to_entity_id: string }).merged_to_entity_id).toBe(entityA);
+  });
+
+  // Async-transaction rollback (PR #1944, QA blocker). The merge sequence was
+  // rewritten from a synchronous better-sqlite3 db.transaction(fn)() to an async
+  // db.transaction(async (tx) => …). This asserts atomicity is preserved under
+  // the async contract: a failure late in the sequence (after the observation
+  // rewrite, relationship repoint, and snapshot deletes have run) rolls the
+  // WHOLE thing back — the source entity stays alive and its edges intact,
+  // rather than leaving a half-merged, orphaned-edge state.
+  it("(rollback) a mid-transaction failure leaves the source entity and edges untouched", async () => {
+    const entityA = "ent_e2e_rollback_A";
+    const entityB = "ent_e2e_rollback_B";
+    const entityC = "ent_e2e_rollback_C";
+
+    await seedEntity(entityA);
+    await seedEntity(entityB);
+    await seedEntity(entityC);
+
+    // B → C so the transaction does real repoint work before the injected fault.
+    await createRelationshipObservations(
+      [
+        {
+          relationship_type: "PART_OF",
+          source_entity_id: entityB,
+          target_entity_id: entityC,
+          metadata: { note: "rollback B→C" },
+        },
+      ],
+      "src_e2e_rollback",
+      null,
+      E2E_USER,
+      50
+    );
+
+    // Inject a fault at the entity_merges audit INSERT — step 8 of 9, so every
+    // prior mutation in the transaction has already executed when it throws.
+    const conn = await getDb();
+    const realPrepare = conn.prepare.bind(conn);
+    const spy = vi
+      .spyOn(conn, "prepare")
+      .mockImplementation((sql: string): ReturnType<DbConnection["prepare"]> => {
+        if (sql.includes("INSERT INTO entity_merges")) {
+          throw new Error("injected mid-merge fault");
+        }
+        return realPrepare(sql);
+      });
+
+    try {
+      await expect(
+        mergeEntities({
+          fromEntityId: entityB,
+          toEntityId: entityA,
+          userId: E2E_USER,
+          mergeReason: "rollback test",
+          mergedBy: "test",
+        })
+      ).rejects.toThrow("injected mid-merge fault");
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Source entity B must still be ALIVE (not marked merged) — the merged-mark
+    // and audit rows are in the rolled-back transaction.
+    const { data: source } = await db
+      .from("entities")
+      .select("id, merged_to_entity_id")
+      .eq("id", entityB)
+      .eq("user_id", E2E_USER)
+      .single();
+    expect((source as { merged_to_entity_id: string | null }).merged_to_entity_id).toBeNull();
+
+    // No audit row landed.
+    const { data: audits } = await db
+      .from("entity_merges")
+      .select("id")
+      .eq("user_id", E2E_USER)
+      .eq("from_entity_id", entityB);
+    expect((audits ?? []).length).toBe(0);
+
+    // B's edge is intact and was NOT repointed onto A (observation rewrite +
+    // repoint both rolled back).
+    const { data: bEdges } = await db
+      .from("relationship_observations")
+      .select("relationship_key")
+      .eq("user_id", E2E_USER)
+      .or(`source_entity_id.eq.${entityB},target_entity_id.eq.${entityB}`);
+    expect((bEdges ?? []).map((r: { relationship_key: string }) => r.relationship_key)).toContain(
+      `PART_OF:${entityB}:${entityC}`
+    );
+
+    const { data: aEdges } = await db
+      .from("relationship_observations")
+      .select("id")
+      .eq("user_id", E2E_USER)
+      .or(`source_entity_id.eq.${entityA},target_entity_id.eq.${entityA}`);
+    expect((aEdges ?? []).length).toBe(0);
   });
 });

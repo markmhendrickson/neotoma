@@ -29,9 +29,22 @@ Resolution order for the data directory and variables: a project-local `.env`, t
 | `NEOTOMA_ENV` | `development` or `production` | `development` |
 | `NEOTOMA_DATA_DIR` | Root data directory | local `data/` |
 | `NEOTOMA_SQLITE_PATH` | Explicit database file path | `{dataDir}/neotoma.db` (dev) |
+| `NEOTOMA_DB_BACKEND` | DB driver: `sqlite` (synchronous, zero-config) or `libsql` (concurrent — statements run off the event loop via worker-hosted driver for local files, or @libsql/client for remote sqld/Turso, so slow queries can't freeze the server; recommended for hosted/agent-heavy/shared instances) | `sqlite` |
+| `NEOTOMA_DB_URL` | libsql connection URL (`file:` for embedded local, `http(s)://`/`libsql://` for remote sqld/Turso) | `file:{NEOTOMA_SQLITE_PATH}` |
+| `NEOTOMA_DB_AUTH_TOKEN` | Auth token for remote libsql connections | unset |
+| `NEOTOMA_DB_READER_WORKERS` | Read-only worker connections for the local `libsql` backend (WAL lets them run concurrently with the writer) | `2` |
 | `NEOTOMA_RAW_STORAGE_DIR` | Content-addressed source files | `{dataDir}/sources` |
 | `NEOTOMA_LOGS_DIR` / `NEOTOMA_EVENT_LOG_PATH` | Log directory and event log file | under `{dataDir}/logs` |
 | `NEOTOMA_HOST_URL` / `NEOTOMA_PUBLIC_BASE_URL` | Public URL of this instance | auto-discovered or unset |
+
+### When to opt into `NEOTOMA_DB_BACKEND=libsql`
+
+Stay on the default `sqlite` backend until you have a concrete reason to switch. Switch to `libsql` when **either** of these is true:
+
+- You operate a **hosted, multi-user, or agent-heavy instance** where a single slow query (e.g. a deep-offset paginated query) has been observed to block health checks or other callers — this was the production symptom that motivated the concurrent backend (see `docs/infrastructure/deployment.md` § SQLite concurrency and the multi-writer model).
+- You are moving a database file to a **remote sqld/Turso URL** (`NEOTOMA_DB_URL=libsql://...` or `http(s)://...`), which requires the `libsql` backend regardless of load.
+
+Before flipping the variable on an existing database, run `npx tsx scripts/validate_libsql_migration.ts <path-to-db>` — it proves the file adopts safely under libsql (integrity check, per-table row-count parity, snapshot hydration spot check) without mutating the original file.
 
 ## Server and ports
 

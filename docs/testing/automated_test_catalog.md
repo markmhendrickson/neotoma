@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **555**
-- Backend and repo Vitest files: **520**
+- Total automated test files: **563**
+- Backend and repo Vitest files: **528**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 151 |
+| Vitest unit tests | 158 |
 | Vitest service tests | 42 |
 | Source-adjacent tests | 65 |
 | Vitest integration tests | 159 |
@@ -85,7 +85,7 @@ flowchart TD
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 1 |
-| Tests Scripts | 2 |
+| Tests Scripts | 3 |
 
 ## Primary validation commands
 - `npm test`
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (151):**
+**Files (158):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -150,6 +150,7 @@ flowchart TD
 - `tests/unit/client_turn_report.test.ts`
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
+- `tests/unit/config_db_backend.test.ts`
 - `tests/unit/config_sqlite_path.test.ts`
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
@@ -157,6 +158,12 @@ flowchart TD
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
+- `tests/unit/db_driver_contract.test.ts`
+- `tests/unit/db_idempotency_concurrency.test.ts`
+- `tests/unit/db_libsql_nonblocking.test.ts`
+- `tests/unit/db_libsql_remote_class.test.ts`
+- `tests/unit/db_url_misconfig_guard.test.ts`
+- `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`
@@ -774,9 +781,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/scripts`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (2):**
+**Files (3):**
 - `tests/scripts/bundles_scaffold.test.ts`
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
+- `tests/scripts/validate_libsql_migration.test.ts`
 
 ### Python unit tests
 **Directory:** `packages/client-python/tests/`

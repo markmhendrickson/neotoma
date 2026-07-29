@@ -147,7 +147,7 @@ async function withServerUser<T>(
 ): Promise<T> {
   const server = await ensureServer(cfg);
   const { ensureLocalDevUser } = await import("./services/local_auth.js");
-  const localUser = ensureLocalDevUser();
+  const localUser = await ensureLocalDevUser();
   return fn(server, localUser.id);
 }
 
@@ -396,7 +396,7 @@ const neotomaPlugin = {
         async execute(_id: string, params: Record<string, unknown>) {
           const server = await ensureServer(pluginConfig);
           const { ensureLocalDevUser } = await import("./services/local_auth.js");
-          const localUser = ensureLocalDevUser();
+          const localUser = await ensureLocalDevUser();
           return server.executeToolForCli(tool.name, params, localUser.id);
         },
       });

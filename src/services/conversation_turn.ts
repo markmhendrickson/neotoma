@@ -1,4 +1,4 @@
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 
 const TS_EPOCH = "1970-01-01T00:00:00.000Z";
 
@@ -281,13 +281,13 @@ ORDER BY
 LIMIT ? OFFSET ?
 `;
 
-export function listConversationTurns(
+export async function listConversationTurns(
   userId: string,
   limit: number,
   offset: number,
   filters?: ConversationTurnsFilters | null
-): { items: ConversationTurnSummary[]; has_more: boolean; limit: number; offset: number } {
-  const db = getSqliteDb();
+): Promise<{ items: ConversationTurnSummary[]; has_more: boolean; limit: number; offset: number }> {
+  const db = await getDb();
   const safeLimit = Math.min(Math.max(limit, 1), 100);
   const safeOffset = Math.max(offset, 0);
   const fetchLimit = safeLimit + 1;
@@ -297,7 +297,7 @@ export function listConversationTurns(
   const activityAfter = filters?.activity_after?.trim() || null;
   const activityBefore = filters?.activity_before?.trim() || null;
 
-  const rows = db
+  const rows = (await db
     .prepare(LIST_SQL)
     .all(
       userId,
@@ -312,7 +312,7 @@ export function listConversationTurns(
       activityBefore,
       fetchLimit,
       safeOffset
-    ) as TurnRow[];
+    )) as TurnRow[];
 
   const hasMore = rows.length > safeLimit;
   const page = hasMore ? rows.slice(0, safeLimit) : rows;
@@ -347,12 +347,12 @@ WHERE e.user_id = ?
 LIMIT 1
 `;
 
-export function getConversationTurn(
+export async function getConversationTurn(
   userId: string,
   turnKey: string
-): ConversationTurnDetail | null {
-  const db = getSqliteDb();
-  const row = db.prepare(DETAIL_SQL).get(userId, userId, turnKey) as TurnRow | undefined;
+): Promise<ConversationTurnDetail | null> {
+  const db = await getDb();
+  const row = (await db.prepare(DETAIL_SQL).get(userId, userId, turnKey)) as TurnRow | undefined;
   if (!row) return null;
   const summary = buildSummaryFromRow(row);
   const snap = safeJson<Record<string, unknown>>(row.snapshot_json) ?? {};
@@ -366,11 +366,11 @@ export function getConversationTurn(
 
   const related: ConversationTurnRelatedEntity[] = [];
   if (allIds.length > 0) {
-    const relatedRows = db
+    const relatedRows = (await db
       .prepare(
         `SELECT id, entity_type, canonical_name FROM entities WHERE user_id = ? AND id IN (${placeholders(allIds.length)})`
       )
-      .all(userId, ...allIds) as Array<{
+      .all(userId, ...allIds)) as Array<{
       id: string;
       entity_type: string | null;
       canonical_name: string | null;
@@ -406,20 +406,20 @@ export function getConversationTurn(
   return {
     ...summary,
     related_entities: related,
-    messages: listMessagesForTurn(userId, summary.turn_key, summary.hook_summary),
+    messages: await listMessagesForTurn(userId, summary.turn_key, summary.hook_summary),
   };
 }
 
-function listMessagesForTurn(
+async function listMessagesForTurn(
   userId: string,
   turnKey: string,
   hookSummary: ConversationTurnHookSummary
-): ConversationTurnMessage[] {
+): Promise<ConversationTurnMessage[]> {
   const cleanTurnKey = cleanString(turnKey);
   if (!cleanTurnKey) return [];
 
-  const db = getSqliteDb();
-  const messageRows = db
+  const db = await getDb();
+  const messageRows = (await db
     .prepare(
       `SELECT
         e.id AS message_id,
@@ -446,7 +446,7 @@ function listMessagesForTurn(
         ) ASC,
         e.id ASC`
     )
-    .all(userId, cleanTurnKey, `${cleanTurnKey}:assistant`) as MessageRow[];
+    .all(userId, cleanTurnKey, `${cleanTurnKey}:assistant`)) as MessageRow[];
 
   const messages = messageRows.map((row) => ({
     message_id: row.message_id,
@@ -462,7 +462,7 @@ function listMessagesForTurn(
 
   if (messages.length === 0) return messages;
 
-  const relatedRows = db
+  const relatedRows = (await db
     .prepare(
       `SELECT
         rs.source_entity_id AS message_id,
@@ -488,7 +488,7 @@ function listMessagesForTurn(
         AND rs.relationship_type != 'PART_OF'
       ORDER BY rs.last_observation_at DESC, rs.computed_at DESC, te.id`
     )
-    .all(userId, userId, ...messages.map((message) => message.message_id)) as RelatedEntityRow[];
+    .all(userId, userId, ...messages.map((message) => message.message_id))) as RelatedEntityRow[];
 
   const relatedByMessage = new Map<string, ConversationTurnMessageRelatedEntity[]>();
   for (const row of relatedRows) {
@@ -514,13 +514,13 @@ function listMessagesForTurn(
  * Build a lightweight hook summary for a set of turn_keys,
  * used to enrich recent_conversations messages.
  */
-export function listHookSummariesByTurnKeys(
+export async function listHookSummariesByTurnKeys(
   userId: string,
   turnKeys: string[]
-): Map<string, ConversationTurnHookSummary> {
+): Promise<Map<string, ConversationTurnHookSummary>> {
   if (turnKeys.length === 0) return new Map();
-  const db = getSqliteDb();
-  const rows = db
+  const db = await getDb();
+  const rows = (await db
     .prepare(
       `SELECT e.canonical_name, es.snapshot
        FROM entities e
@@ -529,7 +529,7 @@ export function listHookSummariesByTurnKeys(
          AND e.entity_type IN ('conversation_turn', 'turn_compliance', 'turn_activity')
          AND e.canonical_name IN (${placeholders(turnKeys.length)})`
     )
-    .all(userId, ...turnKeys) as Array<{ canonical_name: string; snapshot: string | null }>;
+    .all(userId, ...turnKeys)) as Array<{ canonical_name: string; snapshot: string | null }>;
 
   const result = new Map<string, ConversationTurnHookSummary>();
   for (const row of rows) {
