@@ -87,6 +87,7 @@ import { getActiveStandingRulesResult, type StandingRule } from "./services/stan
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
+import { StorePolicyDeniedError } from "./services/instance_policy.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
@@ -1996,6 +1997,15 @@ export class NeotomaServer {
           // Same structured-envelope contract for override-policy rejections:
           // clients branch on `OVERRIDE_POLICY_VIOLATION` via the MCP `data`
           // field (see src/services/override_validation.ts).
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof StorePolicyDeniedError) {
+          // Instance store-policy denials (#1975) get the same treatment. Without
+          // this branch the error falls through to the generic InternalError path
+          // below, which keeps only `message` — so `code` / `denied[]` /
+          // `reason_code` / `hint` would survive on REST but vanish on MCP, and a
+          // policy rejection would read as a server fault. Envelope comes from the
+          // error itself, so both surfaces stay identical by construction.
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
         if (error instanceof CursorError) {

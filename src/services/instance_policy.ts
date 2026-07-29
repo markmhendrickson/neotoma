@@ -115,6 +115,26 @@ export class StorePolicyDeniedError extends Error {
     this.name = "StorePolicyDeniedError";
     this.denied = denied;
   }
+
+  /**
+   * The `ERR_STORE_POLICY_DENIED` envelope, shared by every surface.
+   *
+   * REST nests this under `{ error: … }` (see `/store` and `/correct` in
+   * src/actions.ts); MCP passes it as the `data` field of an `McpError`. Both
+   * read it from here so the two transports cannot drift — the failure mode the
+   * cross-surface parity policy exists to catch.
+   */
+  toErrorEnvelope(): {
+    code: typeof StorePolicyDeniedError.prototype.code;
+    message: string;
+    denied: StorePolicyDenial[];
+  } {
+    return {
+      code: this.code,
+      message: this.message,
+      denied: this.denied,
+    };
+  }
 }
 
 /** Defaults applied when a `person_data` schema omits the field names. */
