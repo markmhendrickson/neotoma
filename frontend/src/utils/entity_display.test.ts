@@ -1,6 +1,6 @@
 /**
  * Entity Display Name Utility Tests
- * 
+ *
  * Tests deterministic display name generation across all entity types
  */
 
@@ -85,6 +85,78 @@ describe("getEntityDisplayName", () => {
     });
   });
 
+  describe("Person-like types lead with name, not title", () => {
+    // A contact's `title` is a job role/headline, not a display label. For
+    // people, name must win over title — otherwise the list shows "Chief
+    // Creative" instead of "Rani Sweis". Regression guard for the Bottega8
+    // leads graph, where canonical_name is an identity key (linkedin_url or
+    // "contact:<name>") that must never surface as the display label.
+    it("contact prefers name over title", () => {
+      const entity: EntityDisplayInput = {
+        entity_type: "contact",
+        canonical_name: "contact:https://www.linkedin.com/in/ranisweis",
+        snapshot: { name: "Rani Sweis", title: "Chief Creative" },
+      };
+      expect(getEntityDisplayName(entity)).toBe("Rani Sweis");
+    });
+
+    it("person prefers name over title", () => {
+      const entity: EntityDisplayInput = {
+        entity_type: "person",
+        canonical_name: "person:jane",
+        snapshot: { name: "Jane Roe", title: "VP Engineering" },
+      };
+      expect(getEntityDisplayName(entity)).toBe("Jane Roe");
+    });
+
+    it("lead prefers name over title", () => {
+      const entity: EntityDisplayInput = {
+        entity_type: "lead",
+        canonical_name: "lead:xyz",
+        snapshot: { name: "Sam Patel", title: "Founder & CEO" },
+      };
+      expect(getEntityDisplayName(entity)).toBe("Sam Patel");
+    });
+
+    it("contact falls back to title when name is absent", () => {
+      const entity: EntityDisplayInput = {
+        entity_type: "contact",
+        canonical_name: "contact:acme-role",
+        snapshot: { title: "Head of Sales" },
+      };
+      expect(getEntityDisplayName(entity)).toBe("Head of Sales");
+    });
+
+    it("contact never surfaces a URL-keyed canonical when a name exists", () => {
+      const entity: EntityDisplayInput = {
+        entity_type: "contact",
+        canonical_name: "contact:https://www.linkedin.com/in/diptishrivastav",
+        snapshot: { name: "Dipti Srivastava", title: "Senior Director" },
+      };
+      const label = getEntityDisplayName(entity);
+      expect(label).toBe("Dipti Srivastava");
+      expect(label).not.toContain("linkedin.com");
+    });
+
+    it("contact falls back to canonical only when name and title are both empty", () => {
+      const entity: EntityDisplayInput = {
+        entity_type: "contact",
+        canonical_name: "contact:fallback",
+        snapshot: {},
+      };
+      expect(getEntityDisplayName(entity)).toBe("contact:fallback");
+    });
+
+    it("non-person types still prefer title over name", () => {
+      const entity: EntityDisplayInput = {
+        entity_type: "task",
+        canonical_name: "task-123",
+        snapshot: { title: "Ship the fix", name: "task-name" },
+      };
+      expect(getEntityDisplayName(entity)).toBe("Ship the fix");
+    });
+  });
+
   describe("Priority 3: Type-specific fields", () => {
     it("uses invoice_number for invoice", () => {
       const entity: EntityDisplayInput = {
@@ -99,7 +171,7 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "receipt",
         canonical_name: "receipt-456",
-        snapshot: { merchant_name: "Whole Foods", amount_total: 45.50 },
+        snapshot: { merchant_name: "Whole Foods", amount_total: 45.5 },
       };
       expect(getEntityDisplayName(entity)).toBe("Whole Foods");
     });
@@ -135,7 +207,7 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "transaction",
         canonical_name: "transaction-ghi",
-        snapshot: { counterparty: "Grocery Store", amount: 45.50 },
+        snapshot: { counterparty: "Grocery Store", amount: 45.5 },
       };
       expect(getEntityDisplayName(entity)).toBe("Grocery Store");
     });
@@ -257,10 +329,10 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "invoice",
         canonical_name: "invoice-123",
-        snapshot: { 
+        snapshot: {
           name: "Invoice Name",
           invoice_number: "INV-001",
-          vendor_name: "Acme Corp"
+          vendor_name: "Acme Corp",
         },
       };
       expect(getEntityDisplayName(entity)).toBe("Invoice Name");
@@ -270,9 +342,9 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "invoice",
         canonical_name: "invoice-123",
-        snapshot: { 
+        snapshot: {
           invoice_number: "", // Empty first priority
-          vendor_name: "Acme Corp" 
+          vendor_name: "Acme Corp",
         },
       };
       expect(getEntityDisplayName(entity)).toBe("Acme Corp");
@@ -284,10 +356,10 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "email",
         canonical_name: "email-123",
-        snapshot: { 
+        snapshot: {
           subject: "Meeting Reminder",
           from: "boss@example.com",
-          body: "Don't forget..."
+          body: "Don't forget...",
         },
       };
       expect(getEntityDisplayName(entity)).toBe("Meeting Reminder");
@@ -297,10 +369,10 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "transaction",
         canonical_name: "transaction-123",
-        snapshot: { 
+        snapshot: {
           counterparty: "Coffee Shop",
-          amount: 5.50,
-          description: "Morning coffee"
+          amount: 5.5,
+          description: "Morning coffee",
         },
       };
       expect(getEntityDisplayName(entity)).toBe("Coffee Shop");
@@ -310,10 +382,10 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "holding",
         canonical_name: "holding-123",
-        snapshot: { 
+        snapshot: {
           asset_name: "Microsoft Corporation",
           asset_symbol: "MSFT",
-          quantity: 50
+          quantity: 50,
         },
       };
       expect(getEntityDisplayName(entity)).toBe("Microsoft Corporation");
@@ -323,9 +395,9 @@ describe("getEntityDisplayName", () => {
       const entity: EntityDisplayInput = {
         entity_type: "account",
         canonical_name: "account-123",
-        snapshot: { 
+        snapshot: {
           wallet_name: "Chase Checking",
-          number: "1234"
+          number: "1234",
         },
       };
       expect(getEntityDisplayName(entity)).toBe("Chase Checking");

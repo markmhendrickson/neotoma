@@ -34,6 +34,7 @@ import {
   resolveSearchQuery,
 } from "@/lib/search_route";
 import { formatDate, truncateId } from "@/lib/utils";
+import { entityDisplayName } from "@/lib/entity_display_name";
 import { sourceDisplaySummary, sourceDisplayTitle } from "@/lib/source_display";
 import type { EntitySnapshot, Source } from "@/types/api";
 
@@ -59,7 +60,7 @@ export default function SearchPage() {
   const [entityType, setEntityType] = useState(urlEntityType);
   const [offset, setOffset] = useState(0);
   const [entityColumnVisibility, setEntityColumnVisibility] = useState<VisibilityState>(
-    DEFAULT_SEARCH_ENTITY_COLUMN_VISIBILITY,
+    DEFAULT_SEARCH_ENTITY_COLUMN_VISIBILITY
   );
 
   useEffect(() => {
@@ -119,7 +120,7 @@ export default function SearchPage() {
         entityType: kind === "entities" && entityType ? entityType : null,
         searchParams,
       }),
-      { replace: true },
+      { replace: true }
     );
   }
 
@@ -133,7 +134,7 @@ export default function SearchPage() {
         entityType: nextType || null,
         searchParams,
       }),
-      { replace: true },
+      { replace: true }
     );
   }
 
@@ -141,7 +142,7 @@ export default function SearchPage() {
     activeKind,
     debouncedSearch,
     offset,
-    activeKind === "entities" ? entityType : undefined,
+    activeKind === "entities" ? entityType : undefined
   );
 
   const entityColumns = useMemo<ColumnDef<EntitySnapshot, unknown>[]>(
@@ -149,7 +150,7 @@ export default function SearchPage() {
       {
         id: "name",
         header: "Name",
-        accessorFn: (row) => row.canonical_name || row.snapshot?.name || row.snapshot?.title || entityRowId(row),
+        accessorFn: (row) => entityDisplayName(row, entityRowId(row)),
         cell: ({ row }) => {
           const entityId = entityRowId(row.original);
           return (
@@ -157,12 +158,7 @@ export default function SearchPage() {
               to={`/entities/${encodeURIComponent(entityId)}`}
               className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
             >
-              {String(
-                row.original.canonical_name ||
-                  row.original.snapshot?.name ||
-                  row.original.snapshot?.title ||
-                  truncateId(entityId),
-              )}
+              {entityDisplayName(row.original, truncateId(entityId))}
             </Link>
           );
         },
@@ -190,7 +186,7 @@ export default function SearchPage() {
         ),
       },
     ],
-    [activeKind],
+    [activeKind]
   );
 
   const isSearching = debouncedSearch.length > 0;
@@ -333,7 +329,9 @@ function PrimitiveSearchResults({
 
   if (resultsQuery.error) {
     return (
-      <QueryErrorAlert title={`Could not load ${SEARCH_PRIMITIVE_LABELS[kind].toLowerCase()} matches`}>
+      <QueryErrorAlert
+        title={`Could not load ${SEARCH_PRIMITIVE_LABELS[kind].toLowerCase()} matches`}
+      >
         {resultsQuery.error.message}
       </QueryErrorAlert>
     );
@@ -425,9 +423,7 @@ function EmptyMatches({
       title={`No matching ${SEARCH_PRIMITIVE_LABELS[kind].toLowerCase()}`}
       description={
         <>
-          <span className="block">
-            Nothing came back for &ldquo;{query}&rdquo;.
-          </span>
+          <span className="block">Nothing came back for &ldquo;{query}&rdquo;.</span>
           {hint ? <span className="mt-2 block">{hint}</span> : null}
         </>
       }
