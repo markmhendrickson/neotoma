@@ -20,6 +20,7 @@ import { FieldValue } from "@/components/shared/field_value";
 import { Columns3 } from "lucide-react";
 import { humanizeKey } from "@/lib/humanize";
 import { truncateId } from "@/lib/utils";
+import { entityDisplayName } from "@/lib/entity_display_name";
 import { EmptyState } from "@/components/shared/empty_state";
 import type { EntitySnapshot, EntitySchema } from "@/types/api";
 
@@ -90,20 +91,28 @@ function EntityCard({ entity, groupField }: { entity: EntitySnapshot; groupField
         to={`/entities/${encodeURIComponent(eid)}`}
         className="block max-w-full truncate text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
         onClick={(e) => e.stopPropagation()}
-        title={String(entity.canonical_name || snap.name || snap.title || eid)}
+        title={entityDisplayName(entity, eid)}
       >
-        {String(entity.canonical_name || snap.name || snap.title || truncateId(eid))}
+        {entityDisplayName(entity, truncateId(eid))}
       </Link>
       <div className="mt-1 flex min-w-0 items-center gap-1">
-        <TypeBadge type={entity.entity_type} humanize className="max-w-[10rem] truncate text-[10px]" />
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{truncateId(eid, 8)}</span>
+        <TypeBadge
+          type={entity.entity_type}
+          humanize
+          className="max-w-[10rem] truncate text-[10px]"
+        />
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          {truncateId(eid, 8)}
+        </span>
       </div>
       {displayFields.length > 0 && (
         <div className="mt-2 space-y-0.5">
           {displayFields.map(([k, v]) => (
             <div key={k} className="flex min-w-0 items-baseline gap-1 text-xs">
               <span className="shrink-0 text-muted-foreground">{humanizeKey(k)}:</span>
-              <div className="min-w-0 flex-1 truncate"><FieldValue value={v} /></div>
+              <div className="min-w-0 flex-1 truncate">
+                <FieldValue value={v} />
+              </div>
             </div>
           ))}
         </div>
@@ -159,7 +168,11 @@ export function EntityBoardView({ entities, groupField }: EntityBoardViewProps) 
       let parsed: unknown = targetColumn;
       if (targetColumn === "(none)") parsed = null;
       else {
-        try { parsed = JSON.parse(targetColumn); } catch { /* string */ }
+        try {
+          parsed = JSON.parse(targetColumn);
+        } catch {
+          /* string */
+        }
       }
 
       await batchCorrect(draggedEntityId, {
