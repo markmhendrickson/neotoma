@@ -2759,9 +2759,10 @@ paths:
     get:
       summary: OAuth 2.0 Authorization Server Metadata (RFC 8414)
       operationId: oauthServerMetadata
+      security: []
       responses:
         "200":
-          description: Authorization server metadata
+          description: Authorization server metadata (public; RFC 8414)
           content:
             application/json:
               schema:
@@ -2769,15 +2770,107 @@ paths:
 
   /.well-known/oauth-protected-resource:
     get:
-      summary: OAuth 2.0 Protected Resource Metadata
+      summary: OAuth 2.0 Protected Resource Metadata (RFC 9728)
+      description: >
+        Public bootstrap document for MCP OAuth discovery. Unauthenticated
+        callers receive 200 with resource and authorization_servers. A stale
+        X-Connection-Id without Bearer may receive 401 invalid_token; the
+        resource_metadata URL in that response is itself publicly readable.
       operationId: oauthProtectedResource
+      security: []
       responses:
         "200":
-          description: Protected resource metadata
+          description: Protected resource metadata (public; RFC 9728 §3)
           content:
             application/json:
               schema:
                 type: object
+                required: [resource, authorization_servers]
+                properties:
+                  resource:
+                    type: string
+                    description: MCP resource identifier (typically {base}/mcp)
+                  authorization_servers:
+                    type: array
+                    minItems: 1
+                    items:
+                      type: string
+                    description: Authorization server base URLs
+        "401":
+          description: >
+            Asserted credential invalid (stale/unknown X-Connection-Id without
+            a valid Bearer). Does not apply to unauthenticated discovery.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+                    enum: [invalid_token]
+                  error_description:
+                    type: string
+
+  /.well-known/oauth-protected-resource/mcp:
+    get:
+      summary: OAuth 2.0 Protected Resource Metadata (MCP path probe)
+      description: >
+        Same RFC 9728 document as /.well-known/oauth-protected-resource.
+        Some MCP clients probe this path; it must also be public.
+      operationId: oauthProtectedResourceMcp
+      security: []
+      responses:
+        "200":
+          description: Protected resource metadata (public; RFC 9728 §3)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resource, authorization_servers]
+                properties:
+                  resource:
+                    type: string
+                  authorization_servers:
+                    type: array
+                    minItems: 1
+                    items:
+                      type: string
+        "401":
+          description: Asserted credential invalid (stale/unknown X-Connection-Id)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+                    enum: [invalid_token]
+                  error_description:
+                    type: string
+
+  /.well-known/openid-configuration:
+    get:
+      summary: OpenID Connect Discovery (not offered)
+      description: >
+        Neotoma does not offer OIDC discovery. Clients should use
+        /.well-known/oauth-authorization-server (RFC 8414). This route returns
+        404 explicitly so it never falls through to the auth guard (401).
+      operationId: openidConfiguration
+      security: []
+      responses:
+        "404":
+          description: OIDC discovery is not offered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  error_description:
+                    type: string
 
   /mcp/oauth/callback:
     get:

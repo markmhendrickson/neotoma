@@ -63,6 +63,7 @@ This release adds a safe way to re-key an entity type's identity rule after data
 
 - **Deep-offset entity queries no longer block the event loop.** Root cause: the chunked scan in `entity_queries.ts` re-read and discarded every visible row up to `offset` in JS on every page, with a `getDeletedEntityIds` round-trip per chunk — measured 4.8-7.5s at `offset:1300` on a hosted instance, freezing `/health` and all concurrent requests for the duration. Fixed by keyset cursor pagination (see Highlights).
 - **`validate:capability-manifest` CI check.** Was failing on `main` since the v0.19.0 tag because `query_contacts_at_company` had no `addedInVersion` entry; regenerated the manifest.
+- **OAuth discovery self-deadlock (#2049).** Unauthenticated `GET /.well-known/oauth-protected-resource` and `.../oauth-protected-resource/mcp` now return **200** with RFC 9728 metadata instead of 401 pointing at themselves, so MCP clients can bootstrap login. `GET /.well-known/openid-configuration` returns explicit **404** (OIDC not offered). Security manifest and OpenAPI classify these discovery routes as public.
 
 ## Tests and validation
 

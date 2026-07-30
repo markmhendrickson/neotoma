@@ -12,6 +12,6 @@ Release history, migration notes, and compatibility changes. For install and upg
 
 **v0.12.0 highlights:** dedicated subsystem references for [peer sync](/peer-sync), [substrate subscriptions](/subscriptions), [issue reporting](/issue-reporting), and [security hardening](/security-hardening). The issue-reporting page also covers the breaking `submit_issue` reporter-provenance contract (`reporter_git_sha` or `reporter_app_version` is now required).
 
-
+**#2049:** `GET /.well-known/oauth-protected-resource` and `.../oauth-protected-resource/mcp` now return **200** unauthenticated per RFC 9728, fixing the MCP OAuth discovery self-deadlock; `/.well-known/openid-configuration` returns explicit **404**.
 
 Published releases and tags live on GitHub alongside npm. When upgrading clients or MCP proxies, pin versions explicitly and re-run [Walkthrough](/walkthrough) checks if your transport or auth tier changed.

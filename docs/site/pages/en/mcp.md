@@ -133,7 +133,7 @@ McpCommonActionPatternsSnippet,
     <code>GET /.well-known/mcp/server-card.json</code> — MCP server card (name, version, capabilities).
   </li>
   <li>
-    <code>GET /.well-known/oauth-authorization-server</code> and <code>/.well-known/oauth-protected-resource</code> — OAuth discovery documents.
+    <code>GET /.well-known/oauth-authorization-server</code>, <code>/.well-known/oauth-protected-resource</code>, and <code>/.well-known/oauth-protected-resource/mcp</code> — OAuth discovery documents (public; unauthenticated <code>200</code> per RFC 8414 / RFC 9728). MCP login bootstrap sequence: unauth <code>/mcp</code> → protected-resource metadata → authorization-server metadata → token endpoint. <code>/.well-known/openid-configuration</code> returns <code>404</code> (OIDC discovery not offered).
   </li>
   <li>
     <code>GET /server-info</code> — runtime details (version, git sha, build timestamp).

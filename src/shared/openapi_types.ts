@@ -218,8 +218,51 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** OAuth 2.0 Protected Resource Metadata */
+    /**
+     * OAuth 2.0 Protected Resource Metadata (RFC 9728)
+     * @description Public bootstrap document for MCP OAuth discovery. Unauthenticated callers receive 200 with resource and authorization_servers. A stale X-Connection-Id without Bearer may receive 401 invalid_token; the resource_metadata URL in that response is itself publicly readable.
+     */
     get: operations["oauthProtectedResource"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/oauth-protected-resource/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * OAuth 2.0 Protected Resource Metadata (MCP path probe)
+     * @description Same RFC 9728 document as /.well-known/oauth-protected-resource. Some MCP clients probe this path; it must also be public.
+     */
+    get: operations["oauthProtectedResourceMcp"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/openid-configuration": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * OpenID Connect Discovery (not offered)
+     * @description Neotoma does not offer OIDC discovery. Clients should use /.well-known/oauth-authorization-server (RFC 8414). This route returns 404 explicitly so it never falls through to the auth guard (401).
+     */
+    get: operations["openidConfiguration"];
     put?: never;
     post?: never;
     delete?: never;
@@ -4288,7 +4331,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Authorization server metadata */
+      /** @description Authorization server metadata (public; RFC 8414) */
       200: {
         headers: {
           [name: string]: unknown;
@@ -4308,13 +4351,90 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Protected resource metadata */
+      /** @description Protected resource metadata (public; RFC 9728 §3) */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": {
+            /** @description MCP resource identifier (typically {base}/mcp) */
+            resource: string;
+            /** @description Authorization server base URLs */
+            authorization_servers: string[];
+          };
+        };
+      };
+      /** @description Asserted credential invalid (stale/unknown X-Connection-Id without a valid Bearer). Does not apply to unauthenticated discovery. */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {string} */
+            error: "invalid_token";
+            error_description?: string;
+          };
+        };
+      };
+    };
+  };
+  oauthProtectedResourceMcp: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Protected resource metadata (public; RFC 9728 §3) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            resource: string;
+            authorization_servers: string[];
+          };
+        };
+      };
+      /** @description Asserted credential invalid (stale/unknown X-Connection-Id) */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {string} */
+            error: "invalid_token";
+            error_description?: string;
+          };
+        };
+      };
+    };
+  };
+  openidConfiguration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OIDC discovery is not offered */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error?: string;
+            error_description?: string;
+          };
         };
       };
     };

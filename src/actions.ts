@@ -861,57 +861,64 @@ app.get("/.well-known/oauth-authorization-server", (req, res) => {
   });
 });
 
-app.get("/.well-known/oauth-protected-resource", async (req, res) => {
-  const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-  const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = forwardedHost || req.header("host");
-  const proto = forwardedProto || req.protocol || "http";
-  const base = host ? `${proto}://${host}` : config.apiBase;
-  logger.info("[MCP OAuth] Protected resource metadata request received", {
-    host: req.header("host") ?? null,
-    resolved_base: base,
-    has_authorization: Boolean(
-      (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined
-    ),
-    has_connection_id: Boolean(req.headers["x-connection-id"] || req.headers["X-Connection-Id"]),
-  });
-  // oauth-repro pattern: return 401 on protected resource endpoint when unauthenticated
-  // Validate X-Connection-Id here so Cursor gets consistent invalid_token signal (helps trigger Connect prompt)
-  const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
-    | string
-    | undefined;
-  const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
+// RFC 9728 §3: protected-resource metadata is the unauthenticated bootstrap
+// document. Both path shapes clients probe must return 200 without credentials.
+// Keep invalid_token only when a caller asserted X-Connection-Id without Bearer
+// (stale-credential affordance); never 401 the no-credential case.
+app.get(
+  ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"],
+  async (req, res) => {
+    const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+    const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
+    const host = forwardedHost || req.header("host");
+    const proto = forwardedProto || req.protocol || "http";
+    const base = host ? `${proto}://${host}` : config.apiBase;
+    const authHeaderRaw = (req.headers["authorization"] || req.headers["Authorization"]) as
+      | string
+      | undefined;
+    const authHeader = typeof authHeaderRaw === "string" ? authHeaderRaw.trim() : undefined;
+    const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
+    logger.info("[MCP OAuth] Protected resource metadata request received", {
+      host: req.header("host") ?? null,
+      resolved_base: base,
+      has_authorization: Boolean(authHeader),
+      has_connection_id: Boolean(connectionIdHeader),
+    });
 
-  // If X-Connection-Id is sent, validate it. Invalid/expired connection → 401 with error=invalid_token
-  // so Cursor may clear stored credentials and show Connect button.
-  if (connectionIdHeader && !authHeader?.startsWith("Bearer ")) {
-    try {
-      const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-      await getAccessTokenForConnection(connectionIdHeader as string);
-    } catch {
-      const wwwAuth = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token", error_description="Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate."`;
-      res.setHeader("WWW-Authenticate", wwwAuth);
-      return res.status(401).json({
-        error: "invalid_token",
-        error_description:
-          "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.",
-      });
+    // Asserted-but-stale credential: 401 invalid_token so clients can clear and re-auth.
+    // resource_metadata must itself return 200 unauthenticated (no self-deadlock).
+    if (connectionIdHeader && !authHeader?.startsWith("Bearer ")) {
+      try {
+        const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+        await getAccessTokenForConnection(connectionIdHeader as string);
+      } catch {
+        const errorDescription =
+          "The provided X-Connection-Id is expired or unrecognized. Re-authenticate via the authorization_servers listed in resource_metadata, then retry with a fresh token.";
+        const wwwAuth = `Bearer error="invalid_token", error_description="${errorDescription}", resource_metadata="${base}/.well-known/oauth-protected-resource"`;
+        res.setHeader("WWW-Authenticate", wwwAuth);
+        return res.status(401).json({
+          error: "invalid_token",
+          error_description: errorDescription,
+        });
+      }
     }
-  }
 
-  if (!authHeader?.startsWith("Bearer ") && !connectionIdHeader) {
-    res.setHeader(
-      "WWW-Authenticate",
-      `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`
-    );
-    return res.status(401).json({
-      error: "Unauthorized: Authentication required",
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.json({
+      resource: `${base}/mcp`,
+      authorization_servers: [base],
     });
   }
+);
 
-  res.setHeader("Content-Type", "application/json");
-  res.json({
-    authorization_servers: [base],
+// Neotoma does not offer OIDC discovery. Explicit 404 so this path never falls
+// through to the global auth guard (which would 401 and deadlock OIDC-first clients).
+app.get("/.well-known/openid-configuration", (_req, res) => {
+  res.status(404).json({
+    error: "not_found",
+    error_description:
+      "OpenID Connect discovery is not offered. Use /.well-known/oauth-authorization-server (RFC 8414).",
   });
 });
 
