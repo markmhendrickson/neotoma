@@ -218,8 +218,65 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** OAuth 2.0 Protected Resource Metadata */
+    /**
+     * OAuth 2.0 Protected Resource Metadata (RFC 9728)
+     * @description Public, unauthenticated bootstrap document (RFC 9728 §3). Its only job is
+     *     to tell a caller holding no credentials where to obtain them, so it MUST
+     *     NOT require authentication — gating it deadlocks the handshake, since the
+     *     `WWW-Authenticate` challenge on a protected resource points here (#2049).
+     *
+     *     A stale `X-Connection-Id` (with no `Authorization`) still yields 401
+     *     `invalid_token`, because that caller asserted a credential.
+     */
     get: operations["oauthProtectedResource"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/oauth-protected-resource/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * OAuth 2.0 Protected Resource Metadata for the /mcp resource (RFC 9728)
+     * @description RFC 9728 §3.1 locates a resource's metadata by appending the resource's
+     *     own path, so a client whose resource is `/mcp` probes this form. Same
+     *     handler and same contract as the bare path; registered explicitly because
+     *     Express does not match it against the bare route (#2049).
+     */
+    get: operations["oauthProtectedResourceForMcp"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/openid-configuration": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * OpenID Connect discovery — not offered (RFC 9728 companion decision)
+     * @description Neotoma does not implement OIDC discovery; clients use RFC 8414
+     *     `/.well-known/oauth-authorization-server`. This route exists solely to
+     *     return an explicit 404 rather than falling through to the catch-all auth
+     *     guard, which would answer 401 — telling an OIDC-first client "this exists
+     *     but you are unauthenticated" and sending it down the same dead-end the
+     *     #2049 deadlock created. A 404 correctly makes such a client fall back.
+     */
+    get: operations["openidConfigurationNotOffered"];
     put?: never;
     post?: never;
     delete?: never;
@@ -2315,6 +2372,36 @@ export interface components {
       };
     };
     /**
+     * @description RFC 9728 §3 protected-resource metadata. Public by design — this document
+     *     is the unauthenticated entry point a client reads to discover where to
+     *     authenticate, so it contains only public server metadata and never
+     *     user, tenant, or credential data (#2049).
+     */
+    OAuthProtectedResourceMetadata: {
+      /**
+       * @description The protected resource identifier clients bind their token request to
+       *     (the MCP endpoint, e.g. `https://host/mcp`).
+       */
+      resource: string;
+      /**
+       * @description Issuers whose RFC 8414 metadata describes how to obtain a token. Never
+       *     empty: an empty array leaves a bootstrapping client unable to proceed,
+       *     which is the same dead end as a 401, one hop later.
+       */
+      authorization_servers: string[];
+    };
+    /**
+     * @description 401 shape for an asserted-but-stale credential on a discovery endpoint.
+     *     Does not echo the submitted `X-Connection-Id` value. Any
+     *     `resource_metadata` URL named in the accompanying `WWW-Authenticate`
+     *     header must itself resolve 200 unauthenticated.
+     */
+    OAuthInvalidTokenEnvelope: {
+      /** @enum {string} */
+      error?: "invalid_token";
+      error_description?: string;
+    };
+    /**
      * @description 400 response shape for `ERR_CONSTRAINT_VIOLATION`. Returned by `/store`
      *     when one or more observations fail a declarative write-time value
      *     constraint declared on their schema (constraint `policy: "reject"`). The
@@ -4308,13 +4395,77 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Protected resource metadata */
+      /** @description Protected resource metadata (served without credentials) */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["OAuthProtectedResourceMetadata"];
+        };
+      };
+      /**
+       * @description Asserted `X-Connection-Id` is expired or unrecognized. Never returned
+       *     for a caller supplying no credentials at all.
+       */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OAuthInvalidTokenEnvelope"];
+        };
+      };
+    };
+  };
+  oauthProtectedResourceForMcp: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Protected resource metadata (served without credentials) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OAuthProtectedResourceMetadata"];
+        };
+      };
+      /** @description Asserted `X-Connection-Id` is expired or unrecognized. */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OAuthInvalidTokenEnvelope"];
+        };
+      };
+    };
+  };
+  openidConfigurationNotOffered: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OIDC discovery is not offered by this server */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error?: string;
+            error_description?: string;
+          };
         };
       };
     };

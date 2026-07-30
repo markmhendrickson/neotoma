@@ -89,12 +89,20 @@ describe("OAuth discovery metadata is reachable unauthenticated (#2049)", () => 
 
         // The document must actually name an authorization server — a 200 with an
         // empty or malformed body is as useless to a bootstrapping client as a 401.
-        const body = res.json as { authorization_servers?: unknown } | null;
+        const body = res.json as { authorization_servers?: unknown; resource?: unknown } | null;
         expect(
           Array.isArray(body?.authorization_servers) &&
             (body!.authorization_servers as unknown[]).length > 0,
           `${routePath} returned 200 but no authorization_servers — a client still cannot ` +
             `discover where to log in. Body: ${res.text.slice(0, 200)}`
+        ).toBe(true);
+
+        // RFC 9728 §3 requires `resource`: without it a client validating the
+        // document cannot confirm it describes the resource it is trying to reach.
+        expect(
+          typeof body?.resource === "string" && (body!.resource as string).length > 0,
+          `${routePath} returned 200 but no \`resource\` identifier (RFC 9728 §3). ` +
+            `Body: ${res.text.slice(0, 200)}`
         ).toBe(true);
 
         // A 200 carrying a challenge would be contradictory, and some clients
@@ -133,6 +141,40 @@ describe("OAuth discovery metadata is reachable unauthenticated (#2049)", () => 
         `authorization-server metadata returned 200 but named neither issuer nor ` +
           `authorization_endpoint. Body: ${res.text.slice(0, 200)}`
       ).toBe(true);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("returns an explicit 404 for openid-configuration, never a 401", async () => {
+    currentTempDir = path.join(process.cwd(), "tmp", `neotoma-wk-oidc-${Date.now()}`);
+    const app = await loadApp(currentTempDir);
+    const server = app.listen(0);
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("no port bound");
+
+      // Arch ADR on #2049: OIDC discovery is not offered, so this must 404 rather
+      // than fall through to the catch-all auth guard. A 401 on a nonexistent
+      // route tells an OIDC-first client "this exists, you're just
+      // unauthenticated" and sends it into the same dead end the
+      // protected-resource deadlock created. Pinned to 404 exactly, not merely
+      // "not 401" — a soft assertion would pass on a synthetic 200 alias, which
+      // the ADR explicitly rejects as advertising a parallel discovery contract.
+      const res = await getAnonymously(address.port, "/.well-known/openid-configuration");
+      expect(
+        res.status,
+        `openid-configuration must return 404 (OIDC discovery not offered). Got ` +
+          `${res.status}. A 401 here reproduces the #2049 dead end on a sibling path; ` +
+          `a 200 would advertise a discovery contract this server does not implement. ` +
+          `Body: ${res.text.slice(0, 200)}`
+      ).toBe(404);
+
+      expect(
+        res.headers.get("www-authenticate"),
+        `openid-configuration sent WWW-Authenticate on a 404 — that reads as "authenticate ` +
+          `and retry" for a route that will never serve this client.`
+      ).toBeNull();
     } finally {
       server.close();
     }

@@ -7,26 +7,76 @@
       "path": "/.well-known/oauth-authorization-server",
       "method": "GET",
       "operation_id": "oauthServerMetadata",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/.well-known/oauth-protected-resource",
       "method": "GET",
       "operation_id": "oauthProtectedResource",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
+      ]
+    },
+    {
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "GET",
+      "operation_id": "oauthProtectedResourceForMcp",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ]
+    },
+    {
+      "path": "/.well-known/openid-configuration",
+      "method": "GET",
+      "operation_id": "openidConfigurationNotOffered",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
       ]
     },
     {

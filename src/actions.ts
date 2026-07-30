@@ -920,10 +920,36 @@ app.get(
 
     res.setHeader("Content-Type", "application/json");
     res.json({
+      // RFC 9728 §3: `resource` is the identifier the client binds its token
+      // request to. Without it a client that validates the metadata document
+      // cannot confirm the document describes the resource it is trying to
+      // reach, and has to guess.
+      resource: `${base}/mcp`,
       authorization_servers: [base],
     });
   }
 );
+
+// OIDC discovery is not offered — return an explicit 404 rather than letting this
+// path fall through to the catch-all auth guard, which answers 401 (#2049).
+//
+// A 401 on a route that does not exist tells an OIDC-first client "this endpoint
+// is real, you are just unauthenticated", sending it into the same dead end the
+// protected-resource deadlock created: it retries against a document that will
+// never serve it. A 404 says "not offered here", which correctly makes the client
+// fall back to RFC 8414 /.well-known/oauth-authorization-server.
+//
+// Deliberately NOT a synthetic 200 alias of the OAuth authorization-server
+// metadata: that would advertise a second, parallel discovery contract Neotoma
+// does not actually implement. Revisit only if a real OIDC stack is scoped.
+app.get("/.well-known/openid-configuration", (_req, res) => {
+  res.status(404).json({
+    error: "not_found",
+    error_description:
+      "This server does not offer OpenID Connect discovery. Use " +
+      "/.well-known/oauth-authorization-server (RFC 8414) instead.",
+  });
+});
 
 // AAuth resource server metadata. Exposed publicly so AAuth client libraries
 // can auto-configure issuer / supported algs / signature window without an
