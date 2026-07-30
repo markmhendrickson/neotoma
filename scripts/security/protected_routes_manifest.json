@@ -7,27 +7,61 @@
       "path": "/.well-known/oauth-authorization-server",
       "method": "GET",
       "operation_id": "oauthServerMetadata",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200
       ],
       "expected_invalid_auth_status": [
-        401
-      ]
+        200
+      ],
+      "reason": "RFC 8414 authorization-server metadata is a public discovery document.",
+      "override_applied": true
     },
     {
       "path": "/.well-known/oauth-protected-resource",
       "method": "GET",
       "operation_id": "oauthProtectedResource",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200
       ],
       "expected_invalid_auth_status": [
-        401
-      ]
+        200
+      ],
+      "reason": "RFC 9728 §3 protected-resource metadata is the unauthenticated OAuth bootstrap document.",
+      "override_applied": true
+    },
+    {
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "GET",
+      "operation_id": "oauthProtectedResourceMcp",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200
+      ],
+      "expected_invalid_auth_status": [
+        200
+      ],
+      "reason": "RFC 9728 §3 MCP path probe; same public bootstrap document as the bare path.",
+      "override_applied": true
+    },
+    {
+      "path": "/.well-known/openid-configuration",
+      "method": "GET",
+      "operation_id": "openidConfiguration",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        404
+      ],
+      "expected_invalid_auth_status": [
+        404
+      ],
+      "reason": "OIDC discovery not offered; explicit 404 so path never auth-guard 401s.",
+      "override_applied": true
     },
     {
       "path": "/access_policies",
@@ -1632,5 +1666,58 @@
       ]
     }
   ],
-  "overrides": []
+  "overrides": [
+    {
+      "method": "GET",
+      "path": "/.well-known/oauth-authorization-server",
+      "fields": {
+        "expected_no_auth_status": [
+          200
+        ],
+        "expected_invalid_auth_status": [
+          200
+        ],
+        "reason": "RFC 8414 authorization-server metadata is a public discovery document."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/oauth-protected-resource",
+      "fields": {
+        "expected_no_auth_status": [
+          200
+        ],
+        "expected_invalid_auth_status": [
+          200
+        ],
+        "reason": "RFC 9728 §3 protected-resource metadata is the unauthenticated OAuth bootstrap document."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "fields": {
+        "expected_no_auth_status": [
+          200
+        ],
+        "expected_invalid_auth_status": [
+          200
+        ],
+        "reason": "RFC 9728 §3 MCP path probe; same public bootstrap document as the bare path."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/openid-configuration",
+      "fields": {
+        "expected_no_auth_status": [
+          404
+        ],
+        "expected_invalid_auth_status": [
+          404
+        ],
+        "reason": "OIDC discovery not offered; explicit 404 so path never auth-guard 401s."
+      }
+    }
+  ]
 }

@@ -49,6 +49,25 @@ Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
 
 OAuth endpoints for MCP client authentication (no bearer token required for public endpoints).
 
+### MCP OAuth discovery bootstrap
+
+First-time MCP clients discover how to log in with **no prior credential**. This is required by RFC 9728 §3 — protected-resource metadata is a public bootstrap document, not a gated resource. Step 2 returning 200 with no credential is correct protocol behavior, not a bug.
+
+1. Client hits `/mcp` without a credential → unauthorized-shaped response with `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource"`.
+2. Client `GET`s that URL with no `Authorization` and no `X-Connection-Id` → **200** with RFC 9728 JSON (`resource`, `authorization_servers`).
+3. Client `GET`s `/.well-known/oauth-authorization-server` → **200** with authorize/token/register endpoints.
+4. Client completes the OAuth flow, then retries `/mcp` with `Authorization: Bearer <token>`.
+
+```bash
+curl -sI https://<instance>/.well-known/oauth-protected-resource      # expect 200
+curl -sI https://<instance>/.well-known/oauth-protected-resource/mcp  # expect 200
+curl -sI https://<instance>/.well-known/oauth-authorization-server    # expect 200
+```
+
+`GET /.well-known/openid-configuration` returns **404** (OIDC discovery is not offered; use the RFC 8414 authorization-server document above). A stale/unknown `X-Connection-Id` without Bearer may still receive **401** `invalid_token` on the protected-resource paths; that response's `resource_metadata` URL itself returns 200 unauthenticated.
+
+**Dynamic client registration note:** today's DCR endpoint may return a shared static `client_id` (`local_mcp_oauth_client`). Do not assume per-registration isolation or independent revocation until that behavior is changed in a follow-up.
+
 ### Initiate OAuth Flow
 
 Start OAuth authorization flow for MCP client.
