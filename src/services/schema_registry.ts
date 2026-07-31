@@ -1223,6 +1223,13 @@ export class SchemaRegistryService {
       };
     }>;
     schema_version?: string;
+    /**
+     * Row-level schema metadata (e.g. `guest_access_policy`, `icon`). Merged
+     * over the current active row's metadata, which is preserved by default —
+     * so callers never have to restate metadata just to add a field. Supply
+     * only the keys you intend to change.
+     */
+    metadata?: SchemaMetadata;
     user_specific?: boolean;
     user_id?: string;
     migrate_existing?: boolean; // Only for backfilling historical data
@@ -1425,12 +1432,26 @@ export class SchemaRegistryService {
       delete preserved.content_field;
     }
 
+    // Preserve row-level `metadata` across incremental updates. This is NOT part
+    // of schema_definition, so the `preserved` spread above does not cover it —
+    // omitting it here registered the new version with metadata `{}`, and since
+    // `guest_access_policy` resolves from SchemaMetadata on the ACTIVE row, every
+    // incremental update silently reset the entity type to the `closed` default
+    // and broke all token-gated guest reads (#1977). Same mechanism loses any
+    // other metadata key (e.g. `icon`). Merge rather than replace so an explicit
+    // metadata option can still override individual keys.
+    const mergedMetadata: SchemaMetadata = {
+      ...(currentSchema.metadata ?? {}),
+      ...(options.metadata ?? {}),
+    };
+
     // 5. Register new version (start inactive, we'll activate separately if needed)
     const newSchema = await this.register({
       entity_type: options.entity_type,
       schema_version: newVersion,
       schema_definition: { ...preserved, fields: mergedFields },
       reducer_config: { merge_policies: mergedReducerPolicies },
+      metadata: mergedMetadata,
       user_id: userId,
       user_specific: options.user_specific,
       activate: false, // Register as inactive first
