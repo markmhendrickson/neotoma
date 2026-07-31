@@ -406,6 +406,67 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
     });
   });
 
+  // Vector: unmerge-cross-tenant-guess (#2004).
+  //
+  // unmerge_entities is keyed on merge_id, an opaque id distinct from any
+  // entity_id the caller already knows. Without a tenant-scoped lookup, a
+  // caller who learns (or guesses) another user's merge_id could confirm its
+  // existence or, worse, mutate that user's entities/observations. The
+  // service scopes the entity_merges lookup by (id, user_id) together so
+  // MERGE_NOT_FOUND fires identically whether the id doesn't exist or
+  // belongs to another tenant — this locks that in via the HTTP surface.
+  describe("/entities/unmerge", () => {
+    it("user A cannot unmerge user B's merge via a known merge_id: 404, zero mutation", async () => {
+      const fromId = `${TEST_PREFIX}_unmerge_from_${Date.now()}`;
+      const toId = `${TEST_PREFIX}_unmerge_to_${Date.now()}`;
+      await db.from("entities").insert({
+        id: fromId,
+        user_id: userB.userId,
+        entity_type: "test",
+        canonical_name: `${fromId}-canonical`,
+      });
+      await db.from("entities").insert({
+        id: toId,
+        user_id: userB.userId,
+        entity_type: "test",
+        canonical_name: `${toId}-canonical`,
+      });
+
+      try {
+        const mergeRes = await callEndpoint("/entities/merge", {
+          from_entity_id: fromId,
+          to_entity_id: toId,
+          user_id: userB.userId,
+        });
+        expect(mergeRes.status).toBe(200);
+        const mergeId = mergeRes.json.merge_id as string;
+        expect(mergeId).toBeTruthy();
+
+        // User A attempts to unmerge user B's merge, authenticated as A.
+        const unmergeRes = await callEndpoint("/entities/unmerge", {
+          merge_id: mergeId,
+          user_id: userA.userId,
+        });
+        expect(unmergeRes.status).toBe(404);
+        expect(unmergeRes.json.error_code).toBe("ERR_MERGE_NOT_FOUND");
+
+        // No mutation: B's entity is still tombstoned to B's survivor.
+        const { data: fromEntity } = await db
+          .from("entities")
+          .select("merged_to_entity_id")
+          .eq("id", fromId)
+          .single();
+        expect((fromEntity as { merged_to_entity_id: string | null }).merged_to_entity_id).toBe(
+          toId
+        );
+      } finally {
+        await db.from("entity_merges").delete().eq("from_entity_id", fromId);
+        await db.from("entities").delete().eq("id", fromId);
+        await db.from("entities").delete().eq("id", toId);
+      }
+    });
+  });
+
   // Vector: bulk-import-cross-user.
   //
   // The bulk `entities import` CLI path (src/cli/index.ts) sends a body

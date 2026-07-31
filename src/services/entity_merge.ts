@@ -84,15 +84,20 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
             "Provide a new idempotency_key for a new merge, or re-send the original pair."
         );
       }
-      return {
-        merge_id: String(existing.id),
-        observations_moved: Number(existing.observations_rewritten ?? 0),
-        relationships_repointed: JSON.parse(
-          String(existing.repointed_relationship_rows_json ?? "[]")
-        ).length,
-        merged_at: String(existing.created_at),
-        replayed: true,
-      };
+      // Only replay if the merge this key points to is still live. If it was
+      // since unmerged, replaying it would tell the caller the merge is live
+      // when it is not — fall through and perform a real merge instead.
+      if (existing.unmerged_at == null) {
+        return {
+          merge_id: String(existing.id),
+          observations_moved: Number(existing.observations_rewritten ?? 0),
+          relationships_repointed: JSON.parse(
+            String(existing.repointed_relationship_rows_json ?? "[]")
+          ).length,
+          merged_at: String(existing.created_at),
+          replayed: true,
+        };
+      }
     }
   }
 
@@ -484,10 +489,13 @@ export async function unmergeEntities(params: UnmergeEntitiesParams): Promise<Un
       const cols = Object.keys(row);
       if (cols.length === 0) continue;
       const placeholders = cols.map(() => "?").join(",");
-      sqliteDb
+      const changes = sqliteDb
         .prepare(`INSERT OR IGNORE INTO ${table} (${cols.join(",")}) VALUES (${placeholders})`)
-        .run(...cols.map((c) => row[c] as never));
-      n++;
+        .run(...cols.map((c) => row[c] as never)).changes as number;
+      // INSERT OR IGNORE no-ops on a conflicting id (e.g. the row was
+      // recreated by unrelated activity since the merge) — only count rows
+      // actually restored, so relationships_restored reflects real state.
+      n += changes ?? 0;
     }
     return n;
   };

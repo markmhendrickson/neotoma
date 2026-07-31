@@ -274,9 +274,9 @@ Operators or agents review the list and call `merge_entities` per pair. No autom
 - Merged entities are excluded.
 - Pure read path: no observations, snapshots, or entities are mutated.
 - The detector caps the scan at 2000 entities per type per call. Callers requiring larger scans should page by type or add filters via future parameters.
-## 7.5 Inverse Operation — `split_entity` (R5)
+## 7.5 Re-split Repair — `split_entity` (R5)
 
-`split_entity(source_entity_id, predicate, new_entity, idempotency_key)` is the surgical inverse of `merge_entities` introduced alongside the R1–R4 conversation-entity-collision fix. It re-points a predicate-selected subset of observations from an over-merged source entity onto a new (or pre-existing) target entity without modifying any observation content.
+`split_entity(source_entity_id, predicate, new_entity, idempotency_key)` was introduced alongside the R1–R4 conversation-entity-collision fix. It re-points a predicate-selected subset of observations from an over-merged source entity onto a new (or pre-existing) target entity without modifying any observation content. It is a repair tool for genuine re-splitting — dividing a legitimately-combined entity along a predicate — not a merge-undo. Prior to #2004 this section described `split_entity` as the "surgical inverse" of `merge_entities`; that is not accurate, because `merge_entities` deletes relationship rows and records only a count of moved observations, so `split_entity` has no way to reconstruct what a specific merge actually did. §7.6 (`unmerge_entities`) is the direct inverse of `merge_entities`; `split_entity` remains for re-splitting.
 
 ### 7.5.1 Why Split Exists
 
@@ -342,6 +342,38 @@ Like `merge_entities`, `split_entity` does NOT recompute typed edges (MUST NOT #
 | `RESOURCE_NOT_FOUND` | Source entity does not exist for this user. |
 | `VALIDATION_INVALID_FORMAT` | Source already merged, predicate matched zero observations, or predicate matched every observation. |
 | `ERR_IDEMPOTENCY_MISMATCH` | `idempotency_key` was reused with a different canonicalized predicate. |
+
+## 7.6 Inverse Operation — `unmerge_entities` (#2004)
+
+`unmerge_entities(merge_id)` is the direct inverse of `merge_entities`. Unlike `split_entity` (§7.5), it does not select a subset by predicate — it replays the full captured inverse of one specific prior merge, keyed on `merge_id` (the `entity_merges` row id), not entity ids, since a source entity may have been merged more than once.
+
+### 7.6.1 Why `merge_entities` Needed Reversibility
+
+`merge_entities` rewrites `observations.entity_id` in place and hard-deletes `relationship_observations`/`relationship_snapshots` rows it dedups or drops, recording only a count (`observations_rewritten`). This is the one Neotoma write path that destroyed prior state without recording an inverse, in tension with the additive-evolution/full-provenance doctrine. `unmerge_entities` closes that gap: at merge time, every moved observation id and the complete pre-mutation content of every deleted/repointed relationship row is captured into `entity_merges` as JSON, making the merge replayable backwards.
+
+### 7.6.2 Contract
+
+See the OpenAPI `/entities/unmerge` operation and `UnmergeEntitiesRequest`/`UnmergeEntitiesResponse` schemas. The MCP tool is `unmerge_entities`.
+
+Required input: `merge_id` — the id returned by the original `merge_entities` call (also its own top-level response field, so no follow-up retrieve is needed to find it).
+
+### 7.6.3 Execution Semantics
+
+1. Load the `entity_merges` row by `(id, user_id)`. Not found (wrong id, or belongs to another tenant) → `ERR_MERGE_NOT_FOUND`. Scoping by `user_id` in the same lookup means a cross-tenant guess at another user's `merge_id` gets an identical not-found response, not a different error that would confirm the id's existence.
+2. If `unmerged_at IS NOT NULL` → return the idempotent replay payload (`already_reversed: true`), no mutation.
+3. If the captured inverse columns are NULL (a merge that ran before #2004 shipped) → `ERR_MERGE_NOT_REVERSIBLE`, no mutation. These are genuinely unrecoverable; there is no backfill.
+4. Chained-merge check: query `entity_merges` for any other unreversed row where `from_entity_id` is this merge's `to_entity_id` (i.e. the survivor was later absorbed into a third entity, A→B then B→C). If found → `ERR_MERGE_SUPERSEDED`, naming the later merge's id. This is checked only at unmerge time — merge-time detection is nonsensical, since it would require guessing about merges that have not happened yet.
+5. Apply the inverse inside one transaction: un-tombstone the entity, restore deleted `relationship_snapshots`/`relationship_observations` rows verbatim, repoint the captured "repointed" rows back to their pre-merge source/target/key, and repoint `observations.entity_id` back to the source entity for exactly the captured `moved_observation_ids` — not "everything currently on the target," which may have grown from unrelated writes since the merge. Mark `unmerged_at`/`unmerged_by` on the audit row last.
+6. Concurrent-write handling: anything written to either entity after the original merge is left exactly where it is. `unmerge_entities` only ever touches the ids/rows captured at merge time; this is the documented v1 behavior, not a gap.
+
+### 7.6.4 Error Codes
+
+| Code | Meaning |
+|------|---------|
+| `ERR_MERGE_NOT_FOUND` | No merge with this id for this user (also returned, not `FORBIDDEN`, when the id belongs to another tenant — avoids confirming existence to a non-owner). |
+| `ERR_MERGE_ALREADY_REVERSED` | (Note: represented as `already_reversed: true` on a 200 response, not a REQUEST_CHANGES-signaling error — see UX rationale in issue #2004.) |
+| `ERR_MERGE_SUPERSEDED` | The merge's survivor was itself later merged into a third entity; that later merge must be unmerged first. |
+| `ERR_MERGE_NOT_REVERSIBLE` | Merge predates inverse capture, or its inverse record is corrupt. |
 
 ## 8. Error Codes
 | Code | Meaning |
