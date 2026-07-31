@@ -63,7 +63,8 @@ const suiteMeta: Record<string, SuiteMeta> = {
     directory: "`tests/integration/`",
     runner: "`vitest`",
     command: "`npm run test:integration` or `npx vitest run tests/integration`",
-    requirements: "Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.",
+    requirements:
+      "Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.",
   },
   "tests/integration/release": {
     title: "Vitest release integration tests",
@@ -91,7 +92,8 @@ const suiteMeta: Record<string, SuiteMeta> = {
     directory: "`tests/security/`",
     runner: "`vitest`",
     command: "`npx vitest run tests/security`",
-    requirements: "Use alongside the dedicated security validation scripts when changing auth or route protection.",
+    requirements:
+      "Use alongside the dedicated security validation scripts when changing auth or route protection.",
   },
   "tests/subscriptions": {
     title: "Vitest subscription tests",
@@ -249,7 +251,7 @@ function generateCatalog(): string {
   const suiteKeys = orderedKeys(grouped);
 
   const repoVitestCount = testFiles.filter(
-    (file) => file.startsWith("tests/") || file.startsWith("src/"),
+    (file) => file.startsWith("tests/") || file.startsWith("src/")
   ).length;
   const frontendCount = testFiles.filter((file) => file.startsWith("frontend/src/")).length;
   const playwrightCount = testFiles.filter((file) => file.startsWith("playwright/tests/")).length;
@@ -387,10 +389,18 @@ function main(): void {
 
   if (checkOnly) {
     if (current === next) {
-      console.log("✅ Automated test catalog is up to date.");
+      console.log(
+        "✅ automated_test_catalog.md verified fresh (auto-merged via merge=union if applicable)."
+      );
       return;
     }
-    console.error("❌ Automated test catalog is stale. Run `npm run generate:test-catalog`.");
+    console.error(
+      [
+        "❌ automated_test_catalog.md is out of date with tracked test files.",
+        "  Run: npm run generate:test-catalog",
+        "  Then commit the result and push.",
+      ].join("\n")
+    );
     process.exit(1);
   }
 
