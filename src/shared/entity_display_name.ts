@@ -1,6 +1,8 @@
 /**
  * Canonical entity display name (shared: CLI and web app).
- * Priority: title → name → type-specific fields → canonical_name.
+ * Priority: title → name → type-specific fields → canonical_name,
+ * EXCEPT person-like types (see PERSON_LIKE_TYPES) which lead with `name`
+ * so a contact shows "Rani Sweis", not their job title "Chief Creative".
  */
 
 export interface EntityDisplayInput {
@@ -8,6 +10,15 @@ export interface EntityDisplayInput {
   canonical_name: string;
   snapshot?: Record<string, unknown> | null;
 }
+
+/**
+ * Entity types that represent a person. For these, `name` is the display label
+ * and `title` is a role/headline — so `name` must take precedence. The default
+ * title-first ordering is correct for document-like types (a task's title beats
+ * its name) but wrong for people. Kept as aliases of the `contact` type plus the
+ * standalone `person` type; see schema_definitions.ts.
+ */
+export const PERSON_LIKE_TYPES: ReadonlySet<string> = new Set(["contact", "person", "lead"]);
 
 /**
  * Type-specific field mappings for display names (when title/name are not present).
@@ -39,11 +50,18 @@ export const TYPE_SPECIFIC_DISPLAY_FIELDS: Record<string, string[]> = {
 export function getEntityDisplayName(input: EntityDisplayInput): string {
   const snapshot = input.snapshot ?? {};
 
-  if (snapshot.title && typeof snapshot.title === "string" && snapshot.title.trim()) {
-    return snapshot.title.trim();
-  }
-  if (snapshot.name && typeof snapshot.name === "string" && snapshot.name.trim()) {
-    return snapshot.name.trim();
+  const titleVal =
+    typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : null;
+  const nameVal =
+    typeof snapshot.name === "string" && snapshot.name.trim() ? snapshot.name.trim() : null;
+
+  // Person-like types lead with name; everything else keeps title-first.
+  if (PERSON_LIKE_TYPES.has(input.entity_type)) {
+    if (nameVal) return nameVal;
+    if (titleVal) return titleVal;
+  } else {
+    if (titleVal) return titleVal;
+    if (nameVal) return nameVal;
   }
 
   const typeSpecificFields = TYPE_SPECIFIC_DISPLAY_FIELDS[input.entity_type] ?? [];

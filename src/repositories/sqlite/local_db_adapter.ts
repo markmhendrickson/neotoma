@@ -2,7 +2,8 @@ import crypto from "crypto";
 import { mkdirSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
-import { clearSqliteCache, getSqliteDb } from "./sqlite_client.js";
+import { clearDbCache, getDb } from "../db/connection.js";
+import type { DbDatabase } from "../db/driver.js";
 import { config } from "../../config.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
@@ -331,6 +332,112 @@ function normalizeColumnName(table: string, column: string): string {
   return column;
 }
 
+/**
+ * Separator characters treated as word boundaries by {@link wordBoundaryHaystackSql}.
+ *
+ * Deliberately a fixed allowlist of ASCII punctuation/whitespace rather than a
+ * regex class: the set is baked into generated SQL, so it must never depend on
+ * user input. Alphanumerics are intentionally absent — they are what a "word"
+ * is made of. `%` and `_` are included so LIKE metacharacters embedded in the
+ * *stored* value cannot survive into the comparison.
+ */
+const WORD_BOUNDARY_SEPARATORS = [
+  "&",
+  ",",
+  ".",
+  "/",
+  "(",
+  ")",
+  "-",
+  ":",
+  ";",
+  "|",
+  "+",
+  "@",
+  '"',
+  "'",
+  "!",
+  "?",
+  "[",
+  "]",
+  "{",
+  "}",
+  "*",
+  "#",
+  "_",
+  "%",
+  "\\",
+  "=",
+  "<",
+  ">",
+  "~",
+  "`",
+  "$",
+  "^",
+  "\n",
+  "\t",
+  "\r",
+];
+
+/**
+ * Build a SQL expression that rewrites `columnSql` into a space-delimited
+ * haystack suitable for whole-word `LIKE '% term %'` matching.
+ *
+ * Every separator is replaced with a space via nested `replace()` (SQLite has
+ * no `translate()`), then the result is padded so terms at the very start or
+ * end of the value still sit between two spaces.
+ *
+ * All literals here are compile-time constants from
+ * {@link WORD_BOUNDARY_SEPARATORS}; `columnSql` is adapter-generated. No user
+ * input reaches this string — the search term is always a bound parameter.
+ */
+function wordBoundaryHaystackSql(columnSql: string): string {
+  let expr = columnSql;
+  for (const separator of WORD_BOUNDARY_SEPARATORS) {
+    // Escape single quotes for the SQL string literal.
+    const literal = separator === "'" ? "''" : separator === "\\" ? "\\" : separator;
+    expr = `replace(${expr}, '${literal}', ' ')`;
+  }
+  return `(' ' || ${expr} || ' ')`;
+}
+
+/**
+ * Rewrite every {@link WORD_BOUNDARY_SEPARATORS} character in a search TERM to a
+ * space, mirroring what {@link wordBoundaryHaystackSql} does to the haystack.
+ *
+ * Without this, a term containing a separator could never align as a single
+ * token: the haystack turns "O'Brien" into "O Brien", but an un-normalized
+ * `% O'Brien %` pattern would never match it — the filter would silently return
+ * zero rows (a false negative indistinguishable from "no matches"). Normalizing
+ * the term the same way makes "O'Brien", "R&D", "100%" match their stored
+ * values instead of failing closed. Runs on the already-LIKE-escaped term:
+ * escaping only prefixes `\` before `%`/`_`/`\`, and the `\` itself is not a
+ * separator, so the escape sequences are preserved (the escaped `%`/`_` ARE
+ * separators and collapse to a space, which is correct — a literal `%` in the
+ * term is a word boundary in the haystack too).
+ */
+function normalizeWordBoundaryTerm(escapedTerm: string): string {
+  let out = "";
+  for (let i = 0; i < escapedTerm.length; i++) {
+    const ch = escapedTerm[i];
+    // Preserve a backslash-escape pair (\%, \_, \\) as-is: the following char
+    // is a literal to LIKE, but if it's a separator it should still collapse to
+    // a space to match the haystack. Handle by letting the separator check below
+    // see the escaped char — so we DON'T skip it here; we only avoid treating
+    // the escaping backslash itself as content.
+    if (ch === "\\" && i + 1 < escapedTerm.length) {
+      const next = escapedTerm[i + 1];
+      // A separator that was escaped (\% or \_) still normalizes to a space,
+      // matching how the haystack collapses a literal %/_ to a space.
+      out += WORD_BOUNDARY_SEPARATORS.includes(next) ? " " : "\\" + next;
+      i++;
+      continue;
+    }
+    out += WORD_BOUNDARY_SEPARATORS.includes(ch) ? " " : ch;
+  }
+  return out;
+}
+
 function deriveCanonicalName(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   return null;
@@ -349,14 +456,14 @@ function deriveCanonicalNameFromObject(value: unknown): string | null {
 }
 
 async function ensureEntityRowForObservation(
-  db: ReturnType<typeof getSqliteDb>,
+  db: DbDatabase,
   obs: Record<string, unknown>
 ): Promise<void> {
   const entityId = typeof obs["entity_id"] === "string" ? (obs["entity_id"] as string) : null;
   const entityType = typeof obs["entity_type"] === "string" ? (obs["entity_type"] as string) : null;
   if (!entityId || !entityType) return;
 
-  const existing = db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId) as
+  const existing = (await db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId)) as
     | { id: string }
     | undefined;
   if (existing) return;
@@ -370,13 +477,15 @@ async function ensureEntityRowForObservation(
   const userId =
     typeof obs["user_id"] === "string" || obs["user_id"] === null ? obs["user_id"] : null;
 
-  db.prepare(
-    "INSERT INTO entities (id, entity_type, canonical_name, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(entityId, entityType, canonicalName, now, now, userId);
+  await db
+    .prepare(
+      "INSERT INTO entities (id, entity_type, canonical_name, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .run(entityId, entityType, canonicalName, now, now, userId);
 }
 
 async function ensureEntityRowForSnapshot(
-  db: ReturnType<typeof getSqliteDb>,
+  db: DbDatabase,
   snapshotRow: Record<string, unknown>
 ): Promise<void> {
   const entityId =
@@ -385,7 +494,7 @@ async function ensureEntityRowForSnapshot(
     typeof snapshotRow["entity_type"] === "string" ? (snapshotRow["entity_type"] as string) : null;
   if (!entityId || !entityType) return;
 
-  const existing = db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId) as
+  const existing = (await db.prepare("SELECT id FROM entities WHERE id = ?").get(entityId)) as
     | { id: string }
     | undefined;
   if (existing) return;
@@ -400,31 +509,29 @@ async function ensureEntityRowForSnapshot(
       ? snapshotRow["user_id"]
       : null;
 
-  db.prepare(
-    "INSERT INTO entities (id, entity_type, canonical_name, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(entityId, entityType, canonicalName, now, now, userId);
+  await db
+    .prepare(
+      "INSERT INTO entities (id, entity_type, canonical_name, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .run(entityId, entityType, canonicalName, now, now, userId);
 }
 
-async function recomputeEntitySnapshot(
-  db: ReturnType<typeof getSqliteDb>,
-  entityId: string
-): Promise<void> {
+async function recomputeEntitySnapshot(db: DbDatabase, entityId: string): Promise<void> {
   const { ObservationReducer } = await import("../../reducers/observation_reducer.js");
   const reducer = new ObservationReducer();
 
-  const rows = db.prepare("SELECT * FROM observations WHERE entity_id = ?").all(entityId) as Record<
-    string,
-    unknown
-  >[];
+  const rows = (await db
+    .prepare("SELECT * FROM observations WHERE entity_id = ?")
+    .all(entityId)) as Record<string, unknown>[];
   const observations = rows.map((r) => fromDbRow("observations", r)) as any[];
   if (observations.length === 0) {
-    db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(entityId);
+    await db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(entityId);
     return;
   }
 
   const snapshot = await reducer.computeSnapshot(entityId, observations);
   if (!snapshot) {
-    db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(entityId);
+    await db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(entityId);
     return;
   }
 
@@ -437,26 +544,28 @@ async function recomputeEntitySnapshot(
   const columns = Object.keys(payload);
   const values = columns.map((column) => toDbValue("entity_snapshots", column, payload[column]));
   const placeholders = columns.map(() => "?").join(", ");
-  db.prepare(
-    `INSERT OR REPLACE INTO entity_snapshots (${columns.join(", ")}) VALUES (${placeholders})`
-  ).run(values);
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entity_snapshots (${columns.join(", ")}) VALUES (${placeholders})`
+    )
+    .run(values);
 }
 
 async function recomputeRelationshipSnapshot(
-  db: ReturnType<typeof getSqliteDb>,
+  db: DbDatabase,
   relationshipKey: string
 ): Promise<void> {
   const { RelationshipReducer } = await import("../../reducers/relationship_reducer.js");
   const reducer = new RelationshipReducer();
 
-  const rows = db
+  const rows = (await db
     .prepare("SELECT * FROM relationship_observations WHERE relationship_key = ?")
-    .all(relationshipKey) as Record<string, unknown>[];
+    .all(relationshipKey)) as Record<string, unknown>[];
   const observations = rows.map((r) => fromDbRow("relationship_observations", r)) as any[];
   if (observations.length === 0) {
-    db.prepare("DELETE FROM relationship_snapshots WHERE relationship_key = ?").run(
-      relationshipKey
-    );
+    await db
+      .prepare("DELETE FROM relationship_snapshots WHERE relationship_key = ?")
+      .run(relationshipKey);
     return;
   }
 
@@ -467,9 +576,11 @@ async function recomputeRelationshipSnapshot(
     toDbValue("relationship_snapshots", column, payload[column])
   );
   const placeholders = columns.map(() => "?").join(", ");
-  db.prepare(
-    `INSERT OR REPLACE INTO relationship_snapshots (${columns.join(", ")}) VALUES (${placeholders})`
-  ).run(values);
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO relationship_snapshots (${columns.join(", ")}) VALUES (${placeholders})`
+    )
+    .run(values);
 }
 
 class LocalQueryBuilder {
@@ -577,6 +688,35 @@ class LocalQueryBuilder {
     const col = normalizeColumnName(this.table, column);
     this.filters.push(`${col} LIKE ? COLLATE NOCASE`);
     this.filterValues.push(pattern);
+    return this;
+  }
+
+  /**
+   * Case-insensitive WHOLE-WORD containment (#1966).
+   *
+   * SQLite has no REGEXP function by default (better-sqlite3 registers none),
+   * so `\b`-style boundaries are unavailable. Instead we normalize the haystack
+   * in SQL — every separator character is rewritten to a space and the value is
+   * padded with a leading/trailing space — then test for `% <term> %`. A term
+   * therefore matches only when delimited by separators or string boundaries:
+   * "CTO" hits "VP, CTO" and "Acme/CTO" but not "director" or "CTOs".
+   *
+   * The term is bound as a parameter (never interpolated) and its LIKE
+   * metacharacters are escaped by the caller, so `%`/`_` in user input are
+   * matched literally rather than acting as wildcards.
+   *
+   * Case folding uses SQLite's NOCASE collation, which is ASCII-only, so a
+   * non-ASCII term matches only with identical casing. Callers escape the term
+   * via `escapeLikeTerm` in src/services/entity_queries.ts.
+   *
+   * The term is separator-normalized with {@link normalizeWordBoundaryTerm}
+   * (mirroring the haystack), so a term containing punctuation — "O'Brien",
+   * "R&D", "100%" — matches its stored value instead of silently failing closed.
+   */
+  ilikeWord(column: string, term: string): this {
+    const col = normalizeColumnName(this.table, column);
+    this.filters.push(`${wordBoundaryHaystackSql(col)} LIKE ? ESCAPE '\\' COLLATE NOCASE`);
+    this.filterValues.push(`% ${normalizeWordBoundaryTerm(term)} %`);
     return this;
   }
 
@@ -714,13 +854,13 @@ class LocalQueryBuilder {
     let lastLockError: { code?: string; errno?: number; message?: string } | null = null;
     for (let lockRetry = 0; lockRetry < SQLITE_LOCK_MAX_RETRIES; lockRetry += 1) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const db = getSqliteDb();
+        const db = await getDb();
         try {
           if (this.operation === "select") {
             const countRow = this.countExact
-              ? (db
+              ? ((await db
                   .prepare(`SELECT COUNT(*) as count FROM ${this.table} ${whereSql}`)
-                  .get(values) as { count: number } | undefined)
+                  .get(values)) as { count: number } | undefined)
               : undefined;
             const count = countRow?.count;
 
@@ -739,10 +879,9 @@ class LocalQueryBuilder {
 
             const sql =
               `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();
-            const rows = db
-              .prepare(sql)
-              .all(values)
-              .map((row: any) => fromDbRow(this.table, row));
+            const rows = (await db.prepare(sql).all(values)).map((row: any) =>
+              fromDbRow(this.table, row)
+            );
 
             if (this.expectSingle) {
               const row = rows[0] || null;
@@ -845,9 +984,11 @@ class LocalQueryBuilder {
                 toDbValue(this.table, column, payload[column])
               );
               const placeholders = columns.map(() => "?").join(", ");
-              db.prepare(
-                `INSERT INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
-              ).run(values);
+              await db
+                .prepare(
+                  `INSERT INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
+                )
+                .run(values);
               inserted.push(payload);
 
               // Local backend parity: inserts can materialize related state (entities + snapshots).
@@ -882,16 +1023,16 @@ class LocalQueryBuilder {
             );
             const updateSql = columns.map((column) => `${column} = ?`).join(", ");
 
-            db.prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`).run([
-              ...updateValues,
-              ...values,
-            ]);
+            await db
+              .prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`)
+              .run([...updateValues, ...values]);
 
             if (this.selectColumns) {
-              const rows = db
-                .prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`)
-                .all(values)
-                .map((row: any) => fromDbRow(this.table, row));
+              const rows = (
+                await db
+                  .prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`)
+                  .all(values)
+              ).map((row: any) => fromDbRow(this.table, row));
               if (this.expectSingle) {
                 const row = rows[0] || null;
                 if (!row && !this.allowNullSingle) {
@@ -934,9 +1075,11 @@ class LocalQueryBuilder {
                 toDbValue(this.table, column, payload[column])
               );
               const placeholders = columns.map(() => "?").join(", ");
-              db.prepare(
-                `INSERT OR REPLACE INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
-              ).run(values);
+              await db
+                .prepare(
+                  `INSERT OR REPLACE INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
+                )
+                .run(values);
               inserted.push(payload);
 
               if (this.table === "entity_snapshots") {
@@ -950,14 +1093,14 @@ class LocalQueryBuilder {
           }
 
           if (this.operation === "delete") {
-            db.prepare(`DELETE FROM ${this.table} ${whereSql}`).run(values);
+            await db.prepare(`DELETE FROM ${this.table} ${whereSql}`).run(values);
             return { data: null, error: null };
           }
 
           return { data: null, error: { message: "Unsupported operation" } };
         } catch (error: any) {
           if (attempt === 0 && isRecoverableSqliteConnectionError(error)) {
-            clearSqliteCache();
+            clearDbCache();
             continue;
           }
           if (isSqliteLockError(error)) {
@@ -1107,8 +1250,8 @@ class LocalAuthAdmin {
   async getUserById(
     userId: string
   ): Promise<QueryResult<{ user: { id: string; email?: string | null } | null }>> {
-    const db = getSqliteDb();
-    const user = db.prepare("SELECT id, email FROM auth_users WHERE id = ?").get(userId) as
+    const db = await getDb();
+    const user = (await db.prepare("SELECT id, email FROM auth_users WHERE id = ?").get(userId)) as
       | { id: string; email?: string | null }
       | undefined;
     if (!user) {
@@ -1122,20 +1265,18 @@ class LocalAuthAdmin {
     email?: string;
     email_confirm?: boolean;
   }): Promise<QueryResult<{ user: { id: string; email?: string | null } }>> {
-    const db = getSqliteDb();
+    const db = await getDb();
     const id = payload.id || crypto.randomUUID();
     const email = payload.email || null;
-    db.prepare("INSERT INTO auth_users (id, email, created_at) VALUES (?, ?, ?)").run(
-      id,
-      email,
-      new Date().toISOString()
-    );
+    await db
+      .prepare("INSERT INTO auth_users (id, email, created_at) VALUES (?, ?, ?)")
+      .run(id, email, new Date().toISOString());
     return { data: { user: { id, email } }, error: null };
   }
 
   async listUsers(): Promise<QueryResult<{ users: Array<{ id: string; email?: string | null }> }>> {
-    const db = getSqliteDb();
-    const users = db.prepare("SELECT id, email FROM auth_users").all();
+    const db = await getDb();
+    const users = await db.prepare("SELECT id, email FROM auth_users").all();
     return { data: { users: users as any }, error: null };
   }
 
@@ -1144,10 +1285,10 @@ class LocalAuthAdmin {
     email: string;
     options?: { redirectTo?: string };
   }): Promise<QueryResult<{ properties: { action_link: string } }>> {
-    const db = getSqliteDb();
-    const user = db
+    const db = await getDb();
+    const user = (await db
       .prepare("SELECT id, email FROM auth_users WHERE email = ?")
-      .get(payload.email) as { id: string; email?: string } | undefined;
+      .get(payload.email)) as { id: string; email?: string } | undefined;
     if (!user) {
       return { data: null, error: { message: "User not found", code: "PGRST116" } };
     }
@@ -1157,9 +1298,11 @@ class LocalAuthAdmin {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const sessionId = crypto.randomUUID();
 
-    db.prepare(
-      "INSERT INTO auth_sessions (id, user_id, access_token, refresh_token, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(sessionId, user.id, accessToken, refreshToken, expiresAt, new Date().toISOString());
+    await db
+      .prepare(
+        "INSERT INTO auth_sessions (id, user_id, access_token, refresh_token, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .run(sessionId, user.id, accessToken, refreshToken, expiresAt, new Date().toISOString());
 
     const redirectTo = payload.options?.redirectTo || "http://localhost:5173";
     const actionLink = `${redirectTo}#access_token=${accessToken}&refresh_token=${refreshToken}`;
@@ -1182,19 +1325,19 @@ class LocalAuthClient {
   async getUser(
     token: string
   ): Promise<QueryResult<{ user: { id: string; email?: string | null } }>> {
-    const db = getSqliteDb();
-    const session = db
+    const db = await getDb();
+    const session = (await db
       .prepare("SELECT user_id, access_token, expires_at FROM auth_sessions WHERE access_token = ?")
-      .get(token) as { user_id: string; expires_at: string | null } | undefined;
+      .get(token)) as { user_id: string; expires_at: string | null } | undefined;
     if (!session) {
       return { data: null, error: { message: "Invalid token", code: "AUTH_INVALID" } };
     }
     if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) {
       return { data: null, error: { message: "Token expired", code: "AUTH_EXPIRED" } };
     }
-    const user = db
+    const user = (await db
       .prepare("SELECT id, email FROM auth_users WHERE id = ?")
-      .get(session.user_id) as { id: string; email?: string | null } | undefined;
+      .get(session.user_id)) as { id: string; email?: string | null } | undefined;
     if (!user) {
       return { data: null, error: { message: "User not found", code: "PGRST116" } };
     }

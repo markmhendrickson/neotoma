@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -267,6 +267,7 @@
   "dependencies": {
     "@hellocoop/httpsig": "^1.4.0",
     "@hookform/resolvers": "^5.2.2",
+    "@libsql/client": "^0.17.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
@@ -307,6 +308,7 @@
     "idb-keyval": "^6.2.2",
     "jose": "^6.2.2",
     "js-yaml": "^4.1.1",
+    "libsql": "^0.5.29",
     "lucide-react": "^0.344.0",
     "morgan": "^1.10.0",
     "next-themes": "^0.4.6",

@@ -10,8 +10,26 @@ import {
 } from "./entity_cursor.js";
 
 export interface SnapshotFilter {
-  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
   value?: unknown;
+}
+
+/**
+ * Escape LIKE metacharacters so user-supplied terms are matched literally.
+ *
+ * Pairs with `ESCAPE '\'` in the generated SQL. Backslash is escaped first so
+ * the escape character itself cannot be smuggled in.
+ *
+ * Note for `contains_word`: separator characters (including `%` and `_`) are
+ * normalized to spaces in BOTH the haystack and the term (see
+ * `normalizeWordBoundaryTerm` in the sqlite adapter), so a term containing
+ * punctuation — "O'Brien", "R&D", "100%" — matches its stored value rather than
+ * silently returning nothing. Escaping here still prevents `%`/`_` from acting
+ * as LIKE wildcards; the adapter's normalization then rewrites those (now
+ * literal) separators to spaces to line up with the haystack.
+ */
+export function escapeLikeTerm(term: string): string {
+  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 export interface EntityQueryOptions {
@@ -434,6 +452,16 @@ export async function queryEntities(
             case "contains":
               snapshotQuery = snapshotQuery.ilike(col, `%${String(filter.value)}%`);
               break;
+            case "contains_word": {
+              // #1966: whole-word containment. `contains` is a raw substring
+              // match, so `title contains "CTO"` also matches "director" and
+              // "doctor". Escape LIKE metacharacters so `%`/`_` in the term are
+              // literal; the term itself is bound as a parameter, never
+              // interpolated into SQL.
+              const term = escapeLikeTerm(String(filter.value));
+              snapshotQuery = snapshotQuery.ilikeWord(col, term);
+              break;
+            }
           }
         }
       }

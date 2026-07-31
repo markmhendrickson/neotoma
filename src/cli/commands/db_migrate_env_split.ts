@@ -53,9 +53,10 @@ export interface MigrateEnvSplitResult extends EnvSplitReport {
   renamed: boolean;
 }
 
-import { createRequire } from "node:module";
-
-const _nodeRequire = createRequire(import.meta.url);
+// Offline, read-only inspection of explicit SQLite files (no running server,
+// never on the server event loop) — the repo-layer synchronous driver is the
+// right tool here and keeps native-module selection in one place.
+import Database from "../../repositories/sqlite/sqlite_driver.js";
 
 type SimpleDb = {
   prepare: (sql: string) => { get: (...p: unknown[]) => unknown };
@@ -63,13 +64,7 @@ type SimpleDb = {
 };
 
 function openDb(dbPath: string): SimpleDb {
-  try {
-    const native = _nodeRequire("node:sqlite") as { DatabaseSync: new (path: string) => SimpleDb };
-    return new native.DatabaseSync(dbPath);
-  } catch {
-    const bsq = _nodeRequire("better-sqlite3") as new (path: string) => SimpleDb;
-    return new bsq(dbPath);
-  }
+  return new Database(dbPath);
 }
 
 /** Count user-contributed rows in a SQLite file without starting the full API. */
