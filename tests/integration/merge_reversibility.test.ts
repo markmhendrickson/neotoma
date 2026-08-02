@@ -701,6 +701,11 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
     await expect(
       unmergeEntities({ mergeId: firstMerge.merge_id, userId: TEST_USER })
     ).rejects.toThrow(new RegExp(secondMerge.merge_id));
+    // Names the survivor of THIS merge (B), not the source (A) — B is what
+    // actually got merged again into C, and the message must say so unambiguously.
+    await expect(
+      unmergeEntities({ mergeId: firstMerge.merge_id, userId: TEST_USER })
+    ).rejects.toThrow(new RegExp(`${B}, the survivor of this merge, was merged again`));
 
     // Fails closed: A is still tombstoned to B (no partial repointing).
     const { data: entA } = await db
@@ -1017,12 +1022,14 @@ describe("unmerge_entities — MCP tool and REST endpoint surface parity (#2004)
       body: JSON.stringify({ merge_id: firstMerge.merge_id, user_id: TEST_USER }),
     });
     expect(httpRes.status).toBe(400);
-    const httpBody = (await httpRes.json()) as { error_code: string };
+    const httpBody = (await httpRes.json()) as { error_code: string; message: string };
     expect(httpBody.error_code).toBe("ERR_MERGE_SUPERSEDED");
+    // Names the survivor of the first merge (B) unambiguously, not the source (A).
+    expect(httpBody.message).toMatch(`${B}, the survivor of this merge, was merged again`);
 
     await expect(
       callMcpUnmerge({ merge_id: firstMerge.merge_id, user_id: TEST_USER })
-    ).rejects.toBeTruthy();
+    ).rejects.toThrow(new RegExp(`${B}, the survivor of this merge, was merged again`));
   });
 
   it("cross-tenant: REST /entities/unmerge cannot reverse another tenant's merge, and does not leak its existence", async () => {
