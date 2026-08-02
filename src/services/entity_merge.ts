@@ -463,7 +463,7 @@ export async function unmergeEntities(params: UnmergeEntitiesParams): Promise<Un
 
   if (supersedingMerge) {
     throw new MergeSupersededError(
-      `Entity ${fromEntityId} was merged again into a third entity after this merge ` +
+      `Entity ${toEntityId}, the survivor of this merge, was merged again into a third entity ` +
         `(see merge ${supersedingMerge.id}). Unmerge that later merge first, or this ` +
         `would leave data in an inconsistent state.`
     );
