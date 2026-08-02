@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { describe, expect, it } from "vitest";
@@ -103,5 +103,104 @@ describe("conversationsToEntities — session identity", () => {
     const result = await parseTranscript({ filePath: file });
     const entities = conversationsToEntities(result.conversations);
     expect(entities.find((e) => e.entity_type === "agent_session")).toBeUndefined();
+  });
+
+  it("emits codex agent_session cwd from session_meta, updated by later turn_context", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "codex-cwd-"));
+    const file = path.join(dir, "rollout-2026-08-02T09-20-00-019e2a99.jsonl");
+    writeFileSync(
+      file,
+      [
+        {
+          timestamp: "2026-08-02T07:20:00.000Z",
+          type: "session_meta",
+          payload: { id: "019e2a99-cwd", cwd: "/tmp/first", cli_version: "0.1.0" },
+        },
+        {
+          timestamp: "2026-08-02T07:20:01.000Z",
+          type: "turn_context",
+          payload: { cwd: "/tmp/moved" },
+        },
+        {
+          timestamp: "2026-08-02T07:20:02.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "where am I?" }],
+          },
+        },
+      ]
+        .map((l) => JSON.stringify(l))
+        .join("\n")
+    );
+
+    const result = await parseTranscript({ filePath: file });
+    const session = conversationsToEntities(result.conversations).find(
+      (e) => e.entity_type === "agent_session"
+    );
+    expect(session).toMatchObject({
+      harness: "codex",
+      native_session_id: "019e2a99-cwd",
+      cwd: "/tmp/moved",
+    });
+  });
+
+  it("strips the internal cursor- prefix from native_session_id for resume", () => {
+    const entities = conversationsToEntities(
+      [
+        {
+          id: "cursor-chatIdBare",
+          title: "t",
+          source: "cursor",
+          messages: [
+            { timestamp: null, author: "user", role: "user", content: "hi" },
+          ],
+          createdAt: null,
+          updatedAt: null,
+          session: { cwd: "/Users/x/repo" },
+        },
+      ],
+      { contentHash: "a".repeat(64), fileSize: 1 }
+    );
+
+    const session = entities.find((e) => e.entity_type === "agent_session");
+    const transcript = entities.find((e) => e.entity_type === "session_transcript");
+    expect(session!.native_session_id).toBe("chatIdBare");
+    expect(transcript!.agent_session_id).toBe("chatIdBare");
+  });
+
+  it("reads cursor cwd from sibling meta.json into agent_session", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "cursor-meta-cwd-"));
+    const convDir = path.join(tempDir, "conv-meta");
+    mkdirSync(convDir, { recursive: true });
+    writeFileSync(path.join(convDir, "meta.json"), JSON.stringify({ cwd: "/Users/x/project" }));
+
+    const dbPath = path.join(convDir, "store.db");
+    const Database = (await import("../../src/repositories/sqlite/sqlite_driver.js")).default;
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+      CREATE TABLE blobs (id TEXT PRIMARY KEY, data TEXT);
+    `);
+    db.prepare("INSERT INTO blobs (id, data) VALUES (?, ?)").run(
+      "m1",
+      Buffer.from(JSON.stringify({ role: "user", content: "hello from cursor" }), "utf-8").toString(
+        "hex"
+      )
+    );
+    db.close();
+
+    const result = await parseTranscript({ filePath: dbPath, source: "cursor" });
+    const session = conversationsToEntities(result.conversations, {
+      contentHash: result.contentHash,
+      fileSize: result.fileSize,
+    }).find((e) => e.entity_type === "agent_session");
+
+    expect(session).toMatchObject({
+      harness: "cursor",
+      native_session_id: "conv-meta",
+      cwd: "/Users/x/project",
+    });
   });
 });

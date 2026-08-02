@@ -100,4 +100,30 @@ describe("runTranscriptImport — session identity attachment", () => {
     expect(result.files_found).toBeGreaterThan(0);
     expect(calls).toHaveLength(0);
   });
+
+  it("does not attach conversation or conversation_message rows (server owns those)", async () => {
+    const { api, calls } = captureApi();
+    await runTranscriptImport({ api: api as never, dryRun: false });
+
+    const entities = calls[0].entities as Array<Record<string, unknown>>;
+    const types = entities.map((e) => e.entity_type);
+    expect(types).toEqual(expect.arrayContaining(["agent_session", "session_transcript"]));
+    expect(types).not.toContain("conversation");
+    expect(types).not.toContain("conversation_message");
+  });
+
+  it("still stores the raw file when parse yields no session entities", async () => {
+    const broken = mkdtempSync(path.join(tmpdir(), "import-broken-"));
+    const proj = path.join(broken, ".claude", "projects", "-broken");
+    mkdirSync(proj, { recursive: true });
+    writeFileSync(path.join(proj, "deadbeef-dead-beef-dead-beefdeadbeef.jsonl"), "NOT JSON\n{{{");
+    process.env.HOME = broken;
+
+    const { api, calls } = captureApi();
+    const result = await runTranscriptImport({ api: api as never, dryRun: false });
+
+    expect(result.files_stored).toBe(1);
+    expect(calls[0].file_path).toContain(".claude/projects");
+    expect(calls[0].entities).toBeUndefined();
+  });
 });
