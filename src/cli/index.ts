@@ -2887,6 +2887,15 @@ async function backupFilesWithTimestamp(filePaths: string[], ts: string): Promis
   return backups;
 }
 
+/**
+ * Quote a value as a SQLite string literal (single quotes, doubling any embedded
+ * single quote). Needed for statements like `VACUUM INTO` that take a literal
+ * path and cannot be parameterised.
+ */
+function quoteSqliteStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 async function checkpointWal(db: AsyncSqliteDatabase): Promise<void> {
   try {
     await db.pragma("wal_checkpoint(FULL)");
@@ -10783,6 +10792,10 @@ backupCommand
     const manifest: Record<string, unknown> = {
       version: "1.0",
       created_at: new Date().toISOString(),
+      // How the DB was captured. "vacuum_into" snapshots are atomic and carry no
+      // separate -wal; older "file_copy" backups (pre-#2075) may include one and
+      // are still restorable by the restore command.
+      db_snapshot_method: "vacuum_into",
       contents: {} as Record<string, string>,
       checksums: {} as Record<string, string>,
       encrypted: process.env.NEOTOMA_ENCRYPTION_ENABLED === "true",
@@ -10792,19 +10805,60 @@ backupCommand
     const contents = manifest.contents as Record<string, string>;
     const checksums = manifest.checksums as Record<string, string>;
 
-    // Copy SQLite DB using file copy (better-sqlite3 backup API requires the DB instance)
+    // Snapshot the SQLite DB with VACUUM INTO — an ATOMIC, transaction-consistent
+    // copy taken through the database engine.
+    //
+    // This MUST NOT go back to copying the DB and its -wal as two separate
+    // fs.copyFile calls (#2075). Those two files are a matched pair describing one
+    // logical state; copying them at different instants captures two different
+    // states, and any write committing in between leaves the WAL's frame checksums
+    // invalid against the main file's header. Restoring such a pair fails with
+    // SQLITE_CORRUPT ("database disk image is malformed") — not stale data, an
+    // unopenable file. On a live server, writes between the two copies are the
+    // normal case, so the old path silently produced unrestorable backups and
+    // still reported verified: true.
+    //
+    // VACUUM INTO emits a single self-contained file with the WAL already applied,
+    // so there is no -wal (or -shm) to copy and no checkpoint to remember.
     let dbCopied = false;
     try {
       await fs.access(sqlitePath);
       const destDb = path.join(backupDir, path.basename(sqlitePath));
-      await fs.copyFile(sqlitePath, destDb);
 
-      // Verify the copy: file must exist and be > 1KB (minimum viable SQLite)
-      const destStat = await fs.stat(destDb);
-      if (destStat.size < 1024) {
+      let sourceDb: AsyncSqliteDatabase | null = null;
+      try {
+        sourceDb = new AsyncSqliteDatabase(sqlitePath);
+        // VACUUM INTO refuses to overwrite, so the destination must not exist.
+        await fs.rm(destDb, { force: true });
+        await sourceDb.exec(`VACUUM INTO ${quoteSqliteStringLiteral(destDb)}`);
+      } finally {
+        await sourceDb?.close().catch(() => {});
+      }
+
+      // Verify the snapshot is a usable database, not merely a plausible-sized file.
+      // The old >1KB check passed happily on corrupt output, which is what made the
+      // #2075 failure silent.
+      let integrityOk = false;
+      let integrityDetail = "unknown";
+      let verifyDb: AsyncSqliteDatabase | null = null;
+      try {
+        verifyDb = new AsyncSqliteDatabase(destDb);
+        const rows = (await verifyDb.pragma("integrity_check")) as Array<Record<string, unknown>>;
+        const first = rows?.[0];
+        const value = first ? String(Object.values(first)[0] ?? "") : "";
+        integrityOk = value === "ok";
+        integrityDetail = value || "no result";
+      } catch (err) {
+        integrityDetail = err instanceof Error ? err.message : String(err);
+      } finally {
+        await verifyDb?.close().catch(() => {});
+      }
+
+      if (!integrityOk) {
         writeCliError(
-          `Backup verification failed: copied DB is only ${destStat.size} bytes (expected > 1024). ` +
-            "The source DB may be locked or empty."
+          `Backup verification failed: integrity_check on the snapshot returned "${integrityDetail}" ` +
+            '(expected "ok"). The backup is NOT usable and has been left in place for inspection at ' +
+            destDb
         );
         process.exitCode = 1;
         return;
@@ -10817,19 +10871,14 @@ backupCommand
       const dbBuf = await fs.readFile(destDb);
       checksums[path.basename(sqlitePath)] =
         "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-
-      // WAL file
-      const walPath = sqlitePath + "-wal";
-      try {
-        await fs.access(walPath);
-        await fs.copyFile(walPath, path.join(backupDir, path.basename(walPath)));
-        contents.wal = path.basename(walPath);
-      } catch {
-        // No WAL file — acceptable
-      }
-    } catch {
+    } catch (err) {
       if (!dbCopied) {
-        writeCliError("SQLite database not found or not readable at " + sqlitePath);
+        const detail = err instanceof Error ? `: ${err.message}` : "";
+        writeCliError(
+          "SQLite database not found, not readable, or could not be snapshotted at " +
+            sqlitePath +
+            detail
+        );
         process.exitCode = 1;
         return;
       }
