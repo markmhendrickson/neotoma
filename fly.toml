@@ -1,9 +1,26 @@
-# fly.toml app configuration file generated for neotoma on 2025-10-30T11:26:06+01:00
+# Default Fly config for a Neotoma deployment.
 #
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+# See https://fly.io/docs/reference/configuration/ for how to use this file.
 #
+# NO `app` FIELD ON PURPOSE — always pass `--app <name>`.
+#
+# This file previously declared `app = 'neotoma-sandbox'`, which was wrong and
+# actively harmful: the public sandbox deploys from fly.sandbox.toml (its own
+# build args, env, and volume), and no automated workflow uses this file at all.
+# The stale name only ever mis-targeted MANUAL deploys — a `flyctl deploy` run
+# in the repo to ship some other instance would silently retarget the sandbox
+# and succeed, giving no signal that the wrong app had been updated.
+#
+# Omitting `app` converts that silent mis-target into an explicit failure:
+#   $ flyctl deploy -c fly.toml
+#   Error: the config for your app is missing an app name, add an app field to
+#          the fly.toml file or specify with the -a flag
+#
+# Per-instance values (app name, region, secrets) belong with the instance, not
+# in this shared file — see docs/infrastructure/client_instance_deployment.md.
+# `primary_region` below is only a default for new apps; existing apps keep
+# whatever region their machines already run in.
 
-app = 'neotoma-sandbox'
 primary_region = 'lhr'
 
 [build]
