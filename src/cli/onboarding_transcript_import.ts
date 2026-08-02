@@ -50,9 +50,7 @@ async function deriveSessionEntities(filePath: string): Promise<Array<Record<str
       filePath: result.filePath,
       contentHash: result.contentHash,
       fileSize: result.fileSize,
-    }).filter(
-      (e) => e.entity_type === "agent_session" || e.entity_type === "session_transcript"
-    );
+    }).filter((e) => e.entity_type === "agent_session" || e.entity_type === "session_transcript");
   } catch {
     return [];
   }
