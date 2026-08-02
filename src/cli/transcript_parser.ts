@@ -65,7 +65,15 @@ export function detectSource(filePath: string, content?: string): TranscriptSour
 
   // Harness-specific path patterns (check before generic name patterns)
   if (normalized.includes("/.claude/projects/") && ext === ".jsonl") return "claude-code";
-  if (normalized.includes("/.codex/archived_sessions/") && ext === ".jsonl") return "codex";
+  // Codex writes live rollouts to a date-partitioned tree
+  // (~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl) and moves older
+  // ones to ~/.codex/archived_sessions/. Match both.
+  if (
+    (normalized.includes("/.codex/sessions/") ||
+      normalized.includes("/.codex/archived_sessions/")) &&
+    ext === ".jsonl"
+  )
+    return "codex";
   if (
     (ext === ".db" && normalized.includes("/.cursor/chats/")) ||
     (ext === ".vscdb" && normalized.includes("/Cursor/User/globalStorage/"))
@@ -460,7 +468,10 @@ function parseCodexTranscript(content: string, filePath: string): ParsedConversa
         text = rawContent
           .filter(
             (b: any) =>
-              (b.type === "text" || b.type === "output_text") && typeof b.text === "string"
+              // Live rollouts encode user turns as `input_text` and assistant
+              // turns as `output_text`; older archived sessions use `text`.
+              (b.type === "text" || b.type === "output_text" || b.type === "input_text") &&
+              typeof b.text === "string"
           )
           .map((b: any) => b.text)
           .join("\n")
