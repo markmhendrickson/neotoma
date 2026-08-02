@@ -35,6 +35,29 @@ export interface TranscriptImportResult {
   errors: Array<{ file: string; error: string }>;
 }
 
+/**
+ * Parse a transcript and derive its session-identity entities. Best-effort: a
+ * parse failure must not block storing the raw file, which remains the durable
+ * artifact.
+ */
+async function deriveSessionEntities(filePath: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const { parseTranscript, conversationsToEntities } = await import("./transcript_parser.js");
+    const result = await parseTranscript({ filePath });
+    if (result.conversations.length === 0) return [];
+
+    return conversationsToEntities(result.conversations, {
+      filePath: result.filePath,
+      contentHash: result.contentHash,
+      fileSize: result.fileSize,
+    }).filter(
+      (e) => e.entity_type === "agent_session" || e.entity_type === "session_transcript"
+    );
+  } catch {
+    return [];
+  }
+}
+
 /** Discover and (optionally) import transcript files from known harness locations. */
 export async function runTranscriptImport(
   options: TranscriptImportOptions
@@ -117,6 +140,13 @@ export async function runTranscriptImport(
           observation_source: "import",
         };
         if (userId) body.user_id = userId;
+
+        // Alongside the raw file, derive the session-identity rows
+        // (agent_session + session_transcript). These carry cwd, native session
+        // id, and a content hash — without them a stored transcript cannot be
+        // located or re-materialized on another machine.
+        const sessionEntities = await deriveSessionEntities(filePath);
+        if (sessionEntities.length > 0) body.entities = sessionEntities;
 
         const { error } = await (api as any).POST("/store", { body });
         if (error) {
