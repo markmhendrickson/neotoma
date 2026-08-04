@@ -16,6 +16,13 @@
  *
  * Companion to tenant_isolation_matrix.test.ts, which covers the read
  * endpoints themselves rather than the counts advertised alongside them.
+ *
+ * Surface parity: this covers the MCP `list_resources` counts. The REST/CLI
+ * counterpart (`GET /stats` -> getDashboardStats(userId) in
+ * src/services/dashboard_stats.ts) already scopes by user_id and is covered
+ * by tests/integration/dashboard_stats.test.ts and
+ * tests/security/cross_user_read_scoping.test.ts. See PR #2041 for the full
+ * surface enumeration (MCP / REST / CLI / HTTP health).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
