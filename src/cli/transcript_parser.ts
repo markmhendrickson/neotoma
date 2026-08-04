@@ -902,7 +902,8 @@ export function formatTranscriptPreview(result: TranscriptParseResult): string {
  * Convert parsed conversations to Neotoma entity format for storage.
  */
 /** Sources that represent a resumable local harness session. */
-const HARNESS_SOURCES = new Set<TranscriptSource>(["claude-code", "codex", "cursor"]);
+/** Sources that represent a resumable local harness session. */
+export const HARNESS_SOURCES = new Set<TranscriptSource>(["claude-code", "codex", "cursor"]);
 
 /**
  * The id the harness itself uses to resume. parseCursorTranscript() namespaces

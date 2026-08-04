@@ -60,11 +60,22 @@ One row per transcript file, content-addressed.
 Derivation is best-effort: a parse failure must never block storing the raw
 file, which remains the durable artifact. Degradation is **reported, not
 swallowed** — `TranscriptImportResult.session_identity_degraded` lists
-`{ file, reason }` for every file stored without identity, each is warned on
-stderr, and a summary line names the count.
+`{ file, reason, kind }` for every file stored without identity, each is warned
+on stderr, and a summary line names the count.
 
-A degraded file is stored but **not resumable**. Re-running ingest after a
-parser fix backfills it; `content_hash` prevents duplicate rows.
+`kind` separates two cases that need different responses:
+
+| kind         | meaning                                                                 | what to do                               |
+| ------------ | ----------------------------------------------------------------------- | ---------------------------------------- |
+| `expected`   | non-harness source (ChatGPT, Slack, …) — no resumable session by design | nothing; re-running will never change it |
+| `unexpected` | parse failure or empty parse                                            | re-run after a parser fix to backfill    |
+
+The summary line branches on this, so a re-run is only ever advised where it can
+actually help. Reasons name the source (`non-harness source (chatgpt) — no
+resumable session`) rather than guessing at it.
+
+A degraded file is stored but **not resumable**; `content_hash` prevents
+duplicate rows on re-import.
 
 ## Harness storage layouts
 

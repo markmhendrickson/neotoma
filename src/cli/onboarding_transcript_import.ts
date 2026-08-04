@@ -40,7 +40,17 @@ export interface TranscriptImportResult {
    * decorative. Surfaced so a caller can distinguish a full import from a
    * degraded one without re-parsing every file.
    */
-  session_identity_degraded: Array<{ file: string; reason: string }>;
+  session_identity_degraded: Array<{
+    file: string;
+    reason: string;
+    /**
+     * `expected` — the source has no resumable session by design (a ChatGPT or
+     * Slack export). Re-running will never change this.
+     * `unexpected` — a parse failure or empty parse; re-running after a parser
+     * fix can backfill identity.
+     */
+    kind: "expected" | "unexpected";
+  }>;
 }
 
 /**
@@ -49,14 +59,22 @@ export interface TranscriptImportResult {
  * artifact. Degradation is reported rather than swallowed — the caller records
  * it on `session_identity_degraded` and warns on stderr.
  */
-async function deriveSessionEntities(
-  filePath: string
-): Promise<{ entities: Array<Record<string, unknown>>; contentHash?: string; reason?: string }> {
+async function deriveSessionEntities(filePath: string): Promise<{
+  entities: Array<Record<string, unknown>>;
+  contentHash?: string;
+  reason?: string;
+  kind?: "expected" | "unexpected";
+}> {
   try {
-    const { parseTranscript, conversationsToEntities } = await import("./transcript_parser.js");
+    const { parseTranscript, conversationsToEntities, HARNESS_SOURCES } =
+      await import("./transcript_parser.js");
     const result = await parseTranscript({ filePath });
     if (result.conversations.length === 0) {
-      return { entities: [], reason: "transcript yielded no conversations" };
+      return {
+        entities: [],
+        reason: "no messages parsed from transcript",
+        kind: "unexpected",
+      };
     }
     const contentHash = result.contentHash;
 
@@ -67,11 +85,26 @@ async function deriveSessionEntities(
     }).filter((e) => e.entity_type === "agent_session" || e.entity_type === "session_transcript");
 
     if (entities.length === 0) {
-      return { entities, contentHash, reason: "no session identity derived (non-harness source?)" };
+      // The source is known here — name it rather than guessing. A non-harness
+      // export (chatgpt, slack, …) has no resumable session by design.
+      const source = result.conversations[0]?.source;
+      const expected = source !== undefined && !HARNESS_SOURCES.has(source);
+      return {
+        entities,
+        contentHash,
+        reason: expected
+          ? `non-harness source (${source}) — no resumable session`
+          : "no session identity derived",
+        kind: expected ? "expected" : "unexpected",
+      };
     }
     return { entities, contentHash };
   } catch (err) {
-    return { entities: [], reason: `parse failed: ${(err as Error).message}` };
+    return {
+      entities: [],
+      reason: `parse failed: ${(err as Error).message}`,
+      kind: "unexpected",
+    };
   }
 }
 
@@ -118,7 +151,11 @@ export async function runTranscriptImport(
   let totalFilesStored = 0;
   let totalFilesSkipped = 0;
   const errors: Array<{ file: string; error: string }> = [];
-  const sessionIdentityDegraded: Array<{ file: string; reason: string }> = [];
+  const sessionIdentityDegraded: Array<{
+    file: string;
+    reason: string;
+    kind: "expected" | "unexpected";
+  }> = [];
 
   for (const summary of relevant) {
     // Apply per-harness file limit (most recently modified first).
@@ -175,7 +212,8 @@ export async function runTranscriptImport(
           body.idempotency_key = `transcript-import-${derived.contentHash ?? filePath}`;
         } else {
           const reason = derived.reason ?? "unknown";
-          sessionIdentityDegraded.push({ file: filePath, reason });
+          const kind = derived.kind ?? "unexpected";
+          sessionIdentityDegraded.push({ file: filePath, reason, kind });
           process.stderr.write(`  [warn] no session identity for ${filePath}: ${reason}\n`);
         }
 
@@ -206,10 +244,18 @@ export async function runTranscriptImport(
       `${totalFilesFound} found, ${totalFilesStored} stored, ` +
       `${totalFilesSkipped} skipped, ${errors.length} error(s).\n`
   );
-  if (sessionIdentityDegraded.length > 0) {
+  const unexpectedDegraded = sessionIdentityDegraded.filter((d) => d.kind === "unexpected");
+  const expectedDegraded = sessionIdentityDegraded.length - unexpectedDegraded.length;
+  if (expectedDegraded > 0) {
     process.stdout.write(
-      `[onboarding] ${sessionIdentityDegraded.length} file(s) stored WITHOUT session identity ` +
-        `— those transcripts are not resumable. Re-run with a fixed parser to backfill.\n`
+      `[onboarding] ${expectedDegraded} file(s) stored without session identity ` +
+        `— non-harness sources have no resumable session by design.\n`
+    );
+  }
+  if (unexpectedDegraded.length > 0) {
+    process.stdout.write(
+      `[onboarding] ${unexpectedDegraded.length} file(s) stored WITHOUT session identity ` +
+        `— those transcripts are not resumable. Re-run after a parser fix to backfill.\n`
     );
   }
   if (dryRun && totalFilesFound > 0) {

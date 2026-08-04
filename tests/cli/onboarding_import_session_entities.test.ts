@@ -148,6 +148,29 @@ describe("runTranscriptImport — session identity attachment", () => {
     expect(result.session_identity_degraded).toHaveLength(1);
     expect(result.session_identity_degraded[0].file).toContain(".claude/projects");
     expect(result.session_identity_degraded[0].reason).toBeTruthy();
+    // A corrupt transcript is actionable: re-running after a parser fix helps.
+    expect(result.session_identity_degraded[0].kind).toBe("unexpected");
+  });
+
+  it("marks a non-harness export as expected degradation, not a bug to chase", async () => {
+    const home = mkdtempSync(path.join(tmpdir(), "import-chatgpt-"));
+    const proj = path.join(home, ".claude", "projects", "-x");
+    mkdirSync(proj, { recursive: true });
+    // A claude-code-shaped path whose content parses but yields no harness
+    // session: role/content present, but not a resumable harness transcript.
+    writeFileSync(
+      path.join(proj, "11111111-2222-3333-4444-555555555555.jsonl"),
+      JSON.stringify({ type: "summary", summary: "no messages here" })
+    );
+    process.env.HOME = home;
+
+    const { api } = captureApi();
+    const result = await runTranscriptImport({ api: api as never, dryRun: false });
+
+    expect(result.files_stored).toBe(1);
+    expect(result.session_identity_degraded).toHaveLength(1);
+    // Reason must not guess — no trailing question mark.
+    expect(result.session_identity_degraded[0].reason).not.toContain("?");
   });
 
   it("reports no degradation when session identity is derived", async () => {
