@@ -11867,6 +11867,15 @@ export async function startHTTPServer() {
     logger.warn(`[Plans] failed to seed plan schema: ${(err as Error).message}`);
   }
 
+  // Seed `agent_session` + `session_transcript` schemas (transcript ingest).
+  try {
+    const { seedSessionSchemas } = await import("./services/sessions/seed_schema.js");
+    await seedSessionSchemas();
+    logger.info("[Sessions] agent_session + session_transcript schemas seeded");
+  } catch (err) {
+    logger.warn(`[Sessions] failed to seed session schemas: ${(err as Error).message}`);
+  }
+
   // Seed `skill` schema (harness-mirrored skills, slash-command palette).
   try {
     const { seedSkillSchema } = await import("./services/skills/seed_schema.js");
