@@ -112,6 +112,28 @@ describe("runTranscriptImport — session identity attachment", () => {
     expect(types).not.toContain("conversation_message");
   });
 
+  it("reports degraded imports on session_identity_degraded instead of failing silently", async () => {
+    const broken = mkdtempSync(path.join(tmpdir(), "import-degraded-"));
+    const proj = path.join(broken, ".claude", "projects", "-broken");
+    mkdirSync(proj, { recursive: true });
+    writeFileSync(path.join(proj, "deadbeef-dead-beef-dead-beefdeadbeef.jsonl"), "NOT JSON\n{{{");
+    process.env.HOME = broken;
+
+    const { api } = captureApi();
+    const result = await runTranscriptImport({ api: api as never, dryRun: false });
+
+    expect(result.files_stored).toBe(1);
+    expect(result.session_identity_degraded).toHaveLength(1);
+    expect(result.session_identity_degraded[0].file).toContain(".claude/projects");
+    expect(result.session_identity_degraded[0].reason).toBeTruthy();
+  });
+
+  it("reports no degradation when session identity is derived", async () => {
+    const { api } = captureApi();
+    const result = await runTranscriptImport({ api: api as never, dryRun: false });
+    expect(result.session_identity_degraded).toHaveLength(0);
+  });
+
   it("still stores the raw file when parse yields no session entities", async () => {
     const broken = mkdtempSync(path.join(tmpdir(), "import-broken-"));
     const proj = path.join(broken, ".claude", "projects", "-broken");

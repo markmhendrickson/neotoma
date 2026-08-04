@@ -33,26 +33,44 @@ export interface TranscriptImportResult {
   files_stored: number;
   files_skipped: number;
   errors: Array<{ file: string; error: string }>;
+  /**
+   * Files stored WITHOUT session identity (`agent_session` /
+   * `session_transcript`). The raw transcript is still stored, but such a
+   * session cannot be located or resumed — `cwd` is load-bearing, not
+   * decorative. Surfaced so a caller can distinguish a full import from a
+   * degraded one without re-parsing every file.
+   */
+  session_identity_degraded: Array<{ file: string; reason: string }>;
 }
 
 /**
  * Parse a transcript and derive its session-identity entities. Best-effort: a
  * parse failure must not block storing the raw file, which remains the durable
- * artifact.
+ * artifact. Degradation is reported rather than swallowed — the caller records
+ * it on `session_identity_degraded` and warns on stderr.
  */
-async function deriveSessionEntities(filePath: string): Promise<Array<Record<string, unknown>>> {
+async function deriveSessionEntities(
+  filePath: string
+): Promise<{ entities: Array<Record<string, unknown>>; reason?: string }> {
   try {
     const { parseTranscript, conversationsToEntities } = await import("./transcript_parser.js");
     const result = await parseTranscript({ filePath });
-    if (result.conversations.length === 0) return [];
+    if (result.conversations.length === 0) {
+      return { entities: [], reason: "transcript yielded no conversations" };
+    }
 
-    return conversationsToEntities(result.conversations, {
+    const entities = conversationsToEntities(result.conversations, {
       filePath: result.filePath,
       contentHash: result.contentHash,
       fileSize: result.fileSize,
     }).filter((e) => e.entity_type === "agent_session" || e.entity_type === "session_transcript");
-  } catch {
-    return [];
+
+    if (entities.length === 0) {
+      return { entities, reason: "no session identity derived (non-harness source?)" };
+    }
+    return { entities };
+  } catch (err) {
+    return { entities: [], reason: `parse failed: ${(err as Error).message}` };
   }
 }
 
@@ -73,6 +91,7 @@ export async function runTranscriptImport(
       files_stored: 0,
       files_skipped: 0,
       errors: [],
+      session_identity_degraded: [],
     };
   }
 
@@ -90,6 +109,7 @@ export async function runTranscriptImport(
       files_stored: 0,
       files_skipped: 0,
       errors: [],
+      session_identity_degraded: [],
     };
   }
 
@@ -97,6 +117,7 @@ export async function runTranscriptImport(
   let totalFilesStored = 0;
   let totalFilesSkipped = 0;
   const errors: Array<{ file: string; error: string }> = [];
+  const sessionIdentityDegraded: Array<{ file: string; reason: string }> = [];
 
   for (const summary of relevant) {
     // Apply per-harness file limit (most recently modified first).
@@ -143,8 +164,14 @@ export async function runTranscriptImport(
         // (agent_session + session_transcript). These carry cwd, native session
         // id, and a content hash — without them a stored transcript cannot be
         // located or re-materialized on another machine.
-        const sessionEntities = await deriveSessionEntities(filePath);
-        if (sessionEntities.length > 0) body.entities = sessionEntities;
+        const derived = await deriveSessionEntities(filePath);
+        if (derived.entities.length > 0) {
+          body.entities = derived.entities;
+        } else {
+          const reason = derived.reason ?? "unknown";
+          sessionIdentityDegraded.push({ file: filePath, reason });
+          process.stderr.write(`  [warn] no session identity for ${filePath}: ${reason}\n`);
+        }
 
         const { error } = await (api as any).POST("/store", { body });
         if (error) {
@@ -173,6 +200,12 @@ export async function runTranscriptImport(
       `${totalFilesFound} found, ${totalFilesStored} stored, ` +
       `${totalFilesSkipped} skipped, ${errors.length} error(s).\n`
   );
+  if (sessionIdentityDegraded.length > 0) {
+    process.stdout.write(
+      `[onboarding] ${sessionIdentityDegraded.length} file(s) stored WITHOUT session identity ` +
+        `— those transcripts are not resumable. Re-run with a fixed parser to backfill.\n`
+    );
+  }
   if (dryRun && totalFilesFound > 0) {
     process.stdout.write(`[onboarding] Re-run with --apply to store the discovered transcripts.\n`);
   }
@@ -183,5 +216,6 @@ export async function runTranscriptImport(
     files_stored: totalFilesStored,
     files_skipped: totalFilesSkipped,
     errors,
+    session_identity_degraded: sessionIdentityDegraded,
   };
 }
