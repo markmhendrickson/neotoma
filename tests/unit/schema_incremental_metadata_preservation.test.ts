@@ -71,17 +71,18 @@ async function runIncrementalUpdate(
   ).mockResolvedValue(current);
 
   vi.spyOn(
-    registry as unknown as { register: (c: Record<string, unknown>) => Promise<SchemaRegistryEntry> },
+    registry as unknown as {
+      register: (c: Record<string, unknown>) => Promise<SchemaRegistryEntry>;
+    },
     "register"
   ).mockImplementation(async (config: Record<string, unknown>) => {
     registerCalls.push(config);
     return { ...current, ...config } as SchemaRegistryEntry;
   });
 
-  vi.spyOn(
-    registry as unknown as { activate: () => Promise<void> },
-    "activate"
-  ).mockResolvedValue(undefined);
+  vi.spyOn(registry as unknown as { activate: () => Promise<void> }, "activate").mockResolvedValue(
+    undefined
+  );
 
   await registry.updateSchemaIncremental({
     entity_type: "rendered_page",
