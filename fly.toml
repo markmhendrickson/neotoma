@@ -44,6 +44,20 @@ primary_region = 'lhr'
   min_machines_running = 1
   processes = ['app']
 
+  # Restart the machine when the app stops answering, regardless of how it
+  # stopped. `min_machines_running` alone does NOT cover a process that exits
+  # with code 0: the platform reads a clean exit as "the job finished" and
+  # declines to restart, so a silent exit becomes an open-ended outage rather
+  # than a blip. Observed in production 2026-08-04 — the server exited code 0
+  # roughly every 12 minutes with no error and stayed down (neotoma#2094).
+  # This check is a safety net, not a fix for that bug.
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '10s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/health'
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
