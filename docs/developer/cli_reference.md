@@ -289,11 +289,11 @@ These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for out
 
 Read by the Neotoma HTTP server when running the public-sandbox profile; no paired CLI flag. Full runbook: [`docs/subsystems/sandbox_deployment.md`](../subsystems/sandbox_deployment.md).
 
-| Environment variable               | Default                       | Purpose                                                                                                                                                                                                                                                                                |
-| ---------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NEOTOMA_SANDBOX_MODE`             | unset                         | Truthy (`1`/`true`/`yes`) enables all sandbox-only behaviors (ephemeral sessions, anon writes, tighter limits). Also auto-enables tenant-scoped entity ids.                                                                                                                              |
-| `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` | follows `NEOTOMA_SANDBOX_MODE` | Truthy forces tenant-scoped deterministic entity ids (salt `generateEntityId` with `user_id`) independent of sandbox mode. Without it (and outside sandbox mode) entity ids are global `hash(entity_type, canonical_name)`, so per-tenant same-named entities collide on one row.        |
-| `NEOTOMA_SANDBOX_BASE_URL`         | `http://127.0.0.1:$HTTP_PORT` | Base URL the per-session pack seeder calls back into (`/sandbox/session/new` seeds over HTTP as the new bearer). Defaults to loopback on the server's own port.                                                                                                                          |
+| Environment variable               | Default                        | Purpose                                                                                                                                                                                                                                                                           |
+| ---------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEOTOMA_SANDBOX_MODE`             | unset                          | Truthy (`1`/`true`/`yes`) enables all sandbox-only behaviors (ephemeral sessions, anon writes, tighter limits). Also auto-enables tenant-scoped entity ids.                                                                                                                       |
+| `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` | follows `NEOTOMA_SANDBOX_MODE` | Truthy forces tenant-scoped deterministic entity ids (salt `generateEntityId` with `user_id`) independent of sandbox mode. Without it (and outside sandbox mode) entity ids are global `hash(entity_type, canonical_name)`, so per-tenant same-named entities collide on one row. |
+| `NEOTOMA_SANDBOX_BASE_URL`         | `http://127.0.0.1:$HTTP_PORT`  | Base URL the per-session pack seeder calls back into (`/sandbox/session/new` seeds over HTTP as the new bearer). Defaults to loopback on the server's own port.                                                                                                                   |
 
 ### MCP / SSE transport tuning (server process)
 
@@ -367,6 +367,33 @@ neotoma session --servers
   - `--project-local`: Store the Neotoma config in `.neotoma/config.json` in the current directory (project-scoped) instead of the user-level `~/.config/neotoma/config.json`. The CLI reads this project-local config automatically for all subsequent commands run from that directory via `readEffectiveConfig`, which checks for `.neotoma/config.json` before falling back to the user-level config. Trust boundary: project-local config is only loaded when the containing directory is owned by the current user (prevents untrusted directories from silently overriding user settings). Use this when you want per-project Neotoma configuration independent of the user-level setup.
   - `--safe`: Dry-run mode. Reports what `init` would do (create directories, write config, run migrations) without writing any files or making any changes. Output lists each planned action with a check mark or blocker reason. Exit code is 0 if all planned actions would succeed; exit code 1 if any blocker is detected (e.g. config already exists without `--force`, parent directory not writable). Combine with `--json` to get machine-readable output. Note: `--safe` checks the filesystem layout planned by `init`; it does not simulate authentication or preflight steps.
 
+- `neotoma init --import-transcripts`: After init, discover and import harness transcripts. Each imported file stores the raw transcript **plus** an `agent_session` and `session_transcript` row carrying the session's `cwd`, native id, and `content_hash` — the metadata needed to locate or resume it later. See [`docs/developer/cli/transcript_ingestion.md`](cli/transcript_ingestion.md).
+  - `--transcript-harness <claude-code|codex|cursor>`: Limit to one harness.
+  - `--transcript-limit <n>`: Cap files per harness (most recently modified first).
+
+  Scanned locations:
+
+  | Harness     | Scanned                                                                                                     |
+  | ----------- | ----------------------------------------------------------------------------------------------------------- |
+  | claude-code | `~/.claude/projects/**/*.jsonl`                                                                             |
+  | codex       | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (live) **and** `~/.codex/archived_sessions/*.jsonl` (legacy) |
+  | cursor      | `~/.cursor/chats/<md5(cwd)>/<chatId>/store.db`                                                              |
+
+  Codex writes _live_ sessions to the date-partitioned `sessions/` tree; `archived_sessions/` holds older ones. Both are scanned, and the scan line reports them separately:
+
+  ```
+  $ neotoma init --import-transcripts --transcript-harness codex
+  [onboarding] scan: codex — 88 transcript(s) (58 live, 30 archived)
+  ```
+
+  Verify what was stored:
+
+  ```
+  neotoma entities list --type agent_session --limit 5
+  ```
+
+  Each row should carry a non-empty `cwd`. Files stored without session identity are reported on `session_identity_degraded` and summarised on stdout — those transcripts are stored but not resumable.
+
 **Examples:**
 
 ```bash
@@ -399,11 +426,11 @@ neotoma init --safe --project-local
 
 **Runtime overrides** for `neotoma init`:
 
-| Precedence | Source | Description |
-|------------|--------|-------------|
-| 1 (highest) | `--data-dir` flag | Explicit data directory path |
-| 2 | `NEOTOMA_DATA_DIR` env var | Environment variable override |
-| 3 (default) | Auto-detected or `~/neotoma/data` | Resolved at startup |
+| Precedence  | Source                            | Description                   |
+| ----------- | --------------------------------- | ----------------------------- |
+| 1 (highest) | `--data-dir` flag                 | Explicit data directory path  |
+| 2           | `NEOTOMA_DATA_DIR` env var        | Environment variable override |
+| 3 (default) | Auto-detected or `~/neotoma/data` | Resolved at startup           |
 
 Config scope for `neotoma init` is a binary switch: `--project-local` writes to `.neotoma/config.json` in cwd; without the flag, init writes to `~/.config/neotoma/config.json`. All subsequent commands that call `readEffectiveConfig` will read the project-local file when present (and owned by the current user).
 
@@ -695,7 +722,7 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
     - Use `--json=` (equals, no space) so the payload is parsed as entities input.
     - Bare `--json` (without `=`) remains the global output-format flag.
   - `--file <path>`: Path to JSON file containing entity array. Use for long payloads.
-  - `--observation-source <kind>`: Classify the *kind* of write. Closed enum — `sensor | llm_summary | workflow_state | human | import | sync` (default `llm_summary`). **Breaking change in v0.18.x (was open in v0.17):** arbitrary strings are rejected. Put custom v0.17 labels (e.g. `cboe_live`, `stale_cache`) in the free-form `data_source` field and map the closest enum value here. See [Migrating from v0.17 to v0.18](fleet_onboarding.md#migrating-observation_source-from-v017-to-v018).
+  - `--observation-source <kind>`: Classify the _kind_ of write. Closed enum — `sensor | llm_summary | workflow_state | human | import | sync` (default `llm_summary`). **Breaking change in v0.18.x (was open in v0.17):** arbitrary strings are rejected. Put custom v0.17 labels (e.g. `cboe_live`, `stale_cache`) in the free-form `data_source` field and map the closest enum value here. See [Migrating from v0.17 to v0.18](fleet_onboarding.md#migrating-observation_source-from-v017-to-v018).
   - `--interpretation-source-id <id>` / `--interpretation-source-ref <structured|unstructured>` plus `--interpretation-config <json>`: Opt into Source -> Interpretation -> Observation provenance for source-derived extraction. Omit for ordinary already-structured/chat-native facts.
   - Silent-failure guard (v0.5.1+): when a commit-mode store returns `entities_created=0`, no resolved entities, and is not an idempotency replay (`replayed: true`), the CLI emits a non-fatal stderr warning so agents/humans don't mistake an empty result for success. Typical root cause: fields nested under `attributes` (see v0.5.0 breaking change) or mismatched `user_id` scope.
   - Idempotency replays: `POST /store` returns `replayed: true` when a request is a deterministic re-commit of a previously committed `(user_id, idempotency_key)` tuple. Use this to distinguish "same call, no new work" from "call produced zero entities."

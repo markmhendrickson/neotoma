@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runTranscriptImport } from "../../src/cli/onboarding_transcript_import.js";
 
 // The import path posts raw files to /store. Session identity (cwd, native
@@ -113,6 +113,39 @@ describe("runTranscriptImport — session identity attachment", () => {
 
     expect(calls[0].file_path).toContain(".claude/projects");
     expect(calls[0].observation_source).toBe("import");
+  });
+
+  it("reports a per-harness scan count before importing", async () => {
+    const out: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(((c: string) => {
+      out.push(String(c));
+      return true;
+    }) as never);
+    const { api } = captureApi();
+    await runTranscriptImport({ api: api as never, dryRun: true });
+    spy.mockRestore();
+
+    expect(out.join("")).toMatch(/\[onboarding\] scan: claude-code — \d+ transcript\(s\)/);
+  });
+
+  it("names the scanned locations when nothing matches, instead of a bare zero", async () => {
+    const empty = mkdtempSync(path.join(tmpdir(), "import-empty-"));
+    process.env.HOME = empty;
+    const out: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(((c: string) => {
+      out.push(String(c));
+      return true;
+    }) as never);
+    const { api } = captureApi();
+    const result = await runTranscriptImport({ api: api as never, dryRun: true });
+    spy.mockRestore();
+
+    expect(result.files_found).toBe(0);
+    const text = out.join("");
+    expect(text).toContain("No transcript files found");
+    // The hint is what makes a zero actionable.
+    expect(text).toContain("~/.codex/sessions/");
+    expect(text).toContain("~/.cursor/chats/");
   });
 
   it("sends no entities in dry-run mode", async () => {

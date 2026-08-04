@@ -137,6 +137,15 @@ export async function runTranscriptImport(
   if (relevant.length === 0) {
     const label = harness ? `harness "${harness}"` : "any harness";
     process.stdout.write(`[onboarding] No transcript files found for ${label}.\n`);
+    // A zero match is ambiguous without saying where we looked — name the
+    // scanned locations so the reader can tell "nothing there" from
+    // "looked in the wrong place".
+    process.stdout.write(
+      `[onboarding] hint: scanned ~/.claude/projects/ (claude-code), ` +
+        `~/.codex/sessions/ + ~/.codex/archived_sessions/ (codex), ` +
+        `~/.cursor/chats/ (cursor). ` +
+        `If your transcripts live elsewhere, they are not discovered automatically.\n`
+    );
     return {
       harnesses_scanned: relevant.length,
       files_found: 0,
@@ -145,6 +154,21 @@ export async function runTranscriptImport(
       errors: [],
       session_identity_degraded: [],
     };
+  }
+
+  // Report what discovery actually saw before importing anything. Codex keeps
+  // live sessions and archived ones in different trees, so a single count hides
+  // which shape matched — that distinction is the whole point of #2072.
+  for (const summary of relevant) {
+    const live = summary.paths.filter((p) => p.includes("/.codex/sessions/")).length;
+    const archived = summary.paths.filter((p) => p.includes("/.codex/archived_sessions/")).length;
+    const split =
+      summary.harness === "codex" && (live > 0 || archived > 0)
+        ? ` (${live} live, ${archived} archived)`
+        : "";
+    process.stdout.write(
+      `[onboarding] scan: ${summary.harness} — ${summary.fileCount} transcript(s)${split}\n`
+    );
   }
 
   let totalFilesFound = 0;
