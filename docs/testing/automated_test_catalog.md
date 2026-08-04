@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 159 |
 | Vitest service tests | 42 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 159 |
+| Vitest integration tests | 160 |
 | Vitest CLI tests | 72 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 4 |
@@ -396,7 +396,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (159):**
+**Files (160):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -528,6 +528,7 @@ flowchart TD
 - `tests/integration/seed_then_works_at_e2e.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
+- `tests/integration/soft_delete_read_path_enforcement.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
