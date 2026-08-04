@@ -35,13 +35,35 @@ function fakeHomeWithClaudeSession(cwd: string): string {
   return home;
 }
 
+/**
+ * Mock that ENFORCES the server's /store contract instead of rubber-stamping.
+ *
+ * The previous mock returned `{ error: undefined }` unconditionally, so it
+ * asserted request *shape* but never *acceptance* — and hid a real defect: a
+ * body carrying `entities` without `idempotency_key` is rejected 400
+ * ("idempotency_key is required when entities are provided", actions.ts), which
+ * meant every real `--apply` import failed while the tests stayed green.
+ */
 function captureApi() {
   const calls: Array<Record<string, unknown>> = [];
+  const seenIdempotencyKeys = new Set<string>();
   return {
     calls,
+    seenIdempotencyKeys,
     api: {
       POST: async (_route: string, opts: { body: Record<string, unknown> }) => {
-        calls.push(opts.body);
+        const body = opts.body;
+        calls.push(body);
+
+        const hasEntities = Array.isArray(body.entities) && body.entities.length > 0;
+        if (hasEntities && !body.idempotency_key) {
+          return {
+            error: { message: "idempotency_key is required when entities are provided" },
+          };
+        }
+        if (typeof body.idempotency_key === "string") {
+          seenIdempotencyKeys.add(body.idempotency_key);
+        }
         return { error: undefined };
       },
     },
@@ -132,6 +154,30 @@ describe("runTranscriptImport — session identity attachment", () => {
     const { api } = captureApi();
     const result = await runTranscriptImport({ api: api as never, dryRun: false });
     expect(result.session_identity_degraded).toHaveLength(0);
+  });
+
+  it("sends idempotency_key whenever entities are attached (server rejects otherwise)", async () => {
+    const { api, calls } = captureApi();
+    const result = await runTranscriptImport({ api: api as never, dryRun: false });
+
+    expect(result.files_stored).toBe(1);
+    expect(result.errors).toHaveLength(0);
+    const withEntities = calls.filter((c) => Array.isArray(c.entities) && c.entities.length > 0);
+    expect(withEntities.length).toBeGreaterThan(0);
+    for (const c of withEntities) {
+      expect(typeof c.idempotency_key).toBe("string");
+      expect(c.idempotency_key as string).toMatch(/^transcript-import-[0-9a-f]{64}$/);
+    }
+  });
+
+  it("re-importing identical content reuses the same idempotency_key (dedupe effect)", async () => {
+    const first = captureApi();
+    await runTranscriptImport({ api: first.api as never, dryRun: false });
+    const second = captureApi();
+    await runTranscriptImport({ api: second.api as never, dryRun: false });
+
+    expect(second.seenIdempotencyKeys.size).toBe(first.seenIdempotencyKeys.size);
+    expect([...second.seenIdempotencyKeys]).toEqual([...first.seenIdempotencyKeys]);
   });
 
   it("still stores the raw file when parse yields no session entities", async () => {

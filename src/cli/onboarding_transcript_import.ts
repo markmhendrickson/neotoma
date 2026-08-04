@@ -51,13 +51,14 @@ export interface TranscriptImportResult {
  */
 async function deriveSessionEntities(
   filePath: string
-): Promise<{ entities: Array<Record<string, unknown>>; reason?: string }> {
+): Promise<{ entities: Array<Record<string, unknown>>; contentHash?: string; reason?: string }> {
   try {
     const { parseTranscript, conversationsToEntities } = await import("./transcript_parser.js");
     const result = await parseTranscript({ filePath });
     if (result.conversations.length === 0) {
       return { entities: [], reason: "transcript yielded no conversations" };
     }
+    const contentHash = result.contentHash;
 
     const entities = conversationsToEntities(result.conversations, {
       filePath: result.filePath,
@@ -66,9 +67,9 @@ async function deriveSessionEntities(
     }).filter((e) => e.entity_type === "agent_session" || e.entity_type === "session_transcript");
 
     if (entities.length === 0) {
-      return { entities, reason: "no session identity derived (non-harness source?)" };
+      return { entities, contentHash, reason: "no session identity derived (non-harness source?)" };
     }
-    return { entities };
+    return { entities, contentHash };
   } catch (err) {
     return { entities: [], reason: `parse failed: ${(err as Error).message}` };
   }
@@ -167,6 +168,11 @@ export async function runTranscriptImport(
         const derived = await deriveSessionEntities(filePath);
         if (derived.entities.length > 0) {
           body.entities = derived.entities;
+          // Attaching `entities` upgrades /store to the structured path, which
+          // REQUIRES idempotency_key -- without it the whole call is rejected
+          // 400 and the raw file is not stored either. Key on content_hash so a
+          // re-import of identical bytes is idempotent by construction.
+          body.idempotency_key = `transcript-import-${derived.contentHash ?? filePath}`;
         } else {
           const reason = derived.reason ?? "unknown";
           sessionIdentityDegraded.push({ file: filePath, reason });
