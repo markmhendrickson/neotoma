@@ -1,16 +1,23 @@
 # Security review — v0.21.1
 
-Diff classifier reports `sensitive=false` for this release. The change is narrowly scoped to a data-integrity bug fix in the schema registry, but it directly affects `guest_access_policy` resolution (a security-relevant access-control gate), so this review checks the classifier's verdict rather than only recording it.
+Diff classifier reports `sensitive=false` for this release. The release ships three fixes: a data-integrity bug fix in the schema registry that directly affects `guest_access_policy` resolution (a security-relevant access-control gate), plus two CLI-local reliability fixes (backup snapshotting, MCP shim port discovery) with no auth or access-control surface. This review checks the classifier's verdict on the full range rather than only recording it, with the adversarial pass focused on the schema-registry change.
 
 ## Scope
 
 - Base ref: `v0.21.0`
-- Head ref: `HEAD`
-- Diff classifier: `sensitive=false` (`npm run security:classify-diff -- --base v0.21.0 --head HEAD --json`). 3 changed files, 0 concerns.
+- Head ref: `HEAD` (3 commits: `e198dacdd` schema metadata carry-forward, `2d6103471` atomic backup snapshot, `cba80b568` MCP port discovery)
+- Diff classifier: `sensitive=false` (`npm run security:classify-diff -- --base v0.21.0 --head HEAD --json`). 11 changed files, 0 concerns.
 - Protected routes manifest: 116 routes, **unchanged** (`security:manifest:check` — in sync).
 - `security:lint` (G2): 0 errors, 125 warnings — identical count to the pre-existing baseline (all pre-existing `src/actions.ts` unauth-route matches and `sandbox_mode.ts` `LOCAL_DEV_USER_ID` references, none touched by this diff).
 - `openapi.yaml`: unchanged. No new MCP tools, no new Express routes.
-- Changed files: `src/services/schema_registry.ts` (metadata carry-forward fix), `tests/unit/schema_incremental_metadata_preservation.test.ts` (new regression tests), `docs/testing/automated_test_catalog.md` (generated, mechanical).
+- Changed files: `src/services/schema_registry.ts` (metadata carry-forward fix), `src/cli/index.ts` (backup atomic snapshot), `scripts/lib/neotoma_mcp_resolve_downstream_url.sh` (MCP port discovery), `tests/unit/schema_incremental_metadata_preservation.test.ts` + `tests/cli/backup_verify.test.ts` (new regression tests), `docs/testing/automated_test_catalog.md` (generated, mechanical).
+
+## Additional scope: backup snapshot and MCP port discovery
+
+Both fixes are local-CLI-only, have no network-facing or access-control surface, and were confirmed out of scope for the adversarial pass below:
+
+- **Backup snapshot (`src/cli/index.ts`):** `VACUUM INTO` runs against a path constructed from `backupDir` (an operator-controlled local directory, not user/network input) and the existing `sqlitePath`. `quoteSqliteStringLiteral` escapes embedded single quotes for the literal path argument — this is not attacker-controlled input (no HTTP/MCP caller supplies this path), so this is a correctness safeguard, not an injection boundary. No new file permissions, no new network exposure, no auth surface touched.
+- **MCP shim port discovery (`scripts/lib/neotoma_mcp_resolve_downstream_url.sh`):** the probe only connects to `127.0.0.1` on a fixed, hardcoded candidate list of ports per profile (`prod`: 9180/3180; `dev`: 9080/3080) — no user-supplied host/port is probed. The self-heal write targets the same port-file path the resolver already reads from, gated on `[ -w "$(dirname "$_pf")" ]`. No privilege change, no remote connection, no new credential handling.
 
 ## Adversarial review prompt
 
@@ -53,5 +60,6 @@ Already covered by the diff's own test additions — no gap identified requiring
 | Reviewer | Verdict | Date |
 |----------|---------|------|
 | Phoenicurus (release-prep agent, manual adversarial pass) | yes | 2026-07-31 |
+| Phoenicurus (release-prep agent, scope extension: backup snapshot + MCP port discovery) | yes | 2026-08-04 |
 
-Verdict `yes` — the merge logic is correct across all four prior-metadata/override combinations, there is no new privilege-escalation path (the fix only prevents metadata from being silently dropped, it does not add a new way to change it), the code-defined-baseline fallback path behaves consistently with the registry-row path, and the regression tests were verified to target the exact original failure mode. No block.
+Verdict `yes` — the merge logic is correct across all four prior-metadata/override combinations, there is no new privilege-escalation path (the fix only prevents metadata from being silently dropped, it does not add a new way to change it), the code-defined-baseline fallback path behaves consistently with the registry-row path, and the regression tests were verified to target the exact original failure mode. No block. The two additional commits merged into this release branch on 2026-08-04 (atomic backup snapshot, MCP port discovery) were confirmed local-CLI-only with no auth/access-control/network-facing surface (see "Additional scope" above) and re-ran G1-G3 clean against the full 3-commit range. No block.
