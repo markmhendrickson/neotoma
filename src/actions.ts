@@ -12054,6 +12054,45 @@ export async function startHTTPServer() {
 // Only auto-start if not disabled AND if this is the main module
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+  // Exit diagnostics. A long-running server should never reach `beforeExit`:
+  // that event only fires when the event loop has drained, i.e. nothing is
+  // left holding the process open. In production this happened silently and
+  // repeatedly — the process exited with code 0 every ~12 minutes with no
+  // error and no signal, and because the exit was CLEAN the platform read it
+  // as success and declined to restart, turning it into an outage
+  // (neotoma#2094).
+  //
+  // Logging the active resources at that moment names what the loop was (and
+  // was no longer) waiting on, which is the one piece of evidence needed to
+  // find the handle that stops holding the server up. `exit` is logged too so
+  // the code and reason are attributable even when the cause is external.
+  process.on("beforeExit", (code) => {
+    let resources: string[] = [];
+    try {
+      const getResources = (process as unknown as { getActiveResourcesInfo?: () => string[] })
+        .getActiveResourcesInfo;
+      if (typeof getResources === "function") resources = getResources.call(process);
+    } catch {
+      /* diagnostics must never themselves throw */
+    }
+    console.error(
+      `[neotoma] beforeExit code=${code} — event loop drained; a long-running ` +
+        `server should not reach here. activeResources=${JSON.stringify(resources)} ` +
+        `uptime=${process.uptime().toFixed(1)}s`
+    );
+  });
+
+  process.on("exit", (code) => {
+    console.error(`[neotoma] exit code=${code} uptime=${process.uptime().toFixed(1)}s`);
+  });
+
+  for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+    process.on(sig, () => {
+      console.error(`[neotoma] received ${sig} uptime=${process.uptime().toFixed(1)}s`);
+      process.exit(0);
+    });
+  }
+
   startHTTPServer().catch((err) => {
     console.error("Failed to start HTTP server:", err);
     process.exit(1);
