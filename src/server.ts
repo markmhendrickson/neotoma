@@ -2261,19 +2261,26 @@ export class NeotomaServer {
         // chips explode in MCP clients and amplify bad event_timestamp values.
 
         // Add generic collection resources (data-driven, always available)
-        // Get counts for better descriptions
+        // Get counts for better descriptions.
+        // These MUST be scoped to the authenticated user: an unscoped COUNT(*)
+        // leaks aggregate per-user data volumes to any caller. Query-plan
+        // follow-up tracked in #1889 index gap (see PR #2041 EXPLAIN QUERY
+        // PLAN table); entities/sources still full-scan pending a user_id index.
         const { count: entityCount } = await db
           .from("entities")
           .select("*", { count: "exact", head: true })
+          .eq("user_id", userId)
           .is("merged_to_entity_id", null);
 
         const { count: relationshipCount } = await db
           .from("relationship_snapshots")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId);
 
         const { count: sourceCount } = await db
           .from("sources")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId);
 
         resources.push({
           uri: "neotoma://entities",
