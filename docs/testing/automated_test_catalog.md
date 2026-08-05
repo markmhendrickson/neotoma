@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **564**
-- Backend and repo Vitest files: **529**
+- Total automated test files: **571**
+- Backend and repo Vitest files: **536**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 158 |
-| Vitest service tests | 42 |
+| Vitest unit tests | 159 |
+| Vitest service tests | 43 |
 | Source-adjacent tests | 65 |
 | Vitest integration tests | 160 |
-| Vitest CLI tests | 72 |
+| Vitest CLI tests | 77 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 4 |
 | Vitest subscription tests | 5 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (158):**
+**Files (159):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -242,6 +242,7 @@ flowchart TD
 - `tests/unit/sandbox_seeder_command.test.ts`
 - `tests/unit/schema_agent_instructions.test.ts`
 - `tests/unit/schema_derived_entity_extraction.test.ts`
+- `tests/unit/schema_incremental_metadata_preservation.test.ts`
 - `tests/unit/schema_inference.test.ts`
 - `tests/unit/schema_mode.test.ts`
 - `tests/unit/schema_projection_lag.test.ts`
@@ -274,7 +275,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (42):**
+**Files (43):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -313,6 +314,7 @@ flowchart TD
 - `tests/services/schema_registry_bootstrap.test.ts`
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
+- `tests/services/session_seed_schema.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
 - `tests/services/sync_webhook_inbound.test.ts`
@@ -562,7 +564,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (72):**
+**Files (77):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -615,6 +617,7 @@ flowchart TD
 - `tests/cli/db_migrate_env_split.test.ts`
 - `tests/cli/db_repair_schema_lag.test.ts`
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
+- `tests/cli/discovery_codex_sessions.test.ts`
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
 - `tests/cli/instance_scripts.test.ts`
@@ -622,6 +625,7 @@ flowchart TD
 - `tests/cli/instance_skills.test.ts`
 - `tests/cli/issues_import.test.ts`
 - `tests/cli/issues_message.test.ts`
+- `tests/cli/onboarding_import_session_entities.test.ts`
 - `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`
 - `tests/cli/processes_command.test.ts`
@@ -634,6 +638,9 @@ flowchart TD
 - `tests/cli/sources_content_cli.test.ts`
 - `tests/cli/test_command_detection.test.ts`
 - `tests/cli/test_debug_tty.test.ts`
+- `tests/cli/transcript_parser_codex_content.test.ts`
+- `tests/cli/transcript_parser_codex_paths.test.ts`
+- `tests/cli/transcript_parser_session_entities.test.ts`
 - `tests/cli/transcript_parser.test.ts`
 
 ### Vitest contract tests

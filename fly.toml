@@ -44,6 +44,37 @@ primary_region = 'lhr'
   min_machines_running = 1
   processes = ['app']
 
+  # Health check for LOAD-BALANCER ROUTING ONLY. A check declared under
+  # [http_service] is a *service* check: it decides whether the Fly proxy sends
+  # traffic to a machine. It does NOT restart one. An earlier version of this
+  # comment claimed it restarted the machine "regardless of how it stopped" —
+  # that was wrong, and it made the deployment look self-healing when it was
+  # not. Restart behavior is the [restart] block below.
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '10s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/health'
+
+# Restart the machine whenever the process ends, INCLUDING a clean exit.
+#
+# Fly's default policy is `on-failure`, which by definition ignores exit code 0:
+# the platform reads a clean exit as "the job finished" and declines to restart.
+# The server does exit 0 periodically with no error (neotoma#2094, root cause
+# still unknown), and under `on-failure` the machine then stays stopped until an
+# inbound request happens to wake it. That cold start is what users experience —
+# measured at 33-45s, with intermittent 503s, against a normal 0.2s.
+#
+# `always` is the only policy that covers a code-0 exit. Verified on a hosted
+# instance 2026-08-05: no exits in ~40 minutes where they had been occurring
+# every ~16, and worst-case latency dropped from 45s to ~2.3s.
+#
+# This is a safety net, NOT a fix for #2094 — the process should not be exiting
+# in the first place.
+[[restart]]
+  policy = 'always'
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'

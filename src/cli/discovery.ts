@@ -418,6 +418,37 @@ async function globFiles(pattern: string): Promise<string[]> {
   return results;
 }
 
+/**
+ * Codex keeps live sessions in a date-partitioned tree
+ * (~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl) and older ones flat
+ * in ~/.codex/archived_sessions/. Walk the former; the caller globs the latter.
+ */
+async function findCodexSessionRollouts(homeDir: string): Promise<string[]> {
+  const results: string[] = [];
+  const sessionsDir = path.join(homeDir, ".codex", "sessions");
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > 3) return;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full, depth + 1);
+      } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+        results.push(full);
+      }
+    }
+  }
+
+  await walk(sessionsDir, 0);
+  return results;
+}
+
 async function findCursorStoreDbs(homeDir: string): Promise<string[]> {
   const results: string[] = [];
   const cursorChatsDir = path.join(homeDir, ".cursor", "chats");
@@ -476,7 +507,11 @@ export async function discoverHarnessTranscripts(
   }
 
   // Codex
-  const codexFiles = await globFiles(path.join(homeDir, ".codex", "archived_sessions", "*.jsonl"));
+  const codexArchived = await globFiles(
+    path.join(homeDir, ".codex", "archived_sessions", "*.jsonl")
+  );
+  const codexLive = await findCodexSessionRollouts(homeDir);
+  const codexFiles = [...codexLive, ...codexArchived];
   if (codexFiles.length > 0) {
     const stats = await Promise.all(codexFiles.map((f) => fs.stat(f).catch(() => null)));
     const mtimes = stats.filter(Boolean).map((s) => s!.mtime);
