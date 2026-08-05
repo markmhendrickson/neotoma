@@ -861,57 +861,93 @@ app.get("/.well-known/oauth-authorization-server", (req, res) => {
   });
 });
 
-app.get("/.well-known/oauth-protected-resource", async (req, res) => {
-  const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-  const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = forwardedHost || req.header("host");
-  const proto = forwardedProto || req.protocol || "http";
-  const base = host ? `${proto}://${host}` : config.apiBase;
-  logger.info("[MCP OAuth] Protected resource metadata request received", {
-    host: req.header("host") ?? null,
-    resolved_base: base,
-    has_authorization: Boolean(
-      (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined
-    ),
-    has_connection_id: Boolean(req.headers["x-connection-id"] || req.headers["X-Connection-Id"]),
-  });
-  // oauth-repro pattern: return 401 on protected resource endpoint when unauthenticated
-  // Validate X-Connection-Id here so Cursor gets consistent invalid_token signal (helps trigger Connect prompt)
-  const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
-    | string
-    | undefined;
-  const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
+// Both the bare path and the resource-suffixed form are served (#2049).
+// RFC 9728 §3.1 locates a resource's metadata by appending the resource's own
+// path, so a client whose resource is `/mcp` probes
+// `/.well-known/oauth-protected-resource/mcp`. Express does not match that
+// against the bare route, so it previously fell through to the catch-all auth
+// guard and 401'd — the same bootstrap failure as the deadlock described below,
+// reached by a different path. Registering both makes either probe order work.
+app.get(
+  ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"],
+  async (req, res) => {
+    const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+    const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
+    const host = forwardedHost || req.header("host");
+    const proto = forwardedProto || req.protocol || "http";
+    const base = host ? `${proto}://${host}` : config.apiBase;
+    logger.info("[MCP OAuth] Protected resource metadata request received", {
+      host: req.header("host") ?? null,
+      resolved_base: base,
+      has_authorization: Boolean(
+        (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined
+      ),
+      has_connection_id: Boolean(req.headers["x-connection-id"] || req.headers["X-Connection-Id"]),
+    });
+    // Validate X-Connection-Id here so Cursor gets consistent invalid_token signal (helps trigger Connect prompt)
+    //
+    // This document is NOT gated on authentication (#2049). RFC 9728 §3 makes
+    // protected-resource metadata the unauthenticated bootstrap entry point: its
+    // entire job is to tell a caller with no credentials where to obtain them. An
+    // earlier revision returned 401 here when neither Authorization nor
+    // X-Connection-Id was present, with a `WWW-Authenticate` naming THIS URL as
+    // the place to look — a self-referential deadlock. A client 401'd at /mcp
+    // follows the header here, is 401'd again pointing back here, and the login
+    // flow never starts, so no credential can resolve it. The sibling
+    // /.well-known/oauth-authorization-server was always public (RFC 8414 requires
+    // the same); that asymmetry was the bug, not the design.
+    const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
+      | string
+      | undefined;
+    const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
 
-  // If X-Connection-Id is sent, validate it. Invalid/expired connection → 401 with error=invalid_token
-  // so Cursor may clear stored credentials and show Connect button.
-  if (connectionIdHeader && !authHeader?.startsWith("Bearer ")) {
-    try {
-      const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-      await getAccessTokenForConnection(connectionIdHeader as string);
-    } catch {
-      const wwwAuth = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token", error_description="Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate."`;
-      res.setHeader("WWW-Authenticate", wwwAuth);
-      return res.status(401).json({
-        error: "invalid_token",
-        error_description:
-          "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.",
-      });
+    // If X-Connection-Id is sent, validate it. Invalid/expired connection → 401 with error=invalid_token
+    // so Cursor may clear stored credentials and show Connect button.
+    if (connectionIdHeader && !authHeader?.startsWith("Bearer ")) {
+      try {
+        const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+        await getAccessTokenForConnection(connectionIdHeader as string);
+      } catch {
+        const wwwAuth = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token", error_description="Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate."`;
+        res.setHeader("WWW-Authenticate", wwwAuth);
+        return res.status(401).json({
+          error: "invalid_token",
+          error_description:
+            "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.",
+        });
+      }
     }
-  }
 
-  if (!authHeader?.startsWith("Bearer ") && !connectionIdHeader) {
-    res.setHeader(
-      "WWW-Authenticate",
-      `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`
-    );
-    return res.status(401).json({
-      error: "Unauthorized: Authentication required",
+    res.setHeader("Content-Type", "application/json");
+    res.json({
+      // RFC 9728 §3: `resource` is the identifier the client binds its token
+      // request to. Without it a client that validates the metadata document
+      // cannot confirm the document describes the resource it is trying to
+      // reach, and has to guess.
+      resource: `${base}/mcp`,
+      authorization_servers: [base],
     });
   }
+);
 
-  res.setHeader("Content-Type", "application/json");
-  res.json({
-    authorization_servers: [base],
+// OIDC discovery is not offered — return an explicit 404 rather than letting this
+// path fall through to the catch-all auth guard, which answers 401 (#2049).
+//
+// A 401 on a route that does not exist tells an OIDC-first client "this endpoint
+// is real, you are just unauthenticated", sending it into the same dead end the
+// protected-resource deadlock created: it retries against a document that will
+// never serve it. A 404 says "not offered here", which correctly makes the client
+// fall back to RFC 8414 /.well-known/oauth-authorization-server.
+//
+// Deliberately NOT a synthetic 200 alias of the OAuth authorization-server
+// metadata: that would advertise a second, parallel discovery contract Neotoma
+// does not actually implement. Revisit only if a real OIDC stack is scoped.
+app.get("/.well-known/openid-configuration", (_req, res) => {
+  res.status(404).json({
+    error: "not_found",
+    error_description:
+      "This server does not offer OpenID Connect discovery. Use " +
+      "/.well-known/oauth-authorization-server (RFC 8414) instead.",
   });
 });
 

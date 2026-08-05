@@ -244,6 +244,44 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/StoreResolutionIssue"
+    OAuthProtectedResourceMetadata:
+      type: object
+      description: |
+        RFC 9728 §3 protected-resource metadata. Public by design — this document
+        is the unauthenticated entry point a client reads to discover where to
+        authenticate, so it contains only public server metadata and never
+        user, tenant, or credential data (#2049).
+      required:
+        - resource
+        - authorization_servers
+      properties:
+        resource:
+          type: string
+          description: |
+            The protected resource identifier clients bind their token request to
+            (the MCP endpoint, e.g. `https://host/mcp`).
+        authorization_servers:
+          type: array
+          minItems: 1
+          description: |
+            Issuers whose RFC 8414 metadata describes how to obtain a token. Never
+            empty: an empty array leaves a bootstrapping client unable to proceed,
+            which is the same dead end as a 401, one hop later.
+          items:
+            type: string
+    OAuthInvalidTokenEnvelope:
+      type: object
+      description: |
+        401 shape for an asserted-but-stale credential on a discovery endpoint.
+        Does not echo the submitted `X-Connection-Id` value. Any
+        `resource_metadata` URL named in the accompanying `WWW-Authenticate`
+        header must itself resolve 200 unauthenticated.
+      properties:
+        error:
+          type: string
+          enum: [invalid_token]
+        error_description:
+          type: string
     ConstraintViolationErrorEnvelope:
       type: object
       description: |
@@ -2759,6 +2797,8 @@ paths:
     get:
       summary: OAuth 2.0 Authorization Server Metadata (RFC 8414)
       operationId: oauthServerMetadata
+      # Public by RFC 8414: authorization-server metadata is unauthenticated by design.
+      security: []
       responses:
         "200":
           description: Authorization server metadata
@@ -2769,15 +2809,84 @@ paths:
 
   /.well-known/oauth-protected-resource:
     get:
-      summary: OAuth 2.0 Protected Resource Metadata
+      summary: OAuth 2.0 Protected Resource Metadata (RFC 9728)
+      description: |
+        Public, unauthenticated bootstrap document (RFC 9728 §3). Its only job is
+        to tell a caller holding no credentials where to obtain them, so it MUST
+        NOT require authentication — gating it deadlocks the handshake, since the
+        `WWW-Authenticate` challenge on a protected resource points here (#2049).
+
+        A stale `X-Connection-Id` (with no `Authorization`) still yields 401
+        `invalid_token`, because that caller asserted a credential.
       operationId: oauthProtectedResource
+      # Public by RFC 9728 §3: the unauthenticated bootstrap document (#2049).
+      security: []
       responses:
         "200":
-          description: Protected resource metadata
+          description: Protected resource metadata (served without credentials)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthProtectedResourceMetadata"
+        "401":
+          description: |
+            Asserted `X-Connection-Id` is expired or unrecognized. Never returned
+            for a caller supplying no credentials at all.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthInvalidTokenEnvelope"
+
+  /.well-known/oauth-protected-resource/mcp:
+    get:
+      summary: OAuth 2.0 Protected Resource Metadata for the /mcp resource (RFC 9728)
+      description: |
+        RFC 9728 §3.1 locates a resource's metadata by appending the resource's
+        own path, so a client whose resource is `/mcp` probes this form. Same
+        handler and same contract as the bare path; registered explicitly because
+        Express does not match it against the bare route (#2049).
+      operationId: oauthProtectedResourceForMcp
+      # Public by RFC 9728 §3.1: same contract as the bare path (#2049).
+      security: []
+      responses:
+        "200":
+          description: Protected resource metadata (served without credentials)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthProtectedResourceMetadata"
+        "401":
+          description: Asserted `X-Connection-Id` is expired or unrecognized.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthInvalidTokenEnvelope"
+
+  /.well-known/openid-configuration:
+    get:
+      summary: OpenID Connect discovery — not offered (RFC 9728 companion decision)
+      description: |
+        Neotoma does not implement OIDC discovery; clients use RFC 8414
+        `/.well-known/oauth-authorization-server`. This route exists solely to
+        return an explicit 404 rather than falling through to the catch-all auth
+        guard, which would answer 401 — telling an OIDC-first client "this exists
+        but you are unauthenticated" and sending it down the same dead-end the
+        #2049 deadlock created. A 404 correctly makes such a client fall back.
+      operationId: openidConfigurationNotOffered
+      # Public: must answer 404, not a 401 from the catch-all guard (#2049).
+      security: []
+      responses:
+        "404":
+          description: OIDC discovery is not offered by this server
           content:
             application/json:
               schema:
                 type: object
+                properties:
+                  error:
+                    type: string
+                  error_description:
+                    type: string
 
   /mcp/oauth/callback:
     get:

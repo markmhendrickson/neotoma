@@ -52,7 +52,29 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     method: "get",
     path: "/.well-known/oauth-protected-resource",
     adapter: "infra",
-    notes: "OAuth protected resource metadata endpoint is infrastructure only.",
+    notes:
+      "OAuth protected resource metadata endpoint is infrastructure only. " +
+      "Public per RFC 9728 §3 — the unauthenticated bootstrap document (#2049).",
+  },
+  {
+    operationId: "oauthProtectedResourceForMcp",
+    method: "get",
+    path: "/.well-known/oauth-protected-resource/mcp",
+    adapter: "infra",
+    notes:
+      "RFC 9728 §3.1 resource-suffixed form of the above, probed by clients whose " +
+      "resource is /mcp. Same handler and contract; registered separately because " +
+      "Express does not match it against the bare route (#2049).",
+  },
+  {
+    operationId: "openidConfigurationNotOffered",
+    method: "get",
+    path: "/.well-known/openid-configuration",
+    adapter: "infra",
+    notes:
+      "Explicit 404: OIDC discovery is not offered. Declared so the route is not an " +
+      "undeclared auth-guard fallthrough answering 401, which would send OIDC-first " +
+      "clients into the #2049 dead end.",
   },
   {
     operationId: "mcpOAuthInitiate",
