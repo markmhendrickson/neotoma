@@ -302,7 +302,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
   proof: {
     kicker: "Cómo se usa",
     blockquote:
-      "En producción diaria más de 5 meses entre Claude Code, Cursor, ChatGPT y CLI. El mismo grafo de estado desde el día uno: cada versión conservada, cada corrección trazable. Los contactos evolucionan, los contratos se enmiendan, las tareas se cierran y se reabren. Pregunto a mis agentes qué cambió en un acuerdo desde octubre o qué dije originalmente a un inversor hace tres meses. La memoria se acumula; nada deriva en silencio.",
+      "En producción diaria más de un año entre Claude Code, Cursor, ChatGPT y CLI. El mismo grafo de estado desde el día uno: cada versión conservada, cada corrección trazable. Los contactos evolucionan, los contratos se enmiendan, las tareas se cierran y se reabren. Pregunto a mis agentes qué cambió en un acuerdo desde octubre o qué dije originalmente a un inversor hace tres meses. La memoria se acumula; nada deriva en silencio.",
     founderPhotoAlt: "Mark Hendrickson",
     founderName: "Mark Hendrickson",
     founderRole: "Creador de Neotoma",
