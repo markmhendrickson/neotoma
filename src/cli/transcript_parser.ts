@@ -5,6 +5,8 @@
  * Claude, Discord, meeting tools) and extracts structured messages with
  * timestamps, authors, and content for storage as observations.
  */
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -30,6 +32,20 @@ export interface ParsedMessage {
   content: string;
 }
 
+/**
+ * Harness-native session context needed to locate — and later re-materialize —
+ * the underlying session. `cwd` is load-bearing, not decorative: Cursor keys its
+ * on-disk chat directory by md5(cwd), and Codex filters its resume picker by it.
+ */
+export interface ParsedSessionContext {
+  /** Working directory the session ran in, when the transcript records it. */
+  cwd?: string | null;
+  /** Git branch at session time (claude-code records this per message). */
+  gitBranch?: string | null;
+  /** Harness CLI version that wrote the transcript. */
+  cliVersion?: string | null;
+}
+
 export interface ParsedConversation {
   id: string;
   title: string;
@@ -37,6 +53,7 @@ export interface ParsedConversation {
   messages: ParsedMessage[];
   createdAt: string | null;
   updatedAt: string | null;
+  session?: ParsedSessionContext;
 }
 
 export interface TranscriptParseResult {
@@ -44,6 +61,10 @@ export interface TranscriptParseResult {
   source: TranscriptSource;
   filePath: string;
   totalMessages: number;
+  /** sha256 of the transcript bytes — content-addressed identity for dedup. */
+  contentHash?: string;
+  /** Size of the transcript file in bytes. */
+  fileSize?: number;
 }
 
 export interface IngestTranscriptOptions {
@@ -65,7 +86,15 @@ export function detectSource(filePath: string, content?: string): TranscriptSour
 
   // Harness-specific path patterns (check before generic name patterns)
   if (normalized.includes("/.claude/projects/") && ext === ".jsonl") return "claude-code";
-  if (normalized.includes("/.codex/archived_sessions/") && ext === ".jsonl") return "codex";
+  // Codex writes live rollouts to a date-partitioned tree
+  // (~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl) and moves older
+  // ones to ~/.codex/archived_sessions/. Match both.
+  if (
+    (normalized.includes("/.codex/sessions/") ||
+      normalized.includes("/.codex/archived_sessions/")) &&
+    ext === ".jsonl"
+  )
+    return "codex";
   if (
     (ext === ".db" && normalized.includes("/.cursor/chats/")) ||
     (ext === ".vscdb" && normalized.includes("/Cursor/User/globalStorage/"))
@@ -369,6 +398,9 @@ function parseMarkdownTranscript(content: string, filePath: string): ParsedConve
 function parseClaudeCodeTranscript(content: string, filePath: string): ParsedConversation[] {
   const lines = content.split("\n").filter((l) => l.trim());
   const messages: ParsedMessage[] = [];
+  let sessionCwd: string | null = null;
+  let sessionGitBranch: string | null = null;
+  let sessionCliVersion: string | null = null;
 
   for (const line of lines) {
     let obj: any;
@@ -377,6 +409,12 @@ function parseClaudeCodeTranscript(content: string, filePath: string): ParsedCon
     } catch {
       continue;
     }
+
+    // cwd/gitBranch/version ride on most record types, not just messages —
+    // capture from any record so sidechain-only transcripts still yield context.
+    if (typeof obj.cwd === "string") sessionCwd = obj.cwd;
+    if (typeof obj.gitBranch === "string") sessionGitBranch = obj.gitBranch;
+    if (typeof obj.version === "string") sessionCliVersion = obj.version;
 
     const type = obj.type as string | undefined;
     if (type !== "user" && type !== "assistant") continue;
@@ -424,6 +462,11 @@ function parseClaudeCodeTranscript(content: string, filePath: string): ParsedCon
       messages,
       createdAt: messages[0]?.timestamp ?? null,
       updatedAt: messages[messages.length - 1]?.timestamp ?? null,
+      session: {
+        cwd: sessionCwd,
+        gitBranch: sessionGitBranch,
+        cliVersion: sessionCliVersion,
+      },
     },
   ];
 }
@@ -433,6 +476,8 @@ function parseCodexTranscript(content: string, filePath: string): ParsedConversa
   const messages: ParsedMessage[] = [];
   let sessionId: string | null = null;
   let sessionTitle: string | null = null;
+  let sessionCwd: string | null = null;
+  let sessionCliVersion: string | null = null;
 
   for (const line of lines) {
     let obj: any;
@@ -445,6 +490,14 @@ function parseCodexTranscript(content: string, filePath: string): ParsedConversa
     if (obj.type === "session_meta" && obj.payload) {
       sessionId = obj.payload.id ?? null;
       sessionTitle = obj.payload.title ?? null;
+      sessionCwd = obj.payload.cwd ?? sessionCwd;
+      sessionCliVersion = obj.payload.cli_version ?? sessionCliVersion;
+      continue;
+    }
+
+    // Later turns can move the working directory; keep the most recent.
+    if (obj.type === "turn_context" && obj.payload?.cwd) {
+      sessionCwd = obj.payload.cwd;
       continue;
     }
 
@@ -460,7 +513,10 @@ function parseCodexTranscript(content: string, filePath: string): ParsedConversa
         text = rawContent
           .filter(
             (b: any) =>
-              (b.type === "text" || b.type === "output_text") && typeof b.text === "string"
+              // Live rollouts encode user turns as `input_text` and assistant
+              // turns as `output_text`; older archived sessions use `text`.
+              (b.type === "text" || b.type === "output_text" || b.type === "input_text") &&
+              typeof b.text === "string"
           )
           .map((b: any) => b.text)
           .join("\n")
@@ -493,8 +549,24 @@ function parseCodexTranscript(content: string, filePath: string): ParsedConversa
       messages,
       createdAt: messages[0]?.timestamp ?? null,
       updatedAt: messages[messages.length - 1]?.timestamp ?? null,
+      session: { cwd: sessionCwd, cliVersion: sessionCliVersion },
     },
   ];
+}
+
+/**
+ * Cursor records a chat's working directory in the sibling meta.json, not in
+ * store.db. This is the one field that makes a Cursor chat re-locatable: the
+ * chat lives under ~/.cursor/chats/<md5(cwd)>/<chatId>/, so without cwd the
+ * directory name cannot be reconstructed on another machine.
+ */
+function readCursorChatCwd(dbPath: string): string | null {
+  try {
+    const meta = JSON.parse(readFileSync(path.join(path.dirname(dbPath), "meta.json"), "utf8"));
+    return typeof meta?.cwd === "string" ? meta.cwd : null;
+  } catch {
+    return null;
+  }
 }
 
 async function parseCursorTranscript(dbPath: string): Promise<ParsedConversation[]> {
@@ -673,6 +745,7 @@ async function parseCursorTranscript(dbPath: string): Promise<ParsedConversation
           messages,
           createdAt: messages[0]?.timestamp ?? null,
           updatedAt: messages[messages.length - 1]?.timestamp ?? null,
+          session: { cwd: readCursorChatCwd(dbPath) },
         });
       }
     }
@@ -757,11 +830,25 @@ export async function parseTranscript(
 
   const totalMessages = conversations.reduce((sum, c) => sum + c.messages.length, 0);
 
+  // Hash the raw bytes (not the decoded text) so SQLite-backed transcripts and
+  // JSONL ones are addressed the same way, and re-imports dedupe.
+  let contentHash: string | undefined;
+  let fileSize: number | undefined;
+  try {
+    const bytes = await fs.readFile(resolvedPath);
+    contentHash = createHash("sha256").update(bytes).digest("hex");
+    fileSize = bytes.byteLength;
+  } catch {
+    // Unreadable file — omit rather than fail the parse.
+  }
+
   return {
     conversations,
     source,
     filePath: resolvedPath,
     totalMessages,
+    contentHash,
+    fileSize,
   };
 }
 
@@ -814,8 +901,35 @@ export function formatTranscriptPreview(result: TranscriptParseResult): string {
 /**
  * Convert parsed conversations to Neotoma entity format for storage.
  */
+/** Sources that represent a resumable local harness session. */
+/** Sources that represent a resumable local harness session. */
+export const HARNESS_SOURCES = new Set<TranscriptSource>(["claude-code", "codex", "cursor"]);
+
+/**
+ * The id the harness itself uses to resume. parseCursorTranscript() namespaces
+ * its ids as `cursor-<chatId>`, but `cursor-agent --resume` expects the bare
+ * chatId, so strip the prefix here.
+ */
+function nativeSessionId(conv: ParsedConversation): string {
+  return conv.source === "cursor" ? conv.id.replace(/^cursor-/, "") : conv.id;
+}
+
+/** On-disk transcript format per harness. */
+function defaultFormat(source: TranscriptSource): string {
+  return source === "cursor" ? "sqlite" : "jsonl";
+}
+
+/** File-level provenance for the transcript the conversations came from. */
+export interface TranscriptFileMeta {
+  filePath?: string;
+  contentHash?: string;
+  fileSize?: number;
+  format?: string;
+}
+
 export function conversationsToEntities(
-  conversations: ParsedConversation[]
+  conversations: ParsedConversation[],
+  fileMeta?: TranscriptFileMeta
 ): Array<Record<string, unknown>> {
   const entities: Array<Record<string, unknown>> = [];
 
@@ -829,6 +943,40 @@ export function conversationsToEntities(
       started_at: conv.createdAt,
       ended_at: conv.updatedAt,
     });
+
+    // Harness sessions additionally get an agent_session row carrying the
+    // context needed to find (and re-materialize) the session on disk. Only
+    // emitted for real harnesses — a ChatGPT export has no resumable session.
+    if (HARNESS_SOURCES.has(conv.source)) {
+      entities.push({
+        entity_type: "agent_session",
+        harness: conv.source,
+        native_session_id: nativeSessionId(conv),
+        title: conv.title,
+        kind: "cli",
+        message_count: conv.messages.length,
+        created_at: conv.createdAt,
+        last_activity_at: conv.updatedAt,
+        cwd: conv.session?.cwd ?? null,
+        branch: conv.session?.gitBranch ?? null,
+      });
+
+      // One content-addressed row per transcript file. session_transcript is
+      // keyed on content_hash, so re-importing the same file dedupes instead of
+      // creating a second row.
+      if (fileMeta?.contentHash) {
+        entities.push({
+          entity_type: "session_transcript",
+          content_hash: fileMeta.contentHash,
+          agent_session_id: nativeSessionId(conv),
+          harness: conv.source,
+          format: fileMeta.format ?? defaultFormat(conv.source),
+          file_size: fileMeta.fileSize ?? null,
+          turn_count: conv.messages.length,
+          storage_url: fileMeta.filePath ? `file://${fileMeta.filePath}` : null,
+        });
+      }
+    }
 
     for (let i = 0; i < conv.messages.length; i++) {
       const msg = conv.messages[i];
