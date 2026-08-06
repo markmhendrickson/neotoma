@@ -1,0 +1,103 @@
+# Fly.io config for an OPERATOR-RUN Neotoma instance.
+#
+# THIS REPO IS PUBLIC. No instance-identifying value belongs in this file — no
+# app name, no hostname, no codename. Pass the app at deploy time:
+#
+#   flyctl deploy -c fly.operator.toml --app <app> --primary-region <region>
+#
+# Same reasoning as .github/workflows/deploy-client-instance.yml, which reads
+# the app name from a repository secret. PR #2001 was closed for reintroducing
+# a client app name into this repo; do not re-add one here in any form.
+#
+# WHY THIS FILE EXISTS
+#
+# Deploying an operator instance with the shared fly.toml silently RESIZES the
+# machine, because that file declares `[[vm]] memory = '1gb'` / `cpus = 1` for
+# the sandbox. A 4GB instance reverts to 1GB on the next deploy with no warning.
+# That happened in production on 2026-08-04: an instance scaled to 2 CPU / 4GB
+# to address query stalls was reverted by a deploy, and the stalls returned.
+#
+# The documented workaround was to re-run `flyctl machine update --vm-memory ...`
+# after every deploy. That is a manual step in a runbook, and it was forgotten
+# exactly once before causing an outage. This file makes the sizing declarative
+# so the deploy is safe by construction instead of by discipline.
+#
+# Sizing is not cosmetic here. Node's default heap ceiling is ~2GB, so a 1GB
+# machine puts the V8 limit above available RAM — see neotoma#2094, where an
+# in-process memory kill is the leading hypothesis for repeated clean exits.
+# Deploying that config onto a loaded instance would make the failure constant
+# rather than intermittent.
+#
+# WHAT DIFFERS FROM fly.toml
+#   - [[vm]]      2 CPU / 4096MB, not the sandbox's 1 CPU / 1GB
+#   - [[restart]] policy = 'always' (see below)
+#   - no VITE_NEOTOMA_SANDBOX_UI, and VITE_PUBLIC_BASE_PATH = "/"
+#   - primary_region is NOT set — pass --primary-region, since the volume's
+#     region is instance-specific and fly.toml's 'lhr' would fail machine
+#     creation with "needs an unattached volume named 'data' in region 'lhr'"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[build.args]
+  # Operator instances serve the full Inspector, not the sandbox UI.
+  VITE_NEOTOMA_SANDBOX_UI = ""
+  VITE_PUBLIC_BASE_PATH = "/"
+
+# Seed the schema_registry before the new release takes traffic (issue #1968).
+# Idempotent: skips entity types that already have an active registration.
+[deploy]
+  release_command = "node dist/seed_schemas_entry.js"
+
+[env]
+  NODE_ENV = "production"
+  NEOTOMA_ENV = "production"
+  # Must match internal_port (Fly routes to this port on the machine)
+  HTTP_PORT = "3180"
+  NEOTOMA_HTTP_PORT = "3180"
+
+[http_service]
+  internal_port = 3180
+  force_https = true
+  # Keep one machine running. MCP-over-HTTP transport sessions are held in
+  # process memory (`mcpTransports` in src/actions.ts), so any machine stop
+  # invalidates every live session — clients then get "MCP session is unknown
+  # or expired" and cannot self-recover (neotoma#2100).
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  # Health check for LOAD-BALANCER ROUTING ONLY. A check declared under
+  # [http_service] is a *service* check: it decides whether the Fly proxy
+  # sends traffic to a machine. It does NOT restart one. Restart behavior is
+  # the [[restart]] block below.
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '10s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/health'
+
+[[mounts]]
+  source = "data"
+  destination = "/app/data"
+
+# Restart whenever the process ends, INCLUDING a clean exit.
+#
+# Fly's default policy is `on-failure`, which ignores exit code 0 by
+# definition: the platform reads a clean exit as "the job finished" and
+# declines to restart. The server does exit 0 periodically (neotoma#2094), and
+# under `on-failure` the machine then stays stopped until an inbound request
+# wakes it — a 33-45s cold start against a normal 0.2s.
+#
+# `always` is the only policy that covers a code-0 exit. Note the TOML must be
+# `[[restart]]` (array of tables); `[restart]` fails flyctl validation with
+# "cannot unmarshal object into Go struct field Config.restart".
+[[restart]]
+  policy = 'always'
+
+[[vm]]
+  memory = '4gb'
+  cpu_kind = 'shared'
+  cpus = 2
