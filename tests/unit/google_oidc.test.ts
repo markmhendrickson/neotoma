@@ -135,7 +135,10 @@ describe("google_oidc", () => {
   });
 
   describe("getSharedGraphUserId", () => {
-    const UUID = "00000000-0000-0000-0000-000000000000";
+    // Deliberately NOT the nil UUID: getSharedGraphUserId rejects that as a
+    // misconfiguration, and using it as the "valid" fixture is how a nil
+    // binding slips into a real deployment unnoticed.
+    const UUID = "3f2a91c4-7b5e-4d18-9c60-2ae8b4471d3f";
 
     it("returns null when unset (default: isolated per-email graphs)", async () => {
       withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: undefined });
@@ -165,6 +168,29 @@ describe("google_oidc", () => {
       withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: "not-a-uuid" });
       const mod = await loadModule();
       expect(mod.getSharedGraphUserId()).toBeNull();
+    });
+
+    // The nil UUID is syntactically valid, so without an explicit check it
+    // would bind every approved signer to the conventional "no user" sentinel
+    // — the same value an unauthenticated session reports. A person who signed
+    // in correctly would then be told they are anonymous, and every per-user
+    // mechanism would resolve to the nil principal.
+    it("rejects the nil UUID rather than binding a team to the no-user sentinel", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: "00000000-0000-0000-0000-000000000000" });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBeNull();
+    });
+
+    it("rejects the nil UUID regardless of case or surrounding whitespace", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: "  00000000-0000-0000-0000-000000000000  " });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBeNull();
+    });
+
+    it("still accepts a UUID that merely contains zero groups", async () => {
+      withEnv({ NEOTOMA_SHARED_GRAPH_USER_ID: "00000000-0000-0000-0000-000000000001" });
+      const mod = await loadModule();
+      expect(mod.getSharedGraphUserId()).toBe("00000000-0000-0000-0000-000000000001");
     });
   });
 
