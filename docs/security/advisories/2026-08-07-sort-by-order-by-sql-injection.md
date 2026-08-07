@@ -1,7 +1,7 @@
 # SQL injection via `sort_by` / `snapshot_filters` in entity queries (v0.21.4 fix)
 
 - **Date disclosed:** 2026-08-07
-- **GHSA:** _pending_ (draft private advisory before any public branch lands)
+- **GHSA:** [GHSA-8f95-jfm5-jjmr](https://github.com/markmhendrickson/neotoma/security/advisories/GHSA-8f95-jfm5-jjmr)
 - **CVE:** _requested_
 - **Severity:** High — authenticated SQL injection in the `ORDER BY` clause of entity queries, usable as a blind/boolean oracle to read arbitrary rows in the SQLite database, bypassing per-row `user_id` tenant scoping on shared-backend deployments. CVSS ~8.1 (AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:L).
 - **Affected:** `>= 0.16.0, < 0.21.4` — every deployment exposing `retrieve_entities` / `POST /entities/query` with the snapshot-field sort path. Verified empirically: the raw `sort_by` interpolation was introduced in **v0.16.0**.
@@ -105,8 +105,8 @@ return column; // <-- non-matching input (e.g. a CASE expression) passes through
 | 2026-08-07 | Confirmed present on the bottega8 client instance (same code path) and on sandbox (injection point present; attribution pinned to public user there). |
 | 2026-08-07 | Affected instances taken offline. |
 | 2026-08-07 | Fix + regression gate `tests/security/sort_by_sql_injection.test.ts` landed on `hotfix/v0.21.4-ed25519-auth-and-sortby-sqli`; adversarial review closed two further sink/completeness gaps. |
-| _pending_ | Private GHSA drafted; CVE requested. |
-| _pending_ | `0.21.4` tagged, released, npm published; advisory mirrored public. |
+| 2026-08-07 | Private GHSA `GHSA-8f95-jfm5-jjmr` filed (draft); CVE requested. |
+| _pending_ | `0.21.4` tagged, released, npm published; advisory (GHSA-8f95-jfm5-jjmr) made public. |
 
 ## References
 

@@ -1,7 +1,7 @@
 # Ed25519 bearer "public-key-is-the-token" auth bypass (v0.21.4 fix)
 
 - **Date disclosed:** 2026-08-07
-- **GHSA:** _pending_ (draft private advisory before any public branch lands)
+- **GHSA:** [GHSA-33x4-v5cf-2hfj](https://github.com/markmhendrickson/neotoma/security/advisories/GHSA-33x4-v5cf-2hfj)
 - **CVE:** _requested_
 - **Severity:** Critical — pre-authentication full read **and** write of a personal-mode instance's entire entity graph, over the public internet, with no secret of any kind. CVSS ~9.8 (AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H).
 - **Affected:** `>= 0.3.0, < 0.21.4` — personal-mode (`mode: personal`) HTTP deployments that expose the REST API. Verified empirically: the optional-signature accept path is present in **every published release from v0.3.0 onward**. Sandbox-mode deployments are **not** affected (see § Impact).
@@ -156,9 +156,9 @@ until then the branch is deliberately dead, not accidentally broken.
 | 2026-08-07 | Operator takes the personal instance and the bottega8 client instance offline. |
 | 2026-08-07 | Fix landed on `hotfix/v0.21.4-ed25519-auth-and-sortby-sqli` (from `9a21de393`), with regression gate `tests/security/ed25519_forged_key_auth_bypass.test.ts` verified to fail pre-fix. |
 | 2026-08-07 | Operator instances patched from the local hotfix worktree and verified by `scripts/security/adversarial_probe.sh` (gate PASS): personal (release v12) and the client instance (release v43). |
-| _pending_ | Private GHSA drafted; CVE requested. |
+| 2026-08-07 | Private GHSA `GHSA-33x4-v5cf-2hfj` filed (draft); CVE requested. |
 | _pending_ | `0.21.4` tagged, released, and published to npm for other operators. |
-| _pending_ | This advisory mirrored public; row added to the advisories index. |
+| _pending_ | This advisory (GHSA-33x4-v5cf-2hfj) made public; row added to the advisories index. |
 
 ## References
 
