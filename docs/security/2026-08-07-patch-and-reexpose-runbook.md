@@ -31,20 +31,56 @@ code. Deploy from the **hotfix worktree** instead:
     /Users/markmhendrickson/repos/neotoma-wt-sec-advisories
     (branch hotfix/v0.21.4-ed25519-auth-and-sortby-sqli)
 
-## ⚠️ Retrieve the deployment_configuration before deploying
+## Deploy binding — VERIFIED via flyctl 2026-08-07
 
-Per the standing rule, the canonical app name, region, build args, secret names,
-and post-deploy checks live in the instance's `deployment_configuration` entity in
-Neotoma — which is currently offline. The values below are from the entity snapshot
-read at the start of the 2026-08-07 session and MUST be re-verified against the live
-entity once Neotoma is reachable, OR confirmed directly via `flyctl apps list` /
-`flyctl status`.
+Confirmed directly against Fly (read-only `flyctl` queries), not from a stale
+Neotoma snapshot:
 
-Observed (verify before use):
-- App: `neotoma-markmhendrickson`  (Fly org `neotoma`)
-- Primary region: `ams`  (REQUIRED flag — fly.toml/fly.operator.toml default lhr)
-- Volume: `vol_4ojlng96ng9kql2r` (region ams)
-- Machine sizing: 2 vCPU / 4096MB (a deploy can silently reset this; re-apply after)
+- App: `neotoma-markmhendrickson` (Fly org `neotoma`), **status: suspended**.
+- **No machines exist** — the app was suspended by destroying its machine. The
+  deploy will CREATE a new machine and attach it to the existing volume. This is
+  why `--primary-region ams` is mandatory (see below).
+- Volume `vol_4ojlng96ng9kql2r`: `ams`, 20GB, **encrypted**, 30-day snapshot
+  retention, scheduled snapshots on, currently **unattached** (STATE: created).
+  **Operator data is intact and backed up on this volume.**
+- Public IPs allocated: v4 `66.241.124.140` (shared), v6 dedicated. DNS
+  `neotoma.markmhendrickson.com` still resolves to the fly.dev host.
+- Machine sizing target: 2 vCPU / 4096MB (a deploy can reset to 1GB; re-apply after).
+
+Confirm still current before deploying:
+
+    flyctl status --app neotoma-markmhendrickson
+    flyctl volumes list --app neotoma-markmhendrickson    # vol in ams, unattached
+    flyctl machine list  --app neotoma-markmhendrickson    # expect none pre-deploy
+
+Once Neotoma is back, still cross-check the `deployment_configuration` entity for
+build-args/secret-names/gotchas narrative (the flyctl facts above cover
+app/region/volume/sizing, which is what gates a safe deploy).
+
+## ⚠️ There is NO natural shielded window — DNS is live and IPs are public
+
+Because DNS already points at Fly and the app has public ingress IPs, a normal
+deploy makes the instance PUBLIC the instant the machine boots. The patched build
+is deployed, so this is exposing the FIX, not the vulnerable code — but choose a
+shielding posture deliberately:
+
+- **Option A (true-shielded, belt-and-suspenders):** release the public IPs,
+  deploy, probe over `flyctl proxy` (private WireGuard tunnel), then re-add IPs
+  only after the probe passes. Zero public seconds on unverified-in-prod code.
+
+      flyctl ips release 66.241.124.140 --app neotoma-markmhendrickson
+      flyctl ips release <v6> --app neotoma-markmhendrickson
+      # deploy (below), then:
+      flyctl proxy 8080:3180 --app neotoma-markmhendrickson   # reach at http://127.0.0.1:8080
+      bash scripts/security/adversarial_probe.sh --host http://127.0.0.1:8080 --entity-type contact
+      # on PASS, re-allocate:
+      flyctl ips allocate-v4 --shared --app neotoma-markmhendrickson
+      flyctl ips allocate-v6 --app neotoma-markmhendrickson
+
+- **Option B (short patched-public window, simpler):** deploy, then immediately
+  probe the public host. The exposure is "patched + being verified", categorically
+  different from the vulnerable exposure that was taken down. Acceptable given the
+  deployed code is the fix.
 
 ## Operator steps (need your Fly credentials — I cannot run these)
 
@@ -61,8 +97,11 @@ Observed (verify before use):
       --build-arg VITE_PUBLIC_BASE_PATH="/" \
       --build-arg NEOTOMA_GIT_SHA="$(git rev-parse HEAD)"
 
-Keep the instance shielded during this step — DNS still dark, or Fly firewall
-scoped to your IP — so it is not public between deploy and probe.
+Shielding: DNS is NOT dark and the app has public IPs, so this instance goes
+public the moment the machine boots. Use Option A above (release IPs → deploy →
+probe via `flyctl proxy` → re-add IPs) for zero public-unverified seconds, or
+Option B (deploy then immediately probe the public host) — the deployed code is
+the patched build either way.
 
 ### 2. Re-apply machine sizing if the deploy reset it (per the gotchas note)
 
