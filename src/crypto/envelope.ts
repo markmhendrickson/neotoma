@@ -31,8 +31,17 @@ export async function encryptEnvelope(
   // Derive shared secret using X25519
   const sharedSecret = x25519.getSharedSecret(ephemeralPrivateKey, recipientPublicKey);
 
-  // Generate ephemeral AES-GCM key from shared secret (HKDF-like)
-  const aesKey = await deriveAESKey(sharedSecret);
+  // Derive the AES-GCM content key from the X25519 shared secret via HKDF.
+  //
+  // SECURITY (Phase 2): the AES key is NOT transmitted. Both parties derive it
+  // deterministically from the same ECDH shared secret + HKDF, so there is no key
+  // to wrap. The previous implementation redundantly XOR-wrapped the AES key with
+  // the raw shared secret ("simple XOR for now") and shipped it in `encryptedKey`
+  // — homemade, unauthenticated key-wrap that added attack surface without adding
+  // security (the recipient can already derive the key). Removing the wrap
+  // eliminates that surface entirely; `deriveAESKey` uses HKDF-SHA256 with a
+  // per-envelope salt bound to the ephemeral public key (see deriveAESKey).
+  const aesKey = await deriveAESKey(sharedSecret, ephemeralPublicKey);
 
   // Generate nonce
   const nonce = randomBytes(AES_GCM_NONCE_LENGTH);
@@ -40,13 +49,11 @@ export async function encryptEnvelope(
   // Encrypt plaintext with AES-GCM
   const ciphertext = await encryptAESGCM(plaintext, aesKey, nonce);
 
-  // Encrypt the AES key with X25519 (using shared secret)
-  const encryptedKey = await encryptAESKey(aesKey, sharedSecret);
-
-  // Create envelope
+  // Create envelope (no wrapped key — the recipient re-derives it from the
+  // shared secret + ephemeralPublicKey).
   const envelope: Omit<EncryptedEnvelope, "signature" | "signerPublicKey"> = {
     ciphertext,
-    encryptedKey,
+    encryptedKey: new Uint8Array(0), // retained for wire-shape compat; no longer carries a key
     ephemeralPublicKey,
     nonce,
   };
@@ -84,8 +91,9 @@ export async function decryptEnvelope(
   // Derive shared secret using X25519
   const sharedSecret = x25519.getSharedSecret(recipientPrivateKey, envelope.ephemeralPublicKey);
 
-  // Decrypt the AES key
-  const aesKey = await decryptAESKey(envelope.encryptedKey, sharedSecret);
+  // Re-derive the AES-GCM content key from the shared secret + ephemeral public
+  // key (same HKDF the sender used). No wrapped key is transmitted.
+  const aesKey = await deriveAESKey(sharedSecret, envelope.ephemeralPublicKey);
 
   // Decrypt plaintext with AES-GCM
   const plaintext = await decryptAESGCM(envelope.ciphertext, aesKey, envelope.nonce);
@@ -96,9 +104,15 @@ export async function decryptEnvelope(
 /**
  * Derive AES key from shared secret (simplified HKDF)
  */
-async function deriveAESKey(sharedSecret: Uint8Array): Promise<CryptoKey> {
-  // Use Web Crypto API to derive key
-  // Convert to standard Uint8Array for Web Crypto API compatibility
+async function deriveAESKey(
+  sharedSecret: Uint8Array,
+  salt: Uint8Array
+): Promise<CryptoKey> {
+  // HKDF-SHA256 over the ECDH shared secret. The salt is the per-envelope
+  // ephemeral X25519 public key (SECURITY, Phase 2: the prior implementation
+  // used an empty salt; binding the salt to the ephemeral key domain-separates
+  // each envelope's derived key). The key is not extractable — it never leaves
+  // the crypto layer, since the wrapped-key path that required export is gone.
   const secretBuffer = new Uint8Array(sharedSecret).buffer;
   const keyMaterial = await crypto.subtle.importKey("raw", secretBuffer, { name: "HKDF" }, false, [
     "deriveKey",
@@ -107,13 +121,13 @@ async function deriveAESKey(sharedSecret: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.deriveKey(
     {
       name: "HKDF",
-      salt: new Uint8Array(0), // No salt for simplicity
+      salt: new Uint8Array(salt),
       info: new Uint8Array([0x6e, 0x65, 0x6f, 0x74, 0x6f, 0x6d, 0x61]), // "neotoma"
       hash: "SHA-256",
     },
     keyMaterial,
     { name: "AES-GCM", length: AES_GCM_KEY_LENGTH * 8 },
-    true, // extractable: true - needed to export key for encryption
+    false, // non-extractable: the key is used in-place, never exported
     ["encrypt", "decrypt"]
   );
 }
@@ -152,42 +166,6 @@ async function decryptAESGCM(
     ciphertextBuffer as ArrayBuffer
   );
   return new Uint8Array(plaintext);
-}
-
-/**
- * Encrypt AES key with shared secret (simple XOR for now, could use proper encryption)
- */
-async function encryptAESKey(aesKey: CryptoKey, sharedSecret: Uint8Array): Promise<Uint8Array> {
-  const keyBytes = await crypto.subtle.exportKey("raw", aesKey);
-  const keyArray = new Uint8Array(keyBytes);
-
-  // Simple XOR with shared secret (in production, use proper encryption)
-  const encrypted = new Uint8Array(keyArray.length);
-  for (let i = 0; i < keyArray.length; i++) {
-    encrypted[i] = keyArray[i] ^ sharedSecret[i % sharedSecret.length];
-  }
-  return encrypted;
-}
-
-/**
- * Decrypt AES key
- */
-async function decryptAESKey(
-  encryptedKey: Uint8Array,
-  sharedSecret: Uint8Array
-): Promise<CryptoKey> {
-  const decrypted = new Uint8Array(encryptedKey.length);
-  for (let i = 0; i < encryptedKey.length; i++) {
-    decrypted[i] = encryptedKey[i] ^ sharedSecret[i % sharedSecret.length];
-  }
-
-  return crypto.subtle.importKey(
-    "raw",
-    decrypted,
-    { name: "AES-GCM", length: AES_GCM_KEY_LENGTH * 8 },
-    false,
-    ["encrypt", "decrypt"]
-  );
 }
 
 /**
