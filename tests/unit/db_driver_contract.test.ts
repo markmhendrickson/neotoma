@@ -217,4 +217,55 @@ describe.each(["sqlite", "libsql"] as const)("db driver contract (%s)", (backend
     ]);
     expect(await timed).toContain(NESTED_TRANSACTION_ERROR);
   });
+
+  // Regression guard for #2131. The standing-rule lookup used the PostgREST
+  // embedded-resource hint `entity_snapshots!inner(snapshot)`, which only the
+  // Supabase backend understands. libSQL forwarded it into SQL and failed with
+  // `unrecognized token: "!"`, and because getActiveStandingRules swallows
+  // errors to avoid blocking session init, every session on a libSQL instance
+  // silently received zero standing rules while storage and retrieval both
+  // reported success.
+  //
+  // The unit tests for that service mock the db module entirely, so no
+  // mock-based test could have caught a dialect incompatibility. This asserts
+  // against a real database that the shape the service now issues — a plain
+  // select over entity_snapshots — actually executes, and that the offending
+  // hint would not.
+  it("executes the standing-rule lookup shape, and rejects the PostgREST join hint", async () => {
+    const db = makeDb(backend);
+    await db.exec(
+      `CREATE TABLE entity_snapshots (
+         entity_id TEXT PRIMARY KEY,
+         entity_type TEXT NOT NULL,
+         canonical_name TEXT,
+         snapshot TEXT,
+         user_id TEXT
+       )`
+    );
+    await db
+      .prepare(
+        "INSERT INTO entity_snapshots (entity_id, entity_type, canonical_name, snapshot, user_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .run([
+        "ent_1",
+        "standing_rule",
+        "Rule One",
+        JSON.stringify({ rule_text: "keep scope" }),
+        "user-1",
+      ]);
+
+    const rows = (await db
+      .prepare(
+        "SELECT entity_id, canonical_name, snapshot FROM entity_snapshots WHERE user_id = ? AND entity_type = ?"
+      )
+      .all(["user-1", "standing_rule"])) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0].snapshot as string).rule_text).toBe("keep scope");
+
+    // The old shape is not merely unsupported sugar — it is a syntax error to
+    // the database, which is why it failed at runtime rather than at build.
+    await expect(
+      db.prepare("SELECT entity_id, entity_snapshots!inner(snapshot) FROM entity_snapshots").all()
+    ).rejects.toThrow();
+  });
 });
