@@ -299,7 +299,9 @@ function fromDbRow(table: string, row: Record<string, unknown>): Record<string, 
   return result;
 }
 
-function normalizeColumnName(table: string, column: string): string {
+// Exported for the security regression test that asserts the fail-closed
+// behaviour of the column normaliser (advisory 2026-08-07-sort-by-order-by-sql-injection).
+export function normalizeColumnName(table: string, column: string): string {
   // Compatibility aliases used by tests and older codepaths.
   if (table === "entities" && column === "merged_into") return "merged_to_entity_id";
   if (table === "observations" && column === "priority") return "source_priority";
@@ -328,6 +330,18 @@ function normalizeColumnName(table: string, column: string): string {
     // Emulate PostgREST text projection semantics for ->>:
     // booleans become "true"/"false"; scalars become text.
     return `CASE json_type(${jsonColumn}, '${jsonPath}') WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE CAST(${extracted} AS TEXT) END`;
+  }
+  // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): this value is
+  // interpolated verbatim into generated SQL (ORDER BY, WHERE, SELECT). The old
+  // `return column` fallthrough let any non-recognised string — including a
+  // `(CASE WHEN … )` expression smuggled through a `snapshot->>${field}` build —
+  // reach SQLite unescaped. Fail closed instead: only a bare column identifier
+  // or a `table.column` qualified identifier may pass through. Every legitimate
+  // caller uses one of those shapes, the `->>` / `lower(->>)` projections, or a
+  // compatibility alias handled above; anything else is a bug or an injection
+  // attempt and must not be interpolated.
+  if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(column)) {
+    throw new Error(`Unsafe column reference rejected: ${JSON.stringify(column)}`);
   }
   return column;
 }
