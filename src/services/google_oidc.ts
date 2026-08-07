@@ -147,6 +147,7 @@ export function isGoogleSigninEnabled(): boolean {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 
 /**
  * Shared-graph opt-in (a bounded, explicit slice of "Model B").
@@ -165,12 +166,26 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * for emails that already pass the `NEOTOMA_APPROVED_EMAILS` allowlist, so a
  * non-approved Google account can never be mapped onto the shared graph.
  *
- * Returns null when unset or malformed (fail-safe to isolated behavior).
+ * Returns null when unset, malformed, or the nil UUID (fail-safe to isolated
+ * behavior).
+ *
+ * The nil UUID is rejected deliberately. It is syntactically a valid UUID, so
+ * it would otherwise pass and bind every approved signer to
+ * `00000000-0000-0000-0000-000000000000` — the conventional "no user"
+ * sentinel, and the same value an unauthenticated session reports. The
+ * observable effect is that a person who signs in correctly is told they are
+ * anonymous, and every per-user mechanism (notably `standing_rule` injection)
+ * silently resolves to the nil principal. Binding a real team to the "no user"
+ * value is never intentional, so it is treated as a misconfiguration rather
+ * than honored.
  */
 export function getSharedGraphUserId(): string | null {
   const raw = (process.env.NEOTOMA_SHARED_GRAPH_USER_ID || "").trim();
   if (!raw) return null;
-  return UUID_RE.test(raw) ? raw.toLowerCase() : null;
+  if (!UUID_RE.test(raw)) return null;
+  const normalized = raw.toLowerCase();
+  if (normalized === NIL_UUID) return null;
+  return normalized;
 }
 
 function getJwks(): ReturnType<typeof createRemoteJWKSet> {
