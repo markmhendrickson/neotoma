@@ -1,11 +1,11 @@
-# Ed25519 bearer "public-key-is-the-token" auth bypass (vX.Y.Z fix)
+# Ed25519 bearer "public-key-is-the-token" auth bypass (v0.21.4 fix)
 
 - **Date disclosed:** 2026-08-07
 - **GHSA:** _pending_ (draft private advisory before any public branch lands)
 - **CVE:** _requested_
 - **Severity:** Critical — pre-authentication full read **and** write of a personal-mode instance's entire entity graph, over the public internet, with no secret of any kind. CVSS ~9.8 (AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H).
-- **Affected:** Personal-mode (`mode: personal`) HTTP deployments that expose the REST API. The Ed25519 bearer accept path has shipped since the public-key registry was introduced; confirmed present through **`0.21.3`**. Sandbox-mode deployments are **not** affected (see § Impact). Fixed range to be stamped at release: `>= <first-affected>, < X.Y.Z`.
-- **Fixed in:** `X.Y.Z` (coordinated hotfix; also carries the `sort_by` SQLi advisory of the same date).
+- **Affected:** `>= 0.3.0, < 0.21.4` — personal-mode (`mode: personal`) HTTP deployments that expose the REST API. Verified empirically: the optional-signature accept path is present in **every published release from v0.3.0 onward**. Sandbox-mode deployments are **not** affected (see § Impact).
+- **Fixed in:** `0.21.4` (coordinated hotfix; also carries the `sort_by` SQLi advisory of the same date).
 - **Reporter:** internal security review (operator-authorized probe of the operator's own hosted instance).
 - **CWEs:** [CWE-287](https://cwe.mitre.org/data/definitions/287.html) (Improper Authentication), [CWE-347](https://cwe.mitre.org/data/definitions/347.html) (Improper Verification of Cryptographic Signature), [CWE-290](https://cwe.mitre.org/data/definitions/290.html) (Authentication Bypass by Spoofing), [CWE-639](https://cwe.mitre.org/data/definitions/639.html) (Authorization Bypass Through User-Controlled Key).
 
@@ -127,7 +127,7 @@ until then the branch is deliberately dead, not accidentally broken.
 
 ## Operator action
 
-1. **Upgrade to `X.Y.Z` or later** before re-exposing any personal-mode REST API to the public internet.
+1. **Upgrade to `0.21.4` or later** before re-exposing any personal-mode REST API to the public internet.
 2. **Until upgraded, do not expose the REST API publicly.** Take the instance offline, bind to loopback, or put it behind an authenticated front door. Rotating `NEOTOMA_BEARER_TOKEN` does **not** mitigate this — the exploit uses no token.
 3. **Audit access logs** for the affected window: look for `auth_method=ed25519_bearer` log lines, and for `2xx` responses on `/entities*`, `/store`, `/correct`, `/list_*`, `/retrieve_*` where the request carried a Bearer that is not your provisioned token. Treat any such hit as potential unauthorized access.
 4. **Assume data exposure** for any instance that was public during the affected window and evaluate breach-notification obligations for third-party personal data held on that instance (see § Detection for scoping).
@@ -154,8 +154,10 @@ until then the branch is deliberately dead, not accidentally broken.
 | 2026-08-07 | Operator-authorized probe confirms the bypass live on the operator's personal instance; forged random key + nil-UUID returns owner data. |
 | 2026-08-07 | Blast-radius check: the bottega8 client instance (personal-mode) confirmed live-exploitable; sandbox confirmed **not** exploitable (user_id override blocked). |
 | 2026-08-07 | Operator takes the personal instance and the bottega8 client instance offline. |
-| _pending_ | Private GHSA drafted; CVE requested; hotfix branch `hotfix/vX.Y.Z-ed25519-auth-bypass` opened from the affected `main` SHA. |
-| _pending_ | Fix + G3 regression rows land; `X.Y.Z` tagged and deployed; instances redeployed before re-exposure. |
+| 2026-08-07 | Fix landed on `hotfix/v0.21.4-ed25519-auth-and-sortby-sqli` (from `9a21de393`), with regression gate `tests/security/ed25519_forged_key_auth_bypass.test.ts` verified to fail pre-fix. |
+| 2026-08-07 | Operator instances patched from the local hotfix worktree and verified by `scripts/security/adversarial_probe.sh` (gate PASS): personal (release v12) and the client instance (release v43). |
+| _pending_ | Private GHSA drafted; CVE requested. |
+| _pending_ | `0.21.4` tagged, released, and published to npm for other operators. |
 | _pending_ | This advisory mirrored public; row added to the advisories index. |
 
 ## References

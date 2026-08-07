@@ -1,11 +1,11 @@
-# SQL injection via `sort_by` / `snapshot_filters` in entity queries (vX.Y.Z fix)
+# SQL injection via `sort_by` / `snapshot_filters` in entity queries (v0.21.4 fix)
 
 - **Date disclosed:** 2026-08-07
 - **GHSA:** _pending_ (draft private advisory before any public branch lands)
 - **CVE:** _requested_
 - **Severity:** High — authenticated SQL injection in the `ORDER BY` clause of entity queries, usable as a blind/boolean oracle to read arbitrary rows in the SQLite database, bypassing per-row `user_id` tenant scoping on shared-backend deployments. CVSS ~8.1 (AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:L).
-- **Affected:** Every deployment exposing `retrieve_entities` / `POST /entities/query` with the snapshot-field sort path. Confirmed present through **`0.21.3`**. Fixed range stamped at release: `>= <first-affected>, < X.Y.Z`.
-- **Fixed in:** `X.Y.Z` (coordinated hotfix; also carries the Ed25519 auth-bypass advisory of the same date).
+- **Affected:** `>= 0.16.0, < 0.21.4` — every deployment exposing `retrieve_entities` / `POST /entities/query` with the snapshot-field sort path. Verified empirically: the raw `sort_by` interpolation was introduced in **v0.16.0**.
+- **Fixed in:** `0.21.4` (coordinated hotfix; also carries the Ed25519 auth-bypass advisory of the same date).
 - **Reporter:** internal security review (operator-authorized probe).
 - **CWEs:** [CWE-89](https://cwe.mitre.org/data/definitions/89.html) (SQL Injection), [CWE-943](https://cwe.mitre.org/data/definitions/943.html) (Improper Neutralization of Special Elements in a Data Query), [CWE-639](https://cwe.mitre.org/data/definitions/639.html) (Authorization Bypass — cross-tenant read on shared backends).
 
@@ -78,7 +78,7 @@ return column; // <-- non-matching input (e.g. a CASE expression) passes through
 
 ## Operator action
 
-1. **Upgrade to `X.Y.Z` or later.** No request-shape change for legitimate `snapshot.<field>` sorts.
+1. **Upgrade to `0.21.4` or later.** No request-shape change for legitimate `snapshot.<field>` sorts.
 2. **Until upgraded, treat any instance reachable by an untrusted caller as exposed to arbitrary in-DB read** — and, on shared-backend multi-tenant hosts, cross-tenant read. Combine with the companion auth-bypass advisory when scoping exposure on personal-mode instances.
 3. **Audit query logs** for `sort_by` / `snapshot_filters` values containing parentheses, `CASE`, `SELECT`, `--`, or other non-identifier characters.
 
@@ -104,8 +104,9 @@ return column; // <-- non-matching input (e.g. a CASE expression) passes through
 | 2026-08-07 | Operator-authorized probe confirms the injection live via `retrieve_entities` (`CASE`-expression `sort_by` reaches SQLite). |
 | 2026-08-07 | Confirmed present on the bottega8 client instance (same code path) and on sandbox (injection point present; attribution pinned to public user there). |
 | 2026-08-07 | Affected instances taken offline. |
-| _pending_ | Private GHSA drafted; CVE requested; fix + regression rows on `hotfix/vX.Y.Z`. |
-| _pending_ | `X.Y.Z` tagged and deployed; advisory mirrored public; index row added. |
+| 2026-08-07 | Fix + regression gate `tests/security/sort_by_sql_injection.test.ts` landed on `hotfix/v0.21.4-ed25519-auth-and-sortby-sqli`; adversarial review closed two further sink/completeness gaps. |
+| _pending_ | Private GHSA drafted; CVE requested. |
+| _pending_ | `0.21.4` tagged, released, npm published; advisory mirrored public. |
 
 ## References
 
