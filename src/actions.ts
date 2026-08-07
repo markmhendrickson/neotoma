@@ -4710,6 +4710,30 @@ app.get("/entities/:id/html", async (req, res) => {
       : undefined;
     if (etag) res.setHeader("ETag", etag);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    // SECURITY (Phase 2, stored XSS in publish_rendered_page): html_body is
+    // author-supplied and served verbatim, and the GLOBAL CSP allows
+    // 'unsafe-inline' scripts — so an injected <script> in a rendered page would
+    // execute in this origin (a page minted with a guest access_token is viewable
+    // unauthenticated). Rendered pages are static CONTENT, never applications:
+    // they never need to run script. Override the global policy for THIS response
+    // with a strict, self-contained CSP that blocks all script execution (inline
+    // and external) and sandboxes the document, neutralizing stored XSS regardless
+    // of html_body contents. Inline <style> from the template is still allowed.
+    res.setHeader(
+      "Content-Security-Policy",
+      [
+        "default-src 'none'",
+        "script-src 'none'",
+        "style-src 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' data:",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'self'",
+        "sandbox allow-same-origin",
+      ].join("; ")
+    );
+    res.setHeader("X-Content-Type-Options", "nosniff");
     return res.send(html);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
