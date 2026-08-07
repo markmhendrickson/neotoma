@@ -888,8 +888,21 @@ class LocalQueryBuilder {
                     .map((o) => `${o.column} ${o.ascending ? "ASC" : "DESC"}`)
                     .join(", ")}`
                 : "";
-            const limitSql = this.limitValue !== null ? `LIMIT ${this.limitValue}` : "";
-            const offsetSql = this.offsetValue !== null ? `OFFSET ${this.offsetValue}` : "";
+            // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection, Fix
+            // item 3): LIMIT/OFFSET are interpolated into query text. Every
+            // current caller coerces to a validated integer upstream, but coerce
+            // again here so this raw sink cannot inject if a future caller passes
+            // an unvalidated value — a non-integer is rejected rather than spliced.
+            const asSqlCount = (value: number, label: string): number => {
+              if (!Number.isInteger(value) || value < 0) {
+                throw new Error(`Unsafe ${label} value rejected: ${JSON.stringify(value)}`);
+              }
+              return value;
+            };
+            const limitSql =
+              this.limitValue !== null ? `LIMIT ${asSqlCount(this.limitValue, "LIMIT")}` : "";
+            const offsetSql =
+              this.offsetValue !== null ? `OFFSET ${asSqlCount(this.offsetValue, "OFFSET")}` : "";
 
             const sql =
               `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();

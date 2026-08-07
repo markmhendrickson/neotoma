@@ -18,6 +18,7 @@ import {
   InvalidSnapshotFieldError,
 } from "../../src/services/entity_queries.js";
 import { normalizeColumnName } from "../../src/repositories/sqlite/local_db_adapter.js";
+import { db } from "../../src/db.js";
 
 const INJECTION_FIELDS = [
   "(CASE WHEN 1=1 THEN entity_id ELSE zzz END)",
@@ -90,5 +91,39 @@ describe("normalizeColumnName fail-closed backstop (advisory 2026-08-07)", () =>
         /Unsafe column reference rejected/
       );
     }
+  });
+});
+
+describe("LIMIT/OFFSET are integer-clamped at the raw sink (advisory 2026-08-07, Fix item 3)", () => {
+  it("a legitimate integer limit/offset builds and runs", async () => {
+    const { error } = await db.from("entities").select("id").limit(5);
+    // May return rows or none, but must not error on the count values.
+    expect(error).toBeFalsy();
+  });
+
+  it("a non-integer limit is rejected before it reaches SQL", async () => {
+    // Bypass upstream Zod validation by driving the adapter directly with a
+    // hostile value, modelling a hypothetical future caller that forgot to
+    // validate. The adapter's execute() catches the guard's throw and surfaces
+    // it as an error envelope — the point is the malicious value NEVER reaches
+    // the SQL string; the query is rejected, not run.
+    const { data, error } = await db
+      .from("entities")
+      .select("id")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .limit("1; DROP TABLE entities;--" as any);
+    expect(error).toBeTruthy();
+    expect(String(error?.message)).toMatch(/Unsafe LIMIT value rejected/);
+    expect(data).toBeNull();
+  });
+
+  it("a non-integer offset is likewise rejected", async () => {
+    const { error } = await db
+      .from("entities")
+      .select("id")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .range("5); DROP TABLE entities;--" as any, 10 as any);
+    expect(error).toBeTruthy();
+    expect(String(error?.message)).toMatch(/Unsafe (LIMIT|OFFSET) value rejected/);
   });
 });

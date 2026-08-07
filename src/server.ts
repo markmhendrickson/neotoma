@@ -11,6 +11,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { db } from "./db.js";
+import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
@@ -7292,9 +7293,21 @@ export class NeotomaServer {
         }
       }
 
-      // Parse sort field
+      // Parse sort field.
+      //
+      // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): the
+      // resource-collection handlers (handleSourceCollection,
+      // handleRelationshipCollection[All]) interpolate this value into an
+      // ORDER BY via `.order(sortField)`. Validate it as a bare column
+      // identifier at the source — mirroring the entity_queries.ts guard — so
+      // these sinks do not rely solely on the sqlite adapter's fail-closed
+      // backstop. A non-identifier value is dropped, so each handler falls back
+      // to its safe default column rather than surfacing a raw SQLite error.
       if (params.has("sort")) {
-        queryParams.sort = params.get("sort")!;
+        const requestedSort = params.get("sort")!;
+        if (isValidSnapshotFieldName(requestedSort)) {
+          queryParams.sort = requestedSort;
+        }
       }
 
       // Parse order (asc/desc)
