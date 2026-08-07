@@ -117,6 +117,18 @@ describe("LIMIT/OFFSET are integer-clamped at the raw sink (advisory 2026-08-07,
     expect(data).toBeNull();
   });
 
+  it("a large integer that stringifies to exponential notation is rejected (plain-decimal guarantee)", async () => {
+    // Number.isInteger(1e21) is true but `${1e21}` === "1e+21" (not plain
+    // decimal). Not injectable, but the guard promises a plain-decimal token.
+    const { data, error } = await db
+      .from("entities")
+      .select("id")
+      .limit(1e21 as number);
+    expect(error).toBeTruthy();
+    expect(String(error?.message)).toMatch(/Unsafe LIMIT value rejected/);
+    expect(data).toBeNull();
+  });
+
   it("a non-integer offset is likewise rejected", async () => {
     const { error } = await db
       .from("entities")

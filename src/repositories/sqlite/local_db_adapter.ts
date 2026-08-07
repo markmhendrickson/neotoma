@@ -893,8 +893,13 @@ class LocalQueryBuilder {
             // current caller coerces to a validated integer upstream, but coerce
             // again here so this raw sink cannot inject if a future caller passes
             // an unvalidated value — a non-integer is rejected rather than spliced.
+            // Number.isSafeInteger (not isInteger): |n| >= 1e21 is still an
+            // "integer" but stringifies to exponential notation ("1e+21"), which
+            // is not a plain decimal token. Not injectable — the form carries no
+            // SQL metacharacters — but rejecting it keeps this sink strictly
+            // plain-decimal, which is what the guard claims to guarantee.
             const asSqlCount = (value: number, label: string): number => {
-              if (!Number.isInteger(value) || value < 0) {
+              if (!Number.isSafeInteger(value) || value < 0) {
                 throw new Error(`Unsafe ${label} value rejected: ${JSON.stringify(value)}`);
               }
               return value;
