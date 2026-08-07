@@ -40,16 +40,27 @@ type StoreResponse = {
   entities?: Array<{ entity_id: string }>;
 };
 
+// No Authorization header: these seed calls run from the Playwright host process
+// against the local backend (127.0.0.1), same as the SPA client requests this spec
+// drives via addInitScript. That hits the untouched `local_no_bearer` auth path in
+// src/actions.ts (storageBackend === "local" + isLocalRequest + no Bearer header),
+// which auto-authenticates as LOCAL_DEV_USER_ID and honors the body's `user_id`.
+//
+// SECURITY (advisory 2026-08-07-ed25519-bearer-forged-key-auth-bypass): sending an
+// Ed25519 Bearer token here without a request Signature — as this spec did prior to
+// v0.21.4 — now 401s by design; getAuthenticatedUserId fails closed for unresolved
+// Bearer principals. This spec's bearerToken fixture is derived from a key that is
+// never registered with a userId (ACTIONS_BEARER_TOKEN isn't consumed by
+// src/actions.ts), so even a signed request would resolve no principal. Omitting
+// the header entirely is the correct fix, not a workaround.
 async function storeEntity(
   origin: string,
-  bearer: string,
   entity: Record<string, unknown>,
   idempotencyKey: string
 ): Promise<string> {
   const res = await fetch(`${origin}/store`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${bearer}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -70,14 +81,12 @@ async function storeEntity(
 
 async function createRelationship(
   origin: string,
-  bearer: string,
   sourceId: string,
   targetId: string
 ): Promise<void> {
   const res = await fetch(`${origin}/create_relationship`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${bearer}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -97,11 +106,10 @@ async function createRelationship(
  * Seed a focus entity linked to >=2 neighbors so the neighborhood graph renders
  * >=3 nodes and >=1 edge. Returns the focus entity id to explore.
  */
-async function seedGraph(origin: string, bearer: string): Promise<string> {
+async function seedGraph(origin: string): Promise<string> {
   const stamp = Date.now();
   const focusId = await storeEntity(
     origin,
-    bearer,
     {
       entity_type: "company",
       name: `PWGraphFocus${stamp}`,
@@ -114,7 +122,6 @@ async function seedGraph(origin: string, bearer: string): Promise<string> {
     neighborIds.push(
       await storeEntity(
         origin,
-        bearer,
         {
           entity_type: "person",
           name: `PWGraphNeighbor${i}_${stamp}`,
@@ -125,8 +132,8 @@ async function seedGraph(origin: string, bearer: string): Promise<string> {
     );
   }
   // focus PART_OF neighbor0, neighbor1 PART_OF focus -> 2 edges, 3 nodes total.
-  await createRelationship(origin, bearer, focusId, neighborIds[0]!);
-  await createRelationship(origin, bearer, neighborIds[1]!, focusId);
+  await createRelationship(origin, focusId, neighborIds[0]!);
+  await createRelationship(origin, neighborIds[1]!, focusId);
   return focusId;
 }
 
@@ -203,7 +210,6 @@ async function assertGraphPaints(page: import("@playwright/test").Page): Promise
 test.describe("Inspector graph render smoke (prod bundle, pixel-level)", () => {
   test("/graph paints a fitted graph with >=3 nodes and >=1 edge", async ({
     page,
-    bearerToken,
     neotomaHttpOrigin,
     inspectorSpaUrl,
   }) => {
@@ -225,7 +231,7 @@ test.describe("Inspector graph render smoke (prod bundle, pixel-level)", () => {
       }
     });
 
-    const focusId = await seedGraph(neotomaHttpOrigin, bearerToken);
+    const focusId = await seedGraph(neotomaHttpOrigin);
 
     await page.goto(`${inspectorSpaUrl}graph?node=${encodeURIComponent(focusId)}`, {
       waitUntil: "domcontentloaded",
@@ -236,11 +242,10 @@ test.describe("Inspector graph render smoke (prod bundle, pixel-level)", () => {
 
   test("/embed/graph paints a fitted graph with >=3 nodes and >=1 edge", async ({
     page,
-    bearerToken,
     neotomaHttpOrigin,
     inspectorSpaUrl,
   }) => {
-    const focusId = await seedGraph(neotomaHttpOrigin, bearerToken);
+    const focusId = await seedGraph(neotomaHttpOrigin);
 
     // The embed route reads its API origin from `?apiBase=` (the `WithBase` graph
     // hook), and the focus node from `?node=`.

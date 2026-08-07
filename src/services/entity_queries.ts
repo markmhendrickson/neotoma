@@ -32,6 +32,35 @@ export function escapeLikeTerm(term: string): string {
   return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
+/**
+ * A snapshot JSON field name that is safe to splice into a `snapshot->>${field}`
+ * column expression.
+ *
+ * SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): both the
+ * `sort_by=snapshot.<field>` path and every `snapshot_filters` key are built
+ * into `snapshot->>${field}` and interpolated into generated SQL (ORDER BY and
+ * WHERE). The sqlite adapter only rewrites a column when it matches a strict
+ * `identifier->>identifier` pattern and otherwise passes it through UNCHANGED,
+ * so a non-identifier field name (e.g. a `(CASE WHEN … )` expression) reaches
+ * SQLite verbatim. Constrain field names to bare identifiers at the source, so
+ * an attacker cannot smuggle an expression through this seam.
+ */
+const SNAPSHOT_FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export function isValidSnapshotFieldName(field: string): boolean {
+  return typeof field === "string" && SNAPSHOT_FIELD_NAME.test(field);
+}
+
+export class InvalidSnapshotFieldError extends Error {
+  constructor(field: string, context: "sort_by" | "snapshot_filters") {
+    super(
+      `Invalid ${context} field name: ${JSON.stringify(field)}. ` +
+        `Snapshot field names must match ${SNAPSHOT_FIELD_NAME.source}.`
+    );
+    this.name = "InvalidSnapshotFieldError";
+  }
+}
+
 export interface EntityQueryOptions {
   userId?: string;
   entityType?: string;
@@ -403,6 +432,9 @@ export async function queryEntities(
 
       if (snapshotFilters) {
         for (const [field, filter] of Object.entries(snapshotFilters)) {
+          if (!isValidSnapshotFieldName(field)) {
+            throw new InvalidSnapshotFieldError(field, "snapshot_filters");
+          }
           const col = `snapshot->>${field}`;
           switch (filter.op) {
             case "eq":
@@ -450,6 +482,9 @@ export async function queryEntities(
         snapshotQuery = snapshotQuery.order("snapshot->>created_at", { ascending });
       } else if (isSnapshotFieldSort) {
         const snapshotField = sortBy.replace("snapshot.", "");
+        if (!isValidSnapshotFieldName(snapshotField)) {
+          throw new InvalidSnapshotFieldError(snapshotField, "sort_by");
+        }
         snapshotQuery = snapshotQuery.order(`snapshot->>${snapshotField}`, { ascending });
       } else {
         snapshotQuery = snapshotQuery.order("entity_id", { ascending: true });

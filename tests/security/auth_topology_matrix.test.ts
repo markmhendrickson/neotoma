@@ -42,6 +42,16 @@
  * `tests/integration/tunnel_auth.test.ts` for the regression-layer
  * coverage of the v0.11.1 bug class; tunnel_auth.test.ts remains the
  * targeted /mcp tunnel-auth assertion.
+ *
+ * NEGATIVE-SPACE DISCIPLINE (Practice 1, docs/security/adversarial_practices.md):
+ * absent/malformed-credential rows are necessary but NOT sufficient. The
+ * 2026-08-07 forged-key bypass lived in the gap between "no credential" and
+ * "wrong credential" — a WELL-FORMED-BUT-UNAUTHORIZED credential. Every auth
+ * boundary must also assert the well-formed-but-unauthorized case (a
+ * syntactically valid but unprovisioned credential, with and without a
+ * caller-supplied user_id override). That specific coverage lives in
+ * `tests/security/ed25519_forged_key_auth_bypass.test.ts`; keep both files in
+ * sync when adding auth paths.
  */
 
 import fs from "node:fs";
