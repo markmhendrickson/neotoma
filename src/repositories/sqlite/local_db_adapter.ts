@@ -299,7 +299,9 @@ function fromDbRow(table: string, row: Record<string, unknown>): Record<string, 
   return result;
 }
 
-function normalizeColumnName(table: string, column: string): string {
+// Exported for the security regression test that asserts the fail-closed
+// behaviour of the column normaliser (advisory 2026-08-07-sort-by-order-by-sql-injection).
+export function normalizeColumnName(table: string, column: string): string {
   // Compatibility aliases used by tests and older codepaths.
   if (table === "entities" && column === "merged_into") return "merged_to_entity_id";
   if (table === "observations" && column === "priority") return "source_priority";
@@ -328,6 +330,18 @@ function normalizeColumnName(table: string, column: string): string {
     // Emulate PostgREST text projection semantics for ->>:
     // booleans become "true"/"false"; scalars become text.
     return `CASE json_type(${jsonColumn}, '${jsonPath}') WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE CAST(${extracted} AS TEXT) END`;
+  }
+  // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): this value is
+  // interpolated verbatim into generated SQL (ORDER BY, WHERE, SELECT). The old
+  // `return column` fallthrough let any non-recognised string — including a
+  // `(CASE WHEN … )` expression smuggled through a `snapshot->>${field}` build —
+  // reach SQLite unescaped. Fail closed instead: only a bare column identifier
+  // or a `table.column` qualified identifier may pass through. Every legitimate
+  // caller uses one of those shapes, the `->>` / `lower(->>)` projections, or a
+  // compatibility alias handled above; anything else is a bug or an injection
+  // attempt and must not be interpolated.
+  if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(column)) {
+    throw new Error(`Unsafe column reference rejected: ${JSON.stringify(column)}`);
   }
   return column;
 }
@@ -874,8 +888,26 @@ class LocalQueryBuilder {
                     .map((o) => `${o.column} ${o.ascending ? "ASC" : "DESC"}`)
                     .join(", ")}`
                 : "";
-            const limitSql = this.limitValue !== null ? `LIMIT ${this.limitValue}` : "";
-            const offsetSql = this.offsetValue !== null ? `OFFSET ${this.offsetValue}` : "";
+            // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection, Fix
+            // item 3): LIMIT/OFFSET are interpolated into query text. Every
+            // current caller coerces to a validated integer upstream, but coerce
+            // again here so this raw sink cannot inject if a future caller passes
+            // an unvalidated value — a non-integer is rejected rather than spliced.
+            // Number.isSafeInteger (not isInteger): |n| >= 1e21 is still an
+            // "integer" but stringifies to exponential notation ("1e+21"), which
+            // is not a plain decimal token. Not injectable — the form carries no
+            // SQL metacharacters — but rejecting it keeps this sink strictly
+            // plain-decimal, which is what the guard claims to guarantee.
+            const asSqlCount = (value: number, label: string): number => {
+              if (!Number.isSafeInteger(value) || value < 0) {
+                throw new Error(`Unsafe ${label} value rejected: ${JSON.stringify(value)}`);
+              }
+              return value;
+            };
+            const limitSql =
+              this.limitValue !== null ? `LIMIT ${asSqlCount(this.limitValue, "LIMIT")}` : "";
+            const offsetSql =
+              this.offsetValue !== null ? `OFFSET ${asSqlCount(this.offsetValue, "OFFSET")}` : "";
 
             const sql =
               `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();

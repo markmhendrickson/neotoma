@@ -4054,31 +4054,45 @@ app.use(async (req, res, next) => {
 
   const bearerToken = headerAuth.slice("Bearer ".length).trim();
 
-  // Try to validate as Ed25519 bearer token first
+  // Ed25519 bearer path.
+  //
+  // SECURITY (advisory 2026-08-07-ed25519-bearer-forged-key-auth-bypass):
+  // The bearer token IS a public key (base64url of 32 raw bytes). Possession
+  // of a public key must NEVER authenticate — anyone can present any public
+  // key. Two invariants close the prior forged-key bypass:
+  //
+  //   1. A valid request Signature is MANDATORY. It proves possession of the
+  //      corresponding private key. A request without a signature is rejected,
+  //      not silently accepted (the old `if (signature && req.body)` made the
+  //      check optional, so an unsigned forged key sailed through).
+  //   2. The key must map to a PRE-PROVISIONED userId. `ensurePublicKeyRegistered`
+  //      auto-registers any syntactically-valid 32-byte key, so its `true` return
+  //      means "well-formed", not "known". Only a key that was registered WITH a
+  //      userId (getUserIdFromBearerToken) is a real principal; a bare
+  //      auto-registered key resolves to `undefined` and must fall through to the
+  //      reject path — never to a caller-supplied `user_id` in getAuthenticatedUserId.
   const registered = ensurePublicKeyRegistered(bearerToken);
+  const registeredUserId = registered ? getUserIdFromBearerToken(bearerToken) : undefined;
+  const { signature: ed25519Signature } = parseAuthHeader(headerAuth);
 
-  if (registered && isBearerTokenValid(bearerToken)) {
-    // Optional: Verify signature if provided
-    const { signature } = parseAuthHeader(headerAuth);
-    if (signature && req.body) {
-      const bodyString = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-      const isValid = verifyRequest(bodyString, signature, bearerToken);
-      if (!isValid) {
-        logWarn("AuthInvalidSignature", req);
-        return sendError(res, 403, "AUTH_INVALID", "Invalid request signature");
-      }
+  if (registered && isBearerTokenValid(bearerToken) && registeredUserId && ed25519Signature) {
+    // Signature is required and must verify over the exact request body.
+    const bodyString = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? "");
+    if (!verifyRequest(bodyString, ed25519Signature, bearerToken)) {
+      logWarn("AuthInvalidSignature", req);
+      return sendError(res, 403, "AUTH_INVALID", "Invalid request signature");
     }
 
     // Attach public key to request for encryption service
     (req as any).publicKey = getPublicKey(bearerToken);
     (req as any).bearerToken = bearerToken;
-    // If this token was registered with a userId, set it so getAuthenticatedUserId works without query param
-    const registeredUserId = getUserIdFromBearerToken(bearerToken);
-    if (registeredUserId) {
-      stampUserPrincipal(req, registeredUserId);
-    }
+    // Bind the request to the pre-provisioned principal. The caller cannot
+    // override this via a `user_id` param — getAuthenticatedUserId keys off the
+    // stamped principal, and the Ed25519 fall-through that trusted a
+    // caller-supplied user_id has been removed.
+    stampUserPrincipal(req, registeredUserId);
     logger.info(
-      `[Auth] ${req.method} ${req.path} auth_method=ed25519_bearer user_id=${(req as any).authenticatedUserId ?? "(from token)"}`
+      `[Auth] ${req.method} ${req.path} auth_method=ed25519_bearer user_id=${registeredUserId}`
     );
   } else {
     // Try to validate as session token
@@ -4192,7 +4206,10 @@ app.get("/me", async (req, res) => {
  * @returns Authenticated user_id
  * @throws Error if not authenticated or user_id mismatch
  */
-async function getAuthenticatedUserId(
+// Exported for the security regression test that asserts the fail-closed
+// behaviour for unresolved Bearer principals
+// (advisory 2026-08-07-ed25519-bearer-forged-key-auth-bypass).
+export async function getAuthenticatedUserId(
   req: express.Request,
   providedUserId?: string
 ): Promise<string> {
@@ -4228,18 +4245,17 @@ async function getAuthenticatedUserId(
     return authenticatedUserId;
   }
 
-  const headerAuth = req.headers.authorization || "";
-  if (!headerAuth.startsWith("Bearer ")) {
-    throw new Error("Not authenticated - missing Bearer token");
-  }
-
-  // Ed25519 bearer token - user_id must be provided
-  if (!providedUserId) {
-    throw new Error("user_id required when using Ed25519 bearer token");
-  }
-
-  // For Ed25519 tokens, we trust the provided user_id (token validation happens in middleware)
-  return providedUserId;
+  // No principal was resolved by the auth middleware. Fail closed.
+  //
+  // SECURITY (advisory 2026-08-07-ed25519-bearer-forged-key-auth-bypass):
+  // Previously this tail returned the caller-supplied `user_id` for any request
+  // carrying a Bearer header, on the assumption that "token validation happens
+  // in middleware". A forged public key was accepted by that middleware without
+  // proving possession of the private key, so this line handed an attacker the
+  // scope of their choice (e.g. the shared nil-UUID owner). A request that
+  // reaches here has NOT been authenticated to any principal — there is no
+  // trustworthy `user_id` to return, regardless of what the caller provided.
+  throw new Error("Not authenticated - no resolved principal for request");
 }
 
 /**
@@ -4314,6 +4330,24 @@ function handleApiError(
     return res
       .status(error.status)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelopeDetails()));
+  }
+  // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): a rejected
+  // snapshot field name (sort_by / snapshot_filters) or an unsafe column
+  // reference caught by the sqlite adapter is a client input error, not a server
+  // fault — surface it as a 400 so it is not masked as a 500 DB_QUERY_FAILED, and
+  // so the negative test asserts a stable status. Matched by name to avoid a
+  // static import cycle with the dynamically-imported query module.
+  if (
+    error instanceof Error &&
+    (error.name === "InvalidSnapshotFieldError" ||
+      error.message.startsWith("Unsafe column reference rejected:"))
+  ) {
+    logWarn(logContext || "InvalidQueryField", req, { detail: error.message });
+    return res.status(400).json(
+      buildErrorEnvelope("INVALID_QUERY_FIELD", "Invalid query field name.", {
+        detail: error.message,
+      })
+    );
   }
   logError(logContext || "APIError", req, error);
   // SECURITY: do not echo raw Error.message to clients in production; SQLite /
