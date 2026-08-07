@@ -30,8 +30,38 @@ export interface StandingRule {
  *
  * Returns an empty array on any error so session initialisation is never
  * blocked by a rules-query failure.
+ *
+ * IMPORTANT: an empty array is ambiguous on its own — it means either "this
+ * user has no standing rules" or "the lookup failed". Those are very different
+ * conditions: the first is normal, the second is a silent policy bypass, and
+ * conflating them is exactly why #2131 went unnoticed. Callers that surface
+ * standing rules to an agent should use {@link getActiveStandingRulesResult}
+ * and report the failure rather than presenting it as an empty policy.
  */
+/**
+ * Message from the most recent failed standing-rules lookup, or null when the
+ * last lookup succeeded. Lets the caller distinguish "no rules" from "could
+ * not read rules" without changing the array-returning API.
+ */
+let lastLookupFailure: string | null = null;
+
+/**
+ * Standing rules plus whether the lookup itself succeeded. Prefer this over
+ * {@link getActiveStandingRules} anywhere the result is shown to an agent or
+ * an operator, so a lookup failure is never rendered as an empty policy.
+ */
+export async function getActiveStandingRulesResult(
+  userId: string
+): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
+  const rules = await getActiveStandingRules(userId);
+  return lastLookupFailure
+    ? { rules, lookup_failed: true, error: lastLookupFailure }
+    : { rules, lookup_failed: false };
+}
+
 export async function getActiveStandingRules(userId: string): Promise<StandingRule[]> {
+  // Reset per call: the marker must describe THIS lookup, not a previous one.
+  lastLookupFailure = null;
   try {
     // Read the reduced field values straight off entity_snapshots. This used
     // to join from `entities` with the PostgREST embedded-resource hint
@@ -75,7 +105,13 @@ export async function getActiveStandingRules(userId: string): Promise<StandingRu
     }
 
     if (error) {
-      logger.warn(`[standing_rules] query failed: ${error.message}`);
+      // error, not warn: a failed lookup means no rule reaches the session,
+      // which is a policy bypass rather than a degraded read.
+      logger.error(
+        `[standing_rules] LOOKUP FAILED — no rules will be injected this session ` +
+          `(this is NOT the same as having no rules configured): ${error.message}`
+      );
+      lastLookupFailure = error.message;
       return [];
     }
 

@@ -83,7 +83,7 @@ import {
   resolveConfiguredSessionOrigin,
   type SessionOriginInfo,
 } from "./services/session_info.js";
-import { getActiveStandingRules, type StandingRule } from "./services/standing_rules.js";
+import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
@@ -686,8 +686,15 @@ export class NeotomaServer {
     // Load standing rules for the authenticated user and inject them so agents
     // apply them from the first turn of the session (issue #184).
     let standingRules: StandingRule[] = [];
+    // An empty rules array is ambiguous — it means either "no rules configured"
+    // or "the lookup failed". Carry the distinction into the payload so an
+    // agent is never handed an empty policy that is actually a broken read
+    // (#2131).
+    let standingRulesLookupFailed = false;
     if (this.authenticatedUserId) {
-      standingRules = await getActiveStandingRules(this.authenticatedUserId);
+      const result = await getActiveStandingRulesResult(this.authenticatedUserId);
+      standingRules = result.rules;
+      standingRulesLookupFailed = result.lookup_failed;
     }
 
     const availableSkills = this.getAvailableSkills();
@@ -708,6 +715,13 @@ export class NeotomaServer {
           : {}),
         _neotoma: {
           standing_rules: standingRules,
+          ...(standingRulesLookupFailed
+            ? {
+                standing_rules_unavailable: true,
+                standing_rules_note:
+                  "Standing rules could not be read for this session. An empty list here does NOT mean no rules are configured — treat any instance policy as unknown rather than absent, and say so rather than proceeding as if unrestricted.",
+              }
+            : {}),
           available_skills: availableSkills,
         },
       },

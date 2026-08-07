@@ -49,7 +49,10 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
-import { getActiveStandingRules } from "../../src/services/standing_rules.js";
+import {
+  getActiveStandingRules,
+  getActiveStandingRulesResult,
+} from "../../src/services/standing_rules.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -226,5 +229,34 @@ describe("getActiveStandingRules", () => {
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe("Array Snap");
     expect(result[0].rule_text).toBe("arr text");
+  });
+
+  // #2131: an empty array must not be conflated with a failed lookup. That
+  // ambiguity is what let a broken query masquerade as "no rules configured"
+  // on every libSQL instance for weeks.
+  describe("failure is distinguishable from empty (#2131)", () => {
+    it("reports lookup_failed when the query errors", async () => {
+      setRows([], { message: 'unrecognized token: "!"' });
+      const result = await getActiveStandingRulesResult("user-1");
+      expect(result.rules).toEqual([]);
+      expect(result.lookup_failed).toBe(true);
+      expect(result.error).toContain("unrecognized token");
+    });
+
+    it("reports lookup_failed=false when the user genuinely has no rules", async () => {
+      setRows([]);
+      const result = await getActiveStandingRulesResult("user-1");
+      expect(result.rules).toEqual([]);
+      expect(result.lookup_failed).toBe(false);
+    });
+
+    it("clears a prior failure once a lookup succeeds", async () => {
+      setRows([], { message: "boom" });
+      expect((await getActiveStandingRulesResult("user-1")).lookup_failed).toBe(true);
+      setRows([makeRow({ snapshot: { title: "R", rule_text: "text" } })]);
+      const after = await getActiveStandingRulesResult("user-1");
+      expect(after.lookup_failed).toBe(false);
+      expect(after.rules).toHaveLength(1);
+    });
   });
 });
