@@ -4342,10 +4342,15 @@ function handleApiError(
     (error.name === "InvalidSnapshotFieldError" ||
       error.message.startsWith("Unsafe column reference rejected:"))
   ) {
+    // Log the full message (with the rejected value) server-side for debugging,
+    // but do NOT echo the caller-supplied field string back in the response —
+    // reflecting rejected input, even sanitized, is needless. Return a generic
+    // detail that names the constraint. (Vanellus review, PR #2129, non-blocking.)
     logWarn(logContext || "InvalidQueryField", req, { detail: error.message });
     return res.status(400).json(
       buildErrorEnvelope("INVALID_QUERY_FIELD", "Invalid query field name.", {
-        detail: error.message,
+        detail:
+          "Query field names (sort_by / snapshot_filters keys) must be bare identifiers matching ^[A-Za-z_][A-Za-z0-9_]*$.",
       })
     );
   }
