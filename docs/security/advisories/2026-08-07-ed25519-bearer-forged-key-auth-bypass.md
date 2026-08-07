@@ -110,6 +110,21 @@ Land all of the following on the hotfix branch; the advisory is not complete unt
 
 4. **Regression test (the gate).** Add a G3 auth-topology-matrix row: a well-formed-but-forged 32-byte key + `user_id=<nil-UUID>`, with and without a signature, must yield `401`/`403` on every protected REST route. The existing matrix only exercises *absent* and *garbage* bearers, which is why this class was not caught.
 
+## Note — the Ed25519 REST accept branch is inert after the fix
+
+Adversarial review (2026-08-07) confirmed a design consequence worth recording:
+after the fix, the Ed25519 REST accept branch is **unreachable in production**.
+It now requires `registeredUserId` (from `getUserIdFromBearerToken`), which is
+only populated by the two-arg `registerPublicKey(token, userId)` — a call that
+**does not exist anywhere in `src/`** (only `ensurePublicKeyRegistered` →
+`registerPublicKey(token)` with no userId is called). No first-party client
+constructs Ed25519-signed REST requests either. This is the intended safe state:
+the only behaviour the pre-fix branch ever produced in production was the bypass
+itself. If provisioned Ed25519 REST agents are ever desired, wire a real
+`registerPublicKey(token, userId)` provisioning path and add an end-to-end test
+that a provisioned key + valid signature authenticates through the middleware —
+until then the branch is deliberately dead, not accidentally broken.
+
 ## Operator action
 
 1. **Upgrade to `X.Y.Z` or later** before re-exposing any personal-mode REST API to the public internet.
