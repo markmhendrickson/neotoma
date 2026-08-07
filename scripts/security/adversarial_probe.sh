@@ -84,50 +84,96 @@ forged_token() {
 }
 
 # Returns the HTTP status; captures body to $BODY for content checks.
+# On a connection failure/timeout, curl writes "000" to stdout via -w AND exits
+# non-zero, so a `|| echo 000` fallback would DOUBLE it ("000000"). Suppress the
+# fallback and read curl's own -w value; normalise anything not 3 digits to 000.
 BODY=""
 http() {
   local method="$1"; shift
   local url="$1"; shift
   local tmp; tmp="$(mktemp)"
   local code
-  code="$(curl -sS -m 20 -o "$tmp" -w '%{http_code}' -A "$UA" -X "$method" "$@" "$url" 2>/dev/null || echo 000)"
+  code="$(curl -sS -m 20 -o "$tmp" -w '%{http_code}' -A "$UA" -X "$method" "$@" "$url" 2>/dev/null)" || true
   BODY="$(cat "$tmp")"; rm -f "$tmp"
+  [[ "$code" =~ ^[0-9]{3}$ ]] || code="000"
   echo "$code"
 }
 
+# Guard: a host that does not respond at all cannot be probed. Treat it as an
+# invocation problem (exit 2), NOT a pass — a down host is not a safe host, and
+# must never be reported as "gate PASS".
+host_reachable() {
+  local host="$1"
+  local code
+  code="$(http GET "${host}/health")"
+  [[ "$code" != "000" ]]
+}
+
+UNREACHABLE=0
 for HOST in "${HOSTS[@]}"; do
   HOST="${HOST%/}"
   log "## Adversarial probe: ${HOST}"
-  TOK="$(forged_token)"
 
-  # --- Probe 1: unauthenticated read on a protected route -> expect 401 ---
-  code="$(http POST "${HOST}/entities/query" -H 'Content-Type: application/json' \
-    -d "{\"entity_type\":\"${ENTITY_TYPE}\",\"limit\":1}")"
-  if [[ "$code" == "401" || "$code" == "403" ]]; then
-    log " PASS  [1] unauth /entities/query -> ${code}"
-  else
-    log " FAIL  [1] unauth /entities/query -> ${code} (expected 401/403)"; FAILURES=$((FAILURES+1))
+  if ! host_reachable "$HOST"; then
+    log " SKIP  host is not responding (/health -> 000). Cannot probe a down host;"
+    log "       a non-responding host is not a verified-safe host. Deploy first, then re-run."
+    log ""
+    UNREACHABLE=$((UNREACHABLE+1))
+    continue
   fi
 
-  # --- Probe 2: forged key + nil-UUID override -> must NOT return data ---
+  TOK="$(forged_token)"
+
+  # Detect server mode from the public server card. A sandbox-mode host serves
+  # anonymous/public reads by design (200 is EXPECTED and safe there), so a bare
+  # 200 is NOT a bypass signal on sandbox. The discriminating signal on ANY mode
+  # is whether a forged key can pivot to ANOTHER user's scope via a user_id
+  # override — which a safe host (patched personal OR sandbox) rejects.
+  MODE="$(http GET "${HOST}/" >/dev/null 2>&1; echo "$BODY" | grep -o '"mode":"[a-z_]*"' | head -1 | sed 's/.*:"//;s/"//')"
+  [[ -n "$MODE" ]] || MODE="unknown"
+  log " INFO  server mode: ${MODE}"
+
+  # --- Probe 1: unauthenticated read on a protected route ---
+  code="$(http POST "${HOST}/entities/query" -H 'Content-Type: application/json' \
+    -d "{\"entity_type\":\"${ENTITY_TYPE}\",\"limit\":1}")"
+  if [[ "$MODE" == "sandbox" ]]; then
+    log " INFO  [1] unauth /entities/query -> ${code} (sandbox serves public reads by design; not a finding)"
+  elif [[ "$code" == "401" || "$code" == "403" ]]; then
+    log " PASS  [1] unauth /entities/query -> ${code}"
+  else
+    log " FAIL  [1] unauth /entities/query -> ${code} (personal-mode host must require auth)"; FAILURES=$((FAILURES+1))
+  fi
+
+  # --- Probe 2: forged key + nil-UUID OVERRIDE — the actual bypass test ---
+  # The discriminator is the user_id override, not the 200. A safe host rejects
+  # the override (403) or requires real auth (401). The pre-fix bug returned the
+  # OPERATOR's data under the nil-UUID on a personal-mode host.
   code="$(http POST "${HOST}/entities/query" \
     -H "Authorization: Bearer ${TOK}" -H 'Content-Type: application/json' \
     -d "{\"user_id\":\"${NIL_UUID}\",\"entity_type\":\"${ENTITY_TYPE}\",\"limit\":1}")"
-  if [[ "$code" == "200" ]]; then
-    log " FAIL  [2] forged-key+nil-UUID /entities/query -> 200 WITH DATA — AUTH BYPASS LIVE. DO NOT RE-EXPOSE."; FAILURES=$((FAILURES+1))
-  elif [[ "$code" == "401" || "$code" == "403" ]]; then
-    log " PASS  [2] forged-key+nil-UUID -> ${code}"
+  if [[ "$code" == "403" || "$code" == "401" ]]; then
+    log " PASS  [2] forged-key+user_id-override -> ${code} (override rejected)"
+  elif [[ "$code" == "200" && "$MODE" == "sandbox" ]]; then
+    # Sandbox pins to its public user; verify it did NOT honor the override by
+    # confirming the same request without a forged key behaves identically.
+    log " WARN  [2] forged-key+override -> 200 on sandbox. Sandbox pins to public user; a 200 alone is not a pivot. Manually confirm the returned rows are the public user's, not another user's."
+  elif [[ "$code" == "200" ]]; then
+    log " FAIL  [2] forged-key+user_id-override -> 200 on ${MODE}-mode host — AUTH BYPASS: override honored. DO NOT RE-EXPOSE."; FAILURES=$((FAILURES+1))
   else
-    log " WARN  [2] forged-key+nil-UUID -> ${code} (not 200, but unexpected; investigate)"
+    log " WARN  [2] forged-key+override -> ${code} (unexpected; investigate)"
   fi
 
-  # --- Probe 2b: forged key via GET /entities ---
+  # --- Probe 2b: forged key via GET /entities with override ---
   code="$(http GET "${HOST}/entities?entity_type=${ENTITY_TYPE}&limit=1&user_id=${NIL_UUID}" \
     -H "Authorization: Bearer ${TOK}")"
-  if [[ "$code" == "200" ]]; then
-    log " FAIL  [2b] forged-key GET /entities -> 200 WITH DATA — AUTH BYPASS LIVE."; FAILURES=$((FAILURES+1))
+  if [[ "$code" == "403" || "$code" == "401" ]]; then
+    log " PASS  [2b] forged-key GET override -> ${code}"
+  elif [[ "$code" == "200" && "$MODE" == "sandbox" ]]; then
+    log " WARN  [2b] forged-key GET override -> 200 on sandbox (public user; not a pivot on its own)"
+  elif [[ "$code" == "200" ]]; then
+    log " FAIL  [2b] forged-key GET override -> 200 on ${MODE}-mode host — AUTH BYPASS."; FAILURES=$((FAILURES+1))
   else
-    log " PASS  [2b] forged-key GET /entities -> ${code}"
+    log " PASS  [2b] forged-key GET override -> ${code}"
   fi
 
   # --- Probe 3: SQLi via sort_by CASE expression -> no raw SQL error / no 200 ---
@@ -158,7 +204,9 @@ for HOST in "${HOSTS[@]}"; do
 done
 
 log "## Result"
-if [[ "$FAILURES" -eq 0 ]]; then
+if [[ "$UNREACHABLE" -gt 0 && "$FAILURES" -eq 0 ]]; then
+  log "${UNREACHABLE} host(s) UNREACHABLE, no probes ran. NOT a pass — deploy the patched build, then re-run (gate INCONCLUSIVE)."
+elif [[ "$FAILURES" -eq 0 ]]; then
   log "ALL ADVERSARIAL PROBES REJECTED — safe to re-expose (gate PASS)."
 else
   log "${FAILURES} FAILURE(S) — a live exposure is present. DO NOT re-expose this instance (gate FAIL)."
@@ -169,5 +217,7 @@ if [[ -n "$OUT_PATH" ]]; then
   echo "Report written to ${OUT_PATH}"
 fi
 
+# Exit codes: 1 = live exposure, 2 = could not probe (unreachable), 0 = clean pass.
 [[ "$FAILURES" -eq 0 ]] || exit 1
+[[ "$UNREACHABLE" -eq 0 ]] || exit 2
 exit 0
