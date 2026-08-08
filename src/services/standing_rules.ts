@@ -169,6 +169,11 @@ export async function getActiveStandingRules(userId: string): Promise<StandingRu
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(`[standing_rules] unexpected error: ${msg}`);
+    // A thrown exception is a failed lookup, not an empty one. Record it the
+    // same way a `{ error }`-shaped query result is recorded, so callers see
+    // `lookup_failed` rather than a bare empty array they cannot distinguish
+    // from "this user has no rules".
+    lastLookupFailure = msg;
     return [];
   }
 }

@@ -258,5 +258,38 @@ describe("getActiveStandingRules", () => {
       expect(after.lookup_failed).toBe(false);
       expect(after.rules).toHaveLength(1);
     });
+
+    // A driver that throws rather than returning `{ error }` reaches the outer
+    // catch. That path swallowed the failure into a bare `[]`, reintroducing
+    // the exact ambiguity this describe-block exists to close — just via a
+    // thrown exception instead of an error-shaped result.
+    it("reports lookup_failed when the driver throws", async () => {
+      const { db } = (await import("../../src/db.js")) as unknown as {
+        db: { from: ReturnType<typeof vi.fn> };
+      };
+      db.from.mockImplementationOnce(() => {
+        throw new Error("connection reset");
+      });
+
+      const result = await getActiveStandingRulesResult("user-1");
+      expect(result.rules).toEqual([]);
+      expect(result.lookup_failed).toBe(true);
+      expect(result.error).toContain("connection reset");
+    });
+
+    it("clears a thrown failure once a later lookup succeeds", async () => {
+      const { db } = (await import("../../src/db.js")) as unknown as {
+        db: { from: ReturnType<typeof vi.fn> };
+      };
+      db.from.mockImplementationOnce(() => {
+        throw new Error("connection reset");
+      });
+      expect((await getActiveStandingRulesResult("user-1")).lookup_failed).toBe(true);
+
+      setRows([makeRow({ snapshot: { title: "R", rule_text: "text" } })]);
+      const after = await getActiveStandingRulesResult("user-1");
+      expect(after.lookup_failed).toBe(false);
+      expect(after.rules).toHaveLength(1);
+    });
   });
 });
