@@ -9,7 +9,7 @@
  * - Handles DB errors gracefully (returns empty array)
  * - Handles unexpected exceptions gracefully (returns empty array)
  * - Passes scope through to the result
- * - Handles entity_snapshots as an array (Supabase join variant)
+ * - Parses a snapshot delivered as JSON text (libSQL variant)
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,14 +21,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Mutable container so individual tests can change the resolved value.
 const resolvedValue: { data: unknown; error: unknown } = { data: [], error: null };
 
+// Merge-pointer rows returned for the secondary `entities` lookup.
+const mergedValue: { data: unknown; error: unknown } = { data: [], error: null };
+
 vi.mock("../../src/db.js", () => {
-  const mockIs = vi.fn(async () => resolvedValue);
-  const mockEq = vi.fn(function () {
-    // Return an object that supports further .eq() and .is() calls
-    return { eq: mockEq, is: mockIs };
-  });
-  const mockSelect = vi.fn(() => ({ eq: mockEq }));
-  const mockFrom = vi.fn(() => ({ select: mockSelect }));
+  // The query is a thenable chain of .eq() calls; which table was addressed
+  // decides which fixture resolves. Mirrors the real two-query shape.
+  const makeChain = (table: string) => {
+    const result = () => (table === "entities" ? mergedValue : resolvedValue);
+    const chain: Record<string, unknown> = {};
+    chain.eq = vi.fn(() => chain);
+    chain.is = vi.fn(() => chain);
+    chain.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result()).then(resolve);
+    return chain;
+  };
+  const mockFrom = vi.fn((table: string) => ({ select: vi.fn(() => makeChain(table)) }));
 
   return { db: { from: mockFrom } };
 });
@@ -42,37 +49,40 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
-import { getActiveStandingRules } from "../../src/services/standing_rules.js";
+import {
+  getActiveStandingRules,
+  getActiveStandingRulesResult,
+} from "../../src/services/standing_rules.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-type SnapshotHolder =
-  | { snapshot: Record<string, unknown> }
-  | Array<{ snapshot: Record<string, unknown> }>;
-
 interface FakeRow {
-  id: string;
+  entity_id: string;
   canonical_name: string;
-  entity_snapshots: SnapshotHolder;
+  // Backends differ on whether a JSON column arrives parsed or as text, so the
+  // fixture can produce either.
+  snapshot: Record<string, unknown> | string;
 }
 
 function makeRow(opts: {
   id?: string;
   canonical_name?: string;
   snapshot?: Record<string, unknown>;
-  snapshotsAsArray?: boolean;
+  snapshotAsText?: boolean;
 }): FakeRow {
   const snap = opts.snapshot ?? {};
-  const holder: SnapshotHolder = opts.snapshotsAsArray
-    ? [{ snapshot: snap }]
-    : { snapshot: snap };
   return {
-    id: opts.id ?? "entity-1",
+    entity_id: opts.id ?? "entity-1",
     canonical_name: opts.canonical_name ?? "Rule One",
-    entity_snapshots: holder,
+    snapshot: opts.snapshotAsText ? JSON.stringify(snap) : snap,
   };
+}
+
+function setMerged(rows: Array<{ id: string; merged_to_entity_id: string | null }>): void {
+  mergedValue.data = rows;
+  mergedValue.error = null;
 }
 
 function setRows(rows: FakeRow[], error: unknown = null): void {
@@ -205,13 +215,13 @@ describe("getActiveStandingRules", () => {
     expect(result[0].priority).toBe(0);
   });
 
-  it("handles entity_snapshots as an array (Supabase join variant)", async () => {
+  it("parses a snapshot delivered as JSON text (libSQL variant)", async () => {
     setRows([
       makeRow({
         id: "e1",
         canonical_name: "Array Snap",
         snapshot: { title: "Array Snap", rule_text: "arr text" },
-        snapshotsAsArray: true,
+        snapshotAsText: true,
       }),
     ]);
 
@@ -219,5 +229,67 @@ describe("getActiveStandingRules", () => {
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe("Array Snap");
     expect(result[0].rule_text).toBe("arr text");
+  });
+
+  // #2131: an empty array must not be conflated with a failed lookup. That
+  // ambiguity is what let a broken query masquerade as "no rules configured"
+  // on every libSQL instance for weeks.
+  describe("failure is distinguishable from empty (#2131)", () => {
+    it("reports lookup_failed when the query errors", async () => {
+      setRows([], { message: 'unrecognized token: "!"' });
+      const result = await getActiveStandingRulesResult("user-1");
+      expect(result.rules).toEqual([]);
+      expect(result.lookup_failed).toBe(true);
+      expect(result.error).toContain("unrecognized token");
+    });
+
+    it("reports lookup_failed=false when the user genuinely has no rules", async () => {
+      setRows([]);
+      const result = await getActiveStandingRulesResult("user-1");
+      expect(result.rules).toEqual([]);
+      expect(result.lookup_failed).toBe(false);
+    });
+
+    it("clears a prior failure once a lookup succeeds", async () => {
+      setRows([], { message: "boom" });
+      expect((await getActiveStandingRulesResult("user-1")).lookup_failed).toBe(true);
+      setRows([makeRow({ snapshot: { title: "R", rule_text: "text" } })]);
+      const after = await getActiveStandingRulesResult("user-1");
+      expect(after.lookup_failed).toBe(false);
+      expect(after.rules).toHaveLength(1);
+    });
+
+    // A driver that throws rather than returning `{ error }` reaches the outer
+    // catch. That path swallowed the failure into a bare `[]`, reintroducing
+    // the exact ambiguity this describe-block exists to close — just via a
+    // thrown exception instead of an error-shaped result.
+    it("reports lookup_failed when the driver throws", async () => {
+      const { db } = (await import("../../src/db.js")) as unknown as {
+        db: { from: ReturnType<typeof vi.fn> };
+      };
+      db.from.mockImplementationOnce(() => {
+        throw new Error("connection reset");
+      });
+
+      const result = await getActiveStandingRulesResult("user-1");
+      expect(result.rules).toEqual([]);
+      expect(result.lookup_failed).toBe(true);
+      expect(result.error).toContain("connection reset");
+    });
+
+    it("clears a thrown failure once a later lookup succeeds", async () => {
+      const { db } = (await import("../../src/db.js")) as unknown as {
+        db: { from: ReturnType<typeof vi.fn> };
+      };
+      db.from.mockImplementationOnce(() => {
+        throw new Error("connection reset");
+      });
+      expect((await getActiveStandingRulesResult("user-1")).lookup_failed).toBe(true);
+
+      setRows([makeRow({ snapshot: { title: "R", rule_text: "text" } })]);
+      const after = await getActiveStandingRulesResult("user-1");
+      expect(after.lookup_failed).toBe(false);
+      expect(after.rules).toHaveLength(1);
+    });
   });
 });
