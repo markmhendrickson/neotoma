@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **575**
-- Backend and repo Vitest files: **540**
+- Total automated test files: **576**
+- Backend and repo Vitest files: **541**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 161 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 160 |
+| Vitest integration tests | 161 |
 | Vitest CLI tests | 77 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 6 |
@@ -399,7 +399,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (160):**
+**Files (161):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -460,6 +460,7 @@ flowchart TD
 - `tests/integration/inspector_bundled_mount.test.ts`
 - `tests/integration/inspector_content_negotiation.test.ts`
 - `tests/integration/inspector_skinning.test.ts`
+- `tests/integration/instance_policy_db_enforcement.test.ts`
 - `tests/integration/interpretation_fragment_ordering.test.ts`
 - `tests/integration/interpretation_no_schema_fallback.test.ts`
 - `tests/integration/interpretation_store.test.ts`
