@@ -87,7 +87,7 @@ import { getActiveStandingRules, type StandingRule } from "./services/standing_r
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
-import { StorePolicyDeniedError } from "./services/instance_policy.js";
+import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
@@ -1993,6 +1993,15 @@ export class NeotomaServer {
           // policy rejection would read as a server fault. Envelope comes from the
           // error itself, so both surfaces stay identical by construction.
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof StorePolicyUnavailableError) {
+          // Distinct from the denial above, and the distinction is the point:
+          // an agent must be able to tell "policy forbids this" from "policy
+          // could not be read". InternalError is the honest code — the failure
+          // is server-side and retryable — where a denial is InvalidRequest.
+          // Envelope carries `retryable: true` so an agent retries rather than
+          // narrowing what it stores in response to an outage.
+          throw new McpError(ErrorCode.InternalError, error.message, error.toErrorEnvelope());
         }
         if (error instanceof CursorError) {
           // Same structured-envelope contract for cursor rejections: clients

@@ -96,6 +96,59 @@ export interface PolicyCandidate {
 }
 
 /**
+ * Thrown when the instance policy could not be read, so no write can be
+ * evaluated against it.
+ *
+ * Deliberately a DIFFERENT error from {@link StorePolicyDeniedError}. Both stop
+ * the write, but they mean opposite things to the agent on the other end:
+ *
+ *   - `ERR_STORE_POLICY_DENIED` — the policy was read, and it forbids this.
+ *     Rewriting the payload is the correct response; retrying is not.
+ *   - `ERR_STORE_POLICY_UNAVAILABLE` — the policy could not be read. Nothing is
+ *     known about whether this write is permitted. Retrying IS appropriate;
+ *     rewriting the payload is not, and an agent that "fixes" its data in
+ *     response to this has been misled by the error.
+ *
+ * Collapsing the two would teach agents to treat infrastructure faults as
+ * policy boundaries — quietly narrowing what they store because of an outage.
+ * The write is refused either way; only the explanation differs.
+ */
+export class StorePolicyUnavailableError extends Error {
+  readonly code = "ERR_STORE_POLICY_UNAVAILABLE" as const;
+  /** Driver-level cause, for operator logs. Not a policy statement. */
+  readonly cause_message?: string;
+
+  constructor(causeMessage?: string) {
+    super(
+      "Instance policy could not be read, so this write could not be checked against it; " +
+        "0 persisted. This is an infrastructure failure, NOT a policy decision — the write " +
+        "may well be permitted. Retry; do not rewrite or narrow the payload in response."
+    );
+    this.name = "StorePolicyUnavailableError";
+    this.cause_message = causeMessage;
+  }
+
+  /** Envelope shared by REST and MCP, mirroring StorePolicyDeniedError. */
+  toErrorEnvelope(): {
+    code: typeof StorePolicyUnavailableError.prototype.code;
+    message: string;
+    retryable: true;
+    hint: string;
+  } {
+    return {
+      code: this.code,
+      message: this.message,
+      retryable: true,
+      hint:
+        "The instance policy lookup failed, so policy state is unknown and the write was " +
+        "refused rather than admitted unchecked. Retry the same payload. If this persists, " +
+        "the instance operator needs to check database health — it is not something the " +
+        "calling agent can resolve by changing what it stores.",
+    };
+  }
+}
+
+/**
  * Thrown when a write violates an `enforced` instance policy.
  *
  * Carries the full denial list so the caller can render the
@@ -201,59 +254,186 @@ function isBlank(value: unknown): boolean {
 }
 
 /**
- * Read the instance-wide policy, or `null` when none is configured.
+ * Outcome of a policy read, keeping "no policy configured" distinct from
+ * "could not read the policy".
  *
- * Takes no caller-supplied identifier by design (see module docblock). Returns
- * `null` — never throws — on any query failure: a policy lookup that errors
- * must not take down the connect handshake or every write on the instance.
- *
- * Note the failure mode this chooses. A read error yields `null`, which means
- * "no policy", which means writes are NOT denied. That is fail-open, and it is
- * the deliberate trade for v1: an instance whose DB is briefly unhealthy keeps
- * accepting writes rather than hard-failing every one of them. Callers that
- * need fail-closed semantics should surface a health check rather than
- * inferring policy state from a silent null.
+ * Those two conditions look identical through a bare `null` and mean opposite
+ * things for a data-protection control: the first is a normal instance with no
+ * declared boundary, the second is an instance whose boundary is unknown. #2131
+ * is what happens when a lookup failure is served as an empty result — a broken
+ * query masqueraded as "nothing configured" on every libSQL instance for weeks,
+ * and nothing upstream could tell.
  */
-export async function getInstancePolicy(): Promise<InstancePolicy | null> {
+export interface InstancePolicyResult {
+  policy: InstancePolicy | null;
+  /** True when the lookup itself failed. `policy` is then meaningless, not empty. */
+  lookup_failed: boolean;
+  /** Driver message for the failed lookup, for logs and operator-facing notes. */
+  error?: string;
+}
+
+/**
+ * Read the instance-wide policy and report whether the read succeeded.
+ *
+ * Takes no caller-supplied identifier by design (see module docblock).
+ *
+ * The query is deliberately backend-portable. It previously selected
+ * `entity_snapshots!inner(snapshot)`, a PostgREST embedded-resource hint that
+ * only Supabase understands: libSQL forwards it into SQL and fails with
+ * `unrecognized token: "!"`. Combined with the old fail-open `null`, that meant
+ * an `enforced` policy silently never loaded outside the unit-test harness —
+ * the enforcement guarantee of #1975 did not function on the local backend at
+ * all. `entity_snapshots` already carries `entity_type`, so the join is
+ * unnecessary; merged-away rows are excluded by a second bounded lookup.
+ */
+export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
   try {
     const { data, error } = await db
-      .from("entities")
-      .select("id, entity_snapshots!inner(snapshot)")
-      .eq("entity_type", "instance_policy")
-      .is("merged_to_entity_id", null);
+      .from("entity_snapshots")
+      .select("entity_id, snapshot")
+      .eq("entity_type", "instance_policy");
 
     if (error) {
-      logger.warn(`[instance_policy] query failed: ${error.message}`);
-      return null;
+      // error, not warn: an unreadable policy on an enforcing instance is a
+      // control failure, not a degraded read.
+      logger.error(
+        `[instance_policy] LOOKUP FAILED — policy state is unknown for this request ` +
+          `(this is NOT the same as having no policy configured): ${error.message}`
+      );
+      return { policy: null, lookup_failed: true, error: error.message };
     }
-    if (!data || data.length === 0) return null;
+    if (!data || data.length === 0) return { policy: null, lookup_failed: false };
 
     const rows = data as Array<{
-      id: string;
-      entity_snapshots:
-        | { snapshot: Record<string, unknown> }
-        | Array<{ snapshot: Record<string, unknown> }>;
+      entity_id: string;
+      snapshot: Record<string, unknown> | string | null;
     }>;
+
+    // entity_snapshots carries no merge pointer, so exclude merged-away
+    // policies with a second bounded lookup. A failure here must not silently
+    // widen the policy: treat it as an unreadable policy rather than guessing.
+    const { data: mergedRows, error: mergedErr } = await db
+      .from("entities")
+      .select("id, merged_to_entity_id")
+      .eq("entity_type", "instance_policy");
+
+    if (mergedErr) {
+      logger.error(
+        `[instance_policy] merge-filter lookup failed; policy state is unknown: ${mergedErr.message}`
+      );
+      return { policy: null, lookup_failed: true, error: mergedErr.message };
+    }
+
+    const mergedAway = new Set(
+      (mergedRows as Array<{ id: string; merged_to_entity_id: string | null }> | null ?? [])
+        .filter((r) => r.merged_to_entity_id != null)
+        .map((r) => r.id)
+    );
+
+    const live = rows.filter((r) => !mergedAway.has(r.entity_id));
+    if (live.length === 0) return { policy: null, lookup_failed: false };
 
     // Deterministic pick: an instance should hold exactly one policy, but if a
     // second is somehow present we must not let row order decide which one
     // enforces. Sort by id and take the first, and say so loudly.
-    if (rows.length > 1) {
+    if (live.length > 1) {
       logger.warn(
-        `[instance_policy] ${rows.length} instance_policy entities found; ` +
+        `[instance_policy] ${live.length} instance_policy entities found; ` +
           `using the lowest entity_id deterministically. An instance should have exactly one.`
       );
     }
-    const chosen = [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+    const chosen = [...live].sort((a, b) =>
+      a.entity_id < b.entity_id ? -1 : a.entity_id > b.entity_id ? 1 : 0
+    )[0];
 
-    const snapshotRaw = Array.isArray(chosen.entity_snapshots)
-      ? chosen.entity_snapshots[0]?.snapshot
-      : chosen.entity_snapshots?.snapshot;
-    if (!snapshotRaw || typeof snapshotRaw !== "object") return null;
+    // Backends differ on whether a JSON column arrives parsed or as text.
+    let snapshotRaw: unknown = chosen.snapshot;
+    if (typeof snapshotRaw === "string") {
+      try {
+        snapshotRaw = JSON.parse(snapshotRaw);
+      } catch (parseErr) {
+        // A stored policy we cannot parse is unreadable, not absent.
+        const msg = (parseErr as Error).message;
+        logger.error(`[instance_policy] stored policy snapshot is unparseable: ${msg}`);
+        return { policy: null, lookup_failed: true, error: msg };
+      }
+    }
+    if (!snapshotRaw || typeof snapshotRaw !== "object") {
+      return { policy: null, lookup_failed: false };
+    }
 
-    return normalizeInstancePolicy(snapshotRaw as Record<string, unknown>);
+    return {
+      policy: normalizeInstancePolicy(snapshotRaw as Record<string, unknown>),
+      lookup_failed: false,
+    };
   } catch (err) {
-    logger.warn(`[instance_policy] unexpected read failure: ${(err as Error).message}`);
+    const msg = (err as Error).message;
+    logger.error(
+      `[instance_policy] LOOKUP FAILED (thrown) — policy state is unknown: ${msg}`
+    );
+    // A thrown driver error is a failed lookup, not an empty one — the same
+    // ambiguity as the `{ error }` shape above, reached a different way.
+    return { policy: null, lookup_failed: true, error: msg };
+  }
+}
+
+/**
+ * Read the instance-wide policy, or `null` when none is configured.
+ *
+ * Convenience wrapper over {@link getInstancePolicyResult} for read-only
+ * surfaces (instructions rendering, `describe_instance_policy`) where showing
+ * no policy on a failed read is acceptable.
+ *
+ * Do NOT use this on the write-enforcement path: it collapses "no policy" and
+ * "unreadable policy" back into one value, which is precisely the distinction
+ * enforcement depends on.
+ */
+export async function getInstancePolicy(): Promise<InstancePolicy | null> {
+  return (await getInstancePolicyResult()).policy;
+}
+
+/**
+ * Entity id of the configured policy, or `null` when none exists.
+ *
+ * Exists for the authoring path. `instance_policy` sets
+ * `name_collision_policy: "reject"`, so re-storing a policy with an existing
+ * `policy_id` fails by design — two operators must not silently merge their
+ * rules into one incoherent policy. That protects the record but leaves
+ * editing with no obvious route: the second edit has to become a `correct`
+ * against the existing entity, which requires knowing its id.
+ *
+ * Without this, an operator's only recourse was to guess the id or discover
+ * the collision by hitting it (the #2011 ux finding).
+ */
+export async function getInstancePolicyEntityId(): Promise<string | null> {
+  try {
+    const { data, error } = await db
+      .from("entity_snapshots")
+      .select("entity_id")
+      .eq("entity_type", "instance_policy");
+
+    if (error || !data || data.length === 0) return null;
+
+    const { data: mergedRows } = await db
+      .from("entities")
+      .select("id, merged_to_entity_id")
+      .eq("entity_type", "instance_policy");
+
+    const mergedAway = new Set(
+      (mergedRows as Array<{ id: string; merged_to_entity_id: string | null }> | null ?? [])
+        .filter((r) => r.merged_to_entity_id != null)
+        .map((r) => r.id)
+    );
+
+    const live = (data as Array<{ entity_id: string }>)
+      .map((r) => r.entity_id)
+      .filter((id) => !mergedAway.has(id))
+      .sort();
+
+    // Same deterministic pick as getInstancePolicyResult, so the id returned
+    // here always addresses the policy that actually enforces.
+    return live[0] ?? null;
+  } catch {
     return null;
   }
 }
@@ -418,7 +598,22 @@ export async function evaluateStorePolicy(
   resolveSchema: SchemaResolver,
   policyOverride?: InstancePolicy | null
 ): Promise<StorePolicyDenial[]> {
-  const policy = policyOverride !== undefined ? policyOverride : await getInstancePolicy();
+  // Fail closed on an unreadable policy. An override (test harness, or a caller
+  // that already resolved the policy) bypasses the read entirely.
+  let policy: InstancePolicy | null;
+  if (policyOverride !== undefined) {
+    policy = policyOverride;
+  } else {
+    const result = await getInstancePolicyResult();
+    if (result.lookup_failed) {
+      // Refusing the write is the safe direction: admitting it would let an
+      // outage silently suspend every boundary the instance declares. The
+      // error type says "infrastructure", not "policy", so the agent retries
+      // rather than narrowing what it stores.
+      throw new StorePolicyUnavailableError(result.error);
+    }
+    policy = result.policy;
+  }
   if (!policy) return [];
   if (policy.enforcement !== "enforced") return [];
   if (candidates.length === 0) return [];
