@@ -83,6 +83,12 @@ describe("Envelope Encryption", () => {
 
     expect(envelope.ciphertext).toBeInstanceOf(Uint8Array);
     expect(envelope.encryptedKey).toBeInstanceOf(Uint8Array);
+    // SECURITY (Phase 2): no wrapped key is transmitted — both parties derive
+    // the AES content key via HKDF from the shared secret. `encryptedKey` is
+    // retained only for wire-shape compat and must always be empty; a
+    // reintroduced wrapped-key path would fail this assertion even though it
+    // would still satisfy the looser `toBeInstanceOf(Uint8Array)` check above.
+    expect(envelope.encryptedKey.byteLength).toBe(0);
     expect(envelope.ephemeralPublicKey).toBeInstanceOf(Uint8Array);
     expect(envelope.nonce).toBeInstanceOf(Uint8Array);
     expect(envelope.signature).toBeInstanceOf(Uint8Array);
