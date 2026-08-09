@@ -32,6 +32,7 @@ import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_inf
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
+import { StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
@@ -4324,6 +4325,21 @@ function handleApiError(
     logWarn(logContext || "CursorRejection", req, error.toErrorEnvelope());
     return res
       .status(error.statusCode)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (error instanceof StorePolicyUnavailableError) {
+    // 503, not 400: the write was refused because the instance could not read
+    // its own policy, which is a service-side fault the caller can retry — not
+    // a statement about the payload. A 400 here would tell an agent its data
+    // was wrong and invite it to narrow what it stores in response to an
+    // outage. Logged at error level because an enforcing instance that cannot
+    // read its policy is refusing every write.
+    logError(logContext || "StorePolicyUnavailable", req, error, {
+      code: error.code,
+      cause: error.cause_message,
+    });
+    return res
+      .status(503)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
   if (error instanceof IssueValidationError) {
