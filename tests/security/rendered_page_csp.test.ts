@@ -50,11 +50,10 @@ describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () =>
   });
 
   it("serves the rendered page with a strict script-blocking CSP", async () => {
-    if (!entityId) {
-      // Seeding depends on local-dev auth mode; if it did not seed, skip rather
-      // than false-fail. The header assertion below is the security-relevant one.
-      return;
-    }
+    // Seeding depends on local-dev auth mode. Fail loudly rather than
+    // early-returning with zero assertions — a broken seed must not
+    // silently greenwash this GHSA regression gate.
+    expect(entityId, "seed /store call failed — see beforeAll for details").toBeTruthy();
     const res = await fetch(`${baseUrl}/entities/${entityId}/html`);
     expect(res.status).toBe(200);
     const csp = res.headers.get("content-security-policy") ?? "";
@@ -64,6 +63,8 @@ describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () =>
     expect(csp).toContain("sandbox");
     // The global 'unsafe-inline' script policy must NOT apply to this route.
     expect(csp).not.toContain("'unsafe-inline' https://cdn.jsdelivr.net");
+    // MIME-sniffing hardening pairs with the strict CSP on this route.
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     // The page still renders its content (the script is served inert, not stripped).
     const html = await res.text();
     expect(html).toContain("<h1>content</h1>");
