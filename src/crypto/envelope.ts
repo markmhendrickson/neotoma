@@ -104,10 +104,7 @@ export async function decryptEnvelope(
 /**
  * Derive AES key from shared secret (simplified HKDF)
  */
-async function deriveAESKey(
-  sharedSecret: Uint8Array,
-  salt: Uint8Array
-): Promise<CryptoKey> {
+async function deriveAESKey(sharedSecret: Uint8Array, salt: Uint8Array): Promise<CryptoKey> {
   // HKDF-SHA256 over the ECDH shared secret. The salt is the per-envelope
   // ephemeral X25519 public key (SECURITY, Phase 2: the prior implementation
   // used an empty salt; binding the salt to the ephemeral key domain-separates
