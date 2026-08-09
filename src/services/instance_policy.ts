@@ -325,7 +325,7 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
     }
 
     const mergedAway = new Set(
-      (mergedRows as Array<{ id: string; merged_to_entity_id: string | null }> | null ?? [])
+      ((mergedRows as Array<{ id: string; merged_to_entity_id: string | null }> | null) ?? [])
         .filter((r) => r.merged_to_entity_id != null)
         .map((r) => r.id)
     );
@@ -368,9 +368,7 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
     };
   } catch (err) {
     const msg = (err as Error).message;
-    logger.error(
-      `[instance_policy] LOOKUP FAILED (thrown) — policy state is unknown: ${msg}`
-    );
+    logger.error(`[instance_policy] LOOKUP FAILED (thrown) — policy state is unknown: ${msg}`);
     // A thrown driver error is a failed lookup, not an empty one — the same
     // ambiguity as the `{ error }` shape above, reached a different way.
     return { policy: null, lookup_failed: true, error: msg };
@@ -420,7 +418,7 @@ export async function getInstancePolicyEntityId(): Promise<string | null> {
       .eq("entity_type", "instance_policy");
 
     const mergedAway = new Set(
-      (mergedRows as Array<{ id: string; merged_to_entity_id: string | null }> | null ?? [])
+      ((mergedRows as Array<{ id: string; merged_to_entity_id: string | null }> | null) ?? [])
         .filter((r) => r.merged_to_entity_id != null)
         .map((r) => r.id)
     );
