@@ -7848,6 +7848,106 @@ instancePolicyCommand
     }
   });
 
+instancePolicyCommand
+  .command("set")
+  .description("Create or update this instance's data policy from a JSON file")
+  .requiredOption("--file <path>", "JSON file containing the policy fields")
+  .option("--enforce", "Set enforcement to 'enforced' (reject violating writes)")
+  .option("--advisory", "Set enforcement to 'advisory' (declare only, do not reject)")
+  .option("--dry-run", "Show what would be written without writing it")
+  .action(async (opts: { file: string; enforce?: boolean; advisory?: boolean; dryRun?: boolean }) => {
+    const outputMode = resolveOutputMode();
+    try {
+      if (opts.enforce && opts.advisory) {
+        throw new Error("--enforce and --advisory are mutually exclusive.");
+      }
+
+      const raw = await fs.readFile(opts.file, "utf-8");
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+      // Enforcement is a flag rather than a JSON field so that turning
+      // rejection on is a deliberate keystroke, not something that rides along
+      // unnoticed in an edited file.
+      const enforcement = opts.enforce ? "enforced" : opts.advisory ? "advisory" : undefined;
+
+      const cliConfig = await readConfig();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
+        token: await getCliToken(),
+      });
+
+      // Read first. `instance_policy` uses name_collision_policy: "reject", so
+      // re-storing over an existing policy fails by design — the update route
+      // is a correction against the existing entity. Discovering that by
+      // hitting the collision is the trial-and-error this command removes.
+      const { getInstancePolicyEntityId } = await import("../services/instance_policy.js");
+      const existingId = await getInstancePolicyEntityId();
+
+      const fields: Record<string, unknown> = { ...parsed };
+      if (enforcement) fields.enforcement = enforcement;
+      fields.updated_at = new Date().toISOString();
+
+      if (opts.dryRun) {
+        writeOutput(
+          {
+            mode: existingId ? "update" : "create",
+            entity_id: existingId,
+            fields,
+            dry_run: true,
+          },
+          outputMode
+        );
+        return;
+      }
+
+      if (!existingId) {
+        if (!fields.policy_id) {
+          throw new Error(
+            "policy_id is required when creating a policy. Add it to the JSON file."
+          );
+        }
+        const { error } = await api.POST("/store", {
+          body: {
+            entities: [{ entity_type: "instance_policy", ...fields }],
+            idempotency_key: `instance-policy-create-${String(fields.policy_id)}`,
+          } as never,
+        });
+        if (error) throw new Error(`Failed to create policy: ${JSON.stringify(error)}`);
+        writeOutput({ mode: "create", policy_id: fields.policy_id, success: true }, outputMode);
+        return;
+      }
+
+      // Update: one correction per changed field, so per-field provenance
+      // records which edit changed what rather than attributing the whole
+      // policy to the last writer.
+      const stamp = new Date().toISOString().slice(0, 10);
+      const applied: string[] = [];
+      for (const [field, value] of Object.entries(fields)) {
+        const { error } = await api.POST("/correct", {
+          body: {
+            entity_id: existingId,
+            entity_type: "instance_policy",
+            field,
+            value,
+            idempotency_key: `instance-policy-set-${field}-${stamp}`,
+          } as never,
+        });
+        if (error) {
+          throw new Error(`Failed to update '${field}': ${JSON.stringify(error)}`);
+        }
+        applied.push(field);
+      }
+
+      writeOutput(
+        { mode: "update", entity_id: existingId, fields_updated: applied, success: true },
+        outputMode
+      );
+    } catch (err) {
+      process.stderr.write(_errorStyle((err as Error).message) + nl());
+      process.exitCode = 1;
+    }
+  });
+
 const mcpCommand = program.command("mcp").description("MCP server configuration");
 
 mcpCommand
