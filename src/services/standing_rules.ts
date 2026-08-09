@@ -25,6 +25,17 @@ export interface StandingRule {
 }
 
 /**
+ * Standing rules plus whether the lookup itself succeeded. Prefer this over
+ * {@link getActiveStandingRules} anywhere the result is shown to an agent or
+ * an operator, so a lookup failure is never rendered as an empty policy.
+ */
+export async function getActiveStandingRulesResult(
+  userId: string
+): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
+  return lookupActiveStandingRules(userId);
+}
+
+/**
  * Return all active `standing_rule` entities for `userId`, ordered by
  * priority descending then canonical_name ascending.
  *
@@ -38,30 +49,24 @@ export interface StandingRule {
  * standing rules to an agent should use {@link getActiveStandingRulesResult}
  * and report the failure rather than presenting it as an empty policy.
  */
-/**
- * Message from the most recent failed standing-rules lookup, or null when the
- * last lookup succeeded. Lets the caller distinguish "no rules" from "could
- * not read rules" without changing the array-returning API.
- */
-let lastLookupFailure: string | null = null;
-
-/**
- * Standing rules plus whether the lookup itself succeeded. Prefer this over
- * {@link getActiveStandingRules} anywhere the result is shown to an agent or
- * an operator, so a lookup failure is never rendered as an empty policy.
- */
-export async function getActiveStandingRulesResult(
-  userId: string
-): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
-  const rules = await getActiveStandingRules(userId);
-  return lastLookupFailure
-    ? { rules, lookup_failed: true, error: lastLookupFailure }
-    : { rules, lookup_failed: false };
+export async function getActiveStandingRules(userId: string): Promise<StandingRule[]> {
+  return (await lookupActiveStandingRules(userId)).rules;
 }
 
-export async function getActiveStandingRules(userId: string): Promise<StandingRule[]> {
-  // Reset per call: the marker must describe THIS lookup, not a previous one.
-  lastLookupFailure = null;
+/**
+ * Single implementation shared by {@link getActiveStandingRules} and
+ * {@link getActiveStandingRulesResult}. The failure signal is carried on this
+ * call's own return value, not on module-level state: an earlier version of
+ * this function recorded failure on a shared mutable variable that was reset
+ * and read across `await` boundaries, which let one concurrent caller's
+ * result leak into another's under interleaved `initialize` requests for
+ * different users (MCP sessions run concurrently). Returning `{ rules,
+ * lookup_failed, error? }` directly from this call keeps each invocation's
+ * outcome local to that invocation.
+ */
+async function lookupActiveStandingRules(
+  userId: string
+): Promise<{ rules: StandingRule[]; lookup_failed: boolean; error?: string }> {
   try {
     // Read the reduced field values straight off entity_snapshots. This used
     // to join from `entities` with the PostgREST embedded-resource hint
@@ -111,12 +116,11 @@ export async function getActiveStandingRules(userId: string): Promise<StandingRu
         `[standing_rules] LOOKUP FAILED — no rules will be injected this session ` +
           `(this is NOT the same as having no rules configured): ${error.message}`
       );
-      lastLookupFailure = error.message;
-      return [];
+      return { rules: [], lookup_failed: true, error: error.message };
     }
 
     if (!data || data.length === 0) {
-      return [];
+      return { rules: [], lookup_failed: false };
     }
 
     const rules: StandingRule[] = [];
@@ -165,15 +169,14 @@ export async function getActiveStandingRules(userId: string): Promise<StandingRu
       return a.title.localeCompare(b.title);
     });
 
-    return rules;
+    return { rules, lookup_failed: false };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(`[standing_rules] unexpected error: ${msg}`);
-    // A thrown exception is a failed lookup, not an empty one. Record it the
-    // same way a `{ error }`-shaped query result is recorded, so callers see
+    // A thrown exception is a failed lookup, not an empty one. Report it the
+    // same way a `{ error }`-shaped query result is reported, so callers see
     // `lookup_failed` rather than a bare empty array they cannot distinguish
     // from "this user has no rules".
-    lastLookupFailure = msg;
-    return [];
+    return { rules: [], lookup_failed: true, error: msg };
   }
 }
