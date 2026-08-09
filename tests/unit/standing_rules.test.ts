@@ -291,5 +291,78 @@ describe("getActiveStandingRules", () => {
       expect(after.lookup_failed).toBe(false);
       expect(after.rules).toHaveLength(1);
     });
+
+    // Regression: an earlier implementation carried the failure signal on a
+    // module-level `let lastLookupFailure` variable, reset at the start of
+    // each call and read again — via a separate `await` — after the call's
+    // own DB query resolved. Two concurrent calls interleave at microtask
+    // granularity: call A's DB query can resolve (successfully), yield the
+    // microtask queue at its `await`, and then call B's DB query resolves
+    // (with a failure) and sets the shared flag — all before A's paused
+    // continuation resumes and reads that same shared flag. Under the
+    // module-state implementation A incorrectly inherits B's failure. This
+    // test forces exactly that resolution order with deferred promises and
+    // asserts A's outcome reflects A's own (successful) query, not B's.
+    it("keeps concurrent lookups for different users independent under adversarial interleaving", async () => {
+      const { db } = (await import("../../src/db.js")) as unknown as {
+        db: { from: ReturnType<typeof vi.fn> };
+      };
+
+      let releaseA: (() => void) | undefined;
+      const gateA = new Promise<void>((resolve) => {
+        releaseA = resolve;
+      });
+      let releaseB: (() => void) | undefined;
+      const gateB = new Promise<void>((resolve) => {
+        releaseB = resolve;
+      });
+
+      // Call A: succeeds, but its DB round-trip is gated so it resolves
+      // only after we explicitly release it.
+      db.from.mockImplementationOnce(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(function (this: unknown) {
+            return this;
+          }),
+          then: (resolve: (v: unknown) => unknown) =>
+            gateA.then(() => resolve({ data: [], error: null })),
+        })),
+      }));
+      const callA = getActiveStandingRulesResult("user-A");
+
+      // Call B: fails, gated separately so we control exactly when its
+      // failure is written relative to A's continuation.
+      db.from.mockImplementationOnce(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(function (this: unknown) {
+            return this;
+          }),
+          then: (resolve: (v: unknown) => unknown) =>
+            gateB.then(() => resolve({ data: null, error: { message: "user-B failure" } })),
+        })),
+      }));
+      const callB = getActiveStandingRulesResult("user-B");
+
+      // Release A's DB query first, but do NOT await callA yet — let its
+      // continuation queue behind further microtasks we control below.
+      releaseA?.();
+      // Flush one microtask turn so A's `.then` callback (which resolves
+      // A's DB call and returns from getActiveStandingRules) runs, without
+      // yet running the continuation inside getActiveStandingRulesResult
+      // that reads the shared flag.
+      await Promise.resolve();
+
+      // Now release B's failing query. Under the module-state
+      // implementation this write can land before A's still-pending
+      // getActiveStandingRulesResult continuation reads the shared flag.
+      releaseB?.();
+
+      const [resultA, resultB] = await Promise.all([callA, callB]);
+
+      expect(resultA.lookup_failed).toBe(false);
+      expect(resultA.rules).toEqual([]);
+      expect(resultB.lookup_failed).toBe(true);
+      expect(resultB.error).toContain("user-B failure");
+    });
   });
 });
