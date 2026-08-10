@@ -6447,6 +6447,26 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
+      /**
+       * @description `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+       *     read, so the write could not be checked against it. Nothing was
+       *     persisted. Retry the request UNCHANGED; the envelope carries
+       *     `retryable: true`.
+       *
+       *     Do not treat this like the `400` `ERR_STORE_POLICY_DENIED` above.
+       *     DENIED means the policy was read and forbids this payload (fix the
+       *     payload). UNAVAILABLE means permission is unknown. An agent that
+       *     responds by narrowing or dropping entities answers an outage by
+       *     silently storing less — the failure this split exists to prevent.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
+        };
+      };
     };
   };
   getEntitySnapshot: {
@@ -8061,6 +8081,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+       *     read, so the correction could not be checked against it. No
+       *     observation was written. Retry the request UNCHANGED; the envelope
+       *     carries `retryable: true`.
+       *
+       *     Do not treat this like the `400` `ERR_STORE_POLICY_DENIED` above.
+       *     DENIED means the policy was read and forbids this correction (fix
+       *     the payload). UNAVAILABLE means permission is unknown, and dropping
+       *     the correction in response answers an outage by silently recording
+       *     less.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
         };
       };
     };
