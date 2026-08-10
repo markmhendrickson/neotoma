@@ -24,7 +24,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     method: "get",
     path: "/health",
     adapter: "infra",
-    notes: "Health endpoint is infrastructure only.",
+    notes: "Health endpoint is infrastructure only. Liveness only — see /ready.",
+  },
+  {
+    operationId: "readinessCheck",
+    method: "get",
+    path: "/ready",
+    adapter: "infra",
+    notes: "Readiness endpoint is infrastructure only. Liveness plus a budgeted DB probe.",
   },
   {
     operationId: "getOpenApiSpec",

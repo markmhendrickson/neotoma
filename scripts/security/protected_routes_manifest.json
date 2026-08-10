@@ -9,18 +9,8 @@
       "operation_id": "oauthServerMetadata",
       "requires_auth": false,
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ]
+      "expected_no_auth_status": [200, 400, 404, 405],
+      "expected_invalid_auth_status": [200, 400, 404, 405]
     },
     {
       "path": "/.well-known/oauth-protected-resource",
@@ -28,18 +18,8 @@
       "operation_id": "oauthProtectedResource",
       "requires_auth": false,
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ]
+      "expected_no_auth_status": [200, 400, 404, 405],
+      "expected_invalid_auth_status": [200, 400, 404, 405]
     },
     {
       "path": "/.well-known/oauth-protected-resource/mcp",
@@ -47,18 +27,8 @@
       "operation_id": "oauthProtectedResourceForMcp",
       "requires_auth": false,
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ]
+      "expected_no_auth_status": [200, 400, 404, 405],
+      "expected_invalid_auth_status": [200, 400, 404, 405]
     },
     {
       "path": "/.well-known/openid-configuration",
@@ -66,18 +36,8 @@
       "operation_id": "openidConfigurationNotOffered",
       "requires_auth": false,
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ]
+      "expected_no_auth_status": [200, 400, 404, 405],
+      "expected_invalid_auth_status": [200, 400, 404, 405]
     },
     {
       "path": "/access_policies",
@@ -85,12 +45,8 @@
       "operation_id": "getAccessPolicies",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/admin/compliance/scorecard",
@@ -98,12 +54,8 @@
       "operation_id": "getComplianceScorecard",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents",
@@ -111,12 +63,8 @@
       "operation_id": null,
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/grants",
@@ -124,12 +72,8 @@
       "operation_id": "listAgentGrants",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/grants",
@@ -137,12 +81,8 @@
       "operation_id": "createAgentGrant",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/grants/{id}",
@@ -150,12 +90,8 @@
       "operation_id": "getAgentGrant",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/grants/{id}",
@@ -163,12 +99,8 @@
       "operation_id": "updateAgentGrant",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/grants/{id}/restore",
@@ -176,12 +108,8 @@
       "operation_id": "restoreAgentGrant",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/grants/{id}/revoke",
@@ -189,12 +117,8 @@
       "operation_id": "revokeAgentGrant",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/grants/{id}/suspend",
@@ -202,12 +126,8 @@
       "operation_id": "suspendAgentGrant",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/{key}",
@@ -215,12 +135,8 @@
       "operation_id": null,
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/agents/{key}/records",
@@ -228,12 +144,8 @@
       "operation_id": null,
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/analyze_schema_candidates",
@@ -241,12 +153,8 @@
       "operation_id": "analyzeSchemaCandidates",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/audit_undeclared_fragments",
@@ -254,12 +162,8 @@
       "operation_id": "auditUndeclaredFragments",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/auth/dev-signin",
@@ -267,12 +171,8 @@
       "operation_id": "devSignIn",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/conversations/{conversation_id}/turn-index",
@@ -280,12 +180,8 @@
       "operation_id": "getConversationTurnIndex",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/correct",
@@ -293,12 +189,8 @@
       "operation_id": "correct",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/create_relationship",
@@ -306,12 +198,8 @@
       "operation_id": "createRelationship",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/create_relationships",
@@ -319,12 +207,8 @@
       "operation_id": "createRelationships",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/delete_entity",
@@ -332,12 +216,8 @@
       "operation_id": "deleteEntity",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/delete_relationship",
@@ -345,12 +225,8 @@
       "operation_id": "deleteRelationship",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities",
@@ -358,12 +234,8 @@
       "operation_id": "listEntities",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities/duplicates",
@@ -371,12 +243,8 @@
       "operation_id": "listPotentialDuplicates",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities/merge",
@@ -384,12 +252,8 @@
       "operation_id": "mergeEntities",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities/query",
@@ -397,12 +261,8 @@
       "operation_id": "queryEntities",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities/split",
@@ -410,12 +270,8 @@
       "operation_id": "splitEntity",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities/{id}",
@@ -423,12 +279,8 @@
       "operation_id": "getEntityById",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities/{id}/observations",
@@ -436,12 +288,8 @@
       "operation_id": "getEntityObservations",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/entities/{id}/relationships",
@@ -449,12 +297,8 @@
       "operation_id": "getEntityRelationships",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/events/stream",
@@ -462,12 +306,8 @@
       "operation_id": "eventsStream",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/get_authenticated_user",
@@ -475,12 +315,8 @@
       "operation_id": "getAuthenticatedUser",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/get_entity_snapshot",
@@ -488,12 +324,8 @@
       "operation_id": "getEntitySnapshot",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/get_field_provenance",
@@ -501,12 +333,8 @@
       "operation_id": "getFieldProvenance",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/get_file_url",
@@ -514,12 +342,8 @@
       "operation_id": "getFileUrl",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/get_schema_recommendations",
@@ -527,12 +351,8 @@
       "operation_id": "getSchemaRecommendations",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/get_subscription_status",
@@ -540,12 +360,8 @@
       "operation_id": "getSubscriptionStatus",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/health",
@@ -553,18 +369,8 @@
       "operation_id": "healthCheck",
       "requires_auth": false,
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ]
+      "expected_no_auth_status": [200, 400, 404, 405],
+      "expected_invalid_auth_status": [200, 400, 404, 405]
     },
     {
       "path": "/health_check_snapshots",
@@ -572,12 +378,8 @@
       "operation_id": "healthCheckSnapshots",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/identify_entity_by_signals",
@@ -585,12 +387,8 @@
       "operation_id": "identifyEntityBySignals",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/interpretations",
@@ -598,12 +396,8 @@
       "operation_id": "listInterpretations",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/interpretations/create",
@@ -611,12 +405,8 @@
       "operation_id": "createInterpretation",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/issues/add_message",
@@ -624,12 +414,8 @@
       "operation_id": "issuesAddMessage",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/issues/bulk_close",
@@ -637,12 +423,8 @@
       "operation_id": "bulkCloseIssues",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/issues/bulk_remove",
@@ -650,12 +432,8 @@
       "operation_id": "bulkRemoveIssues",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/issues/status",
@@ -663,12 +441,8 @@
       "operation_id": "issuesGetStatus",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/issues/submit",
@@ -676,12 +450,8 @@
       "operation_id": "issuesSubmit",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/issues/sync",
@@ -689,12 +459,8 @@
       "operation_id": "issuesSync",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/list_observations",
@@ -702,12 +468,8 @@
       "operation_id": "listObservationsForEntity",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/list_relationships",
@@ -715,12 +477,8 @@
       "operation_id": "listRelationshipsForEntity",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/list_subscriptions",
@@ -728,12 +486,8 @@
       "operation_id": "listSubscriptions",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/authorization-details",
@@ -741,12 +495,8 @@
       "operation_id": "mcpOAuthAuthorizationDetails",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/authorize",
@@ -754,12 +504,8 @@
       "operation_id": "mcpOAuthAuthorize",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/callback",
@@ -767,12 +513,8 @@
       "operation_id": "mcpOAuthCallback",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/connections",
@@ -780,12 +522,8 @@
       "operation_id": "mcpOAuthListConnections",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/connections/{connection_id}",
@@ -793,12 +531,8 @@
       "operation_id": "mcpOAuthRevokeConnection",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/initiate",
@@ -806,12 +540,8 @@
       "operation_id": "mcpOAuthInitiate",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/key-auth",
@@ -819,12 +549,8 @@
       "operation_id": "mcpOAuthKeyAuthGet",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/key-auth",
@@ -832,12 +558,8 @@
       "operation_id": "mcpOAuthKeyAuthPost",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/local-login",
@@ -845,12 +567,8 @@
       "operation_id": "mcpOAuthLocalLogin",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/register",
@@ -858,12 +576,8 @@
       "operation_id": "mcpOAuthRegister",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/status",
@@ -871,12 +585,8 @@
       "operation_id": "mcpOAuthStatus",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/mcp/oauth/token",
@@ -884,12 +594,8 @@
       "operation_id": "mcpOAuthToken",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/me",
@@ -897,12 +603,8 @@
       "operation_id": "getMe",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/observations",
@@ -910,12 +612,8 @@
       "operation_id": "listObservations",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/observations/create",
@@ -923,12 +621,8 @@
       "operation_id": "createObservation",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/observations/query",
@@ -936,12 +630,8 @@
       "operation_id": "queryObservations",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/openapi.yaml",
@@ -949,18 +639,8 @@
       "operation_id": "getOpenApiSpec",
       "requires_auth": false,
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        400,
-        404,
-        405
-      ]
+      "expected_no_auth_status": [200, 400, 404, 405],
+      "expected_invalid_auth_status": [200, 400, 404, 405]
     },
     {
       "path": "/peers",
@@ -968,12 +648,8 @@
       "operation_id": "listPeers",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/peers",
@@ -981,12 +657,8 @@
       "operation_id": "addPeer",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/peers/resolve_sync_conflict",
@@ -994,12 +666,8 @@
       "operation_id": "resolveSyncConflict",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/peers/{peer_id}",
@@ -1007,12 +675,8 @@
       "operation_id": "getPeerStatus",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/peers/{peer_id}",
@@ -1020,12 +684,8 @@
       "operation_id": "removePeer",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/peers/{peer_id}/sync",
@@ -1033,12 +693,8 @@
       "operation_id": "syncPeer",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/query_contacts_at_company",
@@ -1046,12 +702,18 @@
       "operation_id": "queryContactsAtCompany",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
+    },
+    {
+      "path": "/ready",
+      "method": "GET",
+      "operation_id": "readinessCheck",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [200, 400, 404, 405, 503],
+      "expected_invalid_auth_status": [200, 400, 404, 405, 503],
+      "override_applied": true
     },
     {
       "path": "/recent_conversations",
@@ -1059,12 +721,8 @@
       "operation_id": "getRecentConversations",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/recent_conversations/{conversation_id}",
@@ -1072,12 +730,8 @@
       "operation_id": "getRecentConversation",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/record_activity",
@@ -1085,12 +739,8 @@
       "operation_id": "getRecordActivity",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/register_schema",
@@ -1098,12 +748,8 @@
       "operation_id": "registerSchema",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/relationships",
@@ -1111,12 +757,8 @@
       "operation_id": "listRelationships",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/relationships/snapshot",
@@ -1124,12 +766,8 @@
       "operation_id": "getRelationshipSnapshot",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/relationships/{id}",
@@ -1137,12 +775,8 @@
       "operation_id": "getRelationshipById",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/rendered-pages/publish",
@@ -1150,12 +784,8 @@
       "operation_id": "publishRenderedPage",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/restore_entity",
@@ -1163,12 +793,8 @@
       "operation_id": "restoreEntity",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/restore_relationship",
@@ -1176,12 +802,8 @@
       "operation_id": "restoreRelationship",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/retrieve_entity_by_identifier",
@@ -1189,12 +811,8 @@
       "operation_id": "retrieveEntityByIdentifier",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/retrieve_graph_neighborhood",
@@ -1202,12 +820,8 @@
       "operation_id": "retrieveGraphNeighborhood",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/retrieve_related_entities",
@@ -1215,12 +829,8 @@
       "operation_id": "retrieveRelatedEntities",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/schemas",
@@ -1228,12 +838,8 @@
       "operation_id": "listSchemas",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/schemas/{entity_type}",
@@ -1241,12 +847,8 @@
       "operation_id": "getSchemaByEntityType",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/server-info",
@@ -1254,12 +856,8 @@
       "operation_id": "getServerInfo",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/session",
@@ -1267,12 +865,8 @@
       "operation_id": "getSessionInfo",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/sources",
@@ -1280,12 +874,8 @@
       "operation_id": "listSources",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/sources/{id}",
@@ -1293,12 +883,8 @@
       "operation_id": "getSourceById",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/sources/{id}/relationships",
@@ -1306,12 +892,8 @@
       "operation_id": "getSourceRelationships",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/stats",
@@ -1319,12 +901,8 @@
       "operation_id": "getStats",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/store",
@@ -1332,12 +910,8 @@
       "operation_id": "store",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/subscribe",
@@ -1345,12 +919,8 @@
       "operation_id": "subscribe",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/sync/entities",
@@ -1358,12 +928,8 @@
       "operation_id": "listSyncEntities",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/sync/webhook",
@@ -1371,12 +937,8 @@
       "operation_id": "applySyncWebhook",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/timeline",
@@ -1384,12 +946,8 @@
       "operation_id": "listTimeline",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/timeline/{id}",
@@ -1397,12 +955,8 @@
       "operation_id": "getTimelineById",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/turn_summary",
@@ -1410,12 +964,8 @@
       "operation_id": "turnSummary",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/unsubscribe",
@@ -1423,12 +973,8 @@
       "operation_id": "unsubscribe",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/update_schema_incremental",
@@ -1436,12 +982,8 @@
       "operation_id": "updateSchemaIncremental",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/usage",
@@ -1449,12 +991,8 @@
       "operation_id": "getUsage",
       "requires_auth": true,
       "sandbox_allowed": "none",
-      "expected_no_auth_status": [
-        401
-      ],
-      "expected_invalid_auth_status": [
-        401
-      ]
+      "expected_no_auth_status": [401],
+      "expected_invalid_auth_status": [401]
     },
     {
       "path": "/",
@@ -1464,22 +1002,8 @@
       "runtime_only": true,
       "reason": "Root landing renders public marketing copy when allowed by env.",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/favicon.ico",
@@ -1489,22 +1013,8 @@
       "runtime_only": true,
       "reason": "Static asset.",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/docs",
@@ -1514,22 +1024,8 @@
       "runtime_only": true,
       "reason": "Public docs index: read-only render of repo docs/**.md with visibility filtering.",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/docs/*",
@@ -1539,22 +1035,8 @@
       "runtime_only": true,
       "reason": "Public docs page: read-only render of a single docs/**.md with visibility filtering and slug sanitization.",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/sandbox/session/new",
@@ -1564,22 +1046,8 @@
       "runtime_only": true,
       "reason": "Public sandbox onboarding (rate-limited).",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/sandbox/session/redeem",
@@ -1589,22 +1057,8 @@
       "runtime_only": true,
       "reason": "Public sandbox onboarding (rate-limited).",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/sandbox/session",
@@ -1614,22 +1068,8 @@
       "runtime_only": true,
       "reason": "Sandbox session probe.",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/sandbox/session/reset",
@@ -1639,22 +1079,8 @@
       "runtime_only": true,
       "reason": "Sandbox self-reset.",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     },
     {
       "path": "/sandbox/session",
@@ -1664,23 +1090,19 @@
       "runtime_only": true,
       "reason": "Sandbox self-revoke.",
       "sandbox_allowed": "hosted_ok",
-      "expected_no_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ],
-      "expected_invalid_auth_status": [
-        200,
-        204,
-        400,
-        404,
-        405,
-        429
-      ]
+      "expected_no_auth_status": [200, 204, 400, 404, 405, 429],
+      "expected_invalid_auth_status": [200, 204, 400, 404, 405, 429]
     }
   ],
-  "overrides": []
+  "overrides": [
+    {
+      "method": "GET",
+      "path": "/ready",
+      "reason": "/ready returns 503 by design when the instance cannot answer a database probe within its latency budget. Without this override the deployed probe treats a genuine degradation as an auth-topology finding — a false positive that fires precisely during the incident the endpoint exists to surface. 503 is a readiness signal here, never an authentication outcome.",
+      "fields": {
+        "expected_no_auth_status": [200, 400, 404, 405, 503],
+        "expected_invalid_auth_status": [200, 400, 404, 405, 503]
+      }
+    }
+  ]
 }

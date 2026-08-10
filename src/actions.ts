@@ -2414,6 +2414,32 @@ function readPackageVersionForHealth(): string {
  */
 const READINESS_BUDGET_MS = Number(process.env.NEOTOMA_READINESS_BUDGET_MS || 3000);
 
+/** Marker for the timeout this route raises itself, distinguishable from any
+ *  error the driver produced. Matching on message text would be fragile. */
+const READINESS_BUDGET_ERROR = "NeotomaReadinessBudgetExceeded";
+
+function isBudgetOverrun(err: unknown): boolean {
+  return err instanceof Error && err.name === READINESS_BUDGET_ERROR;
+}
+
+/**
+ * SECURITY: `/ready` is unauthenticated, so a driver error must never reach the
+ * caller verbatim in production — SQLite and filesystem errors routinely carry
+ * absolute paths and schema fragments (security_audit_2026_04_22.md S-5, the
+ * same rule `handleApiError` applies). The detail still reaches the operator
+ * through `logError`; only the wire response is redacted.
+ */
+function readinessDetail(err: unknown, fallback: string): string {
+  const includeDetail =
+    config.environment !== "production" ||
+    process.env.NEOTOMA_VERBOSE_ERRORS === "1" ||
+    process.env.NEOTOMA_VERBOSE_ERRORS === "true";
+  if (!includeDetail) return fallback;
+  if (err instanceof Error) return err.message;
+  const message = (err as { message?: string })?.message;
+  return message || String(err);
+}
+
 // Public health endpoint (no auth) — LIVENESS only.
 //
 // Answers "is this process up?" and deliberately touches nothing else, so it
@@ -2444,23 +2470,23 @@ app.get("/ready", async (_req, res) => {
     // so the probe's own cost never becomes the thing that makes it slow.
     const probe = db.from("entities").select("id").limit(1);
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`readiness probe exceeded ${READINESS_BUDGET_MS}ms`)),
-        READINESS_BUDGET_MS
-      )
+      setTimeout(() => {
+        const overrun = new Error(`readiness probe exceeded ${READINESS_BUDGET_MS}ms`);
+        overrun.name = READINESS_BUDGET_ERROR;
+        reject(overrun);
+      }, READINESS_BUDGET_MS)
     );
     const { error } = (await Promise.race([probe, timeout])) as { error?: unknown };
     const elapsed_ms = Date.now() - started;
 
     if (error) {
-      const message = (error as { message?: string })?.message || String(error);
       logError("ReadinessProbeFailed", _req, error, { elapsed_ms });
       return res.status(503).json({
         ok: false,
         version,
         database: "error",
         elapsed_ms,
-        error: message,
+        error: readinessDetail(error, "database probe failed"),
       });
     }
     return res.json({ ok: true, version, database: "ok", elapsed_ms });
@@ -2468,7 +2494,6 @@ app.get("/ready", async (_req, res) => {
     // Budget exceeded, or the driver threw. Both mean the instance cannot
     // serve within a useful time; both are 503.
     const elapsed_ms = Date.now() - started;
-    const message = err instanceof Error ? err.message : String(err);
     logError("ReadinessProbeTimeout", _req, err, { elapsed_ms });
     return res.status(503).json({
       ok: false,
@@ -2476,7 +2501,14 @@ app.get("/ready", async (_req, res) => {
       database: "unreachable",
       elapsed_ms,
       budget_ms: READINESS_BUDGET_MS,
-      error: message,
+      // The budget-overrun message is ours, not the driver's, so it carries no
+      // path or schema detail and is safe to return unconditionally. That
+      // matters: `exceeded 3000ms` is the whole diagnostic value of this
+      // response, and redacting it in production would leave the endpoint
+      // saying only "not ready" during the exact incident it exists for.
+      error: isBudgetOverrun(err)
+        ? (err as Error).message
+        : readinessDetail(err, "database unreachable"),
     });
   }
 });

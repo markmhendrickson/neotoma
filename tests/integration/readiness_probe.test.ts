@@ -16,8 +16,13 @@
  */
 
 import { createServer, type Server } from "node:http";
+import { readFileSync } from "node:fs";
 
+import { load } from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { OPENAPI_OPERATION_MAPPINGS } from "../../src/shared/contract_mappings.js";
+import { resolveOpenApiPath } from "../../src/shared/openapi_file.js";
 
 async function withHttpServer<T>(
   app: unknown,
@@ -110,6 +115,10 @@ describe("readiness probe (#2141)", () => {
   });
 
   it("fails when the driver returns an error", async () => {
+    // Detail IS returned here because the test env is not production. That is
+    // the intended behaviour and also exactly why the production leak below
+    // went unnoticed on the first pass — asserting only this case proves
+    // nothing about what an unauthenticated caller sees in production.
     mockDb(async () => ({ data: null, error: { message: "connection reset" } }));
     const app = await freshApp();
 
@@ -132,6 +141,107 @@ describe("readiness probe (#2141)", () => {
       const resp = await fetch(`${baseUrl}/ready`);
       expect(resp.status).toBe(503);
     });
+  });
+
+  describe("production does not leak driver detail to unauthenticated callers", () => {
+    // `/ready` has `security: []` — anyone on the internet can call it. SQLite
+    // and filesystem errors routinely carry absolute paths and schema
+    // fragments, so returning `Error.message` verbatim hands those out on
+    // request. Same rule `handleApiError` already applies
+    // (security_audit_2026_04_22.md S-5); this route bypassed it.
+    const withProdEnv = async (
+      behaviour: () => Promise<unknown>,
+      assertion: (body: Record<string, unknown>) => void
+    ) => {
+      process.env.NEOTOMA_ENV = "production";
+      delete process.env.NEOTOMA_VERBOSE_ERRORS;
+      mockDb(behaviour);
+      const app = await freshApp();
+      try {
+        await withHttpServer(app, async (baseUrl) => {
+          const resp = await fetch(`${baseUrl}/ready`);
+          expect(resp.status).toBe(503);
+          assertion((await resp.json()) as Record<string, unknown>);
+        });
+      } finally {
+        delete process.env.NEOTOMA_ENV;
+      }
+    };
+
+    it("redacts a driver error message", async () => {
+      await withProdEnv(
+        async () => ({
+          data: null,
+          error: { message: "SQLITE_CANTOPEN: unable to open /var/lib/neotoma/prod.db" },
+        }),
+        (body) => {
+          const detail = String(body.error);
+          expect(detail).not.toContain("/var/lib/neotoma");
+          expect(detail).not.toContain("SQLITE_CANTOPEN");
+          expect(body.database).toBe("error");
+        }
+      );
+    });
+
+    it("redacts a thrown driver error", async () => {
+      await withProdEnv(
+        async () => {
+          throw new Error("connect ENOENT /Users/someone/secret/path/neotoma.db");
+        },
+        (body) => {
+          const detail = String(body.error);
+          expect(detail).not.toContain("/Users/someone");
+          expect(detail).not.toContain("ENOENT");
+        }
+      );
+    });
+
+    it("still returns the budget overrun, which is ours and carries no paths", async () => {
+      // Redacting this one would gut the endpoint: "exceeded 3000ms" is the
+      // entire diagnostic value of the response during the incident it exists
+      // to catch. The string is constructed here, not by the driver.
+      process.env.NEOTOMA_READINESS_BUDGET_MS = "50";
+      await withProdEnv(
+        () => new Promise((resolve) => setTimeout(() => resolve({ error: null }), 5000)),
+        (body) => {
+          expect(body.database).toBe("unreachable");
+          expect(String(body.error)).toMatch(/exceeded 50ms/);
+          expect(body.budget_ms).toBe(50);
+        }
+      );
+      delete process.env.NEOTOMA_READINESS_BUDGET_MS;
+    });
+
+    it("returns detail again when NEOTOMA_VERBOSE_ERRORS is set", async () => {
+      process.env.NEOTOMA_ENV = "production";
+      process.env.NEOTOMA_VERBOSE_ERRORS = "1";
+      mockDb(async () => ({ data: null, error: { message: "SQLITE_BUSY on /tmp/x.db" } }));
+      const app = await freshApp();
+      try {
+        await withHttpServer(app, async (baseUrl) => {
+          const body = (await (await fetch(`${baseUrl}/ready`)).json()) as Record<string, unknown>;
+          expect(String(body.error)).toContain("SQLITE_BUSY");
+        });
+      } finally {
+        delete process.env.NEOTOMA_ENV;
+        delete process.env.NEOTOMA_VERBOSE_ERRORS;
+      }
+    });
+  });
+
+  it("declares /ready in the contract, matching what it serves", () => {
+    // The route existed and answered before it was declared anywhere
+    // (guardrails MUST #17). An undeclared public route is invisible to
+    // generated clients and to the security manifest.
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      paths?: Record<string, { get?: { operationId?: string } }>;
+    };
+    expect(spec.paths?.["/ready"]?.get?.operationId).toBe("readinessCheck");
+
+    const mapping = OPENAPI_OPERATION_MAPPINGS.find((m) => m.path === "/ready");
+    expect(mapping, "/ready must have a contract mapping row").toBeTruthy();
+    expect(mapping?.operationId).toBe("readinessCheck");
+    expect(mapping?.adapter).toBe("infra");
   });
 
   it("keeps /health cheap and independent of the database", async () => {

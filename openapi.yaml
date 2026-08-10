@@ -2564,6 +2564,14 @@ paths:
     get:
       summary: Health check
       operationId: healthCheck
+      description: |
+        LIVENESS only. Answers from process state and reads no dependency, so
+        it stays green while the database is slow or unreachable — by design:
+        an operator needs to distinguish "hung" from "dead", and a liveness
+        check that fails on a slow dependency turns latency into a restart.
+
+        Do NOT use this to decide whether the instance can serve requests. It
+        cannot detect degradation; use `/ready` for that.
       security: []
       responses:
         "200":
@@ -2575,6 +2583,62 @@ paths:
                 properties:
                   ok:
                     type: boolean
+
+  /ready:
+    get:
+      summary: Readiness check
+      operationId: readinessCheck
+      description: |
+        LIVENESS **plus** a bounded database probe. Returns 503 when the probe
+        errors, throws, or exceeds `NEOTOMA_READINESS_BUDGET_MS` (default 3000).
+
+        The budget is the point. On 2026-08-10 this instance served `/health`
+        in 0.28s while entity reads took 34-37s — a probe that merely awaited
+        the database would have reported ready 37 seconds later, accurately and
+        uselessly. Sustained degradation is only detectable against a deadline.
+      security: []
+      responses:
+        "200":
+          description: Instance is live and answered a database probe within budget.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  version:
+                    type: string
+                  database:
+                    type: string
+                    enum: [ok]
+                  elapsed_ms:
+                    type: integer
+        "503":
+          description: |
+            Not ready. `database: "error"` means the driver returned an error;
+            `database: "unreachable"` means it threw or exceeded the budget.
+            `error` carries the budget-overrun detail, and in production a
+            generic string for driver faults — the route is unauthenticated, so
+            raw driver messages are logged rather than returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  version:
+                    type: string
+                  database:
+                    type: string
+                    enum: [error, unreachable]
+                  elapsed_ms:
+                    type: integer
+                  budget_ms:
+                    type: integer
+                  error:
+                    type: string
 
   /openapi.yaml:
     get:
