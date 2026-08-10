@@ -24,6 +24,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { db } from "../../src/db.js";
@@ -190,5 +191,79 @@ describe("an unreadable policy fails closed and says why (#1975)", () => {
     await expect(
       assertStorePolicyAllows([{ entity_type: ALLOWED_TYPE, fields: {} }], noSchema, null)
     ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Cross-surface parity for UNAVAILABLE (#1974/#1975, arch [BLOCKING]).
+ *
+ * The bug this pins: REST `/store` has its OWN catch block, which handled
+ * DENIED and then fell through to `sendError(res, 500, "DB_QUERY_FAILED")`.
+ * It never reached `handleApiError`, where `/correct` gets its 503. So MCP,
+ * `/correct`, the docs, and the declared OpenAPI envelope all promised
+ * `503 retryable: true` while REST `/store` answered `500 DB_QUERY_FAILED`.
+ *
+ * The status IS the contract. 500 reads as "this request broke the server",
+ * and a well-behaved agent responds by changing its payload. 503 +
+ * `retryable: true` reads as "ask again, unchanged". Getting it wrong on one
+ * surface makes an agent store LESS because the instance could not read its
+ * own policy — the precise failure the DENIED/UNAVAILABLE split exists to
+ * prevent, arriving through the surface it was built for.
+ *
+ * Structural rather than end-to-end deliberately: driving a real 503 out of
+ * `/store` needs the policy lookup broken mid-request behind rate limiting and
+ * auth, and a test that elaborate tends to be deleted rather than maintained.
+ * What must never regress is that the handler HAS an Unavailable branch and
+ * does not let it reach the generic 500.
+ */
+describe("REST /store returns 503 for UNAVAILABLE, like every other surface", () => {
+  const source = readFileSync(new URL("../../src/actions.ts", import.meta.url), "utf-8");
+
+  /** The body of handleStorePost, where /store handles its own errors. */
+  const storeHandler = (() => {
+    const start = source.indexOf("async function handleStorePost");
+    expect(start, "handleStorePost not found — did it get renamed?").toBeGreaterThan(-1);
+    const end = source.indexOf('app.post("/store"', start);
+    expect(end, "could not bound handleStorePost").toBeGreaterThan(start);
+    return source.slice(start, end);
+  })();
+
+  it("branches on StorePolicyUnavailableError in its own catch", () => {
+    expect(
+      storeHandler.includes("StorePolicyUnavailableError"),
+      "handleStorePost catches errors itself and never reaches handleApiError; " +
+        "without an explicit branch, UNAVAILABLE falls through to 500 DB_QUERY_FAILED"
+    ).toBe(true);
+  });
+
+  it("answers that branch with 503, not the generic 500", () => {
+    const branch = storeHandler.slice(storeHandler.indexOf("StorePolicyUnavailableError"));
+    const status503 = branch.indexOf("status(503)");
+    const generic500 = branch.indexOf('sendError(res, 500, "DB_QUERY_FAILED"');
+
+    expect(status503, "the Unavailable branch must return 503").toBeGreaterThan(-1);
+    // The 503 has to come FIRST — a branch that falls through to the generic
+    // 500 handler is the bug, not the fix.
+    expect(
+      generic500 === -1 || status503 < generic500,
+      "the Unavailable branch must return before the generic 500 fallthrough"
+    ).toBe(true);
+  });
+
+  it("keeps DENIED on 400 in the same handler, so the two never merge", () => {
+    // Both outcomes must stay distinguishable on the wire. Collapsing them
+    // erases the retry-vs-rewrite instruction entirely.
+    //
+    // Anchored on the RESPONSE (`code: "ERR_STORE_POLICY_DENIED"`), not the
+    // first textual mention — that one is the `errCode ===` guard, and
+    // measuring from it reads the wrong region of the handler.
+    const responseSite = storeHandler.indexOf('code: "ERR_STORE_POLICY_DENIED"');
+    expect(responseSite, "DENIED must still build a response here").toBeGreaterThan(-1);
+
+    const before = storeHandler.slice(0, responseSite);
+    expect(
+      before.lastIndexOf("status(400)"),
+      "the DENIED response must be returned with 400"
+    ).toBeGreaterThan(before.lastIndexOf("status(503)"));
   });
 });

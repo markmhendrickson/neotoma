@@ -8657,6 +8657,28 @@ async function handleStorePost(
         },
       });
     }
+    if (error instanceof StorePolicyUnavailableError) {
+      // MUST sit beside its DENIED sibling, not fall through to the generic
+      // 500 below. `/correct` gets 503 from the shared `handleApiError`, but
+      // this handler catches first and never reaches it — so without this
+      // branch REST `/store` answered 500 DB_QUERY_FAILED while MCP, /correct,
+      // the docs, and the declared envelope all promised 503 retryable:true.
+      //
+      // The status is the entire contract here. 500 reads as "this request
+      // broke the server" and a well-behaved agent responds by changing the
+      // payload; 503 + retryable:true reads as "ask again unchanged". Getting
+      // it wrong makes an agent narrow what it stores because the instance
+      // could not read its own policy — the failure this split exists to
+      // prevent, arriving through the surface it was built for.
+      logError("StorePolicyUnavailable:store", req, error, {
+        code: error.code,
+        cause: error.cause_message,
+      });
+      // Nested under `error` to match the DENIED sibling directly above, so a
+      // client reading `error.code` finds both policy outcomes in one place.
+      // `toErrorEnvelope()` already carries code + message + retryable + hint.
+      return res.status(503).json({ error: error.toErrorEnvelope() });
+    }
     if (error && typeof error === "object" && errCode === "ERR_STORE_RESOLUTION_FAILED") {
       const err = error as {
         message: string;
