@@ -2622,6 +2622,45 @@ export interface components {
       };
     };
     /**
+     * @description 503 response shape for `ERR_STORE_POLICY_UNAVAILABLE`. Returned by
+     *     `/store` and `/correct` when the instance policy could not be READ, so
+     *     the write could not be checked against it. Nothing is persisted.
+     *
+     *     Deliberately distinct from `ERR_STORE_POLICY_DENIED`, and the
+     *     distinction is the point: DENIED means the policy was read and forbids
+     *     the write (fix the payload, do not retry); UNAVAILABLE means permission
+     *     is unknown (retry unchanged, do NOT rewrite). An agent that applies
+     *     DENIED remediation here — narrowing or dropping data — responds to an
+     *     infrastructure fault by silently storing less, which is the failure mode
+     *     this split exists to prevent.
+     *
+     *     503 rather than 400 because the fault is server-side and transient: a
+     *     400 would blame the payload for a condition the caller cannot fix.
+     */
+    StorePolicyUnavailableErrorEnvelope: {
+      error?: {
+        /** @enum {string} */
+        code?: "ERR_STORE_POLICY_UNAVAILABLE";
+        /**
+         * @description States that the policy could not be read, that zero entities
+         *     were persisted, and that this is an infrastructure failure
+         *     rather than a policy decision.
+         */
+        message?: string;
+        /**
+         * @description Always true. The same payload should be retried unmodified.
+         * @enum {boolean}
+         */
+        retryable?: true;
+        /**
+         * @description Actionable guidance: retry the same payload; if the condition
+         *     persists the instance operator must check database health — it
+         *     is not resolvable by changing what the caller stores.
+         */
+        hint?: string;
+      };
+    };
+    /**
      * @description R5: declarative predicate describing which observations of the source
      *     entity should be re-pointed onto the new entity. Every form reads a
      *     column every observation row carries so the predicate surface is

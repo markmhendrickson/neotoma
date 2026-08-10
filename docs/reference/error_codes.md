@@ -464,6 +464,34 @@ No PII appears in this envelope: interpolated values are schema-declared field
 *names* and configured policy values, never any fragment of the submitted
 payload.
 
+## ERR_STORE_POLICY_UNAVAILABLE
+
+Returned by `/store` and `/correct` when the instance policy **could not be
+read**, so the write could not be checked against it. Nothing is persisted.
+
+This is deliberately a DIFFERENT code from `ERR_STORE_POLICY_DENIED`, and
+confusing the two is the failure this split exists to prevent:
+
+| Code | HTTP | Retry? | Means | Correct response |
+| --- | --- | --- | --- | --- |
+| `ERR_STORE_POLICY_DENIED` | 400 | **No** | The policy was read and forbids this write | Fix the payload |
+| `ERR_STORE_POLICY_UNAVAILABLE` | 503 | **Yes** | The policy could not be read; permission is unknown | Retry unchanged |
+
+**Do not apply DENIED remediation to this code.** An agent that responds to an
+infrastructure fault by rewriting or narrowing what it stores has been misled:
+the write may well be permitted, and quietly storing less because the database
+was briefly unreachable is a silent data-loss mode, not a policy outcome.
+
+The envelope carries `retryable: true` and a `hint` saying so explicitly. The
+condition is server-side (an unreadable policy on an enforcing instance refuses
+every write) and is not something the caller can resolve by changing its data —
+if it persists, the instance operator needs to check database health.
+
+Why refuse rather than admit the write: an unreadable policy means the
+instance's boundary is unknown, and admitting writes unchecked would let an
+outage silently suspend every restriction the instance declares. The write is
+refused either way; only the explanation differs.
+
 ## Validation Errors
 
 | Code                        | HTTP | Retry? | Description                          |

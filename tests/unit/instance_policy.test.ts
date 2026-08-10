@@ -429,4 +429,29 @@ describe("instance policy — advisory instruction rendering (#1974)", () => {
     expect(advisoryText).toContain("ADVISORY");
     expect(advisoryText).not.toContain("ERR_STORE_POLICY_DENIED");
   });
+
+  describe("posture honesty in rendered instructions (#2011 ux/pm finding)", () => {
+    it("does not promise rejection under an advisory policy", () => {
+      const text = renderInstancePolicyInstructions({
+        require_lawful_basis: true,
+        require_provenance: true,
+        enforcement: "advisory",
+      });
+      // Telling an agent its write "is rejected" when the instance only
+      // advises contradicts the posture footer on the same block, and is the
+      // opposite of the truth about this instance.
+      expect(text).not.toMatch(/Writes without one are rejected/);
+      expect(text).not.toMatch(/Writes without it are rejected/);
+      expect(text).toMatch(/accepted but violate/);
+    });
+
+    it("does promise rejection under an enforced policy", () => {
+      const text = renderInstancePolicyInstructions({
+        require_lawful_basis: true,
+        enforcement: "enforced",
+      });
+      expect(text).toMatch(/rejected/);
+      expect(text).not.toMatch(/accepted but violate/);
+    });
+  });
 });
