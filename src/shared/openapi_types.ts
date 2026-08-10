@@ -31,8 +31,43 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Health check */
+    /**
+     * Health check
+     * @description LIVENESS only. Answers from process state and reads no dependency, so
+     *     it stays green while the database is slow or unreachable — by design:
+     *     an operator needs to distinguish "hung" from "dead", and a liveness
+     *     check that fails on a slow dependency turns latency into a restart.
+     *
+     *     Do NOT use this to decide whether the instance can serve requests. It
+     *     cannot detect degradation; use `/ready` for that.
+     */
     get: operations["healthCheck"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Readiness check
+     * @description LIVENESS **plus** a bounded database probe. Returns 503 when the probe
+     *     errors, throws, or exceeds `NEOTOMA_READINESS_BUDGET_MS` (default 3000).
+     *
+     *     The budget is the point. On 2026-08-10 this instance served `/health`
+     *     in 0.28s while entity reads took 34-37s — a probe that merely awaited
+     *     the database would have reported ready 37 seconds later, accurately and
+     *     uselessly. Sustained degradation is only detectable against a deadline.
+     */
+    get: operations["readinessCheck"];
     put?: never;
     post?: never;
     delete?: never;
@@ -4090,6 +4125,55 @@ export interface operations {
         content: {
           "application/json": {
             ok?: boolean;
+          };
+        };
+      };
+    };
+  };
+  readinessCheck: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Instance is live and answered a database probe within budget. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok?: boolean;
+            version?: string;
+            /** @enum {string} */
+            database?: "ok";
+            elapsed_ms?: number;
+          };
+        };
+      };
+      /**
+       * @description Not ready. `database: "error"` means the driver returned an error;
+       *     `database: "unreachable"` means it threw or exceeded the budget.
+       *     `error` carries the budget-overrun detail, and in production a
+       *     generic string for driver faults — the route is unauthenticated, so
+       *     raw driver messages are logged rather than returned.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok?: boolean;
+            version?: string;
+            /** @enum {string} */
+            database?: "error" | "unreachable";
+            elapsed_ms?: number;
+            budget_ms?: number;
+            error?: string;
           };
         };
       };
