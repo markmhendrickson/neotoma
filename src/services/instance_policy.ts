@@ -695,15 +695,19 @@ export function renderInstancePolicyInstructions(policy: InstancePolicy | null):
       `These entity types are OUT OF SCOPE and must not be stored here: ${policy.out_of_scope_entity_types.join(", ")}.`
     );
   }
+  // Say what actually happens under THIS posture. Hardcoding "are rejected"
+  // under an advisory policy contradicts the posture footer a few lines below,
+  // and an agent that believes a write will be rejected when it will not is
+  // being told the opposite of the truth about this instance (ux/pm, #2011).
+  const consequence =
+    policy.enforcement === "enforced"
+      ? "Writes without one are rejected."
+      : "Writes without one are accepted but violate this instance's policy — supply it.";
   if (policy.require_lawful_basis) {
-    lines.push(
-      "Person-data entities require a lawful-basis/purpose tag. Writes without one are rejected."
-    );
+    lines.push(`Person-data entities require a lawful-basis/purpose tag. ${consequence}`);
   }
   if (policy.require_provenance) {
-    lines.push(
-      "Person-data entities require attribution/consent metadata. Writes without it are rejected."
-    );
+    lines.push(`Person-data entities require attribution/consent metadata. ${consequence}`);
   }
   if (policy.max_sensitivity_class) {
     lines.push(
