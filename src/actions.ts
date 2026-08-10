@@ -2392,17 +2392,93 @@ function sendValidationError(res: express.Response, issues: unknown): express.Re
   );
 }
 
-// Public health endpoint (no auth)
-app.get("/health", (_req, res) => {
-  let version = "0.0.0";
+/** Read the package version once per request; never throws. */
+function readPackageVersionForHealth(): string {
   try {
     const pkgPath = path.join(config.projectRoot || process.cwd(), "package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: string };
-    version = pkg.version || "0.0.0";
+    return pkg.version || "0.0.0";
   } catch {
-    // fallback
+    return "0.0.0";
   }
-  return res.json({ ok: true, version });
+}
+
+/**
+ * Budget for the readiness DB probe, in ms. Deliberately small: the point is to
+ * fail while the instance is merely SLOW, not to wait until it is dead.
+ *
+ * On 2026-08-10 this instance served `/health` in 0.28s while entity reads took
+ * 34–37s and page renders timed out entirely (#2141). A probe that simply
+ * awaited the database would have returned "ready" 37 seconds later — accurate
+ * and useless. A page that loads in 34s is broken for a human.
+ */
+const READINESS_BUDGET_MS = Number(process.env.NEOTOMA_READINESS_BUDGET_MS || 3000);
+
+// Public health endpoint (no auth) — LIVENESS only.
+//
+// Answers "is this process up?" and deliberately touches nothing else, so it
+// stays cheap and cannot be made to hang by a slow dependency. It is NOT
+// evidence the instance can serve a request: see /ready.
+app.get("/health", (_req, res) => {
+  return res.json({ ok: true, version: readPackageVersionForHealth() });
+});
+
+// Public readiness endpoint (no auth) — LIVENESS **plus** a bounded DB probe.
+//
+// This is what a load balancer or uptime check should target. `/health` cannot
+// distinguish "the server is up" from "the server is up and can answer", and
+// that gap is not theoretical: on 2026-08-10 every dashboard read green while
+// DB-backed requests hung past 40s, because the one signal everybody trusts was
+// the one signal that still worked (#2141).
+//
+// Returns 503 when the probe fails OR exceeds its budget. Sustained degradation
+// is a failure here, not a slow success — a check that waits however long the
+// database takes cannot detect the condition it exists to detect.
+app.get("/ready", async (_req, res) => {
+  const version = readPackageVersionForHealth();
+  const started = Date.now();
+
+  try {
+    // Cheapest possible round trip that proves the driver can actually answer.
+    // `limit(1)` on an indexed table keeps this O(1) regardless of graph size,
+    // so the probe's own cost never becomes the thing that makes it slow.
+    const probe = db.from("entities").select("id").limit(1);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`readiness probe exceeded ${READINESS_BUDGET_MS}ms`)),
+        READINESS_BUDGET_MS
+      )
+    );
+    const { error } = (await Promise.race([probe, timeout])) as { error?: unknown };
+    const elapsed_ms = Date.now() - started;
+
+    if (error) {
+      const message = (error as { message?: string })?.message || String(error);
+      logError("ReadinessProbeFailed", _req, error, { elapsed_ms });
+      return res.status(503).json({
+        ok: false,
+        version,
+        database: "error",
+        elapsed_ms,
+        error: message,
+      });
+    }
+    return res.json({ ok: true, version, database: "ok", elapsed_ms });
+  } catch (err: unknown) {
+    // Budget exceeded, or the driver threw. Both mean the instance cannot
+    // serve within a useful time; both are 503.
+    const elapsed_ms = Date.now() - started;
+    const message = err instanceof Error ? err.message : String(err);
+    logError("ReadinessProbeTimeout", _req, err, { elapsed_ms });
+    return res.status(503).json({
+      ok: false,
+      version,
+      database: "unreachable",
+      elapsed_ms,
+      budget_ms: READINESS_BUDGET_MS,
+      error: message,
+    });
+  }
 });
 
 // ============================================================================
