@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **575**
-- Backend and repo Vitest files: **540**
+- Total automated test files: **576**
+- Backend and repo Vitest files: **541**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 159 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 161 |
+| Vitest integration tests | 162 |
 | Vitest CLI tests | 77 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 7 |
@@ -397,7 +397,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (161):**
+**Files (162):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -510,6 +510,7 @@ flowchart TD
 - `tests/integration/plan_body_raw_fragment_backfill.test.ts`
 - `tests/integration/process_issues_skill.test.ts`
 - `tests/integration/public_key_registry.test.ts`
+- `tests/integration/readiness_probe.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
 - `tests/integration/relationship_agent_attribution_api.test.ts`
 - `tests/integration/relationship_delete_discovery_mcp.test.ts`

@@ -2392,17 +2392,148 @@ function sendValidationError(res: express.Response, issues: unknown): express.Re
   );
 }
 
-// Public health endpoint (no auth)
-app.get("/health", (_req, res) => {
-  let version = "0.0.0";
+/** Read the package version once per request; never throws. */
+function readPackageVersionForHealth(): string {
   try {
     const pkgPath = path.join(config.projectRoot || process.cwd(), "package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: string };
-    version = pkg.version || "0.0.0";
+    return pkg.version || "0.0.0";
   } catch {
-    // fallback
+    return "0.0.0";
   }
-  return res.json({ ok: true, version });
+}
+
+/**
+ * Budget for the readiness DB probe, in ms. Deliberately small: the point is to
+ * fail while the instance is merely SLOW, not to wait until it is dead.
+ *
+ * On 2026-08-10 this instance served `/health` in 0.28s while entity reads took
+ * 34–37s and page renders timed out entirely (#2141). A probe that simply
+ * awaited the database would have returned "ready" 37 seconds later — accurate
+ * and useless. A page that loads in 34s is broken for a human.
+ */
+const READINESS_BUDGET_DEFAULT_MS = 3000;
+
+/**
+ * Parse the readiness budget, falling back on anything non-numeric or absurd.
+ *
+ * `Number("not-a-number")` is `NaN`, and `setTimeout(fn, NaN)` fires after ~1ms
+ * — so a typo in this env var would make a healthy database answering in 10ms
+ * return 503 `exceeded NaNms`, with `budget_ms: null` against an OpenAPI schema
+ * that declares an integer. That is #2141 inverted: a monitor reporting failure
+ * while nothing is wrong, which burns operator trust just as fast as one
+ * reporting success while everything is.
+ *
+ * Mirrors `parseMcpSseKeepaliveMs` below. Zero and negatives are rejected too:
+ * a non-positive budget can never be satisfied, so it would 503 unconditionally.
+ */
+export function parseReadinessBudgetMs(raw: string | undefined): number {
+  if (raw === undefined) return READINESS_BUDGET_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return READINESS_BUDGET_DEFAULT_MS;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : READINESS_BUDGET_DEFAULT_MS;
+}
+
+const READINESS_BUDGET_MS = parseReadinessBudgetMs(process.env.NEOTOMA_READINESS_BUDGET_MS);
+
+/** Marker for the timeout this route raises itself, distinguishable from any
+ *  error the driver produced. Matching on message text would be fragile. */
+const READINESS_BUDGET_ERROR = "NeotomaReadinessBudgetExceeded";
+
+function isBudgetOverrun(err: unknown): boolean {
+  return err instanceof Error && err.name === READINESS_BUDGET_ERROR;
+}
+
+/**
+ * SECURITY: `/ready` is unauthenticated, so a driver error must never reach the
+ * caller verbatim in production — SQLite and filesystem errors routinely carry
+ * absolute paths and schema fragments (security_audit_2026_04_22.md S-5, the
+ * same rule `handleApiError` applies). The detail still reaches the operator
+ * through `logError`; only the wire response is redacted.
+ */
+function readinessDetail(err: unknown, fallback: string): string {
+  const includeDetail =
+    config.environment !== "production" ||
+    process.env.NEOTOMA_VERBOSE_ERRORS === "1" ||
+    process.env.NEOTOMA_VERBOSE_ERRORS === "true";
+  if (!includeDetail) return fallback;
+  if (err instanceof Error) return err.message;
+  const message = (err as { message?: string })?.message;
+  return message || String(err);
+}
+
+// Public health endpoint (no auth) — LIVENESS only.
+//
+// Answers "is this process up?" and deliberately touches nothing else, so it
+// stays cheap and cannot be made to hang by a slow dependency. It is NOT
+// evidence the instance can serve a request: see /ready.
+app.get("/health", (_req, res) => {
+  return res.json({ ok: true, version: readPackageVersionForHealth() });
+});
+
+// Public readiness endpoint (no auth) — LIVENESS **plus** a bounded DB probe.
+//
+// This is what a load balancer or uptime check should target. `/health` cannot
+// distinguish "the server is up" from "the server is up and can answer", and
+// that gap is not theoretical: on 2026-08-10 every dashboard read green while
+// DB-backed requests hung past 40s, because the one signal everybody trusts was
+// the one signal that still worked (#2141).
+//
+// Returns 503 when the probe fails OR exceeds its budget. Sustained degradation
+// is a failure here, not a slow success — a check that waits however long the
+// database takes cannot detect the condition it exists to detect.
+app.get("/ready", async (_req, res) => {
+  const version = readPackageVersionForHealth();
+  const started = Date.now();
+
+  try {
+    // Cheapest possible round trip that proves the driver can actually answer.
+    // `limit(1)` on an indexed table keeps this O(1) regardless of graph size,
+    // so the probe's own cost never becomes the thing that makes it slow.
+    const probe = db.from("entities").select("id").limit(1);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => {
+        const overrun = new Error(`readiness probe exceeded ${READINESS_BUDGET_MS}ms`);
+        overrun.name = READINESS_BUDGET_ERROR;
+        reject(overrun);
+      }, READINESS_BUDGET_MS)
+    );
+    const { error } = (await Promise.race([probe, timeout])) as { error?: unknown };
+    const elapsed_ms = Date.now() - started;
+
+    if (error) {
+      logError("ReadinessProbeFailed", _req, error, { elapsed_ms });
+      return res.status(503).json({
+        ok: false,
+        version,
+        database: "error",
+        elapsed_ms,
+        error: readinessDetail(error, "database probe failed"),
+      });
+    }
+    return res.json({ ok: true, version, database: "ok", elapsed_ms });
+  } catch (err: unknown) {
+    // Budget exceeded, or the driver threw. Both mean the instance cannot
+    // serve within a useful time; both are 503.
+    const elapsed_ms = Date.now() - started;
+    logError("ReadinessProbeTimeout", _req, err, { elapsed_ms });
+    return res.status(503).json({
+      ok: false,
+      version,
+      database: "unreachable",
+      elapsed_ms,
+      budget_ms: READINESS_BUDGET_MS,
+      // The budget-overrun message is ours, not the driver's, so it carries no
+      // path or schema detail and is safe to return unconditionally. That
+      // matters: `exceeded 3000ms` is the whole diagnostic value of this
+      // response, and redacting it in production would leave the endpoint
+      // saying only "not ready" during the exact incident it exists for.
+      error: isBudgetOverrun(err)
+        ? (err as Error).message
+        : readinessDetail(err, "database unreachable"),
+    });
+  }
 });
 
 // ============================================================================
@@ -3865,7 +3996,11 @@ app.use(async (req, res, next) => {
     (req.method === "GET" &&
       (req.path === "/openapi.yaml" ||
         req.path === "/openapi_actions.yaml" ||
-        req.path === "/health")) ||
+        req.path === "/health" ||
+        // Readiness is as public as liveness: a platform probe has no
+        // credential, and the response carries no user data. Listed beside
+        // /health so the pair cannot drift apart.
+        req.path === "/ready")) ||
     (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();

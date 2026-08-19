@@ -142,6 +142,14 @@ jobs:
       - name: Run concurrent-backend effect-verified regressions (merge rollback + migration validator)
         run: npx vitest run --no-file-parallelism tests/integration/merge_repoint_relationship_edges.test.ts tests/scripts/validate_libsql_migration.test.ts
 
+      # Readiness-probe regressions (#2141). Same gap as the step above, found
+      # the same way: the suite that pins the latency budget passed locally and
+      # ran in NO PR lane, so a future change could delete the budget and green
+      # every check. That is the #2141 bug itself in a new place — a signal that
+      # reports success while the thing it guards is gone.
+      - name: Run readiness-probe effect-verified regressions (liveness/readiness split)
+        run: npx vitest run --no-file-parallelism tests/integration/readiness_probe.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline

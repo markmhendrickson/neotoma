@@ -1054,6 +1054,28 @@
       ]
     },
     {
+      "path": "/ready",
+      "method": "GET",
+      "operation_id": "readinessCheck",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405,
+        503
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405,
+        503
+      ],
+      "override_applied": true
+    },
+    {
       "path": "/recent_conversations",
       "method": "GET",
       "operation_id": "getRecentConversations",
@@ -1682,5 +1704,27 @@
       ]
     }
   ],
-  "overrides": []
+  "overrides": [
+    {
+      "method": "GET",
+      "path": "/ready",
+      "reason": "/ready returns 503 by design when the instance cannot answer a database probe within its latency budget. Without this override the deployed probe treats a genuine degradation as an auth-topology finding — a false positive that fires precisely during the incident the endpoint exists to surface. 503 is a readiness signal here, never an authentication outcome.",
+      "fields": {
+        "expected_no_auth_status": [
+          200,
+          400,
+          404,
+          405,
+          503
+        ],
+        "expected_invalid_auth_status": [
+          200,
+          400,
+          404,
+          405,
+          503
+        ]
+      }
+    }
+  ]
 }
