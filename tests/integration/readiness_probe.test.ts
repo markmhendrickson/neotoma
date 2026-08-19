@@ -229,6 +229,70 @@ describe("readiness probe (#2141)", () => {
     });
   });
 
+  describe("a malformed budget must not fail a healthy instance", () => {
+    // The inverse of #2141. `Number("not-a-number")` is NaN, and
+    // `setTimeout(fn, NaN)` fires after ~1ms — so a typo in the env var would
+    // 503 a database answering in 10ms, reporting `exceeded NaNms` with
+    // `budget_ms: null` against a schema that declares an integer. A monitor
+    // that cries failure while nothing is wrong burns operator trust just as
+    // fast as one that stays silent while everything is.
+    it.each([
+      ["not-a-number", "non-numeric"],
+      ["", "empty"],
+      ["0", "zero"],
+      ["-500", "negative"],
+    ])("falls back to the default for a %s budget (%s)", async (raw) => {
+      process.env.NEOTOMA_READINESS_BUDGET_MS = raw;
+      mockDb(() => new Promise((resolve) => setTimeout(() => resolve({ error: null }), 10)));
+      const app = await freshApp();
+      try {
+        await withHttpServer(app, async (baseUrl) => {
+          const resp = await fetch(`${baseUrl}/ready`);
+          expect(resp.status, `budget "${raw}" must not fail a healthy DB`).toBe(200);
+          const body = (await resp.json()) as Record<string, unknown>;
+          expect(body.database).toBe("ok");
+        });
+      } finally {
+        delete process.env.NEOTOMA_READINESS_BUDGET_MS;
+      }
+    });
+
+    it("still honours a valid budget", async () => {
+      process.env.NEOTOMA_READINESS_BUDGET_MS = "50";
+      mockDb(() => new Promise((resolve) => setTimeout(() => resolve({ error: null }), 5000)));
+      const app = await freshApp();
+      try {
+        await withHttpServer(app, async (baseUrl) => {
+          const resp = await fetch(`${baseUrl}/ready`);
+          expect(resp.status).toBe(503);
+          expect(String(((await resp.json()) as Record<string, unknown>).error)).toMatch(
+            /exceeded 50ms/
+          );
+        });
+      } finally {
+        delete process.env.NEOTOMA_READINESS_BUDGET_MS;
+      }
+    });
+  });
+
+  it("keeps /ready beside /health in the public-route allow-lists", async () => {
+    // Both routes register BEFORE the auth and SPA middlewares today, so this
+    // is latent rather than live. But a later reordering would silently break
+    // public readiness with nothing to catch it — the allow-lists are where the
+    // pair is declared, so that is where the drift must be pinned.
+    const { isApiOnlyPath } = await import("../../src/services/inspector_mount.js");
+    expect(isApiOnlyPath("/health")).toBe(true);
+    expect(isApiOnlyPath("/ready"), "/ready must be API-only, like /health").toBe(true);
+
+    const source = readFileSync(new URL("../../src/actions.ts", import.meta.url), "utf-8");
+    const bypass = source.slice(
+      source.indexOf("Bypass auth only for truly public endpoints"),
+      source.indexOf("Bypass auth only for truly public endpoints") + 900
+    );
+    expect(bypass).toContain('req.path === "/health"');
+    expect(bypass, "/ready must bypass auth alongside /health").toContain('req.path === "/ready"');
+  });
+
   it("declares /ready in the contract, matching what it serves", () => {
     // The route existed and answered before it was declared anywhere
     // (guardrails MUST #17). An undeclared public route is invisible to

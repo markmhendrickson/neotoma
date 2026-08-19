@@ -2412,7 +2412,30 @@ function readPackageVersionForHealth(): string {
  * awaited the database would have returned "ready" 37 seconds later — accurate
  * and useless. A page that loads in 34s is broken for a human.
  */
-const READINESS_BUDGET_MS = Number(process.env.NEOTOMA_READINESS_BUDGET_MS || 3000);
+const READINESS_BUDGET_DEFAULT_MS = 3000;
+
+/**
+ * Parse the readiness budget, falling back on anything non-numeric or absurd.
+ *
+ * `Number("not-a-number")` is `NaN`, and `setTimeout(fn, NaN)` fires after ~1ms
+ * — so a typo in this env var would make a healthy database answering in 10ms
+ * return 503 `exceeded NaNms`, with `budget_ms: null` against an OpenAPI schema
+ * that declares an integer. That is #2141 inverted: a monitor reporting failure
+ * while nothing is wrong, which burns operator trust just as fast as one
+ * reporting success while everything is.
+ *
+ * Mirrors `parseMcpSseKeepaliveMs` below. Zero and negatives are rejected too:
+ * a non-positive budget can never be satisfied, so it would 503 unconditionally.
+ */
+export function parseReadinessBudgetMs(raw: string | undefined): number {
+  if (raw === undefined) return READINESS_BUDGET_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return READINESS_BUDGET_DEFAULT_MS;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : READINESS_BUDGET_DEFAULT_MS;
+}
+
+const READINESS_BUDGET_MS = parseReadinessBudgetMs(process.env.NEOTOMA_READINESS_BUDGET_MS);
 
 /** Marker for the timeout this route raises itself, distinguishable from any
  *  error the driver produced. Matching on message text would be fragile. */
@@ -3973,7 +3996,11 @@ app.use(async (req, res, next) => {
     (req.method === "GET" &&
       (req.path === "/openapi.yaml" ||
         req.path === "/openapi_actions.yaml" ||
-        req.path === "/health")) ||
+        req.path === "/health" ||
+        // Readiness is as public as liveness: a platform probe has no
+        // credential, and the response carries no user data. Listed beside
+        // /health so the pair cannot drift apart.
+        req.path === "/ready")) ||
     (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();

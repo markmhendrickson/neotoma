@@ -503,6 +503,7 @@ const API_ONLY_PREFIXES: readonly string[] = [
   "/server-info",
   "/me",
   "/health",
+  "/ready", // liveness's sibling — must stay listed together (see /health)
   "/version",
   "/mcp/", // OAuth + MCP HTTP endpoints serve their own HTML or JSON
   "/oauth/",
