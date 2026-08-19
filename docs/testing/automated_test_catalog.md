@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **576**
-- Backend and repo Vitest files: **541**
+- Total automated test files: **579**
+- Backend and repo Vitest files: **544**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 159 |
+| Vitest unit tests | 161 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 65 |
-| Vitest integration tests | 161 |
+| Vitest integration tests | 162 |
 | Vitest CLI tests | 77 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 8 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (159):**
+**Files (161):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -192,6 +192,8 @@ flowchart TD
 - `tests/unit/i18n_routing.test.ts`
 - `tests/unit/inspector_admin_unlock_url.test.ts`
 - `tests/unit/inspector_skin.test.ts`
+- `tests/unit/instance_policy_write_path_coverage.test.ts`
+- `tests/unit/instance_policy.test.ts`
 - `tests/unit/issue_spec_schema.test.ts`
 - `tests/unit/keepalive_timeout.test.ts`
 - `tests/unit/list_timeline_events_unknown_type.test.ts`
@@ -397,7 +399,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (161):**
+**Files (162):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -458,6 +460,7 @@ flowchart TD
 - `tests/integration/inspector_bundled_mount.test.ts`
 - `tests/integration/inspector_content_negotiation.test.ts`
 - `tests/integration/inspector_skinning.test.ts`
+- `tests/integration/instance_policy_db_enforcement.test.ts`
 - `tests/integration/interpretation_fragment_ordering.test.ts`
 - `tests/integration/interpretation_no_schema_fallback.test.ts`
 - `tests/integration/interpretation_store.test.ts`

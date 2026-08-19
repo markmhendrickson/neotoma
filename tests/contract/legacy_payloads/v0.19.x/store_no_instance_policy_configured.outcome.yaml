@@ -1,0 +1,29 @@
+endpoint: "POST /store"
+outcome: valid
+notes: |
+  v0.19.0 instance store-policy enforcement (#1974/#1975). This fixture pins the
+  BACKWARD-COMPATIBILITY guarantee rather than a tightening: adding the policy
+  engine must not change the behavior of any instance that has not configured a
+  policy.
+
+  `payment_profile` is used deliberately — it is the type named in the issue as
+  the canonical example of something a shared domain instance would deny. On an
+  instance with no `instance_policy` entity (the default, and the state of every
+  instance that existed before this feature), it must still store successfully.
+
+  Two defaults make this hold, and both are load-bearing:
+
+  1. No `instance_policy` record configured => `getInstancePolicy()` returns
+     null => the evaluator denies nothing.
+  2. A policy that IS configured defaults to `enforcement: "advisory"`, which
+     declares the policy in the served client instructions but still accepts
+     violating writes. An operator opts into rejection explicitly by setting
+     `enforcement: "enforced"`.
+
+  Consequence for the release supplement: this change introduces a new error
+  code (`ERR_STORE_POLICY_DENIED`) but is NOT a breaking change, because no
+  previously-accepted payload starts being rejected without an operator first
+  creating a policy and opting into enforcement. The tightening is
+  operator-activated, not release-activated. If a future release flips the
+  default to `enforced`, THAT release is breaking and needs its own fixture flip
+  from `valid` -> `rejected` here.
