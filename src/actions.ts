@@ -32,6 +32,7 @@ import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_inf
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
+import { StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
@@ -996,28 +997,41 @@ app.get("/server-info", (req, res) => {
   });
 });
 
-app.get("/mcp-interaction-instructions", (_req, res) => {
-  const instructionsPath = path.join(
-    config.projectRoot,
-    "docs",
-    "developer",
-    "mcp",
-    "instructions.md"
-  );
-  try {
-    const raw = fs.readFileSync(instructionsPath, "utf-8");
-    const match = raw.match(/```\s*\n?([\s\S]*?)```/);
-    if (match && match[1]) {
-      const text = match[1].trim();
-      if (text) {
-        res.type("text/plain").send(text);
-        return;
-      }
-    }
-  } catch {
-    // fall through to 404
+app.get("/mcp-interaction-instructions", async (_req, res) => {
+  // Uses the shared extractor rather than an inlined fence regex, and appends
+  // the instance policy through the shared composer (#1974), so this surface
+  // cannot drift from the MCP handshake and the CLI.
+  const {
+    readMcpInstructionsMarkdown,
+    extractFirstFencedCodeBlock,
+    resolveNeotomaPackageRoot,
+    composeClientInstructions,
+  } = await import("./mcp_instruction_doc.js");
+
+  let text: string | null = null;
+  for (const root of [config.projectRoot, resolveNeotomaPackageRoot()]) {
+    const raw = readMcpInstructionsMarkdown(root);
+    if (!raw) continue;
+    text = extractFirstFencedCodeBlock(raw);
+    if (text) break;
   }
-  res.status(404).json({ error: "instructions_not_found" });
+
+  if (!text) {
+    res.status(404).json({ error: "instructions_not_found" });
+    return;
+  }
+
+  let policySection = "";
+  try {
+    const { getInstancePolicy, renderInstancePolicyInstructions } =
+      await import("./services/instance_policy.js");
+    policySection = renderInstancePolicyInstructions(await getInstancePolicy());
+  } catch {
+    // An unreadable policy degrades to the global instructions rather than
+    // failing the request.
+  }
+
+  res.type("text/plain").send(composeClientInstructions(text, policySection));
 });
 
 // ============================================================================
@@ -4313,6 +4327,21 @@ function handleApiError(
       .status(error.statusCode)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (error instanceof StorePolicyUnavailableError) {
+    // 503, not 400: the write was refused because the instance could not read
+    // its own policy, which is a service-side fault the caller can retry — not
+    // a statement about the payload. A 400 here would tell an agent its data
+    // was wrong and invite it to narrow what it stores in response to an
+    // outage. Logged at error level because an enforcing instance that cannot
+    // read its policy is refusing every write.
+    logError(logContext || "StorePolicyUnavailable", req, error, {
+      code: error.code,
+      cause: error.cause_message,
+    });
+    return res
+      .status(503)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
   if (error instanceof IssueValidationError) {
     logWarn(logContext || "IssueValidationError", req, {
       code: error.code,
@@ -5128,6 +5157,33 @@ app.get("/schemas", async (req, res) => {
 });
 
 // GET /api/schemas/:entity_type - Get specific schema (FU-XXX)
+// GET /instance-policy — describe this instance's data policy (#1974/#1975).
+//
+// Deliberately takes no user_id or instance identifier: the policy is
+// instance-wide, so every authenticated caller sees the same record and there
+// is no parameter through which one caller could address another scope. Auth is
+// still required — the policy shape reveals what kind of data the instance
+// handles.
+app.get("/instance-policy", async (req, res) => {
+  try {
+    await getAuthenticatedUserId(req, undefined);
+    const { getInstancePolicy } = await import("./services/instance_policy.js");
+    const policy = await getInstancePolicy();
+    // Explicit null, never 404 and never {} — "no policy configured" must not
+    // be mistakable for "denies everything".
+    return res.json({ policy: policy ?? null });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to read instance policy",
+      "DB_QUERY_FAILED",
+      "APIError:instance-policy"
+    );
+  }
+});
+
 app.get("/schemas/:entity_type", async (req, res) => {
   try {
     const entityType = decodeURIComponent(req.params.entity_type);
@@ -7136,6 +7192,40 @@ export async function storeStructuredForApi(params: {
     };
   }
 
+  // Instance store-policy enforcement (#1975).
+  //
+  // Placed before `storeRawContent` — not merely before the observation writes
+  // — because that call persists the `sources` row. A store call is not wrapped
+  // in a transaction, so a denial raised after it would leave an orphaned
+  // source row behind for a request that returned "rejected, 0 persisted".
+  // For a data-protection control, an error that says rejected while data sits
+  // in the database is the worst possible failure mode.
+  //
+  // Evaluates the raw request entities rather than the post-resolution
+  // `resolved` array (computed further down): the policy predicates read
+  // `entity_type` and field presence, both available here, and resolution runs
+  // after the source write.
+  {
+    const { assertStorePolicyAllows } = await import("./services/instance_policy.js");
+    const { schemaRegistry: policySchemaRegistry } = await import("./services/schema_registry.js");
+
+    const policyCandidates = entities.map((entityData) => {
+      const raw = (entityData ?? {}) as Record<string, unknown>;
+      const candidateFields = { ...raw };
+      delete candidateFields.entity_type;
+      delete candidateFields.type;
+      return {
+        entity_type: (raw.entity_type as string) || (raw.type as string) || "generic",
+        fields: candidateFields,
+      };
+    });
+
+    await assertStorePolicyAllows(policyCandidates, async (entityType) => {
+      const entry = await policySchemaRegistry.loadActiveSchema(entityType, userId);
+      return entry?.schema_definition ?? null;
+    });
+  }
+
   const { createObservation } = await import("./services/observation_storage.js");
 
   const jsonContent = incomingJsonContent;
@@ -8540,6 +8630,54 @@ async function handleStorePost(
       const message = error instanceof Error ? error.message : String(error);
       logWarn("IdempotencyCollision:store", req, { message });
       return sendError(res, 409, "ERR_IDEMPOTENCY_COLLISION", message);
+    }
+    if (error && typeof error === "object" && errCode === "ERR_STORE_POLICY_DENIED") {
+      const err = error as {
+        message: string;
+        denied: Array<{
+          entity_index: number;
+          entity_type?: string;
+          reason_code: string;
+          hint: string;
+          policy_id?: string;
+        }>;
+      };
+      // Log counts and reason codes only. The denied entities' field values are
+      // exactly the data the policy refused to hold, so they must not reach the
+      // log either (guardrails MUST NOT 11).
+      logWarn("StorePolicyDenied:store", req, {
+        denied_count: err.denied?.length ?? 0,
+        reason_codes: [...new Set((err.denied ?? []).map((d) => d.reason_code))].sort(),
+      });
+      return res.status(400).json({
+        error: {
+          code: "ERR_STORE_POLICY_DENIED",
+          message: err.message,
+          denied: err.denied ?? [],
+        },
+      });
+    }
+    if (error instanceof StorePolicyUnavailableError) {
+      // MUST sit beside its DENIED sibling, not fall through to the generic
+      // 500 below. `/correct` gets 503 from the shared `handleApiError`, but
+      // this handler catches first and never reaches it — so without this
+      // branch REST `/store` answered 500 DB_QUERY_FAILED while MCP, /correct,
+      // the docs, and the declared envelope all promised 503 retryable:true.
+      //
+      // The status is the entire contract here. 500 reads as "this request
+      // broke the server" and a well-behaved agent responds by changing the
+      // payload; 503 + retryable:true reads as "ask again unchanged". Getting
+      // it wrong makes an agent narrow what it stores because the instance
+      // could not read its own policy — the failure this split exists to
+      // prevent, arriving through the surface it was built for.
+      logError("StorePolicyUnavailable:store", req, error, {
+        code: error.code,
+        cause: error.cause_message,
+      });
+      // Nested under `error` to match the DENIED sibling directly above, so a
+      // client reading `error.code` finds both policy outcomes in one place.
+      // `toErrorEnvelope()` already carries code + message + retryable + hint.
+      return res.status(503).json({ error: error.toErrorEnvelope() });
     }
     if (error && typeof error === "object" && errCode === "ERR_STORE_RESOLUTION_FAILED") {
       const err = error as {
@@ -10941,6 +11079,16 @@ app.post("/correct", async (req, res) => {
       return res
         .status(400)
         .json(buildErrorEnvelope(error.code, error.message, { entity_type: error.entityType }));
+    }
+    // Instance store-policy denial (#1975) — same envelope as /store, so a
+    // caller handling one handles both.
+    const { StorePolicyDeniedError } = await import("./services/instance_policy.js");
+    if (error instanceof StorePolicyDeniedError) {
+      logWarn("StorePolicyDenied:correct", req, {
+        denied_count: error.denied.length,
+        reason_codes: [...new Set(error.denied.map((d) => d.reason_code))].sort(),
+      });
+      return res.status(400).json({ error: error.toErrorEnvelope() });
     }
     return handleApiError(
       req,
