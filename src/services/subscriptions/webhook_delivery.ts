@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 
 import { logger } from "../../utils/logger.js";
+import { isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import type { SubstrateEvent } from "../../events/types.js";
 import { createCorrection } from "../correction.js";
 import type { SubscriptionRecord } from "./subscription_types.js";
@@ -15,6 +16,9 @@ function isProductionEnv(): boolean {
 }
 
 export function isWebhookUrlAllowed(urlStr: string): boolean {
+  // SSRF: reject private/loopback/link-local/platform-internal targets under
+  // hosted mode before any protocol allowance below.
+  if (!isPublicFetchUrlAllowed(urlStr)) return false;
   try {
     const u = new URL(urlStr);
     if (u.protocol === "https:") return true;

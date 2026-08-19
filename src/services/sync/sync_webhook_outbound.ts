@@ -1,3 +1,4 @@
+import { isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import { signWebhookBody, stableStringify } from "../subscriptions/webhook_delivery.js";
 import { createCorrection } from "../correction.js";
 import type { SubstrateEvent } from "../../events/types.js";
@@ -40,6 +41,11 @@ export async function postOutboundSyncWebhook(params: {
     }
     headers["X-Neotoma-Sync-Signature-256"] = signWebhookBody(params.sharedSecret, rawBody);
   }
+  // SSRF: peer webhook URLs are caller-registered. Guard before either
+  // transport branch so the AAuth path cannot bypass the check.
+  if (!isPublicFetchUrlAllowed(url)) {
+    return { ok: false, error: "peer_url_not_public" };
+  }
   try {
     const request = {
       method: "POST",
@@ -79,6 +85,11 @@ export async function postOutboundSyncEntitiesRequest(params: {
 }> {
   const rawBody = stableStringify(params.payload);
   const url = `${params.peerUrlBase.replace(/\/$/, "")}/sync/entities`;
+  // SSRF: same guard as the webhook sink above. This is a separate exported
+  // entry point in the same module, so it needs its own check.
+  if (!isPublicFetchUrlAllowed(url)) {
+    return { ok: false, error: "peer_url_not_public" };
+  }
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
