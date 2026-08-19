@@ -8756,6 +8756,163 @@ async function handleStorePost(
 // POST /api/store - Unified store for structured, unstructured, or combined payloads
 app.post("/store", writeRateLimit, handleStorePost);
 
+// POST /rendered-pages/publish - Mint a guest share URL for a rendered_page.
+//
+// neotoma#2120: this path was declared in contract_mappings.ts and documented in
+// openapi.yaml, but no route was ever mounted — so an OpenAPI-generated client
+// got a method that always 404'd, and publishing was reachable only over MCP.
+// That stranded every non-MCP caller (scripts, daemons, CI, curl, and any agent
+// whose MCP session had dropped): they could create a rendered_page over REST
+// but could not mint the token that makes it shareable.
+//
+// Delegates to the same services/rendered_page/publish.ts the MCP tool uses, so
+// the two surfaces cannot drift.
+app.post("/rendered-pages/publish", writeRateLimit, async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const str = (k: string): string | undefined =>
+    typeof body[k] === "string" ? (body[k] as string) : undefined;
+
+  try {
+    const userId = await getAuthenticatedUserId(req, str("user_id"));
+    const { publishRenderedPage } = await import("./services/rendered_page/publish.js");
+
+    const result = await publishRenderedPage(
+      {
+        entityId: str("entity_id"),
+        title: str("title"),
+        htmlBody: str("html_body"),
+        customCss: str("custom_css"),
+        metaDescription: str("meta_description"),
+        idempotencyKey: str("idempotency_key"),
+        userId,
+      },
+      // create callback: route through the same structured-store path the REST
+      // /store endpoint uses, so an inline-created page lands with full
+      // provenance rather than as a bare row.
+      async (fields) => {
+        const entity: Record<string, unknown> = {
+          entity_type: "rendered_page",
+          title: fields.title,
+          html_body: fields.html_body,
+        };
+        if (fields.custom_css !== undefined) entity.custom_css = fields.custom_css;
+        if (fields.meta_description !== undefined)
+          entity.meta_description = fields.meta_description;
+
+        const stored = (await storeStructuredForApi({
+          userId: fields.userId,
+          entities: [entity],
+          sourcePriority: 100,
+          idempotencyKey:
+            fields.idempotencyKey ?? `publish-rendered-page-${Date.now()}-${randomUUID()}`,
+        })) as { entities?: Array<{ entity_id?: string }> };
+
+        const entityId = stored.entities?.[0]?.entity_id;
+        if (!entityId) {
+          throw new Error("store did not return an entity_id for the new rendered_page");
+        }
+        return entityId;
+      }
+    );
+
+    return res.json(result);
+  } catch (err) {
+    const { PublishRenderedPageError } = await import("./services/rendered_page/publish.js");
+    if (err instanceof PublishRenderedPageError) {
+      // Input problems are the caller's to fix; surface the service's own code
+      // and hint rather than flattening them into a 500.
+      return sendError(res, 400, err.code, err.message, {
+        ...(err.envelope.hint ? { hint: err.envelope.hint } : {}),
+        ...(err.envelope.details ?? {}),
+      });
+    }
+    logError("PublishRenderedPage", req, err);
+    return sendError(
+      res,
+      500,
+      "PUBLISH_RENDERED_PAGE_ERROR",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+});
+
+// POST /query_contacts_at_company - Contacts linked to a company (fuzzy-matched).
+//
+// neotoma#2120: documented in openapi.yaml and declared in contract_mappings.ts,
+// but never mounted — same defect as /rendered-pages/publish, found by the
+// route-mounting assertion added alongside this fix.
+app.post("/query_contacts_at_company", async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const companyName = typeof body.company_name === "string" ? body.company_name.trim() : "";
+  if (!companyName) {
+    return sendError(res, 400, "VALIDATION_MISSING_FIELD", "company_name is required");
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(
+      req,
+      typeof body.user_id === "string" ? body.user_id : undefined
+    );
+    const { queryContactsAtCompany } = await import("./services/company_query.js");
+    const result = await queryContactsAtCompany({
+      companyName,
+      userId,
+      threshold: typeof body.threshold === "number" ? body.threshold : undefined,
+    });
+    return res.json(result);
+  } catch (err) {
+    logError("QueryContactsAtCompany", req, err);
+    return sendError(
+      res,
+      500,
+      "QUERY_CONTACTS_AT_COMPANY_ERROR",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+});
+
+// POST /identify_entity_by_signals - Resolve an entity from partial identifiers.
+//
+// neotoma#2120: as above — declared and documented, never mounted.
+app.post("/identify_entity_by_signals", async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const signals = body.signals;
+  if (!signals || typeof signals !== "object" || Array.isArray(signals)) {
+    return sendError(
+      res,
+      400,
+      "VALIDATION_MISSING_FIELD",
+      "signals is required and must be an object of identifier key/value pairs"
+    );
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(
+      req,
+      typeof body.user_id === "string" ? body.user_id : undefined
+    );
+    const { identifyEntityBySignals } = await import("./services/entity_signal_resolver.js");
+    const result = await identifyEntityBySignals({
+      signals: signals as Record<string, unknown>,
+      entity_type: typeof body.entity_type === "string" ? body.entity_type : undefined,
+      entity_types: Array.isArray(body.entity_types) ? (body.entity_types as string[]) : undefined,
+      max_candidates: typeof body.max_candidates === "number" ? body.max_candidates : undefined,
+      include_observations:
+        typeof body.include_observations === "boolean" ? body.include_observations : undefined,
+      userId,
+    } as Parameters<typeof identifyEntityBySignals>[0]);
+    return res.json(result);
+  } catch (err) {
+    logError("IdentifyEntityBySignals", req, err);
+    return sendError(
+      res,
+      500,
+      "IDENTIFY_ENTITY_BY_SIGNALS_ERROR",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+});
+
 // POST /github/webhook - Receive verified GitHub webhook events
 import { verifyGithubSignature, mapEventToStore } from "./services/github_webhook.js";
 

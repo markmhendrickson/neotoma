@@ -539,7 +539,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "queryContactsAtCompany",
     method: "post",
     path: "/query_contacts_at_company",
-    adapter: "mcp",
+    adapter: "both",
     mcpTool: "query_contacts_at_company",
     notes:
       "Read-only leads-graph lookup: resolve a company name (exact/fuzzy) and return contacts linked via works_at. Never creates a company.",
@@ -570,7 +570,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "identifyEntityBySignals",
     method: "post",
     path: "/identify_entity_by_signals",
-    adapter: "mcp",
+    adapter: "both",
     mcpTool: "identify_entity_by_signals",
   },
   {
@@ -705,7 +705,7 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "publishRenderedPage",
     method: "post",
     path: "/rendered-pages/publish",
-    adapter: "mcp",
+    adapter: "both",
     mcpTool: "publish_rendered_page",
   },
   {
