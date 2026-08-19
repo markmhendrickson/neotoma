@@ -2899,7 +2899,17 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // their isolated per-email one — so the whole allowlisted team, plus the
     // bearer/MCP identity that owns the data, share one populated graph. Unset
     // → isolated per-email behavior (unchanged). See getSharedGraphUserId.
-    const resolvedUserId = getSharedGraphUserId() ?? perEmailUser.id;
+    const sharedGraphUserId = getSharedGraphUserId();
+    // A configured-but-rejected value means NEOTOMA_SHARED_GRAPH_USER_ID is set
+    // to something unusable (malformed, or the nil UUID). The signer silently
+    // falls back to their isolated per-email graph, which looks like an empty
+    // team graph rather than an error — so say so once per sign-in.
+    if (!sharedGraphUserId && (process.env.NEOTOMA_SHARED_GRAPH_USER_ID || "").trim()) {
+      logWarn("SharedGraphUserIdRejected", req, {
+        reason: "not a usable UUID (malformed or nil); falling back to isolated per-email graph",
+      });
+    }
+    const resolvedUserId = sharedGraphUserId ?? perEmailUser.id;
 
     // Mark this browser session as Google-verified and bound to the resolved
     // user_id, exactly the same OAuth key-session cookie the private-key/
