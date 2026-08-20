@@ -17,6 +17,30 @@
  * Neither layer is sufficient alone. Declaration improves the happy path;
  * enforcement is the guarantee.
  *
+ * ## Known scope boundary: raw/unstructured file storage is NOT covered
+ *
+ * `assertStorePolicyAllows` (the enforcement entry point) is wired into the
+ * three ENTITY write paths: `storeStructuredForApi` (src/actions.ts),
+ * `storeStructuredInternal` (src/server.ts), and `createCorrection`
+ * (src/services/correction.ts) — see
+ * `tests/unit/instance_policy_write_path_coverage.test.ts` for the structural
+ * guard pinning those three.
+ *
+ * It is deliberately NOT wired into `storeUnstructuredForApi`
+ * (src/actions.ts), the raw-file / reference-file `/store` path
+ * (`storeRawContent` / `storeRawReference`). That path persists a `sources`
+ * row directly from uploaded bytes and never constructs a typed entity with
+ * an `entity_type`, so the policy's `out_of_scope_entity_types` and
+ * `max_sensitivity_class` gates — both keyed on entity type / schema-declared
+ * sensitivity — have no evaluable target at that call site as designed today.
+ * An instance with `enforcement: "enforced"` still accepts arbitrary raw file
+ * content through this path with zero policy evaluation. This is a real gap
+ * for any operator who assumes "enforced" covers uploads, not just structured
+ * `store` calls with an `entities` array — closing it needs either a
+ * content-type/size-based raw-storage policy dimension or blocking raw
+ * storage outright under `enforcement: "enforced"`, both out of scope for
+ * this feature's v1. Tracked as a known follow-up, not silently omitted.
+ *
  * ## Scope: instance-wide, not per-user
  *
  * A single policy row governs every write on the instance regardless of which

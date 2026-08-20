@@ -8380,6 +8380,15 @@ export async function storeStructuredForApi(params: {
   };
 }
 
+// KNOWN SCOPE BOUNDARY (release-preparation finding, v0.22.0): this raw-file
+// path does NOT call assertStorePolicyAllows / the instance-policy gate.
+// Unlike storeStructuredForApi/storeStructuredInternal/createCorrection (see
+// tests/unit/instance_policy_write_path_coverage.test.ts), raw file uploads
+// never construct a typed entity with an entity_type, so the policy's
+// out_of_scope_entity_types / max_sensitivity_class gates have no evaluable
+// target here today. An instance with enforcement: "enforced" still accepts
+// arbitrary raw file content through this path. See the "Known scope
+// boundary" section in src/services/instance_policy.ts's docblock.
 async function storeUnstructuredForApi(params: {
   userId: string;
   fileContent?: string;

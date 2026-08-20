@@ -4280,6 +4280,13 @@ export class NeotomaServer {
   private async describeInstancePolicy(): Promise<{
     content: Array<{ type: string; text: string }>;
   }> {
+    // Authentication gate: instance policy is instance-wide (not user-scoped,
+    // see instance_policy.ts docblock), but it must still require an
+    // authenticated session, matching the REST sibling
+    // (getAuthenticatedUserId(req, undefined) in actions.ts) and every other
+    // MCP tool handler in this file. The return value is unused — the sole
+    // purpose of this call is to throw when no session is authenticated.
+    this.getAuthenticatedUserId();
     const { getInstancePolicy } = await import("./services/instance_policy.js");
     const policy = await getInstancePolicy();
     return {
