@@ -437,6 +437,15 @@ components:
             - $ref: "#/components/schemas/InstancePolicy"
             - type: "null"
           description: The configured instance policy, or `null` when unset.
+        entity_id:
+          type: string
+          nullable: true
+          description: |
+            The underlying entity id of the configured policy record, or `null`
+            when no policy is configured. Exists so a remote client (e.g. the
+            CLI's `instance-policy set`) can resolve the id needed to `correct`
+            an existing policy over HTTP, without a local database connection.
+            Opaque; do not parse.
     StorePolicyDenial:
       type: object
       description: |

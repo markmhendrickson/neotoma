@@ -5177,11 +5177,13 @@ app.get("/schemas", async (req, res) => {
 app.get("/instance-policy", async (req, res) => {
   try {
     await getAuthenticatedUserId(req, undefined);
-    const { getInstancePolicy } = await import("./services/instance_policy.js");
-    const policy = await getInstancePolicy();
+    const { getInstancePolicyResult } = await import("./services/instance_policy.js");
+    const result = await getInstancePolicyResult();
     // Explicit null, never 404 and never {} — "no policy configured" must not
-    // be mistakable for "denies everything".
-    return res.json({ policy: policy ?? null });
+    // be mistakable for "denies everything". entity_id rides alongside so a
+    // remote client (CLI `instance-policy set`) can resolve the id needed to
+    // `correct` an existing policy without a local database connection.
+    return res.json({ policy: result.policy ?? null, entity_id: result.entity_id ?? null });
   } catch (error) {
     return handleApiError(
       req,
