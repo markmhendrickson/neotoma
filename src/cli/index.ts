@@ -7886,8 +7886,23 @@ instancePolicyCommand
         // re-storing over an existing policy fails by design — the update route
         // is a correction against the existing entity. Discovering that by
         // hitting the collision is the trial-and-error this command removes.
-        const { getInstancePolicyEntityId } = await import("../services/instance_policy.js");
-        const existingId = await getInstancePolicyEntityId();
+        //
+        // Mirrors `instance-policy show`: read entity_id off the
+        // `--base-url`-resolved remote instance over HTTP, not off a local
+        // database connection. This command runs against whatever instance
+        // `--base-url` points to, which is not necessarily the machine
+        // running the CLI — `getInstancePolicyEntityId()` reads the local
+        // process's own DB connection and would silently target the wrong
+        // instance whenever `--base-url` points elsewhere.
+        const { data: policyReadData, error: policyReadError } = await api.GET(
+          "/instance-policy",
+          {}
+        );
+        if (policyReadError) {
+          throw new Error(`Failed to read instance policy: ${JSON.stringify(policyReadError)}`);
+        }
+        const policyReadEnvelope = policyReadData as { entity_id?: string | null } | undefined;
+        const existingId = policyReadEnvelope?.entity_id ?? null;
 
         const fields: Record<string, unknown> = { ...parsed };
         if (enforcement) fields.enforcement = enforcement;
