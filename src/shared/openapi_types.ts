@@ -2565,6 +2565,14 @@ export interface components {
     InstancePolicyResponse: {
       /** @description The configured instance policy, or `null` when unset. */
       policy: components["schemas"]["InstancePolicy"] | null;
+      /**
+       * @description The underlying entity id of the configured policy record, or `null`
+       *     when no policy is configured. Exists so a remote client (e.g. the
+       *     CLI's `instance-policy set`) can resolve the id needed to `correct`
+       *     an existing policy over HTTP, without a local database connection.
+       *     Opaque; do not parse.
+       */
+      entity_id?: string | null;
     };
     /**
      * @description A single per-entity policy denial inside an `ERR_STORE_POLICY_DENIED`
