@@ -110,6 +110,23 @@ describe("isPublicFetchUrlAllowed (hosted mode)", () => {
   it("allows public https targets", () => {
     expect(isPublicFetchUrlAllowed("https://hooks.example.com/x")).toBe(true);
   });
+
+  it("rejects IPv4-mapped IPv6 after WHATWG URL hostname normalization", () => {
+    // Regression: Node's WHATWG URL parser rewrites `[::ffff:127.0.0.1]` to
+    // hostname `[::ffff:7f00:1]`. The dotted-quad unwrap in
+    // `isPrivateOrLoopbackHostname` never sees that form, so the reachable
+    // sink path (`isPublicFetchUrlAllowed`) incorrectly allowed cloud-metadata
+    // / loopback / RFC1918 via IPv4-mapped literals. Assert the URL forms an
+    // attacker can supply — not bare dotted hostnames.
+    for (const u of [
+      "https://[::ffff:127.0.0.1]/latest/meta-data/",
+      "http://[::ffff:7f00:1]/",
+      "http://[::ffff:a00:1]/",
+      "http://[::ffff:a9fe:a9fe]/latest/meta-data/",
+    ]) {
+      expect(isPublicFetchUrlAllowed(u), u).toBe(false);
+    }
+  });
 });
 
 describe("isPublicFetchUrlAllowed (self-hosted)", () => {
