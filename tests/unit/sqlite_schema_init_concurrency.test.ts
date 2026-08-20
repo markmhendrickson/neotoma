@@ -5,14 +5,16 @@
  * Two compounding races on first-touch open of a fresh DB file, both fixed
  * together:
  *
- * 1. ensureSchema() ran its DDL/backfill inside a deferred db.transaction():
- *    two processes opening a fresh DB file concurrently could both start as
- *    readers on the same WAL snapshot, and whichever tried to upgrade to a
- *    writer second hit SQLITE_BUSY_SNAPSHOT — a snapshot conflict
- *    busy_timeout cannot retry. Fixed by taking the write lock up front
- *    (`BEGIN IMMEDIATE` via db.transaction(fn, { mode: "immediate" })).
+ * 1. AsyncSqliteDatabase.transaction() (the driver ensureSchema() runs its
+ *    DDL/backfill inside) already opens every transaction with `BEGIN
+ *    IMMEDIATE` (added for the async driver contract, PR #1944) — two
+ *    processes opening a fresh DB file concurrently no longer race as
+ *    readers on the same WAL snapshot with one hitting
+ *    SQLITE_BUSY_SNAPSHOT on upgrade, since the write lock is acquired up
+ *    front and ordinary lock contention (which busy_timeout does retry)
+ *    replaces the un-retryable snapshot conflict.
  *
- * 2. Once (1) is fixed, `PRAGMA journal_mode = WAL` itself — applied in
+ * 2. `PRAGMA journal_mode = WAL` itself — applied in
  *    applyConnectionPragmas() before ensureSchema() ever runs — turned out to
  *    independently throw plain SQLITE_BUSY on a brand-new file: switching
  *    journal mode rewrites the file header and briefly needs the write lock,
@@ -27,12 +29,12 @@
  * NEOTOMA_SQLITE_PATH. Workers are spawned asynchronously (execFile, not
  * execFileSync) so they genuinely overlap rather than running one-at-a-time,
  * and are handed a shared future timestamp (WORKER_SYNC_AT_MS) so they all
- * call getSqliteDb() within the same instant — reproducing the two-readers-
- * race-to-upgrade window the original bug required. Runs in an isolated tmp
- * directory — never a path that could collide with or leak a real operator
- * DB — and only asserts on the child's JSON stdout (error code + path
- * basename), never raw connection strings or file contents, so a failure
- * doesn't leak DB internals into test output.
+ * call ensureDbInitialized() within the same instant — reproducing the
+ * two-readers-race-to-upgrade window the original bug required. Runs in an
+ * isolated tmp directory — never a path that could collide with or leak a
+ * real operator DB — and only asserts on the child's JSON stdout (error code
+ * + path basename), never raw connection strings or file contents, so a
+ * failure doesn't leak DB internals into test output.
  */
 import { execFile } from "node:child_process";
 import fs from "node:fs";
@@ -42,7 +44,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ensureSqliteDbInitialized } from "../../src/repositories/sqlite/sqlite_client.js";
+import { ensureDbInitialized } from "../../src/repositories/db/connection.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_SCRIPT = path.join(__dirname, "../helpers/sqlite_schema_init_worker.ts");
@@ -179,14 +181,14 @@ describe("concurrent first-touch SQLite schema init (#1927)", () => {
     expect(tableSets[0].length).toBeGreaterThan(0);
   }, 30000);
 
-  it("re-running schema init against an already-initialized DB is a no-op (idempotent, re-entrant)", () => {
+  it("re-running schema init against an already-initialized DB is a no-op (idempotent, re-entrant)", async () => {
     const { dbPath } = freshDbPath("neotoma-schema-init-idempotent-");
 
-    // .immediate() changes lock-acquisition timing, not DDL logic — confirm
+    // BEGIN IMMEDIATE changes lock-acquisition timing, not DDL logic — confirm
     // addColumnIfMissing / backfillRelationshipLiveness still no-op safely on
     // a second call against the same file, same process.
-    expect(() => ensureSqliteDbInitialized(dbPath)).not.toThrow();
-    expect(() => ensureSqliteDbInitialized(dbPath)).not.toThrow();
+    await expect(ensureDbInitialized(dbPath)).resolves.not.toThrow();
+    await expect(ensureDbInitialized(dbPath)).resolves.not.toThrow();
   });
 
   it("surfaces a clear SQLITE_BUSY (not a hang or corruption) when busy_timeout is set too low to cover real contention", async () => {

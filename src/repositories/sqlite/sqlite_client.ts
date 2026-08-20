@@ -51,7 +51,8 @@ async function retryOnBusy<T>(fn: () => Promise<T>): Promise<T> {
  * concurrent readers alongside a single writer, foreign-key enforcement, and a
  * busy_timeout so lock contention waits rather than throwing immediately.
  * journal_mode is retried on SQLITE_BUSY in its own right (see retryOnBusy)
- * since it can throw before busy_timeout (set moments later) takes effect.
+ * since on a brand-new file it can throw before busy_timeout — set after it,
+ * same as before this fix — has taken effect on this connection.
  */
 export async function applyConnectionPragmas(db: DbDatabase): Promise<void> {
   await retryOnBusy(() => db.pragma("journal_mode = WAL"));
@@ -401,6 +402,17 @@ async function addColumnIfMissing(
   await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
 }
 
+/**
+ * Runs all DDL/backfill inside one `database.transaction()`. Relies on the
+ * transaction backend taking the write lock up front (`BEGIN IMMEDIATE`, or
+ * the libsql driver's `"write"` mode) rather than deferring it to the first
+ * write: a deferred transaction lets two processes opening a fresh DB file
+ * concurrently both start as readers on the same WAL snapshot, and whichever
+ * tries to upgrade to a writer second hits SQLITE_BUSY_SNAPSHOT — a snapshot
+ * conflict busy_timeout cannot retry. See #1927; the write-lock-first
+ * behavior itself lives in each backend's transaction() implementation
+ * (sqlite_driver.ts, libsql_driver.ts).
+ */
 export async function ensureSchema(database: DbDatabase): Promise<void> {
   await database.transaction(async (db) => {
     await db.exec("PRAGMA foreign_keys = OFF");
