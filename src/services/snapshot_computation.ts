@@ -9,6 +9,10 @@ import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import {
+  prepareEntitySnapshotWithEmbedding,
+  upsertEntitySnapshotWithEmbedding,
+} from "./entity_snapshot_embedding.js";
+import {
   CanonicalNameUnresolvedError,
   deriveCanonicalNameFromFieldsWithTrace,
   entityIdTenantSalt,
@@ -71,11 +75,60 @@ export async function recomputeSnapshot(
     return null;
   }
 
-  const { error: upsertError } = await db
-    .from("entity_snapshots")
-    .upsert({ ...computed } as Record<string, unknown>);
+  // Route the primary snapshot write through the embedding-aware upsert so
+  // store/correct/split-path entities are semantically searchable by default
+  // (issue #1965). Every other snapshot writer (health-check repair, schema-lag
+  // repair, schema_registry migration, interpretation) already used this
+  // pipeline; this path did a raw upsert and silently produced null embeddings.
+  //
+  // Embedding generation is awaited inline, matching every existing caller.
+  // The provider call is a network round-trip on a promise — it yields the
+  // event loop rather than blocking it, so it does not compound the sync-DB
+  // main-thread sensitivity tracked in #1945. With no provider configured
+  // `prepareEntitySnapshotWithEmbedding` short-circuits before any I/O, so the
+  // unconfigured path costs no more than the raw upsert it replaces.
+  let rowWithEmbedding;
+  try {
+    rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
+      entity_id: computed.entity_id,
+      entity_type: computed.entity_type,
+      schema_version: computed.schema_version,
+      snapshot: computed.snapshot,
+      computed_at: computed.computed_at,
+      observation_count: computed.observation_count,
+      last_observation_at: computed.last_observation_at,
+      provenance: computed.provenance,
+      user_id: computed.user_id || userId,
+    });
+  } catch (err) {
+    // An embedding provider outage must never fail a store. Fall back to
+    // writing the snapshot without an embedding; backfill can repair it later
+    // (scripts/backfill_entity_embeddings.ts).
+    logger.warn(
+      `[SNAPSHOT] Embedding preparation failed for ${entityId}; storing without embedding: ` +
+        (err instanceof Error ? err.message : String(err))
+    );
+    rowWithEmbedding = {
+      entity_id: computed.entity_id,
+      entity_type: computed.entity_type,
+      schema_version: computed.schema_version,
+      snapshot: computed.snapshot,
+      computed_at: computed.computed_at,
+      observation_count: computed.observation_count,
+      last_observation_at: computed.last_observation_at,
+      provenance: computed.provenance,
+      user_id: computed.user_id || userId,
+      embedding: null,
+    };
+  }
 
-  if (upsertError) throw new Error(`Failed to upsert snapshot: ${upsertError.message}`);
+  try {
+    await upsertEntitySnapshotWithEmbedding(rowWithEmbedding, { throwOnError: true });
+  } catch (err) {
+    throw new Error(
+      `Failed to upsert snapshot: ` + (err instanceof Error ? err.message : String(err))
+    );
+  }
 
   const sourceId =
     typeof (observations[0] as { source_id?: string | null }).source_id === "string"
