@@ -1,4 +1,5 @@
 import { logger } from "../../../utils/logger.js";
+import { isPublicFetchUrlAllowed } from "../../net/private_host_guard.js";
 
 /**
  * POST JSON snapshot to a configured webhook URL (custom_webhook mirror).
@@ -14,6 +15,11 @@ export async function postEntityToWebhookMirror(params: {
   };
   if (params.secret) {
     headers["X-Neotoma-Webhook-Secret"] = params.secret;
+  }
+  // SSRF: a mirror URL is caller-configured; refuse internal targets.
+  if (!isPublicFetchUrlAllowed(params.url)) {
+    logger.warn("webhook mirror URL rejected as non-public", { url: params.url });
+    return;
   }
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10_000);

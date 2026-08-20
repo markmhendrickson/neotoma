@@ -3,6 +3,7 @@
  * prefer_local is a no-op with guidance to use correct for field-level overrides.
  */
 
+import { isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import { createHash } from "node:crypto";
 import { db } from "../../db.js";
 import { createCorrection } from "../correction.js";
@@ -78,6 +79,16 @@ export async function resolveSyncConflict(params: {
     ? `?access_token=${encodeURIComponent(params.guest_access_token.trim())}`
     : "";
   const url = `${base}/entities/${encodeURIComponent(params.entity_id)}${tokenQ}`;
+
+  // SSRF: this is the sharpest sink of the class. The fetched JSON is ingested
+  // into the caller's entities, so an internal target would be semi-reflected
+  // back to them rather than merely probed blind.
+  if (!isPublicFetchUrlAllowed(url)) {
+    return {
+      ok: false,
+      message: "prefer_remote: `sender_peer_url` must be a public host.",
+    };
+  }
 
   const res = await fetch(url, {
     method: "GET",
