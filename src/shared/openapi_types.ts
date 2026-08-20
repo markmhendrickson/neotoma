@@ -1187,8 +1187,10 @@ export interface paths {
      *     attempt rather than learning the rules through repeated denials.
      *
      *     Read-only: creates no sources, observations, or entities. Returns
-     *     `{"policy": null}` when no policy is configured — never a 404, and never
-     *     an empty object, so "unset" is never mistaken for "denies everything".
+     *     `{"policy": null, "entity_id": null}` when no policy is configured —
+     *     never a 404, and never an empty object, so "unset" is never mistaken
+     *     for "denies everything". `entity_id` is opaque; pass it to `correct()`
+     *     when updating the policy remotely.
      *
      *     Requires a normal authenticated session. Policy shape can itself reveal
      *     what kind of data an instance handles, so it is not exposed
@@ -2563,6 +2565,14 @@ export interface components {
     InstancePolicyResponse: {
       /** @description The configured instance policy, or `null` when unset. */
       policy: components["schemas"]["InstancePolicy"] | null;
+      /**
+       * @description The underlying entity id of the configured policy record, or `null`
+       *     when no policy is configured. Exists so a remote client (e.g. the
+       *     CLI's `instance-policy set`) can resolve the id needed to `correct`
+       *     an existing policy over HTTP, without a local database connection.
+       *     Opaque; do not parse.
+       */
+      entity_id?: string | null;
     };
     /**
      * @description A single per-entity policy denial inside an `ERR_STORE_POLICY_DENIED`

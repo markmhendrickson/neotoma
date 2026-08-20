@@ -7829,9 +7829,14 @@ instancePolicyCommand
         process.exitCode = 1;
         return;
       }
-      const policy = (data as { policy?: unknown } | undefined)?.policy ?? null;
+      const envelope = data as { policy?: unknown; entity_id?: string | null } | undefined;
+      const policy = envelope?.policy ?? null;
+      // Mirror HTTP GET /instance-policy / MCP describe_instance_policy —
+      // entity_id is the opaque id to pass to correct() when updating remotely.
+      // Text-mode output stays policy-only (human-readable, not a machine contract).
+      const entity_id = envelope?.entity_id ?? null;
       if (outputMode === "json") {
-        writeOutput({ policy }, outputMode);
+        writeOutput({ policy, entity_id }, outputMode);
         return;
       }
       if (!policy) {
@@ -7881,8 +7886,23 @@ instancePolicyCommand
         // re-storing over an existing policy fails by design — the update route
         // is a correction against the existing entity. Discovering that by
         // hitting the collision is the trial-and-error this command removes.
-        const { getInstancePolicyEntityId } = await import("../services/instance_policy.js");
-        const existingId = await getInstancePolicyEntityId();
+        //
+        // Mirrors `instance-policy show`: read entity_id off the
+        // `--base-url`-resolved remote instance over HTTP, not off a local
+        // database connection. This command runs against whatever instance
+        // `--base-url` points to, which is not necessarily the machine
+        // running the CLI — `getInstancePolicyEntityId()` reads the local
+        // process's own DB connection and would silently target the wrong
+        // instance whenever `--base-url` points elsewhere.
+        const { data: policyReadData, error: policyReadError } = await api.GET(
+          "/instance-policy",
+          {}
+        );
+        if (policyReadError) {
+          throw new Error(`Failed to read instance policy: ${JSON.stringify(policyReadError)}`);
+        }
+        const policyReadEnvelope = policyReadData as { entity_id?: string | null } | undefined;
+        const existingId = policyReadEnvelope?.entity_id ?? null;
 
         const fields: Record<string, unknown> = { ...parsed };
         if (enforcement) fields.enforcement = enforcement;

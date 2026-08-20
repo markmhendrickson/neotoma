@@ -4273,17 +4273,37 @@ export class NeotomaServer {
    * scope for a caller to select and no parameter through which one caller
    * could address another's policy.
    *
-   * Returns `{"policy": null}` when unset, never an error — "this instance has
-   * no policy" is a normal, useful answer, and must stay distinguishable from
-   * "this instance denies everything".
+   * Returns `{"policy": null, "entity_id": null}` when unset, never an error —
+   * "this instance has no policy" is a normal, useful answer, and must stay
+   * distinguishable from "this instance denies everything". `entity_id` matches
+   * the HTTP `GET /instance-policy` / CLI `instance-policy show --json` envelope
+   * so agents can pass it to `correct()` when updating the policy remotely.
    */
   private async describeInstancePolicy(): Promise<{
     content: Array<{ type: string; text: string }>;
   }> {
-    const { getInstancePolicy } = await import("./services/instance_policy.js");
-    const policy = await getInstancePolicy();
+    // Authentication gate: instance policy is instance-wide (not user-scoped,
+    // see instance_policy.ts docblock), but it must still require an
+    // authenticated session, matching the REST sibling
+    // (getAuthenticatedUserId(req, undefined) in actions.ts) and every other
+    // MCP tool handler in this file. The return value is unused — the sole
+    // purpose of this call is to throw when no session is authenticated.
+    this.getAuthenticatedUserId();
+    // Same lookup HTTP uses (`getInstancePolicyResult`) so entity_id
+    // computation cannot drift across surfaces.
+    const { getInstancePolicyResult } = await import("./services/instance_policy.js");
+    const result = await getInstancePolicyResult();
     return {
-      content: [{ type: "text", text: JSON.stringify({ policy: policy ?? null }, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            { policy: result.policy ?? null, entity_id: result.entity_id ?? null },
+            null,
+            2
+          ),
+        },
+      ],
     };
   }
 

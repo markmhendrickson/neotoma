@@ -28,6 +28,13 @@
  * A behavioral test cannot substitute here. It would exercise whichever core
  * the test harness happens to route through and pass while the other core sits
  * unguarded — the precise failure this guards against.
+ *
+ * ## Known scope boundary NOT covered by this guard
+ *
+ * `storeUnstructuredForApi` (src/actions.ts) — the raw/reference file upload
+ * path — is deliberately NOT wired into the policy gate; see the
+ * "documents (does not enforce) the known raw-file storage exception" test
+ * below and src/services/instance_policy.ts's docblock.
  */
 
 import { describe, it, expect } from "vitest";
@@ -142,6 +149,36 @@ describe("instance store-policy is enforced on every write path", () => {
       "createCorrection (src/services/correction.ts) must call assertStorePolicyAllows — " +
         "both MCP and REST corrections converge here"
     ).toBe(true);
+  });
+
+  it("documents (does not enforce) the known raw-file storage exception", () => {
+    // KNOWN SCOPE BOUNDARY (release-preparation finding, v0.22.0): raw/
+    // reference file uploads (storeUnstructuredForApi in src/actions.ts) are
+    // NOT covered by the policy gate — that path persists a `sources` row
+    // directly from bytes and never constructs a typed entity with an
+    // entity_type, so out_of_scope_entity_types / max_sensitivity_class have
+    // no evaluable target there today. See the "Known scope boundary"
+    // section in src/services/instance_policy.ts's docblock.
+    //
+    // This test exists so the exception is an EXPLICIT, encoded decision: if
+    // someone adds a partial/inconsistent enforcement call to this function
+    // later without updating this test and the docblock together, the
+    // structural mismatch is visible in the diff rather than silent.
+    const rawStoreCore = sliceFunctionBody(
+      read("src/actions.ts"),
+      "async function storeUnstructuredForApi"
+    );
+    expect(
+      rawStoreCore.includes(ENFORCE_CALL),
+      "storeUnstructuredForApi currently does NOT call assertStorePolicyAllows " +
+        "(documented exception). If this now fails true, the exception was closed " +
+        "— update this test to assert enforcement instead of its absence, and " +
+        "remove the 'Known scope boundary' section from instance_policy.ts's " +
+        "docblock and the inline comment above storeUnstructuredForApi in " +
+        "actions.ts. If it still fails false with unrelated changes, the raw-file " +
+        "path likely got enforcement added inconsistently — decide deliberately, " +
+        "don't let this drift silently."
+    ).toBe(false);
   });
 
   it("enforcement precedes any persistence in each store core", () => {

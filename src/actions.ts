@@ -5177,11 +5177,13 @@ app.get("/schemas", async (req, res) => {
 app.get("/instance-policy", async (req, res) => {
   try {
     await getAuthenticatedUserId(req, undefined);
-    const { getInstancePolicy } = await import("./services/instance_policy.js");
-    const policy = await getInstancePolicy();
+    const { getInstancePolicyResult } = await import("./services/instance_policy.js");
+    const result = await getInstancePolicyResult();
     // Explicit null, never 404 and never {} — "no policy configured" must not
-    // be mistakable for "denies everything".
-    return res.json({ policy: policy ?? null });
+    // be mistakable for "denies everything". entity_id rides alongside so a
+    // remote client (CLI `instance-policy set`) can resolve the id needed to
+    // `correct` an existing policy without a local database connection.
+    return res.json({ policy: result.policy ?? null, entity_id: result.entity_id ?? null });
   } catch (error) {
     return handleApiError(
       req,
@@ -8380,6 +8382,15 @@ export async function storeStructuredForApi(params: {
   };
 }
 
+// KNOWN SCOPE BOUNDARY (release-preparation finding, v0.22.0): this raw-file
+// path does NOT call assertStorePolicyAllows / the instance-policy gate.
+// Unlike storeStructuredForApi/storeStructuredInternal/createCorrection (see
+// tests/unit/instance_policy_write_path_coverage.test.ts), raw file uploads
+// never construct a typed entity with an entity_type, so the policy's
+// out_of_scope_entity_types / max_sensitivity_class gates have no evaluable
+// target here today. An instance with enforcement: "enforced" still accepts
+// arbitrary raw file content through this path. See the "Known scope
+// boundary" section in src/services/instance_policy.ts's docblock.
 async function storeUnstructuredForApi(params: {
   userId: string;
   fileContent?: string;
