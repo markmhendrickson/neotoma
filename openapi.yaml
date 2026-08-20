@@ -5018,8 +5018,10 @@ paths:
         attempt rather than learning the rules through repeated denials.
 
         Read-only: creates no sources, observations, or entities. Returns
-        `{"policy": null}` when no policy is configured — never a 404, and never
-        an empty object, so "unset" is never mistaken for "denies everything".
+        `{"policy": null, "entity_id": null}` when no policy is configured —
+        never a 404, and never an empty object, so "unset" is never mistaken
+        for "denies everything". `entity_id` is opaque; pass it to `correct()`
+        when updating the policy remotely.
 
         Requires a normal authenticated session. Policy shape can itself reveal
         what kind of data an instance handles, so it is not exposed

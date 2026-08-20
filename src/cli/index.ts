@@ -7829,9 +7829,14 @@ instancePolicyCommand
         process.exitCode = 1;
         return;
       }
-      const policy = (data as { policy?: unknown } | undefined)?.policy ?? null;
+      const envelope = data as { policy?: unknown; entity_id?: string | null } | undefined;
+      const policy = envelope?.policy ?? null;
+      // Mirror HTTP GET /instance-policy / MCP describe_instance_policy —
+      // entity_id is the opaque id to pass to correct() when updating remotely.
+      // Text-mode output stays policy-only (human-readable, not a machine contract).
+      const entity_id = envelope?.entity_id ?? null;
       if (outputMode === "json") {
-        writeOutput({ policy }, outputMode);
+        writeOutput({ policy, entity_id }, outputMode);
         return;
       }
       if (!policy) {
