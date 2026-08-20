@@ -76,6 +76,11 @@ export async function submitIssueToRemote(params: {
   authorGithubType?: string;
   local_issue_id?: string;
   submission_timestamp?: string;
+  reporterGitSha?: string;
+  reporterAppVersion?: string;
+  reporterGitRef?: string;
+  reporterChannel?: string;
+  reporterCiRunId?: string;
 }): Promise<RemoteSubmitResult> {
   const config = await loadIssuesConfig();
   if (!config.target_url?.trim()) {
@@ -118,7 +123,25 @@ export async function submitIssueToRemote(params: {
   if (localId) {
     guestBody.local_issue_id = localId;
   }
+  if (params.reporterGitSha?.trim()) {
+    guestBody.reporter_git_sha = params.reporterGitSha.trim();
+  }
+  if (params.reporterAppVersion?.trim()) {
+    guestBody.reporter_app_version = params.reporterAppVersion.trim();
+  }
+  if (params.reporterGitRef?.trim()) {
+    guestBody.reporter_git_ref = params.reporterGitRef.trim();
+  }
+  if (params.reporterChannel?.trim()) {
+    guestBody.reporter_channel = params.reporterChannel.trim();
+  }
+  if (params.reporterCiRunId?.trim()) {
+    guestBody.reporter_ci_run_id = params.reporterCiRunId.trim();
+  }
 
+  // The unsigned-guest retry below (AUTH_REQUIRED branch) reuses this same
+  // `guestBody` object by reference, so the reporter fields set above are
+  // inherited automatically — no separate assignment needed there.
   type SubmitResponse = {
     data?: {
       entity_ids?: string[];

@@ -910,6 +910,11 @@ export async function submitIssue(
         author: authorAlias ?? "local",
         submission_timestamp: now,
         local_issue_id: localId,
+        reporterGitSha: params.reporter_git_sha,
+        reporterAppVersion: params.reporter_app_version,
+        reporterGitRef: params.reporter_git_ref,
+        reporterChannel: params.reporter_channel,
+        reporterCiRunId: params.reporter_ci_run_id,
       });
       submittedToNeotoma = true;
       remoteEntityId = remoteResult.issue_entity_id;
