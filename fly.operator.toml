@@ -29,7 +29,7 @@
 # rather than intermittent.
 #
 # WHAT DIFFERS FROM fly.toml
-#   - [[vm]]      2 CPU / 4096MB, not the sandbox's 1 CPU / 1GB
+#   - [[vm]]      2 DEDICATED CPU / 4096MB, not the sandbox's 1 shared CPU / 1GB
 #   - [[restart]] policy = 'always' (see below)
 #   - no VITE_NEOTOMA_SANDBOX_UI, and VITE_PUBLIC_BASE_PATH = "/"
 #   - primary_region is NOT set — pass --primary-region, since the volume's
@@ -97,7 +97,34 @@
 [[restart]]
   policy = 'always'
 
+# DEDICATED CPUs, not shared. This costs roughly 2.9x more and is deliberate.
+#
+# On 2026-08-09 this instance spent ~40 minutes at 89% CPU STEAL — the
+# hypervisor was withholding ~90% of the CPU the machine was nominally
+# allocated, because a neighbour on the same shared host was busy. Measured
+# from inside the guest via /proc/stat deltas:
+#
+#   during:  steal 89.6% / 89.1%   busy 6.3%   loadavg 5.11
+#   after:   steal  0.0%           busy 0.4%   loadavg 0.15
+#
+# Every database-backed path failed while the app itself was healthy: a
+# limit=1 query on a 7-row entity type took 73s, larger types never completed,
+# the MCP transport went 5x slower, and rendered pages timed out — so anyone
+# holding a share link got nothing. It resolved on its own when the neighbour
+# left. Nothing in Neotoma was at fault, and nothing in Neotoma could fix it.
+#
+# `shared` offers no warning and no recourse for this: the guest cannot detect
+# it in advance, /health keeps returning 200 in 0.25s throughout (answering
+# from process state needs almost no CPU), and Fly's service check therefore
+# stays green — so `[[restart]] policy = 'always'` below can never fire for it.
+# See neotoma#2141 for that monitoring gap and neotoma#2144 for the incident.
+#
+# An operator instance is the durable store several agents and sessions depend
+# on. Losing it for 40 minutes on a neighbour's schedule is the failure this
+# preset exists to prevent. Do NOT revert to `shared` to save cost without
+# accounting for that — the sandbox and client instances are the right place
+# to economise, and Bottega8 stayed healthy on shared throughout this incident.
 [[vm]]
   memory = '4gb'
-  cpu_kind = 'shared'
+  cpu_kind = 'performance'
   cpus = 2
