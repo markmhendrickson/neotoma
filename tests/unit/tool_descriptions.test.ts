@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
+import yaml from "js-yaml";
 import { buildToolDefinitions } from "../../src/tool_definitions.js";
 
 /**
@@ -8,22 +11,39 @@ import { buildToolDefinitions } from "../../src/tool_definitions.js";
 function estimateTokenCount(text: string): number {
   // Split on whitespace and count tokens
   const words = text.split(/\s+/).filter((w) => w.length > 0);
-  const punctuation = (text.match(/[.,!?;:\-—–]/g) || []).length;
+  const punctuation = (text.match(/[.,!?;:\-—–']/g) || []).length;
   const markup = (text.match(/[*_[\]]/g) || []).length;
 
   // Rough estimate: 1 word ≈ 1.3 tokens, punctuation ≈ 0.2 tokens
   return Math.ceil(words.length * 1.3 + punctuation * 0.2 + markup * 0.1);
 }
 
+/**
+ * Mirror src/server.ts loadToolDescriptionsMap / ListTools override path:
+ * YAML entries override buildToolDefinitions() inline defaults when present.
+ */
+function loadToolDescriptionsMap(): Map<string, string> {
+  const path = join(process.cwd(), "docs", "developer", "mcp", "tool_descriptions.yaml");
+  const raw = readFileSync(path, "utf-8");
+  const data = yaml.load(raw) as { tools?: Record<string, string> } | undefined;
+  if (data?.tools && typeof data.tools === "object") {
+    return new Map(Object.entries(data.tools));
+  }
+  return new Map();
+}
+
 describe("tool_descriptions - store tool", () => {
-  const tools = buildToolDefinitions();
+  // Assert the ListTools-facing description (code default + YAML override),
+  // not the bare buildToolDefinitions() fallback alone.
+  const descriptionOverrides = loadToolDescriptionsMap();
+  const tools = buildToolDefinitions(descriptionOverrides);
   const storeTool = tools.find((t) => t.name === "store");
 
   it("should exist", () => {
     expect(storeTool).toBeDefined();
   });
 
-  it("description should be ≤60 tokens (~250 chars)", () => {
+  it("merged ListTools description should be ≤60 tokens (~250 chars)", () => {
     if (!storeTool) throw new Error("store tool not found");
     const tokenCount = estimateTokenCount(storeTool.description);
     const charCount = storeTool.description.length;
@@ -32,8 +52,21 @@ describe("tool_descriptions - store tool", () => {
     expect(charCount).toBeLessThanOrEqual(250);
 
     // Debug output
-    console.log(
-      `Store tool description: ${charCount} chars, ~${tokenCount} tokens`
+    console.log(`Store tool description (merged): ${charCount} chars, ~${tokenCount} tokens`);
+  });
+
+  it("YAML store override must not reintroduce a long-form description", () => {
+    const yamlStore = descriptionOverrides.get("store");
+    // Absent override is fine (inline default wins). If present, it must stay short.
+    if (yamlStore !== undefined) {
+      expect(estimateTokenCount(yamlStore)).toBeLessThanOrEqual(60);
+      expect(yamlStore.length).toBeLessThanOrEqual(250);
+    }
+    if (!storeTool) throw new Error("store tool not found");
+    // Merged result is what agents see via ListTools
+    expect(storeTool.description).toBe(
+      yamlStore ??
+        "Save entities and files to Neotoma. Provide entities[] for structured data, or file_content+mime_type / file_path for files. Handles per-user SHA-256 file dedup and automatic schema inference."
     );
   });
 
@@ -68,7 +101,8 @@ describe("tool_descriptions - store tool", () => {
     if (!storeTool) throw new Error("store tool not found");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props = ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
+    const props =
+      ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
 
     // Check key field descriptions exist and are substantive
     const requiredFields = [
@@ -81,28 +115,23 @@ describe("tool_descriptions - store tool", () => {
     ];
 
     for (const field of requiredFields) {
-      expect(props[field]).toBeDefined(
-        `Field ${field} should exist in inputSchema properties`
-      );
-      expect(props[field].description).toBeDefined(
-        `Field ${field} should have a description`
-      );
+      expect(props[field]).toBeDefined(`Field ${field} should exist in inputSchema properties`);
+      expect(props[field].description).toBeDefined(`Field ${field} should have a description`);
       expect(props[field].description.length).toBeGreaterThanOrEqual(
         40,
         `Field ${field} description should be ≥40 chars (was ${props[field].description.length})`
       );
 
       // Debug output
-      console.log(
-        `${field}: ${props[field].description.length} chars description`
-      );
+      console.log(`${field}: ${props[field].description.length} chars description`);
     }
   });
 
   it("entities field should document schema inference and ALL-fields rule", () => {
     if (!storeTool) throw new Error("store tool not found");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props = ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
+    const props =
+      ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const entitiesDesc = (props.entities as { description: string }).description;
 
@@ -115,22 +144,22 @@ describe("tool_descriptions - store tool", () => {
   it("interpretation field should document Source → Observation chain semantics", () => {
     if (!storeTool) throw new Error("store tool not found");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props = ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
+    const props =
+      ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const interpretationDesc = (props.interpretation as { description: string }).description;
 
     expect(interpretationDesc).toMatch(/Source.*Observation.*chain/i);
     expect(interpretationDesc).toMatch(/provenance/i);
-    expect(interpretationDesc).toMatch(
-      /external.*(data|source)/i
-    );
+    expect(interpretationDesc).toMatch(/external.*(data|source)/i);
     expect(interpretationDesc).toMatch(/interpretation_id.*null/i);
   });
 
   it("file_content field should document per-user dedup and base64", () => {
     if (!storeTool) throw new Error("store tool not found");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props = ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
+    const props =
+      ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fileContentDesc = (props.file_content as { description: string }).description;
 
@@ -142,7 +171,8 @@ describe("tool_descriptions - store tool", () => {
   it("file_path field should document platform availability and tenant scope", () => {
     if (!storeTool) throw new Error("store tool not found");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props = ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
+    const props =
+      ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const filePathDesc = (props.file_path as { description: string }).description;
 
@@ -154,7 +184,8 @@ describe("tool_descriptions - store tool", () => {
   it("idempotency_key field should clarify required vs optional usage", () => {
     if (!storeTool) throw new Error("store tool not found");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props = ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
+    const props =
+      ((storeTool.inputSchema as Record<string, unknown>).properties as Record<string, any>) || {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const idempotencyDesc = (props.idempotency_key as { description: string }).description;
 

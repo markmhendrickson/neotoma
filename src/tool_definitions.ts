@@ -450,7 +450,8 @@ export function buildToolDefinitions(
               source_ref: {
                 type: "string",
                 enum: ["structured", "unstructured"],
-                description: "Source created by this store request. Use unstructured for the raw file source in combined file+entities requests, or structured for the generated JSON source.",
+                description:
+                  "Source created by this store request. Use unstructured for the raw file source in combined file+entities requests, or structured for the generated JSON source.",
               },
               interpretation_config: {
                 type: "object",
