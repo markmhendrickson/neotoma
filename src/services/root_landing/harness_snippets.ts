@@ -11,6 +11,8 @@
  * When updating the marketing snippets, update these too.
  */
 
+import { SANDBOX_SESSION_TTL_CAP_UTC } from "../../shared/sandbox_terms_content.js";
+
 export type LandingMode = "sandbox" | "personal" | "prod" | "local";
 export type HarnessId =
   | "claude-code"
@@ -170,7 +172,7 @@ function agentConnectPrompt(id: HarnessId, ctx: HarnessSnippetContext): string {
     mode === "sandbox"
       ? `Connect this Neotoma MCP server for me: ${mcpUrl}
 
-It is a public, shared sandbox — treat everything as publicly visible and expect a weekly wipe. Use it to help me kick the tires.`
+It is a public sandbox with ephemeral per-session workspaces. Anything I store is publicly visible and is hard-deleted when my session expires (up to 7 days, capped at ${SANDBOX_SESSION_TTL_CAP_UTC}), when I end/reset the session, or sooner via the background sweep. Use it to help me kick the tires only - do not store anything private, and do not rely on persistence.`
       : mode === "local"
         ? `Connect Neotoma MCP (local stdio) for this harness. Neotoma runs on this machine; use the stdio transport, not an HTTP URL.`
         : `Connect this Neotoma MCP server for me: ${mcpUrl}`;
