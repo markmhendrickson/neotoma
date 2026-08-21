@@ -12,12 +12,23 @@
  * content_hash) and stores the raw transcript bytes content-addressed via
  * `neotoma upload --local`.
  *
+ * Parent / transcript linking (arch review PR #1743):
+ * Two-pass ingestion — store all top-level sessions first, build a
+ * `native_session_id → entity_id` map from store JSON responses, then store
+ * sub-agents with `parent_session_id` set to the parent's **entity_id** and a
+ * typed PART_OF relationship (`source_index` → `target_entity_id`). Within a
+ * single session store, `[session, transcript]` is written together with
+ * `relationships: [{ PART_OF, source_index: 1, target_index: 0 }]`; after the
+ * store response yields the session entity_id, a follow-up observation sets
+ * `session_transcript.agent_session_id` to that entity_id (FK is entity_id,
+ * not the harness-scoped native id — joint identity is [harness, native_session_id]).
+ *
  * Usage:
  *   tsx scripts/ingest_agent_sessions.ts [--dry-run] [--limit N] [--base-url URL] [--verbose]
  */
 
 import fs from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
@@ -32,11 +43,15 @@ const baseUrl =
   process.env.NEOTOMA_BASE_URL ??
   "http://localhost:3180";
 
-const REPO_ROOT = path.join(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), "..");
+const REPO_ROOT = path.join(
+  import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname),
+  ".."
+);
 const TSX = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
 const CLI = path.join(REPO_ROOT, "src", "cli", "index.ts");
 const PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
 const READ_BYTES = 500_000; // head window for metadata; enough for cwd + swarm marker
+const HARNESS = "claude-code";
 
 function loadEnvFile(envPath: string): Record<string, string> {
   const vars: Record<string, string> = {};
@@ -46,7 +61,10 @@ function loadEnvFile(envPath: string): Record<string, string> {
       if (!t || t.startsWith("#")) continue;
       const eq = t.indexOf("=");
       if (eq === -1) continue;
-      vars[t.slice(0, eq).trim()] = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      vars[t.slice(0, eq).trim()] = t
+        .slice(eq + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "");
     }
   } catch {
     /* env file optional */
@@ -60,7 +78,7 @@ const childEnv: Record<string, string> = {
   ...(prodEnv.NEOTOMA_BEARER_TOKEN ? { NEOTOMA_BEARER_TOKEN: prodEnv.NEOTOMA_BEARER_TOKEN } : {}),
 };
 
-interface SessionRecord {
+export interface SessionRecord {
   entity_type: "agent_session";
   harness: string;
   native_session_id: string;
@@ -74,21 +92,31 @@ interface SessionRecord {
   message_count: number;
   created_at: string | null;
   last_activity_at: string | null;
+  /** Parent agent_session entity_id once resolved; null for top-level. */
   parent_session_id: string | null;
+  /** Internal: parent native id before entity_id resolution (not stored). */
+  _parentNativeSessionId: string | null;
   _contentHash: string; // internal: idempotency + transcript content link, not stored
   _filePath: string; // internal: source path for blob upload, not stored
   _fileSize: number; // internal, not stored
 }
 
+export interface StoreEnvelope {
+  entities: Array<Record<string, unknown>>;
+  relationships: Array<Record<string, unknown>>;
+}
+
 /** Recursively collect transcript files: top-level sessions and nested sub-agents. */
-async function collectTranscripts(): Promise<{ topLevel: string[]; subAgents: string[] }> {
+export async function collectTranscripts(
+  projectsDir: string = PROJECTS_DIR
+): Promise<{ topLevel: string[]; subAgents: string[] }> {
   const topLevel: string[] = [];
   const subAgents: string[] = [];
   let projectDirs: string[];
   try {
-    projectDirs = (await fs.readdir(PROJECTS_DIR, { withFileTypes: true }))
+    projectDirs = (await fs.readdir(projectsDir, { withFileTypes: true }))
       .filter((d) => d.isDirectory())
-      .map((d) => path.join(PROJECTS_DIR, d.name));
+      .map((d) => path.join(projectsDir, d.name));
   } catch {
     return { topLevel, subAgents };
   }
@@ -118,13 +146,23 @@ async function collectTranscripts(): Promise<{ topLevel: string[]; subAgents: st
   return { topLevel, subAgents };
 }
 
-function extractMetadata(
+export function contentHashOf(buf: Buffer): string {
+  return createHash("sha256").update(buf).digest("hex");
+}
+
+/**
+ * Extract runtime/resume metadata from a transcript. cwd / gitBranch / model
+ * live on message rows, not the leading hook/summary event — reading only
+ * line 1 leaves cwd null on ~91% of real transcripts.
+ */
+export function extractMetadata(
   filePath: string,
   kind: string,
-  parentSessionId: string | null,
+  parentNativeSessionId: string | null,
+  fileContents?: Buffer
 ): SessionRecord {
-  const buf = readFileSync(filePath);
-  const contentHash = createHash("sha256").update(buf).digest("hex");
+  const buf = fileContents ?? readFileSync(filePath);
+  const contentHash = contentHashOf(buf);
   const head = buf.subarray(0, READ_BYTES).toString("utf-8");
   const isSwarm = head.includes("ateles-swarm");
 
@@ -134,20 +172,19 @@ function extractMetadata(
   let model: string | null = null;
   let messageCount = 0;
 
-  // Read message lines, not line one: cwd/gitBranch live on message rows, not the
-  // leading hook/summary event. Validated: line-one-only leaves cwd null on ~91%.
   for (const line of head.split("\n")) {
     if (!line) continue;
-    let o: any;
+    let o: Record<string, unknown>;
     try {
-      o = JSON.parse(line);
+      o = JSON.parse(line) as Record<string, unknown>;
     } catch {
       continue;
     }
-    if (!created && o.timestamp) created = o.timestamp;
-    if (!cwd && o.cwd) cwd = o.cwd;
-    if (!gitBranch && o.gitBranch) gitBranch = o.gitBranch;
-    if (!model && o.message?.model) model = o.message.model;
+    if (!created && typeof o.timestamp === "string") created = o.timestamp;
+    if (!cwd && typeof o.cwd === "string") cwd = o.cwd;
+    if (!gitBranch && typeof o.gitBranch === "string") gitBranch = o.gitBranch;
+    const message = o.message as { model?: string } | undefined;
+    if (!model && message?.model) model = message.model;
     if (o.type === "user" || o.type === "assistant") messageCount++;
   }
 
@@ -157,7 +194,7 @@ function extractMetadata(
 
   return {
     entity_type: "agent_session",
-    harness: "claude-code",
+    harness: HARNESS,
     native_session_id: path.basename(filePath, ".jsonl"),
     kind: resolvedKind,
     cwd,
@@ -168,18 +205,93 @@ function extractMetadata(
     model,
     message_count: messageCount,
     created_at: created,
-    last_activity_at: null, // set from mtime below
-    parent_session_id: parentSessionId,
+    last_activity_at: null,
+    parent_session_id: null, // filled with entity_id after parent pass
+    _parentNativeSessionId: parentNativeSessionId,
     _contentHash: contentHash,
     _filePath: filePath,
     _fileSize: buf.length,
   };
 }
 
-function idempotencyKey(rec: SessionRecord): string {
-  // Same content -> same key (server skips); changed content -> new observation
-  // that merges onto the entity via its [harness, native_session_id] identity.
-  return `agent-session-${rec.native_session_id}-${rec._contentHash.slice(0, 12)}`;
+export function idempotencyKey(rec: SessionRecord): string {
+  // v2: payload now includes entity_id FKs + PART_OF relationships. Bumping the
+  // key namespace avoids ERR_IDEMPOTENCY_MISMATCH against pre-fix v1 ingests
+  // that used the same content hash but a different entity/relationship shape.
+  return `agent-session-v2-${rec.native_session_id}-${rec._contentHash.slice(0, 12)}`;
+}
+
+export function transcriptIdempotencyKey(contentHash: string): string {
+  return `transcript-${contentHash.slice(0, 16)}`;
+}
+
+/**
+ * Build the store envelope for [session, transcript].
+ * `sessionEntityId` — when known (re-ingest), set as transcript.agent_session_id.
+ * `parentEntityId` — parent agent_session entity_id for sub-agents.
+ */
+export function buildStoreEnvelope(
+  rec: SessionRecord,
+  opts: { sessionEntityId?: string | null; parentEntityId?: string | null } = {}
+): StoreEnvelope {
+  const {
+    _contentHash,
+    _filePath: _fp,
+    _fileSize,
+    _parentNativeSessionId: _p,
+    ...sessionFields
+  } = rec;
+  const session: Record<string, unknown> = {
+    ...sessionFields,
+    parent_session_id: opts.parentEntityId ?? null,
+  };
+
+  const transcript: Record<string, unknown> = {
+    entity_type: "session_transcript",
+    content_hash: _contentHash,
+    file_size: _fileSize,
+    mime_type: "application/jsonl",
+    harness: HARNESS,
+    format: "claude_code_jsonl",
+    transcript_kind: rec.kind === "subagent" ? "subagent" : "main",
+    // Prefer entity_id when known; null on first write until follow-up fill.
+    agent_session_id: opts.sessionEntityId ?? null,
+  };
+
+  const relationships: Array<Record<string, unknown>> = [
+    // transcript PART_OF session (same-request index pair)
+    { relationship_type: "PART_OF", source_index: 1, target_index: 0 },
+  ];
+  if (opts.parentEntityId) {
+    // sub-agent session PART_OF parent session (cross-request target id)
+    relationships.push({
+      relationship_type: "PART_OF",
+      source_index: 0,
+      target_entity_id: opts.parentEntityId,
+    });
+  }
+
+  return { entities: [session, transcript], relationships };
+}
+
+/** Parse `neotoma store --json` stdout for the agent_session entity_id. */
+export function parseSessionEntityIdFromStoreOutput(stdout: string): string | null {
+  try {
+    const data = JSON.parse(stdout) as {
+      entities?: Array<{ entity_id?: string; id?: string; entity_type?: string }>;
+      entities_created?: Array<{ id?: string }>;
+    };
+    const typed = (data.entities ?? []).find((e) => e.entity_type === "agent_session");
+    if (typed?.entity_id) return typed.entity_id;
+    if (typed?.id) return typed.id;
+    const first =
+      data.entities_created?.[0]?.id ?? data.entities?.[0]?.entity_id ?? data.entities?.[0]?.id;
+    return typeof first === "string" && first.length > 0 ? first : null;
+  } catch {
+    // Pretty mode or mixed stderr: scan for ent_ tokens near agent_session.
+    const m = stdout.match(/ent_[a-f0-9]{16,}/);
+    return m ? m[0] : null;
+  }
 }
 
 /**
@@ -188,90 +300,200 @@ function idempotencyKey(rec: SessionRecord): string {
  * session_transcript entity links to the bytes by content_hash, so a failed
  * upload still leaves a valid (if blob-less) index entry to retry later.
  */
-function uploadTranscriptBlob(rec: SessionRecord): boolean {
+export function uploadTranscriptBlob(rec: SessionRecord): boolean {
   try {
     execFileSync(
       TSX,
-      [CLI, "upload", rec._filePath, "--local",
-        "--idempotency-key", `transcript-${rec._contentHash.slice(0, 16)}`,
-        "--mime-type", "application/jsonl"],
-      { stdio: verbose ? "inherit" : "pipe", encoding: "utf-8", env: childEnv },
+      [
+        CLI,
+        "upload",
+        rec._filePath,
+        "--local",
+        "--idempotency-key",
+        transcriptIdempotencyKey(rec._contentHash),
+        "--mime-type",
+        "application/jsonl",
+        "--json",
+      ],
+      { stdio: verbose ? "inherit" : "pipe", encoding: "utf-8", env: childEnv }
     );
     return true;
-  } catch (err: any) {
-    if (verbose) console.error(`  blob upload failed ${rec.native_session_id}:`, err.stderr ?? err.message ?? err);
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; message?: string };
+    if (verbose)
+      console.error(`  blob upload failed ${rec.native_session_id}:`, e.stderr ?? e.message ?? err);
     return false;
   }
 }
 
-async function storeOne(rec: SessionRecord): Promise<"ok" | "failed"> {
-  const { _contentHash, _filePath, _fileSize, ...session } = rec;
-  // session_transcript links to the stored bytes by content_hash (same SHA-256
-  // that storeRawContent computes), so source_id/storage_url need not be parsed.
-  const transcript = {
-    entity_type: "session_transcript",
-    content_hash: _contentHash,
-    file_size: _fileSize,
-    mime_type: "application/jsonl",
-    harness: "claude-code",
-    format: "claude_code_jsonl",
-    transcript_kind: rec.kind === "subagent" ? "subagent" : "main",
-    agent_session_id: rec.native_session_id,
-  };
-  const tmp = path.join(os.tmpdir(), `neotoma-agent-session-${rec.native_session_id}.json`);
+function runStore(envelope: StoreEnvelope, key: string): { ok: boolean; stdout: string } {
+  const tmp = path.join(os.tmpdir(), `neotoma-agent-session-${key}.json`);
   try {
-    await fs.writeFile(tmp, JSON.stringify([session, transcript], null, 2));
-    if (dryRun) return "ok";
-    uploadTranscriptBlob(rec); // best-effort: stores raw bytes keyed by content_hash
-    execFileSync(
+    writeFileSync(tmp, JSON.stringify(envelope, null, 2));
+    if (dryRun) return { ok: true, stdout: "{}" };
+    const stdout = execFileSync(
       TSX,
-      [CLI, "store", "--file", tmp, "--observation-source", "import",
-        "--idempotency-key", idempotencyKey(rec), "--base-url", baseUrl, "--no-log-file"],
-      { stdio: verbose ? "inherit" : "pipe", encoding: "utf-8", env: childEnv },
+      [
+        CLI,
+        "store",
+        "--file",
+        tmp,
+        "--observation-source",
+        "import",
+        "--idempotency-key",
+        key,
+        "--base-url",
+        baseUrl,
+        "--no-log-file",
+        "--json",
+      ],
+      { stdio: ["pipe", "pipe", verbose ? "inherit" : "pipe"], encoding: "utf-8", env: childEnv }
     );
-    return "ok";
-  } catch (err: any) {
-    if (verbose) console.error(`  store failed ${rec.native_session_id}:`, err.stderr ?? err.message ?? err);
-    return "failed";
+    return { ok: true, stdout: typeof stdout === "string" ? stdout : String(stdout) };
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; message?: string; stdout?: string };
+    if (verbose) console.error(`  store failed ${key}:`, e.stderr ?? e.message ?? err);
+    return { ok: false, stdout: e.stdout ?? "" };
   } finally {
-    await fs.unlink(tmp).catch(() => {});
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
   }
+}
+
+/**
+ * Fill session_transcript.agent_session_id with the session entity_id after the
+ * initial store (same content_hash identity → merges onto the transcript row).
+ * Returns false if the follow-up store fails (caller should treat as failed).
+ */
+function fillTranscriptSessionFk(contentHash: string, sessionEntityId: string): boolean {
+  if (dryRun) return true;
+  const envelope: StoreEnvelope = {
+    entities: [
+      {
+        entity_type: "session_transcript",
+        content_hash: contentHash,
+        agent_session_id: sessionEntityId,
+      },
+    ],
+    relationships: [
+      {
+        relationship_type: "PART_OF",
+        source_index: 0,
+        target_entity_id: sessionEntityId,
+      },
+    ],
+  };
+  return runStore(envelope, `agent-session-fk-v2-${contentHash.slice(0, 12)}`).ok;
+}
+
+export async function storeOne(
+  rec: SessionRecord,
+  sessionEntityIds: Map<string, string>
+): Promise<"ok" | "failed"> {
+  const parentEntityId =
+    rec._parentNativeSessionId != null
+      ? (sessionEntityIds.get(rec._parentNativeSessionId) ?? null)
+      : null;
+
+  if (rec._parentNativeSessionId && !parentEntityId && verbose) {
+    console.error(
+      `  parent entity_id unresolved for native_session_id=${rec._parentNativeSessionId} ` +
+        `(harness=${HARNESS}); storing sub-agent without parent PART_OF edge`
+    );
+  }
+
+  const envelope = buildStoreEnvelope(rec, {
+    parentEntityId,
+    sessionEntityId: sessionEntityIds.get(rec.native_session_id) ?? null,
+  });
+
+  if (dryRun) return "ok";
+  uploadTranscriptBlob(rec);
+  const { ok, stdout } = runStore(envelope, idempotencyKey(rec));
+  if (!ok) return "failed";
+
+  const sessionEntityId = parseSessionEntityIdFromStoreOutput(stdout);
+  if (sessionEntityId) {
+    sessionEntityIds.set(rec.native_session_id, sessionEntityId);
+    // Ensure denormalized FK holds entity_id (not native id).
+    if (!envelope.entities[1]?.agent_session_id) {
+      if (!fillTranscriptSessionFk(rec._contentHash, sessionEntityId)) {
+        if (verbose) {
+          console.error(
+            `  FK fill failed for transcript content_hash=${rec._contentHash.slice(0, 12)} ` +
+              `session=${sessionEntityId}`
+          );
+        }
+        return "failed";
+      }
+    }
+  } else if (verbose) {
+    console.error(
+      `  could not parse session entity_id from store output for ${rec.native_session_id}`
+    );
+  }
+  return "ok";
 }
 
 async function main() {
   const { topLevel, subAgents } = await collectTranscripts();
   const parentOf = (subPath: string) => path.basename(path.dirname(path.dirname(subPath)));
 
-  let items: Array<{ file: string; kind: string; parent: string | null }> = [
-    ...topLevel.map((f) => ({ file: f, kind: "auto", parent: null })),
-    ...subAgents.map((f) => ({ file: f, kind: "subagent", parent: parentOf(f) })),
-  ];
-  if (limitArg) items = items.slice(0, limitArg);
+  // Two-pass: top-level first so sub-agent parent entity_ids resolve.
+  let topItems = topLevel.map((f) => ({ file: f, kind: "auto", parent: null as string | null }));
+  let subItems = subAgents.map((f) => ({
+    file: f,
+    kind: "subagent",
+    parent: parentOf(f) as string | null,
+  }));
+  if (limitArg) {
+    const combined = [...topItems, ...subItems].slice(0, limitArg);
+    topItems = combined.filter((i) => i.kind !== "subagent");
+    subItems = combined.filter((i) => i.kind === "subagent");
+  }
 
+  const total = topItems.length + subItems.length;
   console.log(
     `Found ${topLevel.length} sessions + ${subAgents.length} sub-agents. ` +
-      `Ingesting ${items.length}${dryRun ? " (dry-run)" : ""} -> ${baseUrl}`,
+      `Ingesting ${total}${dryRun ? " (dry-run)" : ""} -> ${baseUrl} (two-pass parent linking)`
   );
 
+  const sessionEntityIds = new Map<string, string>();
   const counts = { ok: 0, failed: 0 };
   const byKind: Record<string, number> = {};
-  for (let i = 0; i < items.length; i++) {
-    const { file, kind, parent } = items[i];
+
+  async function ingestItem(
+    item: { file: string; kind: string; parent: string | null },
+    index: number
+  ) {
     let rec: SessionRecord;
     try {
-      rec = extractMetadata(file, kind, parent);
-      rec.last_activity_at = (await fs.stat(file)).mtime.toISOString();
-    } catch (err: any) {
+      rec = extractMetadata(item.file, item.kind, item.parent);
+      rec.last_activity_at = (await fs.stat(item.file)).mtime.toISOString();
+    } catch (err: unknown) {
       counts.failed++;
-      if (verbose) console.error(`  read failed ${file}:`, err.message ?? err);
-      continue;
+      if (verbose) console.error(`  read failed ${item.file}:`, (err as Error).message ?? err);
+      return;
     }
     byKind[rec.kind] = (byKind[rec.kind] ?? 0) + 1;
-    const res = await storeOne(rec);
+    const res = await storeOne(rec, sessionEntityIds);
     counts[res]++;
-    if (verbose || (i + 1) % 100 === 0) {
-      console.log(`  [${i + 1}/${items.length}] ${rec.native_session_id} kind=${rec.kind} repo=${rec.repo ?? "-"}`);
+    if (verbose || (index + 1) % 100 === 0) {
+      console.log(
+        `  [${index + 1}/${total}] ${rec.native_session_id} kind=${rec.kind} repo=${rec.repo ?? "-"}`
+      );
     }
+  }
+
+  let i = 0;
+  for (const item of topItems) {
+    await ingestItem(item, i++);
+  }
+  for (const item of subItems) {
+    await ingestItem(item, i++);
   }
 
   console.log(`\n${"-".repeat(60)}`);
@@ -279,7 +501,14 @@ async function main() {
   if (dryRun) console.log("(dry-run - nothing stored)");
 }
 
-main().catch((err) => {
-  console.error("Fatal:", err);
-  process.exit(1);
-});
+const isDirectRun =
+  process.argv[1] != null &&
+  (process.argv[1].endsWith("ingest_agent_sessions.ts") ||
+    process.argv[1].endsWith("ingest_agent_sessions.js"));
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
+}

@@ -2612,7 +2612,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     metadata: {
       label: "Agent session",
       description:
-        "A coding-agent session (interactive or autonomous) keyed by harness + native session id. The runtime/resume record: where the transcript lives, the git env to reconstruct, and (for autonomous swarm runs) the trigger + AAuth attribution. Links PART_OF a conversation and to a session_transcript; relates to harness_event / participation_record / agent_attempt for full orchestration provenance (linked, not duplicated).",
+        "A coding-agent session (interactive or autonomous) keyed by harness + native session id. The runtime/resume record: where the transcript lives, the git env to reconstruct, and (for autonomous swarm runs) the trigger + AAuth attribution. Sub-agent sessions PART_OF their parent agent_session; session_transcript PART_OF this session. Relates to harness_event / participation_record / agent_attempt for full orchestration provenance (linked, not duplicated).",
       category: "agent_runtime",
       aliases: ["coding_session", "claude_code_session"],
     },
@@ -2665,8 +2665,17 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // Joint identity: a native session id is only unique within its harness.
       canonical_name_fields: ["harness", "native_session_id"],
       name_collision_policy: "reject",
-      temporal_fields: [
-        { field: "created_at", event_type: "AgentSessionStarted" },
+      temporal_fields: [{ field: "created_at", event_type: "AgentSessionStarted" }],
+      // parent_session_id holds the parent agent_session's entity_id (not the
+      // harness-scoped native id). Auto-resolution is not wired for this target
+      // type today — callers must emit an explicit PART_OF relationship (see
+      // scripts/ingest_agent_sessions.ts). resolve_target is intentionally omitted.
+      reference_fields: [
+        {
+          field: "parent_session_id",
+          target_entity_type: "agent_session",
+          relationship_type: "PART_OF",
+        },
       ],
       agent_instructions:
         "An agent_session is the runtime/resume record for one coding-agent session. " +
@@ -2675,7 +2684,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         "For autonomous swarm runs, populate the trigger block (trigger_kind, trigger_ref, aauth_sub, " +
         "workflow_definition_ref, gate_name) and relate to the authoritative harness_event / " +
         "participation_record / agent_attempt rather than duplicating their data. " +
-        "Link the session PART_OF its conversation and to its session_transcript.",
+        "For sub-agent sessions set parent_session_id to the parent agent_session entity_id and " +
+        "emit a typed PART_OF relationship (source=this session, target=parent). " +
+        "Link the session to its session_transcript via PART_OF (transcript PART_OF session) " +
+        "with agent_session_id set to this session's entity_id. " +
+        "Conversation PART_OF linking requires a conversation_id field (not yet declared) — " +
+        "do not invent an untyped conversation edge from this schema alone.",
     },
     reducer_config: {
       merge_policies: {
@@ -2738,9 +2752,19 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         turn_count: { type: "number", required: false },
         // main | subagent
         transcript_kind: { type: "string", required: false },
+        // agent_session entity_id (not harness-scoped native_session_id).
         agent_session_id: { type: "string", required: false },
       },
       canonical_name_fields: ["content_hash"],
+      // Declares the FK shape; auto-resolution is not wired for agent_session
+      // targets — ingest must emit an explicit PART_OF relationship.
+      reference_fields: [
+        {
+          field: "agent_session_id",
+          target_entity_type: "agent_session",
+          relationship_type: "PART_OF",
+        },
+      ],
     },
     reducer_config: {
       merge_policies: {
