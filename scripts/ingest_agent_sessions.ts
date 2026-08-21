@@ -33,6 +33,17 @@ import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import {
+  buildSessionTranscriptEnvelope,
+  buildTranscriptSessionFkEnvelope,
+  type SessionStoreRecord,
+  type StoreEnvelope,
+} from "./lib/agent_session_store.js";
+
+export type { StoreEnvelope, SessionStoreRecord };
+export { buildSessionTranscriptEnvelope, buildTranscriptSessionFkEnvelope };
+/** @deprecated Prefer buildSessionTranscriptEnvelope — kept for existing imports/tests. */
+export const buildStoreEnvelope = buildSessionTranscriptEnvelope;
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -78,33 +89,7 @@ const childEnv: Record<string, string> = {
   ...(prodEnv.NEOTOMA_BEARER_TOKEN ? { NEOTOMA_BEARER_TOKEN: prodEnv.NEOTOMA_BEARER_TOKEN } : {}),
 };
 
-export interface SessionRecord {
-  entity_type: "agent_session";
-  harness: string;
-  native_session_id: string;
-  kind: string;
-  cwd: string | null;
-  repo: string | null;
-  source_branch: string | null;
-  branch: string | null;
-  worktree_path: string | null;
-  model: string | null;
-  message_count: number;
-  created_at: string | null;
-  last_activity_at: string | null;
-  /** Parent agent_session entity_id once resolved; null for top-level. */
-  parent_session_id: string | null;
-  /** Internal: parent native id before entity_id resolution (not stored). */
-  _parentNativeSessionId: string | null;
-  _contentHash: string; // internal: idempotency + transcript content link, not stored
-  _filePath: string; // internal: source path for blob upload, not stored
-  _fileSize: number; // internal, not stored
-}
-
-export interface StoreEnvelope {
-  entities: Array<Record<string, unknown>>;
-  relationships: Array<Record<string, unknown>>;
-}
+export type SessionRecord = SessionStoreRecord;
 
 /** Recursively collect transcript files: top-level sessions and nested sub-agents. */
 export async function collectTranscripts(
@@ -225,55 +210,6 @@ export function transcriptIdempotencyKey(contentHash: string): string {
   return `transcript-${contentHash.slice(0, 16)}`;
 }
 
-/**
- * Build the store envelope for [session, transcript].
- * `sessionEntityId` — when known (re-ingest), set as transcript.agent_session_id.
- * `parentEntityId` — parent agent_session entity_id for sub-agents.
- */
-export function buildStoreEnvelope(
-  rec: SessionRecord,
-  opts: { sessionEntityId?: string | null; parentEntityId?: string | null } = {}
-): StoreEnvelope {
-  const {
-    _contentHash,
-    _filePath: _fp,
-    _fileSize,
-    _parentNativeSessionId: _p,
-    ...sessionFields
-  } = rec;
-  const session: Record<string, unknown> = {
-    ...sessionFields,
-    parent_session_id: opts.parentEntityId ?? null,
-  };
-
-  const transcript: Record<string, unknown> = {
-    entity_type: "session_transcript",
-    content_hash: _contentHash,
-    file_size: _fileSize,
-    mime_type: "application/jsonl",
-    harness: HARNESS,
-    format: "claude_code_jsonl",
-    transcript_kind: rec.kind === "subagent" ? "subagent" : "main",
-    // Prefer entity_id when known; null on first write until follow-up fill.
-    agent_session_id: opts.sessionEntityId ?? null,
-  };
-
-  const relationships: Array<Record<string, unknown>> = [
-    // transcript PART_OF session (same-request index pair)
-    { relationship_type: "PART_OF", source_index: 1, target_index: 0 },
-  ];
-  if (opts.parentEntityId) {
-    // sub-agent session PART_OF parent session (cross-request target id)
-    relationships.push({
-      relationship_type: "PART_OF",
-      source_index: 0,
-      target_entity_id: opts.parentEntityId,
-    });
-  }
-
-  return { entities: [session, transcript], relationships };
-}
-
 /** Parse `neotoma store --json` stdout for the agent_session entity_id. */
 export function parseSessionEntityIdFromStoreOutput(stdout: string): string | null {
   try {
@@ -370,22 +306,7 @@ function runStore(envelope: StoreEnvelope, key: string): { ok: boolean; stdout: 
  */
 function fillTranscriptSessionFk(contentHash: string, sessionEntityId: string): boolean {
   if (dryRun) return true;
-  const envelope: StoreEnvelope = {
-    entities: [
-      {
-        entity_type: "session_transcript",
-        content_hash: contentHash,
-        agent_session_id: sessionEntityId,
-      },
-    ],
-    relationships: [
-      {
-        relationship_type: "PART_OF",
-        source_index: 0,
-        target_entity_id: sessionEntityId,
-      },
-    ],
-  };
+  const envelope = buildTranscriptSessionFkEnvelope(contentHash, sessionEntityId);
   return runStore(envelope, `agent-session-fk-v2-${contentHash.slice(0, 12)}`).ok;
 }
 
