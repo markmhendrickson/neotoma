@@ -9689,10 +9689,35 @@ issuesCommand
   .action(async (opts) => {
     const { issuesSync } = await import("./issues.js");
     const config = await readConfig();
-    const token = await getCliToken();
+    // Prefer per-agent AAuth signing when a CLI AAuth key is configured via env
+    // (NEOTOMA_AAUTH_PRIVATE_JWK_PATH). This lets the issues-sync LaunchAgent /
+    // neotoma-agent daemon authenticate with a signed request instead of a
+    // bearer token (bearer-token retirement). Drop the bearer so the signature
+    // is the sole credential, and force the HTTP transport — the in-process
+    // local transport bypasses signing (and also avoids the dev/prod local
+    // transport env-mismatch). Falls back to bearer when AAuth is not configured.
+    // When the env gate is set, fail loud if the key is missing/unusable —
+    // silent unsigned fallback would leave the unattended daemon syncing as
+    // anonymous (REQUEST_CHANGES on #1764 / phoenicurus).
+    const useAAuth = Boolean(process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH);
+    if (useAAuth) {
+      const { loadCliSignerConfig } = await import("./aauth_signer.js");
+      const signerConfig = await loadCliSignerConfig();
+      if (!signerConfig) {
+        throw new Error(
+          `NEOTOMA_AAUTH_PRIVATE_JWK_PATH is set (${process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH}) ` +
+            "but no usable AAuth CLI keypair was found there. Fix the path or run `neotoma auth keygen`. " +
+            "Unattended issues sync must not fall back to an unsigned request."
+        );
+      }
+    }
+    const token = useAAuth ? undefined : await getCliToken();
     const api = createApiClient({
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
+      ...(useAAuth
+        ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
+        : {}),
     });
     await issuesSync({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
   });
@@ -16458,13 +16483,25 @@ program
     // --aauth: drop the bearer so the AAuth request signature is the sole
     // credential. A bearer Authorization header otherwise takes precedence and
     // the request lands under the bearer's identity rather than the agent's.
+    if (opts.aauth) {
+      const { loadCliSignerConfig } = await import("./aauth_signer.js");
+      const signerConfig = await loadCliSignerConfig();
+      if (!signerConfig) {
+        throw new Error(
+          "No AAuth CLI keypair found (~/.neotoma/aauth/private.jwk or NEOTOMA_AAUTH_PRIVATE_JWK_PATH). " +
+            "Run `neotoma auth keygen` once, then retry. `--aauth` must not fall back to an unsigned request."
+        );
+      }
+    }
     const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
     const api = createApiClient({
       baseUrl,
       token,
       // AAuth signing rides the HTTP transport, so force it over the in-process
       // local transport (which would bypass the signature).
-      ...(opts.aauth ? { signWithCliAAuth: true, forceHttpTransport: true } : {}),
+      ...(opts.aauth
+        ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
+        : {}),
     });
 
     const params = parseOptionalJson(opts.params);
