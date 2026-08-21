@@ -2632,6 +2632,158 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  agent_session: {
+    entity_type: "agent_session",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Agent session",
+      description:
+        "A coding-agent session (interactive or autonomous) keyed by harness + native session id. The runtime/resume record: where the transcript lives, the git env to reconstruct, and (for autonomous swarm runs) the trigger + AAuth attribution. Links PART_OF a conversation and to a session_transcript; relates to harness_event / participation_record / agent_attempt for full orchestration provenance (linked, not duplicated).",
+      category: "agent_runtime",
+      aliases: ["coding_session", "claude_code_session"],
+    },
+    schema_definition: {
+      fields: {
+        // Identity: which harness produced the session and its native,
+        // resume-capable id (Claude Code: cli_session_id / JSONL stem).
+        harness: { type: "string", required: true },
+        native_session_id: { type: "string", required: true },
+        // interactive | autonomous | subagent
+        kind: { type: "string", required: false },
+        title: { type: "string", required: false, preserveCase: true },
+        summary: { type: "string", required: false, preserveCase: true },
+        model: { type: "string", required: false },
+        status: { type: "string", required: false },
+        message_count: { type: "number", required: false },
+        created_at: { type: "date", required: false },
+        last_activity_at: { type: "date", required: false },
+        // Git env to reconstruct for resume. Path/host kept as context only
+        // (excluded from identity: paths move and embed usernames).
+        cwd: { type: "string", required: false },
+        repo: { type: "string", required: false },
+        repo_remote_url: { type: "string", required: false },
+        source_branch: { type: "string", required: false },
+        branch: { type: "string", required: false },
+        git_head_sha: { type: "string", required: false },
+        worktree_path: { type: "string", required: false },
+        // Stable handle of the device that produced the session (resolved to a
+        // device entity when one exists). Sub-agent sessions reference parent.
+        origin_device: { type: "string", required: false },
+        parent_session_id: { type: "string", required: false },
+        // Desktop-app UI state (per device).
+        is_archived: { type: "boolean", required: false },
+        auto_archive_exempt: { type: "boolean", required: false },
+        is_pinned: { type: "boolean", required: false },
+        is_bridged: { type: "boolean", required: false },
+        bridge_session_ids: { type: "array", required: false },
+        // Autonomous/swarm trigger + attribution block. Denormalized for
+        // discovery/filtering; authoritative provenance stays in the linked
+        // harness_event / participation_record / agent_attempt entities.
+        trigger_kind: { type: "string", required: false },
+        trigger_ref: { type: "string", required: false },
+        dispatch_parent: { type: "string", required: false },
+        aauth_sub: { type: "string", required: false },
+        workflow_definition_ref: { type: "string", required: false },
+        gate_name: { type: "string", required: false },
+        // Literal command to resume (harness-specific).
+        resume_command: { type: "string", required: false, preserveCase: true },
+      },
+      // Joint identity: a native session id is only unique within its harness.
+      canonical_name_fields: ["harness", "native_session_id"],
+      name_collision_policy: "reject",
+      temporal_fields: [
+        { field: "created_at", event_type: "AgentSessionStarted" },
+      ],
+      agent_instructions:
+        "An agent_session is the runtime/resume record for one coding-agent session. " +
+        "Always supply harness and native_session_id so the entity resolves deterministically. " +
+        "Set kind to interactive, autonomous, or subagent. " +
+        "For autonomous swarm runs, populate the trigger block (trigger_kind, trigger_ref, aauth_sub, " +
+        "workflow_definition_ref, gate_name) and relate to the authoritative harness_event / " +
+        "participation_record / agent_attempt rather than duplicating their data. " +
+        "Link the session PART_OF its conversation and to its session_transcript.",
+    },
+    reducer_config: {
+      merge_policies: {
+        kind: { strategy: "last_write" },
+        title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        summary: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        model: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        message_count: { strategy: "last_write" },
+        created_at: { strategy: "last_write" },
+        last_activity_at: { strategy: "last_write" },
+        cwd: { strategy: "last_write" },
+        repo: { strategy: "last_write" },
+        repo_remote_url: { strategy: "last_write" },
+        source_branch: { strategy: "last_write" },
+        branch: { strategy: "last_write" },
+        git_head_sha: { strategy: "last_write" },
+        worktree_path: { strategy: "last_write" },
+        origin_device: { strategy: "last_write" },
+        parent_session_id: { strategy: "last_write" },
+        is_archived: { strategy: "last_write" },
+        auto_archive_exempt: { strategy: "last_write" },
+        is_pinned: { strategy: "last_write" },
+        is_bridged: { strategy: "last_write" },
+        bridge_session_ids: { strategy: "merge_array" },
+        trigger_kind: { strategy: "last_write" },
+        trigger_ref: { strategy: "last_write" },
+        dispatch_parent: { strategy: "last_write" },
+        aauth_sub: { strategy: "last_write" },
+        workflow_definition_ref: { strategy: "last_write" },
+        gate_name: { strategy: "last_write" },
+        resume_command: { strategy: "last_write" },
+      },
+    },
+  },
+
+  session_transcript: {
+    entity_type: "session_transcript",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Session transcript",
+      description:
+        "The raw, lossless transcript artifact of an agent_session (Claude Code JSONL, Codex rollout, Cursor SQLite export), stored content-addressed in the sources bucket like image_asset/audio_asset. The byte-exact resume artifact and durable backup; structured turns live separately in conversation_message.",
+      category: "agent_runtime",
+      aliases: ["agent_transcript"],
+    },
+    schema_definition: {
+      fields: {
+        // Content-addressed identity (SHA-256 of the transcript bytes), shared
+        // with the sources blob path {user_id}/{content_hash}.
+        content_hash: { type: "string", required: true },
+        source_id: { type: "string", required: false },
+        mime_type: { type: "string", required: false },
+        file_size: { type: "number", required: false },
+        storage_url: { type: "string", required: false },
+        harness: { type: "string", required: false },
+        // claude_code_jsonl | codex_rollout | cursor_sqlite
+        format: { type: "string", required: false },
+        format_version: { type: "string", required: false },
+        turn_count: { type: "number", required: false },
+        // main | subagent
+        transcript_kind: { type: "string", required: false },
+        agent_session_id: { type: "string", required: false },
+      },
+      canonical_name_fields: ["content_hash"],
+    },
+    reducer_config: {
+      merge_policies: {
+        source_id: { strategy: "last_write" },
+        mime_type: { strategy: "last_write" },
+        file_size: { strategy: "last_write" },
+        storage_url: { strategy: "last_write" },
+        harness: { strategy: "last_write" },
+        format: { strategy: "last_write" },
+        format_version: { strategy: "last_write" },
+        turn_count: { strategy: "last_write" },
+        transcript_kind: { strategy: "last_write" },
+        agent_session_id: { strategy: "last_write" },
+      },
+    },
+  },
+
   agent_artifact: {
     entity_type: "agent_artifact",
     schema_version: "0.1.0",
