@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildStoreEnvelope,
+  buildTranscriptSessionFkEnvelope,
   contentHashOf,
   extractMetadata,
   idempotencyKey,
@@ -234,6 +235,8 @@ describe("store_via_aauth signed bulk /store (effect)", () => {
       baseUrl: "https://neotoma.example.test",
       batchSize: 2,
       dryRun: false,
+      // Explicit: this case exercises raw batching, not pair inference.
+      inferRelationships: false,
       signedFetch:
         signedFetch as unknown as typeof import("../../src/cli/aauth_signer.js").cliSignedFetch,
     });
@@ -266,11 +269,104 @@ describe("store_via_aauth signed bulk /store (effect)", () => {
       baseUrl: "https://neotoma.example.test",
       batchSize: 50,
       dryRun: true,
+      inferRelationships: false,
       signedFetch:
         signedFetch as unknown as typeof import("../../src/cli/aauth_signer.js").cliSignedFetch,
     });
     expect(signedFetch).not.toHaveBeenCalled();
     expect(result.ok).toBe(1);
     expect(result.postedBodies[0].observation_source).toBe("import");
+  });
+});
+
+describe("cross-surface parity: Bearer ingest envelope vs AAuth store (PART_OF)", () => {
+  it("posts identical relationships from shared envelope via both call shapes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-session-fx-"));
+    const file = join(dir, "parity.jsonl");
+    const body = fixtureJsonl({
+      cwd: "/Users/me/repos/neotoma",
+      gitBranch: "feat/agent-session-capture",
+      model: "claude-opus-4-20250514",
+    });
+    writeFileSync(file, body);
+    const rec = extractMetadata(file, "subagent", "parent-native", Buffer.from(body));
+    const parentEntityId = "ent_parentdeadbeef0001";
+    const sessionEntityId = "ent_sessiondeadbeef02";
+
+    // Shared construction (single source of truth for both surfaces).
+    const bearerEnvelope = buildStoreEnvelope(rec, { parentEntityId, sessionEntityId });
+
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const signedFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init: init ?? {} });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    // AAuth call shape: envelopes from the shared helper.
+    const aauthFromEnvelopes = await storeViaAauth({
+      envelopes: [bearerEnvelope],
+      baseUrl: "https://neotoma.example.test",
+      batchSize: 50,
+      dryRun: false,
+      signedFetch:
+        signedFetch as unknown as typeof import("../../src/cli/aauth_signer.js").cliSignedFetch,
+    });
+
+    expect(aauthFromEnvelopes.postedBodies).toHaveLength(1);
+    const aauthBody = aauthFromEnvelopes.postedBodies[0];
+    expect(aauthBody.entities).toEqual(bearerEnvelope.entities);
+    expect(aauthBody.relationships).toEqual(bearerEnvelope.relationships);
+    expect(aauthBody.relationships).toEqual([
+      { relationship_type: "PART_OF", source_index: 1, target_index: 0 },
+      {
+        relationship_type: "PART_OF",
+        source_index: 0,
+        target_entity_id: parentEntityId,
+      },
+    ]);
+
+    const posted = JSON.parse(String(calls[0].init.body)) as {
+      entities: unknown[];
+      relationships: unknown[];
+    };
+    expect(posted.relationships).toEqual(bearerEnvelope.relationships);
+    expect(posted.entities).toEqual(bearerEnvelope.entities);
+  });
+
+  it("flat AAuth entity list of [session, transcript] pairs infers the same PART_OF shape", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-session-fx-"));
+    const file = join(dir, "flat-parity.jsonl");
+    const body = fixtureJsonl({
+      cwd: "/tmp/repos/x",
+      gitBranch: "main",
+      model: "m",
+    });
+    writeFileSync(file, body);
+    const rec = extractMetadata(file, "auto", null, Buffer.from(body));
+    const envelope = buildStoreEnvelope(rec);
+
+    const result = await storeViaAauth({
+      entities: envelope.entities,
+      baseUrl: "https://neotoma.example.test",
+      batchSize: 50,
+      dryRun: true,
+      // default inferRelationships: true
+    });
+
+    expect(result.postedBodies).toHaveLength(1);
+    expect(result.postedBodies[0].relationships).toEqual(envelope.relationships);
+    expect(result.postedBodies[0].entities).toEqual(envelope.entities);
+  });
+
+  it("FK follow-up envelope matches across shared helper consumers", () => {
+    const fk = buildTranscriptSessionFkEnvelope("abc123hash", "ent_session99");
+    expect(fk.relationships).toEqual([
+      {
+        relationship_type: "PART_OF",
+        source_index: 0,
+        target_entity_id: "ent_session99",
+      },
+    ]);
+    expect(fk.entities[0].agent_session_id).toBe("ent_session99");
   });
 });
