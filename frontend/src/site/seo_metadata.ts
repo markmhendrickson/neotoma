@@ -826,7 +826,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/usage-telemetry": {
     title: "Usage telemetry | Neotoma",
     description:
-      "How agents and observer processes submit periodic, PII-safe aggregate telemetry via the usage_digest entity type — fields, authentication (AAuth grant or keyless guest), idempotency, time-series retrieval, and server-side redaction.",
+      "How agents and observer processes submit periodic, PII-safe aggregate telemetry via the usage_digest entity type: fields, authentication (AAuth grant or keyless guest), idempotency, time-series retrieval, and server-side redaction.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
