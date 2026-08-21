@@ -1,10 +1,26 @@
 # Neotoma
 
-Neotoma is a deterministic, versioned state layer for AI agents. It ingests sources into immutable observations and computes reproducible entity snapshots with full provenance, exposed over an MCP server, a REST API, a CLI, and a bundled web Inspector.
+**The shared, governed state layer for human-agent systems — one traceable account of what your people, tools, and agents know, decide, dispute, and change.**
+
+That is the category Neotoma is built toward. What ships today is its foundation: a deterministic, versioned state layer for AI agents that ingests sources into immutable observations and computes reproducible entity snapshots with full provenance, exposed over an MCP server, a REST API, a CLI, and a bundled web Inspector. See [Vision and execution status](#vision-and-execution-status) for exactly where the implementation stands against the vision.
 
 It is built for developers building and operating AI agents who need a persistent, deterministic, auditable memory layer shared across tools. The same engine serves two further groups: individuals running a personal cross-assistant memory on a single-user install, and operators running a shared, multi-user instance with agent access control. Agents store structured records (contacts, tasks, transactions, decisions, events, and any other type) once and read them back across every tool and session, and the same observations always reduce to the same state.
 
 **[neotoma.io](https://neotoma.io)** · **[Install](https://neotoma.io/install)** · **[Documentation](https://neotoma.io/docs)** (also served in-app at `/docs`)
+
+## Vision and execution status
+
+As agent use expands, reality fragments across chat histories, agent memories, files, databases, tickets, and application state. The failure is not retrieval — it is that humans and agents can no longer answer: *which assertion is current? which source introduced it? was it observed, inferred, or decided? who had authority to correct it? which agents relied on the previous version? is there legitimate disagreement?* Neotoma's long-term role is **collective epistemic coherence**: not "better semantic memory," but deterministic, governed, multi-party state that humans and agents maintain together — attributed, correctable, disagreement-aware, portable, and independent of any one model or application.
+
+| Vision phase | What it means | Status |
+| --- | --- | --- |
+| **P0 — Deterministic single-writer state** | Append-only observations, hash-derived IDs, deterministic reduction, field-level provenance, corrections-win, replayable history | ✅ **Shipped and stable** — the core guarantee, in daily use |
+| **P1 — Multi-user state foundations** | Human and agent identities, attributed writes, tenant isolation, access controls, shared instances | 🟡 **Partially shipped**: hosted multi-user mode with `user_id` tenancy, per-agent identity (AAuth, optional hardware attestation), capability grants, guest tokens, peer federation. Not yet: organizations/workspaces, membership lifecycle, invitations, offboarding |
+| **P2 — Authority over state** | Domain ownership, correction rights, supersession, policy ownership, temporary grants, disclosure logs | 🟡 **Mechanisms exist** (corrections always win, `SUPERSEDES` relationships, per-operation access controls); authority *semantics* — who may correct what, scoped by domain — are future work |
+| **P3 — Multi-principal semantics** | Competing interpretations, disputed claims, official positions, consensus vs unresolved disagreement, field-level policies, historical validity | 🔜 Planned — interpretations are first-class today; dispute/official-position semantics are not |
+| **P4 — Organizational intelligence substrate** | Non-developer governance UI, "why does the system believe this?" explanations, impact analysis, authority-graph views, enterprise administration | 🔭 Vision — the Inspector's provenance and audit views are the seed |
+
+[Ateles](https://github.com/markmhendrickson/ateles) is the companion layer on the agency side: Neotoma governs what is *known* (truth, memory, provenance); Ateles governs what may *happen* (initiative, delegation, approval, accountability) — against Neotoma state.
 
 ## What Neotoma is
 
@@ -187,7 +203,7 @@ Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md).
 
 **Version:** v0.17.0 · **License:** MIT · **Storage:** local-only (SQLite + local files).
 
-Neotoma is in developer preview and used daily in real agent workflows. The core guarantees (deterministic state, versioned history, append-only log, full provenance, same contract across CLI and MCP) are stable. Schemas, extraction across versions, long-term replay compatibility, and backward compatibility are not yet guaranteed. Expect breaking changes.
+Neotoma is in developer preview and used daily in real agent workflows. The core guarantees (deterministic state, versioned history, append-only log, full provenance, same contract across CLI and MCP) are stable — phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, long-term replay compatibility, and backward compatibility are not yet guaranteed. Expect breaking changes.
 
 ## Development
 
