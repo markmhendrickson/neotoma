@@ -100,13 +100,13 @@ export function formatLiveApiUnavailableMessage(
   }
 
   const envNames = "NEOTOMA_SESSION_DEV_PORT / NEOTOMA_HTTP_PORT";
-  const nextAction = "[COPY: Start the local server, or run this test in the integration lane.]";
+  const nextAction = "Start the local server, or run this test in the integration lane.";
 
   if (reason === "timeout") {
-    return `[COPY: live API probe timed out] on ${hostPort} (${envNames}). ${nextAction}`;
+    return `Live API probe timed out on ${hostPort} (${envNames}). ${nextAction}`;
   }
   if (reason === "invalid_url") {
-    return `[COPY: Live API not listening] on ${hostPort} (${envNames}) — base URL must be literal loopback (127.0.0.1 or ::1). ${nextAction}`;
+    return `Live API not listening on ${hostPort} (${envNames}) — base URL must be literal loopback (127.0.0.1 or ::1). ${nextAction}`;
   }
-  return `[COPY: Live API not listening] on ${hostPort} (${envNames}). ${nextAction}`;
+  return `Live API not listening on ${hostPort} (${envNames}). ${nextAction}`;
 }

@@ -50,6 +50,7 @@ describe("live_api_probe (effect: no hang to suite testTimeout)", () => {
     expect(message).toContain("NEOTOMA_SESSION_DEV_PORT");
     expect(message).toContain("NEOTOMA_HTTP_PORT");
     expect(message).toMatch(/integration lane|Start the local server/i);
+    expect(message).not.toMatch(/\[COPY:/);
     expect(message).not.toMatch(/authorization|bearer|aauth|guest_access_token|token=/i);
   }, 5000);
 
@@ -87,5 +88,7 @@ describe("live_api_probe (effect: no hang to suite testTimeout)", () => {
     expect(timedOut).toMatch(/live API probe timed out/i);
     expect(unreachable).toMatch(/Live API not listening/i);
     expect(timedOut).not.toEqual(unreachable);
+    expect(timedOut).not.toMatch(/\[COPY:/);
+    expect(unreachable).not.toMatch(/\[COPY:/);
   });
 });

@@ -18,7 +18,7 @@ issues message --entity-id … --body … --json exercises POST /issues/add_mess
 ### Example probe-failure message
 
 ```text
-[COPY: Live API not listening] on 127.0.0.1:18080 (NEOTOMA_SESSION_DEV_PORT / NEOTOMA_HTTP_PORT). [COPY: Start the local server, or run this test in the integration lane.]
+Live API not listening on 127.0.0.1:18080 (NEOTOMA_SESSION_DEV_PORT / NEOTOMA_HTTP_PORT). Start the local server, or run this test in the integration lane.
 ```
 
 Set `NEOTOMA_SESSION_DEV_PORT` or `NEOTOMA_HTTP_PORT` to a running local server, or run the case in the integration lane.
