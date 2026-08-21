@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **487**
-- Backend and repo Vitest files: **454**
+- Total automated test files: **488**
+- Backend and repo Vitest files: **455**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -85,7 +85,7 @@ flowchart TD
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 2 |
 | Tests Performance | 1 |
-| Tests Scripts | 1 |
+| Tests Scripts | 2 |
 
 ## Primary validation commands
 - `npm test`
@@ -707,8 +707,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/scripts`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (1):**
+**Files (2):**
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
+- `tests/scripts/release_orchestrator_syntax.test.ts`
 
 ### Python unit tests
 **Directory:** `packages/client-python/tests/`
