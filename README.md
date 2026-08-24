@@ -1,8 +1,10 @@
 # Neotoma
 
-**The shared, governed state layer for human-agent systems — one traceable account of what your people, tools, and agents know, decide, dispute, and change.**
+**Agents cannot own work they cannot verify.**
 
-That is the category Neotoma is built toward. What ships today is its foundation: a deterministic, versioned state layer for AI agents that ingests sources into immutable observations and computes reproducible entity snapshots with full provenance, exposed over an MCP server, a REST API, a CLI, and a bundled web Inspector. See [Vision and execution status](#vision-and-execution-status) for exactly where the implementation stands against the vision.
+You cannot delegate real work to agents you cannot hold to account. Accountability has two halves: what was true, and who was authorized. **Neotoma is the system of record for AI agents** — it answers what was true. Your agents can produce a value; they cannot tell you its version, its source, or whether it is still current. Neotoma versions every fact, attributes it to a source, and replays it.
+
+What ships today is the foundation: a deterministic, versioned state layer that ingests sources into immutable observations and computes reproducible entity snapshots with full provenance, exposed over an MCP server, a REST API, a CLI, and a bundled web Inspector. See [Vision and execution status](#vision-and-execution-status) for exactly where the implementation stands against the vision.
 
 It is built for developers building and operating AI agents who need a persistent, deterministic, auditable memory layer shared across tools. The same engine serves two further groups: individuals running a personal cross-assistant memory on a single-user install, and operators running a shared, multi-user instance with agent access control. Agents store structured records (contacts, tasks, transactions, decisions, events, and any other type) once and read them back across every tool and session, and the same observations always reduce to the same state.
 
@@ -20,7 +22,7 @@ As agent use expands, reality fragments across chat histories, agent memories, f
 | **P3 — Multi-principal semantics** | Competing interpretations, disputed claims, official positions, consensus vs unresolved disagreement, field-level policies, historical validity | 🔜 Planned — interpretations are first-class today; dispute/official-position semantics are not |
 | **P4 — Organizational intelligence substrate** | Non-developer governance UI, "why does the system believe this?" explanations, impact analysis, authority-graph views, enterprise administration | 🔭 Vision — the Inspector's provenance and audit views are the seed |
 
-[Ateles](https://github.com/markmhendrickson/ateles) is the companion layer on the agency side: Neotoma governs what is *known* (truth, memory, provenance); Ateles governs what may *happen* (initiative, delegation, approval, accountability) — against Neotoma state.
+[Ateles](https://github.com/markmhendrickson/ateles) is the other half. Accountability has two halves: **Neotoma answers what was true** (truth, memory, provenance); **Ateles answers who was authorized** (initiative, delegation, approval) — against Neotoma state. Neither is sufficient alone. Memory without authority tells you what happened but not whether it was permitted; authority without memory tells you who may act but not against what state.
 
 ## What Neotoma is
 
