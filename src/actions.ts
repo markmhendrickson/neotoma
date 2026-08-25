@@ -32,6 +32,7 @@ import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_inf
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
+import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
@@ -3475,26 +3476,45 @@ function explicitGuestAccessTokenFromRequest(req: express.Request): string | und
   return undefined;
 }
 
+/**
+ * Static path segments under `/entities/` that are routes in their own right,
+ * not entity ids. The `/entities/:id` family of guest-eligible reads must never
+ * treat these as an id (issue #2208): `/entities/duplicates` matched the
+ * `:id`-shaped guest regex below, so a guest principal could be stamped onto a
+ * route whose handler calls `getAuthenticatedUserId()` and 500s.
+ *
+ * Keep in sync with the `app.get("/entities/<segment>")` registrations. The
+ * boot-time assertion in `assertNoShadowedRoutes()` fails the process if a new
+ * static `/entities/*` route is added without being registered ahead of
+ * `/entities/:id`, which is the other half of this invariant.
+ */
+export const RESERVED_ENTITY_PATH_SEGMENTS = new Set(["duplicates", "merge", "split", "query"]);
+
 /** Exported for unit tests: routes where guest (AAuth / guest token) may be stamped before handlers run. */
 export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" | "path">): boolean {
   const path = req.path;
   if (
-    (req.method === "POST" &&
-      (path === "/issues/submit" ||
-        path === "/api/issues/submit" ||
-        path === "/issues/status" ||
-        path === "/api/issues/status" ||
-        path === "/issues/add_message" ||
-        path === "/api/issues/add_message" ||
-        path === "/subscribe" ||
-        path === "/unsubscribe" ||
-        path === "/list_subscriptions" ||
-        path === "/get_subscription_status")) ||
-    (req.method === "GET" &&
-      (/^\/entities\/[^/]+(?:\/(?:observations|relationships|html))?$/.test(path) ||
-        path === "/events/stream"))
+    req.method === "POST" &&
+    (path === "/issues/submit" ||
+      path === "/api/issues/submit" ||
+      path === "/issues/status" ||
+      path === "/api/issues/status" ||
+      path === "/issues/add_message" ||
+      path === "/api/issues/add_message" ||
+      path === "/subscribe" ||
+      path === "/unsubscribe" ||
+      path === "/list_subscriptions" ||
+      path === "/get_subscription_status")
   ) {
     return true;
+  }
+  if (req.method === "GET") {
+    if (path === "/events/stream") return true;
+    const match = /^\/entities\/([^/]+)(?:\/(?:observations|relationships|html))?$/.exec(path);
+    if (!match) return false;
+    // Fail closed: a reserved static segment is a route, not an entity id, so it
+    // is not guest-eligible unless it is explicitly listed as such above.
+    return !RESERVED_ENTITY_PATH_SEGMENTS.has(match[1]);
   }
   return false;
 }
@@ -4586,6 +4606,73 @@ app.all("/entities", (req, res) => {
     method: req.method,
     supported: ["GET /entities", "POST /entities/query"],
   });
+});
+
+// IMPORTANT (issue #2208): this static route MUST stay registered before
+// `GET /entities/:id` below. Express matches first-wins, so a param route
+// registered earlier would capture `id = "duplicates"` and 404. The
+// boot-time assertion in assertNoShadowedRoutes() enforces this invariant.
+// GET /entities/duplicates - List candidate duplicate entity pairs (R5).
+// Read-only fuzzy post-hoc detector. Never auto-merges. Hands off to
+// /entities/merge once an operator or agent confirms a pair.
+app.get("/entities/duplicates", async (req, res) => {
+  try {
+    const entityType =
+      typeof req.query.entity_type === "string" ? req.query.entity_type : undefined;
+    if (!entityType) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "entity_type query parameter is required"
+      );
+    }
+    const providedUserId = typeof req.query.user_id === "string" ? req.query.user_id : undefined;
+    const authenticatedUserId = await getAuthenticatedUserId(req, providedUserId);
+    if (providedUserId && providedUserId !== authenticatedUserId) {
+      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
+    }
+
+    const thresholdRaw = typeof req.query.threshold === "string" ? req.query.threshold : undefined;
+    const limitRaw = typeof req.query.limit === "string" ? req.query.limit : undefined;
+
+    const threshold = thresholdRaw ? Number(thresholdRaw) : undefined;
+    if (threshold !== undefined && (Number.isNaN(threshold) || threshold <= 0 || threshold > 1)) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "threshold must be a number in (0, 1]"
+      );
+    }
+    const limit = limitRaw ? Number(limitRaw) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > 200)) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "limit must be an integer in [1, 200]"
+      );
+    }
+
+    const { findDuplicateCandidates } = await import("./services/duplicate_detection.js");
+    const candidates = await findDuplicateCandidates({
+      entityType,
+      userId: authenticatedUserId,
+      threshold,
+      limit,
+    });
+
+    return res.json({
+      candidates,
+      entity_type: entityType,
+      threshold: threshold ?? null,
+    });
+  } catch (error) {
+    logError("APIError:entities_duplicates", req, error);
+    const message = error instanceof Error ? error.message : "Failed to list potential duplicates";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
 });
 
 // GET /api/entities/:id - Get entity detail with snapshot and provenance (FU-601)
@@ -9159,68 +9246,9 @@ app.post("/observations/query", async (req, res) => {
   }
 });
 
-// GET /entities/duplicates - List candidate duplicate entity pairs (R5).
-// Read-only fuzzy post-hoc detector. Never auto-merges. Hands off to
-// /entities/merge once an operator or agent confirms a pair.
-app.get("/entities/duplicates", async (req, res) => {
-  try {
-    const entityType =
-      typeof req.query.entity_type === "string" ? req.query.entity_type : undefined;
-    if (!entityType) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_INVALID_FORMAT",
-        "entity_type query parameter is required"
-      );
-    }
-    const providedUserId = typeof req.query.user_id === "string" ? req.query.user_id : undefined;
-    const authenticatedUserId = await getAuthenticatedUserId(req, providedUserId);
-    if (providedUserId && providedUserId !== authenticatedUserId) {
-      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
-    }
-
-    const thresholdRaw = typeof req.query.threshold === "string" ? req.query.threshold : undefined;
-    const limitRaw = typeof req.query.limit === "string" ? req.query.limit : undefined;
-
-    const threshold = thresholdRaw ? Number(thresholdRaw) : undefined;
-    if (threshold !== undefined && (Number.isNaN(threshold) || threshold <= 0 || threshold > 1)) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_INVALID_FORMAT",
-        "threshold must be a number in (0, 1]"
-      );
-    }
-    const limit = limitRaw ? Number(limitRaw) : undefined;
-    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > 200)) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_INVALID_FORMAT",
-        "limit must be an integer in [1, 200]"
-      );
-    }
-
-    const { findDuplicateCandidates } = await import("./services/duplicate_detection.js");
-    const candidates = await findDuplicateCandidates({
-      entityType,
-      userId: authenticatedUserId,
-      threshold,
-      limit,
-    });
-
-    return res.json({
-      candidates,
-      entity_type: entityType,
-      threshold: threshold ?? null,
-    });
-  } catch (error) {
-    logError("APIError:entities_duplicates", req, error);
-    const message = error instanceof Error ? error.message : "Failed to list potential duplicates";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
-  }
-});
+// NOTE: `GET /entities/duplicates` is registered earlier in this file,
+// immediately before `GET /entities/:id`. A static path must be registered
+// before any param route that would also match it (issue #2208).
 
 // POST /api/entities/merge - Merge duplicate entities
 // REQUIRES AUTHENTICATION - validates user_id matches authenticated user and entities belong to user
@@ -12018,11 +12046,23 @@ function emitSandboxBootBanner(
   process.stderr.write(lines.join("\n"));
 }
 
+/**
+ * Fail the boot if any static route is unreachable because an earlier param
+ * route matches it first (issue #2208). Runs after every route registration
+ * and before the process binds a port: an unreachable route table is not a
+ * runnable state, and a warning is what let `GET /entities/duplicates` ship
+ * broken for months.
+ */
+function assertRouteTableIsReachable(): void {
+  assertNoShadowedRoutes(app);
+}
+
 /** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
 function tryListen(
   port: number
 ): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
   return new Promise((resolve, reject) => {
+    assertRouteTableIsReachable();
     const server = app.listen(port, () => {
       // When `port === 0` the OS assigns an ephemeral port. We must report
       // the actually-bound port back to callers (the eval harness's
