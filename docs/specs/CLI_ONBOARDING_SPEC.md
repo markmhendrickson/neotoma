@@ -6,6 +6,21 @@ Draft. Not yet built. This specification consolidates self-serve onboarding into
 single CLI-driven wizard and defines how the shared-instance and hosted-sandbox
 entries reuse that same implementation.
 
+It is the current design of record for Neotoma onboarding. It supersedes the
+three-path model and the hosted-invite-page invitation path in the ways set out
+under Supersession below, and the earlier rendered pages describing those models
+are retained as evidence rather than as current design. Companion artifacts:
+
+| Artifact | Entity | Standing |
+| --- | --- | --- |
+| CLI wizard walkthrough (simulated) | `ent_e832136f7977b9d2b25435a7` | Current |
+| Three-path activation model | `ent_3e5e6ffaad7c247ab408f27f` | Superseded; retained for its funnel evidence |
+| Lifecycle plan mirror | `ent_5fb6cc8d835813d320a7fc06` | Superseded by the plan's own record |
+| Invitation path walkthrough | `ent_1a36128543a5d6f087429673` | Superseded for terminal invitees |
+
+The lifecycle plan `ent_044674678c217038368a533a` remains the umbrella record; this
+specification owns the self-serve and invitee flows within it.
+
 ## Scope
 
 This document covers:
@@ -66,6 +81,44 @@ This document does NOT cover:
 4. Consent screens that fix the existing undisclosed issue-submission default.
 5. A join command that renders the instance disclosure contract in the terminal.
 6. A handoff that launches the first session with detection results attached.
+
+## Supersession
+
+This specification supersedes three decisions settled 2026-08-06 on the lifecycle plan
+`ent_044674678c217038368a533a` ("Neotoma user lifecycle: pre-install to activation").
+Each is listed with what changes and what survives, because the reasoning behind them
+remains sound even where the mechanism does not.
+
+**`front_door_is_mcp_config_to_a_hosted_sandbox`** — superseded. The front door is the
+npm CLI, not a copy-pasteable prompt on `neotoma.io` that writes MCP config pointed at a
+hosted sandbox. The sandbox is not discarded: it is demoted to a wizard option and
+presented first for users with no prior commitment (`npx neotoma try`), which preserves
+that decision's core claim that conviction should precede commitment.
+
+What survives unchanged is its structural argument: because the sandbox is entered
+through MCP config, moving from sandbox to a real instance is a configuration change
+rather than a re-onboarding — the harness, the agent, and the interaction pattern all
+stay the same. That property is why the sandbox remains the recommended first option
+instead of being cut.
+
+**`invitation_starts_with_a_hosted_invite_page`** — superseded for terminal invitees
+only. `npx neotoma join <host>` replaces the hosted page for invitees who work in a
+terminal. The page remains the path for browser-only and non-technical invitees, and its
+supporting evidence still holds: a page hosted on the instance being joined returned 200
+reliably where an equivalent page on a different instance did not, and same-origin
+hosting keeps the link clicked and the server connected to identical.
+
+Joining MUST NOT be reduced to configuration by this change. Invitation is a disclosure
+decision before it is a product decision, so `join` renders the same contract the page
+carries — purpose, what the instance holds as capability and shape, what it refuses, and
+who can read what the user writes — in the terminal, and requires an explicit accept.
+
+**`invite_page_previews_the_instance`** — partially superseded. The preview requirement
+survives; only its surface changes for terminal invitees, where the disclosure contract
+renders in the terminal instead of a browser. The constraint that a preview shows
+capability and shape and never record contents applies to both surfaces, and matters
+more in the terminal case, because an invitee is unauthenticated at the moment the
+contract is displayed.
 
 ## Path model
 
