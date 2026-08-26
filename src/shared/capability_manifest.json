@@ -41,6 +41,9 @@
     "describe_entity_type": {
       "addedInVersion": "v0.16.0"
     },
+    "describe_instance_policy": {
+      "addedInVersion": "v0.22.0"
+    },
     "get_authenticated_user": {
       "addedInVersion": "v0.4.3"
     },
