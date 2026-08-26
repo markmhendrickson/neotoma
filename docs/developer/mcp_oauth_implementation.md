@@ -24,7 +24,7 @@ All endpoints are registered on the Express app without an `/api/` prefix:
 | `/mcp/oauth/status` | GET | Connection status polling |
 | `/mcp/oauth/connections` | GET | List connections |
 | `/mcp/oauth/connections/:id` | DELETE | Revoke connection |
-| `/mcp/oauth/sign-out` | GET/POST | End OAuth key-session on this device (clear cookie + server binding); idempotent when no session |
+| `/mcp/oauth/sign-out` | POST | End OAuth key-session on this device (clear cookie + server binding); idempotent when no session |
 
 ## Flow: Cursor Connect (Remote via Tunnel)
 

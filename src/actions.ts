@@ -2878,7 +2878,10 @@ app.get("/mcp/oauth/google/start", async (req, res) => {
 // never cleared anywhere, so on a shared machine a session stayed live and
 // usable for a week with no remedy but manually clearing cookies. Idempotent:
 // calling it with no session is a no-op that still renders the signed-out page.
-// Handles GET (browser navigation / an Inspector link) and POST (programmatic).
+//
+// POST only, deliberately. Sign-out mutates server-side state, and a GET that
+// does so is triggerable cross-origin by a link or an <img> tag. The Inspector
+// calls this with fetch(..., { method: "POST" }), so nothing needs the GET.
 const handleSignOut = (req: express.Request, res: express.Response) => {
   clearOAuthKeySession(req, res);
   logger.info(`[Auth] ${req.method} /mcp/oauth/sign-out — session cleared`);
@@ -2893,7 +2896,6 @@ const handleSignOut = (req: express.Request, res: express.Response) => {
     })
   );
 };
-app.get("/mcp/oauth/sign-out", handleSignOut);
 app.post("/mcp/oauth/sign-out", handleSignOut);
 
 app.get("/mcp/oauth/google/callback", async (req, res) => {
