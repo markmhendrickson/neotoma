@@ -74,6 +74,20 @@ export class OAuthKeySessionStore {
     return this.boundUsers.get(token);
   }
 
+  /**
+   * Invalidate a session immediately: drop both its expiry and its user
+   * binding. Used by sign-out and by the sign-in failure path — a rejected
+   * authentication attempt must revoke any session still on the browser, not
+   * leave it usable for the rest of its TTL. Idempotent; returns true when a
+   * session actually existed, false when the token was already absent.
+   */
+  invalidate(token: string | undefined): boolean {
+    if (!token) return false;
+    const existed = this.sessions.delete(token);
+    this.boundUsers.delete(token);
+    return existed;
+  }
+
   cleanup(nowMs: number = Date.now()): void {
     for (const [token, expiresAt] of this.sessions.entries()) {
       if (expiresAt <= nowMs) {

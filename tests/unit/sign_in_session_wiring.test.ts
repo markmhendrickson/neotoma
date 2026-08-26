@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SIGN_IN_SESSION_TTL_MIN,
   MAX_SIGN_IN_SESSION_TTL_MIN,
+  clearOAuthKeySession,
   getGoogleVerifiedUserId,
   oauthKeySessions,
   resolveSignInSessionTtlMs,
@@ -29,12 +30,16 @@ function makeReqRes(cookieHeader?: string) {
     secure: true,
     protocol: "https",
   } as never;
+  const cleared: Array<{ name: string; options: Record<string, unknown> }> = [];
   const res = {
     cookie(name: string, value: string, options: Record<string, unknown>) {
       cookies.push({ name, value, options });
     },
+    clearCookie(name: string, options: Record<string, unknown>) {
+      cleared.push({ name, options });
+    },
   } as never;
-  return { req, res, cookies };
+  return { req, res, cookies, cleared };
 }
 
 describe("sign-in session TTL wiring (#2005)", () => {
@@ -171,6 +176,53 @@ describe("sign-in session TTL wiring (#2005)", () => {
       oauthKeySessions.bindUser(token, "user-second");
 
       expect(getGoogleVerifiedUserId(makeReqRes(`${COOKIE}=${token}`).req)).toBe("user-second");
+    });
+  });
+
+  // Regression for the failed-sign-in-does-not-invalidate defect. A rejected
+  // sign-in (and an explicit sign-out) route through clearOAuthKeySession, which
+  // must both drop the server-side session+binding AND clear the browser cookie.
+  describe("clearOAuthKeySession — a failed sign-in / sign-out ends the session", () => {
+    const COOKIE = "neotoma_oauth_key_session";
+
+    it("makes a previously-bound session stop resolving its user", () => {
+      // Set up a live session bound to a user (the teammate already signed in).
+      const { req: setReq, res: setRes } = makeReqRes();
+      const token = setOAuthKeySessionCookie(setReq, setRes, 7 * 24 * 60 * 60 * 1000);
+      oauthKeySessions.bindUser(token, "teammate-user");
+      expect(getGoogleVerifiedUserId(makeReqRes(`${COOKIE}=${token}`).req)).toBe("teammate-user");
+
+      // A failed sign-in on the same browser clears the session.
+      const { req, res } = makeReqRes(`${COOKIE}=${token}`);
+      clearOAuthKeySession(req, res);
+
+      // The surviving cookie now resolves to no one — the next authorize cannot
+      // ride it back in as the teammate.
+      expect(getGoogleVerifiedUserId(makeReqRes(`${COOKIE}=${token}`).req)).toBeUndefined();
+      expect(oauthKeySessions.isValid(token)).toBe(false);
+    });
+
+    it("clears the cookie with the same path/flags it was set with, so the browser drops it", () => {
+      const { req: setReq, res: setRes } = makeReqRes();
+      const token = setOAuthKeySessionCookie(setReq, setRes, 60_000);
+
+      const { req, res, cleared } = makeReqRes(`${COOKIE}=${token}`);
+      clearOAuthKeySession(req, res);
+
+      expect(cleared).toHaveLength(1);
+      expect(cleared[0]!.name).toBe(COOKIE);
+      // Path MUST match the set path or the browser keeps the cookie.
+      expect(cleared[0]!.options.path).toBe("/mcp/oauth");
+      expect(cleared[0]!.options.httpOnly).toBe(true);
+      expect(cleared[0]!.options.sameSite).toBe("lax");
+      expect(cleared[0]!.options.secure).toBe(true);
+    });
+
+    it("is a safe no-op when there is no session cookie", () => {
+      const { req, res, cleared } = makeReqRes();
+      expect(() => clearOAuthKeySession(req, res)).not.toThrow();
+      // Still clears defensively (harmless) and does not throw.
+      expect(cleared).toHaveLength(1);
     });
   });
 });

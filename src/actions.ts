@@ -1743,6 +1743,37 @@ export function setOAuthKeySessionCookie(
   return token;
 }
 
+/**
+ * Fully end the OAuth key-session on this request: invalidate the server-side
+ * session (dropping its expiry and user binding) AND clear the browser cookie.
+ *
+ * Both halves are required. Clearing only the cookie would leave the binding
+ * live in the store for the rest of its TTL, replayable by anyone who still
+ * holds the token value; invalidating only the store would leave the browser
+ * presenting a cookie that resolves to nothing. `res.clearCookie` must use the
+ * SAME path the cookie was set with (`/mcp/oauth`) or the browser keeps it.
+ *
+ * Used by the sign-out route and by the Google sign-in failure path: a rejected
+ * authentication attempt must revoke any session still on the browser rather
+ * than silently preserve it (the failed-sign-in-does-not-invalidate defect).
+ */
+export function clearOAuthKeySession(req: express.Request, res: express.Response): void {
+  const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
+  oauthKeySessions.invalidate(token);
+  const forwardedProto =
+    ((req.headers["x-forwarded-proto"] || req.headers["X-Forwarded-Proto"]) as string | undefined)
+      ?.split(",")[0]
+      ?.trim()
+      ?.toLowerCase() || "";
+  const secure = req.secure || req.protocol === "https" || forwardedProto === "https";
+  res.clearCookie(OAUTH_KEY_SESSION_COOKIE, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/mcp/oauth",
+  });
+}
+
 /** Resolve the local-auth user_id a Google-verified session (if any) mapped to this request. */
 export function getGoogleVerifiedUserId(req: express.Request): string | undefined {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
@@ -2836,6 +2867,30 @@ app.get("/mcp/oauth/google/start", async (req, res) => {
   }
 });
 
+// Sign out: end the OAuth key-session (clear the cookie AND drop the
+// server-side session + user binding). Before this route there was no way to
+// end a session from the app — the key-session cookie has a 7-day TTL and was
+// never cleared anywhere, so on a shared machine a session stayed live and
+// usable for a week with no remedy but manually clearing cookies. Idempotent:
+// calling it with no session is a no-op that still renders the signed-out page.
+// Handles GET (browser navigation / an Inspector link) and POST (programmatic).
+const handleSignOut = (req: express.Request, res: express.Response) => {
+  clearOAuthKeySession(req, res);
+  logger.info(`[Auth] ${req.method} /mcp/oauth/sign-out — session cleared`);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  return res.status(200).send(
+    renderOauthPage({
+      title: "Signed out",
+      subtitle: "Your session on this device has ended.",
+      contentHtml: `<div class="actions">
+          <a class="btn-link secondary" href="/mcp/oauth/key-auth">Sign in again</a>
+        </div>`,
+    })
+  );
+};
+app.get("/mcp/oauth/sign-out", handleSignOut);
+app.post("/mcp/oauth/sign-out", handleSignOut);
+
 app.get("/mcp/oauth/google/callback", async (req, res) => {
   if (!isGoogleSigninEnabled()) {
     return res.status(404).send("Not found");
@@ -2846,6 +2901,14 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
   const nonceParam = (req.query.state as string | undefined)?.trim();
 
   const failWith = (subtitle: string) => {
+    // SECURITY: a rejected sign-in must INVALIDATE any session already on this
+    // browser, not silently preserve it. Without this, a prior teammate's
+    // still-valid key-session cookie (7-day TTL) survives a failed attempt, and
+    // the next /mcp/oauth/authorize passes its gate on that surviving cookie —
+    // so the person who just failed to authenticate is admitted as the previous
+    // user. Every failure branch below routes through failWith, so clearing here
+    // covers all of them. (failed-sign-in-does-not-invalidate defect.)
+    clearOAuthKeySession(req, res);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(401).send(
       renderOauthPage({
