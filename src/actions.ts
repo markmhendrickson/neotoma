@@ -1709,7 +1709,12 @@ function renderOauthPage(params: {
 </html>`;
 }
 
-function hasValidOAuthKeySession(req: express.Request): boolean {
+/**
+ * Exported so tests can drive the exact predicate `/mcp/oauth/authorize`'s
+ * `requireKeyForOauth` gate branches on, rather than a parallel `isValid`
+ * call that only approximates it (pm gate guidance on #2233 / #2227).
+ */
+export function hasValidOAuthKeySession(req: express.Request): boolean {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
   return oauthKeySessions.isValid(token);
 }

@@ -5,6 +5,7 @@ import {
   MAX_SIGN_IN_SESSION_TTL_MIN,
   clearOAuthKeySession,
   getGoogleVerifiedUserId,
+  hasValidOAuthKeySession,
   oauthKeySessions,
   resolveSignInSessionTtlMs,
   setOAuthKeySessionCookie,
@@ -223,6 +224,58 @@ describe("sign-in session TTL wiring (#2005)", () => {
       expect(() => clearOAuthKeySession(req, res)).not.toThrow();
       // Still clears defensively (harmless) and does not throw.
       expect(cleared).toHaveLength(1);
+    });
+  });
+
+  // #2227 acceptance criterion, effect-level: after sign-out, replaying the
+  // captured cookie must fail the SAME predicate `/mcp/oauth/authorize`'s
+  // `requireKeyForOauth` gate branches on (hasValidOAuthKeySession), not just
+  // a parallel isValid/getBoundUser call. Per policy
+  // fixed_means_behavior_verified_not_contract_accepted (ent_db0b7855d47012084477fb00).
+  describe("hasValidOAuthKeySession — the authorize-gate predicate observes sign-out", () => {
+    const COOKIE = "neotoma_oauth_key_session";
+
+    it("passes for a live bound session, then fails after clearOAuthKeySession replays the same cookie", () => {
+      const { req: setReq, res: setRes } = makeReqRes();
+      const token = setOAuthKeySessionCookie(setReq, setRes, 7 * 24 * 60 * 60 * 1000);
+      oauthKeySessions.bindUser(token, "teammate-user");
+
+      // Before sign-out: the authorize gate would let this cookie through.
+      expect(hasValidOAuthKeySession(makeReqRes(`${COOKIE}=${token}`).req)).toBe(true);
+
+      // Sign-out (or a failed sign-in) clears the session.
+      const { req, res } = makeReqRes(`${COOKIE}=${token}`);
+      clearOAuthKeySession(req, res);
+
+      // The AC observable: replaying the SAME captured cookie value against
+      // the authorize gate's own predicate must no longer report valid, so
+      // GET /mcp/oauth/authorize re-prompts instead of riding the old session.
+      expect(hasValidOAuthKeySession(makeReqRes(`${COOKIE}=${token}`).req)).toBe(false);
+    });
+
+    it("does not affect a second, concurrently-bound session's cookie (shared-graph sibling independence)", () => {
+      // Two independent tokens bound to the SAME user_id — the shape a
+      // NEOTOMA_SHARED_GRAPH_USER_ID instance produces when two teammates are
+      // both signed in. Signing one out must not silently revoke the other.
+      const { req: reqA, res: resA } = makeReqRes();
+      const tokenA = setOAuthKeySessionCookie(reqA, resA, 7 * 24 * 60 * 60 * 1000);
+      oauthKeySessions.bindUser(tokenA, "shared-user");
+
+      const { req: reqB, res: resB } = makeReqRes();
+      const tokenB = setOAuthKeySessionCookie(reqB, resB, 7 * 24 * 60 * 60 * 1000);
+      oauthKeySessions.bindUser(tokenB, "shared-user");
+
+      expect(hasValidOAuthKeySession(makeReqRes(`${COOKIE}=${tokenA}`).req)).toBe(true);
+      expect(hasValidOAuthKeySession(makeReqRes(`${COOKIE}=${tokenB}`).req)).toBe(true);
+
+      // Sign out session A only.
+      const { req, res } = makeReqRes(`${COOKIE}=${tokenA}`);
+      clearOAuthKeySession(req, res);
+
+      expect(hasValidOAuthKeySession(makeReqRes(`${COOKIE}=${tokenA}`).req)).toBe(false);
+      // Session B, bound to the same shared user_id, is untouched.
+      expect(hasValidOAuthKeySession(makeReqRes(`${COOKIE}=${tokenB}`).req)).toBe(true);
+      expect(getGoogleVerifiedUserId(makeReqRes(`${COOKIE}=${tokenB}`).req)).toBe("shared-user");
     });
   });
 });
