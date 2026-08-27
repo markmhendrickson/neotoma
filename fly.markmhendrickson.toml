@@ -1,0 +1,86 @@
+# Fly config for the OPERATOR's own Neotoma instance
+# (https://neotoma.markmhendrickson.com).
+#
+# WHY THIS FILE EXISTS — it encodes two per-instance values that the shared
+# fly.toml gets wrong for this app, both of which have already caused outages
+# when left to a remembered manual step:
+#
+#   1. primary_region = 'ams'. This instance's volume lives in ams; fly.toml
+#      defaults to 'lhr'. Deploying without the right region FAILS at machine
+#      creation with "New machine in group 'app' needs an unattached volume
+#      named 'data' in region 'lhr'". (`--regions ams` does NOT fix this — it
+#      filters which existing machines to deploy to. Only primary_region, or
+#      `--primary-region`, overrides fly.toml.)
+#
+#   2. [[vm]] 2 CPU / 4096MB. fly.toml declares 1gb/1cpu, which is correct for
+#      the sandbox and the client instance but far too small here: this app
+#      serves a ~20GB graph. A deploy REAPPLIES the config file's sizing, so
+#      every deploy from the shared fly.toml silently reset this machine to
+#      1GB — observed 2026-08-04 and again 2026-08-27. On 2026-08-27 the
+#      consequence was measured: `/health` kept returning 200 in ~1ms while
+#      `GET /entities?limit=1` timed out completely. A green health check with
+#      a wedged database is the worst failure signature available, because
+#      every automated check passes.
+#
+# Following the fly.sandbox.toml precedent: per-instance app name, region and
+# sizing live with the instance, not in the shared default.
+#
+# Everything NOT overridden here is inherited from fly.toml on purpose —
+# notably [deploy].release_command, [[restart]] policy = 'always', and the
+# always-on http_service settings. Keep it that way: those were each added to
+# fix a specific production failure and should not fork per instance.
+
+app = 'neotoma-markmhendrickson'
+primary_region = 'ams'
+
+[build]
+
+# Seed the schema_registry on every deploy, before the new release takes
+# traffic (issue #1968). Mirrors fly.toml; safe to re-run.
+[deploy]
+  release_command = "node dist/seed_schemas_entry.js"
+
+[env]
+  NODE_ENV = "production"
+  NEOTOMA_ENV = "production"
+  # Must match internal_port (Fly routes to this port on the machine)
+  HTTP_PORT = "3180"
+  NEOTOMA_HTTP_PORT = "3180"
+
+[http_service]
+  internal_port = 3180
+  force_https = true
+  # Always-on. MCP-over-HTTP transport sessions live in process memory, so any
+  # machine stop/start silently invalidates every live session — see the fuller
+  # explanation in fly.toml. This matters more here than anywhere else: this is
+  # the instance every session and daemon actually writes to.
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  # Service check — governs proxy ROUTING only, it does not restart a stopped
+  # machine. Restart behavior is the [[restart]] block below.
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '10s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/health'
+
+# Restart on ANY process end, including a clean exit — Fly's default
+# `on-failure` ignores exit code 0, and this server does exit 0 periodically
+# with no error (neotoma#2094). See fly.toml for the full rationale.
+[[restart]]
+  policy = 'always'
+
+# 2 CPU / 4096MB — see note 2 in the header. Do NOT reduce this to match
+# fly.toml: the 1GB default wedges this instance's database.
+[[vm]]
+  memory = '4096mb'
+  cpu_kind = 'shared'
+  cpus = 2
+
+[[mounts]]
+  source = "data"
+  destination = "/app/data"
