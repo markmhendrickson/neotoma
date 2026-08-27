@@ -9,9 +9,11 @@ Code prints it in verbose mode but the turn still proceeds.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import uuid
@@ -188,6 +190,233 @@ def record_conversation_turn(
     except Exception as exc:
         log("debug", f"record_conversation_turn failed: {exc}")
         return None
+
+
+# ---------------------------------------------------------------------------
+# agent_session + session_transcript capture
+#
+# MCP owns structured turn storage (conversation / conversation_message). The
+# lifecycle hooks own the *runtime/resume* record that MCP cannot see: which
+# harness produced the session, its native resume id, the git env to
+# reconstruct, and the raw transcript artifact. These two helpers write the
+# `agent_session` and `session_transcript` entity types added in the
+# agent-session-capture work. Both are best-effort and identity-stable so
+# repeated calls across SessionStart / Stop coalesce rather than duplicate.
+# ---------------------------------------------------------------------------
+
+# Harness value MUST be the hyphenated Neotoma convention; it is part of the
+# agent_session joint identity ["harness","native_session_id"], so an
+# underscore variant would key a different (wrong) entity.
+HARNESS = "claude-code"
+
+
+def git_context(cwd: str | None = None) -> dict[str, Any]:
+    """Best-effort git repo/branch/sha for the working directory.
+
+    Returns only the keys we could resolve; never raises. Used to populate
+    the agent_session git-env fields needed to reconstruct a session on
+    another machine.
+    """
+    root = cwd or str(Path.cwd())
+
+    def _git(args: list[str]) -> str | None:
+        try:
+            res = subprocess.run(  # noqa: S603
+                ["git", *args],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except Exception:
+            return None
+        if res.returncode != 0:
+            return None
+        value = res.stdout.strip()
+        return value or None
+
+    out: dict[str, Any] = {}
+    toplevel = _git(["rev-parse", "--show-toplevel"])
+    if toplevel:
+        out["repo"] = Path(toplevel).name
+        out["worktree_path"] = toplevel
+    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"])
+    if branch and branch != "HEAD":
+        out["branch"] = branch
+    sha = _git(["rev-parse", "HEAD"])
+    if sha:
+        out["git_head_sha"] = sha
+    remote = _git(["config", "--get", "remote.origin.url"])
+    if remote:
+        out["repo_remote_url"] = remote
+    return out
+
+
+def build_agent_session_entity(
+    *,
+    native_session_id: str,
+    kind: str = "interactive",
+    model: str | None = None,
+    created_at: str | None = None,
+    last_activity_at: str | None = None,
+    message_count: int | None = None,
+    cwd: str | None = None,
+    git: dict[str, Any] | None = None,
+    trigger_kind: str | None = None,
+    parent_session_id: str | None = None,
+    resume_command: str | None = None,
+    hook_event: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build an agent_session entity payload (pure; no network)."""
+    entity: dict[str, Any] = {
+        "entity_type": "agent_session",
+        "harness": HARNESS,
+        "native_session_id": native_session_id,
+        **harness_provenance({"hook_event": hook_event} if hook_event else None),
+    }
+    if kind:
+        entity["kind"] = kind
+    if model:
+        entity["model"] = model
+    if created_at:
+        entity["created_at"] = created_at
+    if last_activity_at:
+        entity["last_activity_at"] = last_activity_at
+    if message_count is not None:
+        entity["message_count"] = message_count
+    if cwd:
+        entity["cwd"] = cwd
+    for key in ("repo", "branch", "git_head_sha", "worktree_path", "repo_remote_url"):
+        if git and git.get(key):
+            entity[key] = git[key]
+    if trigger_kind:
+        entity["trigger_kind"] = trigger_kind
+    if parent_session_id:
+        entity["parent_session_id"] = parent_session_id
+    if resume_command:
+        entity["resume_command"] = resume_command
+    if extra:
+        entity.update(extra)
+    return entity
+
+
+def record_agent_session(
+    client: Any | None,
+    *,
+    native_session_id: str,
+    hook_event: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any] | None:
+    """Upsert the agent_session entity for this session. Best-effort."""
+    if client is None or not native_session_id:
+        return None
+    entity = build_agent_session_entity(
+        native_session_id=native_session_id, hook_event=hook_event, **kwargs
+    )
+    idempotency_key = f"agent-session-{HARNESS}-{native_session_id}-{hook_event or 'update'}"
+    try:
+        client.store({"entities": [entity], "idempotency_key": idempotency_key})
+    except Exception as exc:
+        log("debug", f"record_agent_session failed: {exc}")
+        return None
+    return entity
+
+
+def hash_transcript_file(transcript_path: str) -> tuple[str, int, int] | None:
+    """Return (sha256_hex, byte_size, line_count) for a transcript file.
+
+    Streams the file so large JSONL transcripts do not load into memory.
+    Returns None if the path is missing or unreadable.
+    """
+    try:
+        path = Path(transcript_path)
+        if not path.is_file():
+            return None
+        digest = hashlib.sha256()
+        size = 0
+        lines = 0
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                digest.update(chunk)
+                size += len(chunk)
+                lines += chunk.count(b"\n")
+        return digest.hexdigest(), size, lines
+    except Exception as exc:
+        log("debug", f"hash_transcript_file failed: {exc}")
+        return None
+
+
+def build_session_transcript_entity(
+    *,
+    content_hash: str,
+    agent_session_id: str | None = None,
+    file_size: int | None = None,
+    turn_count: int | None = None,
+    transcript_kind: str = "main",
+    fmt: str = "claude_code_jsonl",
+    mime_type: str = "application/jsonl",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a session_transcript index entity (pure; no network).
+
+    Content-addressed by ``content_hash`` (identity), so re-recording an
+    unchanged transcript coalesces. This writes the index only; uploading the
+    transcript bytes to the sources bucket is handled out-of-band (backfill /
+    future enhancement), hence no ``source_id`` / ``storage_url`` here.
+    """
+    entity: dict[str, Any] = {
+        "entity_type": "session_transcript",
+        "content_hash": content_hash,
+        "harness": HARNESS,
+        "format": fmt,
+        "mime_type": mime_type,
+        "transcript_kind": transcript_kind,
+        **harness_provenance(),
+    }
+    if agent_session_id:
+        entity["agent_session_id"] = agent_session_id
+    if file_size is not None:
+        entity["file_size"] = file_size
+    if turn_count is not None:
+        entity["turn_count"] = turn_count
+    if extra:
+        entity.update(extra)
+    return entity
+
+
+def record_session_transcript(
+    client: Any | None,
+    *,
+    transcript_path: str | None,
+    agent_session_id: str | None = None,
+    transcript_kind: str = "main",
+) -> dict[str, Any] | None:
+    """Hash a transcript file and upsert its session_transcript index entity.
+
+    Best-effort: a missing path, unreadable file, or transport error is logged
+    and swallowed so the agent turn is never blocked.
+    """
+    if client is None or not transcript_path:
+        return None
+    hashed = hash_transcript_file(transcript_path)
+    if hashed is None:
+        return None
+    content_hash, file_size, line_count = hashed
+    entity = build_session_transcript_entity(
+        content_hash=content_hash,
+        agent_session_id=agent_session_id,
+        file_size=file_size,
+        turn_count=line_count or None,
+        transcript_kind=transcript_kind,
+    )
+    idempotency_key = f"session-transcript-{content_hash}"
+    try:
+        client.store({"entities": [entity], "idempotency_key": idempotency_key})
+    except Exception as exc:
+        log("debug", f"record_session_transcript failed: {exc}")
+        return None
+    return entity
 
 
 # ---------------------------------------------------------------------------
