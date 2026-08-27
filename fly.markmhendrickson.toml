@@ -12,15 +12,28 @@
 #      filters which existing machines to deploy to. Only primary_region, or
 #      `--primary-region`, overrides fly.toml.)
 #
-#   2. [[vm]] 2 CPU / 4096MB. fly.toml declares 1gb/1cpu, which is correct for
-#      the sandbox and the client instance but far too small here: this app
-#      serves a ~20GB graph. A deploy REAPPLIES the config file's sizing, so
-#      every deploy from the shared fly.toml silently reset this machine to
-#      1GB — observed 2026-08-04 and again 2026-08-27. On 2026-08-27 the
-#      consequence was measured: `/health` kept returning 200 in ~1ms while
-#      `GET /entities?limit=1` timed out completely. A green health check with
-#      a wedged database is the worst failure signature available, because
-#      every automated check passes.
+#   2. [[vm]] 2 PERFORMANCE CPUs / 4096MB. fly.toml declares 1gb/1cpu shared,
+#      which is correct for the sandbox and the client instance but wrong here
+#      on both axes. A deploy REAPPLIES the config file's [[vm]], so every
+#      deploy from the shared fly.toml silently reset this machine — observed
+#      2026-08-04 and again 2026-08-27.
+#
+#      cpu_kind = 'performance' is the load-bearing part. On 2026-08-27 this
+#      instance was effectively unusable: `/health` returned 200 while
+#      `GET /entities?limit=1` timed out at 90s. The cause was measured as
+#      HYPERVISOR CPU STEAL of 90-93% (/proc/stat field 8) — the guest was
+#      getting ~5-7% of the CPU it thought it had. Memory was NOT the
+#      constraint (750MB used of 3.8GB) and the app was NOT CPU-bound (~17%
+#      of one core). shared-cpu machines are BURSTABLE: sustained demand
+#      drains the CPU balance and the machine is then throttled hard. This
+#      app holds a ~20GB graph written to continuously by a daemon swarm and
+#      every Claude Code session — not a burstable workload. Switching to
+#      'performance' took steal 90-93% -> 0.1-0.2%, load 4.1 -> 0.53, and
+#      restored the read path from a 90s timeout to HTTP 200.
+#
+#      A green health check with a wedged database is the worst failure
+#      signature available, because every automated check passes. That is why
+#      the deploy workflow verifies an authenticated READ, not just /health.
 #
 # Following the fly.sandbox.toml precedent: per-instance app name, region and
 # sizing live with the instance, not in the shared default.
@@ -74,11 +87,11 @@ primary_region = 'ams'
 [[restart]]
   policy = 'always'
 
-# 2 CPU / 4096MB — see note 2 in the header. Do NOT reduce this to match
-# fly.toml: the 1GB default wedges this instance's database.
+# 2 performance CPUs / 4096MB — see note 2 in the header. Do NOT reduce this to
+# match fly.toml, and do NOT change cpu_kind back to 'shared'.
 [[vm]]
   memory = '4096mb'
-  cpu_kind = 'shared'
+  cpu_kind = 'performance'
   cpus = 2
 
 [[mounts]]
