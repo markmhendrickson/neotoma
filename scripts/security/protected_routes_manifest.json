@@ -1067,6 +1067,25 @@
       ]
     },
     {
+      "path": "/ready",
+      "method": "GET",
+      "operation_id": "readinessCheck",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ]
+    },
+    {
       "path": "/recent_conversations",
       "method": "GET",
       "operation_id": "getRecentConversations",

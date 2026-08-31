@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **583**
-- Backend and repo Vitest files: **548**
+- Total automated test files: **585**
+- Backend and repo Vitest files: **550**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 162 |
+| Vitest unit tests | 163 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 165 |
+| Vitest integration tests | 166 |
 | Vitest CLI tests | 77 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 7 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (162):**
+**Files (163):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -228,6 +228,7 @@ flowchart TD
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/pull_request_schema.test.ts`
+- `tests/unit/readiness_probe.test.ts`
 - `tests/unit/recover_json_array_string.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
 - `tests/unit/relationship_reducer.test.ts`
@@ -401,7 +402,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (165):**
+**Files (166):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -455,6 +456,7 @@ flowchart TD
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
+- `tests/integration/health_readiness_split.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/http_related_entities_multihop.test.ts`
 - `tests/integration/http_store_reference_source.test.ts`

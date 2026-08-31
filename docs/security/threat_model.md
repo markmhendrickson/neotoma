@@ -48,7 +48,7 @@ A reverse proxy or tunnel terminates TLS and forwards traffic over loopback. Cod
 
 ### 4. Unauthenticated public route (G2, G3, G5)
 
-A new Express route is registered without `auth.requireUser()` / `assertGuestWriteAllowed()` and is not in the explicit allow-list (`/health`, `/version`, `/openapi.yaml`, `/server-info`, `/.well-known/**`, `/mcp/oauth/**`, `/auth/dev-signin`, plus the runtime-only sandbox-session and favicon routes).
+A new Express route is registered without `auth.requireUser()` / `assertGuestWriteAllowed()` and is not in the explicit allow-list (`/health`, `/ready`, `/version`, `/openapi.yaml`, `/server-info`, `/.well-known/**`, `/mcp/oauth/**`, `/auth/dev-signin`, plus the runtime-only sandbox-session and favicon routes).
 
 **Gates:**
 - G2 rule `unauth-public-route` warns on every `app.METHOD(...)` registration without an obvious auth wrapper; reviewers reconcile against the manifest.

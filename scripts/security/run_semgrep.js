@@ -140,9 +140,10 @@ const RULES = [
     test: (text) => {
       const matches = [];
       // Match top-level app.METHOD( or router.METHOD(. Skip when the same line
-      // contains requireUser/auth.requireUser/assertGuestWriteAllowed/sandbox-/oauth-/health/version/openapi/.well-known/server-info.
+      // contains requireUser/auth.requireUser/assertGuestWriteAllowed/sandbox-/oauth-/health/ready/version/openapi/.well-known/server-info.
       const allowList = [
         "/health",
+        "/ready",
         "/version",
         "/openapi.yaml",
         "/server-info",
