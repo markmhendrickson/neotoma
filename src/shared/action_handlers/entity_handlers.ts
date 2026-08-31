@@ -685,6 +685,54 @@ async function countVisibleEntities(params: {
     return query;
   };
 
+  // ateles#576: count with an indexed aggregate over entity_snapshots instead
+  // of re-deriving deletion state from the observation log on every request.
+  //
+  // The previous implementation loaded every matching entity id, then walked
+  // them in chunks of 500, and for each chunk selected `entity_id,
+  // source_priority, observed_at, fields` for EVERY observation of those
+  // entities — sorting each chunk in a temp b-tree — only to keep the top row
+  // per entity and discard the rest. At ~166k entities that is ~334 sequential
+  // statements reading (and JSON-parsing) essentially the whole observations
+  // table, on every request, no matter how small the requested `limit`. That is
+  // the per-request overhead behind the reported 25-81s `limit: 1` queries, and
+  // it explains why the event loop stayed free while requests hung: the process
+  // was waiting on DB I/O, not computing.
+  //
+  // Two invariants make the snapshot table sufficient on its own:
+  //   - Deleted: a soft-deleted entity has NO entity_snapshots row (the reducer
+  //     returns null for it and the writers drop the row; see
+  //     getDeletedEntityIds in services/entity_queries.ts).
+  //   - Merged:  `mergeEntities` deletes the merged-away entity's snapshot row
+  //     in the SAME transaction that sets `merged_to_entity_id`
+  //     (services/entity_merge.ts steps 7 and 9).
+  // So counting snapshot rows already excludes both, and the default listing —
+  // what agents and apps actually issue — is a single COUNT(*).
+  const countLiveSnapshots = () => {
+    let q = db.from("entity_snapshots").select("entity_id", { count: "exact", head: true });
+    q = q.eq("user_id", userId);
+    q = applyTypeFilter(q, "entity_type");
+    return q;
+  };
+
+  // `includeMerged: true` asks for merged entities to be counted back IN, which
+  // the snapshot table cannot answer (those rows are gone). `updated_at` /
+  // `created_at` live on `entities`. Either case takes the filtered path below,
+  // which stays bounded by the filter rather than by the corpus.
+  const needsEntityTableFilters = Boolean(updatedSince) || Boolean(createdSince) || includeMerged;
+  const needsSnapshotJsonFilters =
+    published !== undefined || Boolean(publishedAfter) || Boolean(publishedBefore);
+
+  if (!needsEntityTableFilters && !needsSnapshotJsonFilters) {
+    const { count, error } = await countLiveSnapshots();
+    if (error) {
+      throw new Error(`Failed to count visible entities: ${error.message}`);
+    }
+    return count ?? 0;
+  }
+
+  // Filtered path: resolve candidate ids from `entities` (indexed, no
+  // observation reads), then keep those that still have a snapshot row.
   let entityIdQuery = db.from("entities").select("id").eq("user_id", userId);
   entityIdQuery = applyTypeFilter(entityIdQuery, "entity_type");
   if (!includeMerged) {
@@ -696,7 +744,7 @@ async function countVisibleEntities(params: {
   if (createdSince) {
     entityIdQuery = entityIdQuery.gte("created_at", createdSince);
   }
-  if (published !== undefined || publishedAfter || publishedBefore) {
+  if (needsSnapshotJsonFilters) {
     let snapshotQuery = db.from("entity_snapshots").select("entity_id").eq("user_id", userId);
     snapshotQuery = applyTypeFilter(snapshotQuery, "entity_type");
     if (published !== undefined) {
@@ -729,40 +777,26 @@ async function countVisibleEntities(params: {
     return 0;
   }
 
-  const entityIds = entityRows.map((row: { id: string }) => row.id);
-  const deletedEntityIds = new Set<string>();
+  const candidateIds = entityRows.map((row: { id: string }) => row.id);
+
+  // Keep the candidates that still have a snapshot row (i.e. are not deleted),
+  // in bounded chunks — a bound parameter list, not a scan.
+  let liveCount = 0;
   const chunkSize = 500;
-
-  for (let i = 0; i < entityIds.length; i += chunkSize) {
-    const chunk = entityIds.slice(i, i + chunkSize);
-    const { data: deletionObservations, error: observationsError } = await db
-      .from("observations")
-      .select("entity_id, source_priority, observed_at, fields")
-      .in("entity_id", chunk)
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false });
-
-    if (observationsError) {
-      throw new Error(
-        `Failed to query deletion observations for count: ${observationsError.message}`
-      );
+  for (let i = 0; i < candidateIds.length; i += chunkSize) {
+    const chunk = candidateIds.slice(i, i + chunkSize);
+    const { count, error } = await db
+      .from("entity_snapshots")
+      .select("entity_id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .in("entity_id", chunk);
+    if (error) {
+      throw new Error(`Failed to count live entities: ${error.message}`);
     }
-
-    const highestByEntity = new Map<string, any>();
-    for (const obs of deletionObservations || []) {
-      if (!highestByEntity.has(obs.entity_id)) {
-        highestByEntity.set(obs.entity_id, obs);
-      }
-    }
-
-    for (const [entityId, obs] of highestByEntity.entries()) {
-      if (obs.fields?._deleted === true) {
-        deletedEntityIds.add(entityId);
-      }
-    }
+    liveCount += count ?? 0;
   }
 
-  return entityIds.length - deletedEntityIds.size;
+  return liveCount;
 }
 
 async function queryEntitiesFromLexicalSearch(params: {

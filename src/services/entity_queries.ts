@@ -198,27 +198,37 @@ async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
     return deletedEntityIds;
   }
 
-  const { data: deletionObservations } = await db
-    .from("observations")
-    .select("entity_id, source_priority, observed_at, fields")
-    .in("entity_id", entityIds)
-    .order("source_priority", { ascending: false })
-    .order("observed_at", { ascending: false });
+  // ateles#576: resolve deletion from the PRESENCE of an entity_snapshots row
+  // rather than by re-deriving it from the observation log.
+  //
+  // A soft-deleted entity has no snapshot row. `ObservationReducer.computeSnapshot`
+  // returns null once the highest-priority observation carries `_deleted: true`,
+  // and the snapshot writers delete the row when the reducer returns null — the
+  // SQLite adapter does this automatically on every observation insert
+  // (`recomputeEntitySnapshot`), so a deletion or restoration observation
+  // re-materializes liveness as a side effect of being written. That makes
+  // "has a snapshot row" the system's existing, self-maintaining record of
+  // liveness; this function now simply reads it.
+  //
+  // The previous implementation instead selected `entity_id, source_priority,
+  // observed_at, fields` for EVERY observation of every id in the chunk, sorted
+  // the whole result in a temp b-tree (the ORDER BY spans entities, so the
+  // per-entity index cannot serve it), then kept only the top row per entity
+  // and discarded the rest. The paginated scan calls this once per chunk, so a
+  // single request re-read large parts of the observations table — including
+  // its `fields` JSON blobs — to recompute something already materialized.
+  const { data: rows, error } = await db
+    .from("entity_snapshots")
+    .select("entity_id")
+    .in("entity_id", entityIds);
 
-  if (!deletionObservations || deletionObservations.length === 0) {
-    return deletedEntityIds;
+  if (error) {
+    throw new Error(`Failed to resolve deleted entities: ${error.message}`);
   }
 
-  // Result set is already sorted by priority and recency.
-  const highestByEntity = new Map<string, any>();
-  for (const obs of deletionObservations) {
-    if (!highestByEntity.has(obs.entity_id)) {
-      highestByEntity.set(obs.entity_id, obs);
-    }
-  }
-
-  for (const [entityId, obs] of highestByEntity.entries()) {
-    if (obs.fields?._deleted === true) {
+  const alive = new Set<string>((rows || []).map((row: { entity_id: string }) => row.entity_id));
+  for (const entityId of entityIds) {
+    if (!alive.has(entityId)) {
       deletedEntityIds.add(entityId);
     }
   }
