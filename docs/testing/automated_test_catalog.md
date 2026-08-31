@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **583**
-- Backend and repo Vitest files: **548**
+- Total automated test files: **585**
+- Backend and repo Vitest files: **550**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 162 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 165 |
+| Vitest integration tests | 166 |
 | Vitest CLI tests | 77 |
 | Vitest contract tests | 15 |
 | Vitest security tests | 7 |
@@ -84,7 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
-| Tests Performance | 1 |
+| Tests Performance | 2 |
 | Tests Scripts | 3 |
 
 ## Primary validation commands
@@ -401,7 +401,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (165):**
+**Files (166):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -444,6 +444,7 @@ flowchart TD
 - `tests/integration/entity_queries_cursor.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
+- `tests/integration/entity_query_deleted_count.test.ts`
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`
@@ -793,7 +794,8 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/performance`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (1):**
+**Files (2):**
+- `tests/performance/entity_query_count.bench.test.ts`
 - `tests/performance/graph_traversal.bench.test.ts`
 
 ### Tests Scripts
