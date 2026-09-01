@@ -72,12 +72,21 @@
   # [http_service] is a *service* check: it decides whether the Fly proxy
   # sends traffic to a machine. It does NOT restart one. Restart behavior is
   # the [[restart]] block below.
+  #
+  # `/ready`, not `/health` — see the long note in fly.toml. `/health` returns
+  # 200 during a total read outage because it never touches the database, and
+  # a check pointed at it makes an outage invisible rather than detected.
+  #
+  # 30s timeout, not 10s: a loaded operator instance was measured answering in
+  # 13-24s on 2026-09-01 while serving correctly. With min_machines_running = 1
+  # a check that flaps on a slow-but-working server takes the only machine out
+  # of rotation, which is a worse outcome than the slowness it detected.
   [[http_service.checks]]
-    interval = '15s'
-    timeout = '10s'
-    grace_period = '30s'
+    interval = '30s'
+    timeout = '30s'
+    grace_period = '120s'
     method = 'GET'
-    path = '/health'
+    path = '/ready'
 
 [[mounts]]
   source = "data"
@@ -97,6 +106,16 @@
 [[restart]]
   policy = 'always'
 
+# VERIFY BEFORE DEPLOYING. This is reapplied verbatim and will SHRINK a machine
+# that was scaled up by hand, with no warning in the deploy output:
+#
+#   flyctl machine list --app <app> --json | jq '.[].config.guest'
+#
+# One operator instance was found on 2026-09-01 running performance/2 CPU/8GB,
+# having been scaled up after repeated exit-134 (V8 heap OOM) aborts. Deploying
+# this file over it would have reverted it to shared/4GB and reintroduced the
+# crash loop. If your instance runs a larger guest, raise these values in a
+# per-instance config rather than deploying this one.
 [[vm]]
   memory = '4gb'
   cpu_kind = 'shared'

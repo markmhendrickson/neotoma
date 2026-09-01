@@ -67,12 +67,30 @@ primary_region = 'lhr'
   # comment claimed it restarted the machine "regardless of how it stopped" —
   # that was wrong, and it made the deployment look self-healing when it was
   # not. Restart behavior is the [restart] block below.
+  #
+  # The path is `/ready`, NOT `/health`. `/health` reads package.json off disk
+  # and never touches the database, so it answers 200 throughout a total read
+  # outage — measured 2026-08-31, `/health` 200 in 0.89s while every query
+  # timed out at 45s (ateles#577, ateles#635). A check pointed at it converts
+  # an outage into a silent one. `/ready` runs a bounded real SELECT.
+  #
+  # Timeouts are sized for a slow-but-alive server, not a fast one. On
+  # 2026-09-01 a loaded production instance answered /health in 13-24s while
+  # serving correctly; a 10s timeout would have pulled a working machine out of
+  # rotation, and with min_machines_running = 1 that is a self-inflicted
+  # outage. 30s tolerates that, and /ready's own probe bound (20s, see
+  # NEOTOMA_READY_DB_TIMEOUT_MS) returns an explicit 503 before it — a wedged
+  # instance that answers "not ready" is diagnosable; one that answers nothing
+  # is indistinguishable from a network fault.
+  #
+  # grace_period 120s: the [deploy] release_command seeds schemas and
+  # migrations run at boot, both before the server listens.
   [[http_service.checks]]
-    interval = '15s'
-    timeout = '10s'
-    grace_period = '30s'
+    interval = '30s'
+    timeout = '30s'
+    grace_period = '120s'
     method = 'GET'
-    path = '/health'
+    path = '/ready'
 
 # Restart the machine whenever the process ends, INCLUDING a clean exit.
 #
@@ -92,10 +110,27 @@ primary_region = 'lhr'
 [[restart]]
   policy = 'always'
 
+# SIZING IS REAPPLIED ON EVERY DEPLOY. Whatever is declared here overwrites the
+# running machine's guest config — `flyctl deploy` does not merge, and it prints
+# no warning when it shrinks a machine.
+#
+# 1GB/shared-cpu-1x was the wrong default to leave here. Node's default heap
+# ceiling is ~2GB, so a 1GB machine puts the V8 limit above available RAM
+# (neotoma#2094), and this file has silently reverted a manually-scaled
+# instance more than once — 2026-08-04 and again 2026-09-01, the second time
+# taking the operator's instance from slow to unreachable for ~30 minutes.
+#
+# 2GB/shared-cpu-2x is a floor that will not OOM a small instance on the first
+# real query, not a recommendation for a loaded one. An instance carrying real
+# traffic should deploy from its own config: fly.operator.toml (4GB) for an
+# operator instance, or a per-instance file. Check what the machine is running
+# before deploying this file over it:
+#
+#   flyctl machine list --app <app> --json | jq '.[].config.guest'
 [[vm]]
-  memory = '1gb'
+  memory = '2gb'
   cpu_kind = 'shared'
-  cpus = 1
+  cpus = 2
 
 [[mounts]]
   source = "data"
