@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { isServerProcess } from "./process_role_state.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { existsSync, readFileSync } from "fs";
@@ -154,31 +155,80 @@ function discoverTunnelUrl(httpPort: number, allowAutoDiscovery: boolean): strin
 }
 
 /**
- * DB backend selection (concurrent-backend plan). `sqlite` (default) keeps the
- * zero-config synchronous better-sqlite3/node:sqlite path. `libsql` opts into
- * the concurrent backend — statements run off the Node event loop, so slow
- * queries cannot freeze the whole server. For local `file:` URLs that is
- * delivered by worker threads hosting the synchronous libSQL driver (a writer
- * plus a read-only reader pool under WAL — every local Node binding is
+ * DB backend selection (concurrent-backend plan), and which backend a process
+ * gets when NEOTOMA_DB_BACKEND is unset.
+ *
+ * `sqlite` keeps the zero-config synchronous better-sqlite3/node:sqlite path.
+ * `libsql` opts into the concurrent backend: statements run off the Node event
+ * loop, so slow queries cannot freeze the whole server. For local `file:` URLs
+ * that is delivered by worker threads hosting the synchronous libSQL driver (a
+ * writer plus a read-only reader pool under WAL — every local Node binding is
  * synchronous on the calling thread, so "async" local libSQL alone would not
  * fix blocking); remote URLs (sqld/Turso) use the genuinely-async
- * @libsql/client. The trigger for opting in is genuine multi-writer/hosted
- * contention (agent-heavy or shared instances), not data size. Same file
- * format and SQL dialect; a `file:` URL derived from sqlitePath is used
- * unless NEOTOMA_DB_URL points at a remote instance.
+ * @libsql/client. Same file format and SQL dialect; a `file:` URL derived from
+ * sqlitePath is used unless NEOTOMA_DB_URL points at a remote instance.
+ *
+ * The `sqlite` backend executes every statement synchronously on the calling
+ * thread. In a one-shot CLI process that is the right trade: no worker spawn,
+ * no extra file handles, and nothing else is waiting on the event loop anyway.
+ *
+ * In a long-lived HTTP server it is a defect. Every request shares one event
+ * loop, so a single slow query freezes *every* concurrent caller for its full
+ * duration — including `GET /health`, which touches no database at all. That
+ * is neotoma#2280: a hosted instance served the DB-free health endpoint in
+ * 9.4s measured from inside its own VM, with 6GB free and ~42% idle CPU.
+ *
+ * The worker-hosted backend that fixes this landed in #1944 and has been
+ * available ever since — but nothing ever selected it. It was opt-in via an
+ * env var that no Dockerfile, fly config, or start script sets, so every
+ * server deployment silently kept the blocking driver. An opt-in fix that no
+ * deployment opts into is not a fix, so servers now default to `libsql`.
+ *
+ * `NEOTOMA_DB_BACKEND` still wins when set explicitly, in either direction.
+ * A process declares itself a server by importing `./process_role.js` (see
+ * src/actions.ts); everything else is treated as CLI.
  */
-const dbBackend = (process.env.NEOTOMA_DB_BACKEND || "sqlite").toLowerCase();
-if (dbBackend !== "sqlite" && dbBackend !== "libsql") {
+export function defaultDbBackend(isServer: boolean): "sqlite" | "libsql" {
+  return isServer ? "libsql" : "sqlite";
+}
+
+/**
+ * Validate an explicit NEOTOMA_DB_BACKEND at module load, as before — a bad
+ * value is a startup error, not a lazy surprise at first query.
+ */
+const explicitDbBackend = (process.env.NEOTOMA_DB_BACKEND || "").toLowerCase();
+if (explicitDbBackend && explicitDbBackend !== "sqlite" && explicitDbBackend !== "libsql") {
   throw new Error(
     `Invalid NEOTOMA_DB_BACKEND "${process.env.NEOTOMA_DB_BACKEND}": expected "sqlite" or "libsql"`
   );
+}
+
+/**
+ * Resolve the backend for this process. Read lazily (see the `dbBackend` getter
+ * on `config`) rather than captured at module load, so an entrypoint that
+ * imports config transitively before declaring itself a server still gets the
+ * server default. Both call sites live in openDb(), which runs at first DB use
+ * — long after entrypoint imports settle.
+ */
+function resolveDbBackend(): "sqlite" | "libsql" {
+  if (explicitDbBackend === "sqlite" || explicitDbBackend === "libsql") {
+    return explicitDbBackend;
+  }
+  return defaultDbBackend(isServerProcess());
 }
 
 export const config = {
   projectRoot,
   storageBackend,
   dataDir,
-  dbBackend: dbBackend as "sqlite" | "libsql",
+  /**
+   * DB driver for this process. A getter, not a captured value — see
+   * resolveDbBackend(). NEOTOMA_DB_BACKEND wins when set; otherwise servers
+   * get the non-blocking backend and CLI processes the synchronous one.
+   */
+  get dbBackend(): "sqlite" | "libsql" {
+    return resolveDbBackend();
+  },
   /** Connection URL for non-file backends (e.g. libsql://…, http(s)://… for sqld/Turso). */
   dbUrl: process.env.NEOTOMA_DB_URL || "",
   /** Auth token for remote libSQL (sqld/Turso) connections. */

@@ -1,3 +1,7 @@
+// MUST be first: declares this process a long-lived server so config.ts picks
+// the non-blocking DB backend. Imports are evaluated in source order, so any
+// import above this one that reaches config.js would lock in the CLI default.
+import "./process_role.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";

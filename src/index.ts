@@ -1,6 +1,10 @@
 // Disable HTTP server autostart for MCP mode
 process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART = "1";
 
+// Long-lived MCP stdio server: same event-loop exposure as the HTTP server, so
+// it takes the non-blocking DB backend too. Must precede any import reaching
+// config.js (see src/process_role.ts).
+import "./process_role.js";
 import { initDatabase } from "./db.js";
 import { NeotomaServer } from "./server.js";
 import { initServerKeys } from "./services/encryption_service.js";
