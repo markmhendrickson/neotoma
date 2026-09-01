@@ -1,0 +1,395 @@
+name: Deploy operator instance
+
+# Deploys merged `main` to the OPERATOR'S OWN Neotoma instance automatically.
+#
+# THE BOUNDARY THIS ENCODES: releases are human-gated; deploying merged main to
+# the operator's personal instance is not. A release is a public artifact and
+# stays a deliberate act. The operator's own instance tracking his own merged
+# work is not a release and should not wait on one.
+#
+# WHY THIS EXISTS: on 2026-09-01 the personal instance was found serving
+# git_sha 4807d596 from 2026-08-27 — five days of merged work undeployed,
+# including #2267, which fixes the slow entity reads the operator was
+# experiencing at that moment. Two gaps combined:
+#   1. deploy-client-instance.yml triggers only on `release: published`, and
+#      releases are (correctly) infrequent and human-gated.
+#   2. That workflow does not target this instance at all — CLIENT_INSTANCE_APP
+#      resolves to a CLIENT app. A workflow_dispatch on main (run 33501582536)
+#      deployed the client instance and left the operator's untouched.
+# See #2277.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# THIS REPO IS PUBLIC. No client-identifying value may appear in this file.
+# ────────────────────────────────────────────────────────────────────────────
+# This workflow deploys the OPERATOR'S OWN instance, whose hostname is already
+# public in .env.example. It must never be pointed at a client app: the app
+# name comes from OPERATOR_INSTANCE_APP, which is a DIFFERENT secret from
+# CLIENT_INSTANCE_APP, so neither can silently deploy the other.
+#
+# DO NOT ADD `release: published` HERE, and do not modify
+# deploy-client-instance.yml to add a push trigger. The two paths are separate
+# on purpose: client instances are release-gated, this one tracks main.
+#
+# Required repository secrets:
+#   OPERATOR_INSTANCE_APP     Fly app name for the operator's instance
+#   OPERATOR_INSTANCE_HOST    hostname to verify (no scheme)
+#   OPERATOR_INSTANCE_TOKEN   bearer token for the post-deploy READ PROBE.
+#                             Read-only use; the probe requests limit=1.
+#   FLY_API_TOKEN             Fly deploy token for the operator instance's org
+#                             (override with OPERATOR_INSTANCE_FLY_TOKEN if the
+#                             app ever moves to a different Fly org).
+#
+# The job SKIPS cleanly (does not fail) when OPERATOR_INSTANCE_APP is unset, so
+# forks and contributors without the secret are unaffected.
+
+on:
+  push:
+    branches: [main]
+    # Docs-only and marketing-site commits do not change the served build.
+    # Skipping them avoids pointless redeploys of a stateful, always-on machine.
+    paths-ignore:
+      - "docs/**"
+      - "site/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (defaults to the workflow ref)"
+        required: false
+        type: string
+      skip_ci_gate:
+        description: "Deploy without waiting for CI to pass (emergency use)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read # read CI conclusions for the commit being deployed
+
+# NOT cancel-in-progress. `flyctl deploy` on a single-machine app with an
+# attached volume is not atomic: cancelling mid-deploy can leave the machine
+# stopped, half-updated, or detached from its volume, and this instance is
+# always-on because MCP-over-HTTP sessions live in process memory. Queueing is
+# the correct behaviour — two merges in quick succession deploy in order, and
+# the second simply supersedes the first. A queued deploy costs a few minutes;
+# a cancelled one costs an outage on the instance the operator is actively using.
+concurrency:
+  group: deploy-operator-instance
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check instance is configured
+        id: gate
+        env:
+          APP: ${{ secrets.OPERATOR_INSTANCE_APP }}
+        run: |
+          if [ -z "$APP" ]; then
+            echo "OPERATOR_INSTANCE_APP not set — no operator instance configured; skipping."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve ref to deploy
+        if: steps.gate.outputs.configured == 'true'
+        id: resolve
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_REF:-}" ]; then
+            echo "ref=$INPUT_REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.configured == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.ref }}
+
+      # ── SAFETY GATE ───────────────────────────────────────────────────────
+      # Only deploy a commit whose CI is GREEN.
+      #
+      # The hazard being closed: this instance holds the operator's live graph
+      # and is used continuously by a daemon swarm and every Claude Code
+      # session. Auto-deploying a broken main to it would convert a CI failure
+      # — normally contained to a red check — into a live outage on the system
+      # he is working in. Merged-to-main is not by itself evidence of green:
+      # main can go red via a merge-order interaction that neither PR showed.
+      #
+      # This POLLS rather than using workflow_run, because "CI test lanes" is a
+      # multi-job workflow and workflow_run fires once per workflow with a
+      # conclusion that does not distinguish which lane failed. Polling the
+      # combined check-runs for the exact SHA is precise, and it also covers
+      # required checks contributed by other workflows.
+      #
+      # Timeout is 45m against a ~10-13m observed CI runtime, leaving headroom
+      # for queueing without hanging a runner indefinitely. A timeout is NOT
+      # treated as success — it fails, and failure escalates.
+      - name: Wait for CI to pass on this commit
+        if: steps.gate.outputs.configured == 'true' && !inputs.skip_ci_gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.resolve.outputs.ref }}
+        run: |
+          set -euo pipefail
+
+          DEADLINE=$(( $(date +%s) + 45 * 60 ))
+
+          # This workflow's own check-run must be ignored, or it waits on
+          # itself forever. Its check-run name is this job's name ("deploy"),
+          # which is also matched below.
+          while :; do
+            RAW=$(gh api "repos/$REPO/commits/$SHA/check-runs" --paginate \
+                    --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv' || true)
+
+            if [ -z "$RAW" ]; then
+              echo "No check-runs reported yet for $SHA; waiting…"
+            else
+              PENDING=0
+              FAILED=""
+              while IFS=$'\t' read -r NAME STATUS CONCLUSION; do
+                [ -z "${NAME:-}" ] && continue
+                # Skip this workflow's own runs (deploy, and any sibling step).
+                case "$NAME" in
+                  deploy|"Deploy operator instance"*) continue ;;
+                esac
+                if [ "$STATUS" != "completed" ]; then
+                  PENDING=$((PENDING + 1))
+                  continue
+                fi
+                case "$CONCLUSION" in
+                  success|skipped|neutral) ;;
+                  *) FAILED="${FAILED}${NAME} (${CONCLUSION}); " ;;
+                esac
+              done <<< "$RAW"
+
+              if [ -n "$FAILED" ]; then
+                echo "FAIL: CI is not green on $SHA — $FAILED"
+                echo "Refusing to deploy a red commit to the operator's live instance."
+                exit 1
+              fi
+
+              if [ "$PENDING" -eq 0 ]; then
+                echo "OK: all check-runs green on $SHA."
+                break
+              fi
+              echo "Waiting on $PENDING in-progress check-run(s)…"
+            fi
+
+            if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+              echo "FAIL: timed out after 45m waiting for CI on $SHA."
+              echo "Not deploying. This is a failure, not a pass — see the escalation below."
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Setup flyctl
+        if: steps.gate.outputs.configured == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # --app is passed EXPLICITLY: the repo's fly.toml declares the SANDBOX
+      # app, so a bare `flyctl deploy` here would redeploy the sandbox.
+      # --primary-region is REQUIRED: fly.toml declares primary_region='lhr'
+      # while this instance's volume is in ams. Without it the deploy builds and
+      # then fails at machine creation with "needs an unattached volume named
+      # 'data' in region 'lhr'". `--regions` does NOT substitute — it filters
+      # existing machines and produces the identical error.
+      # VITE_NEOTOMA_SANDBOX_UI must stay empty (no "Public sandbox" banner) and
+      # VITE_PUBLIC_BASE_PATH must be "/" (a "/inspector/" build renders a blank
+      # page while /health still returns ok).
+      - name: Deploy to Fly (operator instance)
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.OPERATOR_INSTANCE_FLY_TOKEN || secrets.FLY_API_TOKEN }}
+          APP: ${{ secrets.OPERATOR_INSTANCE_APP }}
+          REGION: ${{ vars.OPERATOR_INSTANCE_REGION || 'ams' }}
+          SHA: ${{ steps.resolve.outputs.ref }}
+        run: |
+          flyctl deploy --app "$APP" --primary-region "$REGION" --remote-only \
+            --build-arg VITE_NEOTOMA_SANDBOX_UI="" \
+            --build-arg VITE_PUBLIC_BASE_PATH="/" \
+            --build-arg NEOTOMA_GIT_SHA="$SHA"
+
+      # ── POST-DEPLOY VERIFICATION ──────────────────────────────────────────
+      # Exiting 0 from `flyctl deploy` is NOT evidence the instance is serving.
+      # Checks (a)-(d) mirror the client workflow; (e) is the one this instance's
+      # own deployment_configuration asked for after the 2026-08-27 incident:
+      #
+      #   "RECOMMEND ADDING A FIFTH CHECK: an authenticated read such as
+      #    GET /entities?limit=1"
+      #
+      # because a green /health coexisted with TOTAL read failure. Confirmed
+      # again on 2026-09-01: /health returned 200 in 0.21s while an
+      # authenticated GET /entities?limit=1 timed out at 60s. Checks (a)-(d)
+      # would all have passed through that. See ateles#577.
+      - name: Verify deploy
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          EXPECTED_SHA: ${{ steps.resolve.outputs.ref }}
+          HOST: ${{ secrets.OPERATOR_INSTANCE_HOST }}
+          APP: ${{ secrets.OPERATOR_INSTANCE_APP }}
+          FLY_API_TOKEN: ${{ secrets.OPERATOR_INSTANCE_FLY_TOKEN || secrets.FLY_API_TOKEN }}
+          READ_PROBE_TOKEN: ${{ secrets.OPERATOR_INSTANCE_TOKEN }}
+        run: |
+          set -euo pipefail
+          export EXPECTED_VERSION="$(node -p "require('./package.json').version")"
+
+          # (a) /health responds ok. NECESSARY BUT FAR FROM SUFFICIENT — see (e).
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            "https://$HOST/health" -o /tmp/health.json
+          node -e '
+            const j = require("/tmp/health.json");
+            if (!j.ok) { console.error("FAIL: /health not ok"); process.exit(1); }
+            console.log("OK /health:", JSON.stringify(j));
+          '
+
+          # (b) the deployed git_sha matches the commit we just deployed.
+          #     This is the check that detects a silently stale build.
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            -H "Accept: application/json" "https://$HOST/" -o /tmp/root.json
+          node -e '
+            const j = require("/tmp/root.json");
+            const expSha = process.env.EXPECTED_SHA;
+            const expVer = process.env.EXPECTED_VERSION;
+            const fail = (m) => { console.error("FAIL: " + m); process.exit(1); };
+            if (j.version !== expVer) fail(`version ${j.version} != ${expVer}`);
+            if (/^[0-9a-f]{40}$/.test(j.git_sha || "")) {
+              if (j.git_sha !== expSha) fail(`git_sha ${j.git_sha} != ${expSha}`);
+              console.log("OK git_sha:", j.git_sha);
+            } else {
+              fail(`git_sha ${j.git_sha} is not a commit — build arg not applied`);
+            }
+          '
+
+          # (c) the landing page actually RENDERS (non-trivial byte count).
+          BYTES=$(curl -fsS --retry 3 --retry-delay 5 "https://$HOST/" | wc -c | tr -d ' ')
+          echo "landing page bytes: $BYTES"
+          if [ "$BYTES" -lt 1000 ]; then
+            echo "FAIL: landing page is $BYTES bytes — likely a blank-page build"
+            exit 1
+          fi
+
+          # (d) machine is always-on. MCP-over-HTTP sessions live in process
+          #     memory, so an autostop wipes live sessions.
+          flyctl machine list --app "$APP" --json > /tmp/machines.json
+          node -e '
+            const ms = require("/tmp/machines.json");
+            const stopping = ms.filter(m => m?.config?.auto_destroy || m?.config?.services?.some(s => s.autostop && s.autostop !== "off"));
+            if (stopping.length) {
+              console.error("FAIL: machine(s) not always-on:", stopping.map(m => m.id).join(","));
+              process.exit(1);
+            }
+            console.log("OK always-on:", ms.map(m => m.id).join(","));
+          '
+
+          # (e) AUTHENTICATED READ PROBE — exercises the database, not just the
+          #     HTTP listener. This is the check /health cannot make.
+          #     Budget 90s: a cold read against the operator's ~20GB graph
+          #     legitimately takes 14-18s after a restart, so a short timeout
+          #     would report a false failure on every deploy. Anything beyond
+          #     90s is the wedged-DB signature, not slowness.
+          if [ -z "${READ_PROBE_TOKEN:-}" ]; then
+            echo "FAIL: OPERATOR_INSTANCE_TOKEN is not set — cannot verify the"
+            echo "instance actually serves reads. /health alone has passed"
+            echo "through a total read outage before; refusing to call this"
+            echo "deploy verified."
+            exit 1
+          fi
+          CODE=$(curl -s -o /tmp/entities.json -w '%{http_code}' --max-time 90 \
+                   -H "Authorization: Bearer $READ_PROBE_TOKEN" \
+                   "https://$HOST/entities?limit=1" || echo "000")
+          if [ "$CODE" != "200" ]; then
+            echo "FAIL: authenticated read returned HTTP $CODE (000 = timeout/no response)."
+            echo "The instance is not serving reads even if /health is green."
+            exit 1
+          fi
+          node -e '
+            const j = require("/tmp/entities.json");
+            const rows = Array.isArray(j) ? j : (j.entities ?? j.data ?? j.results);
+            if (!Array.isArray(rows)) {
+              console.error("FAIL: read probe returned no entity array:", JSON.stringify(j).slice(0, 300));
+              process.exit(1);
+            }
+            console.log("OK authenticated read: returned", rows.length, "row(s)");
+          '
+
+      # ── ESCALATION ────────────────────────────────────────────────────────
+      # A failed autodeploy MUST NOT sit silently in an Actions log. An
+      # autodeploy nobody watches, failing quietly, is strictly worse than the
+      # manual step it replaces: it produces the belief that main is deployed
+      # while it is not — which is the exact condition #2277 was filed for.
+      #
+      # This opens a GITHUB ISSUE rather than posting to a chat channel.
+      # Reasoning: a chat notification is fire-and-forget with no record that
+      # anyone saw it, and the repo has no TELEGRAM_* secrets configured — the
+      # equivalent step in deploy-client-instance.yml is dead code today,
+      # silently skipped by its own `if [ -n ... ]` guard. An issue is durable,
+      # deduplicated, assignable, and visible in the same triage surface as
+      # everything else. This is deliberately NOT `daemon_report`, which
+      # ateles#583 established is a write-only channel where 45 queued operator
+      # escalations were lost to an in-memory digest.
+      - name: Escalate on failure
+        if: failure() && steps.gate.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.resolve.outputs.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="Operator instance autodeploy FAILED for ${SHA:0:12} — the instance may be serving a stale build"
+
+          # Reuse one open issue rather than filing one per merge: a broken main
+          # can fail on every subsequent push, and a flood of issues is its own
+          # kind of silence.
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
+                       --label autodeploy-failure --limit 1 --json number \
+                       --jq '.[0].number // ""' || echo "")
+
+          # Built with printf rather than a heredoc on purpose: inside a YAML
+          # block scalar every line must stay indented, but an INDENTED heredoc
+          # delimiter does not terminate the heredoc — it leaks a literal "EOF"
+          # into the body and indents every line enough for Markdown to render
+          # the whole thing as a code block. printf sidesteps both problems.
+          BODY=$(printf '%s\n' \
+            "The autodeploy of merged \`main\` to the operator's instance failed." \
+            "" \
+            "- Commit: \`$SHA\`" \
+            "- Run: $RUN_URL" \
+            "" \
+            "**The instance is likely still serving an older build.** Deploys are" \
+            "automatic, so nothing else will retry this until the next merge — and if" \
+            "that merge fails the same way, the instance stays stale." \
+            "" \
+            "Check which step failed:" \
+            "" \
+            "- **Wait for CI** — main is red at this commit. Fix main; the next green" \
+            "  merge deploys. The gate worked as intended." \
+            "- **Deploy to Fly** — a real deploy failure." \
+            "- **Verify deploy** — the deploy reported success but the instance is not" \
+            "  serving correctly. Note check (e), the authenticated read probe: a green" \
+            "  \`/health\` has coexisted with total read failure before (ateles#577), so" \
+            "  a failure there means reads are down even if the page loads." \
+            "" \
+            "Opened automatically by \`.github/workflows/deploy-operator-instance.yml\`.")
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+            echo "Escalated by commenting on existing issue #$EXISTING"
+          else
+            gh label create autodeploy-failure --repo "$REPO" \
+              --description "Automatic deploy to the operator instance failed" \
+              --color B60205 2>/dev/null || true
+            gh issue create --repo "$REPO" --title "$TITLE" \
+              --label autodeploy-failure --body "$BODY"
+          fi
