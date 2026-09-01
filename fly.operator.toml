@@ -106,17 +106,32 @@
 [[restart]]
   policy = 'always'
 
-# VERIFY BEFORE DEPLOYING. This is reapplied verbatim and will SHRINK a machine
-# that was scaled up by hand, with no warning in the deploy output:
+# SIZED FOR THE LARGEST OPERATOR INSTANCE, DELIBERATELY. This file names no app
+# and is shared across every operator-run instance via `--app` at deploy time,
+# so one guest declaration has to serve all of them. It is reapplied verbatim
+# and overwrites the running machine's guest with no warning in the deploy
+# output. Check what you are about to overwrite:
 #
-#   flyctl machine list --app <app> --json | jq '.[].config.guest'
+#   scripts/check_fly_config_drift.sh --app <app> -c fly.operator.toml
 #
-# One operator instance was found on 2026-09-01 running performance/2 CPU/8GB,
-# having been scaled up after repeated exit-134 (V8 heap OOM) aborts. Deploying
-# this file over it would have reverted it to shared/4GB and reintroduced the
-# crash loop. If your instance runs a larger guest, raise these values in a
-# per-instance config rather than deploying this one.
+# 8GB is the known-good size of the largest instance. On 2026-09-01 one was
+# found running performance/2 CPU/8GB, having been scaled up by hand after
+# repeated exit-134 (V8 heap OOM) aborts — and never written back here. At the
+# previous 4GB, deploying this file would have reverted it and reintroduced the
+# crash loop it was scaled up to stop.
+#
+# THE TRADEOFF, STATED: this oversizes smaller instances. A second operator
+# instance runs shared/1 CPU/1GB today, so this file already grew it at 4GB and
+# grows it further at 8GB. That direction is the safe one. A config that
+# silently SHRINKS a running machine causes an outage and reports success; one
+# that oversizes costs money and keeps serving. Until sizing is genuinely
+# per-instance, err toward the machine that needs the most.
+#
+# cpu_kind stays 'shared'. The 8GB instance runs 'performance', but this file
+# cannot express both and a shared-CPU deploy does not reintroduce the OOM
+# aborts that motivated the memory bump. The drift script reports the cpu_kind
+# downgrade so it is visible rather than silent.
 [[vm]]
-  memory = '4gb'
+  memory = '8gb'
   cpu_kind = 'shared'
   cpus = 2
