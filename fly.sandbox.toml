@@ -85,6 +85,20 @@ primary_region = 'lhr'
     method = 'GET'
     path = '/ready'
 
+# The sandbox had no [[restart]] block, so it inherited Fly's `on-failure`
+# default — which ignores exit code 0 by definition, and this server exits 0 on
+# a cadence (neotoma#2094). A clean exit under `on-failure` leaves the machine
+# stopped until an inbound request wakes it, which users experience as a 33-45s
+# cold start against a normal 0.2s.
+#
+# The running sandbox machine was confirmed on `on-failure` on 2026-09-01, the
+# same divergence found on the operator instance during that incident.
+#
+# Double brackets are required: `[restart]` fails flyctl validation with
+# "cannot unmarshal object into Go struct field Config.restart".
+[[restart]]
+  policy = 'always'
+
 [[mounts]]
   source = "persistent_sandbox"
   destination = "/data"
