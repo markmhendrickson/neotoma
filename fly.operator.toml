@@ -81,6 +81,19 @@
   # 13-24s on 2026-09-01 while serving correctly. With min_machines_running = 1
   # a check that flaps on a slow-but-working server takes the only machine out
   # of rotation, which is a worse outcome than the slowness it detected.
+  #
+  # That same instance was watched degrading over a few hours on 2026-09-01:
+  # /health answered in 15.4s, then 26.8s, then 31.6s, and then stopped
+  # completing a TLS handshake at all (on both the Cloudflare hostname and the
+  # direct .fly.dev one, so the instance itself, not the edge).
+  #
+  # Two things follow. A 10s timeout would have fired during the healthy-but-
+  # slow phase and pulled the only machine, converting slowness into an outage.
+  # And 30s is not a ceiling on real answers either: past ~31s this endpoint was
+  # minutes away from serving nothing, so a check failing there is reporting a
+  # genuine problem rather than being impatient. If a future instance is
+  # legitimately slower than this, fix the instance — do not raise the timeout
+  # until the check can no longer fail.
   [[http_service.checks]]
     interval = '30s'
     timeout = '30s'
