@@ -685,7 +685,82 @@ async function countVisibleEntities(params: {
     return query;
   };
 
-  let entityIdQuery = db.from("entities").select("id").eq("user_id", userId);
+  // ateles#576: count with an indexed aggregate over entity_snapshots instead
+  // of re-deriving deletion state from the observation log on every request.
+  //
+  // The previous implementation loaded every matching entity id, then walked
+  // them in chunks of 500, and for each chunk selected `entity_id,
+  // source_priority, observed_at, fields` for EVERY observation of those
+  // entities — sorting each chunk in a temp b-tree — only to keep the top row
+  // per entity and discard the rest. At ~166k entities that is ~334 sequential
+  // statements reading (and JSON-parsing) essentially the whole observations
+  // table, on every request, no matter how small the requested `limit`. That is
+  // the per-request overhead behind the reported 25-81s `limit: 1` queries, and
+  // it explains why the event loop stayed free while requests hung: the process
+  // was waiting on DB I/O, not computing.
+  //
+  // Two invariants make the snapshot table sufficient on its own:
+  //   - Deleted: a soft-deleted entity has NO entity_snapshots row (the reducer
+  //     returns null for it and the writers drop the row; see
+  //     getDeletedEntityIds in services/entity_queries.ts).
+  //   - Merged:  `mergeEntities` deletes the merged-away entity's snapshot row
+  //     in the SAME transaction that sets `merged_to_entity_id`
+  //     (services/entity_merge.ts steps 7 and 9).
+  // So counting snapshot rows already excludes both, and the default listing —
+  // what agents and apps actually issue — is a single COUNT(*).
+  const countLiveSnapshots = () => {
+    let q = db.from("entity_snapshots").select("entity_id", { count: "exact", head: true });
+    q = q.eq("user_id", userId);
+    q = applyTypeFilter(q, "entity_type");
+    return q;
+  };
+
+  // #2267 review: `includeMerged: true` asks for merged entities to be counted
+  // back IN. That is an ADDITIVE term, not a filter — merged-away entities have
+  // no snapshot row (`mergeEntities` step 9 deletes it), so counting snapshot
+  // rows can never produce them no matter which path runs. Routing it to the
+  // filtered path, whose final step also counts snapshot rows, made
+  // `include_merged: true` return exactly the same total as `false`.
+  // It is now satisfied by adding an indexed count of merged-away `entities`
+  // rows on top of the live-snapshot count. `updated_at` / `created_at` live on
+  // `entities` and remain genuine filters.
+  const needsEntityTableFilters = Boolean(updatedSince) || Boolean(createdSince);
+  const needsSnapshotJsonFilters =
+    published !== undefined || Boolean(publishedAfter) || Boolean(publishedBefore);
+
+  // Counts merged-away entities via an indexed lookup on `entities`. Used as an
+  // additive term whenever `include_merged` is set, on both count paths.
+  const countMergedAway = () => {
+    let q = db
+      .from("entities")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .not("merged_to_entity_id", "is", null);
+    q = applyTypeFilter(q, "entity_type");
+    return q;
+  };
+
+  if (!needsEntityTableFilters && !needsSnapshotJsonFilters) {
+    const { count, error } = await countLiveSnapshots();
+    if (error) {
+      throw new Error(`Failed to count visible entities: ${error.message}`);
+    }
+    let total = count ?? 0;
+    if (includeMerged) {
+      const { count: mergedCount, error: mergedError } = await countMergedAway();
+      if (mergedError) {
+        throw new Error(`Failed to count merged entities: ${mergedError.message}`);
+      }
+      total += mergedCount ?? 0;
+    }
+    return total;
+  }
+
+  // Filtered path: resolve candidate ids from `entities` (indexed, no
+  // observation reads), then keep those that still have a snapshot row.
+  // Merged-away candidates are counted directly instead — they never have a
+  // snapshot row, so the presence check below cannot see them.
+  let entityIdQuery = db.from("entities").select("id, merged_to_entity_id").eq("user_id", userId);
   entityIdQuery = applyTypeFilter(entityIdQuery, "entity_type");
   if (!includeMerged) {
     entityIdQuery = entityIdQuery.is("merged_to_entity_id", null);
@@ -696,7 +771,7 @@ async function countVisibleEntities(params: {
   if (createdSince) {
     entityIdQuery = entityIdQuery.gte("created_at", createdSince);
   }
-  if (published !== undefined || publishedAfter || publishedBefore) {
+  if (needsSnapshotJsonFilters) {
     let snapshotQuery = db.from("entity_snapshots").select("entity_id").eq("user_id", userId);
     snapshotQuery = applyTypeFilter(snapshotQuery, "entity_type");
     if (published !== undefined) {
@@ -729,40 +804,35 @@ async function countVisibleEntities(params: {
     return 0;
   }
 
-  const entityIds = entityRows.map((row: { id: string }) => row.id);
-  const deletedEntityIds = new Set<string>();
+  // Partition on merge state: merged-away rows are counted as-is when
+  // `include_merged` is set (they have no snapshot row to find), and were
+  // already excluded by the query above when it is not.
+  const mergedCandidateCount = entityRows.filter((row: { merged_to_entity_id?: string | null }) =>
+    Boolean(row.merged_to_entity_id)
+  ).length;
+  const candidateIds = entityRows
+    .filter((row: { merged_to_entity_id?: string | null }) => !row.merged_to_entity_id)
+    .map((row: { id: string }) => row.id);
+
+  // Keep the candidates that still have a snapshot row (i.e. are not deleted),
+  // in bounded chunks — a bound parameter list, not a scan. Starts from the
+  // merged tally so a page of only merged-away candidates still counts.
+  let liveCount = mergedCandidateCount;
   const chunkSize = 500;
-
-  for (let i = 0; i < entityIds.length; i += chunkSize) {
-    const chunk = entityIds.slice(i, i + chunkSize);
-    const { data: deletionObservations, error: observationsError } = await db
-      .from("observations")
-      .select("entity_id, source_priority, observed_at, fields")
-      .in("entity_id", chunk)
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false });
-
-    if (observationsError) {
-      throw new Error(
-        `Failed to query deletion observations for count: ${observationsError.message}`
-      );
+  for (let i = 0; i < candidateIds.length; i += chunkSize) {
+    const chunk = candidateIds.slice(i, i + chunkSize);
+    const { count, error } = await db
+      .from("entity_snapshots")
+      .select("entity_id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .in("entity_id", chunk);
+    if (error) {
+      throw new Error(`Failed to count live entities: ${error.message}`);
     }
-
-    const highestByEntity = new Map<string, any>();
-    for (const obs of deletionObservations || []) {
-      if (!highestByEntity.has(obs.entity_id)) {
-        highestByEntity.set(obs.entity_id, obs);
-      }
-    }
-
-    for (const [entityId, obs] of highestByEntity.entries()) {
-      if (obs.fields?._deleted === true) {
-        deletedEntityIds.add(entityId);
-      }
-    }
+    liveCount += count ?? 0;
   }
 
-  return entityIds.length - deletedEntityIds.size;
+  return liveCount;
 }
 
 async function queryEntitiesFromLexicalSearch(params: {

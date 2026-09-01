@@ -192,34 +192,106 @@ export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: str
   return [...types].sort();
 }
 
-async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
+/**
+ * Resolve which of the given entities are soft-deleted.
+ *
+ * ateles#576: resolve deletion from the PRESENCE of an entity_snapshots row
+ * rather than by re-deriving it from the observation log.
+ *
+ * A soft-deleted entity has no snapshot row. `ObservationReducer.computeSnapshot`
+ * returns null once the highest-priority observation carries `_deleted: true`,
+ * and the snapshot writers delete the row when the reducer returns null — the
+ * SQLite adapter does this automatically on every observation insert
+ * (`recomputeEntitySnapshot`), so a deletion or restoration observation
+ * re-materializes liveness as a side effect of being written. That makes
+ * "has a snapshot row" the system's existing, self-maintaining record of
+ * liveness; this function now simply reads it.
+ *
+ * The previous implementation instead selected `entity_id, source_priority,
+ * observed_at, fields` for EVERY observation of every id in the chunk, sorted
+ * the whole result in a temp b-tree (the ORDER BY spans entities, so the
+ * per-entity index cannot serve it), then kept only the top row per entity
+ * and discarded the rest. The paginated scan calls this once per chunk, so a
+ * single request re-read large parts of the observations table — including
+ * its `fields` JSON blobs — to recompute something already materialized.
+ *
+ * #2267 review: snapshot-row ABSENCE is not by itself deletion. Two other
+ * states also lack a snapshot row, and conflating them with deletion silently
+ * removed live entities from results:
+ *
+ *   - MERGED-AWAY. `mergeEntities` rewrites the merged-away entity's
+ *     observations onto the survivor (step 1) and deletes its snapshot row
+ *     (step 9), so it has neither. It is not deleted, and `include_merged: true`
+ *     must still return it. Callers pass `merged_to_entity_id` — already on
+ *     every candidate row via ENTITY_BASE_SELECT — so this costs no extra query.
+ *   - NEVER-OBSERVED. An `entities` row written without any observation never
+ *     gets a snapshot (nothing ran the reducer). Treating it as deleted made
+ *     live entities vanish from default queries — the IT-008 regression. Such a
+ *     row has no deletion observation, so it is live by the prior rule and
+ *     stays live here.
+ *
+ * Both are distinguished WITHOUT reading the observation log, so the
+ * performance win is preserved in full: still one indexed snapshot lookup per
+ * chunk, plus (only when never-observed rows are actually present) one bounded
+ * indexed existence probe against `observations`.
+ */
+async function getDeletedEntityIds(
+  candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
+  userId?: string
+): Promise<Set<string>> {
   const deletedEntityIds = new Set<string>();
-  if (entityIds.length === 0) {
+  if (candidates.length === 0) {
     return deletedEntityIds;
   }
 
-  const { data: deletionObservations } = await db
-    .from("observations")
-    .select("entity_id, source_priority, observed_at, fields")
-    .in("entity_id", entityIds)
-    .order("source_priority", { ascending: false })
-    .order("observed_at", { ascending: false });
+  const entityIds = candidates.map((row) => row.id);
 
-  if (!deletionObservations || deletionObservations.length === 0) {
+  // Tenant scoping: `entity_snapshots` and `observations` are user-owned tables,
+  // so both reads below are scoped to the requesting user per change-guardrail
+  // MUST #5 (GHSA-wrr4-782v-jhwh regression class). `userId` is optional only
+  // because queryEntities itself treats it as optional; when absent no scoping
+  // filter can be applied and the caller has already opted out of it.
+  let snapshotQuery = db.from("entity_snapshots").select("entity_id").in("entity_id", entityIds);
+  if (userId) {
+    snapshotQuery = snapshotQuery.eq("user_id", userId);
+  }
+  const { data: rows, error } = await snapshotQuery;
+
+  if (error) {
+    throw new Error(`Failed to resolve deleted entities: ${error.message}`);
+  }
+
+  const alive = new Set<string>((rows || []).map((row: { entity_id: string }) => row.entity_id));
+
+  // Snapshot-less candidates that are merged-away are not deleted; drop them
+  // from consideration here and let the caller's `include_merged` filter decide.
+  const unresolved = candidates.filter((row) => !alive.has(row.id) && !row.merged_to_entity_id);
+  if (unresolved.length === 0) {
     return deletedEntityIds;
   }
 
-  // Result set is already sorted by priority and recency.
-  const highestByEntity = new Map<string, any>();
-  for (const obs of deletionObservations) {
-    if (!highestByEntity.has(obs.entity_id)) {
-      highestByEntity.set(obs.entity_id, obs);
-    }
+  // Remaining snapshot-less candidates are either genuinely deleted (a
+  // `_deleted` observation drove the reducer to null) or never observed at all.
+  // One bounded, indexed probe over `observations` separates them: an id with
+  // NO observation row was never observed, so it is live.
+  const unresolvedIds = unresolved.map((row) => row.id);
+  let observationQuery = db.from("observations").select("entity_id").in("entity_id", unresolvedIds);
+  if (userId) {
+    observationQuery = observationQuery.eq("user_id", userId);
+  }
+  const { data: observedRows, error: observedError } = await observationQuery;
+
+  if (observedError) {
+    throw new Error(`Failed to resolve deleted entities: ${observedError.message}`);
   }
 
-  for (const [entityId, obs] of highestByEntity.entries()) {
-    if (obs.fields?._deleted === true) {
-      deletedEntityIds.add(entityId);
+  const observed = new Set<string>(
+    (observedRows || []).map((row: { entity_id: string }) => row.entity_id)
+  );
+
+  for (const id of unresolvedIds) {
+    if (observed.has(id)) {
+      deletedEntityIds.add(id);
     }
   }
 
@@ -514,7 +586,7 @@ export async function queryEntities(
         .filter((row): row is any => Boolean(row));
       const deletedIds = includeDeleted
         ? new Set<string>()
-        : await getDeletedEntityIds(candidateRows.map((row: any) => row.id));
+        : await getDeletedEntityIds(candidateRows, userId);
 
       for (const row of candidateRows) {
         if (deletedIds.has(row.id)) {
@@ -547,9 +619,9 @@ export async function queryEntities(
     }
     entities = pagedEntities || [];
   } else {
-    // Deleted-state visibility is resolved from highest-priority observations. To keep
-    // payloads bounded, scan deterministically in chunks and stop once the requested page
-    // of non-deleted entities is filled.
+    // Deleted-state visibility is resolved from entity_snapshots row presence
+    // (see getDeletedEntityIds). To keep payloads bounded, scan deterministically
+    // in chunks and stop once the requested page of non-deleted entities is filled.
     const scanChunkSize = Math.max(200, Math.min(limit * 4, 1000));
     let scanOffset = 0;
     let visibleSkipped = 0;
@@ -571,7 +643,7 @@ export async function queryEntities(
       }
 
       scanOffset += rows.length;
-      const chunkDeletedEntityIds = await getDeletedEntityIds(rows.map((row: any) => row.id));
+      const chunkDeletedEntityIds = await getDeletedEntityIds(rows, userId);
 
       for (const row of rows) {
         if (chunkDeletedEntityIds.has(row.id)) {
