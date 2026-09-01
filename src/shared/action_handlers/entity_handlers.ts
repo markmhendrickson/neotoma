@@ -715,25 +715,52 @@ async function countVisibleEntities(params: {
     return q;
   };
 
-  // `includeMerged: true` asks for merged entities to be counted back IN, which
-  // the snapshot table cannot answer (those rows are gone). `updated_at` /
-  // `created_at` live on `entities`. Either case takes the filtered path below,
-  // which stays bounded by the filter rather than by the corpus.
-  const needsEntityTableFilters = Boolean(updatedSince) || Boolean(createdSince) || includeMerged;
+  // #2267 review: `includeMerged: true` asks for merged entities to be counted
+  // back IN. That is an ADDITIVE term, not a filter — merged-away entities have
+  // no snapshot row (`mergeEntities` step 9 deletes it), so counting snapshot
+  // rows can never produce them no matter which path runs. Routing it to the
+  // filtered path, whose final step also counts snapshot rows, made
+  // `include_merged: true` return exactly the same total as `false`.
+  // It is now satisfied by adding an indexed count of merged-away `entities`
+  // rows on top of the live-snapshot count. `updated_at` / `created_at` live on
+  // `entities` and remain genuine filters.
+  const needsEntityTableFilters = Boolean(updatedSince) || Boolean(createdSince);
   const needsSnapshotJsonFilters =
     published !== undefined || Boolean(publishedAfter) || Boolean(publishedBefore);
+
+  // Counts merged-away entities via an indexed lookup on `entities`. Used as an
+  // additive term whenever `include_merged` is set, on both count paths.
+  const countMergedAway = () => {
+    let q = db
+      .from("entities")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .not("merged_to_entity_id", "is", null);
+    q = applyTypeFilter(q, "entity_type");
+    return q;
+  };
 
   if (!needsEntityTableFilters && !needsSnapshotJsonFilters) {
     const { count, error } = await countLiveSnapshots();
     if (error) {
       throw new Error(`Failed to count visible entities: ${error.message}`);
     }
-    return count ?? 0;
+    let total = count ?? 0;
+    if (includeMerged) {
+      const { count: mergedCount, error: mergedError } = await countMergedAway();
+      if (mergedError) {
+        throw new Error(`Failed to count merged entities: ${mergedError.message}`);
+      }
+      total += mergedCount ?? 0;
+    }
+    return total;
   }
 
   // Filtered path: resolve candidate ids from `entities` (indexed, no
   // observation reads), then keep those that still have a snapshot row.
-  let entityIdQuery = db.from("entities").select("id").eq("user_id", userId);
+  // Merged-away candidates are counted directly instead — they never have a
+  // snapshot row, so the presence check below cannot see them.
+  let entityIdQuery = db.from("entities").select("id, merged_to_entity_id").eq("user_id", userId);
   entityIdQuery = applyTypeFilter(entityIdQuery, "entity_type");
   if (!includeMerged) {
     entityIdQuery = entityIdQuery.is("merged_to_entity_id", null);
@@ -777,11 +804,20 @@ async function countVisibleEntities(params: {
     return 0;
   }
 
-  const candidateIds = entityRows.map((row: { id: string }) => row.id);
+  // Partition on merge state: merged-away rows are counted as-is when
+  // `include_merged` is set (they have no snapshot row to find), and were
+  // already excluded by the query above when it is not.
+  const mergedCandidateCount = entityRows.filter((row: { merged_to_entity_id?: string | null }) =>
+    Boolean(row.merged_to_entity_id)
+  ).length;
+  const candidateIds = entityRows
+    .filter((row: { merged_to_entity_id?: string | null }) => !row.merged_to_entity_id)
+    .map((row: { id: string }) => row.id);
 
   // Keep the candidates that still have a snapshot row (i.e. are not deleted),
-  // in bounded chunks — a bound parameter list, not a scan.
-  let liveCount = 0;
+  // in bounded chunks — a bound parameter list, not a scan. Starts from the
+  // merged tally so a page of only merged-away candidates still counts.
+  let liveCount = mergedCandidateCount;
   const chunkSize = 500;
   for (let i = 0; i < candidateIds.length; i += chunkSize) {
     const chunk = candidateIds.slice(i, i + chunkSize);

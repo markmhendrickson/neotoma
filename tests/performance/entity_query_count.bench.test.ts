@@ -1,5 +1,5 @@
 /**
- * Entity-query per-request overhead benchmark (ateles#576 / this repo's #2222).
+ * Entity-query per-request overhead benchmark (ateles#576 / this repo's #2266).
  *
  * Excluded from the default lane (RUN_BENCH=1 only). Run: `npm run test:bench`.
  *

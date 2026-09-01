@@ -142,6 +142,23 @@ jobs:
       - name: Run concurrent-backend effect-verified regressions (merge rollback + migration validator)
         run: npx vitest run --no-file-parallelism tests/integration/merge_repoint_relationship_edges.test.ts tests/scripts/validate_libsql_migration.test.ts
 
+      # #2266/#2267 entity-query read-latency regressions. Same gap as the step
+      # above: these live under tests/integration, which test:unit excludes, so
+      # without this step the fix for the 25-81s `limit: 1` reads — and the
+      # liveness rule it turns on — would gate nothing. Covers deleted-entity
+      # exclusion from page and total, `include_merged` staying live after a real
+      # merge, and never-observed entities staying visible.
+      #
+      # Deliberately NOT wiring tests/integration/v0.2.0_ingestion.test.ts here,
+      # though its IT-008 case guards this same rule: IT-003 and IT-009 in that
+      # file fail identically on origin/main (831254a67) and on this branch, on
+      # an unrelated interpretation/schema-validation path ("no schema-valid
+      # fields after validation"). Adding the file would make this lane red for a
+      # pre-existing defect this PR did not cause. The IT-008 behaviour it
+      # asserts is covered by the merged-entity cases in the file below.
+      - name: Run entity-query read-latency regressions (#2266)
+        run: npx vitest run --no-file-parallelism tests/integration/entity_query_deleted_count.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline
