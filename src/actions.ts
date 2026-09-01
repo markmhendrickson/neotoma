@@ -2407,17 +2407,171 @@ function sendValidationError(res: express.Response, issues: unknown): express.Re
   );
 }
 
-// Public health endpoint (no auth)
-app.get("/health", (_req, res) => {
-  let version = "0.0.0";
+/**
+ * Version string reported by /health and /ready.
+ *
+ * Deliberately keeps the original /health resolution (config.projectRoot) rather
+ * than delegating to the root-landing `readPackageVersion`, which searches a
+ * different candidate list — this change is about readiness semantics, not about
+ * quietly altering what version /health reports.
+ */
+function readHealthPackageVersion(): string {
   try {
     const pkgPath = path.join(config.projectRoot || process.cwd(), "package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: string };
-    version = pkg.version || "0.0.0";
+    return pkg.version || "0.0.0";
   } catch {
-    // fallback
+    return "0.0.0";
   }
-  return res.json({ ok: true, version });
+}
+
+/**
+ * LIVENESS. Public, no auth, and deliberately does NOT touch the database.
+ *
+ * This endpoint answers exactly one question: is the process up and serving?
+ * It must stay cheap and must NOT start failing when the database is slow.
+ * Fly's `[[restart]] policy = 'always'` plus a liveness-driven restart would
+ * turn a DB stall into a restart loop — a strictly worse outage than the stall.
+ *
+ * For "can this instance actually serve requests", use `/ready`.
+ * See ateles#577: during a real outage `/entities/query` took 25-80s while this
+ * endpoint answered in 1.4-20ms and reported `ok: true` throughout.
+ */
+app.get("/health", (_req, res) => {
+  return res.json({ ok: true, version: readHealthPackageVersion() });
+});
+
+/** Default budget for the `/ready` database probe, in milliseconds. */
+export const READINESS_DB_TIMEOUT_DEFAULT_MS = 2000;
+
+/**
+ * Parse `NEOTOMA_READINESS_DB_TIMEOUT_MS` into the probe budget.
+ *
+ * Mirrors {@link parseMcpSseKeepaliveMs}: only an unset / empty / non-numeric
+ * value falls back to the default. Unlike the keepalive knob there is no
+ * "disable" sentinel — a probe with no budget is precisely the defect this
+ * endpoint exists to close — so non-positive values are rejected back to the
+ * default rather than flowing through as "wait forever".
+ */
+export function parseReadinessDbTimeoutMs(raw: string | undefined): number {
+  if (raw === undefined) return READINESS_DB_TIMEOUT_DEFAULT_MS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return READINESS_DB_TIMEOUT_DEFAULT_MS;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return READINESS_DB_TIMEOUT_DEFAULT_MS;
+  return parsed;
+}
+
+/**
+ * The three states a component probe can land in, plus the degraded-but-alive
+ * middle. `ok` is only ever reported when the probe actually COMPLETED — an
+ * unfinished probe is `timeout`, never a confident pass. That inversion (an
+ * undeterminable check reporting PASS) is the root defect behind ateles#577.
+ */
+export type ReadinessState = "ok" | "slow" | "timeout" | "error";
+
+export interface ComponentReadiness {
+  ok: boolean;
+  latency_ms: number;
+  state: ReadinessState;
+  error?: string;
+}
+
+/**
+ * Race a component probe against its budget and classify the outcome.
+ *
+ * Exported for unit testing: the caller supplies the probe so the degraded
+ * paths (hangs past budget, throws) are exercisable without a real slow
+ * database.
+ *
+ * `slowThresholdMs` marks a probe that completed but took long enough to be
+ * worth surfacing. It stays `ok: true` — a slow-but-answering database is still
+ * serving, and flapping a load balancer on latency alone is its own outage.
+ */
+export async function probeComponent(
+  probe: () => Promise<void>,
+  budgetMs: number,
+  slowThresholdMs = Math.floor(budgetMs / 2)
+): Promise<ComponentReadiness> {
+  const started = performance.now();
+  let timer: NodeJS.Timeout | undefined;
+  const elapsed = () => Math.round(performance.now() - started);
+  try {
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new ProbeTimeoutError()), budgetMs);
+      // Do not hold the event loop open on the timer alone.
+      timer.unref?.();
+    });
+    await Promise.race([probe(), timeout]);
+    const latency_ms = elapsed();
+    return {
+      ok: true,
+      latency_ms,
+      state: latency_ms >= slowThresholdMs ? "slow" : "ok",
+    };
+  } catch (error) {
+    const latency_ms = elapsed();
+    if (error instanceof ProbeTimeoutError) {
+      return {
+        ok: false,
+        latency_ms,
+        state: "timeout",
+        error: `probe exceeded ${budgetMs}ms budget`,
+      };
+    }
+    return {
+      ok: false,
+      latency_ms,
+      state: "error",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+class ProbeTimeoutError extends Error {
+  constructor() {
+    super("probe timed out");
+    this.name = "ProbeTimeoutError";
+  }
+}
+
+/**
+ * The readiness database probe: a bounded, indexed, single-row read.
+ *
+ * `sources.id` is a primary-key lookup capped at one row — the same shape
+ * `initDatabase` already uses to verify connectivity. Deliberately NOT a
+ * `COUNT(*)`, and NOT a scan over `entities` / `observations`: a readiness
+ * probe that is itself expensive becomes a load source during the exact
+ * incident it is supposed to report on.
+ */
+async function probeDatabase(): Promise<void> {
+  const { error } = await db.from("sources").select("id").limit(1);
+  if (error) {
+    throw new Error(typeof error.message === "string" ? error.message : String(error));
+  }
+}
+
+/**
+ * READINESS. Public, no auth. Answers "can this instance actually serve
+ * requests", which liveness cannot: it performs the bounded DB read above
+ * under an explicit timeout budget and reports the measured latency plus a
+ * three-state verdict rather than a bare boolean.
+ *
+ * Returns 503 whenever the probe could not complete inside its budget or
+ * threw, so the Fly proxy and external monitors can see a stalled database
+ * instead of the green `/health` that masked ateles#577 for the whole outage.
+ */
+app.get("/ready", async (_req, res) => {
+  const budgetMs = parseReadinessDbTimeoutMs(process.env.NEOTOMA_READINESS_DB_TIMEOUT_MS);
+  const dbReadiness = await probeComponent(probeDatabase, budgetMs);
+  const body = {
+    ok: dbReadiness.ok,
+    version: readHealthPackageVersion(),
+    db: dbReadiness,
+  };
+  return res.status(dbReadiness.ok ? 200 : 503).json(body);
 });
 
 // ============================================================================
@@ -3909,7 +4063,8 @@ app.use(async (req, res, next) => {
     (req.method === "GET" &&
       (req.path === "/openapi.yaml" ||
         req.path === "/openapi_actions.yaml" ||
-        req.path === "/health")) ||
+        req.path === "/health" ||
+        req.path === "/ready")) ||
     (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();

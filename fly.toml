@@ -61,12 +61,46 @@ primary_region = 'lhr'
   min_machines_running = 1
   processes = ['app']
 
-  # Health check for LOAD-BALANCER ROUTING ONLY. A check declared under
+  # Health checks for LOAD-BALANCER ROUTING ONLY. A check declared under
   # [http_service] is a *service* check: it decides whether the Fly proxy sends
   # traffic to a machine. It does NOT restart one. An earlier version of this
   # comment claimed it restarted the machine "regardless of how it stopped" —
   # that was wrong, and it made the deployment look self-healing when it was
   # not. Restart behavior is the [restart] block below.
+  #
+  # Two checks, because liveness and readiness answer different questions and
+  # only the second one could have caught ateles#577. During that outage
+  # /entities/query took 25-80s and MCP clients timed out, while GET /health
+  # answered in 1.4-20ms and this check reported `passing` throughout — the
+  # instance was unusable and nothing on the platform said so.
+  #
+  # /ready is the primary check: it does a bounded, indexed single-row read
+  # under an explicit timeout budget (NEOTOMA_READINESS_DB_TIMEOUT_MS, default
+  # 2000ms) and returns 503 when that probe cannot complete. Its timeout is 5s,
+  # deliberately above the probe budget, so a probe that blows its budget still
+  # answers 503 (a real verdict) rather than tripping the check's own timeout
+  # (an indistinguishable one).
+  #
+  # /health is KEPT as a second check rather than replaced. It is the only
+  # signal that separates "the process is gone" from "the database is slow",
+  # and losing that distinction is what makes stall incidents unreadable. It is
+  # also the cheap probe every external monitor and the peer-sync
+  # `remote_health` path already calls, so it stays a stable contract.
+  #
+  # Note what this deliberately does NOT do: it does not wire readiness to
+  # restarts. Restarting a machine during a database stall replaces a degraded
+  # instance with a cold one that hits the same slow database, plus 33-45s of
+  # start-up — strictly worse than the stall. Because these are service checks,
+  # a failing /ready drains the machine from the proxy instead, which is the
+  # honest response: 503 at the edge beats a 25-80s hang that looks like
+  # success.
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '5s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/ready'
+
   [[http_service.checks]]
     interval = '15s'
     timeout = '10s'

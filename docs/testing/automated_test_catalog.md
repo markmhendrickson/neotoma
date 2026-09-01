@@ -69,7 +69,7 @@ flowchart TD
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 162 |
+| Vitest unit tests | 163 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 166 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (162):**
+**Files (163):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -228,6 +228,7 @@ flowchart TD
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/pull_request_schema.test.ts`
+- `tests/unit/readiness_probe.test.ts`
 - `tests/unit/recover_json_array_string.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
 - `tests/unit/relationship_reducer.test.ts`
@@ -456,6 +457,7 @@ flowchart TD
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
+- `tests/integration/health_readiness_split.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/http_related_entities_multihop.test.ts`
 - `tests/integration/http_store_reference_source.test.ts`

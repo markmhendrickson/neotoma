@@ -31,8 +31,31 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Health check */
+    /**
+     * Liveness check
+     * @description Liveness only: reports that the process is up and serving. Does not touch the database and never fails on database slowness, so a stalled database cannot trigger a restart loop. For "can this instance actually serve requests", use GET /ready.
+     */
     get: operations["healthCheck"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Readiness check
+     * @description Readiness: performs a bounded, indexed single-row database read under an explicit timeout budget (NEOTOMA_READINESS_DB_TIMEOUT_MS, default 2000ms) and reports the measured latency plus a three-state verdict. Returns 503 when the probe exceeds its budget or throws, so a probe that could not determine an answer never reports a confident pass.
+     */
+    get: operations["readinessCheck"];
     put?: never;
     post?: never;
     delete?: never;
@@ -2271,6 +2294,21 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Outcome of one bounded component probe. `ok` is true only when the probe actually completed; a probe that could not determine an answer reports `timeout`/`error`, never a confident pass. */
+    ComponentReadiness: {
+      ok?: boolean;
+      /** @description Measured wall time of the probe, in milliseconds. */
+      latency_ms?: number;
+      /** @enum {string} */
+      state?: "ok" | "slow" | "timeout" | "error";
+      /** @description Present only when state is timeout or error. */
+      error?: string;
+    };
+    ReadinessResponse: {
+      ok?: boolean;
+      version?: string;
+      db?: components["schemas"]["ComponentReadiness"];
+    };
     FileUrlResponse: {
       /** @description Signed URL for accessing the file */
       url?: string;
@@ -4323,7 +4361,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Server is healthy */
+      /** @description Process is up */
       200: {
         headers: {
           [name: string]: unknown;
@@ -4331,7 +4369,37 @@ export interface operations {
         content: {
           "application/json": {
             ok?: boolean;
+            version?: string;
           };
+        };
+      };
+    };
+  };
+  readinessCheck: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Instance is ready to serve requests */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessResponse"];
+        };
+      };
+      /** @description Instance is not ready (database probe timed out or failed) */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessResponse"];
         };
       };
     };

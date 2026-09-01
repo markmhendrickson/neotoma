@@ -24,7 +24,15 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     method: "get",
     path: "/health",
     adapter: "infra",
-    notes: "Health endpoint is infrastructure only.",
+    notes: "Liveness endpoint is infrastructure only. Never touches the database.",
+  },
+  {
+    operationId: "readinessCheck",
+    method: "get",
+    path: "/ready",
+    adapter: "infra",
+    notes:
+      "Readiness endpoint is infrastructure only. Bounded indexed DB probe under NEOTOMA_READINESS_DB_TIMEOUT_MS; 503 when it cannot complete (ateles#577).",
   },
   {
     operationId: "getOpenApiSpec",

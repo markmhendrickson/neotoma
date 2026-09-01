@@ -23,6 +23,33 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    ComponentReadiness:
+      type: object
+      description: >-
+        Outcome of one bounded component probe. `ok` is true only when the probe
+        actually completed; a probe that could not determine an answer reports
+        `timeout`/`error`, never a confident pass.
+      properties:
+        ok:
+          type: boolean
+        latency_ms:
+          type: integer
+          description: Measured wall time of the probe, in milliseconds.
+        state:
+          type: string
+          enum: [ok, slow, timeout, error]
+        error:
+          type: string
+          description: Present only when state is timeout or error.
+    ReadinessResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+        db:
+          $ref: "#/components/schemas/ComponentReadiness"
     FileUrlResponse:
       type: object
       properties:
@@ -2802,12 +2829,17 @@ paths:
 
   /health:
     get:
-      summary: Health check
+      summary: Liveness check
+      description: >-
+        Liveness only: reports that the process is up and serving. Does not
+        touch the database and never fails on database slowness, so a stalled
+        database cannot trigger a restart loop. For "can this instance actually
+        serve requests", use GET /ready.
       operationId: healthCheck
       security: []
       responses:
         "200":
-          description: Server is healthy
+          description: Process is up
           content:
             application/json:
               schema:
@@ -2815,6 +2847,33 @@ paths:
                 properties:
                   ok:
                     type: boolean
+                  version:
+                    type: string
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: >-
+        Readiness: performs a bounded, indexed single-row database read under an
+        explicit timeout budget (NEOTOMA_READINESS_DB_TIMEOUT_MS, default
+        2000ms) and reports the measured latency plus a three-state verdict.
+        Returns 503 when the probe exceeds its budget or throws, so a probe that
+        could not determine an answer never reports a confident pass.
+      operationId: readinessCheck
+      security: []
+      responses:
+        "200":
+          description: Instance is ready to serve requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: Instance is not ready (database probe timed out or failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
 
   /openapi.yaml:
     get:
