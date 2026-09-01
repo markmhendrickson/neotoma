@@ -246,6 +246,36 @@ describe("fly_deploy_config.all_configs", () => {
     }
   });
 
+  it.each(listFlyConfigs())("%s restarts on a clean exit", (fileName) => {
+    // Asserted across EVERY config, not just fly.toml. Fly's default when no
+    // [[restart]] block is present is `on-failure`, which ignores exit code 0
+    // by definition — and this server exits 0 on a cadence (neotoma#2094), so
+    // an omitted block leaves the machine stopped until a request wakes it.
+    //
+    // Omission is the failure mode that matters here: on 2026-09-01 a running
+    // machine was found on `on-failure` while the configs declared `always`,
+    // and nothing in the repo or the tooling compared the two. The live half
+    // of that comparison needs Fly credentials and lives in
+    // scripts/check_fly_config_drift.sh; this half needs none and runs on
+    // every PR.
+    //
+    // Note the double brackets: `[restart]` fails flyctl validation with
+    // "cannot unmarshal object into Go struct field Config.restart".
+    const restarts = (readFlyConfig(fileName).restart as TomlTable[]) ?? [];
+    expect(
+      restarts.length,
+      `${fileName} declares no [[restart]] block, so it inherits Fly's on-failure ` +
+        `default, which does not restart on the code-0 exit this server produces`
+    ).toBeGreaterThan(0);
+
+    for (const restart of restarts) {
+      expect(
+        restart.policy,
+        `${fileName} declares '${String(restart.policy)}'; only 'always' covers a clean exit`
+      ).toBe("always");
+    }
+  });
+
   it.each(listFlyConfigs())("%s routes to the port the server listens on", (fileName) => {
     const config = readFlyConfig(fileName);
     const env = (config.env as TomlTable) ?? {};
