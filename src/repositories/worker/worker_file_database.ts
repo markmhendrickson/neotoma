@@ -161,6 +161,46 @@ export class WorkerDbCrashError extends Error {
   }
 }
 
+/**
+ * Thrown when a worker's in-flight queue is full. Moving statements off the
+ * event loop stops a slow query from freezing the process, but it does not make
+ * the database faster: if arrivals outpace what SQLite can retire, the backlog
+ * has to go somewhere. Unbounded, it goes into heap — the stall is traded for
+ * unbounded memory growth and an eventual OOM, which is strictly worse than
+ * being slow because it takes the process down and loses every queued request
+ * rather than just delaying them.
+ *
+ * So the queue is bounded and overflow is rejected fast. A caller gets a clear,
+ * retryable error naming the limit and the env var that raises it, while
+ * requests already accepted still complete. Shedding load at a known boundary
+ * is a decision; growing the heap until the kernel decides is not.
+ */
+export class WorkerDbOverloadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkerDbOverloadError";
+  }
+}
+
+/**
+ * Maximum statements queued to a single worker before new ones are rejected.
+ * Per-connection, so the writer and each reader carry their own budget.
+ *
+ * 512 is chosen to sit far above any legitimate burst — a single request fans
+ * out to a few dozen statements at worst, so this absorbs a deep queue across
+ * many concurrent callers — while still bounding worst-case retained memory to
+ * something trivial next to the heap. Raise via NEOTOMA_DB_MAX_QUEUED_STATEMENTS
+ * if a workload genuinely needs a deeper queue; set 0 to disable the bound
+ * (restoring the pre-bound unbounded behavior, not recommended for servers).
+ */
+export const DEFAULT_MAX_QUEUED_STATEMENTS = 512;
+
+function resolveMaxQueued(): number {
+  const raw = Number.parseInt(process.env.NEOTOMA_DB_MAX_QUEUED_STATEMENTS || "", 10);
+  if (!Number.isFinite(raw) || raw < 0) return DEFAULT_MAX_QUEUED_STATEMENTS;
+  return raw;
+}
+
 class WorkerConnection {
   private worker: Worker | null = null;
   private nextId = 1;
@@ -169,6 +209,7 @@ class WorkerConnection {
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
   >();
   private closed = false;
+  private readonly maxQueued = resolveMaxQueued();
 
   constructor(
     private readonly options: {
@@ -239,6 +280,19 @@ class WorkerConnection {
   ): Promise<unknown> {
     if (this.closed) {
       return Promise.reject(new WorkerDbCrashError("DB connection is closed"));
+    }
+    // Bound the backlog (see WorkerDbOverloadError). Checked before spawning or
+    // messaging the worker so an overloaded connection sheds load cheaply.
+    if (this.maxQueued > 0 && this.pending.size >= this.maxQueued) {
+      return Promise.reject(
+        new WorkerDbOverloadError(
+          `DB ${this.options.readonly ? "reader" : "writer"} queue is full ` +
+            `(${this.pending.size} statements in flight, limit ${this.maxQueued}). ` +
+            `The database is saturated; retry shortly. Raise the limit with ` +
+            `NEOTOMA_DB_MAX_QUEUED_STATEMENTS, or add reader workers with ` +
+            `NEOTOMA_DB_READER_WORKERS, if this is sustained rather than a burst.`
+        )
+      );
     }
     const worker = this.ensureWorker();
     const id = this.nextId++;

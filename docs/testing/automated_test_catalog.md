@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **587**
-- Backend and repo Vitest files: **552**
+- Total automated test files: **590**
+- Backend and repo Vitest files: **555**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 163 |
+| Vitest unit tests | 166 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 166 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (163):**
+**Files (166):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -158,12 +158,15 @@ flowchart TD
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
+- `tests/unit/db_backend_server_default.test.ts`
 - `tests/unit/db_driver_contract.test.ts`
 - `tests/unit/db_idempotency_concurrency.test.ts`
 - `tests/unit/db_libsql_nonblocking.test.ts`
 - `tests/unit/db_libsql_remote_class.test.ts`
 - `tests/unit/db_url_misconfig_guard.test.ts`
+- `tests/unit/db_worker_backpressure.test.ts`
 - `tests/unit/db_worker_file_database.test.ts`
+- `tests/unit/db_worker_transaction_integrity.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`

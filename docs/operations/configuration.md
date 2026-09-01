@@ -29,22 +29,46 @@ Resolution order for the data directory and variables: a project-local `.env`, t
 | `NEOTOMA_ENV` | `development` or `production` | `development` |
 | `NEOTOMA_DATA_DIR` | Root data directory | local `data/` |
 | `NEOTOMA_SQLITE_PATH` | Explicit database file path | `{dataDir}/neotoma.db` (dev) |
-| `NEOTOMA_DB_BACKEND` | DB driver: `sqlite` (synchronous, zero-config) or `libsql` (concurrent — statements run off the event loop via worker-hosted driver for local files, or @libsql/client for remote sqld/Turso, so slow queries can't freeze the server; recommended for hosted/agent-heavy/shared instances) | `sqlite` |
+| `NEOTOMA_DB_BACKEND` | DB driver: `sqlite` (synchronous, zero-config) or `libsql` (concurrent — statements run off the event loop via worker-hosted driver for local files, or @libsql/client for remote sqld/Turso, so slow queries can't freeze the server) | `libsql` for servers, `sqlite` for CLI |
 | `NEOTOMA_DB_URL` | libsql connection URL (`file:` for embedded local, `http(s)://`/`libsql://` for remote sqld/Turso) | `file:{NEOTOMA_SQLITE_PATH}` |
 | `NEOTOMA_DB_AUTH_TOKEN` | Auth token for remote libsql connections | unset |
 | `NEOTOMA_DB_READER_WORKERS` | Read-only worker connections for the local `libsql` backend (WAL lets them run concurrently with the writer) | `2` |
+| `NEOTOMA_DB_MAX_QUEUED_STATEMENTS` | Max statements queued per worker connection before new ones are rejected with `WorkerDbOverloadError`; bounds memory under saturation. `0` disables the bound (not recommended for servers) | `512` |
 | `NEOTOMA_RAW_STORAGE_DIR` | Content-addressed source files | `{dataDir}/sources` |
 | `NEOTOMA_LOGS_DIR` / `NEOTOMA_EVENT_LOG_PATH` | Log directory and event log file | under `{dataDir}/logs` |
 | `NEOTOMA_HOST_URL` / `NEOTOMA_PUBLIC_BASE_URL` | Public URL of this instance | auto-discovered or unset |
 
-### When to opt into `NEOTOMA_DB_BACKEND=libsql`
+### How the backend is chosen
 
-Stay on the default `sqlite` backend until you have a concrete reason to switch. Switch to `libsql` when **either** of these is true:
+`NEOTOMA_DB_BACKEND` wins whenever it is set. When it is unset, the default depends on what kind of process is running:
 
-- You operate a **hosted, multi-user, or agent-heavy instance** where a single slow query (e.g. a deep-offset paginated query) has been observed to block health checks or other callers — this was the production symptom that motivated the concurrent backend (see `docs/infrastructure/deployment.md` § SQLite concurrency and the multi-writer model).
-- You are moving a database file to a **remote sqld/Turso URL** (`NEOTOMA_DB_URL=libsql://...` or `http(s)://...`), which requires the `libsql` backend regardless of load.
+| Process | Default | Why |
+| --- | --- | --- |
+| **Server** (`dist/actions.js`, MCP stdio server) | `libsql` | Many callers share one event loop. Under the synchronous driver a single slow query blocks *every* concurrent request for its full duration — including `GET /health`, which touches no database. |
+| **CLI** (`neotoma …`, scripts) | `sqlite` | One-shot process, nothing else waiting on the loop. Spawning worker threads would be pure overhead. |
 
-Before flipping the variable on an existing database, run `npx tsx scripts/validate_libsql_migration.ts <path-to-db>` — it proves the file adopts safely under libsql (integrity check, per-table row-count parity, snapshot hydration spot check) without mutating the original file.
+A process declares itself a server by importing `src/process_role.js`; see the note in that file. The role is deliberately **not** read from the environment — an inherited or `.env`-sourced value would flip the backend for every CLI invocation and every test worker.
+
+This default changed in response to neotoma#2280. The worker-hosted backend had existed since #1944, but it was opt-in via an env var that no Dockerfile, fly config, or start script set — so every server deployment silently kept the blocking driver. A hosted instance served the DB-free `/health` endpoint in 9.4s measured from inside its own VM, with 6GB free and ~42% idle CPU. An opt-in fix that nothing opts into is not a fix.
+
+Measured on the same slow query (a self-join over 6k rows), sync backend vs worker pool:
+
+| Backend | Slow query | Max event-loop lag | Concurrent health check |
+| --- | --- | --- | --- |
+| `sqlite` (synchronous) | 1100ms | **1091ms** | blocked until the slow query finished |
+| `libsql` (worker pool) | 1112ms | **2ms** | answered in 15ms, before the slow query |
+
+The slow query itself is no faster — SQLite does the same work. What changes is that it no longer holds the event loop while doing it.
+
+### Overriding the default
+
+Set `NEOTOMA_DB_BACKEND=sqlite` on a server to force the synchronous driver (e.g. to isolate a suspected backend-specific bug). Set `NEOTOMA_DB_BACKEND=libsql` on a CLI process when pointing it at a **remote sqld/Turso URL** (`NEOTOMA_DB_URL=libsql://...` or `http(s)://...`), which requires the `libsql` backend regardless of load.
+
+Before adopting an existing database file under libsql, run `npx tsx scripts/validate_libsql_migration.ts <path-to-db>` — it proves the file adopts safely (integrity check, per-table row-count parity, snapshot hydration spot check) without mutating the original file.
+
+### Backpressure
+
+Moving statements off the event loop does not make the database faster. If arrivals outpace what SQLite can retire, the backlog has to go somewhere — and unbounded, it grows the heap until the process OOMs, which is worse than being slow because it loses every queued request instead of delaying them. Each worker connection therefore bounds its in-flight queue at `NEOTOMA_DB_MAX_QUEUED_STATEMENTS` (default 512) and rejects overflow with a retryable `WorkerDbOverloadError` naming the limit.
 
 ## Server and ports
 
