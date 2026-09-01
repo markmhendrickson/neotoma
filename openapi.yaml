@@ -23,6 +23,27 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    ReadinessResult:
+      type: object
+      description: Result of the /ready database probe.
+      properties:
+        ok:
+          type: boolean
+          description: True only when the database completed the probe read.
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, failed]
+        latency_ms:
+          type: integer
+          description: >-
+            Probe duration, reported on success and failure alike. Degradation
+            is progressive, so the trend matters as much as the verdict.
+        error:
+          type: string
+          description: Failure reason. Present only when ok is false.
     FileUrlResponse:
       type: object
       properties:
@@ -2802,12 +2823,17 @@ paths:
 
   /health:
     get:
-      summary: Health check
+      summary: Liveness check
+      description: >-
+        Reports that the process is running. Does NOT touch the database — it
+        returns 200 throughout a total read outage, so it must not be used as a
+        health check or as evidence the server can serve requests. Use /ready
+        for that.
       operationId: healthCheck
       security: []
       responses:
         "200":
-          description: Server is healthy
+          description: Process is running
           content:
             application/json:
               schema:
@@ -2815,6 +2841,31 @@ paths:
                 properties:
                   ok:
                     type: boolean
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: >-
+        Runs a bounded real read against the database. Returns 503 when that
+        read errors or exceeds NEOTOMA_READY_DB_TIMEOUT_MS (default 20s). This
+        is the endpoint Fly health checks target. A 200 means the process is up
+        and the database completed a trivial indexed read within the bound; it
+        does not prove that heavier queries or writes succeed.
+      operationId: readinessCheck
+      security: []
+      responses:
+        "200":
+          description: Server is ready to serve reads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResult"
+        "503":
+          description: Database read failed or timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResult"
 
   /openapi.yaml:
     get:

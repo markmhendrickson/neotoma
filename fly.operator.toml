@@ -72,12 +72,34 @@
   # [http_service] is a *service* check: it decides whether the Fly proxy
   # sends traffic to a machine. It does NOT restart one. Restart behavior is
   # the [[restart]] block below.
+  #
+  # `/ready`, not `/health` — see the long note in fly.toml. `/health` returns
+  # 200 during a total read outage because it never touches the database, and
+  # a check pointed at it makes an outage invisible rather than detected.
+  #
+  # 30s timeout, not 10s: a loaded operator instance was measured answering in
+  # 13-24s on 2026-09-01 while serving correctly. With min_machines_running = 1
+  # a check that flaps on a slow-but-working server takes the only machine out
+  # of rotation, which is a worse outcome than the slowness it detected.
+  #
+  # That same instance was watched degrading over a few hours on 2026-09-01:
+  # /health answered in 15.4s, then 26.8s, then 31.6s, and then stopped
+  # completing a TLS handshake at all (on both the Cloudflare hostname and the
+  # direct .fly.dev one, so the instance itself, not the edge).
+  #
+  # Two things follow. A 10s timeout would have fired during the healthy-but-
+  # slow phase and pulled the only machine, converting slowness into an outage.
+  # And 30s is not a ceiling on real answers either: past ~31s this endpoint was
+  # minutes away from serving nothing, so a check failing there is reporting a
+  # genuine problem rather than being impatient. If a future instance is
+  # legitimately slower than this, fix the instance — do not raise the timeout
+  # until the check can no longer fail.
   [[http_service.checks]]
-    interval = '15s'
-    timeout = '10s'
-    grace_period = '30s'
+    interval = '30s'
+    timeout = '30s'
+    grace_period = '120s'
     method = 'GET'
-    path = '/health'
+    path = '/ready'
 
 [[mounts]]
   source = "data"
@@ -97,7 +119,39 @@
 [[restart]]
   policy = 'always'
 
+# SIZED FOR THE LARGEST OPERATOR INSTANCE, DELIBERATELY. This file names no app
+# and is shared across every operator-run instance via `--app` at deploy time,
+# so one guest declaration has to serve all of them. It is reapplied verbatim
+# and overwrites the running machine's guest with no warning in the deploy
+# output. Check what you are about to overwrite:
+#
+#   scripts/check_fly_config_drift.sh --app <app> -c fly.operator.toml
+#
+# These three values are the VERIFIED running state of the largest operator
+# instance, read from the live machine on 2026-09-01:
+#
+#   flyctl machine list --app <app> --json | jq '.[].config.guest'
+#   -> { "cpu_kind": "performance", "cpus": 2, "memory_mb": 8192 }
+#
+# It was scaled up by hand after repeated exit-134 (V8 heap OOM) aborts and
+# never written back here. This file previously declared shared/2 CPU/4GB, so
+# deploying it would have downgraded BOTH halves of that guest.
+#
+# The CPU half is the more dangerous of the two, because it is quieter. An
+# undersized heap announces itself with an OOM abort and a restart; a downgrade
+# from `performance` to `shared` on a datastore under real query load just makes
+# every read slower, which reads as "the database is degraded" rather than "the
+# last deploy shrank the machine". Both halves are declared here for that
+# reason.
+#
+# THE TRADEOFF, STATED: this oversizes smaller instances. Two other Neotoma
+# machines run shared/1 CPU/1GB today, so this file already grew them at 4GB and
+# grows them further now. That direction is the safe one. A config that silently
+# SHRINKS a running machine causes an outage and reports success; one that
+# oversizes costs money and keeps serving. Until sizing is genuinely
+# per-instance, err toward the machine that needs the most — and run the drift
+# check first, which reports either direction before a deploy applies it.
 [[vm]]
-  memory = '4gb'
-  cpu_kind = 'shared'
+  memory = '8gb'
+  cpu_kind = 'performance'
   cpus = 2

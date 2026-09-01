@@ -70,11 +70,30 @@ primary_region = 'lhr'
   min_machines_running = 1
   processes = ['app']
 
+  # The sandbox had no check at all, so Fly could not distinguish a serving
+  # machine from a wedged one here either — the same gap that made the
+  # 2026-09-01 operator outage invisible (neotoma#2279).
+  #
+  # `/ready` runs a real bounded SELECT; `/health` reads package.json off disk
+  # and answers 200 through a total read outage, so it is never a check target.
+  # Timeouts match the other configs: sized for a slow-but-alive server, since
+  # a check that flaps on a working instance is worse than none.
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '30s'
+    grace_period = '120s'
+    method = 'GET'
+    path = '/ready'
+
 [[mounts]]
   source = "persistent_sandbox"
   destination = "/data"
 
+# 2GB, not 1GB. Node's default old-space ceiling is ~2GB, so a 1GB machine puts
+# the V8 limit above available RAM and the process is killed rather than GC'd
+# under load (neotoma#2094). The sandbox takes anonymous public traffic, which
+# is exactly where an unbounded query arrives unannounced.
 [[vm]]
-  memory = '1gb'
+  memory = '2gb'
   cpu_kind = 'shared'
   cpus = 1

@@ -1067,6 +1067,22 @@
       ]
     },
     {
+      "path": "/ready",
+      "method": "GET",
+      "operation_id": "readinessCheck",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        503
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        503
+      ],
+      "override_applied": true
+    },
+    {
       "path": "/recent_conversations",
       "method": "GET",
       "operation_id": "getRecentConversations",
@@ -1695,5 +1711,21 @@
       ]
     }
   ],
-  "overrides": []
+  "overrides": [
+    {
+      "path": "/ready",
+      "method": "GET",
+      "reason": "503 is /ready's designed response when the database read fails or times out — it is the entire point of the endpoint, not an auth outcome. Without this override, deployed_probes.sh scores a legitimately degraded instance as a security failure, which is both a false alarm and a way to train operators to ignore the probe report. Auth posture is unchanged: the route is public by design and never returns 401.",
+      "fields": {
+        "expected_no_auth_status": [
+          200,
+          503
+        ],
+        "expected_invalid_auth_status": [
+          200,
+          503
+        ]
+      }
+    }
+  ]
 }

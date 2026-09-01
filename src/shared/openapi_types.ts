@@ -31,8 +31,31 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Health check */
+    /**
+     * Liveness check
+     * @description Reports that the process is running. Does NOT touch the database — it returns 200 throughout a total read outage, so it must not be used as a health check or as evidence the server can serve requests. Use /ready for that.
+     */
     get: operations["healthCheck"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Readiness check
+     * @description Runs a bounded real read against the database. Returns 503 when that read errors or exceeds NEOTOMA_READY_DB_TIMEOUT_MS (default 20s). This is the endpoint Fly health checks target. A 200 means the process is up and the database completed a trivial indexed read within the bound; it does not prove that heavier queries or writes succeed.
+     */
+    get: operations["readinessCheck"];
     put?: never;
     post?: never;
     delete?: never;
@@ -2271,6 +2294,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Result of the /ready database probe. */
+    ReadinessResult: {
+      /** @description True only when the database completed the probe read. */
+      ok?: boolean;
+      checks?: {
+        /** @enum {string} */
+        database?: "ok" | "failed";
+      };
+      /** @description Probe duration, reported on success and failure alike. Degradation is progressive, so the trend matters as much as the verdict. */
+      latency_ms?: number;
+      /** @description Failure reason. Present only when ok is false. */
+      error?: string;
+    };
     FileUrlResponse: {
       /** @description Signed URL for accessing the file */
       url?: string;
@@ -4323,7 +4359,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Server is healthy */
+      /** @description Process is running */
       200: {
         headers: {
           [name: string]: unknown;
@@ -4332,6 +4368,35 @@ export interface operations {
           "application/json": {
             ok?: boolean;
           };
+        };
+      };
+    };
+  };
+  readinessCheck: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server is ready to serve reads */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessResult"];
+        };
+      };
+      /** @description Database read failed or timed out */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessResult"];
         };
       };
     };

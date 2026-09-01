@@ -29,6 +29,7 @@ import {
 import { attributionContext } from "./middleware/attribution_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
 import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
+import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
@@ -2408,6 +2409,10 @@ function sendValidationError(res: express.Response, issues: unknown): express.Re
 }
 
 // Public health endpoint (no auth)
+//
+// LIVENESS ONLY. This reads package.json off disk and never touches the
+// database, so it returns 200 throughout a total read outage. Do not use it as
+// a Fly health check or as a watchdog's healthy verdict — use /ready below.
 app.get("/health", (_req, res) => {
   let version = "0.0.0";
   try {
@@ -2418,6 +2423,22 @@ app.get("/health", (_req, res) => {
     // fallback
   }
   return res.json({ ok: true, version });
+});
+
+// Public readiness endpoint (no auth). This is what Fly's health check hits —
+// see the [[http_service.checks]] block in fly.toml.
+//
+// Unlike /health above, it exercises the real read path and returns 503 when
+// the database is unreachable, erroring, or too slow. See
+// src/services/readiness.ts for exactly what a passing result does and does
+// not prove.
+app.get("/ready", async (_req, res) => {
+  const result = await probeReadiness(db);
+  if (!result.ok) {
+    logger.warn(`[Ready] database probe failed after ${result.latency_ms}ms: ${result.error}`);
+    return res.status(503).json(result);
+  }
+  return res.json(result);
 });
 
 // ============================================================================
@@ -3909,7 +3930,8 @@ app.use(async (req, res, next) => {
     (req.method === "GET" &&
       (req.path === "/openapi.yaml" ||
         req.path === "/openapi_actions.yaml" ||
-        req.path === "/health")) ||
+        req.path === "/health" ||
+        req.path === "/ready")) ||
     (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();

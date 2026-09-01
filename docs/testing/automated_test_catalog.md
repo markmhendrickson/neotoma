@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **585**
-- Backend and repo Vitest files: **550**
+- Total automated test files: **587**
+- Backend and repo Vitest files: **552**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 162 |
+| Vitest unit tests | 163 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 166 |
 | Vitest CLI tests | 77 |
-| Vitest contract tests | 15 |
+| Vitest contract tests | 16 |
 | Vitest security tests | 7 |
 | Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (162):**
+**Files (163):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -228,6 +228,7 @@ flowchart TD
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/pull_request_schema.test.ts`
+- `tests/unit/readiness_probe.test.ts`
 - `tests/unit/recover_json_array_string.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
 - `tests/unit/relationship_reducer.test.ts`
@@ -658,10 +659,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (15):**
+**Files (16):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
+- `tests/contract/fly_deploy_config.test.ts`
 - `tests/contract/get_entities_alias.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
 - `tests/contract/legacy_payloads/replay.test.ts`
