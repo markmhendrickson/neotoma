@@ -197,13 +197,29 @@ jobs:
         if: steps.gate.outputs.configured == 'true'
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # --app is passed EXPLICITLY: the repo's fly.toml declares the SANDBOX
-      # app, so a bare `flyctl deploy` here would redeploy the sandbox.
-      # --primary-region is REQUIRED: fly.toml declares primary_region='lhr'
-      # while this instance's volume is in ams. Without it the deploy builds and
-      # then fails at machine creation with "needs an unattached volume named
-      # 'data' in region 'lhr'". `--regions` does NOT substitute — it filters
-      # existing machines and produces the identical error.
+      # -c fly.operator.toml is LOAD-BEARING, not tidiness. `flyctl deploy`
+      # defaults to fly.toml, and it REAPPLIES the config's [[vm]] block over
+      # the running machine — it does not merge, and it prints no warning when
+      # it shrinks one. fly.toml declares the small shared default; the operator
+      # instance runs performance / 2 CPU / 8GB, set by hand after repeated
+      # exit-134 (V8 heap OOM) aborts. Deploying without -c would silently
+      # downgrade it by 8x on memory and drop it from `performance` to `shared`.
+      #
+      # That is not hypothetical: on 2026-09-01 a deploy from a stale checkout
+      # reapplied a 1GB/shared-cpu-1x guest over this instance and took it from
+      # slow to unreachable for ~30 minutes, while `flyctl status` reported
+      # `started` throughout. The memory half announces itself with an OOM
+      # abort; the CPU half is quieter and just makes every read slower.
+      #
+      # fly.operator.toml also carries the [[mounts]] source = "data" and the
+      # /ready health check. Deploying from fly.toml would take those settings
+      # from a file that is not describing this instance.
+      #
+      # --app is passed EXPLICITLY because no config in this repo names an app
+      # (this repo is public). --primary-region is REQUIRED: without it machine
+      # creation fails with "needs an unattached volume named 'data' in region
+      # '<region>'". `--regions` does NOT substitute — it filters existing
+      # machines and produces the identical error.
       # VITE_NEOTOMA_SANDBOX_UI must stay empty (no "Public sandbox" banner) and
       # VITE_PUBLIC_BASE_PATH must be "/" (a "/inspector/" build renders a blank
       # page while /health still returns ok).
@@ -215,7 +231,8 @@ jobs:
           REGION: ${{ vars.OPERATOR_INSTANCE_REGION || 'ams' }}
           SHA: ${{ steps.resolve.outputs.ref }}
         run: |
-          flyctl deploy --app "$APP" --primary-region "$REGION" --remote-only \
+          flyctl deploy -c fly.operator.toml \
+            --app "$APP" --primary-region "$REGION" --remote-only \
             --build-arg VITE_NEOTOMA_SANDBOX_UI="" \
             --build-arg VITE_PUBLIC_BASE_PATH="/" \
             --build-arg NEOTOMA_GIT_SHA="$SHA"
