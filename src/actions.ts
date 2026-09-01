@@ -27,6 +27,7 @@ import {
   getAttributionDecisionFromRequest,
 } from "./middleware/aauth_verify.js";
 import { attributionContext } from "./middleware/attribution_context.js";
+import { dbAbortContext } from "./middleware/db_abort_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
 import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
@@ -1829,6 +1830,11 @@ app.use(
 // may nest a more specific `runWithRequestContext` — nested scopes
 // shadow outer ones exactly as intended.
 app.use(attributionContext());
+
+// Bind a per-request AbortSignal so DB reads stop consuming a reader-pool slot
+// when the client hangs up (#2217). Reads only — a write must not be abandoned
+// half-applied. No-op on backends without a worker pool.
+app.use(dbAbortContext());
 
 // Stronger AAuth Admission plan: resolve verified AAuth identities to
 // `agent_grant` entities and stamp `req.aauthAdmission` /
