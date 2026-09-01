@@ -316,4 +316,19 @@ app = 'neotoma-sandbox'
       expect(checksOf(config).length).toBeGreaterThan(0);
     }
   });
+
+  it("keeps the operator config on the performance CPU class", () => {
+    // The CPU half of the downgrade is the quieter one, and so the easier to
+    // reintroduce. An undersized heap announces itself with an OOM abort and a
+    // restart; `performance` -> `shared` on a datastore under query load just
+    // makes every read slower, which reads as "the database is degraded"
+    // rather than "the last deploy shrank the machine".
+    //
+    // Pinned to the verified running state of the largest operator instance
+    // (performance / 2 CPU / 8GB, read from the live machine 2026-09-01).
+    const vm = vmsOf(readFlyConfig("fly.operator.toml"))[0];
+    expect(vm.cpu_kind).toBe("performance");
+    expect(vm.cpus).toBe(2);
+    expect(memoryToMb(vm.memory)).toBe(8192);
+  });
 });

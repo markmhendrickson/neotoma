@@ -114,24 +114,31 @@
 #
 #   scripts/check_fly_config_drift.sh --app <app> -c fly.operator.toml
 #
-# 8GB is the known-good size of the largest instance. On 2026-09-01 one was
-# found running performance/2 CPU/8GB, having been scaled up by hand after
-# repeated exit-134 (V8 heap OOM) aborts — and never written back here. At the
-# previous 4GB, deploying this file would have reverted it and reintroduced the
-# crash loop it was scaled up to stop.
+# These three values are the VERIFIED running state of the largest operator
+# instance, read from the live machine on 2026-09-01:
 #
-# THE TRADEOFF, STATED: this oversizes smaller instances. A second operator
-# instance runs shared/1 CPU/1GB today, so this file already grew it at 4GB and
-# grows it further at 8GB. That direction is the safe one. A config that
-# silently SHRINKS a running machine causes an outage and reports success; one
-# that oversizes costs money and keeps serving. Until sizing is genuinely
-# per-instance, err toward the machine that needs the most.
+#   flyctl machine list --app <app> --json | jq '.[].config.guest'
+#   -> { "cpu_kind": "performance", "cpus": 2, "memory_mb": 8192 }
 #
-# cpu_kind stays 'shared'. The 8GB instance runs 'performance', but this file
-# cannot express both and a shared-CPU deploy does not reintroduce the OOM
-# aborts that motivated the memory bump. The drift script reports the cpu_kind
-# downgrade so it is visible rather than silent.
+# It was scaled up by hand after repeated exit-134 (V8 heap OOM) aborts and
+# never written back here. This file previously declared shared/2 CPU/4GB, so
+# deploying it would have downgraded BOTH halves of that guest.
+#
+# The CPU half is the more dangerous of the two, because it is quieter. An
+# undersized heap announces itself with an OOM abort and a restart; a downgrade
+# from `performance` to `shared` on a datastore under real query load just makes
+# every read slower, which reads as "the database is degraded" rather than "the
+# last deploy shrank the machine". Both halves are declared here for that
+# reason.
+#
+# THE TRADEOFF, STATED: this oversizes smaller instances. Two other Neotoma
+# machines run shared/1 CPU/1GB today, so this file already grew them at 4GB and
+# grows them further now. That direction is the safe one. A config that silently
+# SHRINKS a running machine causes an outage and reports success; one that
+# oversizes costs money and keeps serving. Until sizing is genuinely
+# per-instance, err toward the machine that needs the most — and run the drift
+# check first, which reports either direction before a deploy applies it.
 [[vm]]
   memory = '8gb'
-  cpu_kind = 'shared'
+  cpu_kind = 'performance'
   cpus = 2
