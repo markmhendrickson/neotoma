@@ -75,7 +75,12 @@ async function runNeotomaCli(
 
 describe("CLI issues message (smoke)", () => {
   const baseUrl = resolveTestApiBaseUrl();
-  /** Blank target avoids inherited operator URL pushing thread rows to remote during smoke tests. */
+  /**
+   * Blank target on the CLI process. The shared Vitest HTTP server must also
+   * have NEOTOMA_ISSUES_TARGET_URL="" (set in vitest.global_setup.ts); otherwise
+   * POST /issues/submit forwards to DEFAULT_ISSUES_TARGET_URL and this smoke
+   * can hang until the 60s test timeout.
+   */
   const issuesEnv = { NEOTOMA_ISSUES_TARGET_URL: "" };
 
   it("issues message --entity-id … --body … --json exercises POST /issues/add_message", async () => {

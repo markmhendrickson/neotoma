@@ -17,6 +17,16 @@ export default async function globalSetup() {
   process.env.NEOTOMA_DATA_DIR = process.env.NEOTOMA_DATA_DIR || vitestDir;
   process.env.NODE_ENV = "test";
 
+  // Unit/smoke suites share this HTTP process. Blank the issues target unless the
+  // caller deliberately set one — otherwise loadIssuesConfig falls back to
+  // DEFAULT_ISSUES_TARGET_URL (prod operator) and CLI smoke tests like
+  // tests/cli/issues_message.test.ts hang on remote POST /issues/submit until
+  // vitest's 60s timeout (CI baseline flake on PR #2284). Same pattern as
+  // tests/helpers/two_server_fixture.ts for the canonical operator server.
+  if (process.env.NEOTOMA_ISSUES_TARGET_URL === undefined) {
+    process.env.NEOTOMA_ISSUES_TARGET_URL = "";
+  }
+
   // Pick a stable base port for tests and let the server probe upward if in use.
   // Default 19080 keeps tests off the 18080-18099 range used by the local
   // dev-server LaunchAgents (see scripts/reload_neotoma_launchagents.sh).
