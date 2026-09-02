@@ -27,6 +27,7 @@ import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
 import { createApiClient } from "../shared/api_client.js";
 import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
+import { loadUserEnvFile } from "./user_env.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { parseSchemaFields } from "./parse_schema_fields.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
@@ -1654,7 +1655,15 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
 
 /**
  * Resolve CLI auth token using same patterns as MCP.
- * Encryption off: NEOTOMA_BEARER_TOKEN env, then stored OAuth token from config, or no token (API treats no Bearer as dev-local).
+ *
+ * Encryption off — precedence, highest first:
+ *   1. NEOTOMA_BEARER_TOKEN in the real process environment (explicit override)
+ *   2. NEOTOMA_BEARER_TOKEN in the user env file ($NEOTOMA_ENV_FILE, else
+ *      ~/.config/neotoma/.env) — hydrated by loadUserEnvFile(), which never
+ *      overwrites (1), so a caller can always override the file
+ *   3. stored OAuth token from ~/.config/neotoma/config.json
+ *   4. no token (API treats no Bearer as dev-local)
+ *
  * Encryption on: key-derived token (requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC).
  */
 async function getCliToken(): Promise<string | undefined> {
@@ -1667,6 +1676,11 @@ async function getCliToken(): Promise<string | undefined> {
     }
     return token;
   }
+  if (process.env.NEOTOMA_BEARER_TOKEN) return process.env.NEOTOMA_BEARER_TOKEN;
+  // Defence in depth for callers that reach getCliToken without having gone
+  // through bootstrap.ts / runCli (e.g. a module importing this file directly).
+  // No-op when the variable is already set, so process env still wins.
+  loadUserEnvFile();
   if (process.env.NEOTOMA_BEARER_TOKEN) return process.env.NEOTOMA_BEARER_TOKEN;
   const config = await readConfig();
   if (config.access_token?.trim()) return config.access_token;
@@ -18263,6 +18277,11 @@ function teeToLogFile(logFilePath: string): (() => Promise<void>) | null {
 }
 
 export async function runCli(argv: string[] = process.argv): Promise<void> {
+  // Idempotent with the identical call in bootstrap.ts: loadUserEnvFile never
+  // overwrites an already-set variable, so running it twice is a no-op. Repeated
+  // here because runCli is also invoked directly (tests, `neotoma` subcommand
+  // dispatch, embedders) without going through bootstrap.
+  loadUserEnvFile();
   argv = normalizeLegacyCliOptionAliases(argv);
   const noLogFile = argv.includes("--no-log-file");
   const logFileIdx = argv.indexOf("--log-file");
