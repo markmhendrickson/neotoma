@@ -3391,6 +3391,58 @@ export class NeotomaServer {
 
     const relationships: any[] = [];
 
+    // `source_entity_id` / `target_entity_id` are explicit endpoint filters and
+    // take precedence over the legacy `entity_id` + `direction` pattern, exactly
+    // as HTTP `POST /list_relationships` resolves them (src/actions.ts).
+    //
+    // Before #2205/#1973 this handler queried `parsed.entity_id` alone, so a
+    // call filtered only by `source_entity_id` ran `.eq("source_entity_id",
+    // undefined)` and matched nothing — the read path silently disagreed with
+    // the write path, and callers routed around it via
+    // `GET /entities/<id>/relationships` or `retrieve_graph_neighborhood`.
+    if (parsed.source_entity_id || parsed.target_entity_id) {
+      let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
+
+      if (!parsed.include_deleted) {
+        query = query.eq("is_live", 1);
+      }
+      if (parsed.relationship_type) {
+        query = query.eq("relationship_type", parsed.relationship_type);
+      }
+      if (parsed.source_entity_id) {
+        query = query.eq("source_entity_id", parsed.source_entity_id);
+      }
+      if (parsed.target_entity_id) {
+        query = query.eq("target_entity_id", parsed.target_entity_id);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data) {
+        relationships.push(
+          ...data.map(
+            (r: {
+              relationship_key: string;
+              source_entity_id: string;
+              snapshot?: unknown;
+              last_observation_at?: string;
+            }) => ({
+              ...r,
+              id: r.relationship_key,
+              // With an explicit endpoint filter there is no traversal origin to
+              // orient against, so direction reports the row's own role relative
+              // to the filtered source when one was given.
+              direction: parsed.source_entity_id ? "outbound" : "inbound",
+              metadata: r.snapshot,
+              created_at: r.last_observation_at,
+            })
+          )
+        );
+      }
+
+      return this.finalizeRelationshipList(relationships, parsed);
+    }
+
     // Query relationship_snapshots instead of relationships table
     if (normalizedDirection === "outbound" || normalizedDirection === "both") {
       let outboundQuery = db
@@ -3472,14 +3524,28 @@ export class NeotomaServer {
       }
     }
 
-    // Sort by last_observation_at DESC, tiebroken by relationship_key ASC
-    // (#1571). last_observation_at is mutable and ties for rows upserted in the
-    // same millisecond (batch ingestion); without a stable tiebreaker, tied
-    // rows can move between pages across successive calls, so pagination over
-    // this order can drop or duplicate rows. relationship_key is the snapshot
-    // primary key — a stable, unique tiebreaker that fully determines order.
-    // This matches the HTTP /list_relationships ordering (actions.ts) and the
-    // determinism invariant (docs/architecture/determinism.md). See issue #368.
+    return this.finalizeRelationshipList(relationships, parsed);
+  }
+
+  /**
+   * Shared ordering + pagination tail for `list_relationships`, applied
+   * identically to the endpoint-filter path (`source_entity_id` /
+   * `target_entity_id`) and the legacy `entity_id` + `direction` path so the
+   * two cannot drift (#2205).
+   *
+   * Sort by last_observation_at DESC, tiebroken by relationship_key ASC
+   * (#1571). last_observation_at is mutable and ties for rows upserted in the
+   * same millisecond (batch ingestion); without a stable tiebreaker, tied
+   * rows can move between pages across successive calls, so pagination over
+   * this order can drop or duplicate rows. relationship_key is the snapshot
+   * primary key — a stable, unique tiebreaker that fully determines order.
+   * This matches the HTTP /list_relationships ordering (actions.ts) and the
+   * determinism invariant (docs/architecture/determinism.md). See issue #368.
+   */
+  private finalizeRelationshipList(
+    relationships: any[],
+    parsed: { offset: number; limit: number }
+  ): { content: Array<{ type: string; text: string }> } {
     relationships.sort((a, b) => {
       const aTime = new Date(a.last_observation_at || a.computed_at || 0).getTime();
       const bTime = new Date(b.last_observation_at || b.computed_at || 0).getTime();
@@ -3490,9 +3556,9 @@ export class NeotomaServer {
     });
 
     // Soft-deleted edges were already excluded at the DB via the `is_live`
-    // predicate on each direction's query (#1570), so `relationships` holds
-    // only live edges on the default path (all edges when include_deleted).
-    // `total` therefore reflects the correct post-filter count.
+    // predicate on each query (#1570), so `relationships` holds only live edges
+    // on the default path (all edges when include_deleted). `total` therefore
+    // reflects the correct post-filter count.
     const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
