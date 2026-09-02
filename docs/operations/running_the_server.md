@@ -48,3 +48,7 @@ Remote MCP hosts (for example ChatGPT, or Claude over remote MCP) require HTTPS.
 ## Health and recovery
 
 Run `neotoma doctor` to check the environment, database, and security configuration. For operational procedures and database salvage, see the [runbook](runbook.md) and [health check](health_check.md).
+
+## Keeping the server current
+
+A running server reports its version at `GET /health`, and keeps serving that version until it is restarted. Neotoma never upgrades itself. For version checks, upgrade steps, and automating an update check, see [Upgrading](upgrading.md).
