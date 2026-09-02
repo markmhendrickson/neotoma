@@ -54,6 +54,23 @@ const MIN_MEMORY_MB = 2048;
  */
 const MIN_CHECK_TIMEOUT_SECONDS = 25;
 
+/**
+ * Fly silently clamps a *service* check's grace period to one minute:
+ *
+ *   WARN Service HTTP check has a grace period greater than 1 minute (2m0s);
+ *        this will be lowered to 1 minute
+ *
+ * `flyctl config validate` prints that as a warning and still exits 0, so a
+ * larger value parses, deploys, and reads as authoritative while never taking
+ * effect. Declaring one states a boot budget the platform does not grant.
+ *
+ * This is an upper bound deliberately, paired with the lower bound below. The
+ * lower bound alone is what let `120s` sit in all three configs unnoticed: it
+ * was satisfied, so nothing failed, and the file kept asserting a number that
+ * was discarded at deploy time.
+ */
+const MAX_SERVICE_CHECK_GRACE_SECONDS = 60;
+
 type TomlValue = string | number | boolean;
 type TomlTable = { [key: string]: TomlValue | TomlTable | TomlTable[] };
 
@@ -238,10 +255,21 @@ describe("fly_deploy_config.all_configs", () => {
         `${fileName} would flap against a loaded instance answering in 13-24s`
       ).toBeGreaterThanOrEqual(MIN_CHECK_TIMEOUT_SECONDS);
 
-      // A grace period shorter than boot marks a starting machine unhealthy:
-      // the [deploy] release_command seeds schemas and migrations run before
-      // the server listens.
+      // A grace period shorter than boot marks a starting machine unhealthy
+      // while migrations run before the server listens. Measured cold boot to
+      // first passing check on the largest operator instance (2 CPU / 8GB,
+      // 20GB volume) was 17.7s on 2026-09-01, so 60s carries roughly 3x
+      // headroom over the real number.
       expect(durationToSeconds(check.grace_period)).toBeGreaterThanOrEqual(60);
+
+      // ...and no more than the platform actually honours, so the file cannot
+      // claim a budget Fly discards. See MAX_SERVICE_CHECK_GRACE_SECONDS.
+      expect(
+        durationToSeconds(check.grace_period),
+        `${fileName} declares a grace period Fly clamps to ` +
+          `${MAX_SERVICE_CHECK_GRACE_SECONDS}s; the declared value is never what runs`
+      ).toBeLessThanOrEqual(MAX_SERVICE_CHECK_GRACE_SECONDS);
+
       expect(durationToSeconds(check.interval)).toBeGreaterThan(0);
     }
   });

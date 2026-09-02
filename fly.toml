@@ -83,12 +83,26 @@ primary_region = 'lhr'
   # instance that answers "not ready" is diagnosable; one that answers nothing
   # is indistinguishable from a network fault.
   #
-  # grace_period 120s: the [deploy] release_command seeds schemas and
-  # migrations run at boot, both before the server listens.
+  # grace_period 60s, which is also the ceiling Fly enforces. A service check
+  # declaring more is silently lowered:
+  #
+  #   WARN Service HTTP check has a grace period greater than 1 minute (2m0s);
+  #        this will be lowered to 1 minute
+  #
+  # `flyctl config validate` prints that and still exits 0, so the larger value
+  # parses, deploys, and reads as authoritative while never taking effect. This
+  # file previously declared 120s and justified it by the [deploy]
+  # release_command plus boot migrations — neither of which it bought. The
+  # release_command runs in its own ephemeral machine before the app machine
+  # starts, so it is not inside this budget at all.
+  #
+  # 60s is not tight. Measured on the largest operator instance (2 CPU / 8GB,
+  # 20GB volume) on 2026-09-01: 17.7s from machine start to first passing
+  # check, migrations and readiness probe included.
   [[http_service.checks]]
     interval = '30s'
     timeout = '30s'
-    grace_period = '120s'
+    grace_period = '60s'
     method = 'GET'
     path = '/ready'
 
