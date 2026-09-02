@@ -42,6 +42,17 @@ Full constraints in `docs/foundation/agent_instructions_rules.mdc` and `.claude/
 
 **Validation checklist** in `docs/foundation/agent_instructions_rules.mdc`.
 
+## Verification discipline
+
+Derived from repeated cross-repo failures, all of one shape: a mechanism reported success while doing nothing.
+
+- **A write that reports success has not necessarily happened — read it back.** `/store` accepts undeclared fields and routes them to `raw_fragments`, so a store returns 2xx while the field you cared about is silently not on the entity. A correction can return `success: true` and write nothing. After any write that matters, retrieve the entity and assert the specific field holds the value you wrote. Never treat a 2xx or `success: true` as evidence that data landed.
+- **Validate the instrument before believing the measurement.** A zero or an empty result is a claim about the query before it is a claim about the data. Field-name drift across records (`github_number` / `issue_number` / `number`), a value stored qualified (`owner/repo`) but queried bare, and an MCP tool name used as a REST route (which 404s into an empty result) have each produced a confident, wrong zero. Prove the query non-zero on a case known to be positive before reporting an absence.
+- **A test that cannot fail on the thing it watches is decoration.** Before trusting a test as coverage, revert the fix and confirm it goes red. A test written against current behaviour ratifies the bug rather than catching it.
+- **Fail closed on the field that carries the safety meaning.** When a value is absent, unrecognized, or malformed, default to the restrictive branch — and give absence a single spelling, normalizing sentinels (`""`, `"none"`, `"unassigned"`) to it rather than letting a truthy placeholder pass as a real value.
+- **Extend the mechanism that already generalizes; do not build a parallel one.** Search the code for the existing path before adding another, and reuse the existing entity or relationship type rather than minting a near-duplicate — a second type covering the same meaning splits every future query across both.
+- **A mechanism that does not bind is not a control.** A linter no workflow invokes, a step carrying `continue-on-error`, or a verdict posted as a comment enforces nothing. When adding a control, name what fails when it is violated.
+
 ## Configuration
 
 - **`foundation-config.yaml`** — Repository-specific settings (conventions, security, workflows)
