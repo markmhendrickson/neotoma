@@ -412,6 +412,132 @@ await emitUsageDigest(
 );
 ```
 
+## `/usage` HTTP API endpoint
+
+`GET /usage` is a separate, complementary surface that exposes **pre-aggregated dashboard metrics** computed on the fly from the live database. It is _not_ the same as querying `usage_digest` entities: the endpoint returns ephemeral per-request aggregates scoped to the authenticated user, while `usage_digest` entities are durable, periodic telemetry records submitted by external observers.
+
+### Purpose
+
+The endpoint powers the Neotoma Inspector dashboard (the summary tiles showing total entities, recent ingestion, and schema coverage). It can also be called directly by operators or agents that want a quick snapshot of their local deployment's current state without parsing raw entity records.
+
+### Endpoint
+
+```
+GET /usage
+```
+
+`operationId: getUsage` — declared in `openapi.yaml` and mapped in `src/shared/contract_mappings.ts` with `adapter: "cli"` (CLI-accessible via `neotoma request --operation getUsage`).
+
+### Authentication
+
+**Authentication is required.** All figures are scoped to the authenticated user.
+
+Supported auth methods (same as all other authenticated endpoints):
+
+| Method          | How to supply                                   |
+| --------------- | ----------------------------------------------- |
+| Bearer token    | `Authorization: Bearer <NEOTOMA_BEARER_TOKEN>`  |
+| AAuth grant     | Agent identity admitted via `X-AAuth-*` headers |
+| MCP OAuth token | Bearer token issued through MCP OAuth flow      |
+
+Guest principals cannot call this endpoint. A missing or invalid token returns `401 AUTH_REQUIRED`.
+
+Optional query parameter: `user_id` (UUID string). When supplied, the authenticated user's ID must match — useful for CLI tooling that passes its local user ID explicitly. AAuth-admitted agents cannot override `user_id` to a different user.
+
+### Response shape
+
+**`200 OK`** — `application/json` — `UsageStats` object:
+
+| Field                           | Type                     | Description                                                                                                                                                 |
+| ------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entities_by_type`              | `Record<string, number>` | Count of active (non-merged) entities per `entity_type`, sorted by count descending.                                                                        |
+| `total_entities`                | `number`                 | Total active entities across all types.                                                                                                                     |
+| `observations_by_source`        | `Record<string, number>` | Count of observations grouped by `observation_source` value, sorted by count descending. Sources not present on any observation appear as `"unclassified"`. |
+| `total_observations`            | `number`                 | Total observation records for this user.                                                                                                                    |
+| `entities_created_last_7_days`  | `number`                 | Entities whose `created_at` timestamp falls within the last 7 days.                                                                                         |
+| `entities_created_last_30_days` | `number`                 | Entities whose `created_at` timestamp falls within the last 30 days.                                                                                        |
+| `entity_types_with_schema`      | `number`                 | Count of distinct `entity_type` values present in the entities table that also have an active entry in `schema_registry`.                                   |
+| `entity_types_total`            | `number`                 | Total distinct `entity_type` values present across all active entities for this user.                                                                       |
+| `last_updated`                  | `string` (ISO-8601)      | ISO timestamp generated at the moment the aggregates were computed. Reflects when the response was assembled, not a database watermark.                     |
+
+All figures are computed fresh on each request — there is no server-side cache. The `last_updated` timestamp reflects the time of the request, not a cache expiry.
+
+### Example
+
+**Request:**
+
+```http
+GET /usage HTTP/1.1
+Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
+```
+
+**Response:**
+
+```json
+{
+  "entities_by_type": {
+    "conversation": 214,
+    "task": 156,
+    "contact": 88,
+    "harness_event": 42
+  },
+  "total_entities": 500,
+  "observations_by_source": {
+    "human": 310,
+    "llm_summary": 140,
+    "sensor": 50
+  },
+  "total_observations": 500,
+  "entities_created_last_7_days": 34,
+  "entities_created_last_30_days": 112,
+  "entity_types_with_schema": 6,
+  "entity_types_total": 10,
+  "last_updated": "2026-06-19T09:00:00.000Z"
+}
+```
+
+**curl example:**
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  http://localhost:3080/usage | jq .
+```
+
+### Error responses
+
+| Status | `error_code`      | Cause                                                                 |
+| ------ | ----------------- | --------------------------------------------------------------------- |
+| `401`  | `AUTH_REQUIRED`   | Missing or invalid Bearer token; guest principal attempted.           |
+| `403`  | `FORBIDDEN`       | Supplied `user_id` query param does not match the authenticated user. |
+| `500`  | `DB_QUERY_FAILED` | Database query failed; check server logs for `APIError:usage_stats`.  |
+
+### Inspector / dashboard consumption
+
+The Neotoma Inspector dashboard polls `GET /usage` on page load via React Query (`queryKey: ["usage"]`). The response drives the four summary tiles:
+
+- **Total entities** — `total_entities` with `entity_types_total` entity types as a subtitle.
+- **Total observations** — `total_observations`.
+- **New (7 days)** — `entities_created_last_7_days` with `entities_created_last_30_days` last 30 days as a subtitle.
+- **Schema coverage** — derived from `entity_types_with_schema` / `entity_types_total`.
+
+The dashboard does not poll on an interval; it refetches on manual navigation or page reload. There is no server-sent staleness header.
+
+### Distinction from `usage_digest` entities
+
+|                      | `GET /usage`                                          | `usage_digest` entities                                                |
+| -------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Durability**       | Ephemeral — computed on each request, not stored.     | Durable — persisted entities queryable over time.                      |
+| **Scope**            | Current live state for the authenticated user.        | Historical rollup for a bounded time window from an external observer. |
+| **Writer**           | Neotoma server, on each HTTP call.                    | External agent / observer daemon via `store` MCP operation.            |
+| **Auth**             | Requires authenticated user (Bearer / AAuth / OAuth). | Can accept guest `store` writes via `submit_only` guest policy.        |
+| **PII risk**         | No free-text fields; counts only.                     | Contains `friction_notes` / `notes` — redacted on ingest.              |
+| **Primary consumer** | Inspector dashboard, CLI operators.                   | Telemetry dashboards, cross-deployment trend analysis.                 |
+
+### OpenAPI reference
+
+The full schema for `UsageStats` and the `getUsage` operation are declared in `openapi.yaml`. The generated TypeScript types live in `src/shared/openapi_types.ts` under `components["schemas"]["UsageStats"]` and `operations["getUsage"]`.
+
 ## Related
 
 - [`daemon_report`](../../src/services/schema_definitions.ts) — per-incident anomaly reports; the drill-down companion to usage digests.
@@ -419,3 +545,4 @@ await emitUsageDigest(
 - [`guest_access_policy.md`](guest_access_policy.md) — configuring keyless write access for telemetry sinks.
 - [`aauth.md`](aauth.md) — issuing agent grants for authenticated digest submission.
 - [`subscriptions.md`](subscriptions.md) — subscribing to `UsageDigestClosed` timeline events for downstream alerting.
+- [`docs/api/rest_api.md`](../api/rest_api.md) — top-level REST API reference including the `/usage` endpoint entry.
