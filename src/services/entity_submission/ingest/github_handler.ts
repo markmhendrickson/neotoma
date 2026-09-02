@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 
 import type { ExternalActor } from "../../../crypto/agent_identity.js";
 import { buildExternalActor } from "../../issues/external_actor_builder.js";
+import type { WebhookIngestHandler } from "./webhook_ingest.js";
 
 export function verifyGithubSignature(
   rawBody: Buffer,
@@ -200,3 +201,25 @@ function mapIssueCommentEvent(
     observation_source: "sensor",
   };
 }
+
+/**
+ * Conformance binding for {@link WebhookIngestHandler}.
+ *
+ * The shipped `POST /github/webhook` route in `src/actions.ts` calls
+ * `verifyGithubSignature` and `mapGithubWebhookEventToStore` directly, so this
+ * object is not on the request path. It exists so the compiler checks the
+ * GitHub handler against the stated interface: if the interface changes, or a
+ * second provider is added and this shape drifts, the build fails here rather
+ * than silently diverging. See `webhook_ingest.ts` for why no generic route
+ * exists.
+ */
+export const githubWebhookIngestHandler: WebhookIngestHandler = {
+  provider: "github",
+  verifySignature(headers, rawBody, secret) {
+    const header = headers["x-hub-signature-256"];
+    const signature = Array.isArray(header) ? header[0] : header;
+    if (!signature) return false;
+    return verifyGithubSignature(rawBody, signature, secret);
+  },
+  mapEventToStore: mapGithubWebhookEventToStore,
+};
