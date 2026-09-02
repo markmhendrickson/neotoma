@@ -37,7 +37,7 @@
  * needed for that follow-up.
  */
 
-import { setApiUrl, setAuthSession, getApiUrl } from "@/api/client";
+import { setApiUrl, setAuthSession, getApiUrl, clearAuthToken } from "../api/client";
 
 const PKCE_STORAGE_KEY = "neotoma_inspector_oauth_pkce";
 const RETURN_PATH_STORAGE_KEY = "neotoma_inspector_oauth_return_path";
@@ -240,6 +240,46 @@ export async function completeOAuthSignIn(search: URLSearchParams): Promise<OAut
       returnPath: fallbackReturnPath,
     };
   }
+}
+
+/**
+ * End the current OAuth key-session: `POST /mcp/oauth/sign-out` (cookie is
+ * scoped to `/mcp/oauth`, so `credentials: "include"` is required for the
+ * browser to send it). On 2xx (including idempotent empty session), clear the
+ * locally stored auth bundle via {@link clearAuthToken} so Settings no longer
+ * looks signed-in. On non-2xx / network failure, throw and leave local auth
+ * intact — claiming signed-out when the server session may still be live would
+ * lie to the operator (#2227 UX gate).
+ *
+ * Does not navigate to the HTML “Signed out” page; Settings stays in-app.
+ * Mirrors {@link startOAuthSignIn}: the Inspector is a client of the server's
+ * `/mcp/oauth/sign-out` route, not a second implementation of session
+ * revocation.
+ */
+export async function signOutOAuthSession(): Promise<void> {
+  const apiBase = getApiUrl().replace(/\/$/, "");
+  if (!apiBase) {
+    throw new Error("Set an API Base URL before signing out.");
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}/mcp/oauth/sign-out`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (err) {
+    throw new Error(
+      err instanceof Error ? err.message : "Sign out request failed (network error)."
+    );
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(body.trim() || `Sign out failed (HTTP ${res.status}).`);
+  }
+
+  clearAuthToken();
 }
 
 export { OAUTH_CALLBACK_PATH };
