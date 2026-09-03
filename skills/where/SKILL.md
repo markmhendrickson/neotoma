@@ -6,7 +6,6 @@ triggers:
   - where are we
   - where do things stand
   - what's running
-  - quick status
 user_invocable: true
 supported_harnesses:
   - claude-code
@@ -46,6 +45,10 @@ skill or in a report; a session that believes it is will reach for the wrong too
 moment.
 
 **Both `/where` and `/status` orient the operator, at very different cost. Neither closes anything.**
+
+Natural-language orientation prompts belong to `/where`: "where are we" and "where do things
+stand" should route here. Retrospective session-summary prompts belong to `/status`: "status
+report" and "what's done so far" should route there.
 
 `/end` does not depend on `/where` or `/status` having run — it does its own whole-session
 reconstruction in its Phase 0. So skipping straight from a string of `/where` calls to `/end`
