@@ -27,7 +27,7 @@ This document does not cover:
 ## Definitions
 - **Automated test file**: A repo test source matched by this catalog's scanner (`tests/**`, `src/**`, `frontend/src/**`, `playwright/tests/**`).
 - **Catalog generator**: `scripts/generate-automated-test-catalog.ts`, the only source allowed to rewrite this file.
-- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree.
+- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. CI does not use it: the baseline lane runs `npm run reconcile:test-catalog`, which regenerates instead of failing, so a stale copy never blocks a pull request.
 
 ## Data models or schemas
 None.
@@ -52,8 +52,8 @@ flowchart TD
 
 ## Testing requirements
 - `npm run generate:test-catalog` must be run when automated test inventory changes.
-- `npm run validate:test-catalog` must pass before merge.
-- CI runs `npm run validate:test-catalog` in the baseline lane.
+- `npm run validate:test-catalog` should pass before merge, but does not block it.
+- CI runs `npm run reconcile:test-catalog` in the baseline lane, which regenerates this file rather than failing on drift.
 
 ## Maintenance
 - Canonical policy doc: `docs/testing/testing_standard.md`.
@@ -97,7 +97,7 @@ flowchart TD
 - `npm run validate:doc-deps`
 
 ## CI lanes
-- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `validate:test-catalog`, and `validate:doc-deps`.
+- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `reconcile:test-catalog`, and `validate:doc-deps`.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
 - Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.

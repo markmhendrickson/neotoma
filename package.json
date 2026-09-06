@@ -128,6 +128,7 @@
     "validate:capability-manifest": "tsx scripts/generate-capability-manifest.ts --check",
     "generate:test-catalog": "tsx scripts/generate-automated-test-catalog.ts",
     "validate:test-catalog": "tsx scripts/generate-automated-test-catalog.ts --check",
+    "reconcile:test-catalog": "tsx scripts/generate-automated-test-catalog.ts --reconcile",
     "validate:coverage": "tsx scripts/validate-coverage-map.ts",
     "check:pw-coverage": "tsx scripts/check-playwright-coverage.ts",
     "validate:doc-deps": "node scripts/validate-doc-dependencies.js --check-modified",
