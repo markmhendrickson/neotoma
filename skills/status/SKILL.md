@@ -4,7 +4,6 @@ description: Mid-session status report. Summarizes what's been achieved so far t
 triggers:
   - /status
   - session status
-  - where are we
   - what's done so far
   - status report
 user_invocable: true
