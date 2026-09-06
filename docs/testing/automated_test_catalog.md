@@ -70,7 +70,7 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 163 |
-| Vitest service tests | 43 |
+| Vitest service tests | 44 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 167 |
 | Vitest CLI tests | 77 |
@@ -279,7 +279,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (43):**
+**Files (44):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -318,6 +318,7 @@ flowchart TD
 - `tests/services/schema_registry_bootstrap.test.ts`
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
+- `tests/services/schema_seeding_preserves_custom_identity.test.ts`
 - `tests/services/session_seed_schema.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
