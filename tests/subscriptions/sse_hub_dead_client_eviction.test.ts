@@ -46,17 +46,33 @@ function issueEvent(): SubstrateEvent {
   } as unknown as SubstrateEvent;
 }
 
-/** Minimal fake of the bits of express Response that the hub touches. */
+/**
+ * Minimal fake of the bits of express Response that the hub touches.
+ *
+ * `writableEnded` / `destroyed` / `throwOnWrite` are mutable so a test can
+ * "revive" a socket after a broadcast. That revival is what makes the eviction
+ * splice observable from outside the hub: `clients` is module-private with no
+ * size accessor, so the only black-box way to prove a client was actually
+ * REMOVED — rather than merely skipped on the pass that saw it dead — is to
+ * make it healthy again and assert the hub no longer knows about it.
+ */
 function fakeRes(opts: { ended?: boolean; throwOnWrite?: boolean } = {}) {
   const writes: string[] = [];
   return {
     writableEnded: opts.ended ?? false,
     destroyed: false,
+    throwOnWrite: opts.throwOnWrite ?? false,
     writes,
     write(chunk: string) {
-      if (opts.throwOnWrite) throw new Error("socket destroyed");
+      if (this.throwOnWrite) throw new Error("socket destroyed");
       writes.push(chunk);
       return true;
+    },
+    /** Make this socket healthy again, as if it had never dropped. */
+    revive() {
+      this.writableEnded = false;
+      this.destroyed = false;
+      this.throwOnWrite = false;
     },
   };
 }
@@ -101,6 +117,46 @@ describe("broadcastSubstrateEventToSse dead-client eviction", () => {
       expect(good.writes.length).toBe(3);
       // Second pass: bad client already evicted, good client keeps working.
       broadcastSubstrateEventToSse(issueEvent(), "2");
+      expect(good.writes.length).toBe(6);
+    } finally {
+      unregisterGood();
+    }
+  });
+
+  // The three cases above pass even if the eviction splice is deleted: a dead
+  // socket records no writes whether it was removed from `clients` or merely
+  // skipped again on every later pass. These two lock the splice itself.
+
+  it("REMOVES an ended client from the fan-out set, not just skips it", () => {
+    const res = fakeRes({ ended: true });
+    registerSseClient(client(issueSub("ended-revived"), res));
+
+    // Pass 1 sees a dead socket: no write, and the client must be spliced out.
+    broadcastSubstrateEventToSse(issueEvent(), "1");
+    expect(res.writes.length).toBe(0);
+
+    // The socket comes back to life. If it is still registered, the hub will
+    // now happily write to it — which is exactly the leak #1749 describes.
+    res.revive();
+    broadcastSubstrateEventToSse(issueEvent(), "2");
+    expect(res.writes.length).toBe(0);
+  });
+
+  it("REMOVES a client whose write threw, even after that socket recovers", () => {
+    const bad = fakeRes({ throwOnWrite: true });
+    const good = fakeRes();
+    registerSseClient(client(issueSub("threw-revived"), bad));
+    const unregisterGood = registerSseClient(client(issueSub("good-2"), good));
+    try {
+      // Pass 1: bad throws and is evicted; good is delivered to.
+      broadcastSubstrateEventToSse(issueEvent(), "1");
+      expect(good.writes.length).toBe(3);
+
+      // Bad socket recovers. Having been evicted, it must receive nothing —
+      // a client that threw is gone until it re-registers.
+      bad.revive();
+      broadcastSubstrateEventToSse(issueEvent(), "2");
+      expect(bad.writes.length).toBe(0);
       expect(good.writes.length).toBe(6);
     } finally {
       unregisterGood();
