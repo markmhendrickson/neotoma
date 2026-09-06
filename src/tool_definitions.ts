@@ -1,4 +1,5 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
+import { RelationshipTypeSchema } from "./shared/action_schemas.js";
 
 export type ToolInputSchema = Record<string, unknown>;
 
@@ -10,16 +11,20 @@ export interface ToolDefinition {
   _meta?: Record<string, unknown>;
 }
 
-const RELATIONSHIP_TYPE_ENUM = [
-  "PART_OF",
-  "CORRECTS",
-  "REFERS_TO",
-  "SETTLES",
-  "DUPLICATE_OF",
-  "DEPENDS_ON",
-  "SUPERSEDES",
-  "EMBEDS",
-];
+/**
+ * Relationship types advertised by the hand-built tool schemas
+ * (`delete_relationship`, `restore_relationship`, `get_relationship_snapshot`).
+ *
+ * Derived from `RelationshipTypeSchema` — the SAME Zod enum the server parses
+ * these three requests with — rather than restated as a literal. Until #1972
+ * this was a local 8-member list while `create_relationship` (whose schema
+ * comes from OpenAPI) advertised 28, so an edge written with any of the other
+ * 20 types was advertised to MCP clients as undeletable: a schema-validating
+ * client refused the call before it reached a server that would have accepted
+ * it. Reading the advertisement off the validator makes that class of drift
+ * unrepresentable here instead of merely fixed once.
+ */
+const RELATIONSHIP_TYPE_ENUM: readonly string[] = RelationshipTypeSchema.options;
 
 /**
  * Build the complete list of Neotoma MCP tool definitions.
@@ -636,7 +641,8 @@ export function buildToolDefinitions(
         properties: {
           relationship_type: {
             type: "string",
-            description: "Relationship type (e.g. PART_OF, REFERS_TO, EMBEDS)",
+            description:
+              "Exact relationship type of the existing edge. Accepts the same set create_relationship writes: structural types (PART_OF, REFERS_TO, EMBEDS) and domain types (works_at, related_to, owns).",
             enum: RELATIONSHIP_TYPE_ENUM,
           },
           source_entity_id: {
@@ -699,7 +705,8 @@ export function buildToolDefinitions(
         properties: {
           relationship_type: {
             type: "string",
-            description: "Relationship type (e.g. PART_OF, REFERS_TO, EMBEDS)",
+            description:
+              "Exact relationship type of the existing edge. Accepts the same set create_relationship writes: structural types (PART_OF, REFERS_TO, EMBEDS) and domain types (works_at, related_to, owns).",
             enum: RELATIONSHIP_TYPE_ENUM,
           },
           source_entity_id: {
