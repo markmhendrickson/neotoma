@@ -110,6 +110,20 @@ npm run dev:full
 
 ## Run tests
 
+`npm test` runs the whole Vitest suite, which is wider than the CI baseline lane
+(that lane runs `npm run test:unit`). The extra lanes — `tests/integration`,
+`tests/fixtures` and `inspector/src` — need build artifacts a plain `npm install`
+does not produce, notably the built Inspector SPA at `dist/inspector` and
+`inspector/node_modules`. Without them a clean checkout that is green in CI still
+fails locally, which also blocks the pre-commit hook. Run the setup once per
+checkout:
+
+```bash
+npm run test:setup
+```
+
+Then:
+
 ```bash
 npm test
 npm run test:integration
