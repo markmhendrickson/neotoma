@@ -24,5 +24,5 @@ alwaysApply: false
 - `docs/testing/automated_test_catalog.md` is the canonical automated-test inventory.
 - When automated test files are added, removed, moved, or renamed, run `npm run generate:test-catalog` in the same change.
 - When test commands, CI lanes, or default-vs-optional test modes change, update `docs/testing/automated_test_catalog.md` and `docs/testing/testing_standard.md` in the same change.
-- Before finishing, run `npm run validate:test-catalog`. It is advisory: CI reconciles the catalog rather than failing on it, so a forgotten regeneration will not block your pull request.
+- Before finishing, run `npm run validate:test-catalog`. It is advisory: CI renders the catalog rather than failing on it, so a forgotten regeneration will not block your pull request.
 - Do not hand-edit generated inventory entries in the catalog; update the generator or regenerate the file instead.

@@ -289,7 +289,7 @@ function generateCatalog(): string {
     "## Definitions",
     "- **Automated test file**: A repo test source matched by this catalog's scanner (`tests/**`, `src/**`, `frontend/src/**`, `playwright/tests/**`).",
     "- **Catalog generator**: `scripts/generate-automated-test-catalog.ts`, the only source allowed to rewrite this file.",
-    "- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. CI does not use it: the baseline lane runs `npm run reconcile:test-catalog`, which regenerates instead of failing, so a stale copy never blocks a pull request.",
+    "- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. It is the local, pre-PR advisory gate. CI does not use it: the baseline lane runs `npm run generate:test-catalog`, which renders this file rather than failing on drift, so a stale copy never blocks a pull request.",
     "",
     "## Data models or schemas",
     "None.",
@@ -315,7 +315,7 @@ function generateCatalog(): string {
     "## Testing requirements",
     "- `npm run generate:test-catalog` must be run when automated test inventory changes.",
     "- `npm run validate:test-catalog` should pass before merge, but does not block it.",
-    "- CI runs `npm run reconcile:test-catalog` in the baseline lane, which regenerates this file rather than failing on drift.",
+    "- CI runs `npm run generate:test-catalog` in the baseline lane, which renders this file rather than failing on drift.",
     "",
     "## Maintenance",
     "- Canonical policy doc: `docs/testing/testing_standard.md`.",
@@ -343,7 +343,7 @@ function generateCatalog(): string {
     "- `npm run validate:doc-deps`",
     "",
     "## CI lanes",
-    "- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `reconcile:test-catalog`, and `validate:doc-deps`.",
+    "- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.",
     "- Frontend CI runs `npm run test:frontend`.",
     "- Site/export CI runs route, locale, and export validation tasks.",
     "- Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.",
@@ -384,26 +384,23 @@ function main(): void {
   const next = generateCatalog();
   const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
   const relativeOutput = path.relative(repoRoot, outputPath);
+  // `--check` is the local/pre-PR advisory gate: it reports drift and fails,
+  // without touching the file. The default (no flag) is the write path, and it
+  // is what CI runs.
+  //
+  // CI renders rather than validates because this catalog is a pure derivative
+  // of the test filenames in the tree (`git ls-files` + an extension filter) —
+  // there is no authored prose in the inventory sections, so a stale copy
+  // carries no information that regenerating it could destroy.
+  //
+  // Enforcing it in CI with `--check` turned one merge that forgot to
+  // regenerate into a red required lane on EVERY open PR, and because every PR
+  // adding a test edits the same sorted list and the same `**Files (N):**`
+  // counters, PRs also conflicted with each other in a file neither of them
+  // meaningfully authored. Approvals then aged out while the conflict was
+  // resolved by hand — a staleness ratchet that regrew the review backlog
+  // faster than it could be cleared.
   const checkOnly = process.argv.includes("--check");
-  // `--reconcile` is the CI mode. This catalog is a pure derivative of the test
-  // filenames in the tree (`git ls-files` + an extension filter) — there is no
-  // authored prose in the inventory sections, so a stale copy carries no
-  // information that regenerating it could destroy.
-  //
-  // It used to be enforced with `--check`, which failed the required baseline
-  // lane whenever the committed copy lagged the tree. That turned one merge
-  // that forgot to regenerate into a red lane on EVERY open PR, and because
-  // every PR adding a test edits the same sorted list and the same
-  // `**Files (N):**` counters, PRs also conflicted with each other in a file
-  // neither of them meaningfully authored. Approvals then aged out while the
-  // conflict was resolved by hand — a staleness ratchet that regrew the review
-  // backlog faster than it could be cleared.
-  //
-  // In `--reconcile`, CI regenerates the file in the workspace and reports the
-  // drift without failing. Correctness is unaffected: the catalog is rebuilt
-  // from the tree in the same job, so anything reading it downstream sees the
-  // accurate inventory.
-  const reconcile = process.argv.includes("--reconcile");
 
   if (checkOnly) {
     if (current === next) {
@@ -412,21 +409,6 @@ function main(): void {
     }
     console.error("❌ Automated test catalog is stale. Run `npm run generate:test-catalog`.");
     process.exit(1);
-  }
-
-  if (reconcile) {
-    if (current === next) {
-      console.log("✅ Automated test catalog is up to date.");
-      return;
-    }
-    fs.writeFileSync(outputPath, next);
-    console.log(
-      `♻️  Regenerated ${relativeOutput} (committed copy was stale). ` +
-        "The catalog is generated from the test files in the tree, so this is " +
-        "not a failure. Run `npm run generate:test-catalog` and commit to keep " +
-        "the tracked copy current.",
-    );
-    return;
   }
 
   fs.writeFileSync(outputPath, next);
