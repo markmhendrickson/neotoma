@@ -25,7 +25,7 @@ import crypto from "crypto";
 import { app } from "../../src/actions.js";
 import { NeotomaServer } from "../../src/server.js";
 import { db } from "../../src/db.js";
-import { getSqliteDb } from "../../src/repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../src/repositories/db/connection.js";
 import { createRelationshipObservations } from "../../src/services/interpretation.js";
 import {
   mergeEntities,
@@ -93,29 +93,34 @@ async function seedObservation(
   return id;
 }
 
-function liveEdgesFor(entityId: string, userId: string = TEST_USER): number {
-  const rows = getSqliteDb()
+async function liveEdgesFor(entityId: string, userId: string = TEST_USER): Promise<number> {
+  const db = await getDb();
+  const rows = (await db
     .prepare(
       `SELECT COUNT(*) AS n FROM relationship_observations
        WHERE user_id = ? AND (source_entity_id = ? OR target_entity_id = ?)`
     )
-    .get(userId, entityId, entityId) as { n: number };
+    .get(userId, entityId, entityId)) as { n: number };
   return rows.n;
 }
 
-function auditRow(userId: string = TEST_USER): Record<string, unknown> | undefined {
-  return getSqliteDb()
+async function auditRow(
+  userId: string = TEST_USER
+): Promise<Record<string, unknown> | undefined> {
+  const db = await getDb();
+  return (await db
     .prepare(`SELECT * FROM entity_merges WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`)
-    .get(userId) as Record<string, unknown> | undefined;
+    .get(userId)) as Record<string, unknown> | undefined;
 }
 
-function entitySnapshotFor(
+async function entitySnapshotFor(
   entityId: string,
   userId: string = TEST_USER
-): Record<string, unknown> | undefined {
-  return getSqliteDb()
+): Promise<Record<string, unknown> | undefined> {
+  const db = await getDb();
+  return (await db
     .prepare(`SELECT * FROM entity_snapshots WHERE entity_id = ? AND user_id = ?`)
-    .get(entityId, userId) as Record<string, unknown> | undefined;
+    .get(entityId, userId)) as Record<string, unknown> | undefined;
 }
 
 describe("mergeEntities — records a complete inverse (#2004)", () => {
@@ -137,7 +142,7 @@ describe("mergeEntities — records a complete inverse (#2004)", () => {
       mergedBy: "test",
     });
 
-    const row = auditRow();
+    const row = await auditRow();
     expect(row).toBeDefined();
     const moved = JSON.parse(String(row!.moved_observation_ids_json)) as string[];
 
@@ -194,7 +199,7 @@ describe("mergeEntities — records a complete inverse (#2004)", () => {
       mergedBy: "test",
     });
 
-    const deleted = JSON.parse(String(auditRow()!.deleted_relationship_rows_json)) as Array<
+    const deleted = JSON.parse(String((await auditRow())!.deleted_relationship_rows_json)) as Array<
       Record<string, unknown>
     >;
 
@@ -233,7 +238,7 @@ describe("mergeEntities — records a complete inverse (#2004)", () => {
 
     await mergeEntities({ fromEntityId: B, toEntityId: A, userId: TEST_USER, mergedBy: "test" });
 
-    const repointed = JSON.parse(String(auditRow()!.repointed_relationship_rows_json)) as Array<
+    const repointed = JSON.parse(String((await auditRow())!.repointed_relationship_rows_json)) as Array<
       Record<string, unknown>
     >;
 
@@ -263,7 +268,7 @@ describe("mergeEntities — records a complete inverse (#2004)", () => {
     await mergeEntities({ fromEntityId: B, toEntityId: A, userId: TEST_USER, mergedBy: "test" });
 
     const deletedSnapshots = JSON.parse(
-      String(auditRow()!.deleted_relationship_snapshot_rows_json)
+      String((await auditRow())!.deleted_relationship_snapshot_rows_json)
     ) as Array<Record<string, unknown>>;
     expect(deletedSnapshots.length).toBe(1);
     expect(deletedSnapshots[0].relationship_key).toBe(`KNOWS:${B}:${A}`);
@@ -289,7 +294,7 @@ describe("mergeEntities — records a complete inverse (#2004)", () => {
     });
 
     expect(result.merge_id).toBeTruthy();
-    expect(auditRow()!.id).toBe(result.merge_id);
+    expect((await auditRow())!.id).toBe(result.merge_id);
   });
 
   it("no behavior change to existing merge callers when idempotency_key is omitted", async () => {
@@ -471,7 +476,7 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
       );
     }
 
-    const edgesBefore = liveEdgesFor(B);
+    const edgesBefore = await liveEdgesFor(B);
     expect(edgesBefore).toBe(1);
 
     const merge = await mergeEntities({
@@ -481,13 +486,13 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
       mergedBy: "test",
     });
     // B's duplicate edge was deleted outright by the merge.
-    expect(liveEdgesFor(B)).toBe(0);
+    expect(await liveEdgesFor(B)).toBe(0);
 
     await unmergeEntities({ mergeId: merge.merge_id, userId: TEST_USER });
 
     // The deleted edge is back on B, and A keeps its own.
-    expect(liveEdgesFor(B)).toBe(edgesBefore);
-    expect(liveEdgesFor(A)).toBeGreaterThanOrEqual(1);
+    expect(await liveEdgesFor(B)).toBe(edgesBefore);
+    expect(await liveEdgesFor(A)).toBeGreaterThanOrEqual(1);
   });
 
   it("restores a repointed edge to its captured pre-image, not current state", async () => {
@@ -518,21 +523,21 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
     });
 
     // After merge, the edge is repointed to A → C.
-    const repointedRow = getSqliteDb()
+    const repointedRow = (await (await getDb())
       .prepare(
         `SELECT * FROM relationship_observations WHERE user_id = ? AND relationship_type = 'MANAGES'`
       )
-      .get(TEST_USER) as { source_entity_id: string; target_entity_id: string };
+      .get(TEST_USER)) as { source_entity_id: string; target_entity_id: string };
     expect(repointedRow.source_entity_id).toBe(A);
     expect(repointedRow.target_entity_id).toBe(C);
 
     await unmergeEntities({ mergeId: merge.merge_id, userId: TEST_USER });
 
-    const restoredRow = getSqliteDb()
+    const restoredRow = (await (await getDb())
       .prepare(
         `SELECT * FROM relationship_observations WHERE user_id = ? AND relationship_type = 'MANAGES'`
       )
-      .get(TEST_USER) as { source_entity_id: string; target_entity_id: string };
+      .get(TEST_USER)) as { source_entity_id: string; target_entity_id: string };
     expect(restoredRow.source_entity_id).toBe(B);
     expect(restoredRow.target_entity_id).toBe(C);
   });
@@ -625,7 +630,7 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
       userId: TEST_USER,
       mergedBy: "test",
     });
-    const deletedRow = JSON.parse(String(auditRow()!.deleted_relationship_rows_json))[0] as Record<
+    const deletedRow = JSON.parse(String((await auditRow())!.deleted_relationship_rows_json))[0] as Record<
       string,
       unknown
     >;
@@ -633,7 +638,7 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
     // Independently re-create a row occupying the captured row's original
     // id, simulating unrelated activity landing on that id between merge and
     // unmerge. INSERT OR IGNORE will no-op on it rather than restoring it.
-    getSqliteDb()
+    await (await getDb())
       .prepare(
         `INSERT INTO relationship_observations
            (id, relationship_type, source_entity_id, target_entity_id, relationship_key,
@@ -729,7 +734,7 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
     });
 
     // Simulate a merge recorded before inverse capture existed (direct DB seed).
-    getSqliteDb()
+    await (await getDb())
       .prepare(
         `UPDATE entity_merges
          SET moved_observation_ids_json = NULL,
@@ -828,11 +833,11 @@ describe("unmergeEntities — restores pre-merge state (#2004)", () => {
       userId: TEST_USER,
       mergedBy: "test",
     });
-    expect(entitySnapshotFor(B)).toBeUndefined();
+    expect(await entitySnapshotFor(B)).toBeUndefined();
 
     await unmergeEntities({ mergeId: merge.merge_id, userId: TEST_USER });
 
-    const restoredSnapshot = entitySnapshotFor(B);
+    const restoredSnapshot = await entitySnapshotFor(B);
     expect(restoredSnapshot).toBeDefined();
     const restoredContent =
       typeof restoredSnapshot!.snapshot === "string" &&
@@ -1081,7 +1086,7 @@ describe("unmerge_entities — MCP tool and REST endpoint surface parity (#2004)
 
     // Simulate a merge recorded before inverse capture existed (direct DB seed),
     // mirroring the service-level MERGE_NOT_REVERSIBLE case above.
-    getSqliteDb()
+    await (await getDb())
       .prepare(
         `UPDATE entity_merges
          SET moved_observation_ids_json = NULL,
