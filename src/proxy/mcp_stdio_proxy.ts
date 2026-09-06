@@ -222,18 +222,76 @@ function emitErrorResponse(
   });
 }
 
-async function forwardJsonResponse(response: Response, emit: EmitFn = emitJson): Promise<void> {
+/**
+ * True when `payload` is a JSON-RPC *response* (it carries `result` or
+ * `error`). Server-initiated requests and notifications are not responses and
+ * are never correlated against the pending request's id.
+ */
+export function isJsonRpcResponse(payload: unknown): payload is { id?: unknown } {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return false;
+  const rec = payload as Record<string, unknown>;
+  return "result" in rec || "error" in rec;
+}
+
+/**
+ * Guard against neotoma#2272: a response describing a DIFFERENT caller's write.
+ *
+ * The proxy used to forward whatever envelope downstream returned, so a payload
+ * belonging to another in-flight call could be delivered as the answer to this
+ * one. That is strictly worse than a failed write: the entire discipline for an
+ * append-only store under load is "don't trust a success code, re-read the
+ * entity", and that assumes the response at least says WHICH write it
+ * describes. An agent that stores the returned `entity_id` would attach
+ * subsequent work to the wrong parent, and no idempotency key can detect it —
+ * the mismatch is downstream of the write.
+ *
+ * A response whose id does not match the request is therefore dropped and
+ * replaced with an explicit error, so the caller retries or verifies rather
+ * than silently adopting another caller's entity id. Notifications and
+ * server-initiated requests (no id, no result/error) pass through untouched.
+ *
+ * Returns the payload to emit, or null to drop it.
+ */
+export function correlateResponse(payload: unknown, requestId: unknown): unknown | null {
+  // A batch is forwarded only when every response in it matches.
+  if (Array.isArray(payload)) {
+    const mismatch = payload.some((el) => isJsonRpcResponse(el) && el.id !== requestId);
+    return mismatch ? null : payload;
+  }
+  if (!isJsonRpcResponse(payload)) return payload;
+  // A response with a null id is the spec's shape for "could not determine the
+  // request" (e.g. a parse error), so it is passed through as this call's error.
+  if (payload.id === null || payload.id === undefined) return payload;
+  return payload.id === requestId ? payload : null;
+}
+
+async function forwardJsonResponse(
+  response: Response,
+  emit: EmitFn = emitJson,
+  requestId?: unknown
+): Promise<void> {
   const body = await response.text();
   if (!body) return;
   try {
     const payload = JSON.parse(body);
-    emit(payload);
+    const correlated = correlateResponse(payload, requestId);
+    if (correlated === null) {
+      log(
+        `Dropped mis-correlated downstream response (neotoma#2272): expected id=${JSON.stringify(requestId)}`
+      );
+      return;
+    }
+    emit(correlated);
   } catch (err) {
     log(`Failed to decode JSON response: ${String(err)}`);
   }
 }
 
-async function forwardSseResponse(response: Response, emit: EmitFn = emitJson): Promise<void> {
+async function forwardSseResponse(
+  response: Response,
+  emit: EmitFn = emitJson,
+  requestId?: unknown
+): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
@@ -263,7 +321,14 @@ async function forwardSseResponse(response: Response, emit: EmitFn = emitJson): 
           if (currentEvent !== "message") continue;
           try {
             const payload = JSON.parse(data);
-            emit(payload);
+            const correlated = correlateResponse(payload, requestId);
+            if (correlated === null) {
+              log(
+                `Dropped mis-correlated downstream SSE response (neotoma#2272): expected id=${JSON.stringify(requestId)}`
+              );
+              continue;
+            }
+            emit(correlated);
           } catch {
             log(`SSE data frame is not JSON: ${data.slice(0, 200)}`);
           }
@@ -275,13 +340,32 @@ async function forwardSseResponse(response: Response, emit: EmitFn = emitJson): 
   }
 }
 
-async function forwardResponse(response: Response, emit: EmitFn): Promise<void> {
+/**
+ * Forward a downstream response to stdout, dropping any envelope that does not
+ * correlate to `requestId` (neotoma#2272).
+ *
+ * Returns true when a response for `requestId` was emitted. A false return
+ * means every response frame was mis-correlated and dropped, so the caller is
+ * still owed an answer — `dispatchCore` turns that into an explicit error
+ * rather than leaving the client waiting forever.
+ */
+async function forwardResponse(
+  response: Response,
+  emit: EmitFn,
+  requestId?: unknown
+): Promise<boolean> {
+  let answered = requestId === undefined;
+  const trackingEmit: EmitFn = (payload) => {
+    if (isJsonRpcResponse(payload) || Array.isArray(payload)) answered = true;
+    emit(payload);
+  };
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("text/event-stream")) {
-    await forwardSseResponse(response, emit);
+    await forwardSseResponse(response, trackingEmit, requestId);
   } else {
-    await forwardJsonResponse(response, emit);
+    await forwardJsonResponse(response, trackingEmit, requestId);
   }
+  return answered;
 }
 
 /** Default per-request downstream timeout (ms) — below typical harness MCP timeouts so a hang retries rather than surfacing as "unavailable". */
@@ -413,7 +497,18 @@ export async function dispatchCore(
       loopState.session.capture(resp.headers);
 
       if (resp.status < 400) {
-        await forwardResponse(resp, deps.emit);
+        const answered = await forwardResponse(resp, deps.emit, message.id);
+        if (!answered) {
+          // Every frame downstream sent belonged to a different request
+          // (neotoma#2272). The caller must never adopt another write's
+          // payload, and must not be left hanging either.
+          emitErrorResponse(
+            message,
+            502,
+            "downstream response did not correlate to this request (neotoma#2272); it was dropped rather than delivered as your result — re-read the entity to confirm whether the write landed",
+            deps.emit
+          );
+        }
         return;
       }
 

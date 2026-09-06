@@ -4,6 +4,7 @@ import {
   backoffMs,
   createLoopState,
   dispatchCore,
+  isJsonRpcResponse,
   isRecoverableMcpSessionLostError,
   withTimeout,
   type DispatchDeps,
@@ -303,5 +304,179 @@ describe("dispatchCore", () => {
     expect(calls).toBe(1); // no retry/replay for initialize itself
     expect(emitted).toHaveLength(1);
     expect((emitted[0] as { error?: unknown }).error).toBeDefined();
+  });
+});
+
+/**
+ * Regression coverage for neotoma#2272 — a `store` call receiving another
+ * caller's response payload.
+ *
+ * The proxy forwarded whatever JSON-RPC envelope came back from downstream
+ * without ever checking that its `id` matched the request's. A response
+ * belonging to a different in-flight call therefore reached the client as the
+ * answer to this one — and an agent that stores the returned `entity_id` would
+ * attach subsequent work to the wrong parent.
+ */
+describe("dispatchCore response/request correlation (neotoma#2272)", () => {
+  it("never emits a response whose JSON-RPC id differs from the request's", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "sess-1";
+    loop.lastInitializeBody = JSON.stringify({ jsonrpc: "2.0", id: 0, method: "initialize" });
+
+    // Downstream returns a well-formed JSON-RPC response that belongs to a
+    // DIFFERENT in-flight request (id 41) than the one being dispatched (42) —
+    // exactly the mis-routed payload observed in #2272.
+    const { deps, emitted } = makeDeps(
+      scriptedSend([
+        () =>
+          jsonResponse({
+            jsonrpc: "2.0",
+            id: 41,
+            result: {
+              content: [{ type: "text", text: '{"entity_id":"ent_other_callers_write"}' }],
+            },
+          }),
+      ])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 42,
+      method: "tools/call",
+      params: { name: "store", arguments: { entities: [{ entity_type: "project" }] } },
+    });
+
+    expect(emitted).toHaveLength(1);
+    const payload = emitted[0] as { id?: unknown; error?: { message?: string } };
+
+    // A response for id 41 must never be delivered as the answer to id 42, and
+    // the caller must never see the other write's entity id.
+    expect(payload.id).toBe(42);
+    expect(JSON.stringify(payload)).not.toContain("ent_other_callers_write");
+    expect(payload.error).toBeDefined();
+  });
+
+  it("passes through a correctly correlated response untouched", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "sess-1";
+
+    const { deps, emitted } = makeDeps(
+      scriptedSend([
+        () =>
+          jsonResponse({
+            jsonrpc: "2.0",
+            id: 42,
+            result: { content: [{ type: "text", text: '{"entity_id":"ent_mine"}' }] },
+          }),
+      ])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 42,
+      method: "tools/call",
+      params: { name: "store", arguments: {} },
+    });
+
+    expect(emitted).toHaveLength(1);
+    expect(JSON.stringify(emitted[0])).toContain("ent_mine");
+  });
+
+  it("forwards server-initiated messages that carry no id (notifications/requests)", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "sess-1";
+
+    // A notification has no id of its own and must not be judged against the
+    // request's id — dropping these would break server-initiated traffic.
+    const { deps, emitted } = makeDeps(
+      scriptedSend([
+        () => jsonResponse({ jsonrpc: "2.0", method: "notifications/message", params: {} }),
+      ])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: { name: "store", arguments: {} },
+    });
+
+    // The notification is forwarded verbatim — it carries no id and is not a
+    // response, so it is never judged against the request's id.
+    expect((emitted[0] as { method?: string }).method).toBe("notifications/message");
+
+    // It is also not an answer to the pending call, so the request is still
+    // owed a response rather than left hanging.
+    const answer = emitted.find((m) => isJsonRpcResponse(m)) as { id?: unknown } | undefined;
+    expect(answer?.id).toBe(7);
+  });
+
+  it("forwards a batched response array only when every id matches", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "sess-1";
+
+    const { deps, emitted } = makeDeps(
+      scriptedSend([() => jsonResponse([{ jsonrpc: "2.0", id: 99, result: { ok: true } }])])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "store", arguments: {} },
+    });
+
+    expect(emitted).toHaveLength(1);
+    const payload = emitted[0] as { id?: unknown; error?: unknown };
+    expect(payload.id).toBe(5);
+    expect(payload.error).toBeDefined();
+  });
+
+  it("does not emit a late response from a request it already abandoned to a timeout", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "sess-1";
+    loop.lastInitializeBody = JSON.stringify({ jsonrpc: "2.0", id: 0, method: "initialize" });
+
+    let releaseSlowCall: (r: Response) => void = () => {};
+    let callCount = 0;
+
+    const { deps, emitted } = makeDeps(
+      async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          // First attempt hangs past the deadline, then completes AFTER the
+          // proxy has given up and retried.
+          return await new Promise<Response>((resolve) => {
+            releaseSlowCall = resolve;
+          });
+        }
+        return jsonResponse({
+          jsonrpc: "2.0",
+          id: 42,
+          result: { content: [{ type: "text", text: '{"entity_id":"ent_retry"}' }] },
+        });
+      },
+      { timeoutMs: 10, maxAttempts: 2 }
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 42,
+      method: "tools/call",
+      params: { name: "store", arguments: { entities: [{ entity_type: "project" }] } },
+    });
+
+    // The abandoned first attempt now settles. Its body must not reach stdout.
+    releaseSlowCall(
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: 42,
+        result: { content: [{ type: "text", text: '{"entity_id":"ent_first_attempt"}' }] },
+      })
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(emitted).toHaveLength(1);
+    expect(JSON.stringify(emitted[0])).not.toContain("ent_first_attempt");
   });
 });
