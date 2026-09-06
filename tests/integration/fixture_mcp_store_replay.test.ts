@@ -14,6 +14,7 @@ import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { extractCreatedEntityIds, extractSourceId } from "../helpers/cross_layer_helpers.js";
 import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
+import { getSchemaDefinition } from "../../src/services/schema_definitions.js";
 
 const FIXTURES_DIR = path.join(process.cwd(), "tests", "fixtures");
 const JSON_DIR = path.join(FIXTURES_DIR, "json");
@@ -109,7 +110,9 @@ function getKeyFieldsForEntityType(entityType: string): string[] {
     wallet: ["name", "status"],
     workout: ["name", "duration"],
   };
-  return map[entityType] ?? ["name", "id", "external_id", "title", "amount", "status", "description"];
+  return (
+    map[entityType] ?? ["name", "id", "external_id", "title", "amount", "status", "description"]
+  );
 }
 
 describe("Fixture MCP Store Replay", () => {
@@ -191,7 +194,9 @@ describe("Fixture MCP Store Replay", () => {
       const entityPayload = { ...record, entity_type: entityType };
 
       const idempotencyKey = `fixture-replay-${entityType}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const result = await (server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }).store({
+      const result = await (
+        server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }
+      ).store({
         user_id: TEST_USER_ID,
         entities: [entityPayload],
         idempotency_key: idempotencyKey,
@@ -227,7 +232,13 @@ describe("Fixture MCP Store Replay", () => {
         if (entityType === "contact" || entityType === "transaction") {
           expect(normalizedActual.entity_id).toBeDefined();
           expect(normalizedActual.entity_type).toBe(entityType);
-          expect(normalizedActual.schema_version).toBe("1.0");
+          // Assert the snapshot records the version of the schema it was
+          // actually computed under, rather than a frozen "1.0" literal. The
+          // literal silently rotted when the contact schema was bumped to 1.1
+          // (#1924, the leads-graph field additions): the check then failed for
+          // a deliberate schema change instead of for a real regression.
+          const activeSchemaVersion = getSchemaDefinition(entityType)?.schema_version ?? "1.0";
+          expect(normalizedActual.schema_version).toBe(activeSchemaVersion);
           expect(normalizedActual.snapshot).toBeDefined();
           expect(typeof (normalizedActual.snapshot as Record<string, unknown>)).toBe("object");
           expect(normalizedActual.observation_count).toBeDefined();

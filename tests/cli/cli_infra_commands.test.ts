@@ -27,9 +27,10 @@ function createTestDb(path: string, rows: Array<{ id: string; value: string }>):
 
 function readTestDbRows(path: string): Array<{ id: string; value: string }> {
   const db = new Database(path, { readonly: true });
-  const rows = db
-    .prepare("SELECT id, value FROM cli_test_records ORDER BY id")
-    .all() as Array<{ id: string; value: string }>;
+  const rows = db.prepare("SELECT id, value FROM cli_test_records ORDER BY id").all() as Array<{
+    id: string;
+    value: string;
+  }>;
   db.close();
   return rows;
 }
@@ -54,7 +55,10 @@ async function writeCliConfig(home: string, config: Record<string, unknown>): Pr
   await writeFile(join(configDir, "config.json"), JSON.stringify(config, null, 2));
 }
 
-async function execCliWithRepoRoot(command: string, repoRoot: string): Promise<{
+async function execCliWithRepoRoot(
+  command: string,
+  repoRoot: string
+): Promise<{
   stdout: string;
   stderr: string;
 }> {
@@ -274,7 +278,9 @@ describe("CLI infrastructure command smoke tests", () => {
     it("init --yes should complete in non-interactive mode", async () => {
       const dir = await mkdtemp(join(tmpdir(), "neotoma-cli-init-yes-"));
       const dataDir = join(dir, "data");
-      const { stdout } = await execAsync(`${CLI_PATH} init --yes --data-dir "${dataDir}" --skip-db --skip-env`);
+      const { stdout } = await execAsync(
+        `${CLI_PATH} init --yes --data-dir "${dataDir}" --skip-db --skip-env`
+      );
       expect(stdout).toMatch(/Neotoma initialized/i);
       expect(stdout).toMatch(/neotoma/i);
     });
@@ -306,30 +312,45 @@ describe("CLI infrastructure command smoke tests", () => {
       const isolatedHome = await mkdtemp(join(tmpdir(), "neotoma-cli-home-"));
       const isolatedCwd = await mkdtemp(join(tmpdir(), "neotoma-cli-cwd-"));
       const cliPathAbsolute = join(process.cwd(), "dist", "cli", "index.js");
-      const { stdout } = await execAsync(
-        `node "${cliPathAbsolute}" api start --background --env dev --json`,
-        {
-          cwd: isolatedCwd,
-          env: {
-            ...process.env,
-            HOME: isolatedHome,
-            USERPROFILE: isolatedHome,
-          },
+      // `api start --background` detaches a real `npm run dev:server`. Left
+      // running it is not merely untidy: the child inherits this process's
+      // env, so it boots against the SAME NEOTOMA_HTTP_PORT and the same
+      // .vitest SQLite file the rest of the run is using, and every leaked
+      // server adds contention until this test hangs to its 60s timeout in a
+      // full run (it passes in isolation, which is what disguised the leak).
+      // `api stop` cannot clean it up — that command kills a HARDCODED port
+      // (3080/3180), never the inherited one — so stop the PID we were handed.
+      let startedPid: number | undefined;
+      try {
+        const { stdout } = await execAsync(
+          `node "${cliPathAbsolute}" api start --background --env dev --json`,
+          {
+            cwd: isolatedCwd,
+            env: {
+              ...process.env,
+              HOME: isolatedHome,
+              USERPROFILE: isolatedHome,
+            },
+          }
+        );
+        const result = JSON.parse(stdout);
+        startedPid = typeof result.pid === "number" ? result.pid : undefined;
+        expect(result).toHaveProperty("ok", true);
+        expect(String(result.message ?? "")).toMatch(/started in background/i);
+      } finally {
+        if (startedPid !== undefined) {
+          // The child is detached, so it leads its own process group; the
+          // negative pid reaps `npm run dev:server` together with the node
+          // server it spawns. Killing only the npm wrapper orphans the server.
+          for (const target of [-startedPid, startedPid]) {
+            try {
+              process.kill(target, "SIGTERM");
+            } catch {
+              // Already gone (or never started) — nothing to reap.
+            }
+          }
         }
-      );
-      const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("ok", true);
-      expect(String(result.message ?? "")).toMatch(/started in background/i);
-
-      // Cleanup background API for test isolation.
-      await execAsync(`node "${cliPathAbsolute}" api stop --env dev --json`, {
-        cwd: isolatedCwd,
-        env: {
-          ...process.env,
-          HOME: isolatedHome,
-          USERPROFILE: isolatedHome,
-        },
-      });
+      }
     });
 
     it("servers should report local URL when session env vars are set", async () => {
@@ -366,26 +387,27 @@ describe("CLI infrastructure command smoke tests", () => {
       await mkdir(configuredRepoRoot, { recursive: true });
       await setupTempNeotomaRepo(localRepoRoot);
       await setupTempNeotomaRepo(configuredRepoRoot);
-      await writeCliConfig(home, { project_root: configuredRepoRoot, repo_root: configuredRepoRoot });
+      await writeCliConfig(home, {
+        project_root: configuredRepoRoot,
+        repo_root: configuredRepoRoot,
+      });
 
       await execAsync(
         `node "${cliPathAbsolute}" site configure --umami-url https://umami.local.test --umami-website-id 11111111-1111-1111-1111-111111111111`,
         {
-        cwd: localRepoRoot,
-        env: {
-          ...process.env,
-          HOME: home,
-          USERPROFILE: home,
-          NEOTOMA_REPO_ROOT: "",
-        },
+          cwd: localRepoRoot,
+          env: {
+            ...process.env,
+            HOME: home,
+            USERPROFILE: home,
+            NEOTOMA_REPO_ROOT: "",
+          },
         }
       );
 
       const localEnv = await readFile(join(localRepoRoot, ".env"), "utf-8");
       expect(localEnv).toMatch(/VITE_UMAMI_URL=https:\/\/umami\.local\.test/);
-      expect(localEnv).toMatch(
-        /VITE_UMAMI_WEBSITE_ID=11111111-1111-1111-1111-111111111111/
-      );
+      expect(localEnv).toMatch(/VITE_UMAMI_WEBSITE_ID=11111111-1111-1111-1111-111111111111/);
       await expect(readFile(join(configuredRepoRoot, ".env"), "utf-8")).rejects.toBeDefined();
     });
 
@@ -459,9 +481,13 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(backupResult.status).toBe("complete");
       expect(backupResult).toHaveProperty("backup_dir");
       expect(backupResult).toHaveProperty("backup_size");
-      expect((backupResult as { backup_size: { bytes: number; files: number; human: string } }).backup_size.bytes).toBeGreaterThan(0);
       expect(
-        (backupResult as { backup_size: { bytes: number; files: number; human: string } }).backup_size.human
+        (backupResult as { backup_size: { bytes: number; files: number; human: string } })
+          .backup_size.bytes
+      ).toBeGreaterThan(0);
+      expect(
+        (backupResult as { backup_size: { bytes: number; files: number; human: string } })
+          .backup_size.human
       ).toMatch(/\d/);
 
       const { stdout: restoreStdout } = await execAsync(
@@ -514,7 +540,9 @@ describe("CLI infrastructure command smoke tests", () => {
         root
       );
       const envText = await readFile(join(root, ".env"), "utf-8");
-      expect(envText).toMatch(new RegExp(`NEOTOMA_DATA_DIR=${newDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+      expect(envText).toMatch(
+        new RegExp(`NEOTOMA_DATA_DIR=${newDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+      );
       expect(envText).toMatch(/OPENAI_API_KEY=test-key/);
     });
 
@@ -676,9 +704,7 @@ describe("CLI infrastructure command smoke tests", () => {
     });
 
     it("--env flag is accepted by a command", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} snapshots check --env development --json`
-      );
+      const { stdout } = await execAsync(`${CLI_PATH} snapshots check --env development --json`);
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("healthy");
     });
