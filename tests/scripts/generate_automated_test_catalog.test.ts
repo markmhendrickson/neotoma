@@ -8,6 +8,11 @@
  * deliberately stales the committed catalog, runs the real script through its
  * natural call shape, and asserts on the resulting file content.
  *
+ * Surfaces covered:
+ * - CI / render: `npm run generate:test-catalog` (and the underlying tsx path)
+ * - Local advisory: `npm run validate:test-catalog` / `--check`
+ * - Loud failure: write failure leaves a nonzero exit CI would see
+ *
  * The generator resolves both its repo root and its output path from its own
  * module location, so there is no seam to point it at a fixture tree. Tests
  * instead snapshot the real file, mutate it, and restore it in `afterEach`, so
@@ -24,12 +29,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const scriptPath = path.join(repoRoot, "scripts", "generate-automated-test-catalog.ts");
 const catalogPath = path.join(repoRoot, "docs", "testing", "automated_test_catalog.md");
+const npmScriptsDocPath = path.join(repoRoot, "docs", "developer", "npm_scripts.md");
+const workflowPath = path.join(repoRoot, ".github", "workflows", "ci_test_lanes.yml");
 
 /** The correct output for the current tree, captured before anything is staled. */
 let freshCatalog: string;
 
 function runGenerator(args: string[] = []): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync("npx", ["tsx", scriptPath, ...args], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+    env: process.env,
+  });
+  return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+}
+
+function runNpmScript(script: string): { status: number | null; stdout: string; stderr: string } {
+  const result = spawnSync("npm", ["run", script], {
     cwd: repoRoot,
     encoding: "utf-8",
     env: process.env,
@@ -45,6 +61,17 @@ function readCatalog(): string {
   return fs.readFileSync(catalogPath, "utf8");
 }
 
+function restoreCatalogFile(): void {
+  // A failure-path test may replace the catalog path with a directory.
+  if (fs.existsSync(catalogPath)) {
+    const stat = fs.lstatSync(catalogPath);
+    if (stat.isDirectory()) {
+      fs.rmSync(catalogPath, { recursive: true, force: true });
+    }
+  }
+  writeCatalog(freshCatalog);
+}
+
 beforeAll(() => {
   // Render once so the baseline is what the generator would produce for this
   // tree, whether or not the committed copy happens to be current.
@@ -52,11 +79,11 @@ beforeAll(() => {
   expect(result.status, `generator failed to produce a baseline: ${result.stderr}`).toBe(0);
   freshCatalog = readCatalog();
   expect(freshCatalog.length).toBeGreaterThan(0);
+  expect(freshCatalog.startsWith("# Automated test catalog")).toBe(true);
 });
 
 afterEach(() => {
-  // Restore the tracked file no matter how the assertion above went.
-  writeCatalog(freshCatalog);
+  restoreCatalogFile();
 });
 
 describe("generate-automated-test-catalog render path", () => {
@@ -144,6 +171,45 @@ describe("generate-automated-test-catalog --check advisory gate", () => {
   });
 });
 
+describe("npm script surfaces (natural call shapes)", () => {
+  it("npm run generate:test-catalog regenerates a stale catalog and then validate passes", () => {
+    const stale = freshCatalog.replace("# Automated test catalog", "# Automated test catalog (STALE)");
+    writeCatalog(stale);
+
+    const generate = runNpmScript("generate:test-catalog");
+    expect(generate.status, generate.stderr).toBe(0);
+    expect(readCatalog()).toBe(freshCatalog);
+
+    const validate = runNpmScript("validate:test-catalog");
+    expect(validate.status, validate.stderr).toBe(0);
+  });
+
+  it("npm run validate:test-catalog exits nonzero on a stale catalog and names generate:test-catalog", () => {
+    const stale = freshCatalog.replace("# Automated test catalog", "# Automated test catalog (STALE)");
+    writeCatalog(stale);
+
+    const validate = runNpmScript("validate:test-catalog");
+    expect(validate.status).not.toBe(0);
+    const combined = `${validate.stdout}\n${validate.stderr}`;
+    expect(combined).toContain("generate:test-catalog");
+    expect(readCatalog()).toBe(stale);
+  });
+});
+
+describe("generate-automated-test-catalog loud failure", () => {
+  it("exits nonzero when the catalog path cannot be written", () => {
+    // Replace the output file with a directory so writeFileSync fails. CI must
+    // see a nonzero exit rather than silently accepting a broken catalog.
+    fs.rmSync(catalogPath, { force: true });
+    fs.mkdirSync(catalogPath);
+
+    const result = runGenerator();
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/Failed to write automated test catalog/i);
+  });
+});
+
 describe("generate-automated-test-catalog CLI surface", () => {
   it("no longer accepts a third --reconcile mode", () => {
     // The catalog has exactly two modes: render (default) and --check. An
@@ -164,13 +230,22 @@ describe("generate-automated-test-catalog CLI surface", () => {
   });
 
   it("runs the render path in the required CI baseline lane", () => {
-    const workflow = fs.readFileSync(
-      path.join(repoRoot, ".github", "workflows", "ci_test_lanes.yml"),
-      "utf8",
-    );
+    const workflow = fs.readFileSync(workflowPath, "utf8");
     expect(workflow).toContain("npm run generate:test-catalog");
     expect(workflow).not.toContain("reconcile:test-catalog");
+    expect(workflow).not.toContain("validate:test-catalog");
     // The lane must not fail on a rewritten catalog, nor commit one.
     expect(workflow).not.toMatch(/git diff --exit-code[^\n]*automated_test_catalog/);
+  });
+
+  it("documents sibling generated-file CI policies as intentionally different", () => {
+    const docs = fs.readFileSync(npmScriptsDocPath, "utf8");
+    expect(docs).toContain("generate:test-catalog");
+    expect(docs).toMatch(/baseline lane runs `npm run generate:test-catalog`/i);
+    expect(docs).toContain("openapi.yaml");
+    expect(docs).toContain("openapi_types.ts");
+    expect(docs).toMatch(/fail(?:s)? on [`']?git diff|fail-on-drift/i);
+    expect(docs).toContain("capability_manifest.json");
+    expect(docs).toMatch(/intentionally different|authored API contract/i);
   });
 });

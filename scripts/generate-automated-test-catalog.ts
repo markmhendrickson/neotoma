@@ -380,9 +380,33 @@ function generateCatalog(): string {
   ].join("\n");
 }
 
+/** Loud invalid-output gate: empty or mistitled catalogs must not be committed or accepted by CI. */
+function assertUsableCatalog(content: string): void {
+  if (content.length === 0 || !content.startsWith("# Automated test catalog")) {
+    console.error(
+      "❌ Generated automated test catalog is empty or missing the expected `# Automated test catalog` heading.",
+    );
+    process.exit(1);
+  }
+}
+
+function readCurrentCatalog(): string {
+  try {
+    if (!fs.existsSync(outputPath) || !fs.statSync(outputPath).isFile()) {
+      return "";
+    }
+    return fs.readFileSync(outputPath, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Failed to read automated test catalog at ${path.relative(repoRoot, outputPath)}: ${message}`);
+    process.exit(1);
+  }
+}
+
 function main(): void {
   const next = generateCatalog();
-  const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
+  assertUsableCatalog(next);
+  const current = readCurrentCatalog();
   const relativeOutput = path.relative(repoRoot, outputPath);
   // `--check` is the local/pre-PR advisory gate: it reports drift and fails,
   // without touching the file. The default (no flag) is the write path, and it
@@ -411,7 +435,13 @@ function main(): void {
     process.exit(1);
   }
 
-  fs.writeFileSync(outputPath, next);
+  try {
+    fs.writeFileSync(outputPath, next);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Failed to write automated test catalog to ${relativeOutput}: ${message}`);
+    process.exit(1);
+  }
   console.log(`✅ Wrote automated test catalog to ${relativeOutput}`);
 }
 

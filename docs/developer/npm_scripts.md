@@ -102,14 +102,20 @@ Keep these aliases for one minor release, update docs and automation to the cano
 
 ## Generated files
 
-Some committed files are generated from source and must be kept in sync. Run the generator after making the relevant source change; use `--check` in CI to fail when the file drifts.
+Some committed files are generated from source and must be kept in sync. Run the generator after making the relevant source change. CI policy differs by artifact: a pure tree inventory is re-rendered; contract/registration derivatives still fail on drift.
 
 | Script | What it does | When to run | CI usage |
 |--------|-------------|-------------|----------|
-| `generate:test-catalog` | Regenerates `docs/testing/automated_test_catalog.md` from the test tree | After adding, removing, or renaming a test file | `npm run validate:test-catalog` (fails on drift) |
+| `generate:test-catalog` | Regenerates `docs/testing/automated_test_catalog.md` from the test tree | After adding, removing, or renaming a test file | Baseline lane runs `npm run generate:test-catalog` (render; does not fail on pre-existing staleness) |
 | `validate:test-catalog` | Checks that `docs/testing/automated_test_catalog.md` matches the current test tree | Locally, before opening a PR | Advisory. Not used in CI — the baseline lane runs `generate:test-catalog` instead |
 | `generate:capability-manifest` | Regenerates `src/shared/capability_manifest.json` by walking git `vX.Y.Z` release tags and recording first/last appearance of each MCP tool in `src/tool_definitions.ts` | After adding or removing an MCP tool, or after cutting a new release tag | `npm run validate:capability-manifest` (fails on drift) |
 | `validate:capability-manifest` | Checks that `src/shared/capability_manifest.json` matches what the generator would produce | Before every merge | Runs in CI alongside `generate:test-catalog` |
+
+Sibling artifacts that look similar but are intentionally different:
+
+- `openapi.yaml` is an **authored** API contract (not generated). Do not treat staleness of a generated catalog as a reason to auto-rewrite it.
+- `src/shared/openapi_types.ts` is derived from authored `openapi.yaml`. CI regenerates then **fails on `git diff`** — drift means the YAML changed without committing types, which is registration/contract drift, not a pure inventory refresh.
+- `src/shared/capability_manifest.json` stays **fail-on-drift** (`validate:capability-manifest`) because a missed regen is tool/release registration drift, not a filename inventory refresh.
 
 ## Validation
 
