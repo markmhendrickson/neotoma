@@ -46,7 +46,7 @@ def main() -> int:
     raw_session_id = payload.get("session_id")
     if raw_session_id:
         cwd = payload.get("cwd") or str(Path.cwd())
-        record_agent_session(
+        session_rec = record_agent_session(
             client,
             native_session_id=raw_session_id,
             hook_event="Stop",
@@ -56,10 +56,13 @@ def main() -> int:
             cwd=cwd,
             git=git_context(cwd),
         )
+        # FK must be agent_session.entity_id (ent_*), never the harness UUID.
+        # Omit when unresolved — honest empty beats a silent join miss (#2195).
+        session_entity_id = (session_rec or {}).get("entity_id")
         record_session_transcript(
             client,
             transcript_path=payload.get("transcript_path"),
-            agent_session_id=raw_session_id,
+            agent_session_id=session_entity_id if isinstance(session_entity_id, str) else None,
         )
 
     if not final_text:

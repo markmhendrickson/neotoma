@@ -209,13 +209,103 @@ def record_conversation_turn(
 # underscore variant would key a different (wrong) entity.
 HARNESS = "claude-code"
 
+# Query params whose values are treated as credentials (parity with
+# packages/cursor-hooks/hooks/_common.ts `redactRepositoryRemote`).
+_REMOTE_SECRET_QUERY_RE = re.compile(
+    r"([?&](?:access_token|auth|key|password|token)=)[^&]+", re.IGNORECASE
+)
+_REMOTE_USERINFO_RE = re.compile(r"://([^/@]+)@")
+
+
+def redact_repository_remote(remote: str | None) -> str | None:
+    """Scrub credential material from a git remote URL.
+
+    Faithful Python port of Cursor hooks ``redactRepositoryRemote``:
+    userinfo → ``<redacted>``; ``access_token`` / ``auth`` / ``key`` /
+    ``password`` / ``token`` query values → ``<redacted>``.
+    """
+    if not remote:
+        return None
+    scrubbed = _REMOTE_USERINFO_RE.sub("://<redacted>@", remote)
+    scrubbed = _REMOTE_SECRET_QUERY_RE.sub(r"\1<redacted>", scrubbed)
+    return scrubbed
+
+
+def _is_entity_id(value: Any) -> bool:
+    """True when ``value`` looks like a Neotoma entity id (``ent_*``)."""
+    return isinstance(value, str) and value.startswith("ent_")
+
+
+def _entity_id_from_store_result(result: Any) -> str | None:
+    """Pull the first ``entity_id`` from a store response (dual-shape)."""
+    try:
+        from neotoma_client.helpers import _extract_entities
+
+        entities_list = _extract_entities(result)
+    except Exception:
+        entities_list = (
+            (result or {}).get("entities")
+            or (result or {}).get("structured", {}).get("entities")
+            or []
+        )
+    if not entities_list:
+        return None
+    row = entities_list[0]
+    if not isinstance(row, dict):
+        return None
+    for key in ("entity_id", "id"):
+        eid = row.get(key)
+        if _is_entity_id(eid):
+            return eid
+    return None
+
+
+def _resolve_agent_session_entity_id(
+    client: Any,
+    *,
+    native_session_id: str,
+    store_result: Any,
+) -> str | None:
+    """Prefer store-response ``entity_id``; fall back to retrieve-by-identifier."""
+    eid = _entity_id_from_store_result(store_result)
+    if eid:
+        return eid
+    try:
+        found = client.retrieve_entity_by_identifier(
+            {"entity_type": "agent_session", "identifier": native_session_id}
+        )
+    except Exception as exc:
+        log("debug", f"agent_session retrieve fallback failed: {exc}")
+        return None
+    if not isinstance(found, dict):
+        return None
+    # Preferred: top-level entity_id (some client helpers normalize this way).
+    candidate = found.get("entity_id")
+    if _is_entity_id(candidate):
+        return candidate
+    nested = found.get("entity")
+    if isinstance(nested, dict):
+        for key in ("entity_id", "id"):
+            if _is_entity_id(nested.get(key)):
+                return nested[key]
+    # REST/MCP shape: { entities: [{ id: "ent_…" }], total, match_mode }.
+    entities = found.get("entities")
+    if isinstance(entities, list):
+        for row in entities:
+            if not isinstance(row, dict):
+                continue
+            for key in ("entity_id", "id"):
+                if _is_entity_id(row.get(key)):
+                    return row[key]
+    return None
+
 
 def git_context(cwd: str | None = None) -> dict[str, Any]:
     """Best-effort git repo/branch/sha for the working directory.
 
     Returns only the keys we could resolve; never raises. Used to populate
     the agent_session git-env fields needed to reconstruct a session on
-    another machine.
+    another machine. ``repo_remote_url`` is redacted before return.
     """
     root = cwd or str(Path.cwd())
 
@@ -246,7 +336,7 @@ def git_context(cwd: str | None = None) -> dict[str, Any]:
     sha = _git(["rev-parse", "HEAD"])
     if sha:
         out["git_head_sha"] = sha
-    remote = _git(["config", "--get", "remote.origin.url"])
+    remote = redact_repository_remote(_git(["config", "--get", "remote.origin.url"]))
     if remote:
         out["repo_remote_url"] = remote
     return out
@@ -289,7 +379,12 @@ def build_agent_session_entity(
         entity["cwd"] = cwd
     for key in ("repo", "branch", "git_head_sha", "worktree_path", "repo_remote_url"):
         if git and git.get(key):
-            entity[key] = git[key]
+            value = git[key]
+            if key == "repo_remote_url":
+                value = redact_repository_remote(value if isinstance(value, str) else None)
+                if not value:
+                    continue
+            entity[key] = value
     if trigger_kind:
         entity["trigger_kind"] = trigger_kind
     if parent_session_id:
@@ -308,7 +403,13 @@ def record_agent_session(
     hook_event: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
-    """Upsert the agent_session entity for this session. Best-effort."""
+    """Upsert the agent_session entity for this session. Best-effort.
+
+    Returns the stored payload including ``entity_id`` when the store (or a
+    retrieve-by-identifier fallback) yields an ``ent_*`` id. Callers that
+    link ``session_transcript.agent_session_id`` MUST use that ``entity_id``,
+    never the harness native UUID.
+    """
     if client is None or not native_session_id:
         return None
     entity = build_agent_session_entity(
@@ -316,10 +417,15 @@ def record_agent_session(
     )
     idempotency_key = f"agent-session-{HARNESS}-{native_session_id}-{hook_event or 'update'}"
     try:
-        client.store({"entities": [entity], "idempotency_key": idempotency_key})
+        result = client.store({"entities": [entity], "idempotency_key": idempotency_key})
     except Exception as exc:
         log("debug", f"record_agent_session failed: {exc}")
         return None
+    entity_id = _resolve_agent_session_entity_id(
+        client, native_session_id=native_session_id, store_result=result
+    )
+    if entity_id:
+        return {**entity, "entity_id": entity_id}
     return entity
 
 
@@ -364,6 +470,10 @@ def build_session_transcript_entity(
     unchanged transcript coalesces. This writes the index only; uploading the
     transcript bytes to the sources bucket is handled out-of-band (backfill /
     future enhancement), hence no ``source_id`` / ``storage_url`` here.
+
+    ``agent_session_id`` MUST be the parent ``agent_session`` entity_id
+    (``ent_*``). Harness native UUIDs are rejected so the FK never fakes a
+    link (see #2195 / stacked schema reference_fields).
     """
     entity: dict[str, Any] = {
         "entity_type": "session_transcript",
@@ -374,7 +484,7 @@ def build_session_transcript_entity(
         "transcript_kind": transcript_kind,
         **harness_provenance(),
     }
-    if agent_session_id:
+    if _is_entity_id(agent_session_id):
         entity["agent_session_id"] = agent_session_id
     if file_size is not None:
         entity["file_size"] = file_size
@@ -394,6 +504,12 @@ def record_session_transcript(
 ) -> dict[str, Any] | None:
     """Hash a transcript file and upsert its session_transcript index entity.
 
+    When ``agent_session_id`` is an ``ent_*`` id, sets the denormalized FK and
+    emits a typed ``PART_OF`` edge (transcript → session), mirroring
+    ``scripts/lib/agent_session_store.ts`` ``buildTranscriptSessionFkEnvelope``.
+    Non-``ent_*`` values (including harness UUIDs) are omitted — honest empty
+    rather than a silent join miss.
+
     Best-effort: a missing path, unreadable file, or transport error is logged
     and swallowed so the agent turn is never blocked.
     """
@@ -403,19 +519,35 @@ def record_session_transcript(
     if hashed is None:
         return None
     content_hash, file_size, line_count = hashed
+    session_fk = agent_session_id if _is_entity_id(agent_session_id) else None
     entity = build_session_transcript_entity(
         content_hash=content_hash,
-        agent_session_id=agent_session_id,
+        agent_session_id=session_fk,
         file_size=file_size,
         turn_count=line_count or None,
         transcript_kind=transcript_kind,
     )
     idempotency_key = f"session-transcript-{content_hash}"
+    store_payload: dict[str, Any] = {
+        "entities": [entity],
+        "idempotency_key": idempotency_key,
+    }
+    if session_fk:
+        store_payload["relationships"] = [
+            {
+                "relationship_type": "PART_OF",
+                "source_index": 0,
+                "target_entity_id": session_fk,
+            }
+        ]
     try:
-        client.store({"entities": [entity], "idempotency_key": idempotency_key})
+        result = client.store(store_payload)
     except Exception as exc:
         log("debug", f"record_session_transcript failed: {exc}")
         return None
+    transcript_eid = _entity_id_from_store_result(result)
+    if transcript_eid:
+        return {**entity, "entity_id": transcript_eid}
     return entity
 
 
