@@ -7,6 +7,9 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const frontendSrc = path.resolve(__dirname, "./frontend/src");
+const inspectorSrc = path.resolve(__dirname, "./inspector/src");
+
 /** When set to "1", run remote-dependent tests. Default: local-only (SQLite). */
 const runRemoteTests = process.env.RUN_REMOTE_TESTS === "1";
 
@@ -45,12 +48,45 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./frontend/src"),
-      "@shared": path.resolve(__dirname, "./src/shared"),
-      "@neotoma/client": path.resolve(__dirname, "./packages/client/src/index.ts"),
-      "@neotoma/agent": path.resolve(__dirname, "./packages/agent/src/index.ts"),
-    },
+    alias: [
+      // `@/...` is an alias in BOTH frontend/ and inspector/, each pointing at
+      // its OWN src/. A single static replacement can only serve one tree: with
+      // `@` hardwired to frontend/src, every inspector test whose module graph
+      // reached an `@/...` specifier failed to resolve
+      // (`Cannot find package '@/hooks/use_infra'`). Resolve by the IMPORTER's
+      // location so each tree gets its own `@`, and keep frontend/src as the
+      // default for every other importer.
+      {
+        find: /^@\//,
+        replacement: "@/",
+        customResolver(source, importer) {
+          const target =
+            importer && path.resolve(importer).startsWith(inspectorSrc + path.sep)
+              ? inspectorSrc
+              : frontendSrc;
+          const base = path.join(target, source.slice(2));
+          for (const candidate of [
+            base,
+            `${base}.ts`,
+            `${base}.tsx`,
+            path.join(base, "index.ts"),
+            path.join(base, "index.tsx"),
+          ]) {
+            if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+          }
+          return base;
+        },
+      },
+      { find: "@shared", replacement: path.resolve(__dirname, "./src/shared") },
+      {
+        find: "@neotoma/client",
+        replacement: path.resolve(__dirname, "./packages/client/src/index.ts"),
+      },
+      {
+        find: "@neotoma/agent",
+        replacement: path.resolve(__dirname, "./packages/agent/src/index.ts"),
+      },
+    ],
   },
   test: {
     globals: true,
