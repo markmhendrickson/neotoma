@@ -31,7 +31,7 @@
  * schema_seeding_fresh_instance_gap.test.ts.
  */
 
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, beforeEach } from "vitest";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { seedSchemaRegistryIfEmpty } from "../../src/services/schema_registry_bootstrap.js";
 import { db } from "../../src/db.js";
@@ -69,11 +69,38 @@ function builtInSchema(): SchemaDefinition {
   };
 }
 
+/** Built-in stand-in the seeder would try to install over CUSTOM_TYPE. */
+const FAKE_BUILTIN_FOR_CUSTOM_TYPE = {
+  entity_type: CUSTOM_TYPE,
+  schema_version: "1.0.0",
+  schema_definition: builtInSchema(),
+  reducer_config: { merge_policies: {} },
+} as (typeof import("../../src/services/schema_definitions.js").ENTITY_SCHEMAS)[string];
+
+async function seedBuiltInForCustomType() {
+  return await seedSchemaRegistryIfEmpty({ schemas: [FAKE_BUILTIN_FOR_CUSTOM_TYPE] });
+}
+
+/**
+ * Register + activate the operator's custom identity rule for CUSTOM_TYPE.
+ * Each case must establish this itself — never inherit from a prior `it`.
+ */
+async function arrangeOperatorActiveRule(): Promise<void> {
+  await schemaRegistry.register({
+    entity_type: CUSTOM_TYPE,
+    schema_version: "9.0.0-operator",
+    schema_definition: operatorSchema(),
+    reducer_config: { merge_policies: {} },
+  });
+  await schemaRegistry.activate(CUSTOM_TYPE, "9.0.0-operator");
+}
+
 async function cleanup(): Promise<void> {
   await db.from("schema_registry").delete().eq("entity_type", CUSTOM_TYPE);
 }
 
 describe("issue #2035: deploy/boot re-seed preserves an operator's activated canonical_name_fields", () => {
+  beforeEach(cleanup);
   afterAll(cleanup);
 
   it("seedSchemaRegistryIfEmpty leaves an activated custom identity rule untouched (reported as preserved, not registered)", async () => {
@@ -81,13 +108,7 @@ describe("issue #2035: deploy/boot re-seed preserves an operator's activated can
     //    canonical_name_fields differ from the built-in default. Version string
     //    is deliberately NOT equal to the built-in's, mirroring how a real
     //    update_schema_incremental re-key bumps to an operator-owned version.
-    await schemaRegistry.register({
-      entity_type: CUSTOM_TYPE,
-      schema_version: "9.0.0-operator",
-      schema_definition: operatorSchema(),
-      reducer_config: { merge_policies: {} },
-    });
-    await schemaRegistry.activate(CUSTOM_TYPE, "9.0.0-operator");
+    await arrangeOperatorActiveRule();
 
     // Precondition: the re-key is live.
     const before = await schemaRegistry.loadActiveSchema(CUSTOM_TYPE);
@@ -97,16 +118,7 @@ describe("issue #2035: deploy/boot re-seed preserves an operator's activated can
     // 2. A deploy/boot happens: run the boot-time seeder against a "built-in"
     //    for the SAME type that carries a DIFFERENT (default) identity rule.
     //    This is exactly what schema_registry_bootstrap does on every boot.
-    const summary = await seedSchemaRegistryIfEmpty({
-      schemas: [
-        {
-          entity_type: CUSTOM_TYPE,
-          schema_version: "1.0.0",
-          schema_definition: builtInSchema(),
-          reducer_config: { merge_policies: {} },
-        } as (typeof import("../../src/services/schema_definitions.js").ENTITY_SCHEMAS)[string],
-      ],
-    });
+    const summary = await seedBuiltInForCustomType();
 
     // 3. The seeder must have PRESERVED the type (no write), not re-registered
     //    or re-activated the built-in over it.
@@ -125,22 +137,24 @@ describe("issue #2035: deploy/boot re-seed preserves an operator's activated can
 
   it("is idempotent: a second re-seed still preserves the operator's rule", async () => {
     // Guards against a seeder that is safe once but drifts on repeated runs
-    // (deploys happen many times over an instance's life).
-    const summary = await seedSchemaRegistryIfEmpty({
-      schemas: [
-        {
-          entity_type: CUSTOM_TYPE,
-          schema_version: "1.0.0",
-          schema_definition: builtInSchema(),
-          reducer_config: { merge_policies: {} },
-        } as (typeof import("../../src/services/schema_definitions.js").ENTITY_SCHEMAS)[string],
-      ],
-    });
+    // (deploys happen many times over an instance's life). Setup is local to
+    // this case so `-t "is idempotent"` isolation does not rely on prior-it state.
+    await arrangeOperatorActiveRule();
+
+    const first = await seedBuiltInForCustomType();
+    expect(first.preserved).toContain(CUSTOM_TYPE);
+    expect(first.registered).not.toContain(CUSTOM_TYPE);
+
+    const summary = await seedBuiltInForCustomType();
 
     expect(summary.preserved).toContain(CUSTOM_TYPE);
     expect(summary.registered).not.toContain(CUSTOM_TYPE);
+    expect(summary.failed).toEqual([]);
 
     const after = await schemaRegistry.loadActiveSchema(CUSTOM_TYPE);
+    expect(after).not.toBeNull();
     expect(after!.schema_definition.canonical_name_fields).toEqual(OPERATOR_RULE);
+    expect(after!.schema_definition.canonical_name_fields).not.toEqual(BUILTIN_RULE);
+    expect(after!.schema_version).toBe("9.0.0-operator");
   });
 });
