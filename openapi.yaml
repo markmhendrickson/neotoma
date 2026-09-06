@@ -7636,6 +7636,74 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /recompute_snapshots_by_type:
+    post:
+      summary: Recompute snapshots by entity type
+      description: |
+        Recompute every snapshot the calling user owns for one entity type,
+        re-applying the active schema (canonical name, timeline events) and
+        refreshing embeddings. Scoped to the authenticated user's own
+        snapshots. Use `dry_run` to count and list the affected entities
+        without writing.
+      operationId: recomputeSnapshotsByType
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_type
+              properties:
+                entity_type:
+                  type: string
+                  description: Entity type whose snapshots are recomputed.
+                dry_run:
+                  type: boolean
+                  default: false
+                  description: When true, report the entities that would be recomputed without writing.
+      responses:
+        "200":
+          description: Recompute results, or the dry-run preview when `dry_run` is true.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  entity_type:
+                    type: string
+                  dry_run:
+                    type: boolean
+                    description: Present only on a dry-run response.
+                  entities_to_recompute:
+                    type: integer
+                    description: Dry run only — number of snapshots that would be recomputed.
+                  entity_ids:
+                    type: array
+                    description: Dry run only — ids of the snapshots that would be recomputed.
+                    items:
+                      type: string
+                  total:
+                    type: integer
+                    description: Number of snapshots found for the entity type.
+                  recomputed:
+                    type: integer
+                    description: Number of snapshots successfully recomputed.
+                  errors:
+                    type: integer
+                    description: Number of snapshots that failed to recompute.
+                  error_details:
+                    type: array
+                    description: Present only when at least one snapshot failed.
+                    items:
+                      type: object
+                      properties:
+                        entity_id:
+                          type: string
+                        error:
+                          type: string
+
   /subscribe:
     post:
       summary: Create a substrate event subscription (webhook or SSE)

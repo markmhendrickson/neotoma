@@ -1109,6 +1109,19 @@
       ]
     },
     {
+      "path": "/recompute_snapshots_by_type",
+      "method": "POST",
+      "operation_id": "recomputeSnapshotsByType",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/record_activity",
       "method": "GET",
       "operation_id": "getRecordActivity",

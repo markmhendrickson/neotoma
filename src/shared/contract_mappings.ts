@@ -709,6 +709,15 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "snapshots check",
   },
   {
+    operationId: "recomputeSnapshotsByType",
+    method: "post",
+    path: "/recompute_snapshots_by_type",
+    adapter: "cli",
+    cliCommand: "request --operation recomputeSnapshotsByType",
+    notes:
+      "Maintenance endpoint: rebuilds every snapshot of one entity type for the calling user. Scoped by user_id and blocked in sandbox mode (destructive route).",
+  },
+  {
     operationId: "publishRenderedPage",
     method: "post",
     path: "/rendered-pages/publish",
