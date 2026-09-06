@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **590**
-- Backend and repo Vitest files: **555**
+- Total automated test files: **592**
+- Backend and repo Vitest files: **557**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -74,7 +74,7 @@ flowchart TD
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 167 |
 | Vitest CLI tests | 77 |
-| Vitest contract tests | 17 |
+| Vitest contract tests | 18 |
 | Vitest security tests | 7 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
@@ -661,7 +661,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (17):**
+**Files (18):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -676,6 +676,7 @@ flowchart TD
 - `tests/contract/openclaw_plugin.test.ts`
 - `tests/contract/package_contents.test.ts`
 - `tests/contract/package_scripts.test.ts`
+- `tests/contract/relationship_type_enum_parity.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
