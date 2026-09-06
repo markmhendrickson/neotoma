@@ -456,7 +456,12 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     // than guessing at an inverse it cannot reconstruct.
     await addColumnIfMissing(db, "entity_merges", "moved_observation_ids_json", "TEXT");
     await addColumnIfMissing(db, "entity_merges", "deleted_relationship_rows_json", "TEXT");
-    await addColumnIfMissing(db, "entity_merges", "deleted_relationship_snapshot_rows_json", "TEXT");
+    await addColumnIfMissing(
+      db,
+      "entity_merges",
+      "deleted_relationship_snapshot_rows_json",
+      "TEXT"
+    );
     await addColumnIfMissing(db, "entity_merges", "deleted_entity_snapshot_rows_json", "TEXT");
     await addColumnIfMissing(db, "entity_merges", "repointed_relationship_rows_json", "TEXT");
     await addColumnIfMissing(db, "entity_merges", "idempotency_key", "TEXT");
