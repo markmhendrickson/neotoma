@@ -302,10 +302,21 @@ export function sandboxPrincipalIdFromFingerprint(fingerprint: string): string {
  *
  * Soft deletes (`/delete_entity`, `/delete_relationship`) are allowed because
  * they are reversible via `/restore_entity` and `/restore_relationship`.
+ *
+ * Note on `protected_routes_manifest.json`: this list is NOT derived from that
+ * manifest's `sandbox_allowed` column, and the two are not expected to agree.
+ * `sandbox_allowed: "none"` is generated mechanically from `requires_auth`
+ * (see `scripts/security/sync_protected_routes_manifest.js`), so it marks
+ * "a sandbox principal cannot authenticate to this route" — which is true of
+ * ~100 routes including read-only ones like `/me`, `/stats` and `/server-info`.
+ * This set is the much narrower "even an authenticated caller must not run
+ * this against the shared demo corpus". Membership here is a per-route
+ * judgement about blast radius, not a mirror of the manifest.
  */
 const DESTRUCTIVE_ROUTES: ReadonlySet<string> = new Set([
   // Admin endpoints that could wipe or mutate the whole corpus.
   "/entities/merge",
+  "/entities/unmerge",
   "/entities/split",
   "/recompute_snapshots_by_type",
   "/health_check_snapshots",

@@ -36,10 +36,36 @@ describe("sandbox_mode helpers", () => {
   describe("isDestructiveSandboxRoute", () => {
     it("identifies admin endpoints as destructive", () => {
       expect(isDestructiveSandboxRoute("/entities/merge")).toBe(true);
+      expect(isDestructiveSandboxRoute("/entities/unmerge")).toBe(true);
       expect(isDestructiveSandboxRoute("/entities/split")).toBe(true);
       expect(isDestructiveSandboxRoute("/recompute_snapshots_by_type")).toBe(true);
       expect(isDestructiveSandboxRoute("/health_check_snapshots")).toBe(true);
       expect(isDestructiveSandboxRoute("/update_schema_incremental")).toBe(true);
+    });
+
+    // #2008: `/entities/unmerge` shipped guarded-by-declaration only — it was
+    // `sandbox_allowed: "none"` in protected_routes_manifest.json but absent
+    // from DESTRUCTIVE_ROUTES. The manifest column could not have caught that:
+    // it is generated from `requires_auth`, so ~100 routes carry "none",
+    // including read-only ones. The invariant that *does* bite is narrower and
+    // structural: whenever a graph-mutating route is guarded, the route that
+    // reverses it must be guarded too. An unguarded inverse is not "safe
+    // because it undoes" — on a shared demo corpus it rewrites other visitors'
+    // entities just as a merge does.
+    it("guards every mutating route together with its inverse", () => {
+      const inversePairs: ReadonlyArray<readonly [string, string]> = [
+        ["/entities/merge", "/entities/unmerge"],
+      ];
+      for (const [forward, inverse] of inversePairs) {
+        expect(
+          isDestructiveSandboxRoute(forward),
+          `${forward} is expected to be a guarded destructive route`
+        ).toBe(true);
+        expect(
+          isDestructiveSandboxRoute(inverse),
+          `${inverse} reverses ${forward}, which is guarded, so it must be guarded too`
+        ).toBe(true);
+      }
     });
     it("leaves soft-delete and ordinary routes alone", () => {
       expect(isDestructiveSandboxRoute("/delete_entity")).toBe(false);

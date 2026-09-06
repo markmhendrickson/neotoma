@@ -571,7 +571,7 @@ export function buildToolDefinitions(
       name: "split_entity",
       description: desc(
         "split_entity",
-        "Inverse of merge_entities (R5). Re-point a predicate-selected subset of an entity's observations onto a new or pre-existing entity to repair over-merges. Schema-agnostic predicate; observation content is never modified. Idempotent via (user_id, idempotency_key)."
+        "Re-split an entity that holds observations belonging to distinct things (R5). Re-points a predicate-selected subset of an entity's observations onto a new or pre-existing entity — use it to repair over-merges from heuristic resolution, such as the pre-v1.2 name_key:title collapse on session-scoped types. This is a repair tool, NOT a merge-undo: to reverse a specific merge_entities call use unmerge_entities(merge_id), which replays that merge's recorded inverse. Schema-agnostic predicate; observation content is never modified. Idempotent via (user_id, idempotency_key)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("split_entity"),
     },
