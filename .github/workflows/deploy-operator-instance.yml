@@ -66,6 +66,7 @@ on:
 permissions:
   contents: read
   actions: read # read CI conclusions for the commit being deployed
+  issues: write # file/comment the escalation issue on deploy failure (see "Escalate on failure")
 
 # NOT cancel-in-progress. `flyctl deploy` on a single-machine app with an
 # attached volume is not atomic: cancelling mid-deploy can leave the machine
@@ -147,6 +148,20 @@ jobs:
           # This workflow's own check-run must be ignored, or it waits on
           # itself forever. Its check-run name is this job's name ("deploy"),
           # which is also matched below.
+          #
+          # `cancelled` is treated as PENDING, not FAILED, up front: CI test
+          # lanes runs under `concurrency: { group: ci-test-lanes-<ref>,
+          # cancel-in-progress: true }`, so a rapid follow-up push to main
+          # cancels the in-progress lane run for the OLDER commit currently
+          # being polled here. That cancellation says nothing about whether
+          # this SHA is red — it means CI never got to render a verdict for
+          # it, because a newer commit pushed while its lanes were still
+          # running. Failing the deploy on that basis produced a false
+          # "CI is not green" escalation on 2026-09-01 and 2026-09-06 for
+          # commits whose lanes were in fact never actually red — see the
+          # PR that introduced this comment for the run evidence. A run
+          # that stays cancelled all the way to DEADLINE is reported as
+          # inconclusive (not asserted red) in the timeout branch below.
           while :; do
             RAW=$(gh api "repos/$REPO/commits/$SHA/check-runs" --paginate \
                     --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv' || true)
@@ -156,6 +171,7 @@ jobs:
             else
               PENDING=0
               FAILED=""
+              CANCELLED=""
               while IFS=$'\t' read -r NAME STATUS CONCLUSION; do
                 [ -z "${NAME:-}" ] && continue
                 # Skip this workflow's own runs (deploy, and any sibling step).
@@ -168,6 +184,14 @@ jobs:
                 fi
                 case "$CONCLUSION" in
                   success|skipped|neutral) ;;
+                  cancelled)
+                    # Not evidence of red — see comment above. Keep polling;
+                    # a fresh run for this SHA may still land (e.g. after a
+                    # `workflow_dispatch` re-run), and if not, the timeout
+                    # branch reports it as inconclusive rather than failed.
+                    PENDING=$((PENDING + 1))
+                    CANCELLED="${CANCELLED}${NAME}; "
+                    ;;
                   *) FAILED="${FAILED}${NAME} (${CONCLUSION}); " ;;
                 esac
               done <<< "$RAW"
@@ -182,12 +206,22 @@ jobs:
                 echo "OK: all check-runs green on $SHA."
                 break
               fi
-              echo "Waiting on $PENDING in-progress check-run(s)…"
+              if [ -n "$CANCELLED" ]; then
+                echo "Waiting on $PENDING check-run(s), including cancelled (likely superseded by a newer push): $CANCELLED"
+              else
+                echo "Waiting on $PENDING in-progress check-run(s)…"
+              fi
             fi
 
             if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-              echo "FAIL: timed out after 45m waiting for CI on $SHA."
-              echo "Not deploying. This is a failure, not a pass — see the escalation below."
+              if [ -n "${CANCELLED:-}" ] && [ -z "${FAILED:-}" ]; then
+                echo "INCONCLUSIVE: timed out after 45m; $SHA's CI was superseded/cancelled ($CANCELLED) and never re-ran to a verdict."
+                echo "This is NOT evidence main is red — most likely a newer commit landed and this SHA's CI lane was cancelled by its own concurrency group before finishing."
+                echo "Not deploying without a green verdict. See the escalation below; a subsequent green merge will deploy normally."
+              else
+                echo "FAIL: timed out after 45m waiting for CI on $SHA."
+                echo "Not deploying. This is a failure, not a pass — see the escalation below."
+              fi
               exit 1
             fi
             sleep 30
@@ -407,6 +441,19 @@ jobs:
             gh label create autodeploy-failure --repo "$REPO" \
               --description "Automatic deploy to the operator instance failed" \
               --color B60205 2>/dev/null || true
-            gh issue create --repo "$REPO" --title "$TITLE" \
-              --label autodeploy-failure --body "$BODY"
+
+            # The label is a nice-to-have for triage filtering, not a
+            # precondition for the issue existing: `gh issue create --label`
+            # HARD-FAILS if the named label is missing (e.g. `gh label
+            # create` above failed silently on a transient error or a
+            # permissions gap), and that failure used to take the entire
+            # escalation down with it — filing NO issue at all while this
+            # step still reported "failure" in the Actions UI. Create the
+            # issue unconditionally first, then best-effort attach the
+            # label, so a label hiccup never suppresses the escalation
+            # itself.
+            ISSUE_URL=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY")
+            echo "Escalated by opening $ISSUE_URL"
+            gh issue edit "$ISSUE_URL" --repo "$REPO" --add-label autodeploy-failure \
+              || echo "Note: could not attach the autodeploy-failure label (issue above was still filed)."
           fi
