@@ -2117,6 +2117,23 @@ export interface paths {
      *     refreshing embeddings. Scoped to the authenticated user's own
      *     snapshots. Use `dry_run` to count and list the affected entities
      *     without writing.
+     *
+     *     Retry / idempotency (intrinsic — no `idempotency_key`):
+     *     - The same `{ entity_type, dry_run }` body is safe to retry after
+     *       transport failure. This is maintenance recompute, not
+     *       `ingest` / `store` / `correct`, so there is no request-ledger key.
+     *     - On the live path (`dry_run: false` or omitted), each retry re-runs
+     *       `recomputeSnapshot` per owned entity: a deterministic upsert of
+     *       derived snapshot and timeline rows from the current observation
+     *       set. It does not create duplicate entities or observations.
+     *     - Response counters (`total` / `recomputed` / `errors`) are per
+     *       invocation, not cached across retries.
+     *     - Opportunistic `canonical_name` evolution inside `recomputeSnapshot`
+     *       converges; subsequent retries with an unchanged observation set
+     *       do not keep renaming.
+     *     Unknown top-level request fields are intentionally tolerated
+     *     (handler uses a non-strict Zod object), matching peer maintenance
+     *     POSTs such as `/health_check_snapshots`.
      */
     post: operations["recomputeSnapshotsByType"];
     delete?: never;
