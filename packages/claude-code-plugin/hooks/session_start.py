@@ -28,10 +28,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
     NEOTOMA_BASE_URL,
     get_client,
+    git_context,
     harness_provenance,
     log,
     make_idempotency_key,
     read_hook_input,
+    record_agent_session,
     record_conversation_turn,
     write_cached_mcp_instructions,
     write_hook_output,
@@ -104,6 +106,26 @@ def main() -> int:
         hook_event="SessionStart",
         started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     )
+
+    # Runtime/resume record: where the transcript lives and the git env to
+    # reconstruct. Only emitted for a real harness UUID (a synthesized
+    # fallback id is not resume-capable). Keyed by harness + native_session_id
+    # so the SessionStart and later Stop observations coalesce.
+    if raw_session_id:
+        cwd = payload.get("cwd") or str(Path.cwd())
+        record_agent_session(
+            client,
+            native_session_id=raw_session_id,
+            hook_event="SessionStart",
+            kind="interactive",
+            trigger_kind="interactive",
+            model=payload.get("model"),
+            created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            last_activity_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            cwd=cwd,
+            git=git_context(cwd),
+            resume_command=f"claude --resume {raw_session_id}",
+        )
 
     try:
         client.close()
