@@ -15,6 +15,10 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  BUILT_INSPECTOR_ASSETS,
+  skipWithoutPrerequisite,
+} from "../helpers/test_prerequisites.js";
 
 const ALLOWED = "https://hub.opschudding.app";
 const DENIED = "https://evil.example";
@@ -48,7 +52,14 @@ describe("official cross-origin embed mode (allowlist configured)", () => {
     }
   });
 
-  it("embed shell gets frame-ancestors with the allowlisted origin and drops X-Frame-Options", async () => {
+  // The embed shell IS the built Inspector SPA: without `dist/inspector/index.html`
+  // the mount never installs, so `/embed/graph` 404s and no embed CSP is emitted.
+  // Skip with a named reason rather than fail (issue #2090). The five assertions
+  // below need no build artifact — they exercise CORS and XFO on API routes — so
+  // they keep running on a bare `npm ci` checkout.
+  it.skipIf(
+    skipWithoutPrerequisite(BUILT_INSPECTOR_ASSETS, "embed shell frame-ancestors")
+  )("embed shell gets frame-ancestors with the allowlisted origin and drops X-Frame-Options", async () => {
     const res = await fetch(`${base}/embed/graph`, { headers: { Accept: "text/html" } });
     const csp = res.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("frame-ancestors");

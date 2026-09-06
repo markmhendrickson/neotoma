@@ -22,6 +22,20 @@ const writeTestRunReport = process.env.WRITE_TEST_RUN_REPORT === "1";
 /** When set to "1", run performance benchmarks under tests/performance/. Default: excluded — they seed large datasets and are slow, so they stay out of the default `npm test` lane. Run via `npm run test:bench`. */
 const runBench = process.env.RUN_BENCH === "1";
 
+/**
+ * `inspector/` is a standalone package, not an npm workspace member, so a root
+ * `npm ci` does not install its dependencies. Its unit tests import modules
+ * that reach `@xyflow/react`, `@tanstack/react-query` and `lucide-react`, which
+ * then fail at MODULE LOAD — before any `describe` body runs, so an in-file
+ * `skipIf` cannot help. Excluding them is therefore the only way to skip rather
+ * than fail on a fresh clone (issue #2090).
+ *
+ * The skip is NOT silent: `vitest.global_setup.ts` prints the named reason and
+ * the `npm ci --prefix inspector` remediation on every run that lacks the deps.
+ * Install them and these suites run again with no flag to remember.
+ */
+const hasInspectorDeps = fs.existsSync(path.resolve(__dirname, "./inspector/node_modules"));
+
 export default defineConfig({
   plugins: [
     {
@@ -161,6 +175,9 @@ export default defineConfig({
       "tests/integration/payload/payload_submission.test.ts",
       // React/frontend tests: run only with RUN_FRONTEND_TESTS=1 (jsdom, optional)
       ...(!runFrontendTests ? ["frontend/src/**/*.test.ts", "frontend/src/**/*.test.tsx"] : []),
+      // Inspector unit tests when inspector/node_modules is absent — see
+      // `hasInspectorDeps` above. Reason is announced in global setup.
+      ...(!hasInspectorDeps ? ["inspector/src/**/*.test.ts", "inspector/src/**/*.spec.ts"] : []),
       // Known-bad: jsdom worker ESM/require error (html-encoding-sniffer)
       "frontend/src/components/SchemaDetail.test.tsx",
     ],

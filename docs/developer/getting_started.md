@@ -110,20 +110,6 @@ npm run dev:full
 
 ## Run tests
 
-`npm test` runs the whole Vitest suite, which is wider than the CI baseline lane
-(that lane runs `npm run test:unit`). The extra lanes — `tests/integration`,
-`tests/fixtures` and `inspector/src` — need build artifacts a plain `npm install`
-does not produce, notably the built Inspector SPA at `dist/inspector` and
-`inspector/node_modules`. Without them a clean checkout that is green in CI still
-fails locally, which also blocks the pre-commit hook. Run the setup once per
-checkout:
-
-```bash
-npm run test:setup
-```
-
-Then:
-
 ```bash
 npm test
 npm run test:integration
@@ -131,6 +117,51 @@ npm run test:e2e
 npm run type-check
 npm run lint
 ```
+
+`npm test` runs the whole Vitest suite, which is wider than the CI baseline lane
+(that lane runs `npm run test:unit`). The extra lanes — `tests/integration`,
+`tests/fixtures` and `inspector/src` — reach build artifacts a plain `npm ci`
+does not produce: the built Inspector SPA at `dist/inspector`, the Inspector's
+own `inspector/node_modules`, and the compiled `packages/cursor-hooks/dist`.
+
+### Local prerequisites and the skip policy
+
+On a fresh clone those artifacts are absent, and the suites that need them
+**skip with a named reason** rather than fail. The reason is printed at the top
+of the run:
+
+```
+[neotoma] SKIP inspector-shell suites — missing prerequisite: built inspector assets — npm run build:inspector (or npm run test:setup)
+```
+
+So `npm test` and the pre-commit hook both pass on a fresh clone with no extra
+setup, and any failure you see is attributable to your own change. This is
+deliberate: a failure caused by a missing local build step is indistinguishable
+from a real regression, and that ambiguity is what drove contributors to
+`--no-verify`.
+
+To actually **run** the skipped suites — do this before trusting a green run on
+a change that touches the Inspector or the cursor hooks — install and build
+their prerequisites once per checkout:
+
+```bash
+npm run test:setup
+```
+
+Skips are opt-out by construction: the moment the artifact exists the suite runs
+again, with no flag to remember.
+
+### If `dist/` is missing
+
+`npm test` builds the server first via `pretest`, so this only bites when you
+invoke Vitest directly. A raw `npx vitest run` on an unbuilt checkout stops
+immediately with:
+
+```
+[neotoma] dist/ is missing. Run `npm test` (pretest builds server) or `npm run build:server` before `npx vitest run`.
+```
+
+rather than emitting hundreds of unrelated failures across `tests/cli/**`.
 
 ## Feature guides
 
