@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **588**
-- Backend and repo Vitest files: **553**
+- Total automated test files: **589**
+- Backend and repo Vitest files: **554**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 163 |
 | Vitest service tests | 43 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 166 |
+| Vitest integration tests | 167 |
 | Vitest CLI tests | 77 |
 | Vitest contract tests | 17 |
 | Vitest security tests | 7 |
@@ -402,7 +402,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (166):**
+**Files (167):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -487,6 +487,7 @@ flowchart TD
 - `tests/integration/mcp_graph_variations.test.ts`
 - `tests/integration/mcp_handler_cross_user_scoping.test.ts`
 - `tests/integration/mcp_invalid_bearer_auth.test.ts`
+- `tests/integration/mcp_list_relationships_entity_filters.test.ts`
 - `tests/integration/mcp_npm_check_update_capability_delta.test.ts`
 - `tests/integration/mcp_npm_check_update.test.ts`
 - `tests/integration/mcp_oauth_token_endpoint.test.ts`

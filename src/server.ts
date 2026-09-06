@@ -3389,86 +3389,127 @@ export class NeotomaServer {
           ? "outbound"
           : "both";
 
+    // Tag each row with the direction it was matched on, relative to the
+    // entity the caller asked about. For the source_entity_id /
+    // target_entity_id filters the anchor is that filter's entity, so an
+    // edge matched by source_entity_id is "outbound" from it. When both are
+    // supplied (the delete-discovery path named in the tool description) the
+    // source is the anchor.
+    const anchorEntityId =
+      parsed.source_entity_id ?? parsed.target_entity_id ?? parsed.entity_id ?? null;
+    const directionFor = (row: {
+      source_entity_id?: string;
+      target_entity_id?: string;
+    }): string => {
+      if (anchorEntityId && row.source_entity_id === anchorEntityId) return "outbound";
+      if (anchorEntityId && row.target_entity_id === anchorEntityId) return "inbound";
+      return "both";
+    };
+
+    const decorate = (
+      row: {
+        relationship_key: string;
+        snapshot?: unknown;
+        last_observation_at?: string;
+        source_entity_id?: string;
+        target_entity_id?: string;
+      },
+      direction?: string
+    ) => ({
+      ...row,
+      id: row.relationship_key, // Add id field for backward compatibility
+      direction: direction ?? directionFor(row),
+      // Include snapshot metadata as top-level for backward compatibility
+      metadata: row.snapshot,
+      // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
+      created_at: row.last_observation_at,
+    });
+
     const relationships: any[] = [];
 
-    // Query relationship_snapshots instead of relationships table
-    if (normalizedDirection === "outbound" || normalizedDirection === "both") {
-      let outboundQuery = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("source_entity_id", parsed.entity_id)
-        .eq("user_id", userId);
+    // Query relationship_snapshots instead of relationships table.
+    //
+    // `source_entity_id` / `target_entity_id` / bare `relationship_type` are
+    // declared on ListRelationshipsRequestSchema (whose .refine accepts any
+    // one of them alone) and implemented by the HTTP /list_relationships
+    // handler, but this MCP handler previously filtered ONLY on
+    // `parsed.entity_id`. A call passing just source_entity_id therefore ran
+    // `.eq("source_entity_id", undefined)` and returned a confident zero for
+    // edges that demonstrably exist. Mirror the HTTP branch order here so
+    // both surfaces answer the same question the same way (issue #2205).
+    const useDirectionalEntityIdPath =
+      !parsed.source_entity_id && !parsed.target_entity_id && Boolean(parsed.entity_id);
+
+    if (!useDirectionalEntityIdPath) {
+      let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
 
       // Exclude soft-deleted edges at the DB via the materialized `is_live`
-      // column (#1570), so dead edges are never loaded into memory. Audit
-      // reads pass include_deleted=true to skip this filter.
+      // column (#1570). Audit reads pass include_deleted=true to skip this.
       if (!parsed.include_deleted) {
-        outboundQuery = outboundQuery.eq("is_live", 1);
+        query = query.eq("is_live", 1);
       }
 
+      if (parsed.source_entity_id) {
+        query = query.eq("source_entity_id", parsed.source_entity_id);
+      }
+      if (parsed.target_entity_id) {
+        query = query.eq("target_entity_id", parsed.target_entity_id);
+      }
       if (parsed.relationship_type) {
-        outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
+        query = query.eq("relationship_type", parsed.relationship_type);
       }
 
-      const { data: outbound, error: outboundError } = await outboundQuery;
-
-      if (!outboundError && outbound) {
-        relationships.push(
-          ...outbound.map(
-            (r: {
-              relationship_key: string;
-              snapshot?: unknown;
-              last_observation_at?: string;
-            }) => ({
-              ...r,
-              id: r.relationship_key, // Add id field for backward compatibility
-              direction: "outbound",
-              // Include snapshot metadata as top-level for backward compatibility
-              metadata: r.snapshot,
-              // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
-              created_at: r.last_observation_at,
-            })
-          )
-        );
+      const { data, error } = await query;
+      if (!error && data) {
+        relationships.push(...data.map((r: any) => decorate(r)));
       }
-    }
+    } else {
+      if (normalizedDirection === "outbound" || normalizedDirection === "both") {
+        let outboundQuery = db
+          .from("relationship_snapshots")
+          .select("*")
+          .eq("source_entity_id", parsed.entity_id)
+          .eq("user_id", userId);
 
-    if (normalizedDirection === "inbound" || normalizedDirection === "both") {
-      let inboundQuery = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("target_entity_id", parsed.entity_id)
-        .eq("user_id", userId);
+        // Exclude soft-deleted edges at the DB via the materialized `is_live`
+        // column (#1570), so dead edges are never loaded into memory. Audit
+        // reads pass include_deleted=true to skip this filter.
+        if (!parsed.include_deleted) {
+          outboundQuery = outboundQuery.eq("is_live", 1);
+        }
 
-      // Exclude soft-deleted edges at the DB via `is_live` (#1570).
-      if (!parsed.include_deleted) {
-        inboundQuery = inboundQuery.eq("is_live", 1);
+        if (parsed.relationship_type) {
+          outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
+        }
+
+        const { data: outbound, error: outboundError } = await outboundQuery;
+
+        if (!outboundError && outbound) {
+          relationships.push(...outbound.map((r: any) => decorate(r, "outbound")));
+        }
       }
 
-      if (parsed.relationship_type) {
-        inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
-      }
+      if (normalizedDirection === "inbound" || normalizedDirection === "both") {
+        let inboundQuery = db
+          .from("relationship_snapshots")
+          .select("*")
+          .eq("target_entity_id", parsed.entity_id)
+          .eq("user_id", userId);
 
-      const { data: inbound, error: inboundError } = await inboundQuery;
+        // Exclude soft-deleted edges at the DB via `is_live` (#1570).
+        if (!parsed.include_deleted) {
+          inboundQuery = inboundQuery.eq("is_live", 1);
+        }
 
-      if (!inboundError && inbound) {
-        relationships.push(
-          ...inbound.map(
-            (r: {
-              relationship_key: string;
-              snapshot?: unknown;
-              last_observation_at?: string;
-            }) => ({
-              ...r,
-              id: r.relationship_key, // Add id field for backward compatibility
-              direction: "inbound",
-              // Include snapshot metadata as top-level for backward compatibility
-              metadata: r.snapshot,
-              // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
-              created_at: r.last_observation_at,
-            })
-          )
-        );
+        if (parsed.relationship_type) {
+          inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
+        }
+
+        const { data: inbound, error: inboundError } = await inboundQuery;
+
+        if (!inboundError && inbound) {
+          relationships.push(...inbound.map((r: any) => decorate(r, "inbound")));
+        }
       }
     }
 
@@ -3490,9 +3531,9 @@ export class NeotomaServer {
     });
 
     // Soft-deleted edges were already excluded at the DB via the `is_live`
-    // predicate on each direction's query (#1570), so `relationships` holds
-    // only live edges on the default path (all edges when include_deleted).
-    // `total` therefore reflects the correct post-filter count.
+    // predicate on each query (#1570), so `relationships` holds only live
+    // edges on the default path (all edges when include_deleted). `total`
+    // therefore reflects the correct post-filter count.
     const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
