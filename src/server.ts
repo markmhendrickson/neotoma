@@ -7175,9 +7175,11 @@ export class NeotomaServer {
     }
   }
 
-  // R5: MCP split_entity() Tool — inverse of merge_entities. Re-points a
-  // predicate-selected subset of an entity's observations onto a new (or
-  // pre-existing) entity to repair over-merges. Mirrors the HTTP
+  // R5: MCP split_entity() Tool — re-splits an entity holding observations
+  // that belong to distinct things. Re-points a predicate-selected subset of
+  // an entity's observations onto a new (or pre-existing) entity to repair
+  // over-merges. Not a merge-undo: unmergeEntities() reverses a specific
+  // merge_entities call by replaying its recorded inverse. Mirrors the HTTP
   // POST /entities/split handler in actions.ts and the mergeEntities() shape.
   private async splitEntity(
     args: unknown

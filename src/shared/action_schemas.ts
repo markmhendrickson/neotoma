@@ -768,10 +768,15 @@ export const MergeEntitiesRequestSchema = z.object({
  * #2004: keyed on `merge_id` (the `entity_merges` row id), not entity ids —
  * a source entity may have been merged more than once, so the merge id is
  * the only handle on the specific inverse payload to replay.
+ *
+ * Deliberately has no `idempotency_key`: `merge_id` already *is* the
+ * idempotency key. Each merge has exactly one inverse, and replaying an
+ * unmerge is a no-op read that returns `already_reversed: true` with the
+ * original `unmerged_at` rather than reversing twice. A separate key would
+ * advertise a dedup mechanism that does not exist behind it.
  */
 export const UnmergeEntitiesRequestSchema = z.object({
   merge_id: z.string().min(1),
-  idempotency_key: z.string().optional(),
   user_id: z.string().optional(),
 });
 

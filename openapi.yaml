@@ -747,8 +747,10 @@ components:
             Not an entity id — a source entity may have been merged more
             than once, so the merge id is the only handle on the specific
             inverse payload to replay.
-        idempotency_key:
-          type: string
+
+            `merge_id` is itself the idempotency key: replaying an unmerge is
+            a no-op read that returns `already_reversed: true` with the
+            original `unmerged_at`, so no separate key is accepted.
         user_id:
           type: string
     UnmergeEntitiesResponse:
