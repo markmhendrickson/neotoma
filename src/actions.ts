@@ -9382,7 +9382,9 @@ app.post("/entities/unmerge", async (req, res) => {
   }
 });
 
-// POST /api/entities/split - R5 inverse of /entities/merge.
+// POST /api/entities/split - R5 re-split of an entity holding observations
+// that belong to distinct things. Not a merge-undo: /entities/unmerge reverses
+// a specific merge by replaying its recorded inverse.
 // REQUIRES AUTHENTICATION - all ids scoped to authenticated user.
 app.post("/entities/split", async (req, res) => {
   const parsed = SplitEntityRequestSchema.safeParse(req.body);

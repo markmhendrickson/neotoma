@@ -371,9 +371,10 @@ Required input: `merge_id` — the id returned by the original `merge_entities` 
 | Code | Meaning |
 |------|---------|
 | `ERR_MERGE_NOT_FOUND` | No merge with this id for this user (also returned, not `FORBIDDEN`, when the id belongs to another tenant — avoids confirming existence to a non-owner). |
-| `ERR_MERGE_ALREADY_REVERSED` | (Note: represented as `already_reversed: true` on a 200 response, not a REQUEST_CHANGES-signaling error — see UX rationale in issue #2004.) |
 | `ERR_MERGE_SUPERSEDED` | The merge's survivor was itself later merged into a third entity; that later merge must be unmerged first. |
 | `ERR_MERGE_NOT_REVERSIBLE` | Merge predates inverse capture, or its inverse record is corrupt. |
+
+There is deliberately no `ERR_MERGE_ALREADY_REVERSED`. Re-unmerging an already-reversed merge is a no-op read, not a failure: it returns 200 with `already_reversed: true` and the original `unmerged_at`. That keeps the operation idempotent for a caller retrying without knowing the outcome of its first attempt.
 
 ## 8. Error Codes
 | Code | Meaning |
