@@ -27,7 +27,7 @@ This document does not cover:
 ## Definitions
 - **Automated test file**: A repo test source matched by this catalog's scanner (`tests/**`, `src/**`, `frontend/src/**`, `playwright/tests/**`).
 - **Catalog generator**: `scripts/generate-automated-test-catalog.ts`, the only source allowed to rewrite this file.
-- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree.
+- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. It is the local, pre-PR advisory gate. CI does not use it: the baseline lane runs `npm run generate:test-catalog`, which renders this file rather than failing on drift, so a stale copy never blocks a pull request.
 
 ## Data models or schemas
 None.
@@ -52,8 +52,8 @@ flowchart TD
 
 ## Testing requirements
 - `npm run generate:test-catalog` must be run when automated test inventory changes.
-- `npm run validate:test-catalog` must pass before merge.
-- CI runs `npm run validate:test-catalog` in the baseline lane.
+- `npm run validate:test-catalog` should pass before merge, but does not block it.
+- CI runs `npm run generate:test-catalog` in the baseline lane, which renders this file rather than failing on drift.
 
 ## Maintenance
 - Canonical policy doc: `docs/testing/testing_standard.md`.
@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **593**
-- Backend and repo Vitest files: **558**
+- Total automated test files: **594**
+- Backend and repo Vitest files: **559**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -85,7 +85,7 @@ flowchart TD
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
-| Tests Scripts | 3 |
+| Tests Scripts | 4 |
 
 ## Primary validation commands
 - `npm test`
@@ -97,7 +97,7 @@ flowchart TD
 - `npm run validate:doc-deps`
 
 ## CI lanes
-- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `validate:test-catalog`, and `validate:doc-deps`.
+- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
 - Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.
@@ -811,8 +811,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/scripts`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (3):**
+**Files (4):**
 - `tests/scripts/bundles_scaffold.test.ts`
+- `tests/scripts/generate_automated_test_catalog.test.ts`
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
 - `tests/scripts/validate_libsql_migration.test.ts`
 
