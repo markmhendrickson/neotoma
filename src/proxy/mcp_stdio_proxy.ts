@@ -132,18 +132,70 @@ export class SessionState {
   }
 }
 
+/** JSON-RPC error code `src/actions.ts` uses for an unknown/expired MCP session. */
+const MCP_SESSION_LOST_RPC_CODE = -32001;
+
+/** Statuses on which a session-loss body is honoured. 401 is deliberately absent — see below. */
+const SESSION_LOST_STATUSES = new Set([404, 503]);
+
 /**
- * Exported for unit tests — matches `src/actions.ts` Streamable HTTP unknown-session
- * copy. Accepts 404 (current, spec-compliant status per MCP Streamable HTTP session
- * management) and 503 (prior status, retained so this proxy still recovers against
- * older/unpatched Neotoma server instances).
+ * Extract `error.code` from a JSON-RPC error envelope, or null when the body is
+ * not parseable JSON-RPC. A non-JSON body (an HTML 404 from a proxy in front of
+ * the app, say) yields null and is judged on its message text alone.
  */
-export function isRecoverableMcpSessionLostError(status: number, bodyText: string): boolean {
-  if (status !== 404 && status !== 503) return false;
+function jsonRpcErrorCode(bodyText: string): number | null {
+  try {
+    const parsed = JSON.parse(bodyText) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const err = (parsed as { error?: unknown }).error;
+    if (typeof err !== "object" || err === null) return null;
+    const code = (err as { code?: unknown }).code;
+    return typeof code === "number" ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The session-unknown copy emitted by `src/actions.ts`, matched case-insensitively. */
+function hasSessionUnknownMessage(bodyText: string): boolean {
   const t = bodyText.toLowerCase();
   return (
     t.includes("mcp session is unknown") || t.includes("session is unknown on this api instance")
   );
+}
+
+/**
+ * True when a downstream response means "your MCP session is gone, re-initialize"
+ * (neotoma#2312). Exported for unit tests.
+ *
+ * Keyed on THREE things together, and each one is load-bearing:
+ *
+ * 1. **Status is 404 or 503.** 404 is the spec-compliant status per MCP Streamable
+ *    HTTP session management (neotoma#1923); 503 was the prior status and is retained
+ *    so this proxy still recovers against older/unpatched Neotoma server instances.
+ *    401 is deliberately excluded — `src/actions.ts` returns `-32001` on four separate
+ *    auth failures (invalid/expired bearer, encryption-mode token, unauthenticated POST,
+ *    invalid connection id). Those are not session loss, and replaying `initialize`
+ *    against them would spin the retry loop against a credential problem the replay
+ *    cannot fix, burning `maxAttempts` and masking the real error from the operator.
+ *
+ * 2. **The body carries JSON-RPC `error.code === -32001`.** This is what distinguishes
+ *    a session loss from a genuine routing 404 (a missing route, a misconfigured
+ *    downstream URL), which must surface as an error rather than be retried.
+ *
+ * 3. **The message says the session is unknown.** The code alone is not sufficient,
+ *    since `-32001` is reused for auth; the message keeps an unrelated future
+ *    `-32001` on 404/503 from being read as session loss.
+ *
+ * A body that is not parseable JSON-RPC (no code recoverable) still qualifies on the
+ * message alone, so a server that wraps or strips the envelope does not regress
+ * recovery that worked before this change.
+ */
+export function isRecoverableMcpSessionLostError(status: number, bodyText: string): boolean {
+  if (!SESSION_LOST_STATUSES.has(status)) return false;
+  if (!hasSessionUnknownMessage(bodyText)) return false;
+  const code = jsonRpcErrorCode(bodyText);
+  return code === null || code === MCP_SESSION_LOST_RPC_CODE;
 }
 
 export interface ProxyLoopState {
