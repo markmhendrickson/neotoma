@@ -693,6 +693,53 @@ describe("dispatchCore initialize handshake retry (neotoma#2321)", () => {
     );
   });
 
+  it("still forwards an SSE initialize response, which the classifier now buffers", async () => {
+    // The handshake body has to be read to classify it, which consumes the
+    // stream, so the SSE frames are re-parsed out of the buffered text rather
+    // than streamed. A successful SSE handshake must still reach the client
+    // intact, and the neotoma#2272 correlation guard must still apply.
+    const loop = createLoopState();
+    const sse = `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { ok: true } })}\n\n`;
+    const { deps, emitted } = makeDeps(
+      scriptedSend([
+        () =>
+          new Response(sse, {
+            status: 200,
+            headers: { "content-type": "text/event-stream", "mcp-session-id": "S3" },
+          }),
+      ])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(loop.session.sessionId).toBe("S3");
+    expect(emitted).toEqual([{ jsonrpc: "2.0", id: 1, result: { ok: true } }]);
+  });
+
+  it("drops a mis-correlated initialize response rather than delivering it (neotoma#2272)", async () => {
+    const loop = createLoopState();
+    const { deps, emitted } = makeDeps(
+      scriptedSend([() => jsonResponse({ jsonrpc: "2.0", id: 999, result: { notYours: true } })])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(emitted).toHaveLength(1);
+    const err = (emitted[0] as { error?: { message: string } }).error;
+    expect(err).toBeDefined();
+    expect(err!.message).toContain("did not correlate");
+  });
+
   it("leaves session-loss recovery for established sessions unchanged", async () => {
     // Non-regression on #2312/#2320: the handshake path must not have altered
     // how an established-then-lost session recovers.
