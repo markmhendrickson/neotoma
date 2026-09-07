@@ -328,6 +328,16 @@ class WorkerConnection {
       entry.cleanup();
       entry.reject(error);
     }
+    // Reclamation is routine on this path — an aborting client or an expired
+    // budget — but it is worth a line: each of these was an unhandled
+    // rejection that killed the process before #2316, and a reclamation storm
+    // (the crash-loop signature) is otherwise invisible. Deliberately does not
+    // claim whether a caller was waiting: this promise is consumed by
+    // `routeRead` and by `guardAbandonedRead` before any caller reaches it, so
+    // that is not knowable here.
+    if (entries.length > 0) {
+      logger.warn(`DB reclaimed ${entries.length} in-flight statement(s): ${error.message}`);
+    }
   }
 
   /**
@@ -362,7 +372,7 @@ class WorkerConnection {
     }
     const worker = this.ensureWorker();
     const id = this.nextId++;
-    return new Promise((resolve, reject) => {
+    return new Promise<unknown>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let onAbort: (() => void) | undefined;
       const cleanup = () => {
@@ -479,6 +489,40 @@ function toBindValue(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Make a read's promise safe to abandon (#2316).
+ *
+ * Reads are the only statements that can be reclaimed out from under their
+ * caller: an abort or a statement timeout rejects them on the SERVER's
+ * schedule, whenever the client hangs up or the budget expires, not when the
+ * caller chooses to look. A caller that has already walked away — an express
+ * handler that returned once its client disconnected, an SSE request whose
+ * response closed — never attaches a handler, and Node's default
+ * `--unhandled-rejections=throw` turns that rejection into an unhandled
+ * exception that kills the process. One abandoned HTTP request must never be
+ * able to do that.
+ *
+ * So attach a no-op catch to a DERIVED promise, which marks the rejection
+ * handled without altering the promise we hand back: callers that DO await
+ * still receive the real `WorkerDbAbortError` / `WorkerDbTimeoutError` and can
+ * still map it to a response. Nothing is swallowed for anyone who is listening.
+ *
+ * Scoped deliberately narrowly — reads on the reader pool only:
+ *   - Writes are NOT guarded. `routeWrite` and everything inside a transaction
+ *     ignore the abort signal and are never timed out, precisely so a caller
+ *     hanging up mid-write cannot leave a half-applied mutation. A write that
+ *     fails is a real fault whose rejection must stay loud.
+ *   - This is not a process-wide handler. A blanket
+ *     `process.on("uncaughtException")` would keep the server alive through
+ *     genuine faults — a corrupt migration, an OOM — and is its own defect;
+ *     the crash-worthy cases must still crash. This guards one known-benign
+ *     class of rejection at the one boundary that produces it.
+ */
+function guardAbandonedRead<T>(read: Promise<T>): Promise<T> {
+  void read.catch(() => {});
+  return read;
+}
+
 class WorkerStatement implements DbStatement {
   constructor(
     private readonly db: WorkerFileDatabase,
@@ -496,12 +540,12 @@ class WorkerStatement implements DbStatement {
 
   get(...params: unknown[]): Promise<unknown> {
     const bound = normalizeParams(params).map(toBindValue);
-    return this.db.routeRead("get", this.sql, bound);
+    return guardAbandonedRead(this.db.routeRead("get", this.sql, bound));
   }
 
   all(...params: unknown[]): Promise<unknown[]> {
     const bound = normalizeParams(params).map(toBindValue);
-    return this.db.routeRead("all", this.sql, bound) as Promise<unknown[]>;
+    return guardAbandonedRead(this.db.routeRead("all", this.sql, bound) as Promise<unknown[]>);
   }
 }
 
