@@ -8,27 +8,27 @@ Canonical Cursor wiring, screenshots, and transport choice live in **[`mcp_curso
 
 Stable **`mcp.json` `command` paths** stay at the repo-root `scripts/` filenames below (no subdirectory indirection). Optional relocation under e.g. `scripts/mcp_launchers/` with thin forwarders was deferred to avoid churn for operators who hardcode absolute paths. Shared behavior lives in **`scripts/lib/neotoma_mcp_source_env.sh`** (`.env.dev` → `.env` → `.env.development`, first file found) and **`scripts/lib/neotoma_mcp_resolve_downstream_url.sh`** (port-file + TCP probe for `MCP_PROXY_DOWNSTREAM_URL`, used by both HTTP proxy shims).
 
-| Script | Transport | Signing / worker | Reload | Default downstream / entry | Env files (via lib) |
-|--------|-----------|------------------|--------|------------------------------|---------------------|
-| `run_neotoma_mcp_stdio.sh` | stdio → in-process MCP | None (`dist/index.js` or `tsx src/index.ts`) | Manual reconnect after code change | n/a | `.env.dev`, `.env`, `.env.development` |
-| `run_neotoma_mcp_stdio_dev_watch.sh` | stdio → `tsx watch src/index.ts` | None | `tsx watch` (stdout risk; not for installed MCP) | n/a | same |
-| `run_neotoma_mcp_stdio_prod.sh` | stdio → in-process MCP | None; **`NEOTOMA_ENV=production`** | Manual | n/a | same |
-| `run_neotoma_mcp_stdio_prod_watch.sh` | stdio → plain `tsx src/index.ts` | None; prod env | Manual (comment warns: no `watch` on stdio) | n/a | same |
-| `run_neotoma_mcp_stdio_dev_shim.sh` | stdio → **`mcp_dev_shim`** | Worker default in-process MCP | Shim restarts worker on file change | n/a | same |
-| `run_neotoma_mcp_signed_stdio_dev_shim.sh` | stdio → shim → **HTTP `/mcp`** | **`mcp proxy --aauth`** (AAuth) | Shim + worker reload | `http://127.0.0.1:3080/mcp` unless port file / env | same |
-| `run_neotoma_mcp_unsigned_stdio_dev_shim.sh` | stdio → **`mcp proxy`** (no forced AAuth) | `neotoma mcp proxy` | No shim watch (restart MCP to pick up code) | `http://127.0.0.1:3080/mcp` unless port file / env | same |
-| `run_neotoma_mcp_unsigned_stdio_proxy.sh` | same as unsigned shim | Deprecated forwarder: **`exec`** unsigned shim | same | same | n/a |
+| Script                                       | Transport                                 | Signing / worker                               | Reload                                           | Default downstream / entry                         | Env files (via lib)                    |
+| -------------------------------------------- | ----------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | -------------------------------------------------- | -------------------------------------- |
+| `run_neotoma_mcp_stdio.sh`                   | stdio → in-process MCP                    | None (`dist/index.js` or `tsx src/index.ts`)   | Manual reconnect after code change               | n/a                                                | `.env.dev`, `.env`, `.env.development` |
+| `run_neotoma_mcp_stdio_dev_watch.sh`         | stdio → `tsx watch src/index.ts`          | None                                           | `tsx watch` (stdout risk; not for installed MCP) | n/a                                                | same                                   |
+| `run_neotoma_mcp_stdio_prod.sh`              | stdio → in-process MCP                    | None; **`NEOTOMA_ENV=production`**             | Manual                                           | n/a                                                | same                                   |
+| `run_neotoma_mcp_stdio_prod_watch.sh`        | stdio → plain `tsx src/index.ts`          | None; prod env                                 | Manual (comment warns: no `watch` on stdio)      | n/a                                                | same                                   |
+| `run_neotoma_mcp_stdio_dev_shim.sh`          | stdio → **`mcp_dev_shim`**                | Worker default in-process MCP                  | Shim restarts worker on file change              | n/a                                                | same                                   |
+| `run_neotoma_mcp_signed_stdio_dev_shim.sh`   | stdio → shim → **HTTP `/mcp`**            | **`mcp proxy --aauth`** (AAuth)                | Shim + worker reload                             | `http://127.0.0.1:3080/mcp` unless port file / env | same                                   |
+| `run_neotoma_mcp_unsigned_stdio_dev_shim.sh` | stdio → **`mcp proxy`** (no forced AAuth) | `neotoma mcp proxy`                            | No shim watch (restart MCP to pick up code)      | `http://127.0.0.1:3080/mcp` unless port file / env | same                                   |
+| `run_neotoma_mcp_unsigned_stdio_proxy.sh`    | same as unsigned shim                     | Deprecated forwarder: **`exec`** unsigned shim | same                                             | same                                               | n/a                                    |
 
 ## Downstream URL and signing
 
-| Variable | Default / notes |
-|----------|-----------------|
-| `MCP_PROXY_DOWNSTREAM_URL` | `http://127.0.0.1:3080/mcp` when unset (override per environment). |
-| `MCP_PROXY_AAUTH` | When truthy, load `~/.neotoma/aauth/` keys and sign requests (`neotoma mcp proxy --aauth`). |
-| `MCP_PROXY_CLIENT_NAME`, `MCP_PROXY_CLIENT_VERSION`, `MCP_PROXY_AGENT_LABEL` | Self-report for `clientInfo` injection. |
-| `MCP_PROXY_BEARER_TOKEN`, `MCP_PROXY_CONNECTION_ID` | Optional auth headers. |
-| `MCP_PROXY_SESSION_PREFLIGHT`, `MCP_PROXY_SESSION_PREFLIGHT_BASE`, `MCP_PROXY_FAIL_CLOSED` | Trust / preflight behavior. See `src/cli/mcp_proxy.ts` and `src/proxy/mcp_stdio_proxy.ts`. |
-| `NEOTOMA_AAUTH_AUTHORITY_OVERRIDE` | Canonical host for signing when downstream uses `127.0.0.1` (often `localhost:<port>`). The signed **stdio shim** script can derive this from `MCP_PROXY_DOWNSTREAM_URL` when unset. |
+| Variable                                                                                   | Default / notes                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MCP_PROXY_DOWNSTREAM_URL`                                                                 | `http://127.0.0.1:3080/mcp` when unset (override per environment).                                                                                                                   |
+| `MCP_PROXY_AAUTH`                                                                          | When truthy, load `~/.neotoma/aauth/` keys and sign requests (`neotoma mcp proxy --aauth`).                                                                                          |
+| `MCP_PROXY_CLIENT_NAME`, `MCP_PROXY_CLIENT_VERSION`, `MCP_PROXY_AGENT_LABEL`               | Self-report for `clientInfo` injection.                                                                                                                                              |
+| `MCP_PROXY_BEARER_TOKEN`, `MCP_PROXY_CONNECTION_ID`                                        | Optional auth headers.                                                                                                                                                               |
+| `MCP_PROXY_SESSION_PREFLIGHT`, `MCP_PROXY_SESSION_PREFLIGHT_BASE`, `MCP_PROXY_FAIL_CLOSED` | Trust / preflight behavior. See `src/cli/mcp_proxy.ts` and `src/proxy/mcp_stdio_proxy.ts`.                                                                                           |
+| `NEOTOMA_AAUTH_AUTHORITY_OVERRIDE`                                                         | Canonical host for signing when downstream uses `127.0.0.1` (often `localhost:<port>`). The signed **stdio shim** script can derive this from `MCP_PROXY_DOWNSTREAM_URL` when unset. |
 
 > **Operator security note:** Hosted and operator-managed deployments should set **`MCP_PROXY_FAIL_CLOSED=1`** (or the equivalent `failClosed: true` proxy option) whenever AAuth signing is required. This prevents the proxy from forwarding unsigned downstream requests if signing or session preflight fails.
 
@@ -57,11 +57,11 @@ When **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** (or `true`) is set in **`mcp.json` 
 
 **Verification:** on MCP spawn, stderr should show `[neotoma-mcp-signed-shim]` or `[neotoma-mcp-unsigned-stdio-dev-shim]` for port-file resolution lines, then `[neotoma-mcp-proxy] Starting proxy: downstream=…`.
 
-| Variable | Purpose |
-|----------|---------|
-| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` | `1` / `true` → resolve downstream URL from port files + TCP probe. |
+| Variable                              | Purpose                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------- |
+| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE`     | `1` / `true` → resolve downstream URL from port files + TCP probe.              |
 | `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE` | `dev` or `prod` — which port file(s) to read (preset A sets this per MCP slot). |
-| `NEOTOMA_MCP_PORT_PROBE_MS` | TCP probe timeout in ms (default `1200`, max `5000`). |
+| `NEOTOMA_MCP_PORT_PROBE_MS`           | TCP probe timeout in ms (default `1200`, max `5000`).                           |
 
 **CLI parity:** When the same env vars are set in the shell (not only in `mcp.json`), the **`neotoma` CLI** `resolveBaseUrl()` path uses the same profile rules and TCP probe after session port env and before `config.json` `base_url`, returning `http://localhost:<port>` so AAuth authority matches the API (for example `neotoma inspector admin unlock`). Profile follows **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** if set, else **`NEOTOMA_ENV`**. Project root: `NEOTOMA_PROJECT_ROOT`, then `project_root` / `repo_root` in `~/.config/neotoma/config.json`, else `cwd`.
 
@@ -75,14 +75,34 @@ Streamable HTTP MCP keeps each session in **process memory** (`mcpTransports` in
 
 As of neotoma#1923, an unknown/expired session returns **404** (not 503), per the [MCP Streamable HTTP session management spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#session-management) — this lets spec-compliant clients auto-reinitialize instead of treating the server as unavailable. Servers predating that fix return 503 for the same condition; `neotoma mcp proxy` recognizes both.
 
-| Symptom | Typical cause | What to do |
-|--------|----------------|------------|
-| **400** — no session header on a non-`initialize` POST | Proxy never stored an id (failed init, stripped response header) or client skipped `initialize` | Restart the MCP server in the IDE; confirm proxy stderr shows a successful downstream `initialize` and that your reverse proxy **forwards** `mcp-session-id` on responses and requests (custom headers are not hop-by-hop but some templates hide unknown headers). |
-| **404** (or, against an older server, **503**) — session header present but unknown on this instance | **Load-balanced replicas** without affinity: `initialize` hit instance A, `tools/call` hit B | Use **sticky sessions** for `POST /mcp` (same as [`/mcp/oauth`](../subsystems/auth.md) guidance), scale MCP to **one** API replica for `/mcp`, or terminate TLS on a single Node process. |
-| **404** (or **503**) — same, while using **`neotoma mcp proxy`** | Transient replica drift or API restart after the IDE finished `initialize` | The proxy **replays `initialize` to downstream once** (without emitting a second `initialize` on stdout), captures a fresh `mcp-session-id`, and **retries the failing RPC once**. If the second attempt still fails, fix infra (sticky sessions / single `/mcp` worker) or restart the MCP client. |
-| **404** / **503** / **400** after deploy or restart | In-memory map cleared | Restart the MCP client once so `initialize` runs again. |
+| Symptom                                                                                                                        | Typical cause                                                                                              | What to do                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **400** — no session header on a non-`initialize` POST                                                                         | Proxy never stored an id (failed init, stripped response header) or client skipped `initialize`            | Restart the MCP server in the IDE; confirm proxy stderr shows a successful downstream `initialize` and that your reverse proxy **forwards** `mcp-session-id` on responses and requests (custom headers are not hop-by-hop but some templates hide unknown headers).                                 |
+| **404** (or, against an older server, **503**) — session header present but unknown on this instance                           | **Load-balanced replicas** without affinity: `initialize` hit instance A, `tools/call` hit B               | Use **sticky sessions** for `POST /mcp` (same as [`/mcp/oauth`](../subsystems/auth.md) guidance), scale MCP to **one** API replica for `/mcp`, or terminate TLS on a single Node process.                                                                                                           |
+| **404** (or **503**) — same, while using **`neotoma mcp proxy`**                                                               | Transient replica drift or API restart after the IDE finished `initialize`                                 | The proxy **replays `initialize` to downstream once** (without emitting a second `initialize` on stdout), captures a fresh `mcp-session-id`, and **retries the failing RPC once**. If the second attempt still fails, fix infra (sticky sessions / single `/mcp` worker) or restart the MCP client. |
+| **404** / **503** / **400** after deploy or restart                                                                            | In-memory map cleared                                                                                      | Restart the MCP client once so `initialize` runs again.                                                                                                                                                                                                                                             |
+| `handshake_unreachable` — the first `initialize` never reached a server (CONNECT_TIMEOUT, ECONNREFUSED, socket closed)         | Backend down, restarting, or the wrong `--downstream-url`                                                  | The proxy already retried with backoff (neotoma#2321) and the backend stayed unreachable for the whole window. Check `/health` and the downstream URL, then restart the MCP client once the backend answers.                                                                                        |
+| `handshake_server_error` — the first `initialize` reached the server, which failed internally (5xx, or `-32603` through a 200) | Substrate crash surfacing through the handshake (e.g. neotoma#2316's "DB request aborted by caller")       | Also already retried. The server is broken rather than refusing you: check server logs and `/health`, redeploy if needed, then restart the MCP client.                                                                                                                                              |
+| `handshake_auth_rejected` — the first `initialize` was refused for authentication (401)                                        | Invalid/expired bearer, encryption-mode token required, unauthenticated POST, or invalid `X-Connection-Id` | **Not retried, deliberately** — a replay cannot fix a credential. Fix the credential: re-run `neotoma auth mcp-token`, or remove `Authorization` / `X-Connection-Id` from `mcp.json` and reconnect.                                                                                                 |
+| Tools appear missing / the agent answers about the graph "from silence"                                                        | An exhausted handshake leaves a session with no tools                                                      | An exhausted handshake is a **connection failure, not a missing tool** — its error says so explicitly (`NOT a missing tool`). Check proxy stderr for `initialize exhausted` before concluding a tool does not exist.                                                                                |
 
 When debugging, read the proxy line `Downstream error status=… body=…` (stderr): the JSON body includes the real `message` from Neotoma or the MCP SDK.
+
+### Handshake retry (neotoma#2321)
+
+Session-loss recovery cannot help an `initialize` that never succeeded — there is no session to recover and no cached handshake to replay — so a failed handshake used to be permanent for the life of the client. Every session opened during an outage stayed dark long after the backend recovered, while sessions already established were fine.
+
+The proxy now retries the handshake, but only on a failure a replay can fix: a transport failure that never reached a server, or a server that answered with its own internal error. An `initialize` refused for **authentication is never retried**, because retrying would hammer a server that is correctly rejecting a credential and mask the real cause.
+
+Retries are bounded twice over: by `NEOTOMA_MCP_PROXY_MAX_ATTEMPTS` (default 4) and by a wall-clock budget, `NEOTOMA_MCP_PROXY_HANDSHAKE_BUDGET_MS` (default 45s). The wall-clock bound matters because the proxy emits nothing until it resolves, so the client sits blocked on its own `initialize` timeout — 60s by default in the MCP SDK — for the whole retry window. Overrunning that would turn a recoverable handshake into a client-side abort.
+
+A recovered handshake looks like this on stderr — note the client never sees the intermediate failures, only the successful `initialize`:
+
+```
+[neotoma-mcp-proxy] initialize retry attempt=1/4 (retryable_transport): fetch failed cause=ECONNREFUSED — retrying
+[neotoma-mcp-proxy] initialize retry attempt=2/4 (retryable_server): downstream status=500 — retrying
+[neotoma-mcp-proxy] initialize recovered after 3 attempts
+```
 
 ## Related
 

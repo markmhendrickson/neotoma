@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   backoffMs,
+  classifyInitializeFailure,
   createLoopState,
   dispatchCore,
   isJsonRpcResponse,
@@ -459,7 +460,13 @@ describe("dispatchCore", () => {
     expect((emitted[0] as { error?: unknown }).error).toBeDefined();
   });
 
-  it("does not retry initialize even on a 404 carrying -32001 session loss", async () => {
+  /**
+   * A 404 on the handshake is NOT session loss — there is no session yet — so it
+   * is classified `other_terminal` and surfaces without retry. This replaces the
+   * former "does not retry initialize even on a 404 carrying -32001" test: the
+   * assertion (one call, an error surfaced) is unchanged; only the reason is.
+   */
+  it("does not retry a handshake 404, which cannot be session loss (no session exists yet)", async () => {
     const loop = createLoopState();
     let calls = 0;
     const { deps, emitted } = makeDeps(
@@ -478,19 +485,19 @@ describe("dispatchCore", () => {
       params: {},
     });
 
-    expect(calls).toBe(1); // the client owns the handshake
+    expect(calls).toBe(1);
     expect(emitted).toHaveLength(1);
     expect((emitted[0] as { error?: unknown }).error).toBeDefined();
   });
 
-  it("does not retry a failed initialize (the client owns the handshake)", async () => {
+  it("does not retry a handshake rejected as a client error (400)", async () => {
     const loop = createLoopState();
     let calls = 0;
     const { deps, emitted } = makeDeps(
       scriptedSend([
         () => {
           calls++;
-          return sessionLostResponse();
+          return jsonResponse({ error: { code: -32600, message: "Bad Request" } }, { status: 400 });
         },
       ])
     );
@@ -502,9 +509,315 @@ describe("dispatchCore", () => {
       params: {},
     });
 
-    expect(calls).toBe(1); // no retry/replay for initialize itself
+    expect(calls).toBe(1); // a malformed handshake is not fixed by replaying it
     expect(emitted).toHaveLength(1);
     expect((emitted[0] as { error?: unknown }).error).toBeDefined();
+  });
+});
+
+/**
+ * Regression coverage for neotoma#2321 — a failed `initialize` was permanent.
+ *
+ * Session-loss recovery (#2312/#2320) never applied to the handshake: there is
+ * no session to recover and no cached handshake to replay. So a session whose
+ * `initialize` failed while the backend was unhealthy stayed dark for the life
+ * of the client, long after the backend was fixed and verified serving.
+ *
+ * These cover the three behaviours that fix has to get right together: retry
+ * what a replay can fix, never retry a credential rejection, and stay bounded.
+ */
+describe("dispatchCore initialize handshake retry (neotoma#2321)", () => {
+  /** The 401 + `-32001` body `src/actions.ts` returns on an invalid/expired bearer. */
+  function authRejectedResponse(): Response {
+    return jsonResponse(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32001,
+          message:
+            "Invalid or expired Bearer token. Remove Authorization from mcp.json and click Connect to re-authenticate.",
+        },
+      },
+      { status: 401 }
+    );
+  }
+
+  it("retries a handshake that fails twice then succeeds, and the session establishes", async () => {
+    const loop = createLoopState();
+    let calls = 0;
+    const { deps, emitted } = makeDeps(async () => {
+      calls++;
+      if (calls === 1) throw new Error("fetch failed", { cause: new Error("ECONNREFUSED") });
+      if (calls === 2) return jsonResponse({ error: { code: -32603 } }, { status: 500 });
+      return jsonResponse({ jsonrpc: "2.0", id: 1, result: { ok: true } }, { sessionId: "S1" });
+    });
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(calls).toBe(3);
+    // The effect that matters: the session is usable, not merely that a retry ran.
+    expect(loop.session.sessionId).toBe("S1");
+    // The client sees only the successful handshake — no error leaked mid-retry.
+    expect(emitted).toEqual([{ jsonrpc: "2.0", id: 1, result: { ok: true } }]);
+  });
+
+  it("retries a handshake whose crash surfaces as -32603 through an HTTP 200", async () => {
+    // neotoma#2316's "DB request aborted by caller": when the substrate crashes
+    // after response headers are sent, the status can no longer be restated, so
+    // the internal error rides out on an otherwise-successful response. Forwarded
+    // blindly, that is a handshake failure delivered as a handshake success.
+    const loop = createLoopState();
+    let calls = 0;
+    const { deps, emitted } = makeDeps(async () => {
+      calls++;
+      if (calls === 1) {
+        return jsonResponse({
+          jsonrpc: "2.0",
+          id: 1,
+          error: { code: -32603, message: "DB request aborted by caller" },
+        });
+      }
+      return jsonResponse({ jsonrpc: "2.0", id: 1, result: { ok: true } }, { sessionId: "S9" });
+    });
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(calls).toBe(2);
+    expect(loop.session.sessionId).toBe("S9");
+    expect(emitted).toEqual([{ jsonrpc: "2.0", id: 1, result: { ok: true } }]);
+  });
+
+  it("never retries a handshake rejected for authentication, and says so distinguishably", async () => {
+    const loop = createLoopState();
+    let calls = 0;
+    const { deps, emitted } = makeDeps(async () => {
+      calls++;
+      return authRejectedResponse();
+    });
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    // Load-bearing: retrying would hammer a server correctly refusing a
+    // credential, burn the budget, and mask the real cause from the operator.
+    expect(calls).toBe(1);
+    expect(emitted).toHaveLength(1);
+    const err = (emitted[0] as { error: { message: string } }).error;
+    expect(err.message).toContain("handshake_auth_rejected");
+    // Distinguishable from the unreachable/server-error classes.
+    expect(err.message).not.toContain("handshake_unreachable");
+  });
+
+  it("does not read the shared -32001 code as auth when the status is not 401", async () => {
+    // -32001 is returned on four auth paths AND on session loss. Keying auth on
+    // the code alone would misclassify; the 401 status is the discriminator.
+    expect(
+      classifyInitializeFailure({
+        status: 500,
+        bodyText: JSON.stringify({ error: { code: -32001, message: "whatever" } }),
+      })
+    ).toBe("retryable_server");
+  });
+
+  it("bounds retries: an unreachable backend stops at maxAttempts and reports it as unreachable", async () => {
+    const loop = createLoopState();
+    let calls = 0;
+    const { deps, emitted } = makeDeps(
+      async () => {
+        calls++;
+        throw new Error("fetch failed", { cause: new Error("ECONNREFUSED") });
+      },
+      { maxAttempts: 3 }
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(calls).toBe(3); // bounded, not infinite
+    expect(emitted).toHaveLength(1);
+    const err = (emitted[0] as { error: { message: string } }).error;
+    // A client that exhausted retries must be able to tell "the server is
+    // unreachable" from "this tool does not exist".
+    expect(err.message).toContain("handshake_unreachable");
+    expect(err.message).toContain("NOT a missing tool");
+  });
+
+  it("stops retrying when the wall-clock budget would be exceeded, before the client's own timeout", async () => {
+    // Attempt count alone is not a sufficient bound: the proxy emits nothing
+    // until it resolves, so the client sits blocked on its own initialize
+    // timeout for the whole window. Overrunning it turns a recoverable
+    // handshake into a client-side abort.
+    const loop = createLoopState();
+    let calls = 0;
+    let clock = 0;
+    const { emitted, deps } = makeDeps(
+      async () => {
+        calls++;
+        clock += 20_000; // each attempt burns 20s
+        throw new Error("fetch failed", { cause: new Error("ETIMEDOUT") });
+      },
+      { maxAttempts: 8 }
+    );
+
+    await dispatchCore({ ...deps, now: () => clock, handshakeBudgetMs: 45_000 }, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    // Budget, not maxAttempts, is what stopped it.
+    expect(calls).toBeLessThan(8);
+    expect(calls).toBe(3);
+    expect((emitted[0] as { error: { message: string } }).error.message).toContain(
+      "handshake_unreachable"
+    );
+  });
+
+  it("still forwards an SSE initialize response, which the classifier now buffers", async () => {
+    // The handshake body has to be read to classify it, which consumes the
+    // stream, so the SSE frames are re-parsed out of the buffered text rather
+    // than streamed. A successful SSE handshake must still reach the client
+    // intact, and the neotoma#2272 correlation guard must still apply.
+    const loop = createLoopState();
+    const sse = `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { ok: true } })}\n\n`;
+    const { deps, emitted } = makeDeps(
+      scriptedSend([
+        () =>
+          new Response(sse, {
+            status: 200,
+            headers: { "content-type": "text/event-stream", "mcp-session-id": "S3" },
+          }),
+      ])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(loop.session.sessionId).toBe("S3");
+    expect(emitted).toEqual([{ jsonrpc: "2.0", id: 1, result: { ok: true } }]);
+  });
+
+  it("drops a mis-correlated initialize response rather than delivering it (neotoma#2272)", async () => {
+    const loop = createLoopState();
+    const { deps, emitted } = makeDeps(
+      scriptedSend([() => jsonResponse({ jsonrpc: "2.0", id: 999, result: { notYours: true } })])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(emitted).toHaveLength(1);
+    const err = (emitted[0] as { error?: { message: string } }).error;
+    expect(err).toBeDefined();
+    expect(err!.message).toContain("did not correlate");
+  });
+
+  it("leaves session-loss recovery for established sessions unchanged", async () => {
+    // Non-regression on #2312/#2320: the handshake path must not have altered
+    // how an established-then-lost session recovers.
+    const loop = createLoopState();
+    loop.session.sessionId = "S1";
+    loop.lastInitializeBody = JSON.stringify({ jsonrpc: "2.0", id: 0, method: "initialize" });
+
+    const calls: string[] = [];
+    const send: DispatchDeps["send"] = async (_headers, body) => {
+      const method = methodOf(body);
+      calls.push(method);
+      if (method === "initialize") return jsonResponse({ result: {} }, { sessionId: "S2" });
+      return calls.filter((m) => m === "tools/call").length === 1
+        ? sessionLostResponse()
+        : jsonResponse({ jsonrpc: "2.0", id: 7, result: { ok: true } });
+    };
+
+    const { deps, emitted } = makeDeps(send);
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {},
+    });
+
+    expect(calls).toEqual(["tools/call", "initialize", "tools/call"]);
+    expect(loop.session.sessionId).toBe("S2");
+    expect(emitted).toEqual([{ jsonrpc: "2.0", id: 7, result: { ok: true } }]);
+  });
+});
+
+describe("classifyInitializeFailure (neotoma#2321)", () => {
+  it("classifies a connection failure as retryable transport", () => {
+    expect(classifyInitializeFailure({ networkError: true })).toBe("retryable_transport");
+    expect(classifyInitializeFailure({})).toBe("retryable_transport");
+  });
+
+  it("classifies 5xx and -32603 as retryable server errors", () => {
+    expect(classifyInitializeFailure({ status: 500 })).toBe("retryable_server");
+    expect(classifyInitializeFailure({ status: 502 })).toBe("retryable_server");
+    expect(
+      classifyInitializeFailure({
+        status: 200,
+        bodyText: JSON.stringify({ error: { code: -32603, message: "DB request aborted" } }),
+      })
+    ).toBe("retryable_server");
+  });
+
+  it("classifies every 401 auth path as auth_rejected regardless of body", () => {
+    for (const msg of [
+      "Invalid or expired Bearer token.",
+      "Encryption is enabled. Use MCP token from your private key",
+      "Unauthorized: Authentication required",
+      "Connection invalid or expired.",
+    ]) {
+      expect(
+        classifyInitializeFailure({
+          status: 401,
+          bodyText: JSON.stringify({ error: { code: -32001, message: msg } }),
+        })
+      ).toBe("auth_rejected");
+    }
+  });
+
+  it("never lets a retryable signal override an auth rejection", () => {
+    // A 401 body that also happens to carry -32603 must still fail closed.
+    expect(
+      classifyInitializeFailure({
+        status: 401,
+        bodyText: JSON.stringify({ error: { code: -32603 } }),
+      })
+    ).toBe("auth_rejected");
+  });
+
+  it("classifies non-auth 4xx as terminal, not retryable", () => {
+    expect(classifyInitializeFailure({ status: 400 })).toBe("other_terminal");
+    expect(classifyInitializeFailure({ status: 404 })).toBe("other_terminal");
+    expect(classifyInitializeFailure({ status: 403 })).toBe("other_terminal");
   });
 });
 
