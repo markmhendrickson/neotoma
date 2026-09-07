@@ -28,6 +28,32 @@ function jsonResponse(obj: unknown, opts: { status?: number; sessionId?: string 
   return new Response(JSON.stringify(obj), { status: opts.status ?? 200, headers });
 }
 
+/**
+ * The unknown-session 404 body emitted by `src/actions.ts`, copied verbatim —
+ * including the `-32001` code the neotoma#2312 predicate keys on.
+ */
+const SERVER_404_SESSION_LOST_BODY = {
+  jsonrpc: "2.0",
+  id: null,
+  error: {
+    code: -32001,
+    message:
+      "Not Found: MCP session is unknown or expired on this API instance. The client should re-initialize by sending a new InitializeRequest without a session ID. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance).",
+  },
+};
+
+/** A genuine routing 404 — no `-32001`, so it must surface as an error and never retry. */
+function routingNotFoundResponse(): Response {
+  return jsonResponse(
+    {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32601, message: "Not Found: no such route" },
+    },
+    { status: 404 }
+  );
+}
+
 /** Mirrors the current `404 … session is unknown on this API instance` body from src/actions.ts. */
 function sessionLostResponse(): Response {
   return jsonResponse(
@@ -120,6 +146,89 @@ describe("isRecoverableMcpSessionLostError", () => {
     );
     expect(isRecoverableMcpSessionLostError(404, "rate limited")).toBe(false);
     expect(isRecoverableMcpSessionLostError(503, "rate limited")).toBe(false);
+  });
+
+  // neotoma#2312: the predicate is keyed on the JSON-RPC error code, not the
+  // status or the prose alone.
+  it("matches the real server 404 body verbatim, including error.code -32001", () => {
+    expect(
+      isRecoverableMcpSessionLostError(404, JSON.stringify(SERVER_404_SESSION_LOST_BODY))
+    ).toBe(true);
+  });
+
+  it("does NOT match a genuine routing 404 that carries no -32001", () => {
+    // A missing route / misconfigured downstream URL must surface, never retry.
+    expect(
+      isRecoverableMcpSessionLostError(
+        404,
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32601, message: "Not Found: no such route" },
+        })
+      )
+    ).toBe(false);
+    expect(isRecoverableMcpSessionLostError(404, "<html><body>404 Not Found</body></html>")).toBe(
+      false
+    );
+  });
+
+  it("does NOT treat an auth 401 carrying -32001 as session loss", () => {
+    // src/actions.ts returns -32001 on four separate auth failures. Replaying
+    // initialize cannot fix a credential problem, so these must not recover.
+    for (const message of [
+      "Invalid or expired Bearer token. Remove Authorization from mcp.json and click Connect to re-authenticate.",
+      "Unauthorized: Authentication required",
+    ]) {
+      expect(
+        isRecoverableMcpSessionLostError(
+          401,
+          JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32001, message } })
+        )
+      ).toBe(false);
+    }
+  });
+
+  it("does NOT match an unrelated -32001 on 404/503 whose message is not session loss", () => {
+    expect(
+      isRecoverableMcpSessionLostError(
+        503,
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32001, message: "Service Unavailable: upstream database is down" },
+        })
+      )
+    ).toBe(false);
+  });
+
+  /**
+   * The case that distinguishes the body-keyed predicate from a message-only
+   * one: an envelope whose prose says the session is unknown but whose JSON-RPC
+   * code is something else. Keying on `-32001` makes the code authoritative
+   * whenever one is present, so borrowed or proxied copy cannot spoof recovery.
+   */
+  it("does NOT recover on a session-unknown message carrying a non--32001 code", () => {
+    expect(
+      isRecoverableMcpSessionLostError(
+        404,
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: null,
+          error: {
+            code: -32601,
+            message: "Not Found: MCP session is unknown or expired on this API instance.",
+          },
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("still recovers when the body is not parseable JSON-RPC but says the session is unknown", () => {
+    // A server that wraps or strips the envelope must not regress recovery.
+    expect(
+      isRecoverableMcpSessionLostError(404, "Not Found: MCP session is unknown or expired")
+    ).toBe(true);
   });
 });
 
@@ -280,6 +389,98 @@ describe("dispatchCore", () => {
     const err = emitted[0] as { id: number; error: { code: number; message: string } };
     expect(err.id).toBe(11);
     expect(err.error.message).toMatch(/recovery exhausted after 3 attempts/);
+  });
+
+  // neotoma#2312 — the incident shape: a single-machine restart drops the
+  // in-memory session, and the very next tool call gets the verbatim 404 body.
+  it("recovers from the verbatim server 404 session-loss body after a restart", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "S1";
+    loop.lastInitializeBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 0,
+      method: "initialize",
+      params: { clientInfo: { name: "test-proxy", version: "1.0.0" } },
+    });
+
+    const calls: string[] = [];
+    const sentSessionHeaders: (string | undefined)[] = [];
+    const send: DispatchDeps["send"] = async (headers, body) => {
+      const method = methodOf(body);
+      calls.push(method);
+      sentSessionHeaders.push(headers["mcp-session-id"]);
+      if (method === "initialize") return jsonResponse({ result: {} }, { sessionId: "S2" });
+      return calls.filter((m) => m === "tools/call").length === 1
+        ? jsonResponse(SERVER_404_SESSION_LOST_BODY, { status: 404 })
+        : jsonResponse({ jsonrpc: "2.0", id: 7, result: { ok: true } });
+    };
+
+    const { deps, emitted } = makeDeps(send);
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {},
+    });
+
+    expect(calls).toEqual(["tools/call", "initialize", "tools/call"]);
+    // The replayed initialize must not carry the dead session id.
+    expect(sentSessionHeaders[0]).toBe("S1");
+    expect(sentSessionHeaders[1]).toBeUndefined();
+    expect(loop.session.sessionId).toBe("S2");
+    expect(emitted).toEqual([{ jsonrpc: "2.0", id: 7, result: { ok: true } }]);
+  });
+
+  it("does NOT retry a genuine routing 404 — it surfaces as an error", async () => {
+    const loop = createLoopState();
+    loop.session.sessionId = "S1";
+    loop.lastInitializeBody = JSON.stringify({ jsonrpc: "2.0", id: 0, method: "initialize" });
+
+    let calls = 0;
+    const { deps, emitted } = makeDeps(
+      scriptedSend([
+        () => {
+          calls++;
+          return routingNotFoundResponse();
+        },
+      ])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 13,
+      method: "tools/call",
+      params: {},
+    });
+
+    expect(calls).toBe(1); // no replay, no retry
+    expect(loop.session.sessionId).toBe("S1"); // session left intact
+    expect(emitted).toHaveLength(1);
+    expect((emitted[0] as { error?: unknown }).error).toBeDefined();
+  });
+
+  it("does not retry initialize even on a 404 carrying -32001 session loss", async () => {
+    const loop = createLoopState();
+    let calls = 0;
+    const { deps, emitted } = makeDeps(
+      scriptedSend([
+        () => {
+          calls++;
+          return jsonResponse(SERVER_404_SESSION_LOST_BODY, { status: 404 });
+        },
+      ])
+    );
+
+    await dispatchCore(deps, loop, baseConfig, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {},
+    });
+
+    expect(calls).toBe(1); // the client owns the handshake
+    expect(emitted).toHaveLength(1);
+    expect((emitted[0] as { error?: unknown }).error).toBeDefined();
   });
 
   it("does not retry a failed initialize (the client owns the handshake)", async () => {
