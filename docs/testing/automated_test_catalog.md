@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **594**
-- Backend and repo Vitest files: **559**
+- Total automated test files: **596**
+- Backend and repo Vitest files: **561**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 164 |
 | Vitest service tests | 44 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 167 |
+| Vitest integration tests | 168 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 18 |
 | Vitest security tests | 7 |
@@ -404,7 +404,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (167):**
+**Files (168):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -438,6 +438,7 @@ flowchart TD
 - `tests/integration/csp_local_http.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
+- `tests/integration/db_abort_client_disconnect_survival.test.ts`
 - `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/describe_instance_policy_auth.test.ts`
 - `tests/integration/docs_route.test.ts`
