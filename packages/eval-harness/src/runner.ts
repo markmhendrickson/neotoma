@@ -206,6 +206,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       hooksEnabled: plan.hooksEnabled,
       env: {
         NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
+        ...(plan.scenario.server_env ?? {}),
       },
       faults: plan.scenario.server_faults,
     });

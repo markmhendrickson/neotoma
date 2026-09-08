@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_file_input_remote_path_and_non_base64_reject",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-08T12:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "First store the file at /Users/someone/Documents/review.txt with mime_type text/plain. Then store file_content that is the plain prose \"This is plain text and not base64 at all!!!!\" with mime_type text/plain.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When asked to store a file, call the store tool exactly as instructed.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "file_path": "/Users/someone/Documents/review.txt",
+        "mime_type": "text/plain",
+        "idempotency_key": "eval-2325-remote-path-001"
+      },
+      "output": {
+        "error_code": "ERR_FILE_PATH_IS_SERVER_LOCAL"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "file_content": "This is plain text and not base64 at all!!!!",
+        "mime_type": "text/plain",
+        "idempotency_key": "eval-2325-non-base64-001"
+      },
+      "output": {
+        "error_code": "ERR_FILE_CONTENT_NOT_BASE64"
+      },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "Both store calls were rejected with structured file-input error codes."
+}

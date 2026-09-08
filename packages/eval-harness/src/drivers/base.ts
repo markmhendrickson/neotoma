@@ -147,7 +147,17 @@ async function postNeotomaTool(
       // leave as text
     }
     if (!res.ok) {
-      return { error: `${toolName} returned status ${res.status}: ${text.slice(0, 400)}` };
+      // Prefer the parsed error body as `output` so scenarios can assert
+      // structured codes (error_code / code / details.hint) via
+      // tool_result.matches — message-prefix-as-code is not enough (#2325).
+      const structured =
+        parsed && typeof parsed === "object"
+          ? parsed
+          : { error: { message: text.slice(0, 400), status: res.status } };
+      return {
+        output: structured,
+        error: `${toolName} returned status ${res.status}: ${text.slice(0, 400)}`,
+      };
     }
     return { output: parsed };
   } catch (err) {

@@ -1,0 +1,50 @@
+meta:
+  id: store_file_input_remote_path_and_non_base64_reject
+  description: >
+    Drive store with a remote file_path and with prose file_content; assert the
+    structured reject codes ERR_FILE_PATH_IS_SERVER_LOCAL and
+    ERR_FILE_CONTENT_NOT_BASE64 (not reply prose, not InternalError). Part of
+    neotoma#2325 / #2350 rereview.
+  tags:
+    - tier2
+    - error_recovery
+    - file_input
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "Remote file_path and non-base64 file_content must fail with structured codes on store."
+privacy_transform: "Fully synthetic paths and prose; no PII."
+
+server_env:
+  NEOTOMA_FILESYSTEM_LOCAL: "0"
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When asked to
+  store a file, call the store tool exactly as instructed.
+
+user_prompt: |
+  First store the file at /Users/someone/Documents/review.txt with mime_type
+  text/plain. Then store file_content that is the plain prose
+  "This is plain text and not base64 at all!!!!" with mime_type text/plain.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: eq
+    value: 2
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_subset:
+      error_code: ERR_FILE_PATH_IS_SERVER_LOCAL
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_subset:
+      error_code: ERR_FILE_CONTENT_NOT_BASE64

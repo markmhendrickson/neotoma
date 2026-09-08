@@ -1,5 +1,9 @@
 # Legacy-payload outcome flips
 
+## v0.22.x
+
+- `v0.22.x/store_file_content_non_base64` seeded as `rejected` (#2325). `POST /store` with non-base64 `file_content` previously decoded via Node's permissive base64 decoder (invalid characters discarded) and stored under a valid-looking `content_hash`. It now returns `400 ERR_FILE_CONTENT_NOT_BASE64` with a structured `details.hint` matching `/base64/i` naming the upgrade path (base64-encode bytes before retrying).
+
 One entry per payload whose declared `outcome` changed in a release. The release supplement's **Breaking changes** section links to this file.
 
 Format: one bullet per flip, keyed by the Neotoma version that introduced the new outcome. Name the fixture path and the before/after state.

@@ -1,0 +1,6 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "idempotency_key": "legacy-v0.22.x-store-file-content-non-base64",
+  "file_content": "This is plain text and not base64 at all!!!!",
+  "mime_type": "text/plain"
+}
