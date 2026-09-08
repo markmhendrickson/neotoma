@@ -16,14 +16,23 @@ let sqliteVecLoaded: boolean | null = null;
 /**
  * Load sqlite-vec extension lazily. Caches success/failure.
  * Returns true if loaded, false if failed (e.g. wrong platform).
+ *
+ * sqlite-vec's `load()` calls `db.loadExtension(...)` on the object it is
+ * given, which only exists on the NATIVE driver instance (better-sqlite3's
+ * `Database` / node:sqlite's `DatabaseSync`) — not on this repo's
+ * `SqliteDatabaseImpl` wrapper (`prepare`/`exec`/`pragma`/`transaction`
+ * only). Passing the wrapper here always threw "db.loadExtension is not a
+ * function" regardless of platform, so semantic search silently degraded to
+ * lexical everywhere sqlite-vec was reachable at all. Fixed by unwrapping to
+ * the native handle via `nativeHandle()` before calling `sqliteVec.load()`.
  */
 export function ensureSqliteVecLoaded(db: SqliteDatabase): boolean {
   if (sqliteVecLoaded !== null) {
     return sqliteVecLoaded;
   }
   try {
-    const sqliteVec = createRequireFromMeta("sqlite-vec") as { load: (d: SqliteDatabase) => void };
-    sqliteVec.load(db);
+    const sqliteVec = createRequireFromMeta("sqlite-vec") as { load: (d: unknown) => void };
+    sqliteVec.load(db.nativeHandle());
     sqliteVecLoaded = true;
     return true;
   } catch (err) {
