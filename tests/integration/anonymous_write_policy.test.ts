@@ -3,12 +3,25 @@
  * the service boundary.
  *
  * The policy helper is exercised directly in unit tests; this test
- * asserts that each of the five canonical write paths actually calls
- * `enforceAttributionPolicy` and therefore reject in `reject` mode,
- * regardless of transport. It runs against the local SQLite backend
- * without going through HTTP, because the enforcement seam is
- * deliberately placed inside the service (HTTP / MCP stdio / MCP HTTP
- * / CLI backup all reach the same code path).
+ * asserts that each of the five canonical write-path *service helpers*
+ * calls `enforceAttributionPolicy` and therefore rejects in `reject`
+ * mode. It runs against the local SQLite backend without going through
+ * HTTP.
+ *
+ * SCOPE — read this before trusting the file (#2327). This test proves
+ * the seam is present in the service helpers. It does NOT prove any
+ * transport reaches those helpers. An earlier version of this docblock
+ * claimed coverage held "regardless of transport … HTTP / MCP stdio /
+ * MCP HTTP / CLI backup all reach the same code path". That claim was
+ * false and it is why nobody looked: the MCP `store` core
+ * (`storeStructuredInternal`) does not route through
+ * `createObservation`, so `{"observations":"reject"}` was silently
+ * inert on the primary MCP write path while this file passed.
+ *
+ * Per-transport enforcement is asserted where the transport is actually
+ * dispatched — see `tests/integration/mcp_store_attribution_policy.test.ts`.
+ * Adding a helper here does not extend coverage to a transport; only
+ * dispatching that transport does.
  */
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
