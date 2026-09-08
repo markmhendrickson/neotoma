@@ -3174,7 +3174,20 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     await db.prepare("DELETE FROM entity_snapshots").run();
     await db.prepare("DELETE FROM relationship_snapshots").run();
 
+    // #2343: the merge-import rebuild runs against an ARBITRARY target
+    // database opened by path, so it cannot use the service-layer seam (which
+    // resolves against the process's configured db). It shares the RULES via
+    // attachment_resolution_sqlite.ts instead — same merge-alias follow, same
+    // cycle guard, same depth bound.
+    const { resolveAttachmentTargetSqlite } =
+      await import("../services/attachment_resolution_sqlite.js");
+
     for (const entityId of entityIds) {
+      // A redirected id owns no snapshot of its own: skip it rather than
+      // writing the survivor's snapshot under a merge tombstone.
+      const target = await resolveAttachmentTargetSqlite(db, entityId);
+      if (target.resolvedEntityId !== entityId) continue;
+
       const observations = (
         await db
           .prepare(

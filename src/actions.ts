@@ -11769,20 +11769,28 @@ app.post("/health_check_snapshots", async (req, res) => {
     }
 
     let fixedCount = 0;
+    let redirectedCount = 0;
     if (auto_fix && staleEntities.length > 0) {
       // Recompute snapshots for stale entities using observationReducer
       const { observationReducer } = await import("./reducers/observation_reducer.js");
+      const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
 
       for (const entity of staleEntities) {
         try {
-          // Get all observations for this entity
-          const { data: observations } = await db
-            .from("observations")
-            .select("*")
-            .eq("entity_id", entity.entity_id)
-            .order("observed_at", { ascending: false });
-
-          if (!observations || observations.length === 0) continue;
+          // #2343: the observations ATTACHED to this entity, resolved through
+          // the declared layer, and null when the id is redirected — a
+          // tombstone owns no snapshot, so auto-fix must skip it rather than
+          // upsert the survivor's snapshot under the tombstone's id.
+          // `null` scope, deliberately: this endpoint's observation fetch was
+          // unscoped before #2343, and adding a user_id filter here would
+          // change which rows the reducer sees. Routing the fetch through the
+          // seam is this PR's job; tightening this endpoint's tenancy is not.
+          const observations = await resolveOwnedObservations(entity.entity_id, null);
+          if (observations === null) {
+            redirectedCount++;
+            continue;
+          }
+          if (observations.length === 0) continue;
 
           // Recompute snapshot
           const newSnapshot = await observationReducer.computeSnapshot(
@@ -11821,11 +11829,15 @@ app.post("/health_check_snapshots", async (req, res) => {
         staleEntities.length === 0
           ? "All snapshots healthy"
           : auto_fix
-            ? `Found ${staleEntities.length} stale snapshots, fixed ${fixedCount}`
+            ? `Found ${staleEntities.length} stale snapshots, fixed ${fixedCount}` +
+              (redirectedCount > 0
+                ? `, skipped ${redirectedCount} redirected (merged-away) id(s)`
+                : "")
             : `Found ${staleEntities.length} stale snapshots`,
       checked: staleSnapshots?.length || 0,
       stale: staleEntities.length,
       fixed: auto_fix ? fixedCount : undefined,
+      skipped_redirected: auto_fix ? redirectedCount : undefined,
       stale_snapshots: staleEntities,
     });
   } catch (error) {

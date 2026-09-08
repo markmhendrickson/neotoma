@@ -530,9 +530,29 @@ async function ensureEntityRowForSnapshot(
     .run(entityId, entityType, canonicalName, now, now, userId);
 }
 
+/**
+ * Recompute an entity snapshot from inside the adapter's observation-insert
+ * path (local backend parity).
+ *
+ * #2343: this deliberately does NOT delegate to the service-layer
+ * `recomputeSnapshot`. `src/db.ts` exports this very adapter as `db`, so the
+ * service function's own `db.from("observations")` fetch would re-enter the
+ * adapter while it is mid-insert. What it shares with the seam instead is the
+ * RULES: `attachment_resolution_sqlite.ts` expresses the same merge-alias
+ * resolution, the same cycle guard, and the same depth constant against the
+ * raw handle this layer has. See that module's header for why the split is
+ * structural rather than duplication.
+ */
 async function recomputeEntitySnapshot(db: DbDatabase, entityId: string): Promise<void> {
   const { ObservationReducer } = await import("../../reducers/observation_reducer.js");
   const reducer = new ObservationReducer();
+
+  // Resolution and ownership are different questions. A redirected id (a merge
+  // tombstone) resolves to its survivor but owns no snapshot row; writing the
+  // survivor's snapshot back under it would manufacture a duplicate the flat
+  // fetch never produced.
+  const { ownsSnapshotSqlite } = await import("../../services/attachment_resolution_sqlite.js");
+  if (!(await ownsSnapshotSqlite(db, entityId))) return;
 
   const rows = (await db
     .prepare("SELECT * FROM observations WHERE entity_id = ?")

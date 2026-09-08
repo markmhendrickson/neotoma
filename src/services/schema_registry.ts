@@ -1740,11 +1740,20 @@ export class SchemaRegistryService {
               // Recompute snapshot to include migrated fields
               try {
                 const { observationReducer } = await import("../reducers/observation_reducer.js");
-                const { data: allObservations } = await db
-                  .from("observations")
-                  .select("*")
-                  .eq("entity_id", entityId)
-                  .order("observed_at", { ascending: false });
+                const { resolveOwnedObservations } = await import("./attachment_resolution.js");
+                // #2343: fetch through the declared attachment-resolution
+                // layer. Scope stays `null` to match this migration path's
+                // existing unscoped fetch. A `null` result means the id is
+                // redirected: a merged-away entity owns no snapshot, so this
+                // migration reports and skips rather than writing one under it.
+                const allObservations = await resolveOwnedObservations(entityId, null);
+                if (allObservations === null) {
+                  console.warn(
+                    `[SCHEMA_REGISTRY] Entity ${entityId} resolves elsewhere (merged away); ` +
+                      `no snapshot written under it.`
+                  );
+                  continue;
+                }
 
                 if (allObservations && allObservations.length > 0) {
                   const snapshot = await observationReducer.computeSnapshot(

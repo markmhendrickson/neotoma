@@ -1002,19 +1002,22 @@ export class NeotomaServer {
     // Auto-fix if requested
     if (parsed.auto_fix && staleSnapshots.length > 0) {
       const { observationReducer } = await import("./reducers/observation_reducer.js");
+      const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
       let fixedCount = 0;
+      let redirectedCount = 0;
 
       for (const stale of staleSnapshots) {
         try {
-          // Get all observations
-          const { data: observations } = await db
-            .from("observations")
-            .select("*")
-            .eq("entity_id", stale.entity_id)
-            .eq("user_id", userId)
-            .order("observed_at", { ascending: false });
-
-          if (!observations || observations.length === 0) continue;
+          // #2343: the observations ATTACHED to this entity, through the
+          // declared resolution layer. `null` means the id is redirected (a
+          // merge tombstone): it owns no snapshot, so auto-fix skips it rather
+          // than upserting the survivor's snapshot under the tombstone's id.
+          const observations = await resolveOwnedObservations(stale.entity_id, userId);
+          if (observations === null) {
+            redirectedCount++;
+            continue;
+          }
+          if (observations.length === 0) continue;
 
           // Recompute snapshot
           const newSnapshot = await observationReducer.computeSnapshot(
@@ -1045,10 +1048,15 @@ export class NeotomaServer {
 
       return this.buildTextResponse({
         healthy: false,
-        message: `Found ${staleSnapshots.length} stale snapshots, fixed ${fixedCount}`,
+        message:
+          `Found ${staleSnapshots.length} stale snapshots, fixed ${fixedCount}` +
+          (redirectedCount > 0
+            ? `, skipped ${redirectedCount} redirected (merged-away) id(s)`
+            : ""),
         checked: potentiallyStale.length,
         stale: staleSnapshots.length,
         fixed: fixedCount,
+        skipped_redirected: redirectedCount,
         stale_snapshots: staleSnapshots,
       });
     }
@@ -6216,6 +6224,7 @@ export class NeotomaServer {
       }
     >();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
+    const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
     for (const createdEntity of createdEntities) {
       try {
         const { data: priorSnapRow } = await db
@@ -6228,26 +6237,33 @@ export class NeotomaServer {
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
         priorSnapshotByEntityId.set(createdEntity.entityId, priorSnapshot);
 
-        // Get all observations for entity, scoped to the current user so
-        // cross-user data does not bleed into this user's snapshot.
-        const { data: allObservations, error: obsError } = await db
-          .from("observations")
-          .select("*")
-          .eq("entity_id", createdEntity.entityId)
-          .eq("user_id", userId)
-          .order("observed_at", { ascending: false });
-
-        if (obsError) {
+        // #2343: the observations ATTACHED to this entity, through the
+        // declared resolution layer (attachment_resolution.ts), scoped to the
+        // current user so cross-user data does not bleed into this snapshot.
+        // `null` means the id is redirected (a merge tombstone): it owns no
+        // snapshot, so nothing is upserted under it. That is not an error for
+        // the store caller — attaching an observation to a merged-away id is a
+        // legitimate write; only the snapshot ownership question says no.
+        let allObservations: unknown[] | null = null;
+        try {
+          allObservations = await resolveOwnedObservations(createdEntity.entityId, userId);
+        } catch (err) {
           logger.error(
             `Failed to get observations for entity ${createdEntity.entityId}:`,
-            obsError.message
+            err instanceof Error ? err.message : String(err)
+          );
+          continue;
+        }
+        if (allObservations === null) {
+          logger.info(
+            `[STORE] ${createdEntity.entityId} is redirected; no snapshot written under it.`
           );
           continue;
         }
 
         if (allObservations && allObservations.length > 0) {
           // Map database observations to reducer's expected format
-          const mappedObservations = allObservations.map((obs: any) => ({
+          const mappedObservations = (allObservations as any[]).map((obs: any) => ({
             id: obs.id,
             entity_id: obs.entity_id,
             entity_type: obs.entity_type,
@@ -6323,9 +6339,12 @@ export class NeotomaServer {
             schema: timelineSchema,
           });
 
-          // This path computes and upserts the snapshot inline instead of going
-          // through recomputeSnapshot(), so it must re-derive the entity-level
-          // canonical_name itself. Without this, a corrective observation (e.g.
+          // This path fetches through the attachment-resolution seam (#2343)
+          // but still computes and upserts the snapshot inline rather than via
+          // recomputeSnapshot(), because it also derives embeddings, timeline
+          // events with batch counts, and change events. So it must re-derive
+          // the entity-level canonical_name itself. Without this, a corrective
+          // observation (e.g.
           // stripping an emoji from `name` via target_id) updates the snapshot
           // while entities.canonical_name stays frozen at its creation value —
           // and canonical_name is what entity lists and search display.

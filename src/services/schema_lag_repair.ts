@@ -20,6 +20,7 @@ import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
+import { resolveOwnedObservations } from "./attachment_resolution.js";
 import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
@@ -146,6 +147,9 @@ export async function repairEntityType(
 ): Promise<{ inserted: number; recomputed: number; errors: string[] }> {
   let inserted = 0;
   let recomputed = 0;
+  // Redirected (merged-away) ids: they own no snapshot, so the repair skips
+  // them rather than upserting a survivor's snapshot under a tombstone.
+  let redirected = 0;
   const errors: string[] = [];
 
   const schema = await schemaRegistry.loadActiveSchema(entityType, userId ?? undefined);
@@ -264,13 +268,16 @@ export async function repairEntityType(
   // Recompute snapshots.
   for (const entityId of affectedEntityIds) {
     try {
-      const { data: allObs } = await db
-        .from("observations")
-        .select("*")
-        .eq("entity_id", entityId)
-        .order("observed_at", { ascending: false });
-
-      if (!allObs || allObs.length === 0) continue;
+      // #2343: fetch through the declared attachment-resolution layer rather
+      // than flat entity_id equality. Scope stays `null` to match this repair
+      // path's existing unscoped fetch. `null` result = redirected id, which
+      // owns no snapshot — skip rather than upsert under it.
+      const allObs = await resolveOwnedObservations(entityId, null);
+      if (allObs === null) {
+        redirected++;
+        continue;
+      }
+      if (allObs.length === 0) continue;
 
       const snapshot = await observationReducer.computeSnapshot(entityId, allObs as any);
       if (!snapshot) continue;
@@ -293,6 +300,12 @@ export async function repairEntityType(
     }
   }
 
+  if (redirected > 0) {
+    logger.info(
+      `[SCHEMA_LAG_REPAIR] Skipped ${redirected} redirected (merged-away) entity id(s); ` +
+        `they own no snapshot of their own.`
+    );
+  }
   return { inserted, recomputed, errors };
 }
 
@@ -368,15 +381,19 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
 
   // Recompute snapshots.
   let recomputed = 0;
+  let redirected = 0;
   for (const [entityId] of affectedEntities) {
     try {
-      const { data: allObs } = await db
-        .from("observations")
-        .select("*")
-        .eq("entity_id", entityId)
-        .order("observed_at", { ascending: false });
-
-      if (!allObs || allObs.length === 0) continue;
+      // #2343: fetch through the declared attachment-resolution layer rather
+      // than flat entity_id equality. Scope stays `null` to match this repair
+      // path's existing unscoped fetch. `null` result = redirected id, which
+      // owns no snapshot — skip rather than upsert under it.
+      const allObs = await resolveOwnedObservations(entityId, null);
+      if (allObs === null) {
+        redirected++;
+        continue;
+      }
+      if (allObs.length === 0) continue;
 
       const snapshot = await observationReducer.computeSnapshot(entityId, allObs as any);
       if (!snapshot) continue;
@@ -401,6 +418,11 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     }
   }
 
+  if (redirected > 0) {
+    logger.info(
+      `[SCHEMA_LAG_REPAIR] Rollback skipped ${redirected} redirected (merged-away) entity id(s).`
+    );
+  }
   return { run_id: runId, deleted_observations: ids.length, recomputed_snapshots: recomputed };
 }
 
