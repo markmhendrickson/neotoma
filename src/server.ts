@@ -3188,30 +3188,41 @@ export class NeotomaServer {
       );
     }
 
-    // Get the source from sources table
-    if (!observation.source_id) {
-      throw new McpError(ErrorCode.InternalError, `Observation does not have source_id`);
+    // Get the source from sources table. `source_id` is nullable on
+    // `observations` — a correction (createCorrection, src/services/correction.ts)
+    // deliberately stamps `source_id: null` and wins the snapshot by priority,
+    // so this is a legal, expected state, not an integrity violation. Degrade
+    // to `source: null` instead of throwing (#2026); a non-null `source_id`
+    // that fails to resolve is still a real integrity violation and stays an
+    // error below.
+    let source: {
+      id: string;
+      mime_type: string | null;
+      file_urls: string[];
+      created_at: string | null;
+    } | null = null;
+
+    if (observation.source_id) {
+      const { data: sourceData, error: sourceError } = await db
+        .from("sources")
+        .select("id, mime_type, file_size, original_filename, created_at")
+        .eq("id", observation.source_id)
+        .single();
+
+      if (sourceError || !sourceData) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to get source: ${sourceError?.message || "Source not found"}`
+        );
+      }
+
+      source = {
+        id: sourceData.id,
+        mime_type: sourceData.mime_type,
+        file_urls: [], // Sources table doesn't have file_urls directly
+        created_at: sourceData.created_at,
+      };
     }
-
-    const { data: sourceData, error: sourceError } = await db
-      .from("sources")
-      .select("id, mime_type, file_size, original_filename, created_at")
-      .eq("id", observation.source_id)
-      .single();
-
-    if (sourceError || !sourceData) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get source: ${sourceError?.message || "Source not found"}`
-      );
-    }
-
-    const source = {
-      id: sourceData.id,
-      mime_type: sourceData.mime_type,
-      file_urls: [], // Sources table doesn't have file_urls directly
-      created_at: sourceData.created_at,
-    };
 
     const provenanceChain = {
       field: parsed.field,
@@ -3222,6 +3233,9 @@ export class NeotomaServer {
         observed_at: observation.observed_at,
         specificity_score: observation.specificity_score,
         source_priority: observation.source_priority,
+        // Optional operator/agent-supplied reason — most valuable to surface
+        // exactly here, on a corrected field's provenance.
+        reason: observation.reason ?? null,
       },
       source: source,
       observed_at: observation.observed_at,
@@ -6959,6 +6973,7 @@ export class NeotomaServer {
         schema_version: schemaVersion,
         user_id: userId,
         idempotency_key: parsed.idempotency_key,
+        reason: parsed.reason,
       });
 
       if (isUnknownField) {
