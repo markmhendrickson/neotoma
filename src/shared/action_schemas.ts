@@ -844,6 +844,7 @@ export const CorrectEntityRequestSchema = z.object({
   field: z.string(),
   value: z.unknown(),
   idempotency_key: z.string().min(1),
+  reason: z.string().optional(),
   user_id: z.string().optional(),
 });
 

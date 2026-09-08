@@ -11072,7 +11072,7 @@ app.post("/correct", async (req, res) => {
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const { entity_id, entity_type, field, value, idempotency_key } = parsed.data;
+    const { entity_id, entity_type, field, value, idempotency_key, reason } = parsed.data;
 
     const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
     if (correctCtx) {
@@ -11105,6 +11105,7 @@ app.post("/correct", async (req, res) => {
       schema_version: correctionSchemaVersion,
       user_id: userId,
       idempotency_key,
+      reason,
     });
 
     if (isUnknownField) {

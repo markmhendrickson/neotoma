@@ -547,6 +547,10 @@ export function buildToolDefinitions(
             type: "string",
             description: "Required. Client-provided idempotency key for replay-safe corrections.",
           },
+          reason: {
+            type: "string",
+            description: "Optional reason for the correction (audit)",
+          },
         },
         required: ["entity_id", "entity_type", "field", "value", "idempotency_key"],
       },

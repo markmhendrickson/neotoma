@@ -15740,6 +15740,7 @@ correctionsCommand
   .option("--corrected-value <value>", "Corrected value (required)")
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
+  .option("--reason <reason>", "Optional reason for the correction")
   .action(
     async (
       entityIdArg: string | undefined,
@@ -15750,6 +15751,7 @@ correctionsCommand
         correctedValue?: string;
         userId?: string;
         idempotencyKey?: string;
+        reason?: string;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -15774,6 +15776,7 @@ correctionsCommand
           field: opts.fieldName,
           value: parsedCorrectedValue,
           idempotency_key: idempotencyKey,
+          reason: opts.reason,
           user_id: opts.userId,
         },
       });

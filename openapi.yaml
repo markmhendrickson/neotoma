@@ -7290,6 +7290,9 @@ paths:
                 value: {}
                 idempotency_key:
                   type: string
+                reason:
+                  type: string
+                  description: Optional reason for the correction (audit)
                 user_id:
                   type: string
       responses:

@@ -433,6 +433,13 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "sources", "file_size", "INTEGER");
     await addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
     await addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
+    // Optional operator/agent-supplied reason a correction was made, stamped
+    // by createCorrection() (src/services/correction.ts). Sibling mutating
+    // ops (delete_entity, delete_relationship, restore_entity,
+    // restore_relationship, split_entity, merge_entities as merge_reason)
+    // already carry a reason; correct() — the most common mutating op — did
+    // not. Nullable: only correction observations set this.
+    await addColumnIfMissing(db, "observations", "reason", "TEXT");
     await addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
     await addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
     await addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
