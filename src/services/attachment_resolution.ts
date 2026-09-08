@@ -30,6 +30,27 @@
  * so those changes are a new resolution rule in one place rather than a new
  * fetch in a dozen.
  *
+ * ## Caller contract (#2343)
+ *
+ * Entity snapshots go through this module or through `recomputeSnapshot`.
+ * Never `.eq("entity_id", id)` → `observationReducer.computeSnapshot` for an
+ * entity snapshot: that is the bypass #2343 removed from ten sites.
+ *
+ *   - **Persisting** a snapshot → `resolveOwnedObservations` (or
+ *     `recomputeSnapshot`, which uses it). It returns `null` for a redirected
+ *     id, which is the guard that stops a survivor's snapshot being written
+ *     under a tombstone.
+ *   - **Reading** an observation set → `resolveAttachedObservations`.
+ *   - **Only the resolved id** (e.g. a point-in-time replay that applies its
+ *     own time filter) → `resolveAttachmentTarget`.
+ *   - **A raw SQLite handle** (the local adapter's insert path, the CLI's
+ *     merge-import against an arbitrary database file) → the same rules over
+ *     that handle, in `attachment_resolution_sqlite.ts`.
+ *
+ * **Resolution is not ownership.** Resolving answers "which observations
+ * attach here?"; owning answers "whose snapshot row is this?". Conflating
+ * them is how a resolution layer silently duplicates state.
+ *
  * ## Guards
  *
  * Resolution is bounded by a cycle guard (a visited set) and a maximum depth.
@@ -42,6 +63,14 @@
  * improvement. `entity_merge.ts` blocks merging an already-merged entity on
  * either side, which prevents a two-cycle but does not prevent chains
  * (A→B, then C→B, then B→D builds depth), so the bound is load-bearing.
+ *
+ * ## Tenancy scope
+ *
+ * `userId` is the caller's existing scope, passed through unchanged. `null`
+ * means "do not filter by user" and exists for the one legacy repair endpoint
+ * whose observation fetch was already unscoped: this layer replaces WHICH
+ * mechanism finds the rows, and must not quietly change WHICH rows are found.
+ * New callers should pass a real user id.
  *
  * The read path degrades rather than throws: a cycle or an over-deep chain
  * returns the best-resolved set with `truncated: true` and logs, because a
@@ -84,7 +113,7 @@ export interface AttachmentResolution {
  */
 export async function resolveAttachmentTarget(
   entityId: string,
-  userId: string
+  userId: string | null
 ): Promise<{
   resolvedEntityId: string;
   path: string[];
@@ -96,12 +125,14 @@ export async function resolveAttachmentTarget(
   let current = entityId;
 
   for (let depth = 0; depth < MAX_ATTACHMENT_RESOLUTION_DEPTH; depth++) {
-    const { data: row, error } = await db
-      .from("entities")
-      .select("id, merged_to_entity_id")
-      .eq("id", current)
-      .eq("user_id", userId)
-      .single();
+    // `userId === null` means the caller reads across tenants (one legacy
+    // repair endpoint does; see resolveAttachedObservations). Scoping is the
+    // caller's existing contract, not something this layer may tighten:
+    // narrowing a previously-unscoped fetch would change which observations
+    // the reducer sees, which is the one thing this migration must not do.
+    let entityQuery = db.from("entities").select("id, merged_to_entity_id").eq("id", current);
+    if (userId !== null) entityQuery = entityQuery.eq("user_id", userId);
+    const { data: row, error } = await entityQuery.single();
 
     // A missing entity row is not an error here: observations can be fetched
     // for an id with no `entities` row (the CLI recompute path does exactly
@@ -157,15 +188,17 @@ export async function resolveAttachmentTarget(
  */
 export async function resolveAttachedObservations(
   entityId: string,
-  userId: string
+  userId: string | null
 ): Promise<AttachmentResolution> {
   const target = await resolveAttachmentTarget(entityId, userId);
 
-  const { data, error } = await db
-    .from("observations")
-    .select("*")
-    .eq("entity_id", target.resolvedEntityId)
-    .eq("user_id", userId);
+  let obsQuery = db.from("observations").select("*").eq("entity_id", target.resolvedEntityId);
+  if (userId !== null) obsQuery = obsQuery.eq("user_id", userId);
+  // Ordered observed_at DESC because that is what every bypassing fetch this
+  // seam replaces already did (#2343), and the reducer's tie-breaks read the
+  // input order. Ordering here rather than at each call site keeps the set the
+  // reducer sees identical no matter which path asked for it.
+  const { data, error } = await obsQuery.order("observed_at", { ascending: false });
 
   if (error) {
     throw new Error(`Failed to fetch attached observations: ${error.message}`);
@@ -178,4 +211,45 @@ export async function resolveAttachedObservations(
     truncated: target.truncated,
     truncationReason: target.truncationReason,
   };
+}
+
+/**
+ * The observations a given entity id may compute and PERSIST its own snapshot
+ * from, under the declared resolution layer.
+ *
+ * This is `resolveAttachedObservations` plus the ownership question, and it
+ * exists because those are two different questions that are easy to conflate
+ * — conflating them is how a resolution layer silently duplicates state.
+ *
+ * Resolution answers *"which observations attach here?"*. Ownership answers
+ * *"whose snapshot row is this?"*. A merge tombstone resolves to its survivor,
+ * so a persisting caller that only resolved would compute the survivor's
+ * snapshot and write it back **under the tombstone's id** — manufacturing a
+ * duplicate snapshot the flat fetch never produced, because merge had already
+ * moved the rows. `recomputeSnapshot` learned this the hard way in #2342; this
+ * helper is that lesson made reusable so every persisting site inherits it
+ * rather than re-deriving it (#2343).
+ *
+ * Returns `null` — meaning *do not upsert under this id* — when the id is
+ * redirected. Returns an empty array only when the id genuinely owns no
+ * observations; callers that distinguish "delete the stale row" from "skip"
+ * should branch on that difference themselves.
+ *
+ * Read-only callers (e.g. a point-in-time replay, which asks what attached
+ * *then* rather than who owns a row *now*) want `resolveAttachedObservations`
+ * instead — ownership is not their question.
+ */
+export async function resolveOwnedObservations(
+  entityId: string,
+  userId: string | null
+): Promise<Observation[] | null> {
+  const attached = await resolveAttachedObservations(entityId, userId);
+  if (attached.resolvedEntityId !== entityId) {
+    logger.info(
+      `[AttachmentResolution] ${entityId} resolves to ${attached.resolvedEntityId}; ` +
+        `it owns no snapshot of its own, so no snapshot is written under it.`
+    );
+    return null;
+  }
+  return attached.observations;
 }

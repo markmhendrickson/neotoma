@@ -14,7 +14,7 @@ import {
   entityIdTenantSalt,
   generateEntityId,
 } from "./entity_resolution.js";
-import { resolveAttachedObservations } from "./attachment_resolution.js";
+import { resolveOwnedObservations } from "./attachment_resolution.js";
 import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 
@@ -60,16 +60,12 @@ export async function recomputeSnapshot(
   // #2340: a snapshot is a function of the observations ATTACHED to the
   // entity, resolved through the declared resolution layer, not of the rows
   // whose `entity_id` column equals the entity. See attachment_resolution.ts.
-  const attached = await resolveAttachedObservations(entityId, userId);
-
-  // A redirected id owns no snapshot of its own. When the requested entity
-  // resolves elsewhere (today: it is a merge tombstone), the survivor's rows
-  // must NOT be written back under the requested id — that would manufacture
-  // a duplicate snapshot on a tombstone, which the flat fetch never did
-  // because the rows had already moved. Preserve the null.
-  if (attached.resolvedEntityId !== entityId) return null;
-
-  const observations = attached.observations;
+  // A redirected id owns no snapshot of its own: `resolveOwnedObservations`
+  // returns null for one, so the survivor's rows are never written back under
+  // a tombstone's id. See attachment_resolution.ts for why resolution and
+  // ownership are separate questions.
+  const observations = await resolveOwnedObservations(entityId, userId);
+  if (observations === null) return null;
   if (observations.length === 0) return null;
 
   const computed = await observationReducer.computeSnapshot(entityId, observations);
