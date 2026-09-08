@@ -150,7 +150,13 @@ function typeWeightFor(entityType: string): number {
   return 1;
 }
 
-function recencyDecay(
+/**
+ * Exponential recency decay: 1.0 at age 0, halving every `halfLifeDays`.
+ * Exported so other ranking call sites (e.g. the search tie-break in
+ * `shared/action_handlers/entity_handlers.ts`) reuse this exact math rather
+ * than reimplementing recency scoring in parallel.
+ */
+export function recencyDecay(
   lastObservationAtMs: number,
   nowMs: number,
   halfLifeDays = RECENCY_HALF_LIFE_DAYS

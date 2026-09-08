@@ -4,7 +4,7 @@ import {
   normalizeEntityTypeFilter,
   computeNextCursor,
 } from "../../services/entity_queries.js";
-import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
+import { BOOKKEEPING_ENTITY_TYPES, recencyDecay } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
@@ -149,13 +149,50 @@ export function shouldExcludeBookkeepingFromSearch(entityType?: string): boolean
 type SnapshotRow = {
   entity_id: string;
   snapshot?: unknown;
+  last_observation_at?: string | null;
 };
 
 type LexicalMatch = {
   entityId: string;
   canonicalName: string;
   score: number;
+  lastObservationAt?: string | null;
 };
+
+/**
+ * Recency tie-break (extends the exponential decay already implemented for
+ * `memory export --order importance` in services/memory_export.ts, rather
+ * than introducing parallel decay math here).
+ *
+ * Applied ONLY when two results are otherwise exactly tied — never blended
+ * into the relevance score itself. Rationale: blending recency into the score
+ * (or defaulting it on as an always-applied ranking factor) would change
+ * result ORDER for every existing search caller, a behavioral change no
+ * caller has opted into and none of today's callers can be shown not to
+ * depend on. The alphabetical tie-break it replaces
+ * (`canonical_name.localeCompare`) has no such justification: two results
+ * that score identically on relevance have no principled order today, so
+ * breaking that specific tie by recency fixes the reported defect (a stale
+ * entity permanently outranking a live one by name-sort accident) with the
+ * smallest possible change in observable behavior — non-tied orderings are
+ * completely unaffected.
+ *
+ * Returns negative when `aLastObservationAt` should sort first (more
+ * recent/higher decay), positive when `b` should, 0 when equally
+ * undated/indistinguishable (falls through to the next tie-break key).
+ */
+function compareByRecency(
+  aLastObservationAt: string | null | undefined,
+  bLastObservationAt: string | null | undefined,
+  nowMs: number = Date.now()
+): number {
+  const aMs = aLastObservationAt ? Date.parse(aLastObservationAt) : NaN;
+  const bMs = bLastObservationAt ? Date.parse(bLastObservationAt) : NaN;
+  const aDecay = recencyDecay(aMs, nowMs);
+  const bDecay = recencyDecay(bMs, nowMs);
+  if (aDecay === bDecay) return 0;
+  return bDecay - aDecay;
+}
 
 // Re-export the shared normalizer (imported above) so existing references to
 // `normalizeSearchText` from this module keep resolving (#1572).
@@ -325,7 +362,9 @@ function compareSearchRank(
   bEntityType: string,
   orderMap: Map<string, number>,
   searchTokens: string[],
-  orderedIds: string[]
+  orderedIds: string[],
+  aLastObservationAt?: string | null,
+  bLastObservationAt?: string | null
 ): number {
   const ai = orderMap.get(aEntityId) ?? 9999;
   const bi = orderMap.get(bEntityId) ?? 9999;
@@ -333,6 +372,13 @@ function compareSearchRank(
   const bRank = orderedIds.length - bi + entityTypeKeywordBoost(bEntityType, searchTokens);
   if (bRank !== aRank) {
     return bRank - aRank;
+  }
+  // Recency tie-break (see compareByRecency) before falling back to KNN
+  // position, which — like alphabetical order — has no meaning once scores
+  // are exactly equal.
+  const recencyCompare = compareByRecency(aLastObservationAt, bLastObservationAt);
+  if (recencyCompare !== 0) {
+    return recencyCompare;
   }
   return ai - bi;
 }
@@ -478,13 +524,14 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 
   const entityIds = entities.map((entity: { id: string }) => entity.id);
   const snapshotMap = new Map<string, unknown>();
+  const lastObservationAtMap = new Map<string, string | null>();
   const chunkSize = 500;
 
   for (let i = 0; i < entityIds.length; i += chunkSize) {
     const chunk = entityIds.slice(i, i + chunkSize);
     const { data: snapshots, error: snapshotsError } = await db
       .from("entity_snapshots")
-      .select("entity_id, snapshot")
+      .select("entity_id, snapshot, last_observation_at")
       .in("entity_id", chunk);
 
     if (snapshotsError) {
@@ -493,6 +540,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 
     for (const snapshot of (snapshots || []) as SnapshotRow[]) {
       snapshotMap.set(snapshot.entity_id, snapshot.snapshot);
+      lastObservationAtMap.set(snapshot.entity_id, snapshot.last_observation_at ?? null);
     }
   }
 
@@ -514,6 +562,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     normalizedSnapshot: string;
     searchableText: string;
     textTokens: string[];
+    lastObservationAt: string | null;
   };
 
   const candidates: Candidate[] = [];
@@ -535,6 +584,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
       fragmentTextByEntityId.get(entity.id)
     );
     const textTokens = textTokensForEntityMatch(searchTokens, entity.entity_type, typeFilterTokens);
+    const lastObservationAt = lastObservationAtMap.get(entity.id) ?? null;
     candidates.push({
       id: entity.id,
       canonical_name: entity.canonical_name,
@@ -543,6 +593,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
       normalizedSnapshot,
       searchableText,
       textTokens,
+      lastObservationAt,
     });
     if (matchesSearchTokens(searchableText, textTokens)) {
       let score = 0;
@@ -568,6 +619,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
       lexicalMatches.push({
         entityId: entity.id,
         canonicalName: entity.canonical_name,
+        lastObservationAt,
         score,
       });
     }
@@ -625,6 +677,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
           entityId: candidate.id,
           canonicalName: candidate.canonical_name,
           score,
+          lastObservationAt: candidate.lastObservationAt,
         });
       }
     }
@@ -633,6 +686,14 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   lexicalMatches.sort((a, b) => {
     if (b.score !== a.score) {
       return b.score - a.score;
+    }
+    // Recency tie-break (see compareByRecency): a stale entity should not
+    // permanently outrank a live one purely because its canonical_name sorts
+    // earlier. Only reached when scores are exactly equal, so no ordering
+    // that already discriminates between results is affected.
+    const recencyCompare = compareByRecency(a.lastObservationAt, b.lastObservationAt);
+    if (recencyCompare !== 0) {
+      return recencyCompare;
     }
     const canonicalCompare = a.canonicalName.localeCompare(b.canonicalName);
     if (canonicalCompare !== 0) {
@@ -1062,7 +1123,9 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
               b.entity_type,
               orderMap,
               searchTokens,
-              entityIds
+              entityIds,
+              a.last_observation_at,
+              b.last_observation_at
             )
           );
           total = semanticTotal;
