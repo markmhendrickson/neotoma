@@ -35,6 +35,7 @@ Instance skills / scripts (CLI-only, no MCP tool — materialization writes to t
 ## Transport and environment
 
 - **When MCP is available (installed and running):** Prefer **MCP** for Neotoma operations (**`store`**, `create_relationship`, retrieval tools, etc.) per the MCP instruction block. Deprecated aliases `store_structured` / `store_unstructured` still work but map to the same **`store`** handler.
+- **Remote / large file ingress:** Multipart upload is HTTP-only (`POST /sources/upload` → pass returned `source_id` into MCP or HTTP `store`). There is no MCP upload tool. Full recipe: fenced block in `docs/developer/mcp/instructions.md` (Combined-store remote files).
 - **When both neotoma-dev and neotoma MCP servers are configured:** Default to **neotoma** (production) for retrieval/store/instruction precedence. Use **neotoma-dev** only when the user explicitly requests development behavior or the task is clearly dev-only.
 - **When MCP is not available:** Use the **Neotoma CLI** as backup. Data commands are offline-first with in-process local transport by default. Use `--api-only` to require remote API; `--offline` forces local transport. For server commands (`api start`, `api stop`, `api logs`, `watch`), always pass `--env dev` or `--env prod`.
 
