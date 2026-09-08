@@ -166,6 +166,28 @@ jobs:
       - name: Run entity-query read-latency regressions (#2266)
         run: npx vitest run --no-file-parallelism tests/integration/entity_query_deleted_count.test.ts
 
+      # #2316/#2324 DB-worker abandonment survival. The same gap as the two steps
+      # above, and the one that cost the most: this suite already existed and
+      # already asserted the right property, but `test:unit` excludes
+      # tests/integration and this lane's allowlist omitted it — so the crash
+      # shipped to production TWICE while four passing tests guarded nothing.
+      #
+      # It gates two distinct faults. #2316 is a JS unhandled rejection (exit 1).
+      # #2324 is a Rust panic inside libsql's neon binding (SIGABRT, exit 134),
+      # reached by terminating a worker while a synchronous native call is on its
+      # stack — unreachable by any JavaScript-level guard, since libsql-js builds
+      # with `panic = "abort"`.
+      #
+      # The lane MUST run where `libsql` resolves. The suite asserts the driver
+      # and FAILS rather than skips when it does not, because `better-sqlite3`
+      # contains no neon and cannot produce the panic at all: a run on the wrong
+      # driver is green for the wrong reason, which is exactly how this shipped.
+      # ubuntu-latest + `npm ci` installs @libsql/linux-x64-gnu, so it resolves
+      # here; if that ever stops being true this step turns red loudly instead of
+      # passing quietly, which is the intended failure mode.
+      - name: Run DB-worker abandonment survival regressions (#2316/#2324)
+        run: npx vitest run --no-file-parallelism tests/integration/db_abort_client_disconnect_survival.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline

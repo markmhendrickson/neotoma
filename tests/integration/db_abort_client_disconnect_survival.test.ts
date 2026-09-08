@@ -18,11 +18,22 @@
  *       at ServerResponse.onClose (middleware/db_abort_context.js:32:28)
  *       at emitCloseNT (node:_http_server:1019:10)
  *
- * The neon `PendingException` SIGABRT reported alongside it is downstream of
- * this same unhandled rejection: with the rejection handled, twelve
- * back-to-back mid-statement worker terminations leave the process alive, so
- * it needs no separate guard. `expectAliveAndServing` covers both, since a
- * SIGABRT would fail the liveness assertion just as an exit(1) does.
+ * The neon `PendingException` SIGABRT reported alongside it is NOT downstream
+ * of that rejection, and this file's original header said it was (#2324). It
+ * is a second, independent fault: `worker.terminate()` is built on V8's
+ * `TerminateExecution`, which terminates JAVASCRIPT frames and cannot preempt
+ * a native one. Terminating a worker that is inside the synchronous libsql
+ * addon therefore leaves the isolate tearing down with Rust still on the
+ * stack; the next napi call that Rust makes fails, and neon 1.0.0 asserts on
+ * the status instead of propagating it. `libsql-js` builds with
+ * `panic = "abort"`, so that assertion is a bare `abort()` — SIGABRT, exit
+ * 134, unreachable by any JavaScript-level guard.
+ *
+ * The "twelve back-to-back terminations leave the process alive" experiment
+ * that produced the original claim almost certainly ran on `better-sqlite3`,
+ * which contains no neon and cannot produce the panic at all. That is why
+ * `expectDriverIsLibsql` below FAILS rather than skips: a run on the wrong
+ * driver is not a pass, it is a test that cannot fail.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -30,6 +41,30 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+
+/**
+ * How long the `/slow-all` handler lets its read run before answering — i.e.
+ * how deep into the native call the client's disconnect lands (#2324).
+ *
+ * The value matters, and both directions fail open. Too short and the worker
+ * has not yet taken the message off its queue, so `terminate()` falls
+ * harmlessly between statements and the case CANNOT fail on broken code. Too
+ * long and the statement has finished.
+ *
+ * So the lead is a RANGE, sampled per request, not a constant. The window's
+ * position depends on machine speed and cache warmth; a single measured value
+ * is tuned to one laptop and silently stops reproducing anywhere else. Pinned
+ * at 10ms the case caught the panic in roughly half of runs on unpatched main.
+ *
+ * The larger trap is worker warmth, which cost more debugging than the lead
+ * did: the FIRST abandonment of a run spawns a cold reader, and worker boot
+ * plus opening the database consumes the whole lead, so iteration 1 reliably
+ * misses the window. That is why the case warms the pool before it starts
+ * counting, and why a run that never logs a reclamation is a test that did not
+ * exercise anything rather than a pass.
+ */
+const ABORT_LEAD_MIN_MS = 3;
+const ABORT_LEAD_SPREAD_MS = 22;
 
 const workDir = mkdtempSync(path.join(tmpdir(), "neotoma-abort-survival-"));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -60,15 +95,27 @@ afterAll(() => {
  * migrations, none of which are part of this bug, and all of which would make a
  * failure ambiguous between "crashed on abort" and "failed to start".
  */
-function serverSource(dbPath: string, statementTimeoutMs = 0): string {
+function serverSource(dbPath: string, statementTimeoutMs = 0, readerWorkers = 1): string {
   return `
 import http from "node:http";
 import express from "express";
+import { createRequire } from "node:module";
 import { WorkerFileDatabase } from ${JSON.stringify(path.join(repoRoot, "dist/repositories/worker/worker_file_database.js"))};
 import { dbAbortContext } from ${JSON.stringify(path.join(repoRoot, "dist/middleware/db_abort_context.js"))};
 
+// Report which driver actually resolved. The panic this suite guards exists
+// only in the neon binding behind \`libsql\`; \`better-sqlite3\` is a
+// hand-written NAPI addon with no neon and cannot produce it. A run that
+// silently fell back would be green for the wrong reason, so the parent
+// asserts on this line rather than trusting the checkout.
+try {
+  process.stdout.write("DRIVER " + createRequire(import.meta.url).resolve("libsql") + "\\n");
+} catch (e) {
+  process.stdout.write("DRIVER none\\n");
+}
+
 const db = new WorkerFileDatabase(${JSON.stringify(dbPath)}, {
-  readerWorkers: 1,               // 1 reader == the production saturation case
+  readerWorkers: ${readerWorkers},
   statementTimeoutMs: ${statementTimeoutMs}, // 0 == abort is the only lever, as in the outage
 });
 
@@ -78,6 +125,14 @@ await db.exec(
   "INSERT INTO load (v) SELECT hex(randomblob(96)) FROM cnt"
 );
 const SLOW = "SELECT COUNT(*) AS n FROM load a, load b WHERE a.v < b.v";
+// A statement whose time is spent in .all() rather than in one long native
+// call. libsql's all() delegates to iterate(), which re-enters native via
+// \`rowsNext\` once per 100-row batch (libsql/index.js), so a long result set
+// crosses the JS/native boundary hundreds of times. Each crossing is a fresh
+// chance for a terminate to land while Rust is on the stack, which widens the
+// race from a single window to many — this is the case that actually
+// reproduces the SIGABRT (#2324).
+const SLOW_ALL = "SELECT a.v FROM load a, load b WHERE a.v < b.v LIMIT 500000";
 
 const app = express();
 app.use(dbAbortContext());
@@ -102,6 +157,33 @@ app.get("/slow", (_req, res) => {
   void db.prepare(SLOW).get();
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.write("started");
+});
+
+// The same abandonment, on a statement that repeatedly re-enters native code.
+//
+// The DELAY before answering is load-bearing, and getting it wrong is what
+// makes this test silently useless. The abort has to land while the worker is
+// genuinely inside the native call. Answer immediately and the client's
+// disconnect arrives ~1ms later, before the worker has even picked the
+// message off its queue — the terminate then lands harmlessly between
+// statements and the process survives on unpatched code. So: start the read,
+// let it get properly under way, and only then release the byte that causes
+// the client to hang up.
+//
+// The lead is JITTERED rather than fixed, because a fixed value samples one
+// point of a race window whose position moves with machine speed and cache
+// warmth. Pinned at 10ms this case reproduced the panic in about half of runs
+// on unpatched main; spreading the lead over the window catches the same bug
+// on machines where the sweet spot is not where it was measured. A gate that
+// only fires when the timing happens to match the author's laptop is not a
+// gate.
+app.get("/slow-all", (_req, res) => {
+  void db.prepare(SLOW_ALL).all();
+  const lead = ${ABORT_LEAD_MIN_MS} + Math.random() * ${ABORT_LEAD_SPREAD_MS};
+  setTimeout(() => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.write("started");
+  }, lead);
 });
 
 // A read left to exceed its statement budget with nobody waiting. Same
@@ -134,7 +216,8 @@ server.listen(0, "127.0.0.1", () => {
 /** Boot the child server and resolve its base URL once it reports LISTENING. */
 async function startServer(
   name: string,
-  statementTimeoutMs = 0
+  statementTimeoutMs = 0,
+  readerWorkers = 1
 ): Promise<{ base: string; child: ChildProcess }> {
   const dir = mkdtempSync(path.join(workDir, `${name}-`));
   // The entry file must live INSIDE the repo tree: Node resolves bare imports
@@ -143,7 +226,7 @@ async function startServer(
   // temp dir, so nothing durable is written into the checkout.
   const entry = path.join(entryDir, `server-${name}-${process.pid}-${nextEntry++}.mjs`);
   entries.push(entry);
-  writeFileSync(entry, serverSource(path.join(dir, "db.sqlite"), statementTimeoutMs));
+  writeFileSync(entry, serverSource(path.join(dir, "db.sqlite"), statementTimeoutMs, readerWorkers));
 
   const proc = spawn(process.execPath, [entry], {
     cwd: repoRoot,
@@ -151,7 +234,12 @@ async function startServer(
   });
   let stderr = "";
   proc.stderr?.on("data", (d) => (stderr += String(d)));
+  if (process.env.NEOTOMA_ABORT_TEST_DEBUG) {
+    proc.stderr?.on("data", (d) => process.stderr.write("[child] " + String(d)));
+    proc.stdout?.on("data", (d) => process.stderr.write("[childout] " + String(d)));
+  }
 
+  let stdout = "";
   const port = await new Promise<string>((resolve, reject) => {
     let out = "";
     const timer = setTimeout(
@@ -160,6 +248,7 @@ async function startServer(
     );
     proc.stdout?.on("data", (d) => {
       out += String(d);
+      stdout += String(d);
       const m = out.match(/LISTENING (\d+)/);
       if (m) {
         clearTimeout(timer);
@@ -175,7 +264,59 @@ async function startServer(
   // Surface the child's own crash output in the failure message — without it a
   // regression here reads only as "expected true, got false".
   (proc as ChildProcess & { __stderr?: () => string }).__stderr = () => stderr;
+  expectDriverIsLibsql(stdout);
   return { base: `http://127.0.0.1:${port}`, child: proc };
+}
+
+/**
+ * Fail — never skip — when the child did not resolve the `libsql` driver.
+ *
+ * This is the assertion that makes the rest of the suite able to fail at all.
+ * `resolveWorkerDriver` prefers `libsql` and silently falls back to
+ * `better-sqlite3`, which has no neon binding and therefore cannot produce the
+ * SIGABRT these cases exist to catch. A checkout without `node_modules/libsql`
+ * would run every case green while guarding nothing — which is exactly what
+ * happened when this bug shipped twice. A skip would reproduce that gap
+ * quietly; a hard failure forces a lane that cannot install libsql to say so.
+ */
+function expectDriverIsLibsql(stdout: string): void {
+  const match = stdout.match(/DRIVER (.+)/);
+  expect(
+    match?.[1] && match[1] !== "none",
+    "the `libsql` driver did not resolve in the child process. This suite guards a " +
+      "panic inside libsql's neon binding; on `better-sqlite3` there is no neon and " +
+      "no case here can fail. Run `npm ci` on a platform with an `@libsql/*` " +
+      "prebuild, or fix the lane — do not treat this as a pass."
+  ).toBeTruthy();
+}
+
+/**
+ * `fetch`, retried past a transient connection reset.
+ *
+ * These cases deliberately destroy many sockets mid-flight, and the server is
+ * still tearing those connections down when the probe that follows goes out.
+ * A `fetch` landing in that moment can fail with ECONNRESET even though the
+ * process is perfectly healthy — a property of the harness's own teardown, not
+ * of the code under test.
+ *
+ * This retry is safe precisely because it cannot hide the bug: every crash
+ * assertion in `expectAliveAndServing` — no `panicked at`, no SIGABRT, process
+ * still running — has already been evaluated before this is ever called. A
+ * process killed by the neon panic is not reachable here, and a server that is
+ * genuinely not answering still exhausts the attempts and fails. Only the
+ * narrow "healthy server, socket reset in flight" case is absorbed.
+ */
+async function fetchWithRetry(url: string, attempts = 5): Promise<Response> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await fetch(url);
+    } catch (error) {
+      lastError = error;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  throw lastError;
 }
 
 /**
@@ -209,6 +350,23 @@ async function expectAliveAndServing(
   await new Promise((r) => setTimeout(r, 2_000));
 
   const stderr = (proc as ChildProcess & { __stderr?: () => string }).__stderr?.() ?? "";
+
+  // Name the #2324 failure specifically rather than reporting it as the
+  // generic "process died" that #2316 also produces. A Rust panic under
+  // `panic = "abort"` raises SIGABRT (exit 134) and prints `panicked at`
+  // before dying, so both signals are checked: the stderr scan additionally
+  // catches an abort that a later assertion would otherwise mask.
+  expect(
+    stderr,
+    `${label}: the native driver panicked — this is the #2324 SIGABRT, not a ` +
+      `JavaScript-level crash. A worker was terminated while a native call was ` +
+      `on its stack.\nstderr:\n${stderr}`
+  ).not.toMatch(/panicked at|PendingException/);
+  expect(
+    proc.signalCode,
+    `${label}: server aborted (SIGABRT) — see #2324.\nstderr:\n${stderr}`
+  ).not.toBe("SIGABRT");
+
   expect(
     proc.exitCode === null && proc.signalCode === null,
     `${label}: server process died (exit=${proc.exitCode}, signal=${proc.signalCode}).\n` +
@@ -216,11 +374,11 @@ async function expectAliveAndServing(
   ).toBe(true);
 
   // Alive is necessary but not sufficient — it must still answer.
-  const ping = await fetch(`${base}/ping`);
+  const ping = await fetchWithRetry(`${base}/ping`);
   expect(ping.status, `${label}: /ping after disconnect`).toBe(200);
 
   // And the DB layer must have recovered its reader, not just avoided dying.
-  const fast = await fetch(`${base}/fast`);
+  const fast = await fetchWithRetry(`${base}/fast`);
   expect(fast.status, `${label}: DB read after disconnect`).toBe(200);
   expect(await fast.json()).toEqual({ ok: 1 });
 }
@@ -255,6 +413,82 @@ describe("client disconnect during an in-flight DB read (#2316)", () => {
     expect(res.status).toBe(200);
     await expectAliveAndServing(started.base, started.child, "statement timeout");
   }, 120_000);
+
+  it("survives an .all() read abandoned mid-native-call, repeatedly (#2324)", async () => {
+    // The case that actually reproduces the neon SIGABRT. `.all()` re-enters
+    // native once per 100-row batch, so a disconnect has hundreds of chances
+    // to land while Rust is on the stack instead of the single window a
+    // `.get()` aggregate offers — on unpatched main this aborts the process
+    // with `panicked at .../neon-1.0.0/src/sys/array.rs:22` (the production
+    // trace names the sibling assertion at `external.rs:80`; same defect,
+    // different napi call).
+    //
+    // Looped, and disconnected FAST, because it is a race: the terminate has
+    // to land inside a native frame. A single slow iteration reliably misses
+    // the window and would make this test green on broken code.
+    const started = await startServer("slow-all", 0, 4);
+    child = started.child;
+
+    // Enough attempts to make the race a certainty rather than a coin flip.
+    // Each iteration is an independent batch of rolls: the terminate has to
+    // land inside a native frame, and the abort path firing is not the same as
+    // the race being won. Every iteration DOES exercise the path (the child
+    // logs a reclamation each time); the panic follows on some fraction.
+    //
+    // The count is measured from both directions rather than guessed, because
+    // both directions cost something. Too few and the gate misses the
+    // regression; too many and the GREEN path — which runs every iteration,
+    // and on fixed code waits for each abandoned worker to finish rather than
+    // killing it instantly — overruns its timeout.
+    //
+    // Measured on unpatched main at 63a7dcf88, with the jittered lead and 8
+    // concurrent abandonments per iteration:
+    //
+    //     25 iterations -> 3 of 6 runs reproduced
+    //     60 iterations -> 6 of 8 runs reproduced
+    //    120 iterations -> 8 of 8 runs reproduced
+    //
+    // So 120, because a gate that misses a quarter of the time is not a gate.
+    // Of those eight, five hit `external.rs:80` — the exact assertion named in
+    // the production trace — and three the sibling `array.rs:22`, reached via
+    // the same `.all()` re-entry. On fixed code the same 120 iterations run
+    // green in well under the timeout.
+    for (let i = 0; i < 120; i += 1) {
+      // Stop as soon as the child is gone. When the panic fires mid-loop the
+      // server is already dead, and the next request would throw a bare
+      // `fetch failed` / `UND_ERR_SOCKET` — a confusing TypeError that buries
+      // the actual diagnosis. Break instead and let `expectAliveAndServing`
+      // report it as the SIGABRT it is, with the child's stderr attached.
+      if (started.child.exitCode !== null || started.child.signalCode !== null) break;
+
+      // Warm the reader before each attempt. Each abandonment takes the pool's
+      // only reader out of service, so the next read would otherwise start on
+      // a freshly spawned worker whose boot time swallows the lead entirely,
+      // and an attempt against a cold worker never reaches the native call.
+      try {
+        await fetchWithRetry(`${started.base}/fast`);
+        // Abandon several reads CONCURRENTLY. Production does not disconnect
+        // one client at a time — a daemon restart drops a batch of
+        // subscriptions at once — and more simultaneous teardowns means more
+        // chances that one of them lands inside a native frame. Each iteration
+        // is a batch of independent rolls rather than a single one, which is
+        // what makes a bounded loop enough to catch a race.
+        await Promise.all(
+          Array.from({ length: 8 }, () => connectThenDisconnect(started.base, "/slow-all"))
+        );
+      } catch {
+        // The server died underneath us — the assertion below reports why.
+        break;
+      }
+    }
+    await expectAliveAndServing(started.base, started.child, "abandoned .all()");
+    // 420s, not 180s. A FAILING run is fast — the loop breaks as soon as the
+    // child dies — so this budget only ever bounds the GREEN path, which walks
+    // all 120 iterations and measured 153-168s on a warm dev machine. A CI
+    // runner is slower and noisier, and a timeout here would read as "the fix
+    // regressed" when it actually means "the box was busy". Generous on the
+    // path that passes, unchanged on the path that catches the bug.
+  }, 420_000);
 
   it("survives a reconnect loop of abandoned SSE streams", async () => {
     // The outage was a LOOP: daemons reconnect their subscriptions on every
