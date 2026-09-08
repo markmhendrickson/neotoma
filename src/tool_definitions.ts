@@ -467,7 +467,7 @@ export function buildToolDefinitions(
           file_path: {
             type: "string",
             description:
-              "Local file path (alternative to file_content). If provided, file will be read from filesystem. MIME type will be auto-detected from extension if not provided. Works in local environments (Cursor, Claude Code) where MCP server has filesystem access. Does NOT work in web-based environments (claude.ai, chatgpt.com) - use file_content for those.",
+              "A path on the SERVER's filesystem, not yours. The file is read by the Neotoma instance, so this only works when your client runs on the same machine as the instance — the axis is co-located vs remote, not desktop vs web. Against a hosted or otherwise remote instance it cannot see your disk and is rejected with ERR_FILE_PATH_IS_SERVER_LOCAL. To send a file from a remote client: upload the bytes (POST /sources/upload, multipart/form-data) and pass the returned source_id, or inline small files with file_content (base64) + mime_type. MIME type is auto-detected from the content or extension when not provided.",
           },
           mime_type: {
             type: "string",

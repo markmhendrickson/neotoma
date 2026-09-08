@@ -2647,9 +2647,18 @@ export class NeotomaServer {
     if (input.file_path) {
       const fs = await import("node:fs");
       const path = await import("node:path");
+      const { isFilesystemLocalToCaller, buildFilePathServerLocalError, buildFileNotFoundError } =
+        await import("./services/file_input_diagnostics.js");
+
+      // `file_path` resolves here, on the server. On a remote instance that
+      // makes it unusable, and saying "File not found" would blame the caller's
+      // disk for a parameter that never referred to it (#2325).
+      if (!isFilesystemLocalToCaller()) {
+        throw buildFilePathServerLocalError(input.file_path);
+      }
 
       if (!fs.existsSync(input.file_path)) {
-        throw new Error(`File not found: ${input.file_path}`);
+        throw buildFileNotFoundError(input.file_path);
       }
 
       const fileBuffer = fs.readFileSync(input.file_path);
@@ -2666,8 +2675,11 @@ export class NeotomaServer {
     }
 
     if (input.file_content && input.mime_type) {
+      const { decodeFileContent } = await import("./services/file_input_diagnostics.js");
       return {
-        fileBuffer: Buffer.from(input.file_content, "base64"),
+        // Rejects non-base64 rather than letting Node discard the invalid
+        // characters and store corrupted bytes under a valid content_hash.
+        fileBuffer: decodeFileContent(input.file_content),
         mimeType: input.mime_type,
         filename: input.original_filename || "file",
       };
