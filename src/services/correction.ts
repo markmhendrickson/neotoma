@@ -31,6 +31,14 @@ export interface CreateCorrectionParams {
   user_id: string;
   idempotency_key?: string;
   source_peer_id?: string;
+  /**
+   * Optional operator/agent-supplied reason the correction was made — mirrors
+   * the `reason` field already accepted by `delete_entity`,
+   * `delete_relationship`, `restore_entity`, `restore_relationship`, and
+   * `split_entity` (and `merge_reason` on `merge_entities`). Persisted
+   * verbatim on the observation row.
+   */
+  reason?: string;
 }
 
 export interface CorrectionResult {
@@ -109,6 +117,10 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
 
   if (idempotency_key) {
     row.idempotency_key = idempotency_key;
+  }
+
+  if (params.reason) {
+    row.reason = params.reason;
   }
 
   const correctionAttribution = getCurrentAttribution();

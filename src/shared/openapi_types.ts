@@ -8066,6 +8066,8 @@ export interface operations {
           field: string;
           value: unknown;
           idempotency_key: string;
+          /** @description Optional reason for the correction (audit) */
+          reason?: string;
           user_id?: string;
         };
       };
