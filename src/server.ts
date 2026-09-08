@@ -4984,9 +4984,8 @@ export class NeotomaServer {
     if (parsed.file_path) {
       // Same locality gate as readUnstructuredInput — these branches run before
       // that helper and were unguarded on #2350 (#2325 rereview).
-      const { isFilesystemLocalToCaller, buildFilePathServerLocalError } = await import(
-        "./services/file_input_diagnostics.js"
-      );
+      const { isFilesystemLocalToCaller, buildFilePathServerLocalError } =
+        await import("./services/file_input_diagnostics.js");
       if (!isFilesystemLocalToCaller()) {
         throw buildFilePathServerLocalError(parsed.file_path);
       }
@@ -5007,9 +5006,8 @@ export class NeotomaServer {
 
     // --- By-reference storage path (#1775) ---
     if (parsed.source_storage === "reference" && parsed.file_path) {
-      const { isFilesystemLocalToCaller, buildFilePathServerLocalError } = await import(
-        "./services/file_input_diagnostics.js"
-      );
+      const { isFilesystemLocalToCaller, buildFilePathServerLocalError } =
+        await import("./services/file_input_diagnostics.js");
       if (!isFilesystemLocalToCaller()) {
         throw buildFilePathServerLocalError(parsed.file_path);
       }

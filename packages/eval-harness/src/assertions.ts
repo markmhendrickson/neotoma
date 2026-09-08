@@ -8,12 +8,7 @@
  * lockstep.
  */
 
-import type {
-  AssertionFailure,
-  ExpectedAssertion,
-  InstructionProfile,
-  ToolCall,
-} from "./types.js";
+import type { AssertionFailure, ExpectedAssertion, InstructionProfile, ToolCall } from "./types.js";
 import type { HostToolInvocation, HostToolRegistry } from "./host_tools.js";
 
 export interface AssertionContext {
@@ -162,7 +157,7 @@ function countStoreStructuredCalls(stats: Record<string, unknown> | null): numbe
   if (entitiesByType && typeof entitiesByType === "object") {
     const total = Object.values(entitiesByType).reduce(
       (acc, v) => acc + (typeof v === "number" ? v : 0),
-      0,
+      0
     );
     return total > 0 ? 1 : 0;
   }
@@ -248,7 +243,10 @@ function toolCallsNamed(calls: ToolCall[], name: string | undefined): ToolCall[]
 }
 
 /** Pick one tool call by `which` (default last). */
-function pickToolCall(calls: ToolCall[], which: "first" | "last" | number | undefined): ToolCall | undefined {
+function pickToolCall(
+  calls: ToolCall[],
+  which: "first" | "last" | number | undefined
+): ToolCall | undefined {
   if (calls.length === 0) return undefined;
   if (which === "first") return calls[0];
   if (typeof which === "number") return calls[which];
@@ -319,11 +317,12 @@ export async function evaluatePredicate(
       };
     }
     case "entity.exists": {
-      const types = predicate.entity_type_any_of && predicate.entity_type_any_of.length > 0
-        ? predicate.entity_type_any_of
-        : predicate.entity_type
-          ? [predicate.entity_type]
-          : [undefined as unknown as string];
+      const types =
+        predicate.entity_type_any_of && predicate.entity_type_any_of.length > 0
+          ? predicate.entity_type_any_of
+          : predicate.entity_type
+            ? [predicate.entity_type]
+            : [undefined as unknown as string];
       const lists = await Promise.all(types.map((t) => fetchEntities(ctx, t, predicate.where)));
       const all = lists.flat();
       const matches = all.filter((e) => whereMatches(e, predicate.where));
@@ -372,15 +371,17 @@ export async function evaluatePredicate(
       };
     }
     case "relationship.exists": {
-      const types = predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
-        ? predicate.relationship_type_any_of
-        : predicate.relationship_type
-          ? [predicate.relationship_type]
-          : [];
+      const types =
+        predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
+          ? predicate.relationship_type_any_of
+          : predicate.relationship_type
+            ? [predicate.relationship_type]
+            : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
       const rels = lists.flat();
       if (rels.length > 0) return null;
-      const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
+      const label =
+        types.length > 1 ? `any of ${JSON.stringify(types)}` : (types[0] ?? "(unspecified)");
       return {
         predicate,
         message: `Expected at least one ${label} relationship, got 0.`,
@@ -453,7 +454,8 @@ export async function evaluatePredicate(
           actual: text.slice(0, 200),
         };
       }
-      const needle = predicate.substring ?? (typeof predicate.value === "string" ? predicate.value : "");
+      const needle =
+        predicate.substring ?? (typeof predicate.value === "string" ? predicate.value : "");
       if (!needle) {
         return {
           predicate,
@@ -471,17 +473,19 @@ export async function evaluatePredicate(
       };
     }
     case "relationship.count": {
-      const types = predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
-        ? predicate.relationship_type_any_of
-        : predicate.relationship_type
-          ? [predicate.relationship_type]
-          : [];
+      const types =
+        predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
+          ? predicate.relationship_type_any_of
+          : predicate.relationship_type
+            ? [predicate.relationship_type]
+            : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
       const rels = lists.flat();
       const expected = typeof predicate.value === "number" ? predicate.value : 0;
       const op = predicate.op ?? "eq";
       if (compareNumber(rels.length, op, expected)) return null;
-      const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
+      const label =
+        types.length > 1 ? `any of ${JSON.stringify(types)}` : (types[0] ?? "(unspecified)");
       return {
         predicate,
         message: `Expected relationship.count of "${label}" ${op} ${expected}, got ${rels.length}.`,
@@ -505,7 +509,12 @@ export async function evaluatePredicate(
         message: `Expected mcp_tool[${predicate.tool_name ?? "*"}]${
           predicate.arg_subset ? ` with args ⊇ ${JSON.stringify(predicate.arg_subset)}` : ""
         } invocations ${op} ${expected}, got ${actual}.`,
-        expected: { op, value: expected, tool_name: predicate.tool_name, arg_subset: predicate.arg_subset },
+        expected: {
+          op,
+          value: expected,
+          tool_name: predicate.tool_name,
+          arg_subset: predicate.arg_subset,
+        },
         actual: calls.map((c) => ({ name: c.name, input: c.input })),
       };
     }
@@ -516,8 +525,7 @@ export async function evaluatePredicate(
         // Distinguish "tool never called" from "called, but `which` index is
         // out of range" — the latter is a scenario-authoring bug with a
         // concrete fix (docs/subsystems/errors.md — actionable hints).
-        const outOfRange =
-          typeof predicate.which === "number" && calls.length > 0;
+        const outOfRange = typeof predicate.which === "number" && calls.length > 0;
         const message = outOfRange
           ? `tool_result.matches: "${predicate.tool_name ?? "(any)"}" was invoked ${calls.length} time(s), but which=${predicate.which} is out of range (valid 0..${calls.length - 1}).`
           : `tool_result.matches: no invocation of "${predicate.tool_name ?? "(any)"}" was captured.`;
@@ -528,15 +536,27 @@ export async function evaluatePredicate(
           actual: (ctx.toolCalls ?? []).map((c) => c.name),
         };
       }
-      // The result is the tool's output; failed calls expose {error:{...}} so
-      // error-surface assertions work. Prefer output, fall back to a synthesized
-      // error envelope when the call recorded an error string.
-      const result: unknown =
-        call.output !== undefined
-          ? call.output
-          : call.error !== undefined
-            ? { error: { message: call.error } }
-            : undefined;
+      // Resolve the inspectable result for result_key / result_subset.
+      // Non-2xx HTTP replies may carry both: structured body in `output`
+      // (error_code / details for subset matches — #2325) and a status string
+      // in `error` (legacy scenarios assert result_key "error"). Prefer the
+      // body when present, but synthesize `{ error: { message } }` when the
+      // body lacks a top-level `error` key so those assertions keep working.
+      const result: unknown = (() => {
+        if (call.output !== undefined && call.error !== undefined) {
+          if (call.output && typeof call.output === "object") {
+            const out = call.output as Record<string, unknown>;
+            if (Object.prototype.hasOwnProperty.call(out, "error")) {
+              return call.output;
+            }
+            return { ...out, error: { message: call.error } };
+          }
+          return { error: { message: call.error }, output: call.output };
+        }
+        if (call.output !== undefined) return call.output;
+        if (call.error !== undefined) return { error: { message: call.error } };
+        return undefined;
+      })();
       // result_key and result_subset are ANDed when both are supplied: the
       // key check must pass AND the subset must match. Either may be omitted.
       // (a) result_key present/absent check (dotted path).
@@ -582,7 +602,12 @@ export async function evaluatePredicate(
           actual: null,
         };
       }
-      const snap = await fetchSnapshot(ctx, predicate.entity_id, predicate.entity_type, predicate.where);
+      const snap = await fetchSnapshot(
+        ctx,
+        predicate.entity_id,
+        predicate.entity_type,
+        predicate.where
+      );
       if (!snap) {
         return {
           predicate,
