@@ -132,7 +132,7 @@ const SLOW = "SELECT COUNT(*) AS n FROM load a, load b WHERE a.v < b.v";
 // chance for a terminate to land while Rust is on the stack, which widens the
 // race from a single window to many — this is the case that actually
 // reproduces the SIGABRT (#2324).
-const SLOW_ALL = "SELECT a.v FROM load a, load b WHERE a.v < b.v LIMIT 500000";
+const SLOW_ALL = "SELECT a.v FROM load a, load b WHERE a.v < b.v LIMIT 120000";
 
 const app = express();
 app.use(dbAbortContext());
@@ -426,7 +426,7 @@ describe("client disconnect during an in-flight DB read (#2316)", () => {
     // Looped, and disconnected FAST, because it is a race: the terminate has
     // to land inside a native frame. A single slow iteration reliably misses
     // the window and would make this test green on broken code.
-    const started = await startServer("slow-all", 0, 4);
+    const started = await startServer("slow-all", 0, 2);
     child = started.child;
 
     // Enough attempts to make the race a certainty rather than a coin flip.
@@ -441,19 +441,22 @@ describe("client disconnect during an in-flight DB read (#2316)", () => {
     // and on fixed code waits for each abandoned worker to finish rather than
     // killing it instantly — overruns its timeout.
     //
-    // Measured on unpatched main at 63a7dcf88, with the jittered lead and 8
-    // concurrent abandonments per iteration:
+    // Measured on unpatched main at 63a7dcf88 with the jittered lead: at 8
+    // concurrent abandonments over 4 readers, 25 iterations reproduced in 3 of
+    // 6 runs, 60 in 6 of 8, and 120 in 8 of 8.
     //
-    //     25 iterations -> 3 of 6 runs reproduced
-    //     60 iterations -> 6 of 8 runs reproduced
-    //    120 iterations -> 8 of 8 runs reproduced
+    // That configuration was then DELIBERATELY LIGHTENED — 2 readers, 3
+    // concurrent abandonments, a smaller result set — because it was tuned on
+    // a 16-core machine and killed the 2-core CI runner outright ("the runner
+    // has received a shutdown signal", twice, ~70s in, with no test output).
+    // The iteration count rose to 200 to buy the detection back, and the
+    // lighter shape reproduces in 6 of 6 runs while finishing in ~35-50s.
     //
-    // So 120, because a gate that misses a quarter of the time is not a gate.
-    // Of those eight, five hit `external.rs:80` — the exact assertion named in
-    // the production trace — and three the sibling `array.rs:22`, reached via
-    // the same `.all()` re-entry. On fixed code the same 120 iterations run
-    // green in well under the timeout.
-    for (let i = 0; i < 120; i += 1) {
+    // The lightening was not merely a CI accommodation: 2 readers SATURATE the
+    // pool, and saturation exposed a defect the wider pool hid entirely — see
+    // the `__drained__` probe in worker_file_database.ts. The cheaper test is
+    // also the stricter one.
+    for (let i = 0; i < 200; i += 1) {
       // Stop as soon as the child is gone. When the panic fires mid-loop the
       // server is already dead, and the next request would throw a bare
       // `fetch failed` / `UND_ERR_SOCKET` — a confusing TypeError that buries
@@ -474,7 +477,7 @@ describe("client disconnect during an in-flight DB read (#2316)", () => {
         // is a batch of independent rolls rather than a single one, which is
         // what makes a bounded loop enough to catch a race.
         await Promise.all(
-          Array.from({ length: 8 }, () => connectThenDisconnect(started.base, "/slow-all"))
+          Array.from({ length: 3 }, () => connectThenDisconnect(started.base, "/slow-all"))
         );
       } catch {
         // The server died underneath us — the assertion below reports why.

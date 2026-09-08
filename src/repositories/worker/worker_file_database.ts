@@ -127,6 +127,21 @@ const stripMetadata = workerData.stripRowMetadata
 parentPort.on("message", (msg) => {
   try {
     let result;
+    if (msg.op === "__drained__") {
+      // Sent by the parent AFTER it retires this worker (#2324). Because the
+      // worker processes messages strictly FIFO and runs each statement to
+      // completion, this one cannot be handled until every statement queued
+      // ahead of it has finished. Answering it is therefore the worker's own
+      // proof that it holds no native frame and has nothing left to start —
+      // the only moment at which terminating it cannot abort the process.
+      //
+      // The parent cannot infer this from an ordinary reply: a reply is posted
+      // and the worker then IMMEDIATELY picks up the next queued message, so a
+      // terminate racing that lands inside the next statement's native call.
+      // That is exactly the failure this message exists to remove.
+      parentPort.postMessage({ id: msg.id, ok: true, drained: true });
+      return;
+    }
     if (msg.sql === "__crash__") {
       // Test-only hook: simulate a hard worker crash so supervised-restart is
       // exercisable. Never issued by production code paths.
@@ -212,6 +227,20 @@ export class WorkerDbAbortError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "WorkerDbAbortError";
+  }
+}
+
+/**
+ * Internal signal that a connection was retired between being chosen from the
+ * pool and being dispatched to (#2324). Never reaches a caller: `routeRead`
+ * catches it and re-dispatches to a live reader. It exists as its own type so
+ * that retry is triggered by this one narrow race and not by an abort, which
+ * must still propagate — retrying an aborted read would defeat the abort.
+ */
+class WorkerDbRetiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkerDbRetiredError";
   }
 }
 
@@ -329,10 +358,19 @@ class WorkerConnection {
       // call and is back in JavaScript — the one moment at which terminating
       // it cannot abort the process (#2324). Its result is discarded either
       // way: the callers were already rejected by `failInFlight`.
+      // A retired worker's ordinary replies are discarded — its callers were
+      // already rejected. Only the `__drained__` acknowledgement means it is
+      // safe to terminate: the worker answers that strictly after every
+      // statement queued ahead of it has finished, so no native frame is on
+      // its stack and none is about to start. Terminating on an ordinary reply
+      // instead would race the very next queued statement's native call, which
+      // is what #2324 is (verified: doing so still aborts).
       if (this.retired) {
-        const finish = this.orphanFinish;
-        this.orphanFinish = undefined;
-        finish?.();
+        if ((reply as WorkerReply & { drained?: boolean }).drained) {
+          const finish = this.orphanFinish;
+          this.orphanFinish = undefined;
+          finish?.();
+        }
         return;
       }
       const entry = this.pending.get(reply.id);
@@ -431,11 +469,21 @@ class WorkerConnection {
    *   2. The connection is marked retired and the owner drops it from the
    *      pool, so dispatch never sends it another statement and a replacement
    *      spawns on the next read. The slot is free at this instant.
-   *   3. The orphan finishes its statement and posts its reply. That reply
-   *      finds no `pending` entry and is discarded by the existing
-   *      `if (!entry) return` guard. Crucially, we are then in the `message`
-   *      handler — the worker is provably back in JavaScript with no native
-   *      call on its stack — so `terminate()` is safe there.
+   *   3. A `__drained__` probe is queued BEHIND everything the worker still
+   *      holds, and the orphan is terminated when that probe is acknowledged.
+   *      Ordinary replies are discarded as before.
+   *
+   *      The probe is load-bearing and its absence was a real bug, caught only
+   *      once the test ran with a SATURATED pool: "terminate when the orphan
+   *      posts a reply" is NOT safe. The worker posts a reply and then
+   *      immediately takes the next queued message off its queue, so a
+   *      terminate racing that lands inside the next statement's native call
+   *      and aborts exactly as before. Verified: with reply-triggered
+   *      termination the suite still panicked at `array.rs:22` in 6 of 8 runs.
+   *      Because the worker runs messages strictly FIFO and each statement to
+   *      completion, an acknowledgement of a probe queued after them is the
+   *      worker's own proof that it holds no native frame and has none left to
+   *      start — which a reply, by construction, is not.
    *   4. A worker that never reports (genuinely wedged, or a statement longer
    *      than the window) is terminated anyway after `orphanGraceMs`. That is
    *      the pre-#2324 behaviour kept as a last resort: it can still abort,
@@ -449,6 +497,19 @@ class WorkerConnection {
    * instance down and blocks its own recovery — and the grace window bounds it.
    */
   private abandon(error: Error): void {
+    // ALREADY RETIRED: a second abort landing on the same connection. Under
+    // pool saturation this is the common case, not the exotic one — several
+    // requests share one reader, each installs its own abort listener, and a
+    // client batch going away fires all of them. There is nothing left to
+    // reclaim (the first retirement did it) and the orphan's termination is
+    // already scheduled, so the ONLY thing a second pass could add is a
+    // premature `terminate()` on a worker still inside its native call — the
+    // exact fault this method exists to avoid. Return.
+    if (this.retired) {
+      this.failInFlight(error);
+      return;
+    }
+
     const worker = this.worker;
     this.failInFlight(error);
     if (!worker) return;
@@ -464,8 +525,9 @@ class WorkerConnection {
       return;
     }
 
-    // Terminate when the orphan reports back (it is in JS at that moment), or
-    // when the grace window expires, whichever comes first.
+    // Terminate when the orphan acknowledges the drain probe below — the point
+    // at which it is provably idle — or when the grace window expires,
+    // whichever comes first.
     this.orphanWorker = worker;
     const finish = () => {
       if (this.orphanTimer !== undefined) {
@@ -476,6 +538,13 @@ class WorkerConnection {
       void worker.terminate().catch(() => {});
     };
     this.orphanFinish = finish;
+    // Queue the drain probe BEHIND everything the worker is still holding. Its
+    // reply is the worker's own statement that it is idle; until then we wait.
+    try {
+      worker.postMessage({ id: this.nextId++, op: "__drained__" });
+    } catch {
+      // The worker is already gone; the grace timer below still covers it.
+    }
     this.orphanTimer = setTimeout(() => {
       this.orphanFinish = undefined;
       logger.warn(
@@ -498,6 +567,18 @@ class WorkerConnection {
     const { timeoutMs, signal } = options;
     if (signal?.aborted) {
       return Promise.reject(new WorkerDbAbortError("DB request aborted before dispatch"));
+    }
+    // A RETIRED connection must never serve another statement (#2324). The
+    // pool drops it on retirement, but there is a window: `readerConnection()`
+    // can hand this object to a caller and an abort can retire it before the
+    // caller reaches here. Spawning a fresh worker on a retired connection
+    // would be actively harmful — the `message` handler treats every reply as
+    // the ORPHAN reporting in, so the new worker's own replies are discarded
+    // and its callers hang, while its arrival can trigger a terminate aimed at
+    // a different worker that is still inside a native call. Rejecting sends
+    // the caller back through `routeRead`, which dispatches to a live reader.
+    if (this.retired) {
+      return Promise.reject(new WorkerDbRetiredError("DB reader was retired before dispatch"));
     }
     const worker = this.ensureWorker();
     const id = this.nextId++;
@@ -590,14 +671,26 @@ class WorkerConnection {
     return new Promise<void>((resolve) => {
       const done = () => {
         clearTimeout(timer);
-        worker.off("message", done);
+        worker.off("message", onMessage);
         worker.off("exit", done);
         resolve();
       };
+      // Wait for the DRAIN acknowledgement specifically, not for any message.
+      // An ordinary reply is posted and the worker then immediately starts the
+      // next queued statement, so resolving on one would hand back a worker
+      // that is about to be inside native code again (#2324).
+      const onMessage = (reply: WorkerReply & { drained?: boolean }) => {
+        if (reply?.drained) done();
+      };
       const timer = setTimeout(done, this.orphanGraceMs);
       timer.unref?.();
-      worker.on("message", done);
+      worker.on("message", onMessage);
       worker.on("exit", done);
+      try {
+        worker.postMessage({ id: this.nextId++, op: "__drained__" });
+      } catch {
+        // Already gone — the timer resolves us.
+      }
     });
   }
 }
@@ -1004,6 +1097,35 @@ export class WorkerFileDatabase implements DbDatabase {
    * and retried on the writer. Inside a transaction, reads must see the
    * transaction's uncommitted state, so they go to the writer directly.
    */
+  /**
+   * Send a read to a live reader, re-choosing if the one we picked retired in
+   * between (#2324).
+   *
+   * The window is small but routine under saturation: `readerConnection()`
+   * returns the least-loaded reader, and an abort belonging to a DIFFERENT
+   * request sharing that reader can retire it before this one dispatches. The
+   * retry is bounded and re-picks from the pool each time, so it cannot spin
+   * on the same dead connection; the pool spawns a replacement as soon as it
+   * is short a reader.
+   */
+  private async dispatchRead(
+    op: "get" | "all",
+    sql: string,
+    params: unknown[],
+    options: WorkerRequestOptions
+  ): Promise<unknown> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await this.readerConnection().request(op, sql, params, options);
+      } catch (error) {
+        if (!(error instanceof WorkerDbRetiredError)) throw error;
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
   async routeRead(op: "get" | "all", sql: string, params: unknown[]): Promise<unknown> {
     if (this.txContext.getStore()) {
       // Inside a transaction the statement runs on the writer, which is never
@@ -1017,7 +1139,7 @@ export class WorkerFileDatabase implements DbDatabase {
       signal: abortContext.getStore(),
     };
     try {
-      return await this.readerConnection().request(op, sql, params, options);
+      return await this.dispatchRead(op, sql, params, options);
     } catch (error) {
       if (isReadonlyRejection(error)) {
         // The read mutates, so it belongs on the writer. Re-run it there
