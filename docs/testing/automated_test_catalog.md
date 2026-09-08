@@ -524,6 +524,7 @@ flowchart TD
 - `tests/integration/plan_body_raw_fragment_backfill.test.ts`
 - `tests/integration/process_issues_skill.test.ts`
 - `tests/integration/public_key_registry.test.ts`
+- `tests/integration/recompute_snapshots_by_type_idempotent.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
 - `tests/integration/relationship_agent_attribution_api.test.ts`
 - `tests/integration/relationship_delete_discovery_mcp.test.ts`

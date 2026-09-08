@@ -2101,6 +2101,47 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/recompute_snapshots_by_type": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Recompute snapshots by entity type
+     * @description Recompute every snapshot the calling user owns for one entity type,
+     *     re-applying the active schema (canonical name, timeline events) and
+     *     refreshing embeddings. Scoped to the authenticated user's own
+     *     snapshots. Use `dry_run` to count and list the affected entities
+     *     without writing.
+     *
+     *     Retry / idempotency (intrinsic — no `idempotency_key`):
+     *     - The same `{ entity_type, dry_run }` body is safe to retry after
+     *       transport failure. This is maintenance recompute, not
+     *       `ingest` / `store` / `correct`, so there is no request-ledger key.
+     *     - On the live path (`dry_run: false` or omitted), each retry re-runs
+     *       `recomputeSnapshot` per owned entity: a deterministic upsert of
+     *       derived snapshot and timeline rows from the current observation
+     *       set. It does not create duplicate entities or observations.
+     *     - Response counters (`total` / `recomputed` / `errors`) are per
+     *       invocation, not cached across retries.
+     *     - Opportunistic `canonical_name` evolution inside `recomputeSnapshot`
+     *       converges; subsequent retries with an unchanged observation set
+     *       do not keep renaming.
+     *     Unknown top-level request fields are intentionally tolerated
+     *     (handler uses a non-strict Zod object), matching peer maintenance
+     *     POSTs such as `/health_check_snapshots`.
+     */
+    post: operations["recomputeSnapshotsByType"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/subscribe": {
     parameters: {
       query?: never;
@@ -8377,6 +8418,59 @@ export interface operations {
         };
         content: {
           "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  recomputeSnapshotsByType: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Entity type whose snapshots are recomputed. */
+          entity_type: string;
+          /**
+           * @description When true, report the entities that would be recomputed without writing.
+           * @default false
+           */
+          dry_run?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Recompute results, or the dry-run preview when `dry_run` is true. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            entity_type?: string;
+            /** @description Present only on a dry-run response. */
+            dry_run?: boolean;
+            /** @description Dry run only — number of snapshots that would be recomputed. */
+            entities_to_recompute?: number;
+            /** @description Dry run only — ids of the snapshots that would be recomputed. */
+            entity_ids?: string[];
+            /** @description Number of snapshots found for the entity type. */
+            total?: number;
+            /** @description Number of snapshots successfully recomputed. */
+            recomputed?: number;
+            /** @description Number of snapshots that failed to recompute. */
+            errors?: number;
+            /** @description Present only when at least one snapshot failed. */
+            error_details?: {
+              entity_id?: string;
+              error?: string;
+            }[];
+          } & {
             [key: string]: unknown;
           };
         };
