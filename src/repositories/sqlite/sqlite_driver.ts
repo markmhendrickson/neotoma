@@ -63,6 +63,20 @@ class SqliteDatabaseImpl {
     this.db = new DatabaseCtor(path);
   }
 
+  /**
+   * The underlying native driver instance (better-sqlite3's `Database`, or
+   * `node:sqlite`'s `DatabaseSync`) — distinct from this wrapper. Extension
+   * loaders like sqlite-vec call `db.loadExtension(...)` on the NATIVE
+   * object; this wrapper exposes `prepare`/`exec`/`pragma`/`transaction`
+   * instead, so passing the wrapper itself to `sqliteVec.load()` fails with
+   * "db.loadExtension is not a function" regardless of platform. Exposed so
+   * callers that need the native handle (extension loading) don't have to
+   * reach into this class's private field.
+   */
+  nativeHandle(): any {
+    return this.db;
+  }
+
   prepare(sql: string): SqliteStatementImpl {
     return new SqliteStatementImpl(this.db.prepare(sql));
   }

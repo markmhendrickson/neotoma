@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **596**
-- Backend and repo Vitest files: **561**
+- Total automated test files: **598**
+- Backend and repo Vitest files: **563**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -71,7 +71,7 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 164 |
 | Vitest service tests | 44 |
-| Source-adjacent tests | 66 |
+| Source-adjacent tests | 68 |
 | Vitest integration tests | 168 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 18 |
@@ -331,7 +331,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (66):**
+**Files (68):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -342,6 +342,7 @@ flowchart TD
 - `src/semver_compat.test.ts`
 - `src/services/__tests__/csv_chunking.test.ts`
 - `src/services/__tests__/deletion.test.ts`
+- `src/services/__tests__/entity_merge_embedding_purge.test.ts`
 - `src/services/__tests__/entity_semantic_search.test.ts`
 - `src/services/__tests__/local_auth.test.ts`
 - `src/services/__tests__/local_entity_embedding.test.ts`
@@ -387,6 +388,7 @@ flowchart TD
 - `src/services/rendered_page/publish.test.ts`
 - `src/services/route_shadowing.test.ts`
 - `src/services/sync/peer_health.test.ts`
+- `src/shared/action_handlers/__tests__/entity_handlers_ranking.test.ts`
 - `src/shared/action_handlers/entity_handlers.test.ts`
 - `src/shared/action_schemas.test.ts`
 - `src/shared/spawn_platform.test.ts`
