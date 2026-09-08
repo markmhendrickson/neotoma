@@ -34,6 +34,7 @@ import { generateEntityId } from "../entity_resolution.js";
 
 const EMBEDDING_DIM = 1536;
 const userId = "test-user-merge-embedding-purge";
+const otherUserId = "test-user-merge-embedding-purge-other";
 const entityType = "contact";
 
 /** Deterministic 1536-dim embedding: identical vector for every seed so every
@@ -44,6 +45,12 @@ const entityType = "contact";
 function makeEmbedding(): number[] {
   const arr = new Array(EMBEDDING_DIM).fill(0) as number[];
   arr[0] = 1;
+  return arr;
+}
+
+function makeDistantEmbedding(): number[] {
+  const arr = new Array(EMBEDDING_DIM).fill(0) as number[];
+  arr[1] = 1;
   return arr;
 }
 
@@ -79,6 +86,7 @@ async function rawKnnEntityIds(k: number): Promise<string[]> {
 async function cleanup(): Promise<void> {
   const rawDb = await getDb();
   await db.from("entity_embedding_rows").delete().eq("user_id", userId);
+  await db.from("entity_embedding_rows").delete().eq("user_id", otherUserId);
   if (rawDb instanceof AsyncSqliteDatabase) {
     // entity_embeddings_vec has no user_id column; sweep orphaned vec rows by
     // rejoining against entity_embedding_rows (already cleared above), so any
@@ -92,7 +100,9 @@ async function cleanup(): Promise<void> {
     }
   }
   await db.from("entities").delete().eq("user_id", userId);
+  await db.from("entities").delete().eq("user_id", otherUserId);
   await db.from("entity_snapshots").delete().eq("user_id", userId);
+  await db.from("entity_snapshots").delete().eq("user_id", otherUserId);
 }
 
 describe("mergeEntities purges the merged-away entity's local embedding row", () => {
@@ -102,8 +112,10 @@ describe("mergeEntities purges the merged-away entity's local embedding row", ()
   it("frees the KNN slot the merged-away entity occupied, rather than leaving it a permanent candidate", async () => {
     const survivorName = "Live Survivor";
     const mergedAwayName = "Stale Duplicate";
+    const otherUserName = "Other User Neighbor";
     const survivorId = generateEntityId(entityType, survivorName);
     const mergedAwayId = generateEntityId(entityType, mergedAwayName);
+    const otherUserEntityId = generateEntityId(entityType, otherUserName);
 
     await db.from("entities").insert({
       id: survivorId,
@@ -129,6 +141,13 @@ describe("mergeEntities purges the merged-away entity's local embedding row", ()
       entity_id: mergedAwayId,
       embedding: makeEmbedding(),
       user_id: userId,
+      entity_type: entityType,
+      merged: false,
+    });
+    await storeLocalEntityEmbedding({
+      entity_id: otherUserEntityId,
+      embedding: makeDistantEmbedding(),
+      user_id: otherUserId,
       entity_type: entityType,
       merged: false,
     });
@@ -162,5 +181,17 @@ describe("mergeEntities purges the merged-away entity's local embedding row", ()
       .select("entity_id")
       .eq("entity_id", mergedAwayId);
     expect(remaining ?? []).toHaveLength(0);
+
+    const { data: otherUserRows } = await db
+      .from("entity_embedding_rows")
+      .select("entity_id, user_id")
+      .eq("entity_id", otherUserEntityId)
+      .eq("user_id", otherUserId);
+    expect(otherUserRows ?? []).toEqual([
+      {
+        entity_id: otherUserEntityId,
+        user_id: otherUserId,
+      },
+    ]);
   });
 });

@@ -246,8 +246,8 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
       // rest of the merge, rather than as a best-effort post-mutation step,
       // since this is a correctness issue for retrieval, not just bookkeeping.
       const embeddingRow = (await tx
-        .prepare(`SELECT rowid FROM entity_embedding_rows WHERE entity_id = ?`)
-        .get(fromEntityId)) as { rowid: number } | undefined;
+        .prepare(`SELECT rowid FROM entity_embedding_rows WHERE entity_id = ? AND user_id = ?`)
+        .get(fromEntityId, userId)) as { rowid: number } | undefined;
       if (embeddingRow) {
         // entity_embeddings_vec is a virtual table created lazily by
         // local_entity_embedding.ts only once sqlite-vec loads; guard its
@@ -261,8 +261,8 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
           // sqlite-vec not loaded on this platform — nothing to clean up there.
         }
         await tx
-          .prepare(`DELETE FROM entity_embedding_rows WHERE rowid = ?`)
-          .run(embeddingRow.rowid);
+          .prepare(`DELETE FROM entity_embedding_rows WHERE rowid = ? AND user_id = ?`)
+          .run(embeddingRow.rowid, userId);
       }
 
       return { observations_moved, relationships_repointed: repointed.length };
