@@ -127,6 +127,21 @@ const stripMetadata = workerData.stripRowMetadata
 parentPort.on("message", (msg) => {
   try {
     let result;
+    if (msg.op === "__drained__") {
+      // Sent by the parent AFTER it retires this worker (#2324). Because the
+      // worker processes messages strictly FIFO and runs each statement to
+      // completion, this one cannot be handled until every statement queued
+      // ahead of it has finished. Answering it is therefore the worker's own
+      // proof that it holds no native frame and has nothing left to start —
+      // the only moment at which terminating it cannot abort the process.
+      //
+      // The parent cannot infer this from an ordinary reply: a reply is posted
+      // and the worker then IMMEDIATELY picks up the next queued message, so a
+      // terminate racing that lands inside the next statement's native call.
+      // That is exactly the failure this message exists to remove.
+      parentPort.postMessage({ id: msg.id, ok: true, drained: true });
+      return;
+    }
     if (msg.sql === "__crash__") {
       // Test-only hook: simulate a hard worker crash so supervised-restart is
       // exercisable. Never issued by production code paths.
@@ -215,6 +230,20 @@ export class WorkerDbAbortError extends Error {
   }
 }
 
+/**
+ * Internal signal that a connection was retired between being chosen from the
+ * pool and being dispatched to (#2324). Never reaches a caller: `routeRead`
+ * catches it and re-dispatches to a live reader. It exists as its own type so
+ * that retry is triggered by this one narrow race and not by an abort, which
+ * must still propagate — retrying an aborted read would defeat the abort.
+ */
+class WorkerDbRetiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkerDbRetiredError";
+  }
+}
+
 type PendingEntry = {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
@@ -237,7 +266,36 @@ class WorkerConnection {
   private closed = false;
   /** `Date.now()` when this worker last went from idle to busy; 0 while idle. */
   private busyStartedAt = 0;
+  /**
+   * Set once this connection has been abandoned (#2324). A retired connection
+   * is out of the pool and never dispatched to again; its worker is still
+   * running only so it can finish its native call and be terminated safely.
+   */
+  private retired = false;
+  /** Whether anything was actually executing when this connection retired. */
+  private hadInFlightAtRetire = false;
+  /** Terminates the orphaned worker; cleared once it has run. */
+  private orphanFinish: (() => void) | undefined;
+  private orphanTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The orphaned worker itself, kept because `failInFlight` has already nulled
+   * `this.worker` by the time the connection retires. Without this handle
+   * `close()` would find nothing to wait on and return while the orphan was
+   * still running — the thread would then outlive the database it was reading,
+   * which is precisely what tracking retired connections exists to prevent.
+   */
+  private orphanWorker: Worker | undefined;
 
+  /**
+   * The two objects are separate on purpose. `options` is handed to the Worker
+   * verbatim as `workerData`, so everything in it must be structured-cloneable:
+   * a callback there throws `DataCloneError` at spawn time, and — because that
+   * rejection carries a NUMERIC `code` — it then trips the string handling in
+   * `isReadonlyRejection`, surfacing as an unrelated `TypeError` on the next
+   * read rather than as anything resembling its cause. Connection-local
+   * settings the worker has no use for (the grace window, the retirement
+   * callback) therefore live in `local`, which never crosses the boundary.
+   */
   constructor(
     private readonly options: {
       dbPath: string;
@@ -246,8 +304,27 @@ class WorkerConnection {
       driverPath: string | null;
       useNodeSqlite: boolean;
       stripRowMetadata: boolean;
-    }
+    },
+    private readonly local: {
+      /** Grace window for an orphaned worker before forced termination. */
+      orphanGraceMs?: number;
+      /** Called when this connection retires, so its owner drops it. */
+      onRetire?: (connection: WorkerConnection) => void;
+    } = {}
   ) {}
+
+  private get orphanGraceMs(): number {
+    return this.local.orphanGraceMs ?? DEFAULT_ORPHAN_GRACE_MS;
+  }
+
+  private get onRetire(): ((connection: WorkerConnection) => void) | undefined {
+    return this.local.onRetire;
+  }
+
+  /** Whether this connection has been abandoned and left the pool (#2324). */
+  get isRetired(): boolean {
+    return this.retired;
+  }
 
   /**
    * How many statements this worker currently owns. The worker executes them
@@ -277,6 +354,25 @@ class WorkerConnection {
     if (this.worker) return this.worker;
     const worker = new Worker(WORKER_SOURCE, { eval: true, workerData: this.options });
     worker.on("message", (reply: WorkerReply) => {
+      // A reply from a RETIRED worker means the orphan has finished its native
+      // call and is back in JavaScript — the one moment at which terminating
+      // it cannot abort the process (#2324). Its result is discarded either
+      // way: the callers were already rejected by `failInFlight`.
+      // A retired worker's ordinary replies are discarded — its callers were
+      // already rejected. Only the `__drained__` acknowledgement means it is
+      // safe to terminate: the worker answers that strictly after every
+      // statement queued ahead of it has finished, so no native frame is on
+      // its stack and none is about to start. Terminating on an ordinary reply
+      // instead would race the very next queued statement's native call, which
+      // is what #2324 is (verified: doing so still aborts).
+      if (this.retired) {
+        if ((reply as WorkerReply & { drained?: boolean }).drained) {
+          const finish = this.orphanFinish;
+          this.orphanFinish = undefined;
+          finish?.();
+        }
+        return;
+      }
       const entry = this.pending.get(reply.id);
       if (!entry) return;
       this.pending.delete(reply.id);
@@ -321,6 +417,7 @@ class WorkerConnection {
     // Snapshot first: reject() runs caller continuations that may re-enter
     // request() and repopulate the map while we are still iterating it.
     const entries = [...this.pending.values()];
+    this.hadInFlightAtRetire = entries.length > 0;
     this.pending.clear();
     this.busyStartedAt = 0;
     this.worker = null;
@@ -341,20 +438,121 @@ class WorkerConnection {
   }
 
   /**
-   * Kill the worker hosting a request that overran its budget, and reject
-   * everything it was executing.
+   * Give up on everything this worker is executing and take it out of service,
+   * WITHOUT terminating it while a native call is on its stack (#2324).
    *
-   * Terminating is the only lever available: the worker runs each statement
-   * synchronously to completion before it reads its next message, so a cancel
-   * opcode could not be observed until the statement it was meant to cancel
-   * had already finished. `failInFlight` runs FIRST so the victim's siblings
-   * reject with the same reason rather than a later confusing crash error, and
-   * so `this.worker` is cleared before `terminate()` fires the `exit` handler.
+   * The reason this is not simply `terminate()` is the whole of #2324. The
+   * synchronous driver is a native addon: while a statement runs, the worker
+   * thread is inside Rust, not inside JavaScript. `worker.terminate()` is
+   * built on V8's `TerminateExecution`, which — per V8's own
+   * `include/v8-isolate.h` — "forcefully terminate[s] the current thread of
+   * JAVASCRIPT execution" by raising a termination exception on JS frames. It
+   * has no mechanism to preempt a native frame. So terminating mid-statement
+   * does not stop the Rust; it puts the isolate into a tearing-down state with
+   * the Rust still running on top of it. The next napi call that Rust makes
+   * then fails, and neon 1.0.0 asserts on the status rather than propagating
+   * it — `assert_eq!(status, Ok)` with no `PendingException` arm, unlike its
+   * own siblings in `fun.rs`/`buffer.rs`. Because `libsql-js` builds with
+   * `panic = "abort"`, that assertion is a straight `abort()`: SIGABRT, exit
+   * 134, no unwinding, and nothing any JavaScript-level guard can observe or
+   * catch. Reproduced locally at `neon-1.0.0/src/sys/array.rs:22` (reached
+   * from the per-100-row `rowsNext` re-entry behind `.all()`); the production
+   * trace names `external.rs:80` (`JsBox` allocation). Same defect class, two
+   * assertion sites — which is why the fix has to be the protocol, not a
+   * guard around one call.
+   *
+   * So: reclaim the POOL SLOT immediately, which is all #2217 ever required,
+   * and let the thread die on its own schedule.
+   *
+   *   1. `failInFlight` rejects the callers now, exactly as before. Nothing
+   *      caller-visible changes; the request still fails promptly.
+   *   2. The connection is marked retired and the owner drops it from the
+   *      pool, so dispatch never sends it another statement and a replacement
+   *      spawns on the next read. The slot is free at this instant.
+   *   3. A `__drained__` probe is queued BEHIND everything the worker still
+   *      holds, and the orphan is terminated when that probe is acknowledged.
+   *      Ordinary replies are discarded as before.
+   *
+   *      The probe is load-bearing and its absence was a real bug, caught only
+   *      once the test ran with a SATURATED pool: "terminate when the orphan
+   *      posts a reply" is NOT safe. The worker posts a reply and then
+   *      immediately takes the next queued message off its queue, so a
+   *      terminate racing that lands inside the next statement's native call
+   *      and aborts exactly as before. Verified: with reply-triggered
+   *      termination the suite still panicked at `array.rs:22` in 6 of 8 runs.
+   *      Because the worker runs messages strictly FIFO and each statement to
+   *      completion, an acknowledgement of a probe queued after them is the
+   *      worker's own proof that it holds no native frame and has none left to
+   *      start — which a reply, by construction, is not.
+   *   4. A worker that never reports (genuinely wedged, or a statement longer
+   *      than the window) is terminated anyway after `orphanGraceMs`. That is
+   *      the pre-#2324 behaviour kept as a last resort: it can still abort,
+   *      but only in the case where the alternative is leaking a thread
+   *      forever, instead of on every routine client disconnect.
+   *
+   * The cost is honest and worth stating: peak thread count rises, because an
+   * abandoned reader lingers until its statement finishes rather than dying at
+   * once. On a 2-CPU machine that is real contention. It is the better trade —
+   * a lingering thread degrades throughput, whereas the abort takes the whole
+   * instance down and blocks its own recovery — and the grace window bounds it.
    */
   private abandon(error: Error): void {
+    // ALREADY RETIRED: a second abort landing on the same connection. Under
+    // pool saturation this is the common case, not the exotic one — several
+    // requests share one reader, each installs its own abort listener, and a
+    // client batch going away fires all of them. There is nothing left to
+    // reclaim (the first retirement did it) and the orphan's termination is
+    // already scheduled, so the ONLY thing a second pass could add is a
+    // premature `terminate()` on a worker still inside its native call — the
+    // exact fault this method exists to avoid. Return.
+    if (this.retired) {
+      this.failInFlight(error);
+      return;
+    }
+
     const worker = this.worker;
     this.failInFlight(error);
-    if (worker) void worker.terminate().catch(() => {});
+    if (!worker) return;
+
+    // Out of service: never dispatched to again, and its replies are ignored.
+    this.retired = true;
+    this.onRetire?.(this);
+
+    if (!this.hadInFlightAtRetire) {
+      // Nothing was running, so no native call can be on the stack and the
+      // old prompt behaviour is safe.
+      void worker.terminate().catch(() => {});
+      return;
+    }
+
+    // Terminate when the orphan acknowledges the drain probe below — the point
+    // at which it is provably idle — or when the grace window expires,
+    // whichever comes first.
+    this.orphanWorker = worker;
+    const finish = () => {
+      if (this.orphanTimer !== undefined) {
+        clearTimeout(this.orphanTimer);
+        this.orphanTimer = undefined;
+      }
+      this.orphanWorker = undefined;
+      void worker.terminate().catch(() => {});
+    };
+    this.orphanFinish = finish;
+    // Queue the drain probe BEHIND everything the worker is still holding. Its
+    // reply is the worker's own statement that it is idle; until then we wait.
+    try {
+      worker.postMessage({ id: this.nextId++, op: "__drained__" });
+    } catch {
+      // The worker is already gone; the grace timer below still covers it.
+    }
+    this.orphanTimer = setTimeout(() => {
+      this.orphanFinish = undefined;
+      logger.warn(
+        `DB orphaned worker did not report within ${this.orphanGraceMs}ms; terminating it anyway`
+      );
+      finish();
+    }, this.orphanGraceMs);
+    this.orphanTimer.unref?.();
   }
 
   request(
@@ -369,6 +567,18 @@ class WorkerConnection {
     const { timeoutMs, signal } = options;
     if (signal?.aborted) {
       return Promise.reject(new WorkerDbAbortError("DB request aborted before dispatch"));
+    }
+    // A RETIRED connection must never serve another statement (#2324). The
+    // pool drops it on retirement, but there is a window: `readerConnection()`
+    // can hand this object to a caller and an abort can retire it before the
+    // caller reaches here. Spawning a fresh worker on a retired connection
+    // would be actively harmful — the `message` handler treats every reply as
+    // the ORPHAN reporting in, so the new worker's own replies are discarded
+    // and its callers hang, while its arrival can trigger a terminate aimed at
+    // a different worker that is still inside a native call. Rejecting sends
+    // the caller back through `routeRead`, which dispatches to a live reader.
+    if (this.retired) {
+      return Promise.reject(new WorkerDbRetiredError("DB reader was retired before dispatch"));
     }
     const worker = this.ensureWorker();
     const id = this.nextId++;
@@ -415,12 +625,73 @@ class WorkerConnection {
     });
   }
 
+  /**
+   * Shut this connection down for good (process close, or `db.close()`).
+   *
+   * Shares the shape #2324 is about — a `terminate()` that can land while a
+   * native call is on the worker's stack — but at much lower severity, since
+   * the process is on its way out and an abort during shutdown costs an exit
+   * code rather than an outage. Still worth not doing: an aborting shutdown
+   * turns a clean stop into a crash-looking one and muddies the very signal
+   * used to diagnose this bug. So give an in-flight statement the same short
+   * chance to finish and report as `abandon` does, then terminate. Bounded by
+   * the same grace window, and it never waits at all when nothing is running.
+   */
   async terminate(): Promise<void> {
     this.closed = true;
-    const worker = this.worker;
+    // A RETIRED connection has already had `this.worker` nulled by
+    // `failInFlight`, so its orphan is reachable only through `orphanWorker`.
+    // Taking it here is what makes closing the database actually wait the
+    // orphan out instead of returning while it still runs.
+    const worker = this.worker ?? this.orphanWorker;
+    // Busy means "a statement may still be inside a native call": either this
+    // connection has pending requests, or it is an orphan that has not yet
+    // reported back. Both need the same wait before it is safe to terminate.
+    const wasBusy = this.pending.size > 0 || this.orphanWorker !== undefined;
     this.worker = null;
+    this.orphanWorker = undefined;
     for (const entry of this.pending.values()) entry.cleanup();
-    if (worker) await worker.terminate();
+    this.pending.clear();
+    if (this.orphanTimer !== undefined) {
+      clearTimeout(this.orphanTimer);
+      this.orphanTimer = undefined;
+    }
+    this.orphanFinish = undefined;
+    if (!worker) return;
+    if (wasBusy) await this.awaitWorkerIdle(worker);
+    await worker.terminate();
+  }
+
+  /**
+   * Resolve once `worker` has posted a reply — i.e. it is back in JavaScript
+   * with no native frame on its stack — or once the grace window expires.
+   * Never rejects: a worker that dies on its own is equally safe to terminate.
+   */
+  private awaitWorkerIdle(worker: Worker): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        worker.off("message", onMessage);
+        worker.off("exit", done);
+        resolve();
+      };
+      // Wait for the DRAIN acknowledgement specifically, not for any message.
+      // An ordinary reply is posted and the worker then immediately starts the
+      // next queued statement, so resolving on one would hand back a worker
+      // that is about to be inside native code again (#2324).
+      const onMessage = (reply: WorkerReply & { drained?: boolean }) => {
+        if (reply?.drained) done();
+      };
+      const timer = setTimeout(done, this.orphanGraceMs);
+      timer.unref?.();
+      worker.on("message", onMessage);
+      worker.on("exit", done);
+      try {
+        worker.postMessage({ id: this.nextId++, op: "__drained__" });
+      } catch {
+        // Already gone — the timer resolves us.
+      }
+    });
   }
 }
 
@@ -557,6 +828,21 @@ class WorkerStatement implements DbStatement {
  */
 const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
 
+/**
+ * How long an abandoned ("retired") worker is given to finish its current
+ * statement and report back on its own before it is terminated anyway (#2324).
+ *
+ * Terminating a worker that is inside a synchronous native call is what aborts
+ * the process, so the normal path waits for the orphan to return to JavaScript
+ * and terminates it from the `message` handler instead. This window is the
+ * backstop for the worker that never returns — a genuinely wedged thread must
+ * not leak forever. Sized above the default statement budget so a statement
+ * that is merely slow finishes and reports rather than being killed by the
+ * backstop, which would reintroduce the very race being fixed.
+ * `NEOTOMA_DB_ORPHAN_GRACE_MS` overrides it.
+ */
+const DEFAULT_ORPHAN_GRACE_MS = 30_000;
+
 /** Rate limit for the pool-saturation warning, so a long stall logs once a second. */
 const SATURATION_LOG_INTERVAL_MS = 1_000;
 
@@ -591,6 +877,17 @@ export class WorkerFileDatabase implements DbDatabase {
   private readonly statementTimeoutMs: number;
   private writer: WorkerConnection | null = null;
   private readers: WorkerConnection[] = [];
+  /**
+   * Connections that have been abandoned and left service, but whose orphaned
+   * worker may still be finishing a native call (#2324). Held only so
+   * `close()` can wait them out rather than leaking threads past shutdown.
+   *
+   * In practice these are all readers — the writer is never abandoned, since
+   * writes carry neither a signal nor a timeout — but the set is not typed to
+   * readers so that the shutdown guarantee does not depend on that invariant.
+   */
+  private retiredConnections = new Set<WorkerConnection>();
+  private readonly orphanGraceMs: number;
   private closed = false;
   private saturatedSince: number | null = null;
   private lastSaturationLogAt = 0;
@@ -604,6 +901,8 @@ export class WorkerFileDatabase implements DbDatabase {
       readerWorkers?: number;
       /** Per-statement budget for pool reads; `0` disables the timeout. */
       statementTimeoutMs?: number;
+      /** Grace window for an abandoned worker before it is force-terminated. */
+      orphanGraceMs?: number;
     } = {}
   ) {
     this.dbPath = dbPath;
@@ -617,6 +916,10 @@ export class WorkerFileDatabase implements DbDatabase {
       options.statementTimeoutMs ??
         readEnvInt("NEOTOMA_DB_STATEMENT_TIMEOUT_MS") ??
         DEFAULT_STATEMENT_TIMEOUT_MS
+    );
+    this.orphanGraceMs = Math.max(
+      0,
+      options.orphanGraceMs ?? readEnvInt("NEOTOMA_DB_ORPHAN_GRACE_MS") ?? DEFAULT_ORPHAN_GRACE_MS
     );
     // The writer opens eagerly so the DB file exists before any read-only
     // reader connects (read-only opens fail on a missing file).
@@ -632,29 +935,67 @@ export class WorkerFileDatabase implements DbDatabase {
       throw new WorkerDbCrashError("DB connection is closed");
     }
     if (!this.writer) {
-      this.writer = new WorkerConnection({
-        dbPath: this.dbPath,
-        readonly: false,
-        busyTimeoutMs: this.busyTimeoutMs,
-        driverPath: this.driver.driverPath,
-        useNodeSqlite: this.driver.useNodeSqlite,
-        stripRowMetadata: this.stripRowMetadata(),
-      });
+      this.writer = new WorkerConnection(
+        {
+          dbPath: this.dbPath,
+          readonly: false,
+          busyTimeoutMs: this.busyTimeoutMs,
+          driverPath: this.driver.driverPath,
+          useNodeSqlite: this.driver.useNodeSqlite,
+          stripRowMetadata: this.stripRowMetadata(),
+        },
+        {
+          orphanGraceMs: this.orphanGraceMs,
+          // The writer is never abandoned today: `routeWrite` passes neither a
+          // signal nor a timeout, deliberately, so a client hangup cannot
+          // half-apply a mutation. This hook is wired anyway so the invariant
+          // does not have to hold for `close()` to be correct — if a write
+          // path ever does gain a budget, a retired writer is already tracked
+          // rather than leaking its thread past shutdown.
+          onRetire: (connection) => {
+            if (this.writer === connection) this.writer = null;
+            this.retiredConnections.add(connection);
+          },
+        }
+      );
     }
     return this.writer;
   }
 
   private spawnReader(): WorkerConnection {
-    const reader = new WorkerConnection({
-      dbPath: this.dbPath,
-      readonly: true,
-      busyTimeoutMs: this.busyTimeoutMs,
-      driverPath: this.driver.driverPath,
-      useNodeSqlite: this.driver.useNodeSqlite,
-      stripRowMetadata: this.stripRowMetadata(),
-    });
+    const reader = new WorkerConnection(
+      {
+        dbPath: this.dbPath,
+        readonly: true,
+        busyTimeoutMs: this.busyTimeoutMs,
+        driverPath: this.driver.driverPath,
+        useNodeSqlite: this.driver.useNodeSqlite,
+        stripRowMetadata: this.stripRowMetadata(),
+      },
+      {
+        orphanGraceMs: this.orphanGraceMs,
+        // Reclaiming the POOL SLOT is the whole of the #2217 requirement, and
+        // #2324 is what happens when it is conflated with killing the thread.
+        // Dropping the connection here frees the slot at this instant: dispatch
+        // never sees it again and `readerConnection()` spawns a replacement on
+        // the next read, while the retired worker finishes its native call in
+        // its own time and is terminated safely once it is back in JavaScript.
+        onRetire: (connection) => this.retireReader(connection),
+      }
+    );
     this.readers.push(reader);
     return reader;
+  }
+
+  /**
+   * Drop a retired reader from the pool (#2324). The connection object stays
+   * alive to manage its orphaned worker's safe termination; it is simply no
+   * longer a dispatch target.
+   */
+  private retireReader(connection: WorkerConnection): void {
+    const index = this.readers.indexOf(connection);
+    if (index >= 0) this.readers.splice(index, 1);
+    this.retiredConnections.add(connection);
   }
 
   /**
@@ -756,6 +1097,35 @@ export class WorkerFileDatabase implements DbDatabase {
    * and retried on the writer. Inside a transaction, reads must see the
    * transaction's uncommitted state, so they go to the writer directly.
    */
+  /**
+   * Send a read to a live reader, re-choosing if the one we picked retired in
+   * between (#2324).
+   *
+   * The window is small but routine under saturation: `readerConnection()`
+   * returns the least-loaded reader, and an abort belonging to a DIFFERENT
+   * request sharing that reader can retire it before this one dispatches. The
+   * retry is bounded and re-picks from the pool each time, so it cannot spin
+   * on the same dead connection; the pool spawns a replacement as soon as it
+   * is short a reader.
+   */
+  private async dispatchRead(
+    op: "get" | "all",
+    sql: string,
+    params: unknown[],
+    options: WorkerRequestOptions
+  ): Promise<unknown> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await this.readerConnection().request(op, sql, params, options);
+      } catch (error) {
+        if (!(error instanceof WorkerDbRetiredError)) throw error;
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
   async routeRead(op: "get" | "all", sql: string, params: unknown[]): Promise<unknown> {
     if (this.txContext.getStore()) {
       // Inside a transaction the statement runs on the writer, which is never
@@ -769,7 +1139,7 @@ export class WorkerFileDatabase implements DbDatabase {
       signal: abortContext.getStore(),
     };
     try {
-      return await this.readerConnection().request(op, sql, params, options);
+      return await this.dispatchRead(op, sql, params, options);
     } catch (error) {
       if (isReadonlyRejection(error)) {
         // The read mutates, so it belongs on the writer. Re-run it there
@@ -845,11 +1215,16 @@ export class WorkerFileDatabase implements DbDatabase {
 
   async close(): Promise<void> {
     this.closed = true;
-    const connections = [this.writer, ...this.readers].filter(
+    // Retired readers are included so an orphaned worker cannot outlive the
+    // database it was reading (#2324). Their `terminate()` waits for the
+    // worker to return to JavaScript, bounded by the same grace window, so
+    // close does not abort the process on the way out either.
+    const connections = [this.writer, ...this.readers, ...this.retiredConnections].filter(
       (c): c is WorkerConnection => c !== null
     );
     this.writer = null;
     this.readers = [];
+    this.retiredConnections.clear();
     await Promise.all(connections.map((c) => c.terminate()));
   }
 }
