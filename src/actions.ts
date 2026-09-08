@@ -73,6 +73,12 @@ import {
   SourceFileNotFoundError,
 } from "./services/raw_storage.js";
 import { attachSourceLabelsToObservations } from "./services/observation_source_label.js";
+import {
+  isFilesystemLocalToCaller,
+  buildFilePathServerLocalError,
+  decodeFileContent,
+  FileInputError,
+} from "./services/file_input_diagnostics.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
@@ -8528,8 +8534,10 @@ async function storeUnstructuredForApi(params: {
     userId,
     storageMode = "inline",
   } = params;
+  // decodeFileContent rejects non-base64 instead of letting Node discard the
+  // invalid characters and store corrupted bytes (#2325).
   const resolvedFileBuffer =
-    fileBuffer ?? (fileContent !== undefined ? Buffer.from(fileContent, "base64") : undefined);
+    fileBuffer ?? (fileContent !== undefined ? decodeFileContent(fileContent) : undefined);
   if (!resolvedFileBuffer && storageMode !== "reference") {
     throw new Error("fileContent or fileBuffer is required for inline storage");
   }
@@ -8621,9 +8629,26 @@ async function handleStorePost(
       let resolvedFileBuffer: Buffer | undefined;
 
       if (hasFilePath) {
+        // `file_path` resolves against *this* process's filesystem. On a remote
+        // instance it cannot mean the caller's disk, and the old failure here
+        // was a bare Node ENOENT — worse than MCP's, which at least named the
+        // path. Both transports now fail identically (#2325).
+        if (!isFilesystemLocalToCaller()) {
+          const serverLocal = buildFilePathServerLocalError(parsed.data.file_path as string);
+          sendError(res, 400, serverLocal.code, serverLocal.message, serverLocal.details);
+          return null;
+        }
+
         const resolvedPath = path.isAbsolute(parsed.data.file_path as string)
           ? (parsed.data.file_path as string)
           : path.resolve(process.cwd(), parsed.data.file_path as string);
+
+        if (!fs.existsSync(resolvedPath)) {
+          sendError(res, 400, "ERR_FILE_NOT_FOUND", `File not found: ${resolvedPath}`, {
+            file_path: parsed.data.file_path,
+          });
+          return null;
+        }
 
         if (parsed.data.source_storage === "reference") {
           // For reference mode, don't read the file buffer, just use the path
@@ -8742,6 +8767,13 @@ async function handleStorePost(
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    // A bad file input is the caller's payload, not a server fault: 400 with
+    // the code, never the generic 500 below. Falling through would have made a
+    // non-base64 `file_content` look like a server outage (#2325).
+    if (error instanceof FileInputError) {
+      logWarn("FileInputError:store", req, { code: error.code });
+      return sendError(res, 400, error.code, error.message, error.details);
     }
     const errCode =
       error && typeof error === "object" ? (error as { code?: string }).code : undefined;
