@@ -2534,6 +2534,24 @@ components:
           type: integer
         deduplicated:
           type: boolean
+        storage_mode:
+          type: string
+          enum: [inline, reference, uploaded]
+          description: >-
+            How the bytes reached storage. "uploaded" means the call passed a
+            source_id handle from POST /sources/upload rather than bytes. (#2325)
+        asset_entity_id:
+          type: string
+          description: >-
+            The asset entity created (or resolved) for the stored file. Returned
+            by both the HTTP and MCP store paths — before #2352 the HTTP
+            source_id path omitted it, so the same bytes produced a different
+            graph depending on transport.
+        asset_entity_type:
+          type: string
+          description: >-
+            Entity type of `asset_entity_id`, derived server-side from the MIME
+            type: image_asset, audio_asset, video_asset, or file_asset.
         interpretation:
           type: object
           additionalProperties: true

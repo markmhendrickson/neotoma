@@ -8732,11 +8732,17 @@ async function handleStorePost(
 
       // Already-uploaded handle: the bytes have a `sources` row already, so
       // there is nothing to read, hash, or store again. Resolve the handle,
-      // scoped to this user, and report it (#2325).
+      // scoped to this user, attach the asset entity, and report it (#2325).
+      //
+      // The asset entity is not optional here. Until #2352 this branch returned
+      // early having attached nothing, while the MCP path for the same
+      // `source_id` created an asset entity and returned `asset_entity_id` — so
+      // the same bytes produced a different graph depending on which transport
+      // carried them. Both now go through `ensureAssetEntity`.
       if (hasSourceId) {
         const { data: sourceRow, error: sourceError } = await db
           .from("sources")
-          .select("id, content_hash, mime_type, file_size, original_filename")
+          .select("id, content_hash, mime_type, file_size, original_filename, storage_url")
           .eq("id", parsed.data.source_id as string)
           .eq("user_id", userId)
           .maybeSingle();
@@ -8756,14 +8762,35 @@ async function handleStorePost(
           return null;
         }
 
+        const uploadedMimeType =
+          parsed.data.mime_type || sourceRow.mime_type || "application/octet-stream";
+        const uploadedFilename =
+          parsed.data.original_filename || sourceRow.original_filename || undefined;
+
+        const { ensureAssetEntity } = await import("./services/asset_entity.js");
+        const uploadedAssetInfo = await ensureAssetEntity({
+          userId,
+          sourceId: sourceRow.id,
+          contentHash: sourceRow.content_hash,
+          fileSize: sourceRow.file_size ?? 0,
+          mimeType: uploadedMimeType,
+          originalFilename: uploadedFilename,
+          storageUrl: sourceRow.storage_url,
+          // Schema-defaulted to 100, so always present after parse.
+          sourcePriority: parsed.data.source_priority,
+          idempotencyKey: parsed.data.file_idempotency_key ?? parsed.data.idempotency_key,
+        });
+
         return {
           source_id: sourceRow.id,
           content_hash: sourceRow.content_hash,
           file_size: sourceRow.file_size,
-          mime_type: parsed.data.mime_type || sourceRow.mime_type,
-          original_filename: parsed.data.original_filename || sourceRow.original_filename || null,
+          mime_type: uploadedMimeType,
+          original_filename: uploadedFilename ?? null,
           storage_mode: "uploaded",
           deduplicated: true,
+          asset_entity_id: uploadedAssetInfo.entityId,
+          asset_entity_type: uploadedAssetInfo.entityType,
         };
       }
 

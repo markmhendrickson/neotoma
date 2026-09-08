@@ -4131,6 +4131,15 @@ export interface components {
       content_hash?: string;
       file_size?: number;
       deduplicated?: boolean;
+      /**
+       * @description How the bytes reached storage. "uploaded" means the call passed a source_id handle from POST /sources/upload rather than bytes. (#2325)
+       * @enum {string}
+       */
+      storage_mode?: "inline" | "reference" | "uploaded";
+      /** @description The asset entity created (or resolved) for the stored file. Returned by both the HTTP and MCP store paths — before #2352 the HTTP source_id path omitted it, so the same bytes produced a different graph depending on transport. */
+      asset_entity_id?: string;
+      /** @description Entity type of `asset_entity_id`, derived server-side from the MIME type: image_asset, audio_asset, video_asset, or file_asset. */
+      asset_entity_type?: string;
       interpretation?: {
         [key: string]: unknown;
       };

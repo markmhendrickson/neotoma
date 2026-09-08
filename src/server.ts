@@ -5196,15 +5196,14 @@ export class NeotomaServer {
     return this.buildTextResponse(result);
   }
 
-  // Helper method to get entity IDs from a source_id
-  private getAssetEntityType(mimeType: string): string {
-    const normalized = (mimeType || "").toLowerCase();
-    if (normalized.startsWith("image/")) return "image_asset";
-    if (normalized.startsWith("audio/")) return "audio_asset";
-    if (normalized.startsWith("video/")) return "video_asset";
-    return "file_asset";
-  }
-
+  /**
+   * Thin delegate to the shared `ensureAssetEntity` service (#2352).
+   *
+   * The implementation used to live here as a private method, which is why the
+   * HTTP `/store` route could not reach it and attached no asset entity at all.
+   * Both transports now call the same service; this wrapper only keeps the
+   * existing MCP call sites readable.
+   */
   private async ensureUnstructuredAssetEntity(params: {
     userId: string;
     sourceId: string;
@@ -5212,72 +5211,12 @@ export class NeotomaServer {
     fileSize: number;
     mimeType: string;
     originalFilename?: string;
-    storageUrl: string;
+    storageUrl?: string | null;
     sourcePriority: number;
     idempotencyKey?: string;
   }): Promise<{ entityId: string; entityType: string }> {
-    const { resolveEntity } = await import("./services/entity_resolution.js");
-    const { createObservation } = await import("./services/observation_storage.js");
-    const {
-      userId,
-      sourceId,
-      contentHash,
-      fileSize,
-      mimeType,
-      originalFilename,
-      storageUrl,
-      sourcePriority,
-      idempotencyKey,
-    } = params;
-    const entityType = this.getAssetEntityType(mimeType);
-    const fields: Record<string, unknown> = {
-      source_id: sourceId,
-      content_hash: contentHash,
-      mime_type: mimeType,
-      file_size: fileSize,
-      storage_url: storageUrl,
-      original_filename: originalFilename,
-      title: originalFilename || sourceId,
-    };
-
-    const entityId = await resolveEntity({
-      entityType,
-      fields,
-      userId,
-    });
-
-    const { data: existingObservation, error: existingObservationError } = await db
-      .from("observations")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("source_id", sourceId)
-      .eq("entity_id", entityId)
-      .limit(1)
-      .maybeSingle();
-
-    if (existingObservationError) {
-      throw new Error(
-        `Failed to check existing asset observation: ${existingObservationError.message}`
-      );
-    }
-
-    if (!existingObservation) {
-      await createObservation({
-        entity_id: entityId,
-        entity_type: entityType,
-        schema_version: "1.0",
-        source_id: sourceId,
-        interpretation_id: null,
-        observed_at: new Date().toISOString(),
-        specificity_score: 1.0,
-        source_priority: sourcePriority,
-        fields,
-        user_id: userId,
-        idempotency_key: idempotencyKey ? `${idempotencyKey}:asset` : null,
-      });
-    }
-
-    return { entityId, entityType };
+    const { ensureAssetEntity } = await import("./services/asset_entity.js");
+    return await ensureAssetEntity(params);
   }
 
   // Helper method to get entity IDs from a source_id

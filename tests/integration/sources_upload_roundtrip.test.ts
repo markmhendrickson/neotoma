@@ -16,12 +16,18 @@
  * out of storage" would pass without any storage having been exercised — it
  * could not fail on the thing it watches. #2325 made that skip opt-out
  * (NEOTOMA_TEST_REAL_STORAGE=1) so the bucket leg is reachable from a test at
- * all; run this file with that variable set to exercise it.
+ * all. This file sets that variable in its own `beforeAll`, so the round-trip
+ * test really does read bytes back out of storage rather than passing
+ * vacuously.
  *
- * What the assertions below verify without it is still real and still able to
- * fail: the hash is computed by the route from the bytes it actually received
- * off the wire, and the `sources` row is read back from the database. A route
- * that discarded, truncated, or corrupted the body fails these.
+ * #2352 note: the test formerly titled "round-trips bytes: upload →
+ * store(source_id) → sources row matches the hash" never POSTed to /store. It
+ * uploaded and then read the `sources` row directly, so the store(source_id)
+ * leg — the headline capability — had no coverage, and the test would have
+ * passed unchanged against a store() that ignored source_id completely. It has
+ * been split: the upload-only assertions keep a title that claims only what
+ * they check, and a genuine round trip below drives POST /store and asserts
+ * the graph state it produces.
  */
 
 import crypto from "node:crypto";
@@ -78,8 +84,16 @@ function buildMultipart(
 describe("POST /sources/upload — remote byte ingress (#2325)", () => {
   let httpServer: ReturnType<typeof createServer>;
   const createdSourceIds: string[] = [];
+  let previousRealStorage: string | undefined;
 
   beforeAll(async () => {
+    // Opt into the real bucket leg. The round-trip test below reads bytes back
+    // out of storage; without this `storeRawContent` writes only the `sources`
+    // row and that assertion could not fail on what it watches (#2325). Set
+    // here rather than left to the runner so the file is self-sufficient.
+    previousRealStorage = process.env.NEOTOMA_TEST_REAL_STORAGE;
+    process.env.NEOTOMA_TEST_REAL_STORAGE = "1";
+
     httpServer = createServer(app);
     await new Promise<void>((resolve, reject) => {
       httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
@@ -93,6 +107,8 @@ describe("POST /sources/upload — remote byte ingress (#2325)", () => {
       await db.from("raw_fragments").delete().in("source_id", createdSourceIds);
       await db.from("sources").delete().in("id", createdSourceIds);
     }
+    if (previousRealStorage === undefined) delete process.env.NEOTOMA_TEST_REAL_STORAGE;
+    else process.env.NEOTOMA_TEST_REAL_STORAGE = previousRealStorage;
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   });
 
@@ -128,7 +144,11 @@ describe("POST /sources/upload — remote byte ingress (#2325)", () => {
     expect(payload.original_filename).toBe("large.bin");
   });
 
-  it("round-trips bytes: upload → store(source_id) → sources row matches the hash", async () => {
+  it("the upload handle resolves to a sources row carrying the same hash and size", async () => {
+    // Deliberately NOT titled a round trip: this exercises only the upload
+    // leg. The store(source_id) leg is the test below, which was the gap —
+    // this assertion set would pass unchanged against a store() that ignored
+    // source_id entirely (#2352).
     const fileBuffer = crypto.randomBytes(3 * 1024 * 1024);
     const expectedHash = sha256(fileBuffer);
 
@@ -138,7 +158,6 @@ describe("POST /sources/upload — remote byte ingress (#2325)", () => {
 
     const sourceId = payload.source_id as string;
 
-    // The handle resolves to a real row carrying the same hash and size.
     const { data: sourceRow } = await db
       .from("sources")
       .select("id, content_hash, file_size, original_filename")
@@ -150,6 +169,93 @@ describe("POST /sources/upload — remote byte ingress (#2325)", () => {
     expect(sourceRow?.content_hash).toBe(expectedHash);
     expect(Number(sourceRow?.file_size)).toBe(fileBuffer.length);
     expect(sourceRow?.original_filename).toBe("roundtrip.bin");
+  });
+
+  it("round-trips bytes: upload → POST /store(source_id) → asset entity + stored bytes match", async () => {
+    // The actual round trip, and the PR's headline capability. It POSTs to
+    // /store — the leg the previous version of this test never exercised, so
+    // store() could have discarded source_id completely and the suite stayed
+    // green (#2352).
+    //
+    // NEOTOMA_TEST_REAL_STORAGE is set for this file (see the `beforeAll` on
+    // the describe), so the bucket leg actually ran and the bytes read back
+    // below are bytes that were really stored. Without it this assertion could
+    // not fail on what it claims to watch.
+    const fileBuffer = crypto.randomBytes(64 * 1024);
+    const expectedHash = sha256(fileBuffer);
+
+    const { status: uploadStatus, payload: uploadPayload } = await upload(fileBuffer, {
+      filename: "store-roundtrip.bin",
+    });
+    expect(uploadStatus).toBe(200);
+    const sourceId = uploadPayload.source_id as string;
+
+    // The leg under test: hand store() nothing but the opaque handle.
+    const storeResponse = await fetch(`${API_BASE}/store?user_id=${TEST_USER_ID}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        idempotency_key: `store-roundtrip-${sourceId}`,
+        source_id: sourceId,
+        // /store reads user_id from the body, not the query string — the
+        // upload route reads it from the query. Both must name the same user
+        // or the handle resolves against a different scope and 404s.
+        user_id: TEST_USER_ID,
+      }),
+    });
+
+    expect(storeResponse.status).toBe(200);
+    // Read as text first: a store() that ignored source_id answers 200 with an
+    // empty body, and parsing that straight to JSON would fail with an opaque
+    // SyntaxError instead of naming what went wrong.
+    const rawStoreBody = await storeResponse.text();
+    expect(rawStoreBody, "POST /store returned an empty body — source_id was ignored").not.toBe("");
+    const storeBody = JSON.parse(rawStoreBody) as {
+      unstructured?: Record<string, unknown>;
+    } & Record<string, unknown>;
+    const stored = (storeBody.unstructured ?? storeBody) as Record<string, unknown>;
+
+    // store() honored the handle rather than re-storing or ignoring it.
+    expect(stored.source_id).toBe(sourceId);
+    expect(stored.content_hash).toBe(expectedHash);
+    expect(stored.storage_mode).toBe("uploaded");
+
+    // The graph effect store() is supposed to produce: an asset entity for the
+    // file. A store() that resolved the handle and attached nothing fails here.
+    expect(typeof stored.asset_entity_id).toBe("string");
+    expect(stored.asset_entity_type).toBe("file_asset");
+
+    const assetEntityId = stored.asset_entity_id as string;
+    const { data: assetEntity } = await db
+      .from("entities")
+      .select("id, entity_type")
+      .eq("id", assetEntityId)
+      .maybeSingle();
+    expect(assetEntity?.entity_type).toBe("file_asset");
+
+    // …and an observation of it tied back to this exact source.
+    const { data: assetObservations } = await db
+      .from("observations")
+      .select("id, entity_id, source_id")
+      .eq("user_id", TEST_USER_ID)
+      .eq("source_id", sourceId)
+      .eq("entity_id", assetEntityId);
+    expect((assetObservations ?? []).length).toBeGreaterThan(0);
+
+    // Finally the bytes themselves, read back out of storage and hashed.
+    const { data: sourceRow } = await db
+      .from("sources")
+      .select("id, content_hash, file_size, original_filename, storage_url")
+      .eq("id", sourceId)
+      .eq("user_id", TEST_USER_ID)
+      .maybeSingle();
+    expect(sourceRow?.content_hash).toBe(expectedHash);
+    expect(sourceRow?.storage_url).toBeTruthy();
+
+    const { downloadRawContent } = await import("../../src/services/raw_storage.js");
+    const retrieved = await downloadRawContent(sourceRow!.storage_url as string);
+    expect(sha256(retrieved)).toBe(expectedHash);
+    expect(retrieved.length).toBe(fileBuffer.length);
   });
 
   it("derives the filename from the part rather than defaulting to 'file'", async () => {
@@ -166,10 +272,7 @@ describe("POST /sources/upload — remote byte ingress (#2325)", () => {
     // A PDF magic number sent under a deliberately wrong declared type. The
     // server sniffs its own, which is one of the reasons this is multipart
     // rather than a presigned PUT.
-    const pdfBytes = Buffer.concat([
-      Buffer.from("%PDF-1.4\n"),
-      crypto.randomBytes(256),
-    ]);
+    const pdfBytes = Buffer.concat([Buffer.from("%PDF-1.4\n"), crypto.randomBytes(256)]);
 
     const { payload } = await upload(pdfBytes, {
       filename: "claims-to-be-text.pdf",
