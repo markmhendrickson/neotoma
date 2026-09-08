@@ -29,37 +29,30 @@ interface SearchQuery {
 
 ## Ranking Algorithm
 
+`retrieve_entities` search ranks by **relevance first**. Recency is a **tie-break only** — it does not blend into the relevance score and is not an opt-in parameter.
+
+Order when comparing two candidates:
+
+1. **Relevance score** (higher first) — lexical token score, or semantic rank (`compareSearchRank`).
+2. **Recency tie-break** — prefer the entity with the more recent `entity_snapshots.last_observation_at`, scored via shared `recencyDecay` (`memory_export.ts`, half-life 30 days). Undated / non-finite timestamps share a low floor and lose to any dated row; equal decay falls through.
+3. **Stable fallthrough** (only when score and recency are indistinguishable):
+   - Lexical (strict + partial-overlap share one sort): `canonical_name` ascending, then `entity_id` ascending.
+   - Semantic: original KNN position ascending.
+
 ```typescript
-function rankResults(results: Record[], query: string): Record[] {
-  return results
-    .map((r) => ({ record: r, score: calculateScore(r, query) }))
-    .sort((a, b) => {
-      if (a.score !== b.score) return b.score - a.score;
-      // Tiebreaker 1: created_at
-      if (a.record.created_at !== b.record.created_at) {
-        return b.record.created_at.localeCompare(a.record.created_at);
-      }
-      // Tiebreaker 2: id
-      return a.record.id.localeCompare(b.record.id);
-    })
-    .map(({ record }) => record);
-}
-function calculateScore(record: Record, query: string): number {
-  let score = 0;
-  const regex = new RegExp(query, "gi");
-
-  // Exact match in type
-  if (record.type.toLowerCase() === query.toLowerCase()) score += 10;
-
-  // Match count in raw_text
-  const matches = record.raw_text?.match(regex);
-  score += matches?.length || 0;
-
-  return score;
+// Contract sketch — implementation: entity_handlers.ts
+// compareByRecency / lexicalMatches.sort / compareSearchRank
+function compareSearchCandidates(a, b): number {
+  if (a.score !== b.score) return b.score - a.score; // relevance
+  const byRecency = compareByRecency(a.last_observation_at, b.last_observation_at);
+  if (byRecency !== 0) return byRecency; // more recent first
+  // lexical: canonical_name then entity_id
+  // semantic: KNN index order
+  return stableKeyCompare(a, b);
 }
 ```
 
-**Determinism:** Same query + same DB state → same order
+**Determinism:** Same query + same DB state (including every candidate’s `last_observation_at`) → same order. Recency uses wall-clock age via `recencyDecay`; undated ties resolve on the stable fallthrough keys above, not on `created_at`.
 
 ## Retrieval fallback strategies
 

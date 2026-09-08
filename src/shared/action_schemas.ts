@@ -525,7 +525,16 @@ const RetrieveEntitiesRequestBaseSchema = z
      * result set (#1562).
      */
     entity_types: z.array(z.string()).optional(),
-    search: z.string().optional(),
+    /**
+     * Free-text search. When relevance scores tie, more recently observed
+     * entities (`entity_snapshots.last_observation_at`) rank first.
+     */
+    search: z
+      .string()
+      .optional()
+      .describe(
+        "Free-text search. When relevance scores tie, more recently observed entities (last_observation_at) rank first."
+      ),
     /**
      * Distance threshold for semantic search (L2, range ~0.9–1.5 in practice).
      * Results with distance >= threshold are dropped. Lower = stricter matching.
