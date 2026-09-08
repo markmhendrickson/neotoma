@@ -197,6 +197,11 @@ export interface ScenarioFile {
     /** HTTP status code to return for failures. Default 500. */
     status_code?: number;
   };
+  /**
+   * Extra env vars for the isolated Neotoma child (e.g. NEOTOMA_FILESYSTEM_LOCAL=0
+   * so remote file_path rejects are reproducible in replay).
+   */
+  server_env?: Record<string, string>;
   expected: ExpectedAssertion[];
 }
 

@@ -11,6 +11,7 @@ import { db } from "../db.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
+import { buildFileNotFoundError } from "./file_input_diagnostics.js";
 
 export interface RawStorageOptions {
   userId: string;
@@ -380,9 +381,11 @@ export async function storeRawReference(
 
   const { userId, absolutePath, originalFilename, idempotencyKey, provenance = {} } = options;
 
-  // Read file for hash + metadata; do NOT retain bytes
+  // Read file for hash + metadata; do NOT retain bytes.
+  // Structured FileInputError so a caller that bypasses the server.ts locality
+  // gate still gets a stable code rather than a bare Error (#2325 rereview).
   if (!fs.existsSync(absolutePath)) {
-    throw new Error(`File not found at reference path: ${absolutePath}`);
+    throw buildFileNotFoundError(absolutePath);
   }
 
   const stat = fs.statSync(absolutePath);

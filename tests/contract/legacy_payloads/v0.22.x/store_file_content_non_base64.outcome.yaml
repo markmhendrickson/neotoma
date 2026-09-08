@@ -1,0 +1,10 @@
+endpoint: "POST /store"
+outcome: rejected
+error_code: ERR_FILE_CONTENT_NOT_BASE64
+hint_match: "/base64/i"
+notes: |
+  v0.22.x tightening (#2325). `file_content` that is not valid base64 used to be
+  silently decoded by Node's permissive decoder (invalid characters discarded),
+  hashed, and stored under a valid-looking content_hash. Callers now receive
+  `ERR_FILE_CONTENT_NOT_BASE64` with a structured `details.hint` naming the
+  upgrade path (base64-encode the bytes before retrying).

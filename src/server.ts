@@ -88,6 +88,7 @@ import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
+import { FileInputError } from "./services/file_input_diagnostics.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
@@ -2014,6 +2015,13 @@ export class NeotomaServer {
           // `reason_code` / `hint` would survive on REST but vanish on MCP, and a
           // policy rejection would read as a server fault. Envelope comes from the
           // error itself, so both surfaces stay identical by construction.
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof FileInputError) {
+          // File-input rejects (#2325) are InvalidRequest with structured data.code
+          // (ERR_FILE_PATH_IS_SERVER_LOCAL / ERR_FILE_CONTENT_NOT_BASE64 / …). Without
+          // this branch they fall through to InternalError and the code survives only
+          // as message-prefix prose — the defect QA blocked on #2350.
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
         if (error instanceof StorePolicyUnavailableError) {
@@ -4974,6 +4982,14 @@ export class NeotomaServer {
     }
 
     if (parsed.file_path) {
+      // Same locality gate as readUnstructuredInput — these branches run before
+      // that helper and were unguarded on #2350 (#2325 rereview).
+      const { isFilesystemLocalToCaller, buildFilePathServerLocalError } = await import(
+        "./services/file_input_diagnostics.js"
+      );
+      if (!isFilesystemLocalToCaller()) {
+        throw buildFilePathServerLocalError(parsed.file_path);
+      }
       const { isParquetFile, readParquetFile } = await import("./services/parquet_reader.js");
       if (isParquetFile(parsed.file_path)) {
         const parquetResult = await readParquetFile(parsed.file_path);
@@ -4991,6 +5007,12 @@ export class NeotomaServer {
 
     // --- By-reference storage path (#1775) ---
     if (parsed.source_storage === "reference" && parsed.file_path) {
+      const { isFilesystemLocalToCaller, buildFilePathServerLocalError } = await import(
+        "./services/file_input_diagnostics.js"
+      );
+      if (!isFilesystemLocalToCaller()) {
+        throw buildFilePathServerLocalError(parsed.file_path);
+      }
       const { storeRawReference } = await import("./services/raw_storage.js");
       const refResult = await storeRawReference({
         userId,

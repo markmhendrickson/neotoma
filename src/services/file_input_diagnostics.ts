@@ -35,9 +35,9 @@ export const ERR_FILE_CONTENT_NOT_BASE64 = "ERR_FILE_CONTENT_NOT_BASE64";
 /**
  * An error carrying a stable machine-readable code alongside its message.
  *
- * Both transports need the code: MCP surfaces it in the error text (its
- * envelope has nowhere else to put it), HTTP surfaces it as the `error_code`
- * field. Callers match on the code, never on the prose.
+ * Both transports read the structured envelope from `toErrorEnvelope()` so
+ * MCP `data.code` and HTTP `error_code` cannot drift. Callers match on the
+ * code, never on the prose.
  */
 export class FileInputError extends Error {
   public readonly code: string;
@@ -48,6 +48,23 @@ export class FileInputError extends Error {
     this.name = "FileInputError";
     this.code = code;
     this.details = details;
+  }
+
+  /**
+   * Shared envelope for REST + MCP. REST nests fields under `details` via
+   * `sendError`; MCP passes this object as `McpError` `data`.
+   */
+  toErrorEnvelope(): {
+    code: string;
+    message: string;
+    hint?: string;
+    [key: string]: unknown;
+  } {
+    return {
+      code: this.code,
+      message: this.message,
+      ...this.details,
+    };
   }
 }
 
@@ -69,9 +86,18 @@ export class FileInputError extends Error {
  *      `NODE_ENV=production`, both mean callers reach this server over a
  *      network and their `file_path` is meaningless here.
  *
- * When in doubt this returns `true` (assume local). A false "remote" verdict
- * would reject a `file_path` that would have worked, which is worse than
- * continuing to attempt a read that then fails on its own merits.
+ * When `NEOTOMA_FILESYSTEM_LOCAL` and `NEOTOMA_BASE_URL` are both unset, this
+ * returns `true` (assume local) unless `NODE_ENV=production`. That fail-open
+ * default is intentional for co-located dev: a false "remote" verdict would
+ * reject a `file_path` that would have worked. The operational risk is that a
+ * hosted deployment which forgets `NODE_ENV=production` (and does not set a
+ * non-loopback `NEOTOMA_BASE_URL` or an explicit `NEOTOMA_FILESYSTEM_LOCAL=0`)
+ * silently reverts to pre-#2325 "File not found" behaviour — operators must
+ * set one of those three signals on remote instances.
+ *
+ * A *malformed* `NEOTOMA_BASE_URL` is different from "unset": the operator
+ * intended to configure locality and failed, so we treat that as remote
+ * (deny) after logging a warning rather than falling through to allow.
  */
 export function isFilesystemLocalToCaller(env: NodeJS.ProcessEnv = process.env): boolean {
   const explicit = env.NEOTOMA_FILESYSTEM_LOCAL;
@@ -91,7 +117,12 @@ export function isFilesystemLocalToCaller(env: NodeJS.ProcessEnv = process.env):
         host.endsWith(".localhost");
       if (!isLoopback) return false;
     } catch {
-      // An unparseable base URL tells us nothing; fall through.
+      // Malformed config is evidence the operator tried to signal locality and
+      // got it wrong — lean deny rather than silently treating as unset.
+      console.warn(
+        `[file_input_diagnostics] NEOTOMA_BASE_URL is set but unparseable (${JSON.stringify(baseUrl)}); treating filesystem as remote`
+      );
+      return false;
     }
   }
 
@@ -169,12 +200,16 @@ export function isValidBase64(value: string): boolean {
  * The error for `file_content` that is not base64.
  */
 export function buildFileContentNotBase64Error(): FileInputError {
+  const hint =
+    "Base64-encode the file's bytes before passing them " +
+    "(e.g. Buffer.from(bytes).toString('base64') or btoa for text), then retry with " +
+    "file_content + mime_type. Do not pass raw prose or UTF-8 text as file_content.";
   return new FileInputError(
     ERR_FILE_CONTENT_NOT_BASE64,
     `${ERR_FILE_CONTENT_NOT_BASE64}: 'file_content' must be base64-encoded, and this value is ` +
       `not valid base64. Decoding it would silently discard the invalid characters and store ` +
-      `corrupted bytes under a valid-looking content_hash, so it is rejected instead. ` +
-      `Base64-encode the file's bytes before passing them.`
+      `corrupted bytes under a valid-looking content_hash, so it is rejected instead. ${hint}`,
+    { hint }
   );
 }
 

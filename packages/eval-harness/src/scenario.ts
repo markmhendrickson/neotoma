@@ -91,6 +91,10 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
     server_faults: o.server_faults && typeof o.server_faults === "object"
       ? (o.server_faults as ScenarioFile["server_faults"])
       : undefined,
+    server_env:
+      o.server_env && typeof o.server_env === "object"
+        ? (o.server_env as ScenarioFile["server_env"])
+        : undefined,
     expected: o.expected as ScenarioFile["expected"],
   };
   return scenario;

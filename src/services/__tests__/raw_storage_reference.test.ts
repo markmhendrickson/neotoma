@@ -165,7 +165,7 @@ describe("storeRawReference — with mocked db", () => {
         absolutePath: join(TEST_DIR, "phantom.pdf"),
         idempotencyKey: "test-key-1",
       })
-    ).rejects.toThrow("File not found at reference path");
+    ).rejects.toMatchObject({ name: "FileInputError", code: "ERR_FILE_NOT_FOUND" });
   });
 
   it("inserts a reference row without blob bytes (mocked DB path)", async () => {
