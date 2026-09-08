@@ -469,10 +469,15 @@ export function buildToolDefinitions(
             description:
               "A path on the SERVER's filesystem, not yours. The file is read by the Neotoma instance, so this only works when your client runs on the same machine as the instance — the axis is co-located vs remote, not desktop vs web. Against a hosted or otherwise remote instance it cannot see your disk and is rejected with ERR_FILE_PATH_IS_SERVER_LOCAL. To send a file from a remote client: upload the bytes (POST /sources/upload, multipart/form-data) and pass the returned source_id, or inline small files with file_content (base64) + mime_type. MIME type is auto-detected from the content or extension when not provided.",
           },
+          source_id: {
+            type: "string",
+            description:
+              "Handle for bytes already uploaded via POST /sources/upload (multipart/form-data). This is the route for remote clients and for anything large: file_path is read on the server's filesystem, and file_content is capped by the JSON body limit at roughly 7.5 MB after base64. Upload first, then pass the returned source_id here — the bytes are not re-sent.",
+          },
           mime_type: {
             type: "string",
             description:
-              "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path (auto-detected from extension)",
+              "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path or source_id (auto-detected from content or extension)",
           },
           original_filename: {
             type: "string",

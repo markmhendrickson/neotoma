@@ -599,6 +599,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/sources/upload": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Upload file bytes and receive an opaque source handle
+     * @description Streams file bytes in as multipart/form-data and returns a `source_id` to pass to `store()` in place of `file_path` / `file_content`.
+     *     This is the route a remote caller has to attach a file. `file_path` is resolved on the server's filesystem, and `file_content` forces the artifact through the JSON parser, capping it at roughly 7.5 MB of actual file after base64 — neither reaches, for example, an hour of recorded audio. Bytes here stream to disk and are hashed incrementally, so nothing holds the whole artifact in memory.
+     *     The MIME type is sniffed server-side from the content (falling back to the extension, then the client's claim), and the SHA-256 is computed from the received bytes, so neither depends on the client telling the truth. Identical bytes dedupe to the same content-addressed source.
+     *     Size cap: `NEOTOMA_MAX_UPLOAD_BYTES` (default 512 MiB). (#2325)
+     */
+    post: operations["uploadSource"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/sources/{id}": {
     parameters: {
       query?: never;
@@ -3741,9 +3764,11 @@ export interface components {
       file_idempotency_key?: string;
       /** @description Base64-encoded file content (unstructured path) */
       file_content?: string;
-      /** @description Local file path for server-local environments */
+      /** @description A path on the SERVER's filesystem, not the caller's. Only usable when the client runs on the same machine as the instance; a remote instance rejects it with ERR_FILE_PATH_IS_SERVER_LOCAL. Use source_id (from POST /sources/upload) for remote clients. (#2325) */
       file_path?: string;
-      /** @description Required with file_content, optional with file_path */
+      /** @description Handle for bytes already uploaded via POST /sources/upload. The route for remote clients and for anything large: file_path is read server-side, and file_content is capped by the JSON body limit at roughly 7.5 MB of actual file after base64. The bytes are not re-sent. (#2325) */
+      source_id?: string;
+      /** @description Required with file_content; optional with file_path or source_id (sniffed from content, then extension). */
       mime_type?: string;
       original_filename?: string;
       /**
@@ -5529,6 +5554,79 @@ export interface operations {
             sources?: components["schemas"]["Source"][];
           };
         };
+      };
+    };
+  };
+  uploadSource: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": {
+          /**
+           * Format: binary
+           * @description The file bytes. Exactly one file part.
+           */
+          file: string;
+          /** @description Overrides the filename carried by the file part. */
+          original_filename?: string;
+          /** @description Advisory only — used just as a last fallback when the content and extension both fail to identify the type. */
+          mime_type?: string;
+          idempotency_key?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Bytes stored; handle returned */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @description Opaque handle to pass to store(). */
+            source_id?: string;
+            /** @description SHA-256 of the bytes as received. */
+            content_hash?: string;
+            file_size?: number;
+            mime_type?: string;
+            original_filename?: string | null;
+            /** @description True when these bytes were already stored. */
+            deduplicated?: boolean;
+          };
+        };
+      };
+      /** @description Malformed multipart body, or no file part present */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description File exceeds NEOTOMA_MAX_UPLOAD_BYTES */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Body was not multipart/form-data */
+      415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

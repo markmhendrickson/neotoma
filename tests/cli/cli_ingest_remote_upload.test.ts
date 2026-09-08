@@ -61,7 +61,12 @@ describe("ingest compiled bundle includes auto-upload and size-guard wiring", ()
     expect(compiled).toMatch(/body\.file_path\s*=/);
     // Localhost auto-detect hook.
     expect(compiled).toMatch(/isLocalhostBaseUrl/);
-    // Size guard with clear error text.
-    expect(compiled).toMatch(/remote upload limit/);
+    // Size guard with clear error text. The wording changed in #2325: it used
+    // to say "remote upload limit" and send the operator off to find a
+    // localhost API, which was the only advice available before an upload
+    // route existed. It now names the inline cap and points at /sources/upload,
+    // so the assertion tracks the remedy rather than the old phrasing.
+    expect(compiled).toMatch(/inline limit/);
+    expect(compiled).toMatch(/sources\/upload/);
   });
 });

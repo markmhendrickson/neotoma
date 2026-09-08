@@ -15182,9 +15182,10 @@ program
     if (shouldUpload && sourceBuffer.length > MAX_UPLOADABLE_BYTES) {
       throw new Error(
         `Source file ${sourceBasename} is ${sourceBuffer.length} bytes, which exceeds the ` +
-          `remote upload limit of ~${MAX_UPLOADABLE_BYTES} bytes (server JSON body cap: ` +
-          `${SERVER_JSON_BODY_LIMIT_BYTES} bytes, minus base64 overhead). Host the file on a ` +
-          `localhost API (use --base-url http://127.0.0.1:<port>) and retry without --source-upload.`
+          `inline limit of ~${MAX_UPLOADABLE_BYTES} bytes (server JSON body cap: ` +
+          `${SERVER_JSON_BODY_LIMIT_BYTES} bytes, minus base64 overhead). Upload the bytes ` +
+          `instead — POST the file to /sources/upload as multipart/form-data and pass the ` +
+          `returned source_id to store(); that route streams and is not bound by this cap (#2325).`
       );
     }
 
