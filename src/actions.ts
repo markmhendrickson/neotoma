@@ -79,6 +79,7 @@ import {
   decodeFileContent,
   FileInputError,
 } from "./services/file_input_diagnostics.js";
+import { receiveUploadedFile, discardUpload, UploadError } from "./services/source_upload.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
@@ -208,7 +209,10 @@ import {
   type StoreInterpretationInput,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
-import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
+import {
+  getMimeTypeFromExtension,
+  sniffMimeTypeFromBuffer,
+} from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 import {
@@ -6591,6 +6595,101 @@ app.get("/sources/:id/relationships", async (req, res) => {
   }
 });
 
+// POST /sources/upload - Stream file bytes in and get an opaque handle back (#2325)
+//
+// The remote-caller route for attaching a file. `store()`'s `file_path`
+// resolves on the server, and inlining base64 caps out around 7.5 MB against
+// the JSON envelope — neither reaches the transcript audio this instance holds
+// hundreds of. Bytes arrive as multipart/form-data and stream to disk, so they
+// never pass through express.json's parser or sit in memory whole.
+//
+// express.json only parses requests whose Content-Type is JSON, so a multipart
+// body reaches this handler untouched and its 10mb limit does not apply.
+//
+// Returns `source_id`, which the caller then passes to `store()` in place of
+// `file_path` / `file_content`. The handle is deliberately opaque: a presigned
+// upload could later hand back the same handle without changing store()'s
+// contract.
+//
+// REQUIRES AUTHENTICATION - the source is created against the caller's user.
+app.post("/sources/upload", writeRateLimit, async (req, res) => {
+  let received: Awaited<ReturnType<typeof receiveUploadedFile>> | undefined;
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    received = await receiveUploadedFile(req);
+
+    // Hashing and MIME sniffing stay server-side, where they can be trusted —
+    // one of the reasons this is multipart rather than a presigned PUT.
+    //
+    // Receipt is streamed (bytes land on disk as they arrive, hashed
+    // incrementally), so the request never buffers the artifact. This read is
+    // the one place it is materialized, because `storeRawContent` takes a
+    // Buffer. That caps practical throughput well below the 1 GiB ceiling —
+    // giving the storage layer a stream instead is the obvious next step, and
+    // it can be done without changing this route's contract or store()'s,
+    // since the handle is opaque either way.
+    const fileBuffer = await fs.promises.readFile(received.tempPath);
+    const ext = received.originalFilename
+      ? path.extname(received.originalFilename).toLowerCase()
+      : "";
+    const declaredMime = (received.fields.mime_type || received.clientMimeType || "").trim();
+    const mimeType =
+      sniffMimeTypeFromBuffer(fileBuffer) ||
+      getMimeTypeFromExtension(ext) ||
+      declaredMime ||
+      "application/octet-stream";
+
+    const originalFilename =
+      (received.fields.original_filename || "").trim() || received.originalFilename;
+
+    const storageResult = await storeRawContent({
+      userId,
+      fileBuffer,
+      mimeType,
+      originalFilename,
+      idempotencyKey: (received.fields.idempotency_key || "").trim() || undefined,
+      provenance: { upload_method: "http_sources_upload", client: "api" },
+    });
+
+    // The hash computed while streaming must match the one storeRawContent
+    // derived from the bytes it stored. A mismatch means they are not the same
+    // bytes, and reporting success on that would be the false-success class
+    // this whole change exists to remove.
+    if (storageResult.contentHash !== received.contentHash) {
+      logError("UploadHashMismatch:sources_upload", req, new Error("content hash mismatch"));
+      return sendError(
+        res,
+        500,
+        "ERR_UPLOAD_HASH_MISMATCH",
+        "The stored bytes do not match the bytes received. The upload was not recorded."
+      );
+    }
+
+    return res.status(200).json({
+      source_id: storageResult.sourceId,
+      content_hash: storageResult.contentHash,
+      file_size: storageResult.fileSize,
+      mime_type: mimeType,
+      original_filename: originalFilename ?? null,
+      deduplicated: storageResult.deduplicated,
+    });
+  } catch (error) {
+    if (error instanceof UploadError) {
+      logWarn("UploadError:sources_upload", req, { code: error.code });
+      return sendError(res, error.status, error.code, error.message, error.details);
+    }
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    logError("APIError:sources_upload", req, error);
+    const message = error instanceof Error ? error.message : "Failed to upload source";
+    return sendError(res, 500, "UPLOAD_FAILED", message);
+  } finally {
+    if (received) await discardUpload(received.tempPath);
+  }
+});
+
 // GET /api/sources/:id/content - Download raw source file content
 // REQUIRES AUTHENTICATION - verifies source belongs to authenticated user
 app.get("/sources/:id/content", async (req, res) => {
@@ -8617,7 +8716,10 @@ async function handleStorePost(
     const hasEntities = Boolean(parsed.data.entities?.length);
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
-    const hasUnstructured = hasFileContent || hasFilePath;
+    // Bytes already uploaded via POST /sources/upload (#2325) — nothing to
+    // read here, only a handle to resolve.
+    const hasSourceId = Boolean(parsed.data.source_id && !hasFileContent && !hasFilePath);
+    const hasUnstructured = hasFileContent || hasFilePath || hasSourceId;
 
     let structuredResult: Record<string, unknown> | undefined;
     let unstructuredResult: Record<string, unknown> | undefined;
@@ -8627,6 +8729,70 @@ async function handleStorePost(
       let mimeType = parsed.data.mime_type;
       let originalFilename = parsed.data.original_filename;
       let resolvedFileBuffer: Buffer | undefined;
+
+      // Already-uploaded handle: the bytes have a `sources` row already, so
+      // there is nothing to read, hash, or store again. Resolve the handle,
+      // scoped to this user, attach the asset entity, and report it (#2325).
+      //
+      // The asset entity is not optional here. Until #2352 this branch returned
+      // early having attached nothing, while the MCP path for the same
+      // `source_id` created an asset entity and returned `asset_entity_id` — so
+      // the same bytes produced a different graph depending on which transport
+      // carried them. Both now go through `ensureAssetEntity`.
+      if (hasSourceId) {
+        const { data: sourceRow, error: sourceError } = await db
+          .from("sources")
+          .select("id, content_hash, mime_type, file_size, original_filename, storage_url")
+          .eq("id", parsed.data.source_id as string)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (sourceError) throw sourceError;
+        // Scoped by user_id, so an unknown id and someone else's id look the
+        // same from here — deliberately, so this cannot probe for the
+        // existence of another user's sources.
+        if (!sourceRow) {
+          sendError(
+            res,
+            404,
+            "ERR_SOURCE_NOT_FOUND",
+            `No uploaded source with id '${parsed.data.source_id}' belongs to you. ` +
+              `Upload the bytes first via POST /sources/upload and pass the source_id it returns.`
+          );
+          return null;
+        }
+
+        const uploadedMimeType =
+          parsed.data.mime_type || sourceRow.mime_type || "application/octet-stream";
+        const uploadedFilename =
+          parsed.data.original_filename || sourceRow.original_filename || undefined;
+
+        const { ensureAssetEntity } = await import("./services/asset_entity.js");
+        const uploadedAssetInfo = await ensureAssetEntity({
+          userId,
+          sourceId: sourceRow.id,
+          contentHash: sourceRow.content_hash,
+          fileSize: sourceRow.file_size ?? 0,
+          mimeType: uploadedMimeType,
+          originalFilename: uploadedFilename,
+          storageUrl: sourceRow.storage_url,
+          // Schema-defaulted to 100, so always present after parse.
+          sourcePriority: parsed.data.source_priority,
+          idempotencyKey: parsed.data.file_idempotency_key ?? parsed.data.idempotency_key,
+        });
+
+        return {
+          source_id: sourceRow.id,
+          content_hash: sourceRow.content_hash,
+          file_size: sourceRow.file_size,
+          mime_type: uploadedMimeType,
+          original_filename: uploadedFilename ?? null,
+          storage_mode: "uploaded",
+          deduplicated: true,
+          asset_entity_id: uploadedAssetInfo.entityId,
+          asset_entity_type: uploadedAssetInfo.entityType,
+        };
+      }
 
       if (hasFilePath) {
         // `file_path` resolves against *this* process's filesystem. On a remote

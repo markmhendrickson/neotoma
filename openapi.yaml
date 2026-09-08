@@ -2051,10 +2051,24 @@ components:
           description: Base64-encoded file content (unstructured path)
         file_path:
           type: string
-          description: Local file path for server-local environments
+          description: >-
+            A path on the SERVER's filesystem, not the caller's. Only usable
+            when the client runs on the same machine as the instance; a remote
+            instance rejects it with ERR_FILE_PATH_IS_SERVER_LOCAL. Use
+            source_id (from POST /sources/upload) for remote clients. (#2325)
+        source_id:
+          type: string
+          description: >-
+            Handle for bytes already uploaded via POST /sources/upload. The
+            route for remote clients and for anything large: file_path is read
+            server-side, and file_content is capped by the JSON body limit at
+            roughly 7.5 MB of actual file after base64. The bytes are not
+            re-sent. (#2325)
         mime_type:
           type: string
-          description: Required with file_content, optional with file_path
+          description: >-
+            Required with file_content; optional with file_path or source_id
+            (sniffed from content, then extension).
         original_filename:
           type: string
         source_storage:
@@ -2520,6 +2534,24 @@ components:
           type: integer
         deduplicated:
           type: boolean
+        storage_mode:
+          type: string
+          enum: [inline, reference, uploaded]
+          description: >-
+            How the bytes reached storage. "uploaded" means the call passed a
+            source_id handle from POST /sources/upload rather than bytes. (#2325)
+        asset_entity_id:
+          type: string
+          description: >-
+            The asset entity created (or resolved) for the stored file. Returned
+            by both the HTTP and MCP store paths — before #2352 the HTTP
+            source_id path omitted it, so the same bytes produced a different
+            graph depending on transport.
+        asset_entity_type:
+          type: string
+          description: >-
+            Entity type of `asset_entity_id`, derived server-side from the MIME
+            type: image_asset, audio_asset, video_asset, or file_asset.
         interpretation:
           type: object
           additionalProperties: true
@@ -4051,6 +4083,78 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Source"
+
+  /sources/upload:
+    post:
+      summary: Upload file bytes and receive an opaque source handle
+      operationId: uploadSource
+      description: >-
+        Streams file bytes in as multipart/form-data and returns a `source_id`
+        to pass to `store()` in place of `file_path` / `file_content`.
+
+        This is the route a remote caller has to attach a file. `file_path` is
+        resolved on the server's filesystem, and `file_content` forces the
+        artifact through the JSON parser, capping it at roughly 7.5 MB of
+        actual file after base64 — neither reaches, for example, an hour of
+        recorded audio. Bytes here stream to disk and are hashed incrementally,
+        so nothing holds the whole artifact in memory.
+
+        The MIME type is sniffed server-side from the content (falling back to
+        the extension, then the client's claim), and the SHA-256 is computed
+        from the received bytes, so neither depends on the client telling the
+        truth. Identical bytes dedupe to the same content-addressed source.
+
+        Size cap: `NEOTOMA_MAX_UPLOAD_BYTES` (default 512 MiB). (#2325)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file bytes. Exactly one file part.
+                original_filename:
+                  type: string
+                  description: Overrides the filename carried by the file part.
+                mime_type:
+                  type: string
+                  description: >-
+                    Advisory only — used just as a last fallback when the
+                    content and extension both fail to identify the type.
+                idempotency_key:
+                  type: string
+              required: [file]
+      responses:
+        "200":
+          description: Bytes stored; handle returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source_id:
+                    type: string
+                    description: Opaque handle to pass to store().
+                  content_hash:
+                    type: string
+                    description: SHA-256 of the bytes as received.
+                  file_size: { type: integer }
+                  mime_type: { type: string }
+                  original_filename: { type: string, nullable: true }
+                  deduplicated:
+                    type: boolean
+                    description: True when these bytes were already stored.
+        "400":
+          description: Malformed multipart body, or no file part present
+        "401":
+          description: Not authenticated
+        "413":
+          description: File exceeds NEOTOMA_MAX_UPLOAD_BYTES
+        "415":
+          description: Body was not multipart/form-data
 
   /sources/{id}:
     get:

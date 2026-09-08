@@ -2689,7 +2689,14 @@ export class NeotomaServer {
         // characters and store corrupted bytes under a valid content_hash.
         fileBuffer: decodeFileContent(input.file_content),
         mimeType: input.mime_type,
-        filename: input.original_filename || "file",
+        // No filename default. This used to be the literal string "file",
+        // which propagated to the asset entity's title — so every unnamed
+        // inline upload was titled "file" and they were indistinguishable
+        // from each other in the graph. Leaving it undefined lets
+        // ensureUnstructuredAssetEntity fall back to the source id, which is
+        // at least unique. The file_path branch derives a real basename;
+        // callers who want a real title pass original_filename (#2325).
+        filename: input.original_filename || "",
       };
     }
 
@@ -4821,6 +4828,11 @@ export class NeotomaServer {
         file_idempotency_key: z.string().min(1).optional(),
         file_content: z.string().optional(),
         file_path: z.string().optional(),
+        // Handle for bytes already uploaded via POST /sources/upload (#2325).
+        // The remote-caller route: `file_path` resolves on the server and
+        // `file_content` caps out against the JSON envelope, so neither can
+        // carry a large file from a remote client.
+        source_id: z.string().min(1).optional(),
         mime_type: z.string().optional(),
         original_filename: z.string().optional(),
         entities: z.array(z.record(z.unknown())).optional(),
@@ -4850,12 +4862,13 @@ export class NeotomaServer {
           if (data.intake?.mode === "overflow") return true; // overflow bypasses entity requirement
           const hasFileContent = data.file_content && data.mime_type;
           const hasFilePath = data.file_path;
+          const hasSourceId = data.source_id;
           const hasEntities = data.entities && data.entities.length > 0;
-          return hasFileContent || hasFilePath || hasEntities;
+          return hasFileContent || hasFilePath || hasSourceId || hasEntities;
         },
         {
           message:
-            "Must provide either (file_content+mime_type) OR file_path OR entities array (or use intake.mode='overflow')",
+            "Must provide either (file_content+mime_type) OR file_path OR source_id (from POST /sources/upload) OR entities array (or use intake.mode='overflow')",
         }
       )
       .refine((data) => data.intake?.mode === "overflow" || Boolean(data.idempotency_key), {
@@ -4889,7 +4902,9 @@ export class NeotomaServer {
     const idempotencyKey = parsed.idempotency_key!;
 
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
-    const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
+    const hasUnstructured = Boolean(
+      (parsed.file_content && parsed.mime_type) || parsed.file_path || parsed.source_id
+    );
 
     let structuredResponsePayload: Record<string, unknown> | undefined;
     let preloadedUnstructuredPayload: Record<string, unknown> | undefined;
@@ -4973,6 +4988,62 @@ export class NeotomaServer {
       });
     }
 
+    // --- Already-uploaded handle path (#2325) ---
+    // Bytes arrived earlier via POST /sources/upload and already have a
+    // `sources` row. Nothing to read, hash, or store again — resolve the
+    // handle, confirm it belongs to this user, and attach the asset entity so
+    // the provenance chain matches every other ingress route.
+    if (parsed.source_id && !parsed.file_content && !parsed.file_path) {
+      const { data: sourceRow, error: sourceError } = await db
+        .from("sources")
+        .select("id, content_hash, mime_type, file_size, original_filename, storage_url")
+        .eq("id", parsed.source_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (sourceError) {
+        throw new Error(`Failed to resolve source_id: ${sourceError.message}`);
+      }
+      // Scoped to user_id above, so an unknown id and another user's id are
+      // indistinguishable here — deliberately, so this cannot be used to probe
+      // for the existence of someone else's sources.
+      if (!sourceRow) {
+        throw new Error(
+          `ERR_SOURCE_NOT_FOUND: No uploaded source with id '${parsed.source_id}' belongs to you. ` +
+            `Upload the bytes first via POST /sources/upload and pass the source_id it returns.`
+        );
+      }
+
+      const uploadedMimeType =
+        parsed.mime_type || sourceRow.mime_type || "application/octet-stream";
+      const uploadedFilename = parsed.original_filename || sourceRow.original_filename || undefined;
+
+      const uploadedAssetInfo = await this.ensureUnstructuredAssetEntity({
+        userId,
+        sourceId: sourceRow.id,
+        contentHash: sourceRow.content_hash,
+        fileSize: sourceRow.file_size ?? 0,
+        mimeType: uploadedMimeType,
+        originalFilename: uploadedFilename,
+        storageUrl: sourceRow.storage_url,
+        sourcePriority: parsed.source_priority,
+        idempotencyKey,
+      });
+
+      return this.buildTextResponse({
+        source_id: sourceRow.id,
+        content_hash: sourceRow.content_hash,
+        file_size: sourceRow.file_size,
+        mime_type: uploadedMimeType,
+        original_filename: uploadedFilename ?? null,
+        storage_mode: "uploaded",
+        deduplicated: true,
+        asset_entity_id: uploadedAssetInfo.entityId,
+        asset_entity_type: uploadedAssetInfo.entityType,
+      });
+    }
+    // --- End already-uploaded handle path ---
+
     if (parsed.file_path) {
       const { isParquetFile, readParquetFile } = await import("./services/parquet_reader.js");
       if (isParquetFile(parsed.file_path)) {
@@ -5051,11 +5122,15 @@ export class NeotomaServer {
     // --- End by-reference storage path ---
 
     const { fileBuffer, mimeType, filename } = await this.readUnstructuredInput(parsed);
+    // An inline upload with no original_filename has no real name to record.
+    // Storing the old literal "file" was worse than storing nothing: it became
+    // the asset entity's title, so every unnamed upload shared one (#2325).
+    const resolvedFilename = filename || undefined;
     const storageResult = await storeRawContent({
       userId,
       fileBuffer,
       mimeType,
-      originalFilename: filename,
+      originalFilename: resolvedFilename,
       idempotencyKey,
       provenance: {
         upload_method: "mcp_store",
@@ -5076,7 +5151,7 @@ export class NeotomaServer {
       contentHash: storageResult.contentHash,
       fileSize: storageResult.fileSize,
       mimeType,
-      originalFilename: filename,
+      originalFilename: resolvedFilename,
       storageUrl: storageResult.storageUrl,
       sourcePriority: parsed.source_priority,
       idempotencyKey,
@@ -5121,15 +5196,14 @@ export class NeotomaServer {
     return this.buildTextResponse(result);
   }
 
-  // Helper method to get entity IDs from a source_id
-  private getAssetEntityType(mimeType: string): string {
-    const normalized = (mimeType || "").toLowerCase();
-    if (normalized.startsWith("image/")) return "image_asset";
-    if (normalized.startsWith("audio/")) return "audio_asset";
-    if (normalized.startsWith("video/")) return "video_asset";
-    return "file_asset";
-  }
-
+  /**
+   * Thin delegate to the shared `ensureAssetEntity` service (#2352).
+   *
+   * The implementation used to live here as a private method, which is why the
+   * HTTP `/store` route could not reach it and attached no asset entity at all.
+   * Both transports now call the same service; this wrapper only keeps the
+   * existing MCP call sites readable.
+   */
   private async ensureUnstructuredAssetEntity(params: {
     userId: string;
     sourceId: string;
@@ -5137,72 +5211,12 @@ export class NeotomaServer {
     fileSize: number;
     mimeType: string;
     originalFilename?: string;
-    storageUrl: string;
+    storageUrl?: string | null;
     sourcePriority: number;
     idempotencyKey?: string;
   }): Promise<{ entityId: string; entityType: string }> {
-    const { resolveEntity } = await import("./services/entity_resolution.js");
-    const { createObservation } = await import("./services/observation_storage.js");
-    const {
-      userId,
-      sourceId,
-      contentHash,
-      fileSize,
-      mimeType,
-      originalFilename,
-      storageUrl,
-      sourcePriority,
-      idempotencyKey,
-    } = params;
-    const entityType = this.getAssetEntityType(mimeType);
-    const fields: Record<string, unknown> = {
-      source_id: sourceId,
-      content_hash: contentHash,
-      mime_type: mimeType,
-      file_size: fileSize,
-      storage_url: storageUrl,
-      original_filename: originalFilename,
-      title: originalFilename || sourceId,
-    };
-
-    const entityId = await resolveEntity({
-      entityType,
-      fields,
-      userId,
-    });
-
-    const { data: existingObservation, error: existingObservationError } = await db
-      .from("observations")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("source_id", sourceId)
-      .eq("entity_id", entityId)
-      .limit(1)
-      .maybeSingle();
-
-    if (existingObservationError) {
-      throw new Error(
-        `Failed to check existing asset observation: ${existingObservationError.message}`
-      );
-    }
-
-    if (!existingObservation) {
-      await createObservation({
-        entity_id: entityId,
-        entity_type: entityType,
-        schema_version: "1.0",
-        source_id: sourceId,
-        interpretation_id: null,
-        observed_at: new Date().toISOString(),
-        specificity_score: 1.0,
-        source_priority: sourcePriority,
-        fields,
-        user_id: userId,
-        idempotency_key: idempotencyKey ? `${idempotencyKey}:asset` : null,
-      });
-    }
-
-    return { entityId, entityType };
+    const { ensureAssetEntity } = await import("./services/asset_entity.js");
+    return await ensureAssetEntity(params);
   }
 
   // Helper method to get entity IDs from a source_id
