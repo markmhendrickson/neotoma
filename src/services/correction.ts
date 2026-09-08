@@ -103,6 +103,10 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     observed_at: new Date().toISOString(),
     specificity_score: 1.0,
     source_priority: 1000,
+    // #2033: durable correction marker, stamped ONLY here. Never accept this
+    // from client request bodies on the generic store/store_structured paths
+    // — see observation_reducer.ts lastWriteWins for how the reducer uses it.
+    is_correction: true,
     fields: { [field]: value },
     user_id,
   };

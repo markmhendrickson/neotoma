@@ -24,6 +24,7 @@ type QueryResult<T> = {
 /** Columns stored as 0/1 in SQLite that should be returned as boolean */
 const BOOLEAN_COLUMNS: Record<string, Set<string>> = {
   schema_registry: new Set(["active", "test"]),
+  observations: new Set(["is_correction"]),
 };
 
 const JSON_COLUMNS: Record<string, Set<string>> = {
