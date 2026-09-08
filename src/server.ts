@@ -5369,6 +5369,34 @@ export class NeotomaServer {
       });
     }
 
+    // Attribution policy, "observations" write path (#2327).
+    //
+    // This MCP store core does not route through `createObservation`, so the
+    // "observations" gate that lives at observation_storage.ts:85 is never
+    // reached from here. It pre-computes the observation id for its dedup
+    // probe and inserts into `observations` directly, which is deliberate —
+    // but it means a seam placed only in the shared write helper is enforced
+    // on REST and silently inert on MCP. Called explicitly, mirroring the
+    // `assertCanWriteProtected` call below and the reasoning recorded for
+    // `assertStorePolicyAllows` above.
+    //
+    // Placement, for the same reason given above: a store call is not
+    // transactional, so denial must happen before anything is persisted.
+    // Gating next to the insert would reject only after `storeRawContent`
+    // had already written a source row. Once per call, not per entity —
+    // `enforceAttributionPolicy` does not read entity type, so the answer is
+    // identical for every row in the batch.
+    //
+    // Ordering: after `assertStorePolicyAllows`, not before. Instance store
+    // policy governs *what* may be stored; attribution governs *who* may
+    // store it. Keeping this order means an entity type the instance refuses
+    // is refused identically regardless of attribution.
+    {
+      const { enforceAttributionPolicy } = await import("./services/attribution_policy.js");
+      const { getCurrentAgentIdentity } = await import("./services/request_context.js");
+      enforceAttributionPolicy("observations", getCurrentAgentIdentity());
+    }
+
     // Plan mode: resolve deterministically, report planned actions per entity,
     // and skip every write (source row, observations, snapshots, relationships).
     if (!commit) {
