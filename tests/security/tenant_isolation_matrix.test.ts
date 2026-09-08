@@ -37,6 +37,8 @@ interface FixtureUserData {
   observationId: string;
   fragmentKey: string;
   fragmentEntityType: string;
+  /** Unique observation.reason — used to detect cross-tenant provenance leaks. */
+  reasonText: string;
 }
 
 async function seedUserData(label: string): Promise<FixtureUserData> {
@@ -47,6 +49,8 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
   const sourceId = randomUUID();
   const relationshipKey = `${TEST_PREFIX}_rel_${label}_${suffix}`;
   const observationId = randomUUID();
+  const reasonText = `${TEST_PREFIX}_reason_${label}_${suffix}`;
+  const markerValue = `${TEST_PREFIX}_obs_${label}`;
 
   await db.from("entities").insert({
     id: entityId,
@@ -81,7 +85,7 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
     user_id: userId,
   });
 
-  await db.from("observations").insert({
+  const { error: obsErr } = await db.from("observations").insert({
     id: observationId,
     entity_id: entityId,
     entity_type: "test",
@@ -89,9 +93,33 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
     observed_at: new Date().toISOString(),
     source_priority: 0,
     source_id: sourceId,
-    fields: { marker: `${TEST_PREFIX}_obs_${label}` },
+    fields: { marker: markerValue },
     user_id: userId,
+    reason: reasonText,
   });
+  if (obsErr) {
+    throw new Error(`tenant_iso seed observation insert failed for ${label}: ${obsErr.message}`);
+  }
+
+  // Snapshot + provenance so /get_field_provenance and MCP retrieveFieldProvenance
+  // have a field to resolve (PR #2332 tenant-isolation MUST 5). Delete any
+  // auto-computed snapshot first so provenance/reason fixtures are deterministic.
+  await db.from("entity_snapshots").delete().eq("entity_id", entityId);
+  const { error: snapErr } = await db.from("entity_snapshots").insert({
+    entity_id: entityId,
+    entity_type: "test",
+    schema_version: "1.0",
+    canonical_name: `${label}'s Entity`,
+    snapshot: { marker: markerValue },
+    observation_count: 1,
+    last_observation_at: new Date().toISOString(),
+    provenance: { marker: observationId },
+    user_id: userId,
+    computed_at: new Date().toISOString(),
+  });
+  if (snapErr) {
+    throw new Error(`tenant_iso seed snapshot insert failed for ${label}: ${snapErr.message}`);
+  }
 
   // Per-user undeclared raw_fragment, used by the /audit_undeclared_fragments
   // tenant-isolation row. The fragment_key is unique per user so a cross-user
@@ -114,12 +142,14 @@ async function seedUserData(label: string): Promise<FixtureUserData> {
     observationId,
     fragmentKey,
     fragmentEntityType,
+    reasonText,
   };
 }
 
 async function cleanupUserData(data: FixtureUserData): Promise<void> {
   await db.from("observations").delete().eq("id", data.observationId);
   await db.from("relationship_snapshots").delete().eq("relationship_key", data.relationshipKey);
+  await db.from("entity_snapshots").delete().eq("entity_id", data.entityId);
   await db.from("entities").delete().eq("user_id", data.userId);
   await db.from("sources").delete().eq("id", data.sourceId);
   await db.from("raw_fragments").delete().eq("fragment_key", data.fragmentKey);
@@ -228,6 +258,67 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
       const keys = (json.relationships ?? []).map((r: any) => r.relationship_key);
       expect(keys).not.toContain(userB.relationshipKey);
       expect(json.relationships).toEqual([]);
+    });
+  });
+
+  describe("/list_observations", () => {
+    it("user A listing their own entity observations sees their reason, not B's", async () => {
+      // Sanity: seed must be visible via the same db handle the HTTP server uses.
+      const { data: direct } = await db
+        .from("observations")
+        .select("id, reason, user_id")
+        .eq("id", userA.observationId);
+      expect(direct?.[0]?.reason).toBe(userA.reasonText);
+
+      const { status, json } = await callEndpoint("/list_observations", {
+        entity_id: userA.entityId,
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      const reasons = (json.observations ?? []).map((o: any) => o.reason);
+      expect(reasons).toContain(userA.reasonText);
+      expect(reasons).not.toContain(userB.reasonText);
+      const ids = (json.observations ?? []).map((o: any) => o.id);
+      expect(ids).toContain(userA.observationId);
+      expect(ids).not.toContain(userB.observationId);
+    });
+
+    it("user A listing user B's entity_id does NOT return B's observations or reason", async () => {
+      const { status, json } = await callEndpoint("/list_observations", {
+        entity_id: userB.entityId,
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      expect(json.observations).toEqual([]);
+      const serialized = JSON.stringify(json);
+      expect(serialized).not.toContain(userB.reasonText);
+      expect(serialized).not.toContain(userB.observationId);
+    });
+  });
+
+  describe("/get_field_provenance", () => {
+    it("user A reading their own field returns their observation reason", async () => {
+      const { status, json } = await callEndpoint("/get_field_provenance", {
+        entity_id: userA.entityId,
+        field: "marker",
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      const reasons = (json.observations ?? []).map((o: any) => o.reason);
+      expect(reasons).toContain(userA.reasonText);
+      expect(JSON.stringify(json)).not.toContain(userB.reasonText);
+    });
+
+    it("user A reading user B's entity_id field does NOT return B's reason", async () => {
+      const { status, json } = await callEndpoint("/get_field_provenance", {
+        entity_id: userB.entityId,
+        field: "marker",
+        user_id: userA.userId,
+      });
+      // Same not-found class as missing own-tenant field — never B's reason.
+      expect(status).toBe(404);
+      expect(JSON.stringify(json)).not.toContain(userB.reasonText);
+      expect(JSON.stringify(json)).not.toContain(userB.observationId);
     });
   });
 

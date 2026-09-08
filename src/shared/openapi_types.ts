@@ -3250,6 +3250,8 @@ export interface components {
         | "import"
         | "sync"
         | null;
+      /** @description Optional operator/agent-supplied reason for this observation (e.g. audit text from correct() / delete / restore). Null when omitted. */
+      reason?: string | null;
       fields?: {
         [key: string]: unknown;
       };
@@ -6602,6 +6604,8 @@ export interface operations {
            *     observed_at is greater than or equal to this value.
            */
           created_since?: string;
+          /** @description Optional. Normally inferred from authentication. */
+          user_id?: string;
         };
       };
     };
@@ -6631,6 +6635,8 @@ export interface operations {
         "application/json": {
           entity_id?: string;
           field?: string;
+          /** @description Optional. Normally inferred from authentication. */
+          user_id?: string;
         };
       };
     };
@@ -6642,9 +6648,22 @@ export interface operations {
         };
         content: {
           "application/json": {
-            [key: string]: unknown;
+            field?: string;
+            entity_id?: string;
+            observation_ids?: string[];
+            observations?: components["schemas"]["Observation"][];
+            sources?: {
+              [key: string]: unknown;
+            }[];
           };
         };
+      };
+      /** @description Entity or field not found (includes cross-tenant miss) */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

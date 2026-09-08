@@ -667,6 +667,13 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--limit <n>`
   - `--offset <n>`
 
+### Corrections
+
+- `neotoma corrections create --entity-id <id> --entity-type <type> --field-name <field> --corrected-value <value>`: Create a high-priority correction observation (same path as MCP `correct` / HTTP `POST /correct`).
+  - `--reason <reason>`: Optional durable *why* for the correction. Persisted on the observation and returned on `retrieve_field_provenance` / `POST /get_field_provenance` as `source_observation.reason` / observation `reason`.
+  - `--idempotency-key <key>`: Optional; auto-generated when omitted.
+- After `correct()` / `corrections create`, field provenance often has `source: null` because corrections stamp `source_id: null` by design — that is a legal empty state, not a server fault. Use `reason` (when supplied) for the audit trail.
+
 ### Relationships
 
 - `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship.

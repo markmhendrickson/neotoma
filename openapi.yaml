@@ -1388,6 +1388,12 @@ components:
             Null / missing for legacy rows written before the field
             existed; writes default to `llm_summary` when unspecified
             because MCP callers are LLM-driven by construction.
+        reason:
+          type: string
+          nullable: true
+          description: >
+            Optional operator/agent-supplied reason for this observation
+            (e.g. audit text from correct() / delete / restore). Null when omitted.
         fields:
           type: object
           additionalProperties: true
@@ -5363,6 +5369,9 @@ paths:
                   description: |
                     ISO 8601 timestamp. Return only observations whose
                     observed_at is greater than or equal to this value.
+                user_id:
+                  type: string
+                  description: Optional. Normally inferred from authentication.
       responses:
         "200":
           description: Observations
@@ -5391,6 +5400,9 @@ paths:
                   type: string
                 field:
                   type: string
+                user_id:
+                  type: string
+                  description: Optional. Normally inferred from authentication.
       responses:
         "200":
           description: Provenance
@@ -5398,7 +5410,26 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
+                properties:
+                  field:
+                    type: string
+                  entity_id:
+                    type: string
+                  observation_ids:
+                    type: array
+                    items:
+                      type: string
+                  observations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Observation"
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        "404":
+          description: Entity or field not found (includes cross-tenant miss)
 
   /create_relationship:
     post:

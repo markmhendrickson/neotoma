@@ -74,7 +74,7 @@ export function buildToolDefinitions(
       name: "retrieve_field_provenance",
       description: desc(
         "retrieve_field_provenance",
-        "Retrieve the provenance chain for a specific field in an entity snapshot"
+        "Retrieve the provenance chain for a specific field in an entity snapshot. When the winning observation has a NULL source_id (typical after correct()), source is null — a legal empty state, not a server fault. source_observation.reason carries the optional correction reason when supplied."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
     },
@@ -519,8 +519,10 @@ export function buildToolDefinitions(
     },
     {
       name: "correct",
-      description:
-        "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation.",
+      description: desc(
+        "correct",
+        "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation. Optional reason records why the value changed and surfaces on retrieve_field_provenance as source_observation.reason; the correction stamps source_id null so provenance source is null (expected)."
+      ),
       inputSchema: {
         type: "object",
         properties: {

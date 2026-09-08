@@ -3149,12 +3149,18 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
+    // Tenant isolation (MUST 5): same pattern as listObservations — scope every
+    // lookup to the authenticated user. Cross-tenant miss returns the same
+    // InvalidParams / not-found class as a missing own-tenant id (no existence
+    // oracle). See Falco guidance on PR #2332 / security_finding ent_75e0756ed2fd067bf52e601d.
+    const userId = this.getAuthenticatedUserId(undefined);
 
     // Get the snapshot to extract provenance
     const { data: snapshot, error: snapshotError } = await db
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", parsed.entity_id)
+      .eq("user_id", userId)
       .single();
 
     if (snapshotError || !snapshot) {
@@ -3179,12 +3185,13 @@ export class NeotomaServer {
       .from("observations")
       .select("*")
       .eq("id", observationId)
+      .eq("user_id", userId)
       .single();
 
     if (obsError || !observation) {
       throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get observation: ${obsError?.message}`
+        ErrorCode.InvalidParams,
+        `Field '${parsed.field}' not found in entity snapshot`
       );
     }
 
@@ -3207,6 +3214,7 @@ export class NeotomaServer {
         .from("sources")
         .select("id, mime_type, file_size, original_filename, created_at")
         .eq("id", observation.source_id)
+        .eq("user_id", userId)
         .single();
 
       if (sourceError || !sourceData) {

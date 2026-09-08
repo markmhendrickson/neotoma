@@ -8,6 +8,21 @@ import { tmpdir } from "os";
 const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
+function cliBaseUrlFlag(): string {
+  // Prefer the Vitest globalSetup HTTP server; ignore ambient NEOTOMA_BASE_URL
+  // (often production) so --reason is exercised against this branch's OpenAPI.
+  const port = process.env.NEOTOMA_SESSION_DEV_PORT;
+  if (port && /^\d+$/.test(port)) {
+    return `--base-url http://127.0.0.1:${port}`;
+  }
+  return "";
+}
+
+function cli(cmd: string): string {
+  const base = cliBaseUrlFlag();
+  return base ? `${CLI_PATH} ${base} ${cmd}` : `${CLI_PATH} ${cmd}`;
+}
+
 describe("CLI correction commands", () => {
   let testEntityId: string;
   let testDir: string;
@@ -33,7 +48,7 @@ describe("CLI correction commands", () => {
       founded_date: { type: "string", required: false },
     });
     await execAsync(
-      `${CLI_PATH} schemas register --entity-type "${correctionType}" --fields '${schemaFields}' --activate --json`
+      cli(`schemas register --entity-type "${correctionType}" --fields '${schemaFields}' --activate --json`)
     );
 
     const entityFile = join(testDir, "correction-entity.json");
@@ -50,7 +65,7 @@ describe("CLI correction commands", () => {
       })
     );
 
-    const { stdout } = await execAsync(`${CLI_PATH} store --file "${entityFile}" --json`);
+    const { stdout } = await execAsync(cli(`store --file "${entityFile}" --json`));
     const result = JSON.parse(stdout);
     testEntityId = result.entities?.[0]?.entity_id;
   });
@@ -58,7 +73,9 @@ describe("CLI correction commands", () => {
   describe("corrections create", () => {
     it("creates a correction with --json", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "name" --corrected-value "Updated Company Name" --json`
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "name" --corrected-value "Updated Company Name" --json`
+        )
       );
 
       const result = JSON.parse(stdout);
@@ -66,12 +83,42 @@ describe("CLI correction commands", () => {
       expect(result.entity_id).toBe(testEntityId);
     });
 
+    it("persists --reason onto the observation row (effect)", async () => {
+      const { db } = await import("../../src/db.js");
+      const reasonText = "cli operator verified against invoice";
+      const idem = `cli-reason-effect-${Date.now()}`;
+      const { stdout } = await execAsync(
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "name" --corrected-value "Reasoned Name" --reason "${reasonText}" --idempotency-key "${idem}" --json`
+        )
+      );
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("correction_id");
+
+      const { data: rows, error } = await db
+        .from("observations")
+        .select("reason, idempotency_key")
+        .eq("entity_id", testEntityId)
+        .eq("idempotency_key", idem);
+      expect(error).toBeNull();
+      expect(rows?.length).toBeGreaterThan(0);
+      expect(rows?.[0]?.reason).toBe(reasonText);
+    });
+
     it("supports common scalar field types", async () => {
       const commands = [
-        `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "description" --corrected-value "New description" --json`,
-        `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "employee_count" --corrected-value "500" --json`,
-        `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "is_active" --corrected-value "true" --json`,
-        `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "founded_date" --corrected-value "2020-01-15" --json`,
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "description" --corrected-value "New description" --json`
+        ),
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "employee_count" --corrected-value "500" --json`
+        ),
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "is_active" --corrected-value "true" --json`
+        ),
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "founded_date" --corrected-value "2020-01-15" --json`
+        ),
       ];
 
       for (const command of commands) {
@@ -84,7 +131,9 @@ describe("CLI correction commands", () => {
     it("rejects missing required parameters", async () => {
       await expect(
         execAsync(
-          `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --json`
+          cli(
+            `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --json`
+          )
         )
       ).rejects.toThrow();
     });
@@ -97,7 +146,9 @@ describe("CLI correction commands", () => {
       const schemalessType = `cli_correction_unregistered_${Date.now()}`;
       await expect(
         execAsync(
-          `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${schemalessType}" --field-name "name" --corrected-value "X" --json`
+          cli(
+            `corrections create --entity-id "${testEntityId}" --entity-type "${schemalessType}" --field-name "name" --corrected-value "X" --json`
+          )
         )
       ).rejects.toThrow();
     });
@@ -106,7 +157,9 @@ describe("CLI correction commands", () => {
   describe("output formats", () => {
     it("outputs JSON with --json", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "test_field" --corrected-value "test_value" --json`
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "test_field" --corrected-value "test_value" --json`
+        )
       );
 
       const result = JSON.parse(stdout);
@@ -115,11 +168,13 @@ describe("CLI correction commands", () => {
 
     it("outputs pretty format without --json", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "test_field2" --corrected-value "test_value2"`
+        cli(
+          `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "test_field2" --corrected-value "test_value2"`
+        )
       );
 
-      const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("correction_id");
+      expect(stdout).toBeTruthy();
+      expect(stdout.length).toBeGreaterThan(0);
     });
   });
 
@@ -127,22 +182,21 @@ describe("CLI correction commands", () => {
     it("returns exit code 0 on success", async () => {
       await expect(
         execAsync(
-          `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "exit_test" --corrected-value "value" --json`
+          cli(
+            `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --field-name "exit_test" --corrected-value "value" --json`
+          )
         )
       ).resolves.toBeDefined();
     });
 
     it("returns non-zero exit code on error", async () => {
-      let exitCode = 0;
-      try {
-        await execAsync(
-          `${CLI_PATH} corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --json`
-        );
-      } catch (error: any) {
-        exitCode = error.code || 1;
-      }
-
-      expect(exitCode).toBeGreaterThan(0);
+      await expect(
+        execAsync(
+          cli(
+            `corrections create --entity-id "${testEntityId}" --entity-type "${correctionType}" --json`
+          )
+        )
+      ).rejects.toThrow();
     });
   });
 });

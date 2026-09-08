@@ -30,6 +30,8 @@ describe("MCP handler cross-user scoping", () => {
   const bEntityId2 = `${PFX}_b2_${randomUUID().slice(0, 8)}`;
   const bStaleEntityId = `${PFX}_bstale_${randomUUID().slice(0, 8)}`;
   const bStaleObsId = randomUUID();
+  const bObsId = randomUUID();
+  const bReasonText = `${PFX}_reason_b_${randomUUID().slice(0, 8)}`;
   const bTimelineId = `${PFX}_tl_${randomUUID()}`;
   const bRelKey = `REFERS_TO:${bEntityId}:${bEntityId2}`;
   const bPrivateType = `${PFX}_type_${randomUUID().slice(0, 8)}`;
@@ -38,31 +40,58 @@ describe("MCP handler cross-user scoping", () => {
     (server as any).authenticatedUserId = u;
   };
 
-  async function seedEntityWithSnapshot(entityId: string, userId: string): Promise<void> {
+  async function seedEntityWithSnapshot(
+    entityId: string,
+    userId: string,
+    opts?: { observationId?: string; reason?: string; field?: string; value?: string }
+  ): Promise<void> {
+    const field = opts?.field ?? "canonical_name";
+    const value = opts?.value ?? entityId;
     await db.from("entities").insert({
       id: entityId,
       user_id: userId,
       entity_type: "test",
       canonical_name: entityId,
     });
-    await db.from("entity_snapshots").insert({
+    const snapshotRow: Record<string, unknown> = {
       entity_id: entityId,
       entity_type: "test",
       schema_version: "1.0",
       canonical_name: entityId,
-      snapshot: JSON.stringify({ canonical_name: entityId }),
+      snapshot: JSON.stringify({ [field]: value }),
       observation_count: 1,
       user_id: userId,
       computed_at: new Date().toISOString(),
-    });
+    };
+    if (opts?.observationId) {
+      snapshotRow.provenance = JSON.stringify({ [field]: opts.observationId });
+    }
+    await db.from("entity_snapshots").insert(snapshotRow);
   }
 
   beforeAll(async () => {
     server = new NeotomaServer();
 
     await seedEntityWithSnapshot(aEntityId, userA);
-    await seedEntityWithSnapshot(bEntityId, userB);
+    await seedEntityWithSnapshot(bEntityId, userB, {
+      observationId: bObsId,
+      reason: bReasonText,
+      field: "marker",
+      value: "bob-only",
+    });
     await seedEntityWithSnapshot(bEntityId2, userB);
+
+    await db.from("observations").insert({
+      id: bObsId,
+      entity_id: bEntityId,
+      entity_type: "test",
+      schema_version: "1.0",
+      observed_at: new Date().toISOString(),
+      source_priority: 0,
+      fields: { marker: "bob-only" },
+      user_id: userB,
+      reason: bReasonText,
+    });
 
     await db.from("timeline_events").insert({
       id: bTimelineId,
@@ -150,6 +179,24 @@ describe("MCP handler cross-user scoping", () => {
       format: "json",
     });
     expect(own.content[0].text).toContain(aEntityId);
+  });
+
+  it("retrieve_field_provenance: A against B's entity_id never surfaces B's reason", async () => {
+    asUser(userA);
+    await expect(
+      (server as any).retrieveFieldProvenance({
+        entity_id: bEntityId,
+        field: "marker",
+      })
+    ).rejects.toThrow();
+
+    asUser(userB);
+    const raw = await (server as any).retrieveFieldProvenance({
+      entity_id: bEntityId,
+      field: "marker",
+    });
+    const body = JSON.parse(raw.content[0].text);
+    expect(body.source_observation?.reason).toBe(bReasonText);
   });
 
   it("list_timeline_events: A does not see B's events; B does", async () => {

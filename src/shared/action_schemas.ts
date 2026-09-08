@@ -77,11 +77,15 @@ export const ListObservationsRequestSchema = z.object({
   offset: z.number().int().nonnegative().optional().default(0),
   updated_since: z.string().optional(),
   created_since: z.string().optional(),
+  /** Optional; normally inferred from auth. Local-dev override for CLI/tests. */
+  user_id: z.string().optional(),
 });
 
 export const FieldProvenanceRequestSchema = z.object({
   entity_id: z.string(),
   field: z.string(),
+  /** Optional; normally inferred from auth. Local-dev override for CLI/tests. */
+  user_id: z.string().optional(),
 });
 
 export const RelationshipTypeSchema = z.enum([

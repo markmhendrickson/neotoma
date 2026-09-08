@@ -9456,9 +9456,26 @@ app.post("/list_observations", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id, limit = 100, offset = 0, updated_since, created_since } = parsed.data;
+  const { entity_id, limit = 100, offset = 0, updated_since, created_since, user_id } = parsed.data;
 
-  let query = db.from("observations").select("*").eq("entity_id", entity_id);
+  // Tenant isolation: match MCP listObservations (getAuthenticatedUserId +
+  // .eq("user_id", userId)). Cross-tenant entity_id returns empty, never
+  // another tenant's observation.reason.
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req, user_id);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Authentication required",
+      "AUTH_REQUIRED",
+      "APIError:list_observations"
+    );
+  }
+
+  let query = db.from("observations").select("*").eq("entity_id", entity_id).eq("user_id", userId);
 
   if (updated_since) {
     query = query.gte("observed_at", updated_since);
@@ -9493,13 +9510,29 @@ app.post("/get_field_provenance", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id, field } = parsed.data;
+  const { entity_id, field, user_id } = parsed.data;
 
-  // Get snapshot to find observation ID for this field
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req, user_id);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Authentication required",
+      "AUTH_REQUIRED",
+      "APIError:get_field_provenance"
+    );
+  }
+
+  // Get snapshot to find observation ID for this field — scoped to caller.
+  // Empty after scoping → same 404 class as field-not-found (no existence oracle).
   const { data: snapshot } = await db
     .from("entity_snapshots")
     .select("provenance")
     .eq("entity_id", entity_id)
+    .eq("user_id", userId)
     .single();
 
   if (!snapshot || !snapshot.provenance) {
@@ -9519,25 +9552,35 @@ app.post("/get_field_provenance", async (req, res) => {
   const { data: observations, error: obsError } = await db
     .from("observations")
     .select("*, source_id")
-    .in("id", observationIds);
+    .in("id", observationIds)
+    .eq("user_id", userId);
 
   if (obsError) {
     logError("DbError:get_field_provenance", req, obsError);
     return sendError(res, 500, "DB_QUERY_FAILED", obsError.message);
   }
 
-  // Get sources for provenance
+  if (!observations || observations.length === 0) {
+    return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity or field not found");
+  }
+
+  // Get sources for provenance (tenant-scoped)
   const sourceIds = (observations || [])
     .map((obs: { source_id?: string }) => obs.source_id)
     .filter((sourceId: string | undefined): sourceId is string => Boolean(sourceId));
 
-  const { data: sources, error: sourceError } = await db
-    .from("sources")
-    .select("id, content_hash, mime_type, storage_url, file_name, created_at")
-    .in("id", sourceIds);
+  let sources: unknown[] = [];
+  if (sourceIds.length > 0) {
+    const { data: sourceRows, error: sourceError } = await db
+      .from("sources")
+      .select("id, content_hash, mime_type, storage_url, file_name, created_at")
+      .in("id", sourceIds)
+      .eq("user_id", userId);
 
-  if (sourceError) {
-    logError("DbError:get_field_provenance:sources", req, sourceError);
+    if (sourceError) {
+      logError("DbError:get_field_provenance:sources", req, sourceError);
+    }
+    sources = sourceRows || [];
   }
 
   logDebug("Success:get_field_provenance", req, { entity_id, field });
@@ -9546,7 +9589,7 @@ app.post("/get_field_provenance", async (req, res) => {
     entity_id,
     observation_ids: observationIds,
     observations: observations || [],
-    sources: sources || [],
+    sources,
   });
 });
 

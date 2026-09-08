@@ -124,4 +124,62 @@ describe("#2026 retrieve_field_provenance on a corrected (NULL source_id) field"
     expect(provenance?.value).toBe("Corrected Title");
     expect(provenance?.source).toBeNull();
   });
+
+  it("throws when winning observation has a non-NULL source_id with no sources row", async () => {
+    // #2026 AC both-branch: NULL source_id → source:null (above); non-NULL
+    // source_id that fails to resolve remains an integrity error.
+    const title = `Provenance dangling source_id ${Date.now()}`;
+    const danglingSourceId = randomUUID();
+    const observationId = randomUUID();
+
+    const firstStore = JSON.parse(
+      (
+        await server.store({
+          idempotency_key: `provenance-dangling-source-first-${Date.now()}`,
+          entities: [
+            {
+              entity_type: "task",
+              title,
+              canonical_name: title,
+            },
+          ],
+        })
+      ).content[0].text
+    );
+    const entityId = firstStore.entities?.[0]?.entity_id as string;
+    expect(entityId).toBeTruthy();
+    createdEntityIds.push(entityId);
+
+    await db.from("observations").insert({
+      id: observationId,
+      entity_id: entityId,
+      entity_type: "task",
+      schema_version: "1.0",
+      observed_at: new Date().toISOString(),
+      source_priority: 1000,
+      source_id: danglingSourceId,
+      fields: { title: "Dangling Source Title" },
+      user_id: testUserId,
+    });
+
+    await db.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      entity_type: "task",
+      schema_version: "1.0",
+      canonical_name: title,
+      snapshot: { title: "Dangling Source Title" },
+      observation_count: 1,
+      last_observation_at: new Date().toISOString(),
+      provenance: { title: observationId },
+      user_id: testUserId,
+      computed_at: new Date().toISOString(),
+    });
+
+    await expect(
+      server.retrieveFieldProvenance({
+        entity_id: entityId,
+        field: "title",
+      })
+    ).rejects.toThrow(/Failed to get source|Source not found/i);
+  });
 });
