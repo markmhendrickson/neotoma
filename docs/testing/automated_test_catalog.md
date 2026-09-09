@@ -288,7 +288,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (44):**
+**Files (45):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -319,6 +319,7 @@ flowchart TD
 - `tests/services/raw_fragments_isolation.test.ts`
 - `tests/services/raw_storage_mime_map.test.ts`
 - `tests/services/raw_storage.test.ts`
+- `tests/services/relationship_type_registration.test.ts`
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
 - `tests/services/schema_recommendation.test.ts`
@@ -701,6 +702,7 @@ flowchart TD
 - `tests/contract/package_contents.test.ts`
 - `tests/contract/package_scripts.test.ts`
 - `tests/contract/relationship_type_enum_parity.test.ts`
+- `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
