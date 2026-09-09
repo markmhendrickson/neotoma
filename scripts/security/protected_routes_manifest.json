@@ -879,6 +879,27 @@
       ]
     },
     {
+      "path": "/mcp/oauth/sign-out",
+      "method": "POST",
+      "operation_id": "mcpOAuthSignOut",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "reason": "Browser key-session termination: clears only the caller's HttpOnly OAuth key-session cookie/binding and returns no user data.",
+      "override_applied": true
+    },
+    {
       "path": "/mcp/oauth/status",
       "method": "GET",
       "operation_id": "mcpOAuthStatus",
@@ -1712,6 +1733,13 @@
     }
   ],
   "overrides": [
+    {
+      "path": "/mcp/oauth/sign-out",
+      "method": "POST",
+      "fields": {
+        "reason": "Browser key-session termination: clears only the caller's HttpOnly OAuth key-session cookie/binding and returns no user data."
+      }
+    },
     {
       "path": "/ready",
       "method": "GET",

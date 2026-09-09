@@ -140,6 +140,16 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "request --operation mcpOAuthRegister",
   },
   {
+    operationId: "mcpOAuthSignOut",
+    method: "post",
+    path: "/mcp/oauth/sign-out",
+    adapter: "infra",
+    notes:
+      "Browser-facing key-session termination endpoint. It clears an HttpOnly " +
+      "OAuth key-session cookie and returns no user data; the CLI's local " +
+      "auth logout command is not this server-side operation.",
+  },
+  {
     operationId: "getMe",
     method: "get",
     path: "/me",

@@ -131,4 +131,39 @@ describe("oauth_key_gate", () => {
       expect(store.getBoundUser(token, createdAt + 5_000)).toBeUndefined();
     });
   });
+
+  // Regression: a failed sign-in / sign-out must be able to end a live session
+  // immediately, before its TTL. Without invalidate(), a session (and its user
+  // binding) survived a rejected auth attempt and stayed usable for its full
+  // 7-day lifetime.
+  describe("invalidate() ends a live session immediately", () => {
+    it("drops both the session and its user binding while still within TTL", async () => {
+      const mod = await loadOauthKeyGateModule(String(Date.now() + 4));
+      const store = new mod.OAuthKeySessionStore(10);
+      const createdAt = Date.now();
+      const token = store.create(createdAt, 10_000);
+      store.bindUser(token, "user-abc", createdAt);
+
+      // Live before invalidation.
+      expect(store.isValid(token, createdAt + 1_000)).toBe(true);
+      expect(store.getBoundUser(token, createdAt + 1_000)).toBe("user-abc");
+
+      // Invalidate mid-life, then it resolves nothing despite TTL remaining.
+      expect(store.invalidate(token)).toBe(true);
+      expect(store.isValid(token, createdAt + 1_001)).toBe(false);
+      expect(store.getBoundUser(token, createdAt + 1_001)).toBeUndefined();
+    });
+
+    it("is idempotent and a no-op for an unknown or undefined token", async () => {
+      const mod = await loadOauthKeyGateModule(String(Date.now() + 5));
+      const store = new mod.OAuthKeySessionStore(10);
+      expect(store.invalidate("never-issued")).toBe(false);
+      expect(store.invalidate(undefined)).toBe(false);
+
+      const token = store.create(Date.now(), 10_000);
+      expect(store.invalidate(token)).toBe(true);
+      // Second call finds nothing left to remove.
+      expect(store.invalidate(token)).toBe(false);
+    });
+  });
 });

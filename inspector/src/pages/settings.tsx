@@ -30,11 +30,11 @@ import { areDestructiveActionsHidden, isApiUrlOverrideDisabled } from "@/lib/san
 import { readStoredSandboxSession } from "@/lib/sandbox_session";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Circle, LogIn, RefreshCw } from "lucide-react";
+import { Circle, LogIn, LogOut, RefreshCw } from "lucide-react";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { InspectorThemeToggle } from "@/components/shared/inspector_theme_toggle";
-import { isOAuthSignInSupported, startOAuthSignIn } from "@/lib/oauth_signin";
+import { isOAuthSignInSupported, startOAuthSignIn, signOutOAuthSession } from "@/lib/oauth_signin";
 
 const LOCAL_PROXY_PLACEHOLDER = "/api";
 
@@ -106,6 +106,7 @@ export default function SettingsPage() {
   const activeSandboxSession = readStoredSandboxSession();
   const [showAdvanced, setShowAdvanced] = useState(activeSandboxSession === null);
   const [signingIn, setSigningIn] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const health = useHealthCheck();
   const serverInfo = useServerInfo();
@@ -145,6 +146,19 @@ export default function SettingsPage() {
     } catch (err) {
       setSigningIn(false);
       toast.error(err instanceof Error ? err.message : "Could not start sign-in");
+    }
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOutOAuthSession();
+      qc.invalidateQueries();
+      toast.success("Signed out");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sign out failed");
+    } finally {
+      setSigningOut(false);
     }
   }
 
@@ -278,19 +292,31 @@ export default function SettingsPage() {
                 </div>
                 {isOAuthSignInSupported() ? (
                   <div className="min-w-0 space-y-2">
-                    <Button
-                      variant="default"
-                      className="w-fit max-w-full shrink-0"
-                      onClick={handleSignIn}
-                      disabled={isApiUrlOverrideDisabled() || signingIn}
-                    >
-                      <LogIn className="h-4 w-4" />
-                      {signingIn ? "Redirecting…" : "Sign in"}
-                    </Button>
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      <Button
+                        variant="default"
+                        className="w-fit max-w-full shrink-0"
+                        onClick={handleSignIn}
+                        disabled={isApiUrlOverrideDisabled() || signingIn}
+                      >
+                        <LogIn className="h-4 w-4" />
+                        {signingIn ? "Redirecting…" : "Sign in"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-fit max-w-full shrink-0"
+                        onClick={handleSignOut}
+                        disabled={isApiUrlOverrideDisabled() || signingOut}
+                      >
+                        <LogOut className="h-4 w-4" />
+                        {signingOut ? "Signing out…" : "Sign out"}
+                      </Button>
+                    </div>
                     <p className="min-w-0 break-words text-xs text-muted-foreground">
-                      Opens this server&apos;s sign-in page (private key, mnemonic, or Google —
-                      whichever the server has configured). Preferred over pasting a bearer token
-                      below.
+                      Sign in opens this server&apos;s sign-in page (private key, mnemonic, or
+                      Google — whichever the server has configured); preferred over pasting a
+                      bearer token below. Sign out ends the session on this device — clears the
+                      server-side session and this browser&apos;s stored token.
                     </p>
                   </div>
                 ) : null}
