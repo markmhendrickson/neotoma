@@ -11022,6 +11022,153 @@ app.post("/update_schema_incremental", async (req, res) => {
 // reducer_config are validated consistently across CLI, MCP and HTTP, and
 // schema-level declarations (canonical_name_fields, temporal_fields,
 // reference_fields, aliases) are rejected early when malformed.
+/**
+ * Relationship-type registry over REST (#1972 / G25).
+ *
+ * The census: types this instance PERMITS, not types that have edges. Mirrors
+ * the MCP `list_relationship_types` handler so both surfaces read one registry.
+ */
+app.post("/list_relationship_types", async (req, res) => {
+  const parsed = z
+    .object({
+      keyword: z.string().optional(),
+      scope: z.enum(["user", "global"]).optional(),
+      include_deactivated: z.boolean().optional(),
+      include_edge_counts: z.boolean().optional(),
+      user_id: z.string().optional(),
+    })
+    .safeParse(req.body ?? {});
+  if (!parsed.success) {
+    logWarn("ValidationError:list_relationship_types", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { relationshipTypeRegistry } = await import("./services/relationship_types/registry.js");
+
+    const registrations = await relationshipTypeRegistry.list({
+      user_id: userId,
+      keyword: parsed.data.keyword,
+      scope: parsed.data.scope,
+      include_deactivated: parsed.data.include_deactivated,
+    });
+
+    // edge_count means "rows written" and is never evidence of registration —
+    // conflating the two is the confusion this endpoint exists to end.
+    const edgeCounts = new Map<string, number>();
+    if (parsed.data.include_edge_counts) {
+      const { data } = await db
+        .from("relationship_snapshots")
+        .select("relationship_type")
+        .eq("user_id", userId);
+      for (const row of (data ?? []) as Array<{ relationship_type: string }>) {
+        edgeCounts.set(row.relationship_type, (edgeCounts.get(row.relationship_type) ?? 0) + 1);
+      }
+    }
+
+    return res.json({
+      relationship_types: registrations.map((r) => ({
+        ...r,
+        ...(parsed.data.include_edge_counts
+          ? { edge_count: edgeCounts.get(r.relationship_type) ?? 0 }
+          : {}),
+      })),
+      total: registrations.length,
+    });
+  } catch (err) {
+    return handleApiError(
+      req,
+      res,
+      err,
+      "Failed to list relationship types",
+      "DB_QUERY_FAILED",
+      "list_relationship_types"
+    );
+  }
+});
+
+/**
+ * Register a relationship type over REST (#1972 / G25).
+ *
+ * Authorization runs in the service layer before any state mutation, so this
+ * surface and the MCP one inherit the same check rather than each carrying
+ * their own.
+ */
+app.post("/register_relationship_type", async (req, res) => {
+  const parsed = z
+    .object({
+      relationship_type: z.string(),
+      description: z.string().optional(),
+      // Defaults to "user" — the safe branch, inverting register_schema.
+      scope: z.enum(["user", "global"]).default("user"),
+      source_entity_types: z.array(z.string()).optional(),
+      target_entity_types: z.array(z.string()).optional(),
+      inverse: z.string().optional(),
+      symmetric: z.boolean().optional(),
+      acyclic: z.boolean().optional(),
+      user_id: z.string().optional(),
+    })
+    .safeParse(req.body ?? {});
+  if (!parsed.success) {
+    logWarn("ValidationError:register_relationship_type", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const { user_id: requestedUserId, ...registration } = parsed.data;
+    const userId = await getAuthenticatedUserId(req, requestedUserId);
+
+    {
+      const { enforceRelationshipTypeCapability, contextFromAgentIdentity } =
+        await import("./services/agent_capabilities.js");
+      const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
+      if (ctx) {
+        enforceRelationshipTypeCapability(registration.relationship_type, registration.scope, ctx);
+      }
+    }
+
+    const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =
+      await import("./services/relationship_types/registry.js");
+
+    try {
+      const result = await relationshipTypeRegistry.register({
+        ...registration,
+        // Recorded on global rows too, unlike register_schema.
+        created_by: userId,
+        user_id: userId,
+      });
+      logDebug("Success:register_relationship_type", req, {
+        relationship_type: result.relationship_type,
+        scope: result.scope,
+      });
+      return res.json({
+        success: true,
+        relationship_type: result.relationship_type,
+        scope: result.scope,
+        state: result.state,
+        registry_version: result.registry_version,
+        registered_at: result.registered_at,
+      });
+    } catch (err) {
+      if (err instanceof RelationshipTypeRegistrationError) {
+        logWarn("ValidationError:register_relationship_type", req, { error: err.message });
+        return sendError(res, err.statusCode, err.code.toUpperCase(), `${err.message} ${err.hint}`);
+      }
+      throw err;
+    }
+  } catch (err) {
+    return handleApiError(
+      req,
+      res,
+      err,
+      "Failed to register relationship type",
+      "DB_QUERY_FAILED",
+      "register_relationship_type"
+    );
+  }
+});
+
 app.post("/register_schema", async (req, res) => {
   const parsed = RegisterSchemaRequestSchema.safeParse(req.body);
   if (!parsed.success) {
