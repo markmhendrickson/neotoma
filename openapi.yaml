@@ -3206,6 +3206,26 @@ paths:
               schema:
                 type: object
 
+  /mcp/oauth/sign-out:
+    post:
+      summary: End the current OAuth key-session
+      description: |
+        Clears the OAuth key-session cookie and drops the server-side session
+        binding for the current browser. Idempotent: callers with no live
+        key-session still receive the signed-out HTML page.
+      operationId: mcpOAuthSignOut
+      # Public by design: this endpoint must work from the browser with only
+      # the HttpOnly key-session cookie; it clears session state and returns no
+      # user data.
+      security: []
+      responses:
+        "200":
+          description: Signed-out HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
   /mcp/oauth/authorization-details:
     get:
       summary: Authorization details proxy

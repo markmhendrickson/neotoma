@@ -354,6 +354,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp/oauth/sign-out": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * End the current OAuth key-session
+     * @description Clears the OAuth key-session cookie and drops the server-side session
+     *     binding for the current browser. Idempotent: callers with no live
+     *     key-session still receive the signed-out HTML page.
+     */
+    post: operations["mcpOAuthSignOut"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp/oauth/authorization-details": {
     parameters: {
       query?: never;
@@ -4820,6 +4842,26 @@ export interface operations {
         };
         content: {
           "application/json": Record<string, never>;
+        };
+      };
+    };
+  };
+  mcpOAuthSignOut: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Signed-out HTML page */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/html": string;
         };
       };
     };
