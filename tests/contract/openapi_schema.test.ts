@@ -45,12 +45,22 @@ describe("OpenAPI tool schemas", () => {
       );
     });
 
-    it("enumerates canonical relationship_type values including EMBEDS", () => {
+    it("declares relationship_type as an open string pointing at the registry", () => {
+      // REWRITTEN for #1972 / G25, same reason as the list_relationships case
+      // below: the vocabulary is a runtime registry, so an enum in the
+      // contract is a second copy that goes stale on the next registration —
+      // and a spec-driven client would then refuse locally a call the server
+      // accepts, which is exactly the one-way door #1972 was opened about.
       const rel = schema?.properties?.relationship_type;
       expect(rel?.type).toBe("string");
-      expect(rel?.enum).toEqual(
-        expect.arrayContaining(["PART_OF", "CORRECTS", "REFERS_TO", "DEPENDS_ON", "EMBEDS"])
-      );
+      expect(
+        rel?.enum,
+        "create_relationship must not enumerate relationship types in the contract"
+      ).toBeUndefined();
+      expect(
+        rel?.description ?? "",
+        "the contract must tell a client how to discover the vocabulary"
+      ).toContain("list_relationship_types");
     });
 
     it("declares optional metadata, source_id, user_id alongside required fields", () => {
@@ -105,22 +115,22 @@ describe("OpenAPI tool schemas", () => {
       );
     });
 
-    it("constrains relationship_type to the closed enum matching the handler", () => {
+    it("declares relationship_type as an open string pointing at the registry", () => {
+      // REWRITTEN for #1972 / G25. This used to assert a CLOSED enum containing
+      // a sample of the 28 built-ins. That assertion pinned the bug rather than
+      // the fix: the vocabulary is a runtime registry, so an enum in the
+      // contract goes stale the moment a type is registered, and a
+      // spec-driven client would refuse locally a call the server accepts.
       const rel = schema?.properties?.relationship_type;
       expect(rel?.type).toBe("string");
-      // Sample of canonical + lowercase relationship types; full list must
-      // match RelationshipTypeSchema in src/shared/action_schemas.ts.
-      expect(rel?.enum).toEqual(
-        expect.arrayContaining([
-          "PART_OF",
-          "CORRECTS",
-          "REFERS_TO",
-          "DEPENDS_ON",
-          "EMBEDS",
-          "works_at",
-          "invested_in",
-        ])
-      );
+      expect(
+        rel?.enum,
+        "openapi.yaml must not enumerate relationship types — the vocabulary is a registry"
+      ).toBeUndefined();
+      expect(
+        rel?.description ?? "",
+        "the contract must tell a client how to discover the vocabulary"
+      ).toContain("list_relationship_types");
     });
 
     // Note: the openapi.yaml schema declares an `anyOf` constraint requiring

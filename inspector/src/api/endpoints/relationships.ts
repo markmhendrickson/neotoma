@@ -79,3 +79,23 @@ export function restoreRelationship(
 export function retrieveRelatedEntities(params: RelatedEntitiesParams, fetch?: FetchOptions) {
   return post<Record<string, unknown>>("/retrieve_related_entities", params, fetch);
 }
+
+/**
+ * The relationship-type registry census (#1972 / G25).
+ *
+ * Types this instance PERMITS — not types that have edges. Read this instead
+ * of a hardcoded list; there deliberately is no hardcoded fallback, because a
+ * fallback would silently restore the closed-vocabulary bug in the UI while
+ * the server had moved on.
+ */
+export function listRelationshipTypes(fetch?: FetchOptions) {
+  return post<{
+    relationship_types: Array<{
+      relationship_type: string;
+      scope: string;
+      state: string;
+      description?: string;
+    }>;
+    total: number;
+  }>("/list_relationship_types", {}, fetch);
+}

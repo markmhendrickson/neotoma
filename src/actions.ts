@@ -7196,6 +7196,28 @@ export async function storeStructuredForApi(params: {
     }
   }
 
+  // Relationship-type validation, UP FRONT and BEFORE any entity is persisted
+  // (#1972 / G25).
+  //
+  // This closes the more damaging half of the closed-vocabulary defect. The
+  // relationships leg further down catches per edge and downgrades to
+  // logger.warn, so a store carrying an edge the substrate would not accept
+  // returned SUCCESS with the edge silently absent — a caller believed it had
+  // written a graph it had not written, and nothing in the response said
+  // otherwise. Validating here means an unacceptable type is a refusal the
+  // caller sees, and no entities are written that would have been orphaned by
+  // the edge that was going to fail anyway.
+  if (commit && Array.isArray(relationships) && relationships.length > 0) {
+    const { relationshipsService } = await import("./services/relationships.js");
+    const seen = new Set<string>();
+    for (const rel of relationships) {
+      const type = rel?.relationship_type;
+      if (typeof type !== "string" || seen.has(type)) continue;
+      seen.add(type);
+      await relationshipsService.assertRegisteredType(type, userId);
+    }
+  }
+
   // Protected-entity-types guard: governance state (`agent_grant`, etc.)
   // is gated by an explicit capability on the admitted grant. Mirrors
   // the same check made deep in `createObservation` so callers see a
@@ -12227,6 +12249,41 @@ export async function startHTTPServer() {
   } catch (err) {
     // Never block boot — a briefly-unavailable DB must not stop the server.
     logger.warn(`[SchemaRegistry] failed to seed built-in schemas: ${(err as Error).message}`);
+  }
+
+  // Seed the built-in relationship-type vocabulary (#1972 / G25).
+  //
+  // Runs immediately after the entity-schema seeder and BEFORE any request can
+  // be served, because `relationshipsService.createRelationship` now validates
+  // against this registry: an unseeded instance would refuse every edge,
+  // including PART_OF. Strictly additive — a type with any existing effective
+  // registration is left untouched, so an operator's deliberate registration
+  // or deregistration survives a redeploy.
+  try {
+    const { seedBuiltInRelationshipTypes } =
+      await import("./services/relationship_types/seed_registry.js");
+    const summary = await seedBuiltInRelationshipTypes();
+    if (summary.registered.length > 0) {
+      logger.info(
+        `[RelationshipTypes] seeded ${summary.registered.length} built-in type(s): ` +
+          `${summary.registered.join(", ")} (preserved ${summary.preserved.length} existing)`
+      );
+    } else {
+      logger.info(
+        `[RelationshipTypes] all ${summary.preserved.length} built-in relationship type(s) ` +
+          `already registered; nothing to seed`
+      );
+    }
+    if (summary.failed.length > 0) {
+      logger.warn(
+        `[RelationshipTypes] ${summary.failed.length} type(s) failed to seed: ` +
+          summary.failed.map((f) => `${f.relationship_type} (${f.error})`).join("; ")
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      `[RelationshipTypes] failed to seed built-in relationship types: ${(err as Error).message}`
+    );
   }
 
   // Seed `issue` schema for the GitHub Issues integration.

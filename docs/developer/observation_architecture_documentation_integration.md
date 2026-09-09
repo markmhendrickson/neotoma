@@ -184,7 +184,7 @@ This plan integrates the 11 architectural decisions document into Neotoma's docu
 ### Task 3.5: Create relationships.md
 **File:** [`docs/subsystems/relationships.md`](docs/subsystems/relationships.md) (NEW)
 **Content:**
-- Document relationship types (PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF)
+- Document relationship types (read the live vocabulary via `list_relationship_types`)
 - Explain graph patterns
 - Provide examples
 - Add query patterns

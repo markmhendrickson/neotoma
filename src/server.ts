@@ -2143,6 +2143,10 @@ export class NeotomaServer {
         return await this.getEntityTypeCounts(args);
       case "list_entity_types":
         return await this.listEntityTypes(args);
+      case "list_relationship_types":
+        return await this.listRelationshipTypes(args);
+      case "register_relationship_type":
+        return await this.registerRelationshipType(args);
       case "describe_entity_type":
         return await this.describeEntityType(args);
       case "describe_instance_policy":
@@ -3255,48 +3259,86 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = CreateRelationshipRequestSchema.parse(args ?? {});
 
-    // Check if relationship would create a cycle
-    // Get all relationships to build the graph
-    const { data: allRelationships } = await db
-      .from("relationship_snapshots")
-      .select("source_entity_id, target_entity_id");
-
-    // Build graph from existing relationships
-    const graph = new Map<string, Set<string>>();
-    if (allRelationships) {
-      for (const rel of allRelationships) {
-        if (!graph.has(rel.source_entity_id)) {
-          graph.set(rel.source_entity_id, new Set());
-        }
-        graph.get(rel.source_entity_id)!.add(rel.target_entity_id);
-      }
-    }
-
-    // Check if adding source -> target would create a cycle
-    // A cycle exists if there's already a path from target to source
-    const visited = new Set<string>();
-    const hasPath = (from: string, to: string): boolean => {
-      if (from === to) return true;
-      if (visited.has(from)) return false;
-      visited.add(from);
-      const neighbors = graph.get(from) || new Set();
-      for (const neighbor of neighbors) {
-        if (hasPath(neighbor, to)) return true;
-      }
-      return false;
-    };
-
-    // Check if target can reach source (which would create a cycle when we add source -> target)
-    visited.clear();
-    if (hasPath(parsed.target_entity_id, parsed.source_entity_id)) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Creating this relationship would create a cycle in the graph`
-      );
-    }
-
     // Use authenticated user_id
     const userId = this.getAuthenticatedUserId();
+
+    // ── CYCLE CHECK (#1972 / G25) ──────────────────────────────────────────
+    //
+    // This check used to be type-blind, tenant-blind and unbounded, and it
+    // was on exactly one of four write paths. All four properties were wrong:
+    //
+    //   - TYPE-BLIND: it built ONE graph from EVERY edge of EVERY type and
+    //     refused any edge closing a loop in that union. Types that legitimately
+    //     coexist on the same entities — a work-model FOLLOWS chain and an
+    //     authority-model ownership fan-in, say — would refuse each other
+    //     though no single-type cycle existed.
+    //   - TENANT-BLIND: the select carried no user_id filter, so on a shared
+    //     instance one tenant's edges could refuse another tenant's write.
+    //   - UNBOUNDED: every create_relationship call loaded the entire
+    //     relationship_snapshots table and walked it with a recursive closure
+    //     rebuilt per call — a latent denial-of-service surface independent of
+    //     correctness.
+    //   - INCONSISTENT: createRelationships (plural), store's relationship leg
+    //     and the REST path did not check at all, so the same edge was refused
+    //     through one door and accepted through three. A check that holds on
+    //     one door of four is not an invariant.
+    //
+    // It is now OPT-IN PER TYPE via the registry's `acyclic` flag, scoped to
+    // edges of that type and that tenant, and depth-bounded. `DEPENDS_ON` and
+    // `PART_OF` carry the flag and keep the protection; a type whose semantics
+    // permit cycles does not, because refusing those is not protection.
+    {
+      const { isRelationshipTypeAcyclic } =
+        await import("./services/relationship_types/registry.js");
+      if (await isRelationshipTypeAcyclic(parsed.relationship_type, userId)) {
+        const { data: sameTypeEdges } = await db
+          .from("relationship_snapshots")
+          .select("source_entity_id, target_entity_id")
+          .eq("relationship_type", parsed.relationship_type)
+          .eq("user_id", userId);
+
+        const graph = new Map<string, Set<string>>();
+        for (const rel of (sameTypeEdges ?? []) as Array<{
+          source_entity_id: string;
+          target_entity_id: string;
+        }>) {
+          if (!graph.has(rel.source_entity_id)) graph.set(rel.source_entity_id, new Set());
+          graph.get(rel.source_entity_id)!.add(rel.target_entity_id);
+        }
+
+        // Iterative, visited-guarded, and depth-bounded. The bound is a
+        // circuit-breaker, not a semantic limit: a hierarchy deeper than this
+        // is pathological, and traversing it on every write is the cost the
+        // unbounded version imposed on everyone.
+        const MAX_CYCLE_CHECK_DEPTH = 1000;
+        const target = parsed.target_entity_id;
+        const source = parsed.source_entity_id;
+        const visited = new Set<string>();
+        const stack: string[] = [target];
+        let closesLoop = target === source;
+        let steps = 0;
+        while (stack.length > 0 && !closesLoop && steps < MAX_CYCLE_CHECK_DEPTH) {
+          steps++;
+          const node = stack.pop()!;
+          if (node === source) {
+            closesLoop = true;
+            break;
+          }
+          if (visited.has(node)) continue;
+          visited.add(node);
+          for (const next of graph.get(node) ?? []) stack.push(next);
+        }
+
+        if (closesLoop) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Creating this relationship would create a cycle among "${parsed.relationship_type}" ` +
+              `edges, and that type is registered as acyclic. Register the type without ` +
+              `acyclic: true, or use a type whose semantics permit cycles.`
+          );
+        }
+      }
+    }
 
     try {
       // Create a source for this relationship
@@ -4642,6 +4684,142 @@ export class NeotomaServer {
   /**
    * Register a new schema
    */
+  /**
+   * The registry census (#1972 / G25): relationship types this instance
+   * PERMITS.
+   *
+   * Deliberately NOT the same thing as the pre-existing enumeration behind the
+   * `neotoma://relationship_types`-shaped hole, which did
+   * `SELECT relationship_type FROM relationship_snapshots` and deduped — that
+   * reports types that HAVE edges. A registered-but-unwritten type is
+   * invisible there, which is exactly backwards for a caller discovering what
+   * it may write BEFORE writing it. A registered type with zero edges appears
+   * here, mirroring how a registered entity type with no entities behaves.
+   */
+  private async listRelationshipTypes(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = z
+      .object({
+        keyword: z.string().optional(),
+        scope: z.enum(["user", "global"]).optional(),
+        include_deactivated: z.boolean().optional(),
+        include_edge_counts: z.boolean().optional(),
+      })
+      .parse(args ?? {});
+
+    const { relationshipTypeRegistry } = await import("./services/relationship_types/registry.js");
+    const userId = this.getAuthenticatedUserId();
+
+    const registrations = await relationshipTypeRegistry.list({
+      user_id: userId,
+      keyword: parsed.keyword,
+      scope: parsed.scope,
+      include_deactivated: parsed.include_deactivated,
+    });
+
+    // edge_count is OPTIONAL and means "rows written". It is never evidence of
+    // registration — conflating the two is the confusion this tool exists to
+    // end — so it is off by default and documented as such on the tool.
+    const edgeCounts = new Map<string, number>();
+    if (parsed.include_edge_counts) {
+      const { data } = await db
+        .from("relationship_snapshots")
+        .select("relationship_type")
+        .eq("user_id", userId);
+      for (const row of (data ?? []) as Array<{ relationship_type: string }>) {
+        edgeCounts.set(row.relationship_type, (edgeCounts.get(row.relationship_type) ?? 0) + 1);
+      }
+    }
+
+    return this.buildTextResponse({
+      relationship_types: registrations.map((r) => ({
+        ...r,
+        ...(parsed.include_edge_counts
+          ? { edge_count: edgeCounts.get(r.relationship_type) ?? 0 }
+          : {}),
+      })),
+      total: registrations.length,
+    });
+  }
+
+  /**
+   * Register a relationship type (#1972 / G25).
+   *
+   * Authorization runs BEFORE any state mutation, per
+   * `services/bundles/activation.ts`'s `assertAdminGateHook` note, so the MCP,
+   * HTTP and CLI surfaces inherit one check rather than three.
+   */
+  private async registerRelationshipType(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = z
+      .object({
+        relationship_type: z.string(),
+        description: z.string().optional(),
+        // Defaults to "user" — the SAFE branch, inverting register_schema,
+        // whose user_specific defaults to false and whose default branch is
+        // therefore both the widest blast radius and the unattributed one.
+        scope: z.enum(["user", "global"]).default("user"),
+        source_entity_types: z.array(z.string()).optional(),
+        target_entity_types: z.array(z.string()).optional(),
+        inverse: z.string().optional(),
+        symmetric: z.boolean().optional(),
+        acyclic: z.boolean().optional(),
+      })
+      .parse(args ?? {});
+
+    const userId = this.getAuthenticatedUserId();
+
+    {
+      const { enforceRelationshipTypeCapability, contextFromAgentIdentity } =
+        await import("./services/agent_capabilities.js");
+      const { getCurrentAgentIdentity } = await import("./services/request_context.js");
+      const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
+      if (ctx) {
+        enforceRelationshipTypeCapability(parsed.relationship_type, parsed.scope, ctx);
+      }
+    }
+
+    const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =
+      await import("./services/relationship_types/registry.js");
+
+    try {
+      const registration = await relationshipTypeRegistry.register({
+        ...parsed,
+        // created_by is recorded on GLOBAL rows too. register_schema stores
+        // user_id: null for global rows, so a global registration records
+        // nothing about who made it. There is no reason to repeat that.
+        created_by: userId,
+        user_id: userId,
+      });
+
+      // A client holding cached tool definitions may still refuse a
+      // newly registered type LOCALLY, before the request is sent. Registering
+      // is not sufficient — the client must refresh. Tell compliant ones to.
+      try {
+        await this.mcpServer.server.sendToolListChanged();
+      } catch {
+        // Not every transport supports the notification; never fail a
+        // successful registration because the courtesy ping did not land.
+      }
+
+      return this.buildTextResponse({
+        success: true,
+        relationship_type: registration.relationship_type,
+        scope: registration.scope,
+        state: registration.state,
+        registry_version: registration.registry_version,
+        registered_at: registration.registered_at,
+      });
+    } catch (error: any) {
+      if (error instanceof RelationshipTypeRegistrationError) {
+        throw new McpError(ErrorCode.InvalidParams, `${error.message} ${error.hint}`);
+      }
+      throw error;
+    }
+  }
+
   private async registerSchema(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {

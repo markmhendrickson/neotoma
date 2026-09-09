@@ -13,6 +13,7 @@ import { generateDeterministicSourceId } from "./source_identity.js";
 import { getCurrentAgentIdentity } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
+import { getActiveRelationshipTypeNames } from "./relationship_types/registry.js";
 
 /** Minimal shape of a `relationship_observations` row needed for liveness. */
 interface RelationshipObservationRow {
@@ -48,35 +49,23 @@ export function isRelationshipLive(observations: RelationshipObservationRow[]): 
   return winner?.metadata?._deleted !== true;
 }
 
-export type RelationshipType =
-  | "PART_OF"
-  | "CORRECTS"
-  | "REFERS_TO"
-  | "SETTLES"
-  | "DUPLICATE_OF"
-  | "DEPENDS_ON"
-  | "SUPERSEDES"
-  | "EMBEDS"
-  | "works_at"
-  | "owns"
-  | "manages"
-  | "part_of"
-  | "related_to"
-  | "depends_on"
-  | "references"
-  | "transacted_with"
-  | "member_of"
-  | "reports_to"
-  | "located_at"
-  | "created_by"
-  | "funded_by"
-  | "acquired_by"
-  | "subsidiary_of"
-  | "partner_of"
-  | "competitor_of"
-  | "supplies_to"
-  | "contracted_with"
-  | "invested_in";
+/**
+ * A relationship type name.
+ *
+ * This was a 28-member closed union until #1972 (G25). It is now `string`,
+ * because the vocabulary is a RUNTIME REGISTRY
+ * (`relationship_types/registry.ts`) rather than a compile-time literal —
+ * membership is decided against registered rows at write time, in
+ * `createRelationship` below, which remains the single enforcement point.
+ *
+ * The union was not enforcement in any useful sense: `store`'s relationship
+ * leg reached this service through an explicit `as never` cast
+ * (`actions.ts:8056`), so the compiler was actively silenced about it, and
+ * `validTypes.has()` was the only thing between an arbitrary string and the
+ * database. Keeping the alias (rather than replacing every reference with
+ * `string`) preserves the documentary value of the name at ~16 call sites.
+ */
+export type RelationshipType = string;
 
 export interface Relationship {
   id: string;
@@ -105,37 +94,50 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/**
+ * Structured refusal for an unregistered relationship type.
+ *
+ * Replaces a bare `throw new Error("Invalid relationship type: X")`, which
+ * named no remedy — a caller learned the type was rejected but not that a
+ * registry exists, nor how to read it, nor how to add to it.
+ */
+export class UnregisteredRelationshipTypeError extends Error {
+  readonly code = "unregistered_relationship_type";
+  readonly statusCode = 400;
+  readonly relationshipType: string;
+  readonly hint: string;
+
+  constructor(relationshipType: string) {
+    const hint =
+      `Call list_relationship_types to see the vocabulary this instance accepts, ` +
+      `or register_relationship_type to add "${relationshipType}" to it.`;
+    super(`Invalid relationship type: ${relationshipType}. ${hint}`);
+    this.name = "UnregisteredRelationshipTypeError";
+    this.relationshipType = relationshipType;
+    this.hint = hint;
+  }
+}
+
 export class RelationshipsService {
-  private validTypes: Set<RelationshipType> = new Set([
-    "PART_OF",
-    "CORRECTS",
-    "REFERS_TO",
-    "SETTLES",
-    "DUPLICATE_OF",
-    "DEPENDS_ON",
-    "SUPERSEDES",
-    "EMBEDS",
-    "works_at",
-    "owns",
-    "manages",
-    "part_of",
-    "related_to",
-    "depends_on",
-    "references",
-    "transacted_with",
-    "member_of",
-    "reports_to",
-    "located_at",
-    "created_by",
-    "funded_by",
-    "acquired_by",
-    "subsidiary_of",
-    "partner_of",
-    "competitor_of",
-    "supplies_to",
-    "contracted_with",
-    "invested_in",
-  ]);
+  /**
+   * Validate a relationship type against the registry.
+   *
+   * THIS IS THE SINGLE ENFORCEMENT POINT for the relationship vocabulary, and
+   * it was the single enforcement point before #1972 too — the difference is
+   * that it now reads registered rows instead of a hardcoded 28-member Set,
+   * so the vocabulary is data and the fifteen advertisement copies elsewhere
+   * in the tree have nothing left to drift from.
+   *
+   * Membership is resolved user-then-global: a type registered by this user
+   * shadows a global one of the same name, and another user's user-scoped
+   * registration is not visible here at all.
+   */
+  async assertRegisteredType(relationshipType: string, userId?: string): Promise<void> {
+    const names = await getActiveRelationshipTypeNames(userId);
+    if (!names.has(relationshipType)) {
+      throw new UnregisteredRelationshipTypeError(relationshipType);
+    }
+  }
 
   /**
    * Create relationship (creates observation and snapshot)
@@ -150,9 +152,7 @@ export class RelationshipsService {
     user_id: string;
   }): Promise<RelationshipSnapshot> {
     enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
-    if (!this.validTypes.has(params.relationship_type)) {
-      throw new Error(`Invalid relationship type: ${params.relationship_type}`);
-    }
+    await this.assertRegisteredType(params.relationship_type, params.user_id);
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;
     let sourceId = params.source_id || null;

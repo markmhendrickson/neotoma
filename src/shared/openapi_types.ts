@@ -1916,6 +1916,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/register_relationship_type": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Register a relationship type
+     * @description Add a relationship type to this instance's vocabulary (#1972 / G25). The vocabulary is a runtime registry rather than a closed enum, so a caller needing an edge type the substrate does not already know registers it here instead of bending an existing type or simulating the edge as a field on an entity. Read the vocabulary back with list_relationship_types.
+     *
+     *     Registration is APPEND-ONLY: re-registering a type inserts a newer row that supersedes the prior one, and deregistering appends a deactivated row. Nothing is updated in place and nothing is deleted, so the history of what was registered when stays readable.
+     *
+     *     Scope defaults to "user". Registering at "global" scope changes the vocabulary for every tenant on the instance and requires an explicit register_relationship_type capability naming the type (or "*").
+     *
+     *     source_entity_types, target_entity_types, inverse and symmetric are ADVISORY ONLY and are not enforced at write time, mirroring how entity schemas treat unknown fields. acyclic is the one exception and IS enforced.
+     */
+    post: operations["registerRelationshipType"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/list_relationship_types": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * List registered relationship types
+     * @description The registry census: relationship types this instance PERMITS, which is not the same as types that HAVE edges. A type registered a moment ago with zero edges written appears here, which is exactly what a caller discovering what it may write BEFORE writing it needs.
+     *
+     *     edge_count, when present, means "rows written" and is never evidence of registration.
+     */
+    post: operations["listRelationshipTypes"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/register_schema": {
     parameters: {
       query?: never;
@@ -3512,36 +3560,8 @@ export interface components {
     };
     StoreRelationshipInput:
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Index into the entities array for the target entity. */
@@ -3551,36 +3571,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Existing target entity ID. */
@@ -3590,36 +3582,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Index into the entities array for the target entity. */
@@ -3629,36 +3593,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Existing target entity ID. */
@@ -4239,36 +4175,8 @@ export interface components {
       canonical_name?: string | null;
     };
     GetRelationshipSnapshotRequest: {
-      /** @enum {string} */
-      relationship_type:
-        | "PART_OF"
-        | "CORRECTS"
-        | "REFERS_TO"
-        | "SETTLES"
-        | "DUPLICATE_OF"
-        | "DEPENDS_ON"
-        | "SUPERSEDES"
-        | "EMBEDS"
-        | "works_at"
-        | "owns"
-        | "manages"
-        | "part_of"
-        | "related_to"
-        | "depends_on"
-        | "references"
-        | "transacted_with"
-        | "member_of"
-        | "reports_to"
-        | "located_at"
-        | "created_by"
-        | "funded_by"
-        | "acquired_by"
-        | "subsidiary_of"
-        | "partner_of"
-        | "competitor_of"
-        | "supplies_to"
-        | "contracted_with"
-        | "invested_in";
+      /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+      relationship_type: string;
       source_entity_id: string;
       target_entity_id: string;
       /** @description Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md. */
@@ -6658,42 +6566,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /**
-           * @description Typed relationship category. Canonical structural types are
-           *     `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`,
-           *     `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Domain
-           *     types (e.g. `works_at`, `owns`, `manages`) are also accepted.
-           * @enum {string}
-           */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing entity id at the source end of the edge. */
           source_entity_id: string;
           /** @description Existing entity id at the target end of the edge. */
@@ -6741,36 +6615,8 @@ export interface operations {
       content: {
         "application/json": {
           relationships: {
-            /** @enum {string} */
-            relationship_type:
-              | "PART_OF"
-              | "CORRECTS"
-              | "REFERS_TO"
-              | "SETTLES"
-              | "DUPLICATE_OF"
-              | "DEPENDS_ON"
-              | "SUPERSEDES"
-              | "EMBEDS"
-              | "works_at"
-              | "owns"
-              | "manages"
-              | "part_of"
-              | "related_to"
-              | "depends_on"
-              | "references"
-              | "transacted_with"
-              | "member_of"
-              | "reports_to"
-              | "located_at"
-              | "created_by"
-              | "funded_by"
-              | "acquired_by"
-              | "subsidiary_of"
-              | "partner_of"
-              | "competitor_of"
-              | "supplies_to"
-              | "contracted_with"
-              | "invested_in";
+            /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+            relationship_type: string;
             source_entity_id: string;
             target_entity_id: string;
             source_id?: string;
@@ -6834,41 +6680,8 @@ export interface operations {
                * @enum {string}
                */
               direction?: "inbound" | "outbound" | "incoming" | "outgoing" | "both";
-              /**
-               * @description Optional relationship_type filter. Closed enum matching the handler's
-               *     accepted values; spec-driven clients passing any other value will be
-               *     rejected at runtime with a Zod validation error.
-               * @enum {string}
-               */
-              relationship_type?:
-                | "PART_OF"
-                | "CORRECTS"
-                | "REFERS_TO"
-                | "SETTLES"
-                | "DUPLICATE_OF"
-                | "DEPENDS_ON"
-                | "SUPERSEDES"
-                | "EMBEDS"
-                | "works_at"
-                | "owns"
-                | "manages"
-                | "part_of"
-                | "related_to"
-                | "depends_on"
-                | "references"
-                | "transacted_with"
-                | "member_of"
-                | "reports_to"
-                | "located_at"
-                | "created_by"
-                | "funded_by"
-                | "acquired_by"
-                | "subsidiary_of"
-                | "partner_of"
-                | "competitor_of"
-                | "supplies_to"
-                | "contracted_with"
-                | "invested_in";
+              /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+              relationship_type?: string;
               /**
                * @description Maximum number of relationships to return.
                * @default 100
@@ -7698,36 +7511,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
@@ -7773,36 +7558,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
@@ -7998,6 +7755,109 @@ export interface operations {
             scope?: string;
           } & {
             [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  registerRelationshipType: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Identifier-shaped name, 1-64 characters, matching ^[A-Za-z][A-Za-z0-9_]*$. Casing-agnostic. A new name that differs from an existing active type only by case is rejected; the pre-existing PART_OF/part_of and DEPENDS_ON/depends_on pairs are grandfathered. */
+          relationship_type: string;
+          description?: string;
+          /**
+           * @description Defaults to "user" — the safe branch. This deliberately inverts register_schema, whose user_specific defaults to false and whose default branch is therefore both the widest blast radius and the one that records no identity.
+           * @default user
+           * @enum {string}
+           */
+          scope?: "user" | "global";
+          /** @description Advisory only. Not enforced at write time. */
+          source_entity_types?: string[];
+          /** @description Advisory only. Not enforced at write time. */
+          target_entity_types?: string[];
+          /** @description Advisory only. Name of the inverse edge. */
+          inverse?: string;
+          /** @description Advisory only. Whether the edge reads the same both ways. */
+          symmetric?: boolean;
+          /** @description ENFORCED. When true, create_relationship refuses an edge of this type that would close a loop among edges OF THIS TYPE within this tenant. Opt-in: a type whose semantics permit cycles should leave this unset. */
+          acyclic?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Relationship type registered */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            success: boolean;
+            relationship_type: string;
+            scope: string;
+            state: string;
+            registry_version?: string;
+            registered_at?: string;
+          };
+        };
+      };
+    };
+  };
+  listRelationshipTypes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Case-insensitive filter over name and description. */
+          keyword?: string;
+          /** @enum {string} */
+          scope?: "user" | "global";
+          /** @default false */
+          include_deactivated?: boolean;
+          /**
+           * @description Include edge_count per type. Costs one aggregate query; "rows written", never evidence of registration.
+           * @default false
+           */
+          include_edge_counts?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Registered relationship types */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            relationship_types: {
+              relationship_type?: string;
+              scope?: string;
+              state?: string;
+              description?: string;
+              registry_version?: string;
+              registered_at?: string;
+              source_entity_types?: string[];
+              target_entity_types?: string[];
+              inverse?: string;
+              symmetric?: boolean;
+              acyclic?: boolean;
+              edge_count?: number;
+            }[];
+            total: number;
           };
         };
       };

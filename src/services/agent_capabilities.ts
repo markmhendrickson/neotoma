@@ -44,6 +44,14 @@ export type AgentCapabilityOp =
   | "create_relationship"
   | "correct"
   | "retrieve"
+  /**
+   * Registering a relationship type is a GOVERNANCE act, not a data write:
+   * it changes what edges the instance will accept. Gated at the service
+   * layer so MCP, HTTP and CLI inherit one check (#1972 / G25).
+   *
+   * Scoped by `relationship_types`, not `entity_types` — see the field below.
+   */
+  | "register_relationship_type"
   | "github_harness:read"
   | "github_harness:write"
   | "github_harness:*";
@@ -52,6 +60,19 @@ export interface AgentCapabilityEntry {
   op: AgentCapabilityOp;
   /** Allowed entity types for this op. `"*"` widens to any entity_type. */
   entity_types: string[];
+  /**
+   * Allowed relationship types for `register_relationship_type`. `"*"` widens.
+   *
+   * A PARALLEL field rather than an overload of `entity_types`, deliberately:
+   * `entity_types` already means one vocabulary, and making it mean two
+   * depending on the op is precisely the ambiguity #1972 is about. Additive —
+   * grants written before this field simply carry no relationship capability,
+   * which is the correct default for a governance op.
+   *
+   * The special value `"global"` is required IN ADDITION to a type match to
+   * register at instance-wide scope.
+   */
+  relationship_types?: string[];
   /**
    * Repo-scope for `github_harness:*` ops — list of "owner/repo" strings.
    * `"*"` wildcards any repo. Only meaningful for github_harness ops;
@@ -353,4 +374,104 @@ export function enforceAgentCapability(
 
 export function getAgentCapabilitiesSource(): string {
   return "agent_grant_entities";
+}
+
+/**
+ * Enforce the `register_relationship_type` capability (#1972 / G25).
+ *
+ * Registering a relationship type is a governance act: it changes the set of
+ * edges the instance will accept. It is therefore gated here, in the service
+ * layer BEFORE any state mutation, so the MCP, HTTP and CLI surfaces inherit
+ * one check rather than three — the shape
+ * `services/bundles/activation.ts`'s `assertAdminGateHook` note asks for.
+ *
+ * Two properties, both deliberate:
+ *
+ *   - The relationship type is matched against `relationship_types`, a
+ *     PARALLEL field, not against `entity_types`. Overloading one field to
+ *     mean two vocabularies depending on the op is the ambiguity #1972 is
+ *     about.
+ *   - GLOBAL scope needs `"global"` in that list IN ADDITION to a type match.
+ *     A grant that lets an agent register `LEASE` for itself does not let it
+ *     change the vocabulary for every tenant on the instance.
+ *
+ * NOTE ON WHAT THIS DOES NOT DO: `register_schema` — the same defect one
+ * vocabulary over — has NO authorization check at all beyond authentication,
+ * and its scope is caller-chosen with `global` as the DEFAULT and the
+ * unattributed branch. That is deliberately left alone here. Adding a
+ * capability requirement to a tool that has never had one breaks every
+ * existing caller whose grant does not name it, and deserves its own issue
+ * with its own back-compat analysis. Gating only the NEW surface means it is
+ * safe from day one with no migration, which is the right asymmetry.
+ */
+export function enforceRelationshipTypeCapability(
+  relationshipType: string,
+  scope: "user" | "global",
+  ctx: AgentCapabilityContext
+): void {
+  const op: AgentCapabilityOp = "register_relationship_type";
+
+  if (ctx.admitted && ctx.capabilities) {
+    const matching = ctx.capabilities.filter((cap) => grantOpMatchesRequested(cap.op, op));
+    const types = matching.flatMap((cap) => cap.relationship_types ?? []);
+    const coversType = types.includes("*") || types.includes(relationshipType);
+    const coversGlobal = types.includes("global");
+
+    if (!coversType || (scope === "global" && !coversGlobal)) {
+      const missing = !coversType
+        ? `relationship_types: ["${relationshipType}"]`
+        : `relationship_types: ["${relationshipType}", "global"]`;
+      const err = new AgentCapabilityError({
+        op,
+        entityType: relationshipType,
+        agentLabel: ctx.agentLabel,
+        hint:
+          `Admitted agent "${ctx.agentLabel}" may not register relationship type ` +
+          `"${relationshipType}"${scope === "global" ? " at global scope" : ""}. ` +
+          `Edit the grant in Inspector → Agents → Grants and add ` +
+          `{ op: "${op}", entity_types: [], ${missing} }.`,
+      });
+      logger.warn(
+        JSON.stringify({
+          event: "agent_capability_denied",
+          reason: coversType ? "global_scope_not_granted" : "relationship_type_out_of_scope",
+          op,
+          relationship_type: relationshipType,
+          scope,
+          agent_label: ctx.agentLabel,
+          admitted: true,
+        })
+      );
+      throw err;
+    }
+    return;
+  }
+
+  // Unadmitted: same default-deny posture as enforceAgentCapability, so this
+  // op is not stricter than the rest of the model during rollout.
+  const enforcedTier =
+    ctx.tier === "hardware" || ctx.tier === "software" || ctx.tier === "operator_attested";
+  if (!enforcedTier) return;
+  if (!isAgentDefaultDenyEnabled()) return;
+
+  const err = new AgentCapabilityError({
+    op,
+    entityType: relationshipType,
+    agentLabel: ctx.agentLabel,
+    hint:
+      "No active agent_grant matches this AAuth identity and " +
+      "NEOTOMA_AGENT_DEFAULT_DENY is enabled. Create a grant in " +
+      "Inspector → Agents → Grants for this agent or unset the env var.",
+  });
+  logger.warn(
+    JSON.stringify({
+      event: "agent_capability_denied",
+      reason: "default_deny_no_match",
+      op,
+      relationship_type: relationshipType,
+      agent_label: ctx.agentLabel,
+      admitted: false,
+    })
+  );
+  throw err;
 }
