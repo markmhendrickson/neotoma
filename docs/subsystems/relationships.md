@@ -54,7 +54,14 @@ Neotoma does **not** hard-code hierarchies:
 - Enables out-of-order ingestion, multiple parents, overlapping summaries, corrections
 See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
 ## 2. Relationship Types
-### 2.1 Core Relationship Types
+
+The vocabulary is a **runtime registry**, not a closed set (#1972 / G25). Call
+`list_relationship_types` to read what an instance actually accepts, and
+`register_relationship_type` to add to it. The table below documents what the
+eight canonical **built-ins** mean; it is not the list of types a given
+instance permits, and code must never hardcode it.
+
+### 2.1 Core Relationship Types (built-in — not exhaustive)
 | Type           | Description                | Example                              |
 | -------------- | -------------------------- | ------------------------------------ |
 | `PART_OF`      | Hierarchical relationships | Invoice line item part of invoice    |

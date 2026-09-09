@@ -226,6 +226,30 @@ const SCHEMA_STATEMENTS = [
     scope TEXT,
     metadata TEXT
   )`,
+  // Relationship-type registry (#1972 / G25). APPEND-ONLY: every registration,
+  // re-registration and deregistration is an INSERT and `state` is a value on
+  // the row, never a column updated in place — unlike `schema_registry` above,
+  // whose `active INTEGER` is flipped by an UPDATE. Resolution reads the latest
+  // row per (relationship_type, scope, user_id). See
+  // src/services/relationship_types/registry.ts for the full rationale.
+  //
+  // `relationship_type` carries no CHECK: the naming rule lives in the service
+  // where it can produce a structured error, exactly as entity-type naming does
+  // in entity_type_guard.ts. `relationship_snapshots.relationship_type` is
+  // likewise unconstrained TEXT, so widening the vocabulary needs no data
+  // migration — existing edges are untouched.
+  `CREATE TABLE IF NOT EXISTS relationship_type_registry (
+    id TEXT PRIMARY KEY,
+    relationship_type TEXT NOT NULL,
+    registry_version TEXT NOT NULL,
+    definition TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT,
+    created_by TEXT,
+    user_id TEXT,
+    scope TEXT,
+    metadata TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_state (
     id TEXT PRIMARY KEY,
     state TEXT NOT NULL,
@@ -595,6 +619,30 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
+      )
+      .run();
+
+    // Relationship-type registry (#1972 / G25). Two indexes, and neither is
+    // optional: `schema_registry` has NO index at all, so every registry read
+    // there is a full table scan — and this registry is read on the
+    // relationship WRITE path, not just at boot.
+    //
+    // The UNIQUE index is the one `schema_registry` lacks. Without it nothing
+    // prevents two rows for the same key, which is why
+    // schema_registry_bootstrap.ts's `isDuplicateRegistrationError` (matching
+    // "duplicate key" / "unique constraint" / "already exists") is dead code on
+    // SQLite: the concurrent-boot race it claims to absorb is real and
+    // unhandled there. Here a racing double-seed hits a real constraint.
+    await db
+      .prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_type_registry_unique " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, registry_version)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_type_registry_resolve " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, created_at)"
       )
       .run();
 

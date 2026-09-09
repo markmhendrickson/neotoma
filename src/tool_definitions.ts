@@ -1,5 +1,4 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
-import { RelationshipTypeSchema } from "./shared/action_schemas.js";
 
 export type ToolInputSchema = Record<string, unknown>;
 
@@ -12,19 +11,32 @@ export interface ToolDefinition {
 }
 
 /**
- * Relationship types advertised by the hand-built tool schemas
- * (`delete_relationship`, `restore_relationship`, `get_relationship_snapshot`).
+ * Relationship types are NOT enumerated in any tool schema (#1972 / G25).
  *
- * Derived from `RelationshipTypeSchema` — the SAME Zod enum the server parses
- * these three requests with — rather than restated as a literal. Until #1972
- * this was a local 8-member list while `create_relationship` (whose schema
- * comes from OpenAPI) advertised 28, so an edge written with any of the other
- * 20 types was advertised to MCP clients as undeletable: a schema-validating
+ * History, kept because it records why the drift happened twice. Until #1972
+ * these three hand-built schemas (`delete_relationship`,
+ * `restore_relationship`, `get_relationship_snapshot`) carried a local
+ * 8-member literal while `create_relationship` — whose schema comes from
+ * OpenAPI — advertised 28. An edge written with any of the other 20 types was
+ * therefore advertised to MCP clients as UNDELETABLE: a schema-validating
  * client refused the call before it reached a server that would have accepted
- * it. Reading the advertisement off the validator makes that class of drift
- * unrepresentable here instead of merely fixed once.
+ * it. The first fix derived all four from `RelationshipTypeSchema.options`,
+ * which made those four agree — but left fifteen further copies of the same
+ * literal elsewhere in the tree, any of which could be wrong with no test
+ * failing. One of them, `docs/developer/mcp/tool_descriptions.yaml`, WAS wrong
+ * in the field: loaded into the live tool descriptions at server boot, it told
+ * every LLM client the vocabulary was 8 types while the schema beside it said
+ * 28.
+ *
+ * The vocabulary is now a runtime registry. These schemas advertise
+ * `type: string` and point at `list_relationship_types`, so there is nothing
+ * left here to drift. `tests/contract/relationship_type_single_source.test.ts`
+ * fails if a literal enumeration comes back anywhere outside the seed file.
  */
-const RELATIONSHIP_TYPE_ENUM: readonly string[] = RelationshipTypeSchema.options;
+const RELATIONSHIP_TYPE_DESCRIPTION =
+  "Relationship type. The vocabulary is a runtime registry, not a closed enum: " +
+  "call list_relationship_types to read what this instance accepts, and " +
+  "register_relationship_type to add to it.";
 
 /**
  * Build the complete list of Neotoma MCP tool definitions.
@@ -118,8 +130,7 @@ export function buildToolDefinitions(
         properties: {
           relationship_type: {
             type: "string",
-            enum: RELATIONSHIP_TYPE_ENUM,
-            description: "Type of relationship",
+            description: RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -642,8 +653,9 @@ export function buildToolDefinitions(
           relationship_type: {
             type: "string",
             description:
-              "Exact relationship type of the existing edge. Accepts the same set create_relationship writes: structural types (PART_OF, REFERS_TO, EMBEDS) and domain types (works_at, related_to, owns).",
-            enum: RELATIONSHIP_TYPE_ENUM,
+              "Exact relationship type of the existing edge — the same vocabulary " +
+              "create_relationship writes. " +
+              RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -706,8 +718,9 @@ export function buildToolDefinitions(
           relationship_type: {
             type: "string",
             description:
-              "Exact relationship type of the existing edge. Accepts the same set create_relationship writes: structural types (PART_OF, REFERS_TO, EMBEDS) and domain types (works_at, related_to, owns).",
-            enum: RELATIONSHIP_TYPE_ENUM,
+              "Exact relationship type of the existing edge — the same vocabulary " +
+              "create_relationship writes. " +
+              RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -745,6 +758,34 @@ export function buildToolDefinitions(
         },
         required: [],
       },
+    },
+    {
+      name: "list_relationship_types",
+      description: desc(
+        "list_relationship_types",
+        "List the relationship types this instance PERMITS. This is the registry census, " +
+          "not a survey of what has been written: a type registered a moment ago with zero " +
+          "edges appears here, which is what you need when discovering what you may write " +
+          "BEFORE writing it. Call this instead of assuming a fixed vocabulary. " +
+          "source_entity_types, target_entity_types, inverse and symmetric are advisory " +
+          "metadata and are NOT enforced at write time; acyclic IS enforced. edge_count, " +
+          "when requested, means rows written and is never evidence of registration."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("list_relationship_types"),
+    },
+    {
+      name: "register_relationship_type",
+      description: desc(
+        "register_relationship_type",
+        "Add a relationship type to this instance's vocabulary, so an edge you need can be " +
+          "named rather than bent onto an existing type or simulated as a field on an entity. " +
+          "Registration is append-only: re-registering supersedes with a newer row, " +
+          "deregistering appends a deactivated one, and nothing is updated in place. " +
+          'scope defaults to "user"; registering at "global" scope changes the vocabulary ' +
+          "for every tenant and requires an explicit register_relationship_type capability. " +
+          "Read the result back with list_relationship_types."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("register_relationship_type"),
     },
     {
       name: "list_entity_types",
@@ -1565,6 +1606,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "restore_relationship",
   "get_entity_type_counts",
   "list_entity_types",
+  "list_relationship_types",
+  "register_relationship_type",
   "describe_entity_type",
   "describe_instance_policy",
   "analyze_schema_candidates",

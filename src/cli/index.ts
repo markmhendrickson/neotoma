@@ -13753,15 +13753,7 @@ relationshipsCommand
       const effectiveUserId = resolveEffectiveUserId(opts.userId);
       const { data, error } = await api.POST("/relationships/snapshot", {
         body: {
-          relationship_type: relationshipType as
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS",
+          relationship_type: relationshipType,
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
@@ -15341,7 +15333,7 @@ program
     ];
 
     const relationships: Array<{
-      relationship_type: "PART_OF" | "REFERS_TO";
+      relationship_type: string;
       source_index: number;
       target_index: number;
     }> = [
