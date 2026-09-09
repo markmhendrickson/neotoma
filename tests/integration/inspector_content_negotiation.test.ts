@@ -23,6 +23,19 @@ import {
   installInspectorSpaFallback,
   installInspectorSpaShellEarly,
 } from "../../src/services/inspector_mount.js";
+import {
+  BUILT_INSPECTOR_ASSETS,
+  skipWithoutPrerequisite,
+} from "../helpers/test_prerequisites.js";
+
+// The two end-to-end blocks below install the real SPA mount against the real
+// bundled dist, so without `dist/inspector/index.html` they serve 404/JSON and
+// their assertions cannot hold. Skip those two with a named reason (issue
+// #2090); the pure-helper blocks above need no build artifact and always run.
+const SKIP_E2E = skipWithoutPrerequisite(
+  BUILT_INSPECTOR_ASSETS,
+  "inspector content-negotiation end-to-end"
+);
 
 type Server = ReturnType<express.Application["listen"]>;
 
@@ -173,7 +186,7 @@ describe("isEntityRenderedSurfacePath", () => {
 // End-to-end: early SPA-shell handler (registered BEFORE data routes)
 // ---------------------------------------------------------------------------
 
-describe("installInspectorSpaShellEarly — end-to-end", () => {
+describe.skipIf(SKIP_E2E)("installInspectorSpaShellEarly — end-to-end", () => {
   let server: Server | null = null;
 
   afterEach(() => {
@@ -289,7 +302,7 @@ describe("installInspectorSpaShellEarly — end-to-end", () => {
 // End-to-end: SPA fallback over HTTP
 // ---------------------------------------------------------------------------
 
-describe("installInspectorSpaFallback — end-to-end", () => {
+describe.skipIf(SKIP_E2E)("installInspectorSpaFallback — end-to-end", () => {
   let server: Server | null = null;
   let tempDir: string | null = null;
 

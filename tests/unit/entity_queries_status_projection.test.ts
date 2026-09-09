@@ -75,8 +75,10 @@ describe("entity_queries — status projection (#1586)", () => {
       snapshot: { status: "active" },
     };
 
-    // deletionObservations (getDeletedEntityIds) — observations query
-    const deletionQuery = buildQuery([]);
+    // ateles#576: getDeletedEntityIds now resolves liveness from the PRESENCE
+    // of an entity_snapshots row rather than from the observation log. Return
+    // the entity's snapshot row so it reads as live.
+    const deletionQuery = buildQuery([{ entity_id: "ent_abc123" }]);
     // entities chunk scan
     const entityQuery = buildQuery([entityRow]);
     // entity_snapshots lightweight select
@@ -123,7 +125,8 @@ describe("entity_queries — status projection (#1586)", () => {
       snapshot: {}, // no status field
     };
 
-    const deletionQuery = buildQuery([]);
+    // ateles#576: liveness = presence of an entity_snapshots row.
+    const deletionQuery = buildQuery([{ entity_id: "ent_def456" }]);
     const entityQuery = buildQuery([entityRow]);
     const snapshotQuery = buildQuery([snapshotRow]);
 
@@ -184,7 +187,8 @@ describe("entity_queries — status projection (#1586)", () => {
       snapshot: { status: "inactive" },
     };
 
-    const deletionQuery = buildQuery([]);
+    // ateles#576: liveness = presence of an entity_snapshots row; both live.
+    const deletionQuery = buildQuery([{ entity_id: "ent_active" }, { entity_id: "ent_inactive" }]);
     const entityQuery = buildQuery([entityActive, entityInactive]);
     const snapshotQuery = buildQuery([snapshotActive, snapshotInactive]);
 
@@ -242,8 +246,9 @@ describe("entity_queries — status projection (#1586)", () => {
     const snapshotScanQuery = buildQuery([snapshotScanRow]);
     // entities lookup by id (fetchEntitiesByIds)
     const entityLookupQuery = buildQuery([entityById]);
-    // deletion check (getDeletedEntityIds)
-    const deletionQuery = buildQuery([]);
+    // deletion check (getDeletedEntityIds) — ateles#576: liveness is now the
+    // presence of an entity_snapshots row, so echo the scanned entity back.
+    const deletionQuery = buildQuery([{ entity_id: entityById.id }]);
     // entity_snapshots lightweight fetch (after scan)
     const snapshotFetchQuery = buildQuery([snapshotRow]);
 
@@ -251,7 +256,7 @@ describe("entity_queries — status projection (#1586)", () => {
     //   1. db.from("entities") at line 195 — query builder only, not awaited in snapshot path
     //   2. db.from("entity_snapshots") at line 278 — the actual scan (awaited)
     //   3. db.from("entities") inside fetchEntitiesByIds (awaited)
-    //   4. db.from("observations") inside getDeletedEntityIds (awaited)
+    //   4. db.from("entity_snapshots") inside getDeletedEntityIds (awaited)
     //   5. db.from("entity_snapshots") at line 451 — lightweight snapshot fetch (awaited)
     const unusedEntityQuery = buildQuery([]);
     vi.mocked(db.from)

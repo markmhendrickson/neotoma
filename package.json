@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -80,6 +80,7 @@
     "watch:full": "npm run dev",
     "watch:full:prod": "npm run dev:full:prod",
     "test": "vitest run",
+    "test:setup": "bash scripts/setup_test_env.sh",
     "test:unit": "vitest run tests/unit tests/services tests/agent tests/contract tests/security tests/cli tests/subscriptions",
     "test:frontend": "cross-env RUN_FRONTEND_TESTS=1 vitest run frontend/src",
     "test:integration": "vitest run tests/integration",

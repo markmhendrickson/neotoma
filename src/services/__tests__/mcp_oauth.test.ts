@@ -335,6 +335,77 @@ describe("MCP OAuth Service", () => {
       rmSync(tempDir, { recursive: true, force: true });
     });
 
+    it("rejects a forged unsigned JWT bearer instead of trusting its claims (auth bypass regression)", async () => {
+      // Regression for the unverified-JWT authentication bypass: validateSessionToken
+      // must NOT fall back to decoding the bearer and trusting its own sub/email when
+      // no live connection row matches. A fully attacker-controlled `alg:none` token
+      // that names an arbitrary user_id must be rejected, not admitted.
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-forged-jwt-${Date.now()}`);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      const mcpAuth = await loadLocalMcpAuthModule(tempDir);
+      await loadDbConnection(tempDir);
+
+      // A real user exists in this instance; the attacker targets their id.
+      await localAuth.createLocalAuthUser("victim@example.com", "password123");
+      const victim = await localAuth.getLocalAuthUserByEmail("victim@example.com");
+      if (!victim) {
+        throw new Error("Local auth user not found in test");
+      }
+
+      const b64url = (obj: unknown) =>
+        Buffer.from(JSON.stringify(obj)).toString("base64url").replace(/=+$/, "");
+      const forge = (sub: string, email?: string) =>
+        `${b64url({ alg: "none", typ: "JWT" })}.${b64url({ sub, ...(email ? { email } : {}) })}.x`;
+
+      // Forged token naming the victim's real user_id — must be rejected.
+      await expect(
+        mcpAuth.validateSessionToken(forge(victim.id, "attacker@example.com"))
+      ).rejects.toThrow("Invalid session token");
+
+      // Forged token naming an arbitrary user_id that never signed in — must be rejected.
+      await expect(
+        mcpAuth.validateSessionToken(forge("deadbeef-0000-4000-8000-000000000001"))
+      ).rejects.toThrow("Invalid session token");
+
+      // A non-JWT random bearer that matches no connection — must be rejected.
+      await expect(mcpAuth.validateSessionToken("not-a-real-token")).rejects.toThrow(
+        "Invalid session token"
+      );
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("still accepts a valid, live connection access token after the fail-closed fix", async () => {
+      // Guards against over-correction: the legitimate OAuth-issued token must
+      // continue to authenticate as its bound user with the right email.
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-valid-token-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      const mcpAuth = await loadLocalMcpAuthModule(tempDir);
+      await loadDbConnection(tempDir);
+      await localAuth.createLocalAuthUser("valid@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("valid@example.com");
+      if (!user) {
+        throw new Error("Local auth user not found in test");
+      }
+
+      const connectionId = "cursor-local-valid-token";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+      await oauth.completeLocalAuthorization(request.state, user.id);
+      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+
+      const validated = await mcpAuth.validateSessionToken(tokenResponse.access_token);
+      expect(validated.userId).toBe(user.id);
+      expect(validated.email).toBe("valid@example.com");
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
     it("exchanges a refresh token for a new local access token", async () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-refresh-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);

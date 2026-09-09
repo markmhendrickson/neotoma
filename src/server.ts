@@ -1002,19 +1002,22 @@ export class NeotomaServer {
     // Auto-fix if requested
     if (parsed.auto_fix && staleSnapshots.length > 0) {
       const { observationReducer } = await import("./reducers/observation_reducer.js");
+      const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
       let fixedCount = 0;
+      let redirectedCount = 0;
 
       for (const stale of staleSnapshots) {
         try {
-          // Get all observations
-          const { data: observations } = await db
-            .from("observations")
-            .select("*")
-            .eq("entity_id", stale.entity_id)
-            .eq("user_id", userId)
-            .order("observed_at", { ascending: false });
-
-          if (!observations || observations.length === 0) continue;
+          // #2343: the observations ATTACHED to this entity, through the
+          // declared resolution layer. `null` means the id is redirected (a
+          // merge tombstone): it owns no snapshot, so auto-fix skips it rather
+          // than upserting the survivor's snapshot under the tombstone's id.
+          const observations = await resolveOwnedObservations(stale.entity_id, userId);
+          if (observations === null) {
+            redirectedCount++;
+            continue;
+          }
+          if (observations.length === 0) continue;
 
           // Recompute snapshot
           const newSnapshot = await observationReducer.computeSnapshot(
@@ -1045,10 +1048,15 @@ export class NeotomaServer {
 
       return this.buildTextResponse({
         healthy: false,
-        message: `Found ${staleSnapshots.length} stale snapshots, fixed ${fixedCount}`,
+        message:
+          `Found ${staleSnapshots.length} stale snapshots, fixed ${fixedCount}` +
+          (redirectedCount > 0
+            ? `, skipped ${redirectedCount} redirected (merged-away) id(s)`
+            : ""),
         checked: potentiallyStale.length,
         stale: staleSnapshots.length,
         fixed: fixedCount,
+        skipped_redirected: redirectedCount,
         stale_snapshots: staleSnapshots,
       });
     }
@@ -2647,9 +2655,18 @@ export class NeotomaServer {
     if (input.file_path) {
       const fs = await import("node:fs");
       const path = await import("node:path");
+      const { isFilesystemLocalToCaller, buildFilePathServerLocalError, buildFileNotFoundError } =
+        await import("./services/file_input_diagnostics.js");
+
+      // `file_path` resolves here, on the server. On a remote instance that
+      // makes it unusable, and saying "File not found" would blame the caller's
+      // disk for a parameter that never referred to it (#2325).
+      if (!isFilesystemLocalToCaller()) {
+        throw buildFilePathServerLocalError(input.file_path);
+      }
 
       if (!fs.existsSync(input.file_path)) {
-        throw new Error(`File not found: ${input.file_path}`);
+        throw buildFileNotFoundError(input.file_path);
       }
 
       const fileBuffer = fs.readFileSync(input.file_path);
@@ -2666,8 +2683,11 @@ export class NeotomaServer {
     }
 
     if (input.file_content && input.mime_type) {
+      const { decodeFileContent } = await import("./services/file_input_diagnostics.js");
       return {
-        fileBuffer: Buffer.from(input.file_content, "base64"),
+        // Rejects non-base64 rather than letting Node discard the invalid
+        // characters and store corrupted bytes under a valid content_hash.
+        fileBuffer: decodeFileContent(input.file_content),
         mimeType: input.mime_type,
         filename: input.original_filename || "file",
       };
@@ -3389,86 +3409,127 @@ export class NeotomaServer {
           ? "outbound"
           : "both";
 
+    // Tag each row with the direction it was matched on, relative to the
+    // entity the caller asked about. For the source_entity_id /
+    // target_entity_id filters the anchor is that filter's entity, so an
+    // edge matched by source_entity_id is "outbound" from it. When both are
+    // supplied (the delete-discovery path named in the tool description) the
+    // source is the anchor.
+    const anchorEntityId =
+      parsed.source_entity_id ?? parsed.target_entity_id ?? parsed.entity_id ?? null;
+    const directionFor = (row: {
+      source_entity_id?: string;
+      target_entity_id?: string;
+    }): string => {
+      if (anchorEntityId && row.source_entity_id === anchorEntityId) return "outbound";
+      if (anchorEntityId && row.target_entity_id === anchorEntityId) return "inbound";
+      return "both";
+    };
+
+    const decorate = (
+      row: {
+        relationship_key: string;
+        snapshot?: unknown;
+        last_observation_at?: string;
+        source_entity_id?: string;
+        target_entity_id?: string;
+      },
+      direction?: string
+    ) => ({
+      ...row,
+      id: row.relationship_key, // Add id field for backward compatibility
+      direction: direction ?? directionFor(row),
+      // Include snapshot metadata as top-level for backward compatibility
+      metadata: row.snapshot,
+      // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
+      created_at: row.last_observation_at,
+    });
+
     const relationships: any[] = [];
 
-    // Query relationship_snapshots instead of relationships table
-    if (normalizedDirection === "outbound" || normalizedDirection === "both") {
-      let outboundQuery = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("source_entity_id", parsed.entity_id)
-        .eq("user_id", userId);
+    // Query relationship_snapshots instead of relationships table.
+    //
+    // `source_entity_id` / `target_entity_id` / bare `relationship_type` are
+    // declared on ListRelationshipsRequestSchema (whose .refine accepts any
+    // one of them alone) and implemented by the HTTP /list_relationships
+    // handler, but this MCP handler previously filtered ONLY on
+    // `parsed.entity_id`. A call passing just source_entity_id therefore ran
+    // `.eq("source_entity_id", undefined)` and returned a confident zero for
+    // edges that demonstrably exist. Mirror the HTTP branch order here so
+    // both surfaces answer the same question the same way (issue #2205).
+    const useDirectionalEntityIdPath =
+      !parsed.source_entity_id && !parsed.target_entity_id && Boolean(parsed.entity_id);
+
+    if (!useDirectionalEntityIdPath) {
+      let query = db.from("relationship_snapshots").select("*").eq("user_id", userId);
 
       // Exclude soft-deleted edges at the DB via the materialized `is_live`
-      // column (#1570), so dead edges are never loaded into memory. Audit
-      // reads pass include_deleted=true to skip this filter.
+      // column (#1570). Audit reads pass include_deleted=true to skip this.
       if (!parsed.include_deleted) {
-        outboundQuery = outboundQuery.eq("is_live", 1);
+        query = query.eq("is_live", 1);
       }
 
+      if (parsed.source_entity_id) {
+        query = query.eq("source_entity_id", parsed.source_entity_id);
+      }
+      if (parsed.target_entity_id) {
+        query = query.eq("target_entity_id", parsed.target_entity_id);
+      }
       if (parsed.relationship_type) {
-        outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
+        query = query.eq("relationship_type", parsed.relationship_type);
       }
 
-      const { data: outbound, error: outboundError } = await outboundQuery;
-
-      if (!outboundError && outbound) {
-        relationships.push(
-          ...outbound.map(
-            (r: {
-              relationship_key: string;
-              snapshot?: unknown;
-              last_observation_at?: string;
-            }) => ({
-              ...r,
-              id: r.relationship_key, // Add id field for backward compatibility
-              direction: "outbound",
-              // Include snapshot metadata as top-level for backward compatibility
-              metadata: r.snapshot,
-              // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
-              created_at: r.last_observation_at,
-            })
-          )
-        );
+      const { data, error } = await query;
+      if (!error && data) {
+        relationships.push(...data.map((r: any) => decorate(r)));
       }
-    }
+    } else {
+      if (normalizedDirection === "outbound" || normalizedDirection === "both") {
+        let outboundQuery = db
+          .from("relationship_snapshots")
+          .select("*")
+          .eq("source_entity_id", parsed.entity_id)
+          .eq("user_id", userId);
 
-    if (normalizedDirection === "inbound" || normalizedDirection === "both") {
-      let inboundQuery = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("target_entity_id", parsed.entity_id)
-        .eq("user_id", userId);
+        // Exclude soft-deleted edges at the DB via the materialized `is_live`
+        // column (#1570), so dead edges are never loaded into memory. Audit
+        // reads pass include_deleted=true to skip this filter.
+        if (!parsed.include_deleted) {
+          outboundQuery = outboundQuery.eq("is_live", 1);
+        }
 
-      // Exclude soft-deleted edges at the DB via `is_live` (#1570).
-      if (!parsed.include_deleted) {
-        inboundQuery = inboundQuery.eq("is_live", 1);
+        if (parsed.relationship_type) {
+          outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
+        }
+
+        const { data: outbound, error: outboundError } = await outboundQuery;
+
+        if (!outboundError && outbound) {
+          relationships.push(...outbound.map((r: any) => decorate(r, "outbound")));
+        }
       }
 
-      if (parsed.relationship_type) {
-        inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
-      }
+      if (normalizedDirection === "inbound" || normalizedDirection === "both") {
+        let inboundQuery = db
+          .from("relationship_snapshots")
+          .select("*")
+          .eq("target_entity_id", parsed.entity_id)
+          .eq("user_id", userId);
 
-      const { data: inbound, error: inboundError } = await inboundQuery;
+        // Exclude soft-deleted edges at the DB via `is_live` (#1570).
+        if (!parsed.include_deleted) {
+          inboundQuery = inboundQuery.eq("is_live", 1);
+        }
 
-      if (!inboundError && inbound) {
-        relationships.push(
-          ...inbound.map(
-            (r: {
-              relationship_key: string;
-              snapshot?: unknown;
-              last_observation_at?: string;
-            }) => ({
-              ...r,
-              id: r.relationship_key, // Add id field for backward compatibility
-              direction: "inbound",
-              // Include snapshot metadata as top-level for backward compatibility
-              metadata: r.snapshot,
-              // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
-              created_at: r.last_observation_at,
-            })
-          )
-        );
+        if (parsed.relationship_type) {
+          inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
+        }
+
+        const { data: inbound, error: inboundError } = await inboundQuery;
+
+        if (!inboundError && inbound) {
+          relationships.push(...inbound.map((r: any) => decorate(r, "inbound")));
+        }
       }
     }
 
@@ -3490,9 +3551,9 @@ export class NeotomaServer {
     });
 
     // Soft-deleted edges were already excluded at the DB via the `is_live`
-    // predicate on each direction's query (#1570), so `relationships` holds
-    // only live edges on the default path (all edges when include_deleted).
-    // `total` therefore reflects the correct post-filter count.
+    // predicate on each query (#1570), so `relationships` holds only live
+    // edges on the default path (all edges when include_deleted). `total`
+    // therefore reflects the correct post-filter count.
     const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
@@ -5328,6 +5389,34 @@ export class NeotomaServer {
       });
     }
 
+    // Attribution policy, "observations" write path (#2327).
+    //
+    // This MCP store core does not route through `createObservation`, so the
+    // "observations" gate that lives at observation_storage.ts:85 is never
+    // reached from here. It pre-computes the observation id for its dedup
+    // probe and inserts into `observations` directly, which is deliberate —
+    // but it means a seam placed only in the shared write helper is enforced
+    // on REST and silently inert on MCP. Called explicitly, mirroring the
+    // `assertCanWriteProtected` call below and the reasoning recorded for
+    // `assertStorePolicyAllows` above.
+    //
+    // Placement, for the same reason given above: a store call is not
+    // transactional, so denial must happen before anything is persisted.
+    // Gating next to the insert would reject only after `storeRawContent`
+    // had already written a source row. Once per call, not per entity —
+    // `enforceAttributionPolicy` does not read entity type, so the answer is
+    // identical for every row in the batch.
+    //
+    // Ordering: after `assertStorePolicyAllows`, not before. Instance store
+    // policy governs *what* may be stored; attribution governs *who* may
+    // store it. Keeping this order means an entity type the instance refuses
+    // is refused identically regardless of attribution.
+    {
+      const { enforceAttributionPolicy } = await import("./services/attribution_policy.js");
+      const { getCurrentAgentIdentity } = await import("./services/request_context.js");
+      enforceAttributionPolicy("observations", getCurrentAgentIdentity());
+    }
+
     // Plan mode: resolve deterministically, report planned actions per entity,
     // and skip every write (source row, observations, snapshots, relationships).
     if (!commit) {
@@ -6147,6 +6236,7 @@ export class NeotomaServer {
       }
     >();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
+    const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
     for (const createdEntity of createdEntities) {
       try {
         const { data: priorSnapRow } = await db
@@ -6159,26 +6249,33 @@ export class NeotomaServer {
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
         priorSnapshotByEntityId.set(createdEntity.entityId, priorSnapshot);
 
-        // Get all observations for entity, scoped to the current user so
-        // cross-user data does not bleed into this user's snapshot.
-        const { data: allObservations, error: obsError } = await db
-          .from("observations")
-          .select("*")
-          .eq("entity_id", createdEntity.entityId)
-          .eq("user_id", userId)
-          .order("observed_at", { ascending: false });
-
-        if (obsError) {
+        // #2343: the observations ATTACHED to this entity, through the
+        // declared resolution layer (attachment_resolution.ts), scoped to the
+        // current user so cross-user data does not bleed into this snapshot.
+        // `null` means the id is redirected (a merge tombstone): it owns no
+        // snapshot, so nothing is upserted under it. That is not an error for
+        // the store caller — attaching an observation to a merged-away id is a
+        // legitimate write; only the snapshot ownership question says no.
+        let allObservations: unknown[] | null = null;
+        try {
+          allObservations = await resolveOwnedObservations(createdEntity.entityId, userId);
+        } catch (err) {
           logger.error(
             `Failed to get observations for entity ${createdEntity.entityId}:`,
-            obsError.message
+            err instanceof Error ? err.message : String(err)
+          );
+          continue;
+        }
+        if (allObservations === null) {
+          logger.info(
+            `[STORE] ${createdEntity.entityId} is redirected; no snapshot written under it.`
           );
           continue;
         }
 
         if (allObservations && allObservations.length > 0) {
           // Map database observations to reducer's expected format
-          const mappedObservations = allObservations.map((obs: any) => ({
+          const mappedObservations = (allObservations as any[]).map((obs: any) => ({
             id: obs.id,
             entity_id: obs.entity_id,
             entity_type: obs.entity_type,
@@ -6254,9 +6351,12 @@ export class NeotomaServer {
             schema: timelineSchema,
           });
 
-          // This path computes and upserts the snapshot inline instead of going
-          // through recomputeSnapshot(), so it must re-derive the entity-level
-          // canonical_name itself. Without this, a corrective observation (e.g.
+          // This path fetches through the attachment-resolution seam (#2343)
+          // but still computes and upserts the snapshot inline rather than via
+          // recomputeSnapshot(), because it also derives embeddings, timeline
+          // events with batch counts, and change events. So it must re-derive
+          // the entity-level canonical_name itself. Without this, a corrective
+          // observation (e.g.
           // stripping an emoji from `name` via target_id) updates the snapshot
           // while entities.canonical_name stays frozen at its creation value —
           // and canonical_name is what entity lists and search display.

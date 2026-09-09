@@ -27,11 +27,14 @@ import {
   getAttributionDecisionFromRequest,
 } from "./middleware/aauth_verify.js";
 import { attributionContext } from "./middleware/attribution_context.js";
+import { dbAbortContext } from "./middleware/db_abort_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
 import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
+import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
+import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
@@ -70,6 +73,12 @@ import {
   SourceFileNotFoundError,
 } from "./services/raw_storage.js";
 import { attachSourceLabelsToObservations } from "./services/observation_source_label.js";
+import {
+  isFilesystemLocalToCaller,
+  buildFilePathServerLocalError,
+  decodeFileContent,
+  FileInputError,
+} from "./services/file_input_diagnostics.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
@@ -1865,6 +1874,11 @@ app.use(
 // shadow outer ones exactly as intended.
 app.use(attributionContext());
 
+// Bind a per-request AbortSignal so DB reads stop consuming a reader-pool slot
+// when the client hangs up (#2217). Reads only — a write must not be abandoned
+// half-applied. No-op on backends without a worker pool.
+app.use(dbAbortContext());
+
 // Stronger AAuth Admission plan: resolve verified AAuth identities to
 // `agent_grant` entities and stamp `req.aauthAdmission` /
 // `req.authenticatedUserId`. Runs after attributionContext so the
@@ -2443,6 +2457,10 @@ function sendValidationError(res: express.Response, issues: unknown): express.Re
 }
 
 // Public health endpoint (no auth)
+//
+// LIVENESS ONLY. This reads package.json off disk and never touches the
+// database, so it returns 200 throughout a total read outage. Do not use it as
+// a Fly health check or as a watchdog's healthy verdict — use /ready below.
 app.get("/health", (_req, res) => {
   let version = "0.0.0";
   try {
@@ -2453,6 +2471,22 @@ app.get("/health", (_req, res) => {
     // fallback
   }
   return res.json({ ok: true, version });
+});
+
+// Public readiness endpoint (no auth). This is what Fly's health check hits —
+// see the [[http_service.checks]] block in fly.toml.
+//
+// Unlike /health above, it exercises the real read path and returns 503 when
+// the database is unreachable, erroring, or too slow. See
+// src/services/readiness.ts for exactly what a passing result does and does
+// not prove.
+app.get("/ready", async (_req, res) => {
+  const result = await probeReadiness(db);
+  if (!result.ok) {
+    logger.warn(`[Ready] database probe failed after ${result.latency_ms}ms: ${result.error}`);
+    return res.status(503).json(result);
+  }
+  return res.json(result);
 });
 
 // ============================================================================
@@ -3545,26 +3579,45 @@ function explicitGuestAccessTokenFromRequest(req: express.Request): string | und
   return undefined;
 }
 
+/**
+ * Static path segments under `/entities/` that are routes in their own right,
+ * not entity ids. The `/entities/:id` family of guest-eligible reads must never
+ * treat these as an id (issue #2208): `/entities/duplicates` matched the
+ * `:id`-shaped guest regex below, so a guest principal could be stamped onto a
+ * route whose handler calls `getAuthenticatedUserId()` and 500s.
+ *
+ * Keep in sync with the `app.get("/entities/<segment>")` registrations. The
+ * boot-time assertion in `assertNoShadowedRoutes()` fails the process if a new
+ * static `/entities/*` route is added without being registered ahead of
+ * `/entities/:id`, which is the other half of this invariant.
+ */
+export const RESERVED_ENTITY_PATH_SEGMENTS = new Set(["duplicates", "merge", "split", "query"]);
+
 /** Exported for unit tests: routes where guest (AAuth / guest token) may be stamped before handlers run. */
 export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" | "path">): boolean {
   const path = req.path;
   if (
-    (req.method === "POST" &&
-      (path === "/issues/submit" ||
-        path === "/api/issues/submit" ||
-        path === "/issues/status" ||
-        path === "/api/issues/status" ||
-        path === "/issues/add_message" ||
-        path === "/api/issues/add_message" ||
-        path === "/subscribe" ||
-        path === "/unsubscribe" ||
-        path === "/list_subscriptions" ||
-        path === "/get_subscription_status")) ||
-    (req.method === "GET" &&
-      (/^\/entities\/[^/]+(?:\/(?:observations|relationships|html))?$/.test(path) ||
-        path === "/events/stream"))
+    req.method === "POST" &&
+    (path === "/issues/submit" ||
+      path === "/api/issues/submit" ||
+      path === "/issues/status" ||
+      path === "/api/issues/status" ||
+      path === "/issues/add_message" ||
+      path === "/api/issues/add_message" ||
+      path === "/subscribe" ||
+      path === "/unsubscribe" ||
+      path === "/list_subscriptions" ||
+      path === "/get_subscription_status")
   ) {
     return true;
+  }
+  if (req.method === "GET") {
+    if (path === "/events/stream") return true;
+    const match = /^\/entities\/([^/]+)(?:\/(?:observations|relationships|html))?$/.exec(path);
+    if (!match) return false;
+    // Fail closed: a reserved static segment is a route, not an entity id, so it
+    // is not guest-eligible unless it is explicitly listed as such above.
+    return !RESERVED_ENTITY_PATH_SEGMENTS.has(match[1]);
   }
   return false;
 }
@@ -3959,7 +4012,8 @@ app.use(async (req, res, next) => {
     (req.method === "GET" &&
       (req.path === "/openapi.yaml" ||
         req.path === "/openapi_actions.yaml" ||
-        req.path === "/health")) ||
+        req.path === "/health" ||
+        req.path === "/ready")) ||
     (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();
@@ -4656,6 +4710,73 @@ app.all("/entities", (req, res) => {
     method: req.method,
     supported: ["GET /entities", "POST /entities/query"],
   });
+});
+
+// IMPORTANT (issue #2208): this static route MUST stay registered before
+// `GET /entities/:id` below. Express matches first-wins, so a param route
+// registered earlier would capture `id = "duplicates"` and 404. The
+// boot-time assertion in assertNoShadowedRoutes() enforces this invariant.
+// GET /entities/duplicates - List candidate duplicate entity pairs (R5).
+// Read-only fuzzy post-hoc detector. Never auto-merges. Hands off to
+// /entities/merge once an operator or agent confirms a pair.
+app.get("/entities/duplicates", async (req, res) => {
+  try {
+    const entityType =
+      typeof req.query.entity_type === "string" ? req.query.entity_type : undefined;
+    if (!entityType) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "entity_type query parameter is required"
+      );
+    }
+    const providedUserId = typeof req.query.user_id === "string" ? req.query.user_id : undefined;
+    const authenticatedUserId = await getAuthenticatedUserId(req, providedUserId);
+    if (providedUserId && providedUserId !== authenticatedUserId) {
+      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
+    }
+
+    const thresholdRaw = typeof req.query.threshold === "string" ? req.query.threshold : undefined;
+    const limitRaw = typeof req.query.limit === "string" ? req.query.limit : undefined;
+
+    const threshold = thresholdRaw ? Number(thresholdRaw) : undefined;
+    if (threshold !== undefined && (Number.isNaN(threshold) || threshold <= 0 || threshold > 1)) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "threshold must be a number in (0, 1]"
+      );
+    }
+    const limit = limitRaw ? Number(limitRaw) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > 200)) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "limit must be an integer in [1, 200]"
+      );
+    }
+
+    const { findDuplicateCandidates } = await import("./services/duplicate_detection.js");
+    const candidates = await findDuplicateCandidates({
+      entityType,
+      userId: authenticatedUserId,
+      threshold,
+      limit,
+    });
+
+    return res.json({
+      candidates,
+      entity_type: entityType,
+      threshold: threshold ?? null,
+    });
+  } catch (error) {
+    logError("APIError:entities_duplicates", req, error);
+    const message = error instanceof Error ? error.message : "Failed to list potential duplicates";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
 });
 
 // GET /api/entities/:id - Get entity detail with snapshot and provenance (FU-601)
@@ -8483,8 +8604,10 @@ async function storeUnstructuredForApi(params: {
     userId,
     storageMode = "inline",
   } = params;
+  // decodeFileContent rejects non-base64 instead of letting Node discard the
+  // invalid characters and store corrupted bytes (#2325).
   const resolvedFileBuffer =
-    fileBuffer ?? (fileContent !== undefined ? Buffer.from(fileContent, "base64") : undefined);
+    fileBuffer ?? (fileContent !== undefined ? decodeFileContent(fileContent) : undefined);
   if (!resolvedFileBuffer && storageMode !== "reference") {
     throw new Error("fileContent or fileBuffer is required for inline storage");
   }
@@ -8576,9 +8699,26 @@ async function handleStorePost(
       let resolvedFileBuffer: Buffer | undefined;
 
       if (hasFilePath) {
+        // `file_path` resolves against *this* process's filesystem. On a remote
+        // instance it cannot mean the caller's disk, and the old failure here
+        // was a bare Node ENOENT — worse than MCP's, which at least named the
+        // path. Both transports now fail identically (#2325).
+        if (!isFilesystemLocalToCaller()) {
+          const serverLocal = buildFilePathServerLocalError(parsed.data.file_path as string);
+          sendError(res, 400, serverLocal.code, serverLocal.message, serverLocal.details);
+          return null;
+        }
+
         const resolvedPath = path.isAbsolute(parsed.data.file_path as string)
           ? (parsed.data.file_path as string)
           : path.resolve(process.cwd(), parsed.data.file_path as string);
+
+        if (!fs.existsSync(resolvedPath)) {
+          sendError(res, 400, "ERR_FILE_NOT_FOUND", `File not found: ${resolvedPath}`, {
+            file_path: parsed.data.file_path,
+          });
+          return null;
+        }
 
         if (parsed.data.source_storage === "reference") {
           // For reference mode, don't read the file buffer, just use the path
@@ -8697,6 +8837,13 @@ async function handleStorePost(
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    // A bad file input is the caller's payload, not a server fault: 400 with
+    // the code, never the generic 500 below. Falling through would have made a
+    // non-base64 `file_content` look like a server outage (#2325).
+    if (error instanceof FileInputError) {
+      logWarn("FileInputError:store", req, { code: error.code });
+      return sendError(res, 400, error.code, error.message, error.details);
     }
     const errCode =
       error && typeof error === "object" ? (error as { code?: string }).code : undefined;
@@ -9229,68 +9376,9 @@ app.post("/observations/query", async (req, res) => {
   }
 });
 
-// GET /entities/duplicates - List candidate duplicate entity pairs (R5).
-// Read-only fuzzy post-hoc detector. Never auto-merges. Hands off to
-// /entities/merge once an operator or agent confirms a pair.
-app.get("/entities/duplicates", async (req, res) => {
-  try {
-    const entityType =
-      typeof req.query.entity_type === "string" ? req.query.entity_type : undefined;
-    if (!entityType) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_INVALID_FORMAT",
-        "entity_type query parameter is required"
-      );
-    }
-    const providedUserId = typeof req.query.user_id === "string" ? req.query.user_id : undefined;
-    const authenticatedUserId = await getAuthenticatedUserId(req, providedUserId);
-    if (providedUserId && providedUserId !== authenticatedUserId) {
-      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
-    }
-
-    const thresholdRaw = typeof req.query.threshold === "string" ? req.query.threshold : undefined;
-    const limitRaw = typeof req.query.limit === "string" ? req.query.limit : undefined;
-
-    const threshold = thresholdRaw ? Number(thresholdRaw) : undefined;
-    if (threshold !== undefined && (Number.isNaN(threshold) || threshold <= 0 || threshold > 1)) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_INVALID_FORMAT",
-        "threshold must be a number in (0, 1]"
-      );
-    }
-    const limit = limitRaw ? Number(limitRaw) : undefined;
-    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > 200)) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_INVALID_FORMAT",
-        "limit must be an integer in [1, 200]"
-      );
-    }
-
-    const { findDuplicateCandidates } = await import("./services/duplicate_detection.js");
-    const candidates = await findDuplicateCandidates({
-      entityType,
-      userId: authenticatedUserId,
-      threshold,
-      limit,
-    });
-
-    return res.json({
-      candidates,
-      entity_type: entityType,
-      threshold: threshold ?? null,
-    });
-  } catch (error) {
-    logError("APIError:entities_duplicates", req, error);
-    const message = error instanceof Error ? error.message : "Failed to list potential duplicates";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
-  }
-});
+// NOTE: `GET /entities/duplicates` is registered earlier in this file,
+// immediately before `GET /entities/:id`. A static path must be registered
+// before any param route that would also match it (issue #2208).
 
 // POST /api/entities/merge - Merge duplicate entities
 // REQUIRES AUTHENTICATION - validates user_id matches authenticated user and entities belong to user
@@ -11783,20 +11871,28 @@ app.post("/health_check_snapshots", async (req, res) => {
     }
 
     let fixedCount = 0;
+    let redirectedCount = 0;
     if (auto_fix && staleEntities.length > 0) {
       // Recompute snapshots for stale entities using observationReducer
       const { observationReducer } = await import("./reducers/observation_reducer.js");
+      const { resolveOwnedObservations } = await import("./services/attachment_resolution.js");
 
       for (const entity of staleEntities) {
         try {
-          // Get all observations for this entity
-          const { data: observations } = await db
-            .from("observations")
-            .select("*")
-            .eq("entity_id", entity.entity_id)
-            .order("observed_at", { ascending: false });
-
-          if (!observations || observations.length === 0) continue;
+          // #2343: the observations ATTACHED to this entity, resolved through
+          // the declared layer, and null when the id is redirected — a
+          // tombstone owns no snapshot, so auto-fix must skip it rather than
+          // upsert the survivor's snapshot under the tombstone's id.
+          // `null` scope, deliberately: this endpoint's observation fetch was
+          // unscoped before #2343, and adding a user_id filter here would
+          // change which rows the reducer sees. Routing the fetch through the
+          // seam is this PR's job; tightening this endpoint's tenancy is not.
+          const observations = await resolveOwnedObservations(entity.entity_id, null);
+          if (observations === null) {
+            redirectedCount++;
+            continue;
+          }
+          if (observations.length === 0) continue;
 
           // Recompute snapshot
           const newSnapshot = await observationReducer.computeSnapshot(
@@ -11835,11 +11931,15 @@ app.post("/health_check_snapshots", async (req, res) => {
         staleEntities.length === 0
           ? "All snapshots healthy"
           : auto_fix
-            ? `Found ${staleEntities.length} stale snapshots, fixed ${fixedCount}`
+            ? `Found ${staleEntities.length} stale snapshots, fixed ${fixedCount}` +
+              (redirectedCount > 0
+                ? `, skipped ${redirectedCount} redirected (merged-away) id(s)`
+                : "")
             : `Found ${staleEntities.length} stale snapshots`,
       checked: staleSnapshots?.length || 0,
       stale: staleEntities.length,
       fixed: auto_fix ? fixedCount : undefined,
+      skipped_redirected: auto_fix ? redirectedCount : undefined,
       stale_snapshots: staleEntities,
     });
   } catch (error) {
@@ -12088,11 +12188,23 @@ function emitSandboxBootBanner(
   process.stderr.write(lines.join("\n"));
 }
 
+/**
+ * Fail the boot if any static route is unreachable because an earlier param
+ * route matches it first (issue #2208). Runs after every route registration
+ * and before the process binds a port: an unreachable route table is not a
+ * runnable state, and a warning is what let `GET /entities/duplicates` ship
+ * broken for months.
+ */
+function assertRouteTableIsReachable(): void {
+  assertNoShadowedRoutes(app);
+}
+
 /** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
 function tryListen(
   port: number
 ): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
   return new Promise((resolve, reject) => {
+    assertRouteTableIsReachable();
     const server = app.listen(port, () => {
       // When `port === 0` the OS assigns an ephemeral port. We must report
       // the actually-bound port back to callers (the eval harness's

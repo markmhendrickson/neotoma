@@ -4,7 +4,6 @@
  * Validates session tokens for MCP server authentication
  */
 
-import { logger } from "../utils/logger.js";
 import { getDb } from "../repositories/db/connection.js";
 import { getLocalAuthUserById } from "./local_auth.js";
 
@@ -14,34 +13,27 @@ export interface ValidatedUser {
 }
 
 /**
- * Decode JWT token header and payload without verification
- * Extracts algorithm, user_id, and other claims for diagnostics
- */
-function decodeJWTUnverified(token: string): {
-  header?: { alg?: string; kid?: string; typ?: string };
-  payload?: { sub?: string; email?: string; exp?: number };
-} | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      return null;
-    }
-    // Decode header (first part)
-    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf-8"));
-    // Decode payload (second part)
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
-    return { header, payload };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Validate a session token (JWT) and extract user information
+ * Validate a session token and extract user information.
  *
- * @param token - access_token (JWT)
+ * A session token is valid only if it maps to a live (non-revoked, unexpired)
+ * row in `mcp_oauth_connections`. A token that matches no such row is rejected
+ * — claims decoded from the token itself are never trusted.
+ *
+ * SECURITY: a previous revision fell back to decoding the bearer as an
+ * UNVERIFIED JWT and trusting its `sub`/`email` claims when no connection row
+ * matched. That is an authentication bypass: the token is fully
+ * attacker-controlled, so `Bearer <base64url({alg:none})>.<base64url({sub:<any
+ * user_id>})>.x` authenticated the caller as any user over the public internet
+ * (there was no local-only gate despite the "local-only" comment; the claimed
+ * `user_id` is derivable as sha256(email)). The fix enforces the same
+ * fail-closed invariant the Ed25519 bearer path adopted after advisory
+ * 2026-08-07-ed25519-bearer-forged-key-auth-bypass: a bearer that does not
+ * resolve to a pre-provisioned principal must be rejected, never mapped to a
+ * caller-supplied identity.
+ *
+ * @param token - access_token issued by the OAuth flow
  * @returns User information including user_id
- * @throws Error if token is invalid or expired
+ * @throws Error if the token is unknown, revoked, or expired
  */
 export async function validateSessionToken(token: string): Promise<ValidatedUser> {
   const db = await getDb();
@@ -52,15 +44,10 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
     .get(token)) as { user_id?: string; access_token_expires_at?: string } | undefined;
 
   if (!connection?.user_id) {
-    const decoded = decodeJWTUnverified(token);
-    if (!decoded?.payload?.sub) {
-      throw new Error("Invalid local session token");
-    }
-    logger.warn("[MCP Auth] Falling back to unverified JWT payload for local-only compatibility");
-    return {
-      userId: decoded.payload.sub,
-      email: decoded.payload.email,
-    };
+    // Fail closed: a bearer that matches no live connection is not a valid
+    // session. Never decode and trust the token's own claims (see SECURITY
+    // note above).
+    throw new Error("Invalid session token");
   }
 
   if (

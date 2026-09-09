@@ -21,10 +21,14 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  BUILT_CURSOR_HOOK_PACKAGE,
+  skipWithoutPrerequisite,
+} from "../helpers/test_prerequisites.js";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const STOP_HOOK = join(
@@ -60,7 +64,17 @@ function runHook(
   };
 }
 
-describe("cursor-hooks stop backfill integration", () => {
+// These tests spawn the COMPILED hook entrypoints under
+// packages/cursor-hooks/dist/. A bare `npm ci` never builds that package, so on
+// a fresh clone the dist is absent. Previously each test threw — a failure
+// indistinguishable from a real regression. Skip with a named reason instead
+// (issue #2090).
+const SKIP = skipWithoutPrerequisite(
+  BUILT_CURSOR_HOOK_PACKAGE,
+  "cursor-hooks stop backfill integration"
+);
+
+describe.skipIf(SKIP)("cursor-hooks stop backfill integration", () => {
   let scratchDir: string;
   let baseEnv: NodeJS.ProcessEnv;
 
@@ -85,11 +99,6 @@ describe("cursor-hooks stop backfill integration", () => {
   });
 
   it("emits followup_message by default when MCP store was skipped", () => {
-    if (!existsSync(STOP_HOOK)) {
-      throw new Error(
-        "cursor-hooks dist not built; run `npm --prefix packages/cursor-hooks run build`"
-      );
-    }
     const sessionId = "cursor-stop-backfill-1";
     const stop = runHook(
       STOP_HOOK,
@@ -111,9 +120,6 @@ describe("cursor-hooks stop backfill integration", () => {
   });
 
   it("counts wrapped Neotoma CallMcpTool store as a store", () => {
-    if (!existsSync(AFTER_TOOL_USE) || !existsSync(STOP_HOOK)) {
-      throw new Error("cursor-hooks dist not built");
-    }
     const sessionId = "cursor-stop-backfill-wrapped-store";
     const turnId = "turn-1";
 
@@ -155,9 +161,6 @@ describe("cursor-hooks stop backfill integration", () => {
   });
 
   it("nudges after wrapped external MCP calls before a Neotoma store", () => {
-    if (!existsSync(AFTER_TOOL_USE)) {
-      throw new Error("cursor-hooks dist not built");
-    }
     const seed = runHook(
       AFTER_TOOL_USE,
       {
@@ -182,9 +185,6 @@ describe("cursor-hooks stop backfill integration", () => {
   });
 
   it("does NOT emit followup_message when the agent already called store", () => {
-    if (!existsSync(AFTER_TOOL_USE) || !existsSync(STOP_HOOK)) {
-      throw new Error("cursor-hooks dist not built");
-    }
     const sessionId = "cursor-stop-backfill-2";
     const turnId = "turn-1";
 

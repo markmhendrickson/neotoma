@@ -137,10 +137,14 @@ Every advisory in `docs/security/advisories/` MUST result in one of:
 1. A new gate, rule, or checklist category (documented in this file under the relevant section)
 2. An explicit waiver with a written reason (documented in the advisory's Gate Gap section)
 
-The two advisories filed to date have both produced gate or checklist work:
+Advisories filed to date have each produced gate or regression-test work:
 
 - `2026-05-11-inspector-auth-bypass` → G2 rules, G3a manifest, G3b matrix test, checklist categories 1–5 (all landed in v0.11.1)
 - `2026-05-21-relationship-endpoint-tenant-isolation` → G3b extension, checklist category 6 (pending, tracked in #372)
+- `2026-08-07-ed25519-bearer-forged-key-auth-bypass` → fail-closed fix on the Ed25519 bearer path plus `tests/security/ed25519_forged_key_auth_bypass.test.ts` (landed in v0.21.4)
+- `2026-08-07-sort-by-order-by-sql-injection` → `normalizeColumnName` fail-closed backstop plus `tests/security/sort_by_sql_injection.test.ts` (landed in v0.21.4)
+- `2026-08-09-rendered-page-stored-xss-csp` → CSP hardening plus `tests/security/rendered_page_csp.test.ts` (landed in v0.21.5)
+- `2026-08-26-jwt-bearer-unverified-fallback-auth-bypass` → fail-closed fix on the MCP session-token bearer path (removed the unverified-JWT decode fallback), plus regression tests in `src/services/__tests__/mcp_oauth.test.ts` and `tests/services/mcp_auth.test.ts` (landed in v0.22.1). Same regression class as the Ed25519 bearer path above — an unresolved bearer must fail closed rather than fall through to trusting caller-supplied claims.
 
 ### Single-tenant assumption
 

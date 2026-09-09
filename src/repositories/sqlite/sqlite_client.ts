@@ -579,6 +579,19 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
       )
       .run();
+
+    // ateles#576: the visible-entity count is a COUNT(*) over entity_snapshots
+    // filtered by (user_id, entity_type). Without this index that count was a
+    // full table SCAN of every snapshot row on every /entities/query request —
+    // the residual per-request cost after the count stopped re-reading the
+    // observation log. `entity_id` is appended so the index covers the
+    // deleted-entity lookups in services/entity_queries.ts too, letting SQLite
+    // answer both from the index without touching the table.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entity_snapshots_user_type ON entity_snapshots(user_id, entity_type, entity_id)"
+      )
+      .run();
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"

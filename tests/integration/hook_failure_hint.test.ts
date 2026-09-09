@@ -23,8 +23,21 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  BUILT_CURSOR_HOOK_PACKAGE,
+  skipWithoutPrerequisite,
+} from "../helpers/test_prerequisites.js";
 
 const HOOK_DIR = resolve(__dirname, "../../packages/cursor-hooks/dist");
+
+// Both suites spawn the COMPILED hook entrypoints in HOOK_DIR. A bare `npm ci`
+// never builds packages/cursor-hooks, so on a fresh clone they are absent and
+// every spawn fails with a MODULE_NOT_FOUND that reads like a product break.
+// Skip with a named reason instead (issue #2090).
+const SKIP = skipWithoutPrerequisite(
+  BUILT_CURSOR_HOOK_PACKAGE,
+  "cursor-hooks failure-hint integration"
+);
 
 let stateDir: string;
 
@@ -68,7 +81,7 @@ afterEach(() => {
   if (existsSync(stateDir)) rmSync(stateDir, { recursive: true, force: true });
 });
 
-describe("cursor postToolUseFailure hook", () => {
+describe.skipIf(SKIP)("cursor postToolUseFailure hook", () => {
   it("creates a failure counter file for Neotoma-relevant tools", () => {
     const result = runHook("post_tool_use_failure.js", {
       session_id: "session-A",
@@ -111,7 +124,7 @@ describe("cursor postToolUseFailure hook", () => {
   });
 });
 
-describe("cursor postToolUse (after_tool_use) failure-hint surfacing", () => {
+describe.skipIf(SKIP)("cursor postToolUse (after_tool_use) failure-hint surfacing", () => {
   it("surfaces a one-shot hint via additional_context once the threshold trips", () => {
     const payload = {
       session_id: "session-C",

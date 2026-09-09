@@ -14,6 +14,7 @@ import {
   entityIdTenantSalt,
   generateEntityId,
 } from "./entity_resolution.js";
+import { resolveOwnedObservations } from "./attachment_resolution.js";
 import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 
@@ -56,14 +57,16 @@ export async function recomputeSnapshot(
   entityId: string,
   userId: string
 ): Promise<SnapshotRecord | null> {
-  const { data: observations, error } = await db
-    .from("observations")
-    .select("*")
-    .eq("entity_id", entityId)
-    .eq("user_id", userId);
-
-  if (error) throw new Error(`Failed to fetch observations for recomputation: ${error.message}`);
-  if (!observations || observations.length === 0) return null;
+  // #2340: a snapshot is a function of the observations ATTACHED to the
+  // entity, resolved through the declared resolution layer, not of the rows
+  // whose `entity_id` column equals the entity. See attachment_resolution.ts.
+  // A redirected id owns no snapshot of its own: `resolveOwnedObservations`
+  // returns null for one, so the survivor's rows are never written back under
+  // a tombstone's id. See attachment_resolution.ts for why resolution and
+  // ownership are separate questions.
+  const observations = await resolveOwnedObservations(entityId, userId);
+  if (observations === null) return null;
+  if (observations.length === 0) return null;
 
   const computed = await observationReducer.computeSnapshot(entityId, observations);
   if (!computed) {
