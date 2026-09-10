@@ -7829,11 +7829,14 @@ export class NeotomaServer {
    * Resource handler: Get individual entity
    */
   private async handleIndividualEntity(entityId: string): Promise<any> {
+    const userId = this.getAuthenticatedUserId();
+
     // Get entity
     const { data: entity, error: entityError } = await db
       .from("entities")
       .select("*")
       .eq("id", entityId)
+      .eq("user_id", userId)
       .single();
 
     if (entityError || !entity) {
@@ -7845,6 +7848,7 @@ export class NeotomaServer {
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", entityId)
+      .eq("user_id", userId)
       .single();
 
     if (snapshotError) {
@@ -7870,10 +7874,13 @@ export class NeotomaServer {
    * Resource handler: Get entity observations
    */
   private async handleEntityObservations(entityId: string): Promise<any> {
+    const userId = this.getAuthenticatedUserId();
+
     const { data: observations, error } = await db
       .from("observations")
       .select("*")
       .eq("entity_id", entityId)
+      .eq("user_id", userId)
       .order("observed_at", { ascending: false })
       .limit(100);
 
@@ -7885,7 +7892,8 @@ export class NeotomaServer {
     const { count, error: countError } = await db
       .from("observations")
       .select("*", { count: "exact", head: true })
-      .eq("entity_id", entityId);
+      .eq("entity_id", entityId)
+      .eq("user_id", userId);
 
     if (countError) {
       throw new McpError(
@@ -7907,11 +7915,14 @@ export class NeotomaServer {
    * Resource handler: Get entity relationships
    */
   private async handleEntityRelationships(entityId: string): Promise<any> {
+    const userId = this.getAuthenticatedUserId();
+
     // Get outbound relationships
     const { data: outbound, error: outError } = await db
       .from("relationship_snapshots")
       .select("*")
-      .eq("source_entity_id", entityId);
+      .eq("source_entity_id", entityId)
+      .eq("user_id", userId);
 
     if (outError) {
       throw new McpError(
@@ -7924,7 +7935,8 @@ export class NeotomaServer {
     const { data: inbound, error: inError } = await db
       .from("relationship_snapshots")
       .select("*")
-      .eq("target_entity_id", entityId);
+      .eq("target_entity_id", entityId)
+      .eq("user_id", userId);
 
     if (inError) {
       throw new McpError(
