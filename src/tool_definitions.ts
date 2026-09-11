@@ -750,7 +750,7 @@ export function buildToolDefinitions(
       name: "list_entity_types",
       description: desc(
         "list_entity_types",
-        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type."
+        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type. Each version shown is the one YOUR writes resolve against: a schema scoped to you wins over the instance-wide one. describe_entity_type resolves the same way, so the two agree."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
