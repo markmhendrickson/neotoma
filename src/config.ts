@@ -174,6 +174,55 @@ if (dbBackend !== "sqlite" && dbBackend !== "libsql") {
   );
 }
 
+/**
+ * Parse a comma-separated env var into a trimmed, de-duplicated list.
+ *
+ * Distinguishes *unset* from *explicitly empty*, which is the whole point of
+ * the `NEOTOMA_MCP_INSTRUCTION_*` list settings: unset means "use the default
+ * set", while an explicit empty string means "inject nothing of this class".
+ * Collapsing the two would make the documented disable switch unreachable.
+ */
+function parseCsvEnv(raw: string | undefined, fallback: string[]): string[] {
+  if (raw === undefined) return fallback;
+  return Array.from(
+    new Set(
+      raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+    )
+  );
+}
+
+/**
+ * Parse a non-negative integer env var, falling back to `fallback` when the
+ * value is missing, non-numeric or negative.
+ *
+ * Fails soft rather than throwing: this value governs an injection cap on the
+ * MCP session-start path, and a typo in an operator's env must degrade to the
+ * default rather than break every `initialize`.
+ */
+function parseMaxEntitiesEnv(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    console.warn(
+      `[instruction_entities] invalid NEOTOMA_MCP_INSTRUCTION_MAX_ENTITIES "${raw}"; using default ${fallback}`
+    );
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
+
+/** Default instruction-bearing entity types injected at MCP session start. */
+export const DEFAULT_MCP_INSTRUCTION_ENTITY_TYPES = ["standing_rule", "agent_policy"];
+
+/** Default entity `scope` values considered in-scope for session injection. */
+export const DEFAULT_MCP_INSTRUCTION_SCOPES = ["global", "swarm"];
+
+/** Default cap on the number of instruction entities injected per session. */
+export const DEFAULT_MCP_INSTRUCTION_MAX_ENTITIES = 50;
+
 export const config = {
   projectRoot,
   storageBackend,
@@ -223,6 +272,32 @@ export const config = {
     mnemonic: process.env.NEOTOMA_MNEMONIC || "",
     mnemonicPassphrase: process.env.NEOTOMA_MNEMONIC_PASSPHRASE || "",
     logEncryptionEnabled: process.env.NEOTOMA_LOG_ENCRYPTION_ENABLED === "true",
+  },
+
+  /**
+   * MCP session-start instruction injection (#2054).
+   *
+   * Controls which instruction-bearing entity types reach an agent through
+   * `serverInfo._neotoma.instruction_entities` at `initialize`. Set a list to
+   * the empty string to disable injection of that class entirely; leave a var
+   * unset to take the default.
+   */
+  mcp: {
+    /** Entity types injected at session start. Empty array disables injection. */
+    instructionEntityTypes: parseCsvEnv(
+      process.env.NEOTOMA_MCP_INSTRUCTION_ENTITY_TYPES,
+      DEFAULT_MCP_INSTRUCTION_ENTITY_TYPES
+    ),
+    /** Entity `scope` values treated as in-scope. Unioned with a domain match. */
+    instructionScopes: parseCsvEnv(
+      process.env.NEOTOMA_MCP_INSTRUCTION_SCOPES,
+      DEFAULT_MCP_INSTRUCTION_SCOPES
+    ),
+    /** Maximum entities injected per session; excess is dropped with a warning. */
+    instructionMaxEntities: parseMaxEntitiesEnv(
+      process.env.NEOTOMA_MCP_INSTRUCTION_MAX_ENTITIES,
+      DEFAULT_MCP_INSTRUCTION_MAX_ENTITIES
+    ),
   },
 
   // Icon generation settings

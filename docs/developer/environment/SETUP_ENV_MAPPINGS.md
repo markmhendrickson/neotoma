@@ -54,6 +54,27 @@ These can be excluded from 1Password sync as they're typically local development
 - `NEOTOMA_OAUTH_REDIRECT_BASE_URL` / `OAUTH_REDIRECT_BASE_URL` - OAuth redirect base
 - `NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY` / `MCP_TOKEN_ENCRYPTION_KEY` - OAuth token encryption
 - `NEOTOMA_MCP_CMD` / `MCP_CMD`, `NEOTOMA_MCP_ARGS` / `MCP_ARGS` - MCP WebSocket bridge config
+- `NEOTOMA_MCP_INSTRUCTION_ENTITY_TYPES` - comma-separated entity types injected into `serverInfo._neotoma.instruction_entities` at MCP `initialize`. Default `standing_rule,agent_policy`. Unset takes the default; an explicit empty string (`NEOTOMA_MCP_INSTRUCTION_ENTITY_TYPES=""`) disables instruction injection entirely. A configured type with no field mapping in the loader's registry is skipped with a warning.
+- `NEOTOMA_MCP_INSTRUCTION_SCOPES` - comma-separated entity `scope` values treated as in-scope for injection. Default `global,swarm`. Unioned with (never intersected against) a match between an entity's `domain` and the session's server-resolved agent identity. Empty string disables scope-based inclusion.
+- `NEOTOMA_MCP_INSTRUCTION_MAX_ENTITIES` - maximum entities injected per session. Default `50`. Entities are sorted by rank before the cap applies, and anything dropped is named in a `[instruction_entities]` warning. A non-numeric or negative value falls back to the default.
+
+Operator examples:
+
+```bash
+# Defaults — standing rules and agent policies, global + swarm scopes
+# (no configuration needed)
+
+# Disable instruction injection entirely
+NEOTOMA_MCP_INSTRUCTION_ENTITY_TYPES=""
+
+# Also inject conformance policies (off by default: most sessions never render a page)
+NEOTOMA_MCP_INSTRUCTION_ENTITY_TYPES="standing_rule,agent_policy,conformance_policy"
+
+# Tighten a hosted client instance to global policy only, with a smaller budget
+NEOTOMA_MCP_INSTRUCTION_ENTITY_TYPES="agent_policy"
+NEOTOMA_MCP_INSTRUCTION_SCOPES="global"
+NEOTOMA_MCP_INSTRUCTION_MAX_ENTITIES="20"
+```
 
 ### Frontend Configuration (Optional - usually local)
 These can be excluded from 1Password sync:
