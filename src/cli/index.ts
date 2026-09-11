@@ -7396,7 +7396,16 @@ const authLoginCommand = authCommand
       try {
         const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
         if (res.ok) {
-          const me = (await res.json()) as { user_id?: string; email?: string };
+          // #2228: `email` is who is signed in; `user_id` is the graph being
+          // operated on. Under shared-graph mode they describe different
+          // people, so print the scope rather than letting the id read as the
+          // signer's own.
+          const me = (await res.json()) as {
+            user_id?: string;
+            email?: string;
+            authenticated_user_id?: string;
+            shared_graph?: boolean;
+          };
           if (outputMode === "json") {
             writeOutput(
               {
@@ -7404,13 +7413,20 @@ const authLoginCommand = authCommand
                 base_url: baseUrl,
                 user_id: me.user_id,
                 email: me.email,
+                ...(me.shared_graph
+                  ? {
+                      shared_graph: true,
+                      authenticated_user_id: me.authenticated_user_id,
+                    }
+                  : {}),
               },
               outputMode
             );
           } else {
             process.stdout.write("Already signed in");
             if (me.user_id ?? me.email) {
-              process.stdout.write(` (${[me.email, me.user_id].filter(Boolean).join(", ")})`);
+              const scope = me.shared_graph ? `shared graph ${me.user_id}` : me.user_id;
+              process.stdout.write(` (${[me.email, scope].filter(Boolean).join(", ")})`);
             }
             process.stdout.write(".\n");
           }

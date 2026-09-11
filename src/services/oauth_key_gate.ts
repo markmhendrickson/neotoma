@@ -22,14 +22,36 @@ export type OAuthKeyCredentials = {
   bearerToken?: string;
 };
 
+/**
+ * What a sign-in bound to a session: the graph being operated on, and — when
+ * they differ — who actually signed in (#2228).
+ *
+ * `graphUserId` is the authorization/scope principal: every read and write uses
+ * it, and under NEOTOMA_SHARED_GRAPH_USER_ID it is the shared graph owner.
+ * `authenticatedUserId` / `authenticatedEmail` are the authentication
+ * principal: the verified Google identity of the person at the keyboard. Before
+ * #2228 only the former survived sign-in, so a teammate on a shared graph was
+ * shown the graph owner's email as their own.
+ */
+export type BoundIdentity = {
+  /** Graph scope — the user_id all data access is scoped to. */
+  graphUserId: string;
+  /** Per-email local_auth_users.id of the signer, when distinct from the scope. */
+  authenticatedUserId?: string;
+  /** Verified email of the signer. */
+  authenticatedEmail?: string;
+};
+
 export class OAuthKeySessionStore {
   private readonly sessions = new Map<string, number>();
   /**
    * Optional user binding for a session (set by the Google sign-in callback).
    * Kept in the SAME store as the expiry so a bound user can never outlive its
    * session — a separate module-level map had no TTL and grew unbounded (#2005).
+   * Carries the full identity (#2228), not just the graph scope; every field
+   * expires together with the session.
    */
-  private readonly boundUsers = new Map<string, string>();
+  private readonly boundUsers = new Map<string, BoundIdentity>();
   private readonly ttlMs: number;
 
   constructor(ttlMs: number = DEFAULT_SESSION_TTL_MS) {
@@ -58,20 +80,44 @@ export class OAuthKeySessionStore {
     return true;
   }
 
-  /** Bind a resolved user_id to a live session. No-op for an invalid token, so
-   *  a binding can never resurrect or outlast an expired session. */
-  bindUser(token: string, userId: string, nowMs: number = Date.now()): boolean {
+  /**
+   * Bind a resolved identity to a live session. No-op for an invalid token, so
+   * a binding can never resurrect or outlast an expired session.
+   *
+   * Accepts either a bare graph user_id (the pre-#2228 shape, still used by
+   * callers that have no separate authenticated identity) or a full
+   * {@link BoundIdentity}.
+   */
+  bindUser(token: string, identity: string | BoundIdentity, nowMs: number = Date.now()): boolean {
     if (!this.isValid(token, nowMs)) return false;
-    this.boundUsers.set(token, userId);
+    const resolved: BoundIdentity =
+      typeof identity === "string" ? { graphUserId: identity } : { ...identity };
+    this.boundUsers.set(token, resolved);
     return true;
   }
 
-  /** Resolve the bound user for a session, or undefined when the session is
-   *  absent/expired. Expiry is enforced here, not just at write time. */
+  /**
+   * Resolve the bound GRAPH SCOPE user_id for a session, or undefined when the
+   * session is absent/expired. Expiry is enforced here, not just at write time.
+   *
+   * This intentionally returns the scope, not the signer: callers use it to
+   * decide which graph to operate on. Use {@link getBoundIdentity} to learn who
+   * signed in (#2228).
+   */
   getBoundUser(token: string | undefined, nowMs: number = Date.now()): string | undefined {
+    return this.getBoundIdentity(token, nowMs)?.graphUserId;
+  }
+
+  /** Resolve the full bound identity (graph scope + signed-in identity) for a
+   *  live session, or undefined when the session is absent/expired. */
+  getBoundIdentity(
+    token: string | undefined,
+    nowMs: number = Date.now()
+  ): BoundIdentity | undefined {
     if (!token) return undefined;
     if (!this.isValid(token, nowMs)) return undefined;
-    return this.boundUsers.get(token);
+    const bound = this.boundUsers.get(token);
+    return bound ? { ...bound } : undefined;
   }
 
   cleanup(nowMs: number = Date.now()): void {

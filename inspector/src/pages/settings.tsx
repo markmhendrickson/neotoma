@@ -360,7 +360,12 @@ export default function SettingsPage() {
             ) : me.data ? (
               <>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">User ID</span>
+                  {/* Under shared-graph mode the User ID is the graph being
+                      operated on, not the signer — label it so, rather than
+                      letting it read as the viewer's own id (#2228). */}
+                  <span className="text-muted-foreground">
+                    {me.data.shared_graph ? "Graph User ID" : "User ID"}
+                  </span>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="font-mono text-xs cursor-default">
@@ -368,15 +373,29 @@ export default function SettingsPage() {
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="left" className="max-w-sm">
-                      <p className="text-xs text-muted-foreground">User ID</p>
+                      <p className="text-xs text-muted-foreground">
+                        {me.data.shared_graph ? "Shared graph User ID" : "User ID"}
+                      </p>
                       <p className="font-mono text-xs break-all">{me.data.user_id}</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 {me.data.email && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Email</span>
+                    <span className="text-muted-foreground">Signed in as</span>
                     <span>{me.data.email}</span>
+                  </div>
+                )}
+                {me.data.shared_graph && (
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground">Graph</span>
+                    <span className="text-right">
+                      <Badge variant="secondary">Shared graph</Badge>
+                      <span className="block text-xs text-muted-foreground mt-1">
+                        You are signed in as yourself, working in a graph shared with your team.
+                        Everything you read and write belongs to that shared graph.
+                      </span>
+                    </span>
                   </div>
                 )}
                 {me.data.storage && (

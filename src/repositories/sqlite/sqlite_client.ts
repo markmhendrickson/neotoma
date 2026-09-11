@@ -240,6 +240,12 @@ const SCHEMA_STATEMENTS = [
     scope TEXT,
     final_redirect_uri TEXT
   )`,
+  // `user_id` is the GRAPH SCOPE principal — the user_id every read and write
+  // is scoped to. Under NEOTOMA_SHARED_GRAPH_USER_ID it is the shared graph
+  // owner, not the person who signed in. `authenticated_user_id` /
+  // `authenticated_email` carry WHO SIGNED IN alongside that scope (#2228);
+  // they are NULL on non-shared-graph and pre-migration rows, where identity
+  // is resolved from `user_id` exactly as before.
   `CREATE TABLE IF NOT EXISTS mcp_oauth_connections (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -250,7 +256,9 @@ const SCHEMA_STATEMENTS = [
     client_name TEXT,
     last_used_at TEXT,
     created_at TEXT,
-    revoked_at TEXT
+    revoked_at TEXT,
+    authenticated_user_id TEXT,
+    authenticated_email TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_client_state (
     id TEXT PRIMARY KEY,
@@ -461,6 +469,10 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     // support fast collapse_by grouping on retrieve_entities.
     await addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
     await addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+    // #2228: signed-in identity carried alongside the graph-scope user_id.
+    // Existing rows get NULLs and keep resolving identity from user_id.
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_user_id", "TEXT");
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_email", "TEXT");
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
