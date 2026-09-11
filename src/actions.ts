@@ -2971,6 +2971,25 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
   }
 });
 
+/**
+ * Send an authorize-endpoint refusal as plain text.
+ *
+ * `res.send(string)` defaults to `text/html`, which makes the body an HTML sink.
+ * That matters here because this endpoint is reached by a BROWSER, before any
+ * authentication, with a `redirect_uri` supplied by whoever crafted the link —
+ * so anything echoed from the request into an HTML body would execute on this
+ * instance's own origin. Setting `text/plain` removes the sink rather than
+ * filtering it, which is what makes it safe to name the rejected redirect_uri
+ * in the body below.
+ *
+ * Plain text (rather than the canonical JSON ErrorEnvelope) is also the right
+ * shape for the reader: this renders in a browser address bar mid-redirect, for
+ * a human. Declared as `text/plain` in openapi.yaml under `mcpOAuthAuthorize`.
+ */
+function sendAuthorizeRefusal(res: express.Response, status: number, message: string) {
+  return res.status(status).type("text/plain").send(message);
+}
+
 // RFC 8414 authorization endpoint (GET) for Cursor and other OAuth clients
 app.get("/mcp/oauth/authorize", async (req, res) => {
   try {
@@ -2990,11 +3009,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
 
     if (!redirect_uri) {
       logger.warn("[MCP OAuth] Authorize rejected: missing redirect_uri");
-      return res.status(400).send("redirect_uri is required");
+      return sendAuthorizeRefusal(res, 400, "redirect_uri is required");
     }
     if (!state) {
       logger.warn("[MCP OAuth] Authorize rejected: missing state");
-      return res.status(400).send("state is required");
+      return sendAuthorizeRefusal(res, 400, "state is required");
     }
     const isOpenAiCustomGptRedirect =
       redirect_uri &&
@@ -3005,7 +3024,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       logger.warn("[MCP OAuth] Authorize rejected: missing PKCE for non-OpenAI redirect", {
         redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
       });
-      return res.status(400).send("code_challenge and code_challenge_method=S256 are required");
+      return sendAuthorizeRefusal(
+        res,
+        400,
+        "code_challenge and code_challenge_method=S256 are required"
+      );
     }
     if (!hasPkce && isOpenAiCustomGptRedirect) {
       // Allow OAuth without client PKCE for OpenAI Custom GPT only (weaker security; see docs).
@@ -3016,9 +3039,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       return res.redirect(`/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`);
     }
     if (dev_stub === "1" || dev_stub === "true") {
-      return res
-        .status(400)
-        .send("dev_stub is disabled. OAuth requires key authentication via /mcp/oauth/key-auth.");
+      return sendAuthorizeRefusal(
+        res,
+        400,
+        "dev_stub is disabled. OAuth requires key authentication via /mcp/oauth/key-auth."
+      );
     }
 
     if (config.storageBackend === "local") {
@@ -3029,14 +3054,35 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         // proxy) so an Inspector callback on this instance's own origin is allowed.
         const selfHost = req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.get("host");
         if (!isRedirectUriAllowedForTunnel(redirect_uri, selfHost)) {
+          // Name the config variable and whether it is even set: an operator who
+          // has configured a callback and still gets refused otherwise has no way
+          // to tell a typo from an unset variable from an exact-match miss.
+          const trustedCount = config.oauthTrustedCallbackUrls.length;
+          const sanitizedRedirectUri = sanitizeRedirectUriForLog(redirect_uri);
           logger.warn("[MCP OAuth] Authorize rejected: redirect_uri not allowed for tunnel", {
-            redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+            redirect_uri: sanitizedRedirectUri,
+            trusted_callback_urls_configured: trustedCount,
           });
-          return res
-            .status(400)
-            .send(
-              "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, localhost, loopback, or trusted callback URLs (OpenAI/Claude)."
-            );
+          return sendAuthorizeRefusal(
+            res,
+            400,
+            "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, localhost, loopback, or trusted callback URLs (OpenAI/Claude). " +
+              // Echo what the server actually compared. An operator on a hosted
+              // deploy has no log access, and every likely failure here is a
+              // NEAR miss (trailing slash, port, case, a dot segment that
+              // resolved) — indistinguishable from a typo or a client-side bug
+              // without seeing the value the server saw. Safe to echo because
+              // this response is text/plain (see sendAuthorizeRefusal) and
+              // because the value is sanitized: scheme, host and path only,
+              // with query and fragment — where the code and state live —
+              // already stripped.
+              (sanitizedRedirectUri
+                ? `The server compared: ${sanitizedRedirectUri} (query and fragment ignored). `
+                : "") +
+              (trustedCount > 0
+                ? `This instance has ${trustedCount} operator-configured callback URL(s) in NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS; none matched. That list is matched on the EXACT full callback URL: scheme, host, port and path must all agree. The host is compared case-insensitively and the path case-sensitively; a trailing slash and a default port (:443) are insignificant; query and fragment are ignored; and plaintext http: is only honoured for loopback hosts.`
+                : "To trust a self-hosted app's callback, set NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS to its exact full callback URL (for example https://app.example.com/auth/callback).")
+          );
         }
       }
 
@@ -3102,7 +3148,7 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
     return res.redirect(result.authUrl);
   } catch (error: any) {
     logError("MCPOAuthAuthorize", req, error);
-    return res.status(500).send(error.message ?? "Authorization failed");
+    return sendAuthorizeRefusal(res, 500, error.message ?? "Authorization failed");
   }
 });
 

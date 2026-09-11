@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **602**
-- Backend and repo Vitest files: **567**
+- Total automated test files: **605**
+- Backend and repo Vitest files: **570**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 165 |
+| Vitest unit tests | 166 |
 | Vitest service tests | 44 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 171 |
+| Vitest integration tests | 172 |
 | Vitest CLI tests | 78 |
-| Vitest contract tests | 18 |
+| Vitest contract tests | 19 |
 | Vitest security tests | 9 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (165):**
+**Files (166):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -152,6 +152,7 @@ flowchart TD
 - `tests/unit/config_data_dir_resolution.test.ts`
 - `tests/unit/config_db_backend.test.ts`
 - `tests/unit/config_sqlite_path.test.ts`
+- `tests/unit/config_trusted_callbacks.test.ts`
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/conversation_session_uuid_bridge.test.ts`
@@ -405,7 +406,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (171):**
+**Files (172):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -496,6 +497,7 @@ flowchart TD
 - `tests/integration/mcp_npm_check_update_capability_delta.test.ts`
 - `tests/integration/mcp_npm_check_update.test.ts`
 - `tests/integration/mcp_oauth_token_endpoint.test.ts`
+- `tests/integration/mcp_oauth_trusted_callback.test.ts`
 - `tests/integration/mcp_query_variations.test.ts`
 - `tests/integration/mcp_relationship_variations.test.ts`
 - `tests/integration/mcp_resource_variations.test.ts`
@@ -668,7 +670,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (18):**
+**Files (19):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -677,6 +679,7 @@ flowchart TD
 - `tests/contract/get_entities_alias.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
 - `tests/contract/legacy_payloads/replay.test.ts`
+- `tests/contract/mcp_oauth_authorize_responses.test.ts`
 - `tests/contract/mcp_stdio_output_safety.test.ts`
 - `tests/contract/mcp_tool_dispatch_coverage.test.ts`
 - `tests/contract/openapi_schema.test.ts`
