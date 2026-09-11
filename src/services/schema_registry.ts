@@ -993,9 +993,12 @@ export function isHigherPrecedenceSchemaRow(
   const isOwnOverride = (row: Pick<SchemaRegistryEntry, "scope" | "user_id">): boolean =>
     row.scope === "user" && !!userId && row.user_id === userId;
   // Only an own-override outranks an incumbent, and only when the incumbent is
-  // not itself one (two active override rows for the same principal is a real
-  // data-integrity fault; keeping the first is deterministic, and
-  // `loadUserSpecificSchema`'s `.single()` already raises on it).
+  // not itself one. Two active override rows for the same principal is a real
+  // data-integrity fault, and NOTHING raises on it: this adapter's `.single()`
+  // errors only on ZERO rows (`local_db_adapter.ts`, `expectSingle` returns
+  // `rows[0]` otherwise) and the SELECT carries no ORDER BY, so the resolver
+  // silently serves an arbitrary row. Keeping the first candidate here is at
+  // least deterministic within one call.
   return isOwnOverride(candidate) && !isOwnOverride(incumbent);
 }
 
@@ -1133,6 +1136,15 @@ export class SchemaRegistryService {
     Array<{
       entity_type: string;
       global_version: string;
+      /**
+       * Set only when this type has MORE THAN ONE active global row — a
+       * corrupt state, distinct from the intentional global/user pair this
+       * audit exists to report. While present, `global_version` is the highest
+       * of these and not necessarily the one the resolver serves, so
+       * `overrides_older_than_global` is unreliable for this type until the
+       * duplication is repaired.
+       */
+      duplicate_global_versions?: string[];
       overrides: Array<{ user_id: string; schema_version: string; older_than_global: boolean }>;
       overrides_older_than_global: boolean;
     }>
@@ -1166,9 +1178,30 @@ export class SchemaRegistryService {
       return 0;
     };
 
-    const globals = new Map<string, string>();
+    // Multiple ACTIVE global rows for one type is not a scope pair — it is
+    // unambiguous corruption, and it is the one state here that is safely
+    // auto-repairable (no per-tenant intent can be encoded in a duplicate
+    // within a single scope). It must be surfaced separately, and it must NOT
+    // be collapsed last-write-wins: the resolver serves whichever row the
+    // unordered SELECT returns first, so a last-write-wins `global_version`
+    // can disagree with what is actually served and mis-flag an override as
+    // stale against a version no caller ever sees.
+    //
+    // Collapse deterministically to the highest version so the reported
+    // `global_version` is stable across runs, and report the duplication.
+    const globalVersions = new Map<string, string[]>();
     for (const r of rows) {
-      if (r.scope !== "user") globals.set(r.entity_type, r.schema_version);
+      if (r.scope === "user") continue;
+      const list = globalVersions.get(r.entity_type) ?? [];
+      list.push(r.schema_version);
+      globalVersions.set(r.entity_type, list);
+    }
+    const globals = new Map<string, string>();
+    const duplicateGlobals = new Map<string, string[]>();
+    for (const [entityType, versions] of globalVersions) {
+      const sorted = [...versions].sort(compareVersions);
+      globals.set(entityType, sorted[sorted.length - 1]);
+      if (versions.length > 1) duplicateGlobals.set(entityType, sorted);
     }
 
     const byType = new Map<
@@ -1192,6 +1225,13 @@ export class SchemaRegistryService {
       .map(([entity_type, overrides]) => ({
         entity_type,
         global_version: globals.get(entity_type) as string,
+        // Present ONLY when this type has more than one active global row.
+        // While set, `global_version` is the highest of them, not necessarily
+        // the one the resolver serves — repair the duplication before acting
+        // on `overrides_older_than_global` for this type.
+        ...(duplicateGlobals.has(entity_type)
+          ? { duplicate_global_versions: duplicateGlobals.get(entity_type) as string[] }
+          : {}),
         overrides,
         overrides_older_than_global: overrides.some((o) => o.older_than_global),
       }))
@@ -2072,9 +2112,11 @@ export class SchemaRegistryService {
   async activate(entityType: string, version: string, userId?: string): Promise<void> {
     // Load the schema to get its scope and user_id.
     //
-    // #2356: this used `.single()` on (entity_type, schema_version) alone, which
-    // THROWS when a global row and a user-scoped row share a version string —
-    // and resolves to an arbitrary row's scope when it does not. `userId` was
+    // #2356: this used `.single()` on (entity_type, schema_version) alone, so
+    // when a global row and a user-scoped row shared a version string it
+    // silently resolved to whichever the unordered SELECT returned first.
+    // (It does NOT throw: `expectSingle` in this adapter errors only on zero
+    // rows.) The arbitrary-row resolution is the whole defect. `userId` was
     // accepted and ignored (`_userId`), so a caller activating a user's override
     // could not say so. Prefer this principal's own row when one exists at this
     // version, and fall back to the global row, mirroring `loadActiveSchema`.

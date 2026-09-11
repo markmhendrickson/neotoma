@@ -37,7 +37,8 @@ const SCOPED_NEWER = `scope_parity_newer_${Date.now()}`;
 /** Type owned by a DIFFERENT user, used to pin the cross-user disclosure guard. */
 const FOREIGN = `scope_parity_foreign_${Date.now()}`;
 
-const ALL_TYPES = [SCOPED_OLDER, SCOPED_NEWER, FOREIGN];
+const DUP_GLOBAL = `scope_parity_dupglobal_${Date.now()}`;
+const ALL_TYPES = [SCOPED_OLDER, SCOPED_NEWER, FOREIGN, DUP_GLOBAL];
 
 function fields(names: string[]): Record<string, { type: "string"; required: boolean }> {
   return Object.fromEntries(
@@ -217,6 +218,44 @@ describe("schema scope resolution parity (#2356)", () => {
       // 1.18.0 > 1.3.0 — an intentional-looking override, not flagged.
       // A lexical compare would rank "1.18.0" BELOW "1.3.0" and wrongly flag it.
       expect(newer?.overrides_older_than_global).toBe(false);
+    });
+
+    it("surfaces duplicate ACTIVE global rows instead of collapsing them", async () => {
+      // Two active GLOBAL rows for one type is corruption, not a scope pair —
+      // and it is the state the resolver handles worst: `expectSingle` in this
+      // adapter errors only on ZERO rows, so `loadGlobalSchema` serves
+      // whichever row the unordered SELECT returns first.
+      //
+      // The audit previously collapsed these last-write-wins, which let it
+      // report a `global_version` the resolver does not serve and then flag a
+      // healthy override as stale against a version no caller ever sees.
+      const DUP = DUP_GLOBAL;
+      await seedRow({
+        entity_type: DUP, schema_version: "2.0.0",
+        field_names: ["a"], scope: "global", user_id: null,
+      });
+      await seedRow({
+        entity_type: DUP, schema_version: "9.0.0",
+        field_names: ["a", "b"], scope: "global", user_id: null,
+      });
+      await seedRow({
+        entity_type: DUP, schema_version: "3.0.0",
+        field_names: ["a", "c"], scope: "user", user_id: USER,
+      });
+
+      const report = await schemaRegistry.auditDualActiveSchemas();
+      const dup = report.find((r) => r.entity_type === DUP);
+
+      // Both duplicates reported, ascending, so an operator can see WHICH rows
+      // collide rather than only that something is wrong.
+      expect(dup?.duplicate_global_versions).toEqual(["2.0.0", "9.0.0"]);
+      // Deterministic collapse: highest, not "last row the DB happened to
+      // return". Stable across runs regardless of insertion order.
+      expect(dup?.global_version).toBe("9.0.0");
+      // A type with exactly one global row must NOT carry the field at all.
+      expect(
+        report.find((r) => r.entity_type === SCOPED_OLDER)?.duplicate_global_versions
+      ).toBeUndefined();
     });
 
     it("ignores an override that has no global row to shadow", async () => {
