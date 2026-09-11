@@ -12485,6 +12485,9 @@ export async function startHTTPServer() {
       const subscriptionBridge =
         await import("./services/subscriptions/install_subscription_bridge.js");
       subscriptionBridge.installSubscriptionBridge();
+      // Fail loudly if no persisting listener ended up registered (#2326).
+      // The MCP stdio entrypoint carries the same pair of calls.
+      subscriptionBridge.assertSubstrateListenerInstalled();
       logger.info("[Subscriptions] substrate event bridge installed");
       return { server, port: boundPort };
     } catch (err: unknown) {
