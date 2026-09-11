@@ -653,8 +653,20 @@ export type ServerMode =
   | "refuse";
 
 export interface UserInfo {
+  /**
+   * Graph scope — the user_id whose graph is being read and written. Under
+   * shared-graph mode this is the shared owner, not the signed-in person.
+   */
   user_id: string;
+  /** Email of the signed-in user (the teammate, under shared-graph mode). */
   email?: string;
+  /**
+   * Per-email user_id of the signed-in user. Present only when it differs from
+   * `user_id`, i.e. when a shared graph is being operated on (#2228).
+   */
+  authenticated_user_id?: string;
+  /** True when the graph being operated on is not the signed-in user's own. */
+  shared_graph?: boolean;
   storage?: {
     storage_backend: string;
     data_dir?: string;
