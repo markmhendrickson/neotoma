@@ -27,6 +27,12 @@ describe("MCP_INTERACTION_INSTRUCTIONS_FALLBACK", () => {
     expect(fb).toContain("Closing store");
   });
 
+  it("requires bounded retrieval before reasoning about a newly-named entity", () => {
+    expect(fb).toMatch(/newly-named entity requires this lookup BEFORE reasoning/i);
+    expect(fb).toMatch(/no-match is fine, skipping is not/i);
+    expect(fb).toMatch(/unretrieved newly-named entities/i);
+  });
+
   it("references conversation_message entity type", () => {
     expect(fb).toContain("conversation_message");
   });
