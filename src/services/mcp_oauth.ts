@@ -94,6 +94,7 @@ interface LocalOAuthStateRow {
 
 interface LocalConnectionRow {
   id: string;
+  /** Graph scope: the user_id all data access on this connection is scoped to. */
   user_id: string;
   connection_id: string;
   refresh_token: string;
@@ -103,7 +104,16 @@ interface LocalConnectionRow {
   last_used_at: string | null;
   created_at: string;
   revoked_at: string | null;
+  /** Signed-in identity (#2228). NULL outside shared-graph mode and on rows
+   *  written before the migration, where identity comes from `user_id`. */
+  authenticated_user_id?: string | null;
+  authenticated_email?: string | null;
 }
+
+/** Columns every LocalConnectionRow SELECT reads. Kept in one place so adding a
+ *  column cannot silently miss one of the three lookup helpers. */
+const LOCAL_CONNECTION_COLUMNS =
+  "id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at, authenticated_user_id, authenticated_email";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -187,7 +197,7 @@ async function getLocalConnectionById(connectionId: string): Promise<LocalConnec
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL`
     )
     .get(connectionId);
   return row ? (row as LocalConnectionRow) : null;
@@ -199,7 +209,7 @@ async function getLocalConnectionByAccessToken(
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL`
     )
     .get(accessToken);
   return row ? (row as LocalConnectionRow) : null;
@@ -211,7 +221,7 @@ async function getLocalConnectionByRefreshToken(
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL`
     )
     .get(refreshToken);
   return row ? (row as LocalConnectionRow) : null;
@@ -224,13 +234,29 @@ async function upsertLocalConnection(payload: {
   accessToken: string;
   accessTokenExpiresAt: string;
   clientName?: string | null;
+  /** Signed-in identity to persist alongside the graph scope (#2228). Omitted
+   *  by callers with no separate identity (token refresh, non-Google paths),
+   *  where the row's existing identity is preserved rather than cleared. */
+  authenticatedUserId?: string | null;
+  authenticatedEmail?: string | null;
 }): Promise<void> {
   const db = await getDb();
   const existing = await getLocalConnectionById(payload.connectionId);
   if (existing) {
+    // A refresh (which carries no identity) must not erase the identity a
+    // sign-in already recorded, or `/me` would silently revert to reporting the
+    // graph owner's email after the first token refresh.
+    const authenticatedUserId =
+      payload.authenticatedUserId !== undefined
+        ? payload.authenticatedUserId
+        : (existing.authenticated_user_id ?? null);
+    const authenticatedEmail =
+      payload.authenticatedEmail !== undefined
+        ? payload.authenticatedEmail
+        : (existing.authenticated_email ?? null);
     await db
       .prepare(
-        "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL WHERE connection_id = ?"
+        "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL, authenticated_user_id = ?, authenticated_email = ? WHERE connection_id = ?"
       )
       .run(
         payload.userId,
@@ -239,13 +265,15 @@ async function upsertLocalConnection(payload: {
         payload.accessTokenExpiresAt,
         payload.clientName ?? null,
         nowIso(),
+        authenticatedUserId,
+        authenticatedEmail,
         payload.connectionId
       );
     return;
   }
   await db
     .prepare(
-      "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at, authenticated_user_id, authenticated_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       randomUUID(),
@@ -257,7 +285,9 @@ async function upsertLocalConnection(payload: {
       payload.clientName ?? null,
       nowIso(),
       nowIso(),
-      null
+      null,
+      payload.authenticatedUserId ?? null,
+      payload.authenticatedEmail ?? null
     );
 }
 
@@ -1064,8 +1094,13 @@ export async function createLocalAuthorizationRequest(params: {
 
 export async function completeLocalAuthorization(
   state: string,
+  /** Graph scope — the user_id this connection's reads and writes are scoped to. */
   userId: string,
-  clientName?: string | null
+  clientName?: string | null,
+  /** Verified identity of the signer, when shared-graph mode made it distinct
+   *  from the graph scope (#2228). Recorded on the connection row so `/me` can
+   *  report who signed in; it never affects which graph is accessed. */
+  identity?: { authenticatedUserId?: string; authenticatedEmail?: string }
 ): Promise<{ connectionId: string; redirectUri?: string; clientState?: string }> {
   if (!isLocalBackend) {
     throw createOAuthError.stateInvalid("Local authorization completion requires local backend");
@@ -1101,6 +1136,8 @@ export async function completeLocalAuthorization(
     accessToken: tokens.accessToken,
     accessTokenExpiresAt: expiresAt.toISOString(),
     clientName: clientName ?? null,
+    authenticatedUserId: identity?.authenticatedUserId ?? null,
+    authenticatedEmail: identity?.authenticatedEmail ?? null,
   });
 
   auditLog("oauth_callback_success", {

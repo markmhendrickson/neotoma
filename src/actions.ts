@@ -162,6 +162,7 @@ import {
   normalizeOauthNextPath,
   OAuthKeySessionStore,
 } from "./services/oauth_key_gate.js";
+import type { BoundIdentity } from "./services/oauth_key_gate.js";
 import {
   buildGoogleAuthorizeUrl,
   createGoogleSigninNonce,
@@ -1752,12 +1753,30 @@ export function setOAuthKeySessionCookie(
   return token;
 }
 
-/** Resolve the local-auth user_id a Google-verified session (if any) mapped to this request. */
+/**
+ * Resolve the GRAPH SCOPE user_id a Google-verified session (if any) mapped to
+ * this request — the user_id whose graph is read and written. Under
+ * shared-graph mode this is the shared owner, not the signer; use
+ * {@link getGoogleVerifiedIdentity} to learn who signed in (#2228).
+ */
 export function getGoogleVerifiedUserId(req: express.Request): string | undefined {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
   // getBoundUser enforces session validity itself, so an expired session can
   // never resolve a user even if a binding is still in memory.
   return oauthKeySessions.getBoundUser(token);
+}
+
+/**
+ * Resolve the full identity bound to a Google-verified session: the graph being
+ * operated on plus, when shared-graph mode remapped the scope, the verified
+ * email and per-email user_id of the person who signed in (#2228).
+ *
+ * Session validity is enforced by the store, so an expired session resolves to
+ * undefined rather than a stale identity.
+ */
+export function getGoogleVerifiedIdentity(req: express.Request): BoundIdentity | undefined {
+  const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
+  return oauthKeySessions.getBoundIdentity(token);
 }
 
 /**
@@ -2952,8 +2971,19 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // resolves the user via this session instead of always ensureLocalDevUser().
     // Sign-in gets the long session TTL, not the key-entry gate's 15 minutes,
     // and the user binding lives in the same store so it expires with it (#2005).
+    //
+    // #2228: bind the verified identity ALONGSIDE the graph scope. Previously
+    // only `resolvedUserId` was bound, so under shared-graph mode the verified
+    // Google email was discarded here and every downstream surface resolved the
+    // email from the shared user_id — telling a signed-in teammate they were the
+    // graph owner. `graphUserId` still decides which graph is read and written;
+    // the identity fields only say who is doing it.
     const sessionToken = setOAuthKeySessionCookie(req, res, SIGN_IN_SESSION_TTL_MS);
-    oauthKeySessions.bindUser(sessionToken, resolvedUserId);
+    oauthKeySessions.bindUser(sessionToken, {
+      graphUserId: resolvedUserId,
+      authenticatedUserId: perEmailUser.id,
+      authenticatedEmail: email,
+    });
 
     return res.redirect(nextPath);
   } catch (error: any) {
@@ -3172,12 +3202,23 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     // user's own user_id instead of the shared dev user. Every other path
     // (no Google session on this cookie — the default, and the only
     // possibility when the Google feature flag is off) is unchanged.
-    const googleUserId = getGoogleVerifiedUserId(req);
-    const resolvedUserId = googleUserId ?? (await ensureLocalDevUser()).id;
+    // #2228: the session carries BOTH the graph scope and, under shared-graph
+    // mode, the verified identity of the signer. `resolvedUserId` stays the
+    // graph scope — it is what the connection row scopes data access to, and
+    // what every read and write continues to use. The identity rides alongside
+    // it onto the row so `/me` can report who is signed in without changing
+    // whose graph is operated on.
+    const googleIdentity = getGoogleVerifiedIdentity(req);
+    const resolvedUserId = googleIdentity?.graphUserId ?? (await ensureLocalDevUser()).id;
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
     const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
       state,
-      resolvedUserId
+      resolvedUserId,
+      undefined,
+      {
+        authenticatedUserId: googleIdentity?.authenticatedUserId,
+        authenticatedEmail: googleIdentity?.authenticatedEmail,
+      }
     );
     const frontendBase =
       process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
@@ -4177,9 +4218,15 @@ app.use(async (req, res, next) => {
     try {
       const { validateSessionToken } = await import("./services/mcp_auth.js");
       const validated = await validateSessionToken(bearerToken);
-      // Attach user_id and email to request for user-scoped queries and /me
+      // Attach user_id and email to request for user-scoped queries and /me.
+      // The stamped principal remains the GRAPH SCOPE user_id — data scoping
+      // must not move to the per-email identity (#2228). The identity fields
+      // are carried separately, for /me to report, and are never read by
+      // getAuthenticatedUserId.
       stampUserPrincipal(req, validated.userId);
       (req as any).authenticatedUserEmail = validated.email;
+      (req as any).signedInUserId = validated.authenticatedUserId;
+      (req as any).signedInSharedGraph = validated.sharedGraph === true;
       (req as any).bearerToken = bearerToken;
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
@@ -4255,11 +4302,22 @@ app.get("/me", async (req, res) => {
     // startHTTPServer()).
     const sandboxMode: NeotomaSandboxModeName | null =
       _resolvedServerMode ?? (_localSandboxActive ? "local_sandbox" : null);
+    // #2228: report identity and scope as two things, not one.
+    //   user_id            — the graph being operated on (unchanged meaning)
+    //   email              — WHO is signed in; under shared-graph mode this is
+    //                        the teammate's verified address, not the owner's
+    //   authenticated_user_id / shared_graph — present only when the two differ,
+    //                        so non-shared-graph responses keep their old shape
+    const signedInUserId = (req as any).signedInUserId as string | undefined;
+    const sharedGraph = (req as any).signedInSharedGraph === true;
     return res.json({
       user_id: userId,
       email: email ?? undefined,
       storage,
       ...(sandboxMode ? { sandbox_mode: sandboxMode } : {}),
+      ...(sharedGraph && signedInUserId
+        ? { authenticated_user_id: signedInUserId, shared_graph: true }
+        : {}),
     });
   } catch (error: any) {
     logError("GetMe", req, error);

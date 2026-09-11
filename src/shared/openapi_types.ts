@@ -4562,8 +4562,14 @@ export interface operations {
         };
         content: {
           "application/json": {
+            /** @description Graph scope: the user_id all reads and writes are scoped to. Under shared-graph mode this is the shared graph owner, not the signed-in user. */
             user_id?: string;
+            /** @description Email of the signed-in user. Under shared-graph mode this is the verified address of the teammate who signed in, not the graph owner's. */
             email?: string;
+            /** @description Per-email user_id of the signed-in user. Present only when it differs from user_id (shared-graph mode); omitted otherwise. */
+            authenticated_user_id?: string;
+            /** @description True when this session operates on a shared graph whose owner is not the signed-in user. Omitted otherwise. */
+            shared_graph?: boolean;
             storage?: {
               /** @enum {string} */
               storage_backend?: "local";

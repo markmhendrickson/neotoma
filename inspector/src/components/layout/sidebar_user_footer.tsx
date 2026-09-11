@@ -117,7 +117,18 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
               <User className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="truncate font-medium">{label}</p>
+                {/* #2228: on a shared graph the id below is the graph's, not
+                    the signer's — say which is which instead of showing an id
+                    that reads as the viewer's own. */}
+                {me.data.shared_graph ? (
+                  <p className="mt-1 text-muted-foreground">Working in a shared graph</p>
+                ) : null}
                 <p className="mt-1 break-all font-mono text-muted-foreground">{me.data.user_id}</p>
+                {me.data.shared_graph ? (
+                  <Badge variant="secondary" className="mt-1.5">
+                    Shared graph
+                  </Badge>
+                ) : null}
                 {me.data.sandbox_mode && me.data.sandbox_mode !== "local" ? (
                   <Badge
                     variant={me.data.sandbox_mode === "refuse" ? "destructive" : "secondary"}
