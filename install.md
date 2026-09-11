@@ -786,6 +786,7 @@ automatically upload source artifacts via `file_content` instead of
 ### Production runbook cross-links
 
 - Deployment runbook: [`docs/operations/runbook.md`](docs/operations/runbook.md)
+- Upgrading an instance, version checks, and automating an update check: [`docs/operations/upgrading.md`](docs/operations/upgrading.md)
 - CLI reference (including ingest auto-upload and size cap): [`docs/developer/cli_reference.md`](docs/developer/cli_reference.md)
 - Environment conventions and env-var naming: [`docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md`](docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md)
 
