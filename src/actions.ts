@@ -3029,13 +3029,21 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         // proxy) so an Inspector callback on this instance's own origin is allowed.
         const selfHost = req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.get("host");
         if (!isRedirectUriAllowedForTunnel(redirect_uri, selfHost)) {
+          // Name the config variable and whether it is even set: an operator who
+          // has configured a callback and still gets refused otherwise has no way
+          // to tell a typo from an unset variable from an exact-match miss.
+          const trustedCount = config.oauthTrustedCallbackUrls.length;
           logger.warn("[MCP OAuth] Authorize rejected: redirect_uri not allowed for tunnel", {
             redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+            trusted_callback_urls_configured: trustedCount,
           });
           return res
             .status(400)
             .send(
-              "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, localhost, loopback, or trusted callback URLs (OpenAI/Claude)."
+              "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, localhost, loopback, or trusted callback URLs (OpenAI/Claude). " +
+                (trustedCount > 0
+                  ? `This instance has ${trustedCount} operator-configured callback URL(s) in NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS; none matched. That list is matched on the EXACT full callback URL (scheme, host, port and path), and plaintext http: is only honoured for loopback hosts.`
+                  : "To trust a self-hosted app's callback, set NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS to its exact full callback URL (for example https://app.example.com/auth/callback).")
             );
         }
       }

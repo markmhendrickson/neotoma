@@ -62,8 +62,29 @@ See [Running the Server](running_the_server.md) for transports and processes.
 | --- | --- |
 | `NEOTOMA_REQUIRE_KEY_FOR_OAUTH` | Require a key for OAuth connections |
 | `NEOTOMA_OAUTH_CLIENT_ID` | MCP OAuth client id (hosted mode) |
+| `NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS` | Comma-separated **exact** callback URLs additionally trusted to receive an authorization code when the authorize request arrives via a tunnel. Empty by default. See below. |
 | `NEOTOMA_SANDBOX_MODE` | Opt into the public hosted-sandbox profile |
 | `NEOTOMA_REFUSE_MODE` | `warn` or `enforce` when a no-auth, non-loopback topology is detected |
+
+### Trusted OAuth callback URLs
+
+When an authorize request reaches a local-backend instance over a tunnel, the `redirect_uri` must be on an allowlist, so an authorization code is never handed to a third-party site. Built in are the `cursor:`/`vscode:`/`app:` schemes, localhost and loopback, this instance's own origin, and the ChatGPT and Claude callbacks.
+
+To let a **self-hosted first-party app** complete sign-in against a hosted instance, set its callback URL:
+
+```bash
+NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS=https://app.example.com/auth/callback
+```
+
+Several entries are comma-separated. Rules worth knowing before you set it:
+
+- **Exact full URLs, not origins.** The example above authorises `https://app.example.com/auth/callback` and **not** `https://app.example.com/anything-else`. Configure every callback path you need.
+- **https only**, unless the host is loopback. A plaintext `http://` entry to any other host is ignored rather than honoured.
+- A trailing slash is insignificant; the host is compared case-insensitively; the path is compared **case-sensitively**; a default port (`:443`) is equivalent to none.
+- Query string and fragment on the incoming request are ignored, so the usual `?code=...&state=...` callback matches.
+- A malformed or non-https entry is skipped without disabling the rest of the list.
+
+If a redirect is refused, the 400 response says how many entries are configured, which distinguishes an unset variable from a typo or an exact-match miss.
 
 See [Deployment Modes](deployment.md) and [Agent Access Control](agent_access_control.md).
 

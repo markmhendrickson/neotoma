@@ -18,6 +18,7 @@ import {
   isRedirectUriAllowedForTunnel,
 } from "../mcp_oauth.js";
 import { OAuthError } from "../mcp_oauth_errors.js";
+import { config } from "../../config.js";
 import { randomBytes } from "node:crypto";
 import path from "path";
 import { rmSync } from "fs";
@@ -223,6 +224,193 @@ describe("MCP OAuth Service", () => {
     it("rejects unrelated hosted redirects", () => {
       expect(isRedirectUriAllowedForTunnel("https://claude.ai/other/path")).toBe(false);
       expect(isRedirectUriAllowedForTunnel("https://example.com/oauth/callback")).toBe(false);
+    });
+  });
+
+  describe("operator-configured trusted callback URLs", () => {
+    const original = [...config.oauthTrustedCallbackUrls];
+
+    function setTrusted(entries: string[]): void {
+      config.oauthTrustedCallbackUrls.length = 0;
+      config.oauthTrustedCallbackUrls.push(...entries);
+    }
+
+    afterEach(() => {
+      setTrusted(original);
+    });
+
+    it("defaults to empty, changing nothing for an operator who sets no variable", () => {
+      // The default from a real process with no NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS set.
+      expect(original).toEqual([]);
+      setTrusted([]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://bottega8-dashboard.fly.dev/auth/callback")
+      ).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("allows a configured exact callback URL", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+    });
+
+    it("allows a configured callback carrying a query string or fragment", () => {
+      // A real client callback arrives with ?code=&state=; only origin+path is compared.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?state=abc123")
+      ).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback#frag")).toBe(
+        true
+      );
+    });
+
+    it("refuses the same origin at a different path", () => {
+      // The #2215 defect in miniature: trusting an origin must not trust the host.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/anything-else")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback2")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth")).toBe(false);
+    });
+
+    it("refuses a path-traversal walk out of the configured callback path", () => {
+      // The URL parser resolves `..` before we compare, so this is /auth/admin.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/../admin")).toBe(
+        false
+      );
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/%2E%2E/admin")
+      ).toBe(false);
+    });
+
+    it("treats a dot segment that resolves back to the callback as the callback", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/./callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/x/../auth/callback")).toBe(
+        true
+      );
+    });
+
+    it("ignores host case but respects path case", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      // Hosts are case-insensitive.
+      expect(isRedirectUriAllowedForTunnel("HTTPS://APP.EXAMPLE.COM/auth/callback")).toBe(true);
+      // Paths are not.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/CALLBACK")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/Auth/callback")).toBe(false);
+    });
+
+    it("normalises a configured entry's own case too", () => {
+      setTrusted(["HTTPS://APP.EXAMPLE.COM/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+    });
+
+    it("treats a trailing slash as insignificant in either direction", () => {
+      setTrusted(["https://app.example.com/auth/callback/"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/")).toBe(true);
+    });
+
+    it("resolves backslashes the way a browser would", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https:\\\\app.example.com\\auth\\callback")).toBe(true);
+      // And a backslash walk out of the path is still refused.
+      expect(
+        isRedirectUriAllowedForTunnel("https:\\\\app.example.com\\auth\\callback\\..\\admin")
+      ).toBe(false);
+    });
+
+    it("treats a default port as equivalent to no port, and a non-default port as distinct", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com:443/auth/callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com:8443/auth/callback")).toBe(
+        false
+      );
+      setTrusted(["https://app.example.com:8443/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com:8443/auth/callback")).toBe(
+        true
+      );
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("does not treat an encoded slash as a path separator", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth%2Fcallback")).toBe(false);
+    });
+
+    it("refuses plaintext http: to a non-loopback host even when configured", () => {
+      // Fail closed on operator misconfiguration rather than shipping codes in cleartext.
+      setTrusted(["http://evil.com/cb"]);
+      expect(isRedirectUriAllowedForTunnel("http://evil.com/cb")).toBe(false);
+      setTrusted(["http://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("http://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("does not let a configured https entry authorise its http twin", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("http://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("refuses a URL carrying userinfo on either side", () => {
+      // `https://app.example.com@evil.com/cb` reads as the trusted host to a human
+      // skimming config but resolves to evil.com.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://evil.com@app.example.com/auth/callback")).toBe(
+        false
+      );
+      setTrusted(["https://app.example.com@evil.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://evil.com/auth/callback")).toBe(false);
+    });
+
+    it("refuses a host that merely contains or extends the configured host", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com.evil.com/auth/callback")).toBe(
+        false
+      );
+      expect(isRedirectUriAllowedForTunnel("https://evil-app.example.com/auth/callback")).toBe(
+        false
+      );
+      expect(isRedirectUriAllowedForTunnel("https://sub.app.example.com/auth/callback")).toBe(
+        false
+      );
+    });
+
+    it("honours several configured entries and skips a malformed one", () => {
+      // One bad entry must not silently disable the rest of the list.
+      setTrusted([
+        "not a url",
+        "https://a.example.com/cb",
+        "http://evil.com/cb",
+        "https://b.example.com/cb",
+      ]);
+      expect(isRedirectUriAllowedForTunnel("https://a.example.com/cb")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://b.example.com/cb")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("http://evil.com/cb")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://c.example.com/cb")).toBe(false);
+    });
+
+    it("leaves the pre-existing allowlist intact when entries are configured", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("cursor://auth/callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("http://localhost:5195/oauth")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://chatgpt.com/aip/g-123/oauth/callback")).toBe(
+        true
+      );
+      expect(isRedirectUriAllowedForTunnel("https://claude.ai/api/mcp/auth_callback")).toBe(true);
+      // ...and does not loosen what it refused before.
+      expect(isRedirectUriAllowedForTunnel("https://claude.ai/other/path")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://example.com/oauth/callback")).toBe(false);
+    });
+
+    it("authorises the motivating self-hosted dashboard callback exactly", () => {
+      setTrusted(["https://bottega8-dashboard.fly.dev/auth/callback"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://bottega8-dashboard.fly.dev/auth/callback")
+      ).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://bottega8-dashboard.fly.dev/admin")).toBe(false);
     });
   });
 

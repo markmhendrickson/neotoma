@@ -214,6 +214,19 @@ export const config = {
     (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "1" ||
     (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "true",
   oauthClientId: process.env.NEOTOMA_OAUTH_CLIENT_ID || "",
+  /**
+   * Additional exact callback URLs an operator trusts to receive an authorization
+   * code when the authorize request arrives via a tunnel (non-local Host).
+   *
+   * Comma-separated list of FULL callback URLs, not origins — `https://app.example.com/auth/callback`
+   * authorises that path and nothing else on that host. Entries must be https: unless
+   * they point at a loopback host. Empty by default: an operator who sets nothing keeps
+   * exactly the behaviour they had before this existed.
+   */
+  oauthTrustedCallbackUrls: (process.env.NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0),
   requireKeyForOauth:
     (process.env.NEOTOMA_REQUIRE_KEY_FOR_OAUTH || "true").toLowerCase() !== "false",
   // Encryption settings (local backend)

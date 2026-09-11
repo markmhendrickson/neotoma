@@ -314,10 +314,83 @@ function validateRedirectUri(redirectUri: string): void {
   }
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * Canonical form of a callback URL for exact comparison, or null if the URL is
+ * unparseable or not one we will ever honour.
+ *
+ * Normalisation is delegated to the WHATWG URL parser wherever the parser and a
+ * browser agree, because the browser is what will actually perform the redirect:
+ *   - backslashes are resolved as slashes, the way a browser resolves them;
+ *   - dot segments are resolved (`/auth/callback/../admin` becomes `/auth/admin`,
+ *     which then simply fails to match the configured `/auth/callback`);
+ *   - the host is lowercased; a default port (443/80) is dropped.
+ * On top of that we:
+ *   - compare protocol + host + port + pathname only, so a query string or
+ *     fragment on the request cannot smuggle a mismatch past the comparison and
+ *     equally cannot cause a legitimate callback carrying `?state=` to be refused;
+ *   - preserve pathname case, which is correctly case-SENSITIVE (unlike the host);
+ *   - treat a trailing slash as insignificant, since `/cb` and `/cb/` reach the
+ *     same handler in every server we care about and an operator should not be
+ *     punished for the difference;
+ *   - refuse any URL carrying userinfo. `https://evil.com@app.example.com/cb` is
+ *     harmless to the URL parser but is a well-worn way to make a URL read as one
+ *     host to a human reviewing config and resolve as another;
+ *   - refuse plaintext http: to anything but a loopback host, so an operator who
+ *     misconfigures `http://evil.com/cb` fails closed rather than silently
+ *     shipping authorization codes over the wire in cleartext.
+ */
+function canonicalCallbackUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const protocol = url.protocol.toLowerCase();
+  if (protocol !== "https:" && protocol !== "http:") return null;
+  // Credentials in a callback URL are never load-bearing and are a spoofing vector.
+  if (url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (!host) return null;
+  // Plaintext only to loopback, where there is no wire to sniff.
+  if (protocol === "http:" && !LOOPBACK_HOSTS.has(host)) return null;
+  const port = url.port ? `:${url.port}` : "";
+  // Trailing slash is insignificant; everything else about the path is significant.
+  const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
+  return `${protocol}//${host}${port}${path}`;
+}
+
+/**
+ * Exact-match check against the operator-configured trusted callback URLs
+ * (NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS). Empty by default.
+ *
+ * Deliberately matches a FULL callback URL rather than an origin: a configured
+ * `https://app.example.com/auth/callback` authorises that one path and NOT
+ * `https://app.example.com/anything-else`. Trusting a whole third-party origin is
+ * the defect reported in #2215; this does not add a second instance of it.
+ */
+export function isRedirectUriInConfiguredAllowlist(redirectUri: string): boolean {
+  if (config.oauthTrustedCallbackUrls.length === 0) return false;
+  const candidate = canonicalCallbackUrl(redirectUri);
+  if (!candidate) return false;
+  for (const configured of config.oauthTrustedCallbackUrls) {
+    const allowed = canonicalCallbackUrl(configured);
+    // A malformed or non-https entry is skipped, not fatal: one bad entry must not
+    // silently disable the rest of an operator's list.
+    if (allowed && allowed === candidate) return true;
+  }
+  return false;
+}
+
 /**
  * Redirect URIs allowed when the authorization request is from a tunnel (non-local Host).
  * Prevents sending the authorization code to a third-party site. Allows localhost, loopback,
- * known app schemes, and trusted hosted OAuth callbacks (OpenAI/Claude).
+ * known app schemes, trusted hosted OAuth callbacks (OpenAI/Claude), and any exact
+ * callback URLs the operator configured via NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS
+ * (empty by default, so this function's behaviour is unchanged unless an operator
+ * opts in).
  */
 export function isRedirectUriAllowedForTunnel(redirectUri: string, selfHost?: string): boolean {
   if (!redirectUri || typeof redirectUri !== "string") return false;
@@ -339,6 +412,9 @@ export function isRedirectUriAllowedForTunnel(redirectUri: string, selfHost?: st
       if (host === self) return true;
     }
     if (host === "chatgpt.com" || host === "chat.openai.com") return true;
+    // Operator-configured exact callback URLs. Additive: empty by default, and
+    // checked only after every pre-existing rule has already declined.
+    if (isRedirectUriInConfiguredAllowlist(redirectUri)) return true;
     if (
       (host === "claude.ai" || host === "www.claude.ai") &&
       (url.pathname === "/api/mcp/auth_callback" ||
