@@ -86,6 +86,8 @@ Several entries are comma-separated. Rules worth knowing before you set it:
 
 If a redirect is refused, the 400 response says how many entries are configured, which distinguishes an unset variable from a typo or an exact-match miss.
 
+> The variable is `NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS`. Early planning notes for this feature called it `NEOTOMA_TRUSTED_OAUTH_CALLBACKS`; that name was never implemented and setting it has no effect.
+
 See [Deployment Modes](deployment.md) and [Agent Access Control](agent_access_control.md).
 
 ## Encryption

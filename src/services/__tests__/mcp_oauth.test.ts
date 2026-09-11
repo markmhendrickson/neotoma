@@ -265,6 +265,75 @@ describe("MCP OAuth Service", () => {
       );
     });
 
+    it("ignores the query string entirely rather than making it part of the match", () => {
+      // DOCUMENTING THE CHOSEN RULE, not merely asserting "it works": the query
+      // string is NOT part of the exact match. canonicalCallbackUrl compares
+      // protocol + host + port + pathname and drops query and fragment, so a
+      // difference in the query cannot cause either a false accept or a false
+      // reject. Both directions are asserted below so the rule is pinned.
+      //
+      // Why this is the right rule here: the redirect_uri that arrives at
+      // authorize is the client's REGISTERED callback, and the authorization
+      // code is appended to it as ?code=&state= by this server afterwards. A
+      // client that registered `/auth/callback` and is sent to
+      // `/auth/callback?code=…` must still match, so treating the query as
+      // significant would break every real callback. Nothing is given away by
+      // ignoring it: the query cannot change WHERE the browser sends the code,
+      // which is what the allowlist exists to constrain.
+
+      // A configured entry with no query matches a request carrying any query.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?code=abc&state=xyz")
+      ).toBe(true);
+      // ...including a query that differs from any other request's query.
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?tenant=other")
+      ).toBe(true);
+
+      // And symmetrically: a configured entry that itself carries a query still
+      // matches a request with a DIFFERENT query, or none at all, because the
+      // query is dropped from both sides before comparison.
+      setTrusted(["https://app.example.com/auth/callback?env=prod"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?env=staging")
+      ).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+
+      // The path remains significant even when the query would "look" right —
+      // ignoring the query must not soften the path match.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/other?env=prod")).toBe(false);
+    });
+
+    it("treats a trailing slash as insignificant, including against a query and on the root path", () => {
+      // DOCUMENTING THE CHOSEN RULE: a trailing slash is stripped from the
+      // pathname on BOTH sides before comparison, so `/cb` and `/cb/` are the
+      // same callback. An operator should not be locked out by a slash.
+      //
+      // The root path is the deliberate exception: `https://host` and
+      // `https://host/` both parse to pathname "/", which is left as "/" rather
+      // than stripped to "", so a configured root callback still matches
+      // itself and does not collapse into an empty path.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      // Trailing slash on the request, combined with a real query.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/?code=abc")).toBe(
+        true
+      );
+
+      // A root-path callback matches with and without the slash...
+      setTrusted(["https://app.example.com/"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/")).toBe(true);
+      // ...and does NOT thereby trust every path on that host.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/admin")).toBe(false);
+
+      // The slash rule does not merge genuinely different paths.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/extra")).toBe(
+        false
+      );
+    });
+
     it("refuses the same origin at a different path", () => {
       // The #2215 defect in miniature: trusting an origin must not trust the host.
       setTrusted(["https://app.example.com/auth/callback"]);

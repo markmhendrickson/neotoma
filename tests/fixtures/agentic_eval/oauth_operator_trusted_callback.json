@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "id": "oauth_operator_trusted_callback",
+    "description": "An operator diagnoses why their self-hosted app's OAuth callback is refused and records the NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS fix as durable memory. SCOPE NOTE: Tier 1 is the hook-lifecycle layer and runs against a MOCK Neotoma server, so this fixture asserts what the agent REMEMBERS about the allowlist, not that the allowlist enforces. The enforcement itself — that the exact configured callback is accepted at /mcp/oauth/authorize and a sibling path, a traversal and an unconfigured host are refused — is asserted over real HTTP in tests/integration/mcp_oauth_trusted_callback.test.ts, and the matching rule is covered unit-level in src/services/__tests__/mcp_oauth.test.ts. See that integration file for the effect-level evidence this tier cannot express.",
+    "harnesses": ["cursor-hooks"],
+    "models": [
+      "composer-2",
+      "gpt-5.5-fast",
+      "claude-haiku-4",
+      "claude-sonnet-4.5",
+      "gpt-5.5-medium"
+    ],
+    "tags": ["oauth", "operator-config", "turn-lifecycle", "tool-loop"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Sign-in to my instance fails for the dashboard I deployed at https://bottega8-dashboard.fly.dev — authorize returns 'redirect_uri is not allowed when connecting via a tunnel'. Figure out what I need to configure and remember it."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entities",
+        "tool_input": {
+          "entity_types": ["instance_config"],
+          "query": "oauth trusted callback urls"
+        },
+        "tool_output": {
+          "entities": [],
+          "count": 0
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "entities": [
+            {
+              "entity_type": "instance_config",
+              "name": "NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS",
+              "value": "https://bottega8-dashboard.fly.dev/auth/callback",
+              "matching_rule": "exact full callback URL — scheme, host, port and path; query and fragment ignored; trailing slash insignificant",
+              "default": "empty",
+              "notes": "Empty by default, so an unset variable preserves prior behaviour exactly. Matched on the EXACT callback URL rather than the origin, so configuring it authorises that one path and not the rest of the host. Plaintext http: is honoured only for loopback hosts."
+            }
+          ],
+          "idempotency_key": "oauth-trusted-callback-eval-001"
+        },
+        "tool_output": {
+          "stored": 1,
+          "entity_ids": ["ent_oauth_cfg_001"]
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "The instance refuses any callback that is not on its tunnel allowlist, and that list is empty until you set it. Set NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS to the exact full callback URL — https://bottega8-dashboard.fly.dev/auth/callback — not just the host. It is matched exactly: that path is authorised and nothing else on that host, the query string and a trailing slash are ignored, and plaintext http: is accepted only for loopback. I have recorded the setting so it survives this session."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_retrieve_entities" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "input_summary",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 3
+      }
+    ]
+  }
+}
