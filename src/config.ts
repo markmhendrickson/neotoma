@@ -174,6 +174,91 @@ if (dbBackend !== "sqlite" && dbBackend !== "libsql") {
   );
 }
 
+const OAUTH_CALLBACK_LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * Why an entry is refused, phrased for an operator reading a startup failure.
+ * Returns null when the entry is acceptable.
+ */
+function describeTrustedCallbackDefect(entry: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(entry);
+  } catch {
+    return "not a parseable absolute URL (a full URL with a scheme is required, e.g. https://app.example.com/auth/callback)";
+  }
+  const protocol = url.protocol.toLowerCase();
+  if (protocol !== "https:" && protocol !== "http:") {
+    return `scheme "${protocol}" is not supported here (use https:, or http: only for a loopback host)`;
+  }
+  if (url.username || url.password) {
+    return "carries userinfo (user:password@host), which is a URL-spoofing vector and is never load-bearing in a callback";
+  }
+  const host = url.hostname.toLowerCase();
+  if (!host) {
+    return "has no host";
+  }
+  if (protocol === "http:" && !OAUTH_CALLBACK_LOOPBACK_HOSTS.has(host)) {
+    return "is plaintext http: to a non-loopback host, which would ship authorization codes in cleartext (use https:)";
+  }
+  return null;
+}
+
+/**
+ * Parse NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS, FAILING CLOSED on the whole list.
+ *
+ * If any entry is malformed, the entire list is rejected and startup fails —
+ * entries 1 and 3 do not survive a bad entry 2. This is deliberate and is the
+ * condition pre-registered on #2384 before implementation.
+ *
+ * The rejected alternative was skipping a bad entry and honouring the rest. That
+ * is friendlier on a typo, but it makes an allowlist enforce something other than
+ * what the operator wrote, with no signal that it did: the refusal a bad entry
+ * produces is indistinguishable from an exact-match miss. An allowlist is a
+ * security control, and a control that silently binds less than its configuration
+ * says is the failure mode in docs/foundation/principles.md#1. Refusing to start
+ * is loud, immediate, and happens before any authorization request is served,
+ * rather than surfacing as an unexplained sign-in failure weeks later.
+ *
+ * The blast radius of the strict reading is bounded: this throws only when the
+ * operator has actually set the variable. Leaving it unset is the default and is
+ * unaffected.
+ */
+function parseTrustedCallbackUrls(raw: string | undefined): string[] {
+  const entries = (raw || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  const defects = entries
+    .map((entry, index) => {
+      const defect = describeTrustedCallbackDefect(entry);
+      // The entry is operator-authored config, not user input, and is already
+      // echoed in startup logs; but userinfo is the one part that could carry a
+      // credential, so redact it rather than printing it back.
+      return defect ? `  entry ${index + 1} ("${redactUrlUserinfo(entry)}"): ${defect}` : null;
+    })
+    .filter((defect): defect is string => defect !== null);
+
+  if (defects.length > 0) {
+    throw new Error(
+      `Invalid NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS: ${defects.length} of ${entries.length} ` +
+        `entries are not usable as trusted OAuth callback URLs.\n${defects.join("\n")}\n` +
+        `The whole list is rejected rather than partially applied, so the allowlist in force ` +
+        `always matches what is configured. Fix the entries above, or unset the variable to ` +
+        `fall back to the built-in allowlist (localhost, loopback, cursor:/vscode:/app:, this ` +
+        `instance's own origin, and the ChatGPT/Claude callbacks).`
+    );
+  }
+
+  return entries;
+}
+
+/** Replace any `user:password@` in a URL-ish string, for safe echoing in errors. */
+function redactUrlUserinfo(value: string): string {
+  return value.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/@]*@/, "$1<redacted>@");
+}
+
 export const config = {
   projectRoot,
   storageBackend,
@@ -222,11 +307,13 @@ export const config = {
    * authorises that path and nothing else on that host. Entries must be https: unless
    * they point at a loopback host. Empty by default: an operator who sets nothing keeps
    * exactly the behaviour they had before this existed.
+   *
+   * Validated at load, fail-closed on the WHOLE list: one malformed entry rejects
+   * every entry and fails startup. See parseTrustedCallbackUrls above for why.
    */
-  oauthTrustedCallbackUrls: (process.env.NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS || "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0),
+  oauthTrustedCallbackUrls: parseTrustedCallbackUrls(
+    process.env.NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS
+  ),
   requireKeyForOauth:
     (process.env.NEOTOMA_REQUIRE_KEY_FOR_OAUTH || "true").toLowerCase() !== "false",
   // Encryption settings (local backend)

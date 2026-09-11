@@ -447,18 +447,17 @@ describe("MCP OAuth Service", () => {
       );
     });
 
-    it("honours several configured entries and skips a malformed one", () => {
-      // One bad entry must not silently disable the rest of the list.
-      setTrusted([
-        "not a url",
-        "https://a.example.com/cb",
-        "http://evil.com/cb",
-        "https://b.example.com/cb",
-      ]);
+    it("honours several configured entries, each on its own exact terms", () => {
+      // A well-formed multi-entry list: every entry authorises its own exact
+      // callback and nothing else. (A list containing a MALFORMED entry cannot
+      // reach this matcher at all — config parsing rejects the whole list at
+      // load; see the fail-closed suite in src/__tests__/config_trusted_callbacks.test.ts.)
+      setTrusted(["https://a.example.com/cb", "https://b.example.com/cb"]);
       expect(isRedirectUriAllowedForTunnel("https://a.example.com/cb")).toBe(true);
       expect(isRedirectUriAllowedForTunnel("https://b.example.com/cb")).toBe(true);
-      expect(isRedirectUriAllowedForTunnel("http://evil.com/cb")).toBe(false);
       expect(isRedirectUriAllowedForTunnel("https://c.example.com/cb")).toBe(false);
+      // Configuring two hosts does not merge their paths.
+      expect(isRedirectUriAllowedForTunnel("https://a.example.com/other")).toBe(false);
     });
 
     it("leaves the pre-existing allowlist intact when entries are configured", () => {

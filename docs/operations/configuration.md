@@ -79,12 +79,31 @@ NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS=https://app.example.com/auth/callback
 Several entries are comma-separated. Rules worth knowing before you set it:
 
 - **Exact full URLs, not origins.** The example above authorises `https://app.example.com/auth/callback` and **not** `https://app.example.com/anything-else`. Configure every callback path you need.
-- **https only**, unless the host is loopback. A plaintext `http://` entry to any other host is ignored rather than honoured.
-- A trailing slash is insignificant; the host is compared case-insensitively; the path is compared **case-sensitively**; a default port (`:443`) is equivalent to none.
-- Query string and fragment on the incoming request are ignored, so the usual `?code=...&state=...` callback matches.
-- A malformed or non-https entry is skipped without disabling the rest of the list.
+- **https only**, unless the host is loopback. A plaintext `http://` entry to any other host is rejected rather than honoured.
+- **A bad entry rejects the whole list, and the server will not start.** See below.
 
-If a redirect is refused, the 400 response says how many entries are configured, which distinguishes an unset variable from a typo or an exact-match miss.
+#### What the server compares
+
+A redirect is accepted when the request's callback and a configured entry agree on **scheme, host, port and path** — all four. In detail:
+
+| Part | How it is compared |
+| --- | --- |
+| Scheme | Must match. `https` does not authorise its `http` twin. |
+| Host | Case-**insensitive**. `APP.EXAMPLE.COM` matches `app.example.com`. |
+| Port | Must match, but a default port is equivalent to none: `https://app.example.com` = `https://app.example.com:443`. |
+| Path | Case-**sensitive**. `/Auth/Callback` does **not** match `/auth/callback`. A trailing slash is insignificant in either direction. Dot segments resolve first, so `/auth/callback/../admin` is compared as `/auth/admin`. An encoded slash (`%2F`) is not a path separator. |
+| Query and fragment | **Ignored on both sides**, so the usual `?code=...&state=...` callback matches. |
+| Userinfo | Any URL carrying `user:password@` is rejected. |
+
+If a redirect is refused, the `400` response names the callback URL the server actually compared (scheme, host and path — query and fragment are stripped) and says how many entries are configured. That is usually enough to tell a near miss — a trailing slash, a port, a case difference — from a typo or an unset variable, without needing server logs.
+
+#### A malformed entry fails the whole list, loudly
+
+If **any** entry cannot be used as a trusted callback URL, the entire list is rejected and **the server fails to start** with an error naming the offending entry by position and value. Entries 1 and 3 do not quietly survive a bad entry 2.
+
+This is deliberate. The friendlier alternative — skip the bad entry, honour the rest — makes the allowlist enforce something other than what you wrote, with no signal that it did: the refusal a dropped entry produces looks exactly like an exact-match miss. A startup failure is noisy, but it happens immediately and before any sign-in is served, rather than surfacing weeks later as an unexplained OAuth failure.
+
+Entries are rejected when they are unparseable, use a scheme other than `https:`/`http:`, are plaintext `http:` to a non-loopback host, or carry `user:password@` userinfo. To recover, either fix the entry the error names, or unset the variable entirely to fall back to the built-in allowlist.
 
 > The variable is `NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS`. Early planning notes for this feature called it `NEOTOMA_TRUSTED_OAUTH_CALLBACKS`; that name was never implemented and setting it has no effect.
 

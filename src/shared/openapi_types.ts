@@ -4495,12 +4495,52 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Redirect to authorization URL */
+      /**
+       * @description Redirect to the authorization URL, or to /mcp/oauth/key-auth when
+       *     NEOTOMA_REQUIRE_KEY_FOR_OAUTH is set and the request carries no valid
+       *     key session.
+       */
       302: {
         headers: {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /**
+       * @description Authorization refused before any redirect. The body is a plain-text
+       *     sentence addressed to the human in the browser, NOT an ErrorEnvelope:
+       *     this endpoint is reached by a user-agent mid-OAuth-redirect, so the
+       *     response is rendered directly in the address bar. A JSON envelope
+       *     would be read by nobody at this point in the flow. Machine clients
+       *     MUST treat any 400 here as a terminal refusal of the authorization
+       *     request and MUST NOT parse the body; the reason is carried by the
+       *     server's structured warn log, not by this response.
+       *
+       *     Emitted for: a missing `redirect_uri`; a missing `state`; a missing
+       *     or non-S256 PKCE challenge on a non-OpenAI redirect; a `dev_stub`
+       *     request while dev_stub is disabled; and a `redirect_uri` that is not
+       *     on the tunnel allowlist (built-in entries plus any exact callback
+       *     URLs configured in NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS).
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
+      };
+      /**
+       * @description Authorization failed unexpectedly. Plain-text body, for the same
+       *     browser-facing reason as the 400 above.
+       */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
       };
     };
   };

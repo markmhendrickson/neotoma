@@ -377,8 +377,11 @@ export function isRedirectUriInConfiguredAllowlist(redirectUri: string): boolean
   if (!candidate) return false;
   for (const configured of config.oauthTrustedCallbackUrls) {
     const allowed = canonicalCallbackUrl(configured);
-    // A malformed or non-https entry is skipped, not fatal: one bad entry must not
-    // silently disable the rest of an operator's list.
+    // `allowed` is non-null for every entry that survives config parsing:
+    // `parseTrustedCallbackUrls` in src/config.ts rejects the whole list at load
+    // if any entry is malformed, so a bad entry can never reach here to be
+    // silently skipped. The null-guard remains as a defence-in-depth belt on a
+    // helper that is exported and could be called with an unvalidated list.
     if (allowed && allowed === candidate) return true;
   }
   return false;
