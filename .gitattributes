@@ -1,0 +1,10 @@
+# Generated artifact, union-merge — concurrent test-adding branches both
+# regenerate this deterministically; union-merge avoids spurious text
+# conflicts. Canonical ordering is restored by the next
+# `npm run generate:test-catalog` run, which validate:test-catalog
+# already forces on every PR. See docs/testing/README.md#catalog-merging
+docs/testing/automated_test_catalog.md merge=union
+
+# Generated artifact, union-merge — same conflict class as the test
+# catalog above. See docs/testing/README.md#catalog-merging
+src/shared/capability_manifest.json merge=union
