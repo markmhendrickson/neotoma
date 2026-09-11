@@ -5225,12 +5225,20 @@ app.get("/schemas", async (req, res) => {
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
-    // Get schemas - listEntityTypes will return global + user-specific schemas
-    // The service should filter by user_id, but for now we'll filter in the endpoint
-    const allSchemas = await schemaRegistry.listEntityTypes(keyword);
+    // Get schemas — scoped to this principal so the version each row reports is
+    // the one this caller's reads and writes actually resolve.
+    //
+    // #2356: this passed no userId. `listEntityTypes` then had no way to apply
+    // the user-overrides-global precedence, so the version it reported for a
+    // type with an active user-scoped override was decided by row order — and
+    // disagreed with `GET /schemas/:entity_type`, `describe_entity_type` and the
+    // write path, all of which resolve scoped. The post-filter below only ever
+    // restricted WHICH entity types appear; it never corrected the version, so
+    // it could not compensate. `userId` is already required above, so scoping
+    // here changes no caller's authorization, only the accuracy of the version.
+    const allSchemas = await schemaRegistry.listEntityTypes(keyword, userId);
 
     // Filter to only show global schemas (user_id is null) or user-specific schemas for this user
-    // Note: listEntityTypes doesn't currently filter by user_id, so we need to query directly
     // Also fetch metadata (including icons) for each schema
     const { data: dbSchemas, error: dbError } = await db
       .from("schema_registry")
@@ -11066,7 +11074,14 @@ app.post("/register_schema", async (req, res) => {
 
     if (activate) {
       try {
-        await schemaRegistry.activate(entity_type, newSchema.schema_version);
+        // #2356: name the principal when the registration was user-scoped, so
+        // activation lands on that user's row rather than resolving scope from
+        // an unscoped (entity_type, version) lookup that can match either row.
+        await schemaRegistry.activate(
+          entity_type,
+          newSchema.schema_version,
+          user_specific ? userId : undefined
+        );
       } catch (err) {
         logWarn("ActivateError:register_schema", req, {
           error: err instanceof Error ? err.message : String(err),

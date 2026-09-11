@@ -758,7 +758,7 @@ export function buildToolDefinitions(
       name: "describe_entity_type",
       description: desc(
         "describe_entity_type",
-        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. Read-only."
+        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. The schema returned is the one YOUR writes resolve against: if this instance holds a schema scoped to you for this type, that is what you get, otherwise the instance-wide one. list_entity_types resolves the same way, so the two agree. Read-only."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("describe_entity_type"),
     },
