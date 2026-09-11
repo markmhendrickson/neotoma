@@ -32,6 +32,14 @@ export interface Observation {
    * those rank last within their `source_priority` bucket.
    */
   observation_source?: ObservationSourceRankValue | null;
+  /**
+   * True only for observations created by `createCorrection`
+   * (src/services/correction.ts). Never client-settable — see that module
+   * for the write path. Lets `lastWriteWins` partition candidates so a
+   * correction is not silently reverted by a later, non-correction write
+   * (issue #2033). Absent/false for all other observations.
+   */
+  is_correction?: boolean | null;
   fields: Record<string, unknown>;
   created_at: string;
   user_id: string;
@@ -310,6 +318,18 @@ export class ObservationReducer {
 
   /**
    * Last Write Wins strategy
+   *
+   * #2033: a `correct()` observation (`is_correction: true`, stamped only by
+   * `createCorrection`) must survive a later, non-correction write — the
+   * documented "corrections always win" contract (#1541) applied to
+   * merge_array, but not to last_write, the default for every
+   * auto-discovered field. When any candidate carries the marker, restrict
+   * resolution to the correction-marked candidates only (mirroring the
+   * priority-gated union in `mergeArray`); corrections remain mutually
+   * last-write among themselves via the existing observed_at DESC sort.
+   * Ordinary numeric `source_priority` is intentionally NOT read here — that
+   * would reintroduce the general priority-vs-last_write mismatch #1755
+   * deliberately declined to fix.
    */
   private lastWriteWins(
     field: string,
@@ -320,7 +340,10 @@ export class ObservationReducer {
     // down to those where this field is non-null, so the input list can be
     // empty for fields whose only observation is null. Return a sentinel
     // no-value result in that case; the caller drops it from the snapshot.
-    const latest = observations[0];
+    const correctionObservations = observations.filter((obs) => obs.is_correction === true);
+    const candidates = correctionObservations.length > 0 ? correctionObservations : observations;
+
+    const latest = candidates[0];
     if (!latest) {
       return { value: undefined, source_observation_id: "" };
     }

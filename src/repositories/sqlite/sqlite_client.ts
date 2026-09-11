@@ -461,6 +461,12 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     // support fast collapse_by grouping on retrieve_entities.
     await addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
     await addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+    // Durable correction marker (#2033): stamped ONLY by createCorrection
+    // (src/services/correction.ts), never accepted from client request
+    // bodies on the generic store/store_structured paths. Lets the reducer
+    // partition last_write candidates so a correction survives a later,
+    // lower-priority write instead of being silently outdated by observed_at.
+    await addColumnIfMissing(db, "observations", "is_correction", "INTEGER");
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
