@@ -5323,28 +5323,30 @@ app.get("/schemas/:entity_type", async (req, res) => {
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
-    // Handle authentication - support both Ed25519 and session tokens
-    const headerAuth = req.headers.authorization || "";
-    let userId: string | undefined = req.query.user_id as string | undefined;
-
-    if (headerAuth.startsWith("Bearer ")) {
-      const token = headerAuth.slice("Bearer ".length).trim();
-
-      // Try to validate as Ed25519 bearer token first
-      const registered = ensurePublicKeyRegistered(token);
-      if (!registered || !isBearerTokenValid(token)) {
-        // Try to validate as session token
-        try {
-          const { validateSessionToken } = await import("./services/mcp_auth.js");
-          const validated = await validateSessionToken(token);
-          // Use validated user ID if not provided in query
-          userId = userId || validated.userId;
-        } catch {
-          // Not a valid token - continue without user_id (will try global schema)
-        }
-      }
-      // If Ed25519 token is valid, use user_id from query (Ed25519 tokens don't contain user info)
-    }
+    // SECURITY (GHSA-f48j-993h-g6qr): `user_id` selects the schema SCOPE that
+    // loadActiveSchema reads — a user-scoped row shadows the global one — so it
+    // carries the safety meaning for this route and must be validated against
+    // the authenticated principal, never used as supplied.
+    //
+    // This route previously initialised `userId` straight from
+    // `req.query.user_id` and ran its own Bearer/session handling, so the query
+    // value became the scope rather than a request for one. That bespoke block
+    // is removed in favour of the shared guard its sibling GET /schemas already
+    // uses. Nothing is lost by removing it: the app-wide auth middleware runs
+    // ahead of this route (this path is not on the public allowlist, which is
+    // only /openapi*.yaml, /health and /ready), validates Ed25519 bearers
+    // *including the request signature*, falls through to the same
+    // validateSessionToken for session bearers, stamps the principal, and 401s
+    // an unresolvable token. The route-level copy did strictly less — no
+    // signature verification, and a silent fall-through that kept the
+    // caller-supplied id when validation failed.
+    //
+    // Legitimate callers are unaffected: the CLI's optional --user-id and the
+    // eval harness pass nothing by default, so the principal resolves itself,
+    // and getAuthenticatedUserId still honours the local-dev override for CLI
+    // and dev flows. Built-in/code-defined schema discovery is unchanged — it
+    // is the fallback below, reached the same way once the scope is resolved.
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Try to load active schema (global or user-specific), then fallback to code-defined schemas
     let schema = await schemaRegistry.loadActiveSchema(entityType, userId);
@@ -5372,9 +5374,18 @@ app.get("/schemas/:entity_type", async (req, res) => {
 
     return res.json(schema);
   } catch (error) {
-    logError("APIError:schema_detail", req, error);
-    const message = error instanceof Error ? error.message : "Failed to get schema";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
+    // Routed through handleApiError so a rejected user_id surfaces as 403 and an
+    // unresolved principal as 401 — the same mapping GET /schemas gets. The
+    // previous bespoke catch turned every failure into a 500, which would have
+    // reported the guard's refusal as a server fault.
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get schema",
+      "DB_QUERY_FAILED",
+      "APIError:schema_detail"
+    );
   }
 });
 
