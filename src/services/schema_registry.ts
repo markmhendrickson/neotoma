@@ -1503,6 +1503,77 @@ export class SchemaRegistryService {
         delete preserved.reference_fields;
       }
     }
+    // `store_warnings` is carried forward like its neighbours above, and for
+    // the same two reasons: a rule must not survive pointing at a field the
+    // new version no longer declares, and — since `register()` now validates
+    // `store_warnings` — a rule that was already malformed BEFORE the
+    // validator existed must not turn every future incremental update into a
+    // registration-time throw.
+    //
+    // Schemas registered before that validation carry shapes it rejects: the
+    // legacy `condition`-shaped rule with no `fields` key (observed on the
+    // live `skill` type), or a `null` entry. Those rows reach `register()`
+    // through this carry-forward path, so validating without normalizing here
+    // would move the crash from the store path to the registration path for
+    // exactly the schemas the store-path guard exists to unbreak. Dropping the
+    // malformed entry keeps an unrelated update — adding a field, changing
+    // metadata — working for an operator who did not write the bad rule and is
+    // not touching it. A caller who SUPPLIES a malformed rule is still
+    // rejected by `validateSchemaDefinition`: this normalizes only what was
+    // already stored.
+    if (preserved.store_warnings !== undefined) {
+      const rules = Array.isArray(preserved.store_warnings) ? preserved.store_warnings : [];
+      if (!Array.isArray(preserved.store_warnings)) {
+        console.warn(
+          `[schema_registry] updateSchemaIncremental: dropping non-array store_warnings ` +
+            `carried forward from entity_type "${options.entity_type}". Store warnings will ` +
+            `no longer fire for this schema; re-declare them in the canonical ` +
+            `{ code, fields, message } shape.`
+        );
+      }
+      const normalizedRules = rules
+        .map((rule) => {
+          // Mirrors the store-path guard in src/actions.ts / src/server.ts:
+          // the nullish check must come first, because `rule.fields` is
+          // dereferenced on `rule` itself.
+          if (
+            !rule ||
+            typeof rule !== "object" ||
+            typeof rule.code !== "string" ||
+            typeof rule.message !== "string" ||
+            !Array.isArray(rule.fields) ||
+            rule.fields.length === 0 ||
+            rule.fields.some((f) => typeof f !== "string")
+          ) {
+            console.warn(
+              `[schema_registry] updateSchemaIncremental: dropping malformed store_warnings ` +
+                `rule (code: ${(rule as { code?: unknown } | null)?.code ?? "unknown"}) carried ` +
+                `forward from entity_type "${options.entity_type}". It could not be evaluated ` +
+                `at store time either; re-declare it as { code, fields, message }.`
+            );
+            return null;
+          }
+          // Prune removed fields, exactly as canonical_name_fields does. A rule
+          // left with no fields would vacuously fire on every store, so it goes.
+          const remaining = rule.fields.filter((f) => !removalSet.has(f));
+          if (remaining.length === 0) {
+            console.warn(
+              `[schema_registry] updateSchemaIncremental: dropping store_warnings rule ` +
+                `"${rule.code}" from entity_type "${options.entity_type}" because every field ` +
+                `it watches was removed. This warning will no longer fire for this schema.`
+            );
+            return null;
+          }
+          return remaining.length === rule.fields.length ? rule : { ...rule, fields: remaining };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+
+      if (normalizedRules.length === 0) {
+        delete preserved.store_warnings;
+      } else {
+        preserved.store_warnings = normalizedRules;
+      }
+    }
     if (preserved.content_field && removalSet.has(preserved.content_field)) {
       console.warn(
         `[schema_registry] updateSchemaIncremental: content_field "${preserved.content_field}" ` +
