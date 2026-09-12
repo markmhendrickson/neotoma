@@ -19,17 +19,76 @@ function resolveUserEnvPath(): string | null {
   return join(homeDir, ".config", "neotoma", ".env");
 }
 
+/**
+ * Is this process test-shaped (issue #2387)?
+ *
+ * `VITEST` is set by the vitest runner in workers; `NODE_ENV=test` is set by
+ * `vitest.global_setup.ts` and is the conventional signal a child process
+ * inherits. `NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR=1` lets any caller demand the
+ * same strictness without pretending to be a test.
+ */
+function requiresExplicitDataDir(): boolean {
+  if (process.env.NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR?.trim() === "1") return true;
+  if (process.env.VITEST?.trim()) return true;
+  return process.env.NODE_ENV?.trim() === "test";
+}
+
+/** Deliberate opt-in that re-permits the user-level fallback under test (issue #2387). */
+function userEnvFallbackAllowedInTest(): boolean {
+  return process.env.NEOTOMA_ALLOW_USER_ENV_IN_TEST?.trim() === "1";
+}
+
+/**
+ * Refuse the `~/.config/neotoma/.env` data-directory fallback in a test-shaped
+ * process (issue #2387).
+ *
+ * A CLI child spawned by a test does not necessarily inherit `NEOTOMA_DATA_DIR`.
+ * Without this guard such a child hydrated the variable from the user-level
+ * config and then read and wrote the data directory it names — the operator's
+ * real database — silently and with exit code 0. A test that passes against
+ * residue in real data is green for the wrong reason twice over, and the write
+ * itself is invisible because nothing fails.
+ *
+ * So: stop, name the variable to set, and exit non-zero. Non-test processes are
+ * untouched — the interactive CLI and the server keep hydrating exactly as
+ * before — and `NEOTOMA_ALLOW_USER_ENV_IN_TEST=1` re-permits it for the rare
+ * test that genuinely means to exercise the fallback.
+ */
+function refuseUserEnvFallbackUnderTest(userEnvPath: string, configuredDataDir: string): never {
+  const message = [
+    "[neotoma] Refusing to resolve the data directory from the user-level config while running under test.",
+    `  A test-shaped process (VITEST / NODE_ENV=test / NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR=1) has no explicit NEOTOMA_DATA_DIR,`,
+    `  so ${userEnvPath} would have pointed it at a data directory holding real data.`,
+    "",
+    "  Set NEOTOMA_DATA_DIR to a test-scoped directory in the environment of this process",
+    "  (and pass it explicitly to any CLI child process the test spawns).",
+    "  To exercise the user-level fallback on purpose, set NEOTOMA_ALLOW_USER_ENV_IN_TEST=1.",
+  ].join("\n");
+  process.stderr.write(`${message}\n`);
+  // Length, not content: the configured path may name a real operator directory.
+  process.stderr.write(
+    `[neotoma] (refused user-level data directory: ${configuredDataDir.length} chars, not used)\n`
+  );
+  process.exit(1);
+}
+
 function hydrateDataDirFromUserEnvConfig(): void {
   if (process.env.NEOTOMA_DATA_DIR?.trim()) return;
   const userEnvPath = resolveUserEnvPath();
   if (!userEnvPath || !existsSync(userEnvPath)) return;
+  let configuredDataDir: string | undefined;
   try {
     const parsed = dotenv.parse(readFileSync(userEnvPath, "utf-8"));
-    const configuredDataDir = parsed.NEOTOMA_DATA_DIR?.trim();
-    if (configuredDataDir) process.env.NEOTOMA_DATA_DIR = configuredDataDir;
+    configuredDataDir = parsed.NEOTOMA_DATA_DIR?.trim();
   } catch {
     // Ignore invalid user env files and continue with existing fallbacks.
+    return;
   }
+  if (!configuredDataDir) return;
+  if (requiresExplicitDataDir() && !userEnvFallbackAllowedInTest()) {
+    refuseUserEnvFallbackUnderTest(userEnvPath, configuredDataDir);
+  }
+  process.env.NEOTOMA_DATA_DIR = configuredDataDir;
 }
 
 function isNeotomaRepoRoot(candidate: string | null | undefined): candidate is string {
