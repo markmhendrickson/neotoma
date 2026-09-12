@@ -423,10 +423,25 @@ Two mechanisms emit non-fatal `store_warnings[]` entries on a successful `/store
   {
     "code": "MISSING_IDENTITY_FIELDS",
     "message": "Stored without any feedback source identity field.",
-    "condition": { "missing_all_of": ["github_url", "conversation_id", "session_id"] }
+    "fields": ["github_url", "conversation_id", "session_id"]
   }
 ]
 ```
+
+Each rule is `{ code, fields, message }`, where `fields` is a non-empty array of
+strings. All three keys are required, and the shape is enforced at registration
+time — a rule that omits `fields`, or declares it as anything other than a
+non-empty array of strings, is rejected by `register()`.
+
+> **Note on the legacy `condition` form.** This example previously showed a
+> `condition: { missing_all_of: [...] }` key instead of `fields`. That form was
+> never what the evaluator read: the store path evaluates `fields`, so a
+> `condition`-shaped rule matched no field, evaluated nothing, and is now
+> skipped with a logged warning. A small number of schemas registered before
+> the registration-time check carry the legacy shape and are skipped this way
+> rather than firing. Use `fields`.
+
+Registration-time rejection applies to a definition the **caller supplies**. A schema that already carries a malformed rule stays updatable: `updateSchemaIncremental()` normalizes `store_warnings` as it carries the current definition forward, dropping any entry the validator would reject and logging which one, the same way it prunes `canonical_name_fields`, `temporal_fields`, `reference_fields`, and `content_field`. Without that, adding an unrelated field to a legacy schema would throw at registration — moving the crash from the store path to the registration path for exactly the schemas the store-path guard exists to keep working. Removing a field also prunes it from every rule's `fields` list, and a rule left watching nothing is dropped rather than kept as a condition that fires on every store.
 
 **2. `content_field` declaration** — marks a schema as a document type. When declared, the store path emits `MISSING_CONTENT_FIELD` if the stored observation omits or empties the named field:
 
