@@ -48,6 +48,50 @@ import { cleanupEntityType, cleanupTestSchema } from "../helpers/cleanup_helpers
 const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
+/**
+ * Environment the CLI child process must run under for its effect assertions
+ * to mean anything.
+ *
+ * The CLI resolves its database through `src/config.ts`, which falls back to
+ * `~/.config/neotoma/.env` (and thence to a machine-local data directory)
+ * whenever `NEOTOMA_DATA_DIR` is not already set in the process env. The test
+ * worker happens to inherit `NEOTOMA_DATA_DIR` from `vitest.global_setup.ts`,
+ * so `exec` has been passing it to the child implicitly — but that is an
+ * unstated precondition, not a guarantee. Where the inheritance does not hold
+ * (a runner that sanitizes the child env, or this file driven outside the
+ * configured global setup), the CLI child writes to the operator's own
+ * machine-local database while `readSnapshotFields` reads the test one, and
+ * the read-back fails for a reason that has nothing to do with the guard
+ * under test. Worse, it can PASS on residue left in that machine-local
+ * database by an earlier run, making the result evidence about the runner
+ * rather than about the code.
+ *
+ * So pass the data directory explicitly, and fail loudly here if it is not
+ * resolvable, rather than letting the child silently pick a different
+ * database. Per neotoma#2165 policy
+ * fixed_means_behavior_verified_not_contract_accepted
+ * (ent_db0b7855d47012084477fb00), a test whose outcome depends on which
+ * instance it points at is not effect-verified.
+ */
+function cliEnv(): NodeJS.ProcessEnv {
+  const dataDir = process.env.NEOTOMA_DATA_DIR;
+  if (!dataDir?.trim()) {
+    throw new Error(
+      "NEOTOMA_DATA_DIR is not set in this test process, so the CLI child would " +
+        "resolve a different database than these assertions read. Run this suite " +
+        "through the configured vitest setup (npm run test:contract-parity), or set " +
+        "NEOTOMA_DATA_DIR explicitly."
+    );
+  }
+  return {
+    ...process.env,
+    NEOTOMA_DATA_DIR: dataDir,
+    // `src/config.ts` keys its env-file loading off NEOTOMA_ENV (not NODE_ENV);
+    // pin it so the child cannot load a production env file and repoint itself.
+    NEOTOMA_ENV: process.env.NEOTOMA_ENV || "development",
+  };
+}
+
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000000";
 const ENTITY_TYPE = "store_warning_malformed_rule_guard_test_skill";
 
@@ -253,7 +297,8 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       ]).replace(/"/g, '\\"');
 
       const { stdout, stderr } = await execAsync(
-        `${CLI_PATH} store --entities "${entitiesJson}" --user-id "${TEST_USER_ID}" --idempotency-key "malformed-rule-guard-cli-${randomUUID()}" --json`
+        `${CLI_PATH} store --entities "${entitiesJson}" --user-id "${TEST_USER_ID}" --idempotency-key "malformed-rule-guard-cli-${randomUUID()}" --json`,
+        { env: cliEnv() }
       );
 
       // The CLI writes environment-dependent advisory lines to stderr on
@@ -329,7 +374,8 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       const cliProbeName = `parity-cli-${randomUUID()}`;
       const entitiesJson = JSON.stringify([commonPayload(cliProbeName)]).replace(/"/g, '\\"');
       const { stdout: cliStdout } = await execAsync(
-        `${CLI_PATH} store --entities "${entitiesJson}" --user-id "${TEST_USER_ID}" --idempotency-key "parity-cli-${randomUUID()}" --json`
+        `${CLI_PATH} store --entities "${entitiesJson}" --user-id "${TEST_USER_ID}" --idempotency-key "parity-cli-${randomUUID()}" --json`,
+        { env: cliEnv() }
       );
       const cliResult = JSON.parse(cliStdout) as {
         entities?: Array<{ entity_id?: string; id?: string }>;
@@ -549,12 +595,74 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
   // Second entity type declaring store_warnings (neotoma#2165 acceptance
   // criterion: "at least one other entity type that declares store_warnings
   // can be stored without this TypeError"). Waxwing's arch section names
-  // `product_feedback` (schema_definitions.ts, well-formed `fields`-shaped
+  // `product_feedback` (schema_definitions.ts: a well-formed `fields`-shaped
   // rule, code MISSING_IDENTITY_FIELDS) as the confirmed second type.
+  //
+  // This block deliberately does NOT store a real `product_feedback` entity.
+  // `product_feedback`'s ACTIVE schema is whatever the instance under test
+  // holds, not what `schema_definitions.ts` declares: the seeded local test
+  // DB carries schema_version 1.0 WITH the store_warnings rule, while a
+  // long-lived instance carries a later version (observed: 1.21.0, 35
+  // fields) with NO store_warnings block at all — the rule having been
+  // dropped by subsequent schema evolution. Asserting MISSING_IDENTITY_FIELDS
+  // against the bare type therefore passes or fails according to which
+  // database the process resolves, which is an unstated precondition living
+  // in the environment rather than in the test. That is precisely what
+  // policy fixed_means_behavior_verified_not_contract_accepted
+  // (ent_db0b7855d47012084477fb00) excludes: a green result that is evidence
+  // about the runner, not about the code.
+  //
+  // So the precondition is seeded here instead. This suite owns a second
+  // entity type whose schema declares the canonical well-formed
+  // `fields`-shaped rule verbatim as `product_feedback` declares it, and
+  // asserts the fire/suppress behaviour against that. The assertion is
+  // unchanged in substance — a well-formed rule still fires when no listed
+  // field is present and stays silent when one is — but its outcome now
+  // depends only on this file.
   // ---------------------------------------------------------------------
-  describe("second store_warnings-declaring type: product_feedback", () => {
+  describe("second store_warnings-declaring type: well-formed fields-shaped rule", () => {
+    const WELL_FORMED_ENTITY_TYPE = "store_warning_malformed_rule_guard_test_wellformed";
+
+    // Byte-for-byte the rule `product_feedback` declares in
+    // src/services/schema_definitions.ts, so this fixture tracks the shape
+    // arch's ruling names rather than a paraphrase of it.
+    const WELL_FORMED_STORE_WARNINGS_RULE = {
+      code: "MISSING_IDENTITY_FIELDS",
+      fields: ["feedback_source", "reporter_email", "reporter_name", "reporter_id"],
+      message:
+        "product_feedback stored without identity fields " +
+        "(feedback_source, reporter_email, reporter_name, reporter_id); " +
+        "consider adding at least one to distinguish internal from external feedback",
+    };
+
+    beforeAll(async () => {
+      if (!(await schemaRegistry.loadActiveSchema(WELL_FORMED_ENTITY_TYPE, TEST_USER_ID))) {
+        await schemaRegistry.register({
+          entity_type: WELL_FORMED_ENTITY_TYPE,
+          schema_version: "1.0",
+          schema_definition: {
+            fields: {
+              title: { type: "string", required: false },
+              content: { type: "string", required: false },
+              feedback_source: { type: "string", required: false },
+              reporter_email: { type: "string", required: false },
+              reporter_name: { type: "string", required: false },
+              reporter_id: { type: "string", required: false },
+            },
+            identity_opt_out: "heuristic_canonical_name",
+            store_warnings: [WELL_FORMED_STORE_WARNINGS_RULE],
+          },
+          reducer_config: { merge_policies: {} },
+          user_id: TEST_USER_ID,
+          user_specific: true,
+          activate: true,
+        });
+      }
+    });
+
     afterAll(async () => {
-      await cleanupEntityType("product_feedback", TEST_USER_ID);
+      await cleanupEntityType(WELL_FORMED_ENTITY_TYPE, TEST_USER_ID);
+      await cleanupTestSchema(WELL_FORMED_ENTITY_TYPE, TEST_USER_ID);
     });
 
     it("stores cleanly and fires MISSING_IDENTITY_FIELDS when no identity field is present", async () => {
@@ -562,12 +670,12 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
         userId: TEST_USER_ID,
         entities: [
           {
-            entity_type: "product_feedback",
-            content: `product feedback probe ${randomUUID()}`,
+            entity_type: WELL_FORMED_ENTITY_TYPE,
+            content: `well-formed rule probe ${randomUUID()}`,
           },
         ],
         sourcePriority: 100,
-        idempotencyKey: `product-feedback-probe-${randomUUID()}`,
+        idempotencyKey: `well-formed-probe-${randomUUID()}`,
       });
 
       expect(result.entities.length).toBeGreaterThan(0);
@@ -584,13 +692,13 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
         userId: TEST_USER_ID,
         entities: [
           {
-            entity_type: "product_feedback",
-            content: `product feedback probe with identity ${randomUUID()}`,
+            entity_type: WELL_FORMED_ENTITY_TYPE,
+            content: `well-formed rule probe with identity ${randomUUID()}`,
             feedback_source: "internal",
           },
         ],
         sourcePriority: 100,
-        idempotencyKey: `product-feedback-probe-identity-${randomUUID()}`,
+        idempotencyKey: `well-formed-probe-identity-${randomUUID()}`,
       });
 
       expect(result.entities.length).toBeGreaterThan(0);
@@ -600,6 +708,218 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
         }
       ).store_warnings;
       expect(warnings?.some((w) => w.code === "MISSING_IDENTITY_FIELDS")).toBeFalsy();
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Control case for the ACTIVE-schema hazard above, asserted rather than
+  // assumed: a type whose active schema declares NO store_warnings block
+  // emits no schema-driven identity warning. This is the real behaviour of
+  // `product_feedback` on a long-lived instance (observed: schema_version
+  // 1.21.0, no store_warnings), and EDGE-4's control case. It is stated here
+  // against a seeded type so the control is verified rather than inherited
+  // from whatever the environment happens to hold.
+  // ---------------------------------------------------------------------
+  describe("EDGE-4 control: a type declaring NO store_warnings fires no identity warning", () => {
+    const NO_RULES_ENTITY_TYPE = "store_warning_malformed_rule_guard_test_norules";
+
+    beforeAll(async () => {
+      if (!(await schemaRegistry.loadActiveSchema(NO_RULES_ENTITY_TYPE, TEST_USER_ID))) {
+        await schemaRegistry.register({
+          entity_type: NO_RULES_ENTITY_TYPE,
+          schema_version: "1.0",
+          schema_definition: {
+            fields: {
+              title: { type: "string", required: false },
+              content: { type: "string", required: false },
+            },
+            identity_opt_out: "heuristic_canonical_name",
+            // No store_warnings key at all — deliberately.
+          },
+          reducer_config: { merge_policies: {} },
+          user_id: TEST_USER_ID,
+          user_specific: true,
+          activate: true,
+        });
+      }
+    });
+
+    afterAll(async () => {
+      await cleanupEntityType(NO_RULES_ENTITY_TYPE, TEST_USER_ID);
+      await cleanupTestSchema(NO_RULES_ENTITY_TYPE, TEST_USER_ID);
+    });
+
+    it("stores cleanly and emits no MISSING_IDENTITY_FIELDS warning", async () => {
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: NO_RULES_ENTITY_TYPE,
+            content: `no-rules probe ${randomUUID()}`,
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `no-rules-probe-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const warnings = (
+        result as unknown as {
+          store_warnings?: Array<{ code: string }>;
+        }
+      ).store_warnings;
+      expect(warnings?.some((w) => w.code === "MISSING_IDENTITY_FIELDS")).toBeFalsy();
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Guard-shape coverage the surface-level tests above cannot reach: an
+  // EMPTY `fields` array, and a MIXED rule list where a malformed rule sits
+  // alongside a well-formed one. The guard skips on
+  // `!Array.isArray(rule.fields) || rule.fields.length === 0`, so the
+  // zero-length case is a distinct branch from the absent-array case, and a
+  // mixed list proves `continue` skips only the offending rule rather than
+  // abandoning the remaining ones.
+  // ---------------------------------------------------------------------
+  describe("guard branches: empty fields array, and a mixed rule list", () => {
+    const EMPTY_FIELDS_ENTITY_TYPE = "store_warning_malformed_rule_guard_test_emptyfields";
+    const MIXED_ENTITY_TYPE = "store_warning_malformed_rule_guard_test_mixed";
+
+    beforeAll(async () => {
+      if (!(await schemaRegistry.loadActiveSchema(EMPTY_FIELDS_ENTITY_TYPE, TEST_USER_ID))) {
+        await schemaRegistry.register({
+          entity_type: EMPTY_FIELDS_ENTITY_TYPE,
+          schema_version: "1.0",
+          schema_definition: {
+            fields: {
+              title: { type: "string", required: false },
+              content: { type: "string", required: false },
+            },
+            identity_opt_out: "heuristic_canonical_name",
+            store_warnings: [
+              {
+                code: "EMPTY_FIELDS_RULE",
+                fields: [],
+                message: "a rule declaring an empty fields array cannot evaluate anything",
+              },
+            ],
+          },
+          reducer_config: { merge_policies: {} },
+          user_id: TEST_USER_ID,
+          user_specific: true,
+          activate: true,
+        });
+      }
+
+      if (!(await schemaRegistry.loadActiveSchema(MIXED_ENTITY_TYPE, TEST_USER_ID))) {
+        await schemaRegistry.register({
+          entity_type: MIXED_ENTITY_TYPE,
+          schema_version: "1.0",
+          schema_definition: {
+            fields: {
+              title: { type: "string", required: false },
+              content: { type: "string", required: false },
+              feedback_source: { type: "string", required: false },
+            },
+            identity_opt_out: "heuristic_canonical_name",
+            // Malformed FIRST, so a guard that threw or bailed out of the
+            // loop entirely would suppress the well-formed rule behind it.
+            store_warnings: [
+              MALFORMED_STORE_WARNINGS_RULE,
+              {
+                code: "MIXED_BATCH_WELL_FORMED",
+                fields: ["feedback_source"],
+                message: "well-formed rule sharing a rule list with a malformed one",
+              },
+            ],
+          },
+          reducer_config: { merge_policies: {} },
+          user_id: TEST_USER_ID,
+          user_specific: true,
+          activate: true,
+        });
+      }
+    });
+
+    afterAll(async () => {
+      await cleanupEntityType(EMPTY_FIELDS_ENTITY_TYPE, TEST_USER_ID);
+      await cleanupTestSchema(EMPTY_FIELDS_ENTITY_TYPE, TEST_USER_ID);
+      await cleanupEntityType(MIXED_ENTITY_TYPE, TEST_USER_ID);
+      await cleanupTestSchema(MIXED_ENTITY_TYPE, TEST_USER_ID);
+    });
+
+    it("a rule with an EMPTY fields array is skipped, not evaluated, and never throws", async () => {
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: EMPTY_FIELDS_ENTITY_TYPE,
+            content: `empty-fields probe ${randomUUID()}`,
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `empty-fields-probe-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const warnings = (
+        result as unknown as {
+          store_warnings?: Array<{ code: string }>;
+        }
+      ).store_warnings;
+      // An empty `fields` list vacuously has no present field, so an
+      // UNGUARDED evaluator would fire the warning. The guard must skip it.
+      expect(warnings?.some((w) => w.code === "EMPTY_FIELDS_RULE")).toBeFalsy();
+    });
+
+    it("mixed batch: the malformed rule is skipped while the well-formed rule behind it still fires", async () => {
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: MIXED_ENTITY_TYPE,
+            content: `mixed-batch probe ${randomUUID()}`,
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `mixed-batch-probe-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const warnings = (
+        result as unknown as {
+          store_warnings?: Array<{ code: string }>;
+        }
+      ).store_warnings;
+      // The malformed rule contributes nothing...
+      expect(warnings?.some((w) => w.code === "MISSING_CONTENT_FIELD")).toBeFalsy();
+      // ...and the well-formed rule that follows it is still evaluated,
+      // which only holds if the guard used `continue` rather than `break` or
+      // an early return out of the rule loop.
+      expect(warnings?.some((w) => w.code === "MIXED_BATCH_WELL_FORMED")).toBe(true);
+    });
+
+    it("mixed batch: the well-formed rule still SUPPRESSES correctly when its field is present", async () => {
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: MIXED_ENTITY_TYPE,
+            content: `mixed-batch suppress probe ${randomUUID()}`,
+            feedback_source: "internal",
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `mixed-batch-suppress-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const warnings = (
+        result as unknown as {
+          store_warnings?: Array<{ code: string }>;
+        }
+      ).store_warnings;
+      expect(warnings?.some((w) => w.code === "MIXED_BATCH_WELL_FORMED")).toBeFalsy();
     });
   });
 
@@ -704,7 +1024,8 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       const entitiesJson = JSON.stringify([fullPayload(probeName)]).replace(/"/g, '\\"');
 
       const { stdout, stderr } = await execAsync(
-        `${CLI_PATH} store --entities "${entitiesJson}" --user-id "${TEST_USER_ID}" --idempotency-key "reg5-cli-${randomUUID()}" --json`
+        `${CLI_PATH} store --entities "${entitiesJson}" --user-id "${TEST_USER_ID}" --idempotency-key "reg5-cli-${randomUUID()}" --json`,
+        { env: cliEnv() }
       );
 
       expect(stderr).not.toMatch(/error|exception|fail(ed)?|TypeError/i);
