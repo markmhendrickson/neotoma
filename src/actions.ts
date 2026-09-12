@@ -8206,7 +8206,15 @@ export async function storeStructuredForApi(params: {
           // Guard against a malformed rule (no `fields` array, e.g. a legacy
           // `condition`-shaped entry): it cannot evaluate "missing identity
           // field", so skip it rather than throwing on `undefined.some`.
-          if (!Array.isArray(rule.fields) || rule.fields.length === 0) continue;
+          // Follow-up (Neotoma issue ent_93ef2baa28951b8d331641e3): migrate
+          // the offending schema's DB store_warnings rule to the canonical
+          // `fields`-shaped form so it stops being silently skipped here.
+          if (!Array.isArray(rule.fields) || rule.fields.length === 0) {
+            logger.warn(
+              `[store] Skipping malformed store_warnings rule (no fields array): entity_type=${r.entity_type} code=${rule.code ?? "unknown"}`
+            );
+            continue;
+          }
           const hasIdentityField = rule.fields.some(
             (f) => r.fields[f] !== undefined && r.fields[f] !== null && r.fields[f] !== ""
           );
