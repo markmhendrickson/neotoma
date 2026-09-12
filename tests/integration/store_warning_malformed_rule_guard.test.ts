@@ -106,6 +106,78 @@ const MALFORMED_STORE_WARNINGS_RULE = {
   condition: { missing_all_of: ["content"] },
 } as unknown as { code: string; fields: string[]; message: string };
 
+/**
+ * Overwrite a registered schema's `store_warnings` with a shape the
+ * registration-time validator refuses.
+ *
+ * `validateSchemaDefinition` now validates `store_warnings` at registration
+ * (it previously validated it zero times, which is the root cause of this
+ * whole ticket — six sibling rule-bearing fields were validated and this one
+ * was not). That closes the door on NEW malformed schemas, but the malformed
+ * rows this guard exists for are ALREADY in the DB on long-lived instances:
+ * the live `skill` type carries a legacy `condition`-shaped entry that
+ * predates the validator.
+ *
+ * So the faithful reproduction is to register a well-formed schema and then
+ * write the malformed rule directly into the persisted row, bypassing the
+ * validator exactly as history did. Going through `register()` would now
+ * (correctly) throw and would only prove the validator works — it would not
+ * exercise the consumption-site guard at all.
+ */
+async function injectStoreWarningsPastValidator(
+  entityType: string,
+  rules: unknown[]
+): Promise<void> {
+  const { data, error } = await db
+    .from("schema_registry")
+    .select("id, schema_definition")
+    .eq("entity_type", entityType)
+    .eq("user_id", TEST_USER_ID)
+    .eq("scope", "user")
+    .eq("active", true)
+    .maybeSingle();
+  expect(error).toBeNull();
+  expect(data, `seeded schema row for ${entityType} was not found`).toBeTruthy();
+
+  const row = data as { id: string; schema_definition: unknown };
+  const definition = (
+    typeof row.schema_definition === "string"
+      ? JSON.parse(row.schema_definition)
+      : row.schema_definition
+  ) as Record<string, unknown>;
+  definition.store_warnings = rules;
+
+  // Write the definition as an OBJECT, not a JSON string. The driver already
+  // serializes this column, so passing `JSON.stringify(definition)` here
+  // double-encodes it: the row then holds a JSON string, `schema_definition`
+  // reads back as a `string` rather than an object, and every `store_warnings`
+  // lookup silently sees `undefined` — the schema appears to declare no rules
+  // at all. Verified both ways; the read-back assertion below is what catches
+  // it if this ever regresses.
+  const { error: updateError } = await db
+    .from("schema_registry")
+    .update({ schema_definition: definition })
+    .eq("id", row.id);
+  expect(updateError).toBeNull();
+
+  // No cache invalidation needed: `loadActiveSchema` reads the row from the DB
+  // on every call (verified — the registry holds no schema cache), so the store
+  // path sees the mutated definition immediately. If a cache is ever
+  // introduced, this is where it must be dropped.
+  //
+  // Read back and assert the malformed shape survived the round-trip. Without
+  // this, a JSON round-trip that dropped the entry (or an update that silently
+  // no-opped) would leave every assertion below passing vacuously against a
+  // perfectly well-formed schema.
+  const reloaded = await schemaRegistry.loadActiveSchema(entityType, TEST_USER_ID);
+  const reloadedRules = (reloaded?.schema_definition as { store_warnings?: unknown[] } | undefined)
+    ?.store_warnings;
+  expect(
+    reloadedRules?.length,
+    "the injected store_warnings did not survive the read-back — the store path would never see them, so these tests would pass vacuously"
+  ).toBe(rules.length);
+}
+
 /** Read back an entity's persisted snapshot fields directly from the DB. */
 async function readSnapshotFields(entityId: string): Promise<Record<string, unknown>> {
   const { data, error } = await db
@@ -131,7 +203,17 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
             content: { type: "string", required: false },
           },
           identity_opt_out: "heuristic_canonical_name",
-          store_warnings: [MALFORMED_STORE_WARNINGS_RULE],
+          // Registered well-formed, then overwritten with the malformed
+          // `condition`-shaped rule below — see
+          // `injectStoreWarningsPastValidator` for why this indirection is now
+          // required and why it is the faithful reproduction.
+          store_warnings: [
+            {
+              code: "PLACEHOLDER_WELL_FORMED",
+              fields: ["name"],
+              message: "placeholder, overwritten below.",
+            },
+          ],
         },
         reducer_config: { merge_policies: {} },
         user_id: TEST_USER_ID,
@@ -139,6 +221,7 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
         activate: true,
       });
     }
+    await injectStoreWarningsPastValidator(ENTITY_TYPE, [MALFORMED_STORE_WARNINGS_RULE]);
   });
 
   afterAll(async () => {
@@ -454,7 +537,13 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
             },
             identity_opt_out: "heuristic_canonical_name",
             content_field: "content",
-            store_warnings: [MALFORMED_STORE_WARNINGS_RULE],
+            store_warnings: [
+              {
+                code: "PLACEHOLDER_WELL_FORMED",
+                fields: ["name"],
+                message: "placeholder, overwritten below.",
+              },
+            ],
           },
           reducer_config: { merge_policies: {} },
           user_id: TEST_USER_ID,
@@ -462,6 +551,9 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
           activate: true,
         });
       }
+      await injectStoreWarningsPastValidator(CONTENT_FIELD_ENTITY_TYPE, [
+        MALFORMED_STORE_WARNINGS_RULE,
+      ]);
     });
 
     afterAll(async () => {
@@ -798,9 +890,9 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
             identity_opt_out: "heuristic_canonical_name",
             store_warnings: [
               {
-                code: "EMPTY_FIELDS_RULE",
-                fields: [],
-                message: "a rule declaring an empty fields array cannot evaluate anything",
+                code: "PLACEHOLDER_WELL_FORMED",
+                fields: ["title"],
+                message: "placeholder, overwritten below.",
               },
             ],
           },
@@ -810,6 +902,15 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
           activate: true,
         });
       }
+      // The empty-fields rule is itself now refused at registration, so inject
+      // it past the validator the same way.
+      await injectStoreWarningsPastValidator(EMPTY_FIELDS_ENTITY_TYPE, [
+        {
+          code: "EMPTY_FIELDS_RULE",
+          fields: [],
+          message: "a rule declaring an empty fields array cannot evaluate anything",
+        },
+      ]);
 
       if (!(await schemaRegistry.loadActiveSchema(MIXED_ENTITY_TYPE, TEST_USER_ID))) {
         await schemaRegistry.register({
@@ -822,14 +923,11 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
               feedback_source: { type: "string", required: false },
             },
             identity_opt_out: "heuristic_canonical_name",
-            // Malformed FIRST, so a guard that threw or bailed out of the
-            // loop entirely would suppress the well-formed rule behind it.
             store_warnings: [
-              MALFORMED_STORE_WARNINGS_RULE,
               {
-                code: "MIXED_BATCH_WELL_FORMED",
-                fields: ["feedback_source"],
-                message: "well-formed rule sharing a rule list with a malformed one",
+                code: "PLACEHOLDER_WELL_FORMED",
+                fields: ["title"],
+                message: "placeholder, overwritten below.",
               },
             ],
           },
@@ -839,6 +937,16 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
           activate: true,
         });
       }
+      // Malformed FIRST, so a guard that threw or bailed out of the loop
+      // entirely would suppress the well-formed rule behind it.
+      await injectStoreWarningsPastValidator(MIXED_ENTITY_TYPE, [
+        MALFORMED_STORE_WARNINGS_RULE,
+        {
+          code: "MIXED_BATCH_WELL_FORMED",
+          fields: ["feedback_source"],
+          message: "well-formed rule sharing a rule list with a malformed one",
+        },
+      ]);
     });
 
     afterAll(async () => {
@@ -1087,9 +1195,18 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       // the `.some(` call it protects; large enough to contain both without
       // pulling in unrelated code. The marker sits well before the guard
       // (past several lines of response-type declarations), so this window
-      // must clear that gap — measured empirically at ~2450-2750 chars in
-      // both files.
-      return source.slice(start, start + 3500);
+      // must clear that gap.
+      //
+      // Measured offsets from the marker (re-measure if this ever fails
+      // rather than widening blindly — a window that no longer reaches
+      // `.some(` makes these tests fail for a reason unrelated to the guard):
+      //   src/actions.ts  guard 3461, .some( 3805
+      //   src/server.ts   guard 3171, .some( 3514
+      // 5000 clears both with headroom. The window was 3500 before the
+      // nullish-rule guard added its explanatory comment, which pushed
+      // `.some(` in src/actions.ts from ~2750 to 3805 and silently truncated
+      // it out of the excerpt.
+      return source.slice(start, start + 5000);
     }
 
     it("src/actions.ts: the Array.isArray guard sits BEFORE `.some(` in the store_warnings loop", () => {
@@ -1190,6 +1307,248 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       expect(end, "could not bound handleStorePost").toBeGreaterThan(start);
       const handler = actionsSource.slice(start, end);
       expect(handler.includes('sendError(res, 500, "DB_QUERY_FAILED"')).toBe(true);
+    });
+  });
+
+  describe("nullish rule entry: the guard itself must not throw one access earlier", () => {
+    // The guard this PR added reads `rule.fields` as its FIRST sub-expression:
+    //
+    //   if (!Array.isArray(rule.fields) || rule.fields.length === 0)
+    //
+    // `Array.isArray` cannot protect a dereference that has already happened.
+    // A `null` (or `undefined`) entry in the rule array therefore throws
+    // `TypeError: Cannot read properties of null (reading 'fields')` — the
+    // same crash class this PR exists to close, inside the very `if` that
+    // closes it. Note the risk is specifically nullish: a primitive such as
+    // `123` coerces safely and `Array.isArray(123..fields)` is simply false.
+    const NULLISH_ENTITY_TYPE = "store_warning_nullish_rule_guard_test";
+
+    beforeAll(async () => {
+      if (!(await schemaRegistry.loadActiveSchema(NULLISH_ENTITY_TYPE, TEST_USER_ID))) {
+        await schemaRegistry.register({
+          entity_type: NULLISH_ENTITY_TYPE,
+          schema_version: "1.0",
+          schema_definition: {
+            fields: {
+              name: { type: "string", required: false },
+              reporter_email: { type: "string", required: false },
+            },
+            identity_opt_out: "heuristic_canonical_name",
+            // A well-formed rule so registration-time validation accepts the
+            // schema; the nullish entry is injected directly into the stored
+            // definition below, reproducing a DB row that predates (or
+            // bypasses) that validation — which is exactly how the malformed
+            // `skill` rule came to exist.
+            store_warnings: [
+              {
+                code: "MISSING_IDENTITY_FIELDS",
+                fields: ["reporter_email"],
+                message: "stored without any identity field.",
+              },
+            ],
+          },
+          reducer_config: { merge_policies: {} },
+          user_id: TEST_USER_ID,
+          user_specific: true,
+          activate: true,
+        });
+      }
+
+      // `null` FIRST, so it is reached BEFORE the well-formed rule behind it.
+      // If the guard throws on it, the well-formed rule never gets to fire —
+      // which is exactly what the assertions below detect.
+      //
+      // Only `null` is injected, not `undefined`: the schema definition is
+      // persisted as JSON, and `JSON.stringify` serializes an `undefined`
+      // array element as `null` anyway, so an `undefined` entry is
+      // indistinguishable once it round-trips through the DB. `undefined` is
+      // covered at the registration boundary instead, in
+      // tests/services/schema_store_warnings_validation.test.ts.
+      await injectStoreWarningsPastValidator(NULLISH_ENTITY_TYPE, [
+        null,
+        {
+          code: "MISSING_IDENTITY_FIELDS",
+          fields: ["reporter_email"],
+          message: "stored without any identity field.",
+        },
+      ]);
+
+      // Pin that the entry the store path will actually see is nullish, not
+      // merely present — the helper checks length, this checks shape.
+      const reloaded = await schemaRegistry.loadActiveSchema(NULLISH_ENTITY_TYPE, TEST_USER_ID);
+      const reloadedRules = (
+        reloaded?.schema_definition as { store_warnings?: unknown[] } | undefined
+      )?.store_warnings;
+      expect(
+        reloadedRules?.[0],
+        "the null entry did not survive the read-back — the store path would never see it, so these tests would pass vacuously"
+      ).toBeNull();
+    });
+
+    afterAll(async () => {
+      await cleanupEntityType(NULLISH_ENTITY_TYPE, TEST_USER_ID);
+      await cleanupTestSchema(NULLISH_ENTITY_TYPE, TEST_USER_ID);
+    });
+
+    it("API path (storeStructuredForApi): a null rule entry does not throw, and the store still succeeds", async () => {
+      const probeName = `nullish-api-${randomUUID()}`;
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: NULLISH_ENTITY_TYPE,
+            name: probeName,
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `nullish-api-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const entityId = result.entities[0]?.entity_id;
+      expect(entityId, "the entity was not created").toBeTruthy();
+      const snapshot = await readSnapshotFields(entityId as string);
+      expect(snapshot.name).toBe(probeName);
+    });
+
+    it("MCP path (NeotomaServer.store): a null rule entry does not throw, and the store still succeeds", async () => {
+      const server = new NeotomaServer();
+      (server as unknown as Record<string, unknown>).authenticatedUserId = TEST_USER_ID;
+      const storeMethod = (
+        server as unknown as {
+          store: (params: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
+        }
+      ).store.bind(server);
+
+      const result = await storeMethod({
+        user_id: TEST_USER_ID,
+        idempotency_key: `nullish-mcp-${randomUUID()}`,
+        entities: [
+          {
+            entity_type: NULLISH_ENTITY_TYPE,
+            name: `nullish-mcp-${randomUUID()}`,
+          },
+        ],
+      });
+
+      expect(result.content.length).toBeGreaterThan(0);
+    });
+
+    it("HTTP POST /store: a null rule entry is 200, not 500, and error_code is never DB_QUERY_FAILED", async () => {
+      const port = 18176;
+      const server = createServer(app);
+      await new Promise<void>((resolve, reject) => {
+        server.listen(port, "127.0.0.1", () => resolve());
+        server.once("error", reject);
+      });
+
+      try {
+        const resp = await fetch(`http://127.0.0.1:${port}/store`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: TEST_USER_ID,
+            idempotency_key: `nullish-http-${randomUUID()}`,
+            entities: [
+              {
+                entity_type: NULLISH_ENTITY_TYPE,
+                name: `nullish-http-${randomUUID()}`,
+              },
+            ],
+          }),
+        });
+
+        expect(resp.status).not.toBe(500);
+        expect(resp.status).toBe(200);
+        const body = (await resp.json()) as { error_code?: string };
+        expect(body.error_code).toBeUndefined();
+        expect(body.error_code).not.toBe("DB_QUERY_FAILED");
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    it("the well-formed rule BEHIND the null entry still fires (the guard skipped, it did not bail)", async () => {
+      // This is the assertion that distinguishes `continue` from a throw or a
+      // `break`: the null entry sits FIRST in the rule list, so this warning
+      // can only appear if iteration survived it and carried on.
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: NULLISH_ENTITY_TYPE,
+            name: `nullish-fires-${randomUUID()}`,
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `nullish-fires-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const warnings = (
+        result as unknown as {
+          store_warnings?: Array<{ code: string }>;
+        }
+      ).store_warnings;
+      expect(warnings?.some((w) => w.code === "MISSING_IDENTITY_FIELDS")).toBe(true);
+    });
+
+    it("the well-formed rule behind the null entry still SUPPRESSES when its field is present", async () => {
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: NULLISH_ENTITY_TYPE,
+            name: `nullish-suppress-${randomUUID()}`,
+            reporter_email: "someone@example.com",
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `nullish-suppress-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const warnings = (
+        result as unknown as {
+          store_warnings?: Array<{ code: string }>;
+        }
+      ).store_warnings;
+      // Suppression shows up as the code being absent from the list — and the
+      // list itself may be omitted entirely when nothing fires, so normalize
+      // rather than asserting `false` against `undefined`.
+      expect((warnings ?? []).map((w) => w.code)).not.toContain("MISSING_IDENTITY_FIELDS");
+      // And pin that the entity really did carry the identity field, so this
+      // test cannot pass because the field silently failed to persist.
+      const entityId = result.entities[0]?.entity_id;
+      const snapshot = await readSnapshotFields(entityId as string);
+      expect(snapshot.reporter_email).toBe("someone@example.com");
+    });
+
+    it("structural: the nullish-rule check precedes the `rule.fields` dereference in both copies", () => {
+      for (const [label, source] of [
+        ["src/actions.ts", readFileSync(new URL("../../src/actions.ts", import.meta.url), "utf-8")],
+        ["src/server.ts", readFileSync(new URL("../../src/server.ts", import.meta.url), "utf-8")],
+      ] as const) {
+        const marker = "Schema-driven store_warnings:";
+        const start = source.indexOf(marker);
+        expect(start, `${label}: store_warnings loop marker not found`).toBeGreaterThan(-1);
+        const loop = source.slice(start, start + 4200);
+
+        const nullishIndex = loop.indexOf("!rule ||");
+        const derefIndex = loop.indexOf("Array.isArray(rule.fields)");
+        expect(
+          nullishIndex,
+          `${label}: no nullish guard on \`rule\` itself — a null entry still throws on \`rule.fields\``
+        ).toBeGreaterThan(-1);
+        expect(
+          derefIndex,
+          `${label}: the \`rule.fields\` dereference was not found`
+        ).toBeGreaterThan(-1);
+        expect(
+          nullishIndex,
+          `${label}: the nullish check must precede the \`rule.fields\` dereference`
+        ).toBeLessThan(derefIndex);
+      }
     });
   });
 });

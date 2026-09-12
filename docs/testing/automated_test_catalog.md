@@ -61,16 +61,16 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **606**
-- Backend and repo Vitest files: **571**
+- Total automated test files: **607**
+- Backend and repo Vitest files: **572**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 167 |
-| Vitest service tests | 44 |
+| Vitest unit tests | 166 |
+| Vitest service tests | 45 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 173 |
 | Vitest CLI tests | 78 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (167):**
+**Files (166):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -151,7 +151,6 @@ flowchart TD
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
 - `tests/unit/config_db_backend.test.ts`
-- `tests/unit/config_refuses_user_env_under_test.test.ts`
 - `tests/unit/config_sqlite_path.test.ts`
 - `tests/unit/config_trusted_callbacks.test.ts`
 - `tests/unit/content_field_store_warning.test.ts`
@@ -283,7 +282,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (44):**
+**Files (45):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -323,6 +322,7 @@ flowchart TD
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/schema_seeding_preserves_custom_identity.test.ts`
+- `tests/services/schema_store_warnings_validation.test.ts`
 - `tests/services/session_seed_schema.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`

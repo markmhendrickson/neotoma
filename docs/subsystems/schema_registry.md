@@ -423,10 +423,23 @@ Two mechanisms emit non-fatal `store_warnings[]` entries on a successful `/store
   {
     "code": "MISSING_IDENTITY_FIELDS",
     "message": "Stored without any feedback source identity field.",
-    "condition": { "missing_all_of": ["github_url", "conversation_id", "session_id"] }
+    "fields": ["github_url", "conversation_id", "session_id"]
   }
 ]
 ```
+
+Each rule is `{ code, fields, message }`, where `fields` is a non-empty array of
+strings. All three keys are required, and the shape is enforced at registration
+time — a rule that omits `fields`, or declares it as anything other than a
+non-empty array of strings, is rejected by `register()`.
+
+> **Note on the legacy `condition` form.** This example previously showed a
+> `condition: { missing_all_of: [...] }` key instead of `fields`. That form was
+> never what the evaluator read: the store path evaluates `fields`, so a
+> `condition`-shaped rule matched no field, evaluated nothing, and is now
+> skipped with a logged warning. A small number of schemas registered before
+> the registration-time check carry the legacy shape and are skipped this way
+> rather than firing. Use `fields`.
 
 **2. `content_field` declaration** — marks a schema as a document type. When declared, the store path emits `MISSING_CONTENT_FIELD` if the stored observation omits or empties the named field:
 

@@ -2444,6 +2444,34 @@ export class SchemaRegistryService {
       }
     }
 
+    if (definition.store_warnings !== undefined) {
+      if (!Array.isArray(definition.store_warnings)) {
+        throw new Error("store_warnings must be an array");
+      }
+      for (const entry of definition.store_warnings) {
+        if (
+          !entry ||
+          typeof entry !== "object" ||
+          typeof entry.code !== "string" ||
+          typeof entry.message !== "string"
+        ) {
+          throw new Error("store_warnings entries must be { code, fields, message }");
+        }
+        if (!Array.isArray(entry.fields) || entry.fields.length === 0) {
+          throw new Error(
+            `store_warnings entries: fields must be a non-empty array of strings (code: ${entry.code})`
+          );
+        }
+        for (const field of entry.fields) {
+          if (typeof field !== "string") {
+            throw new Error(
+              `store_warnings entries: fields must contain only strings (code: ${entry.code})`
+            );
+          }
+        }
+      }
+    }
+
     if (definition.aliases !== undefined) {
       if (!Array.isArray(definition.aliases)) {
         throw new Error("aliases must be an array of strings");

@@ -8206,12 +8206,28 @@ export async function storeStructuredForApi(params: {
           // Guard against a malformed rule (no `fields` array, e.g. a legacy
           // `condition`-shaped entry): it cannot evaluate "missing identity
           // field", so skip it rather than throwing on `undefined.some`.
+          //
+          // The `rule` null/undefined check must come FIRST. `rule.fields` is
+          // dereferenced on `rule` itself as the first sub-expression, so a
+          // `null` or `undefined` rule throws
+          // `TypeError: Cannot read properties of null (reading 'fields')`
+          // before `Array.isArray` can protect anything — the same crash class
+          // this guard exists to close. Only `null`/`undefined` throw here:
+          // a primitive such as `123` coerces safely and `Array.isArray`
+          // already skips it, so the risk is specifically nullish, not "any
+          // non-object".
+          //
           // Follow-up (Neotoma issue ent_93ef2baa28951b8d331641e3): migrate
           // the offending schema's DB store_warnings rule to the canonical
           // `fields`-shaped form so it stops being silently skipped here.
-          if (!Array.isArray(rule.fields) || rule.fields.length === 0) {
+          if (
+            !rule ||
+            typeof rule !== "object" ||
+            !Array.isArray(rule.fields) ||
+            rule.fields.length === 0
+          ) {
             logger.warn(
-              `[store] Skipping malformed store_warnings rule (no fields array): entity_type=${r.entity_type} code=${rule.code ?? "unknown"}`
+              `[store] Skipping malformed store_warnings rule (no fields array): entity_type=${r.entity_type} code=${rule?.code ?? "unknown"}`
             );
             continue;
           }
