@@ -488,16 +488,60 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
           }),
         });
 
+        // EDGE-1 (neotoma#2165 QA plan): the field is not `required`, so the
+        // entity must PERSIST with 200 + the warning — never a 4xx and never
+        // a crash. "No crash alone is not sufficient" per the QA plan, so
+        // assert the warning code explicitly, not just its absence of error.
         expect(resp.status).toBe(200);
         const body = (await resp.json()) as {
           error_code?: string;
           entities?: Array<{ entity_id?: string; id?: string }>;
+          store_warnings?: Array<{ code: string; entity_id?: string }>;
         };
         expect(body.error_code).toBeUndefined();
         expect(body.entities?.length).toBeGreaterThan(0);
+        const entityId = body.entities?.[0]?.entity_id ?? body.entities?.[0]?.id;
+        const warningForEntity = body.store_warnings?.find((w) => w.entity_id === entityId);
+        expect(warningForEntity?.code).toBe("MISSING_CONTENT_FIELD");
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
+    });
+
+    // EDGE-2 (neotoma#2165 QA plan): content present but an empty string.
+    // Arch's decision states truthiness covers undefined/null/"" — empty
+    // string DOES fire MISSING_CONTENT_FIELD, same as absent content.
+    it("EDGE-2: content as an empty string fires MISSING_CONTENT_FIELD, same as absent content", async () => {
+      const probeName = `empty-content-${randomUUID()}`;
+      const result = await storeStructuredForApi({
+        userId: TEST_USER_ID,
+        entities: [
+          {
+            entity_type: CONTENT_FIELD_ENTITY_TYPE,
+            name: probeName,
+            content: "",
+          },
+        ],
+        sourcePriority: 100,
+        idempotencyKey: `malformed-rule-guard-empty-content-${randomUUID()}`,
+      });
+
+      expect(result.entities.length).toBeGreaterThan(0);
+      const entityId =
+        (result.entities[0] as { entity_id?: string; id?: string }).entity_id ??
+        (result.entities[0] as { entity_id?: string; id?: string }).id;
+      expect(entityId).toBeTruthy();
+
+      const snapshotFields = await readSnapshotFields(entityId as string);
+      expect(snapshotFields.name).toBe(probeName);
+
+      const warnings = (
+        result as unknown as {
+          store_warnings?: Array<{ code: string; entity_id: string }>;
+        }
+      ).store_warnings;
+      const warningForEntity = warnings?.find((w) => w.entity_id === entityId);
+      expect(warningForEntity?.code).toBe("MISSING_CONTENT_FIELD");
     });
   });
 
@@ -556,6 +600,127 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
         }
       ).store_warnings;
       expect(warnings?.some((w) => w.code === "MISSING_IDENTITY_FIELDS")).toBeFalsy();
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // REG-5 (neotoma#2165 QA plan, full realistic payload): repeats the
+  // reporter's full payload shape — name, slug, description, content,
+  // triggers[], supported_harnesses[], user_invocable, enabled, version,
+  // file_path, repository_name — across MCP, HTTP, and CLI. A minimal
+  // {name, content} payload passing does not exclude a bug that only
+  // manifests on the full shape or on one particular field (e.g. an array
+  // or boolean field tripping something the warning evaluator or the
+  // reducer does differently under load). Asserts the same effects as the
+  // minimal-payload tests: entity created, retrievable, content persisted,
+  // no DB_QUERY_FAILED, no throw.
+  // ---------------------------------------------------------------------
+  describe("REG-5: full realistic payload (all 11 reporter fields) across all three surfaces", () => {
+    function fullPayload(probeName: string) {
+      return {
+        entity_type: ENTITY_TYPE,
+        name: probeName,
+        slug: `slug-${probeName}`,
+        description: "REG-5 full-payload probe description",
+        content: "REG-5 full-payload probe body",
+        triggers: ["probe", "reg-5"],
+        supported_harnesses: ["claude-code", "cursor"],
+        user_invocable: true,
+        enabled: true,
+        version: "1.0.0",
+        file_path: "skills/probe/SKILL.md",
+        repository_name: "neotoma",
+      };
+    }
+
+    it("MCP store(): full payload resolves without throwing, entity created and retrievable", async () => {
+      const probeName = `reg5-mcp-${randomUUID()}`;
+      const server = new NeotomaServer();
+      (server as unknown as Record<string, unknown>).authenticatedUserId = TEST_USER_ID;
+      const storeMethod = (
+        server as unknown as {
+          store: (params: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
+        }
+      ).store.bind(server);
+
+      const result = await storeMethod({
+        user_id: TEST_USER_ID,
+        idempotency_key: `reg5-mcp-${randomUUID()}`,
+        entities: [fullPayload(probeName)],
+      });
+
+      const parsed = JSON.parse(result.content[0]!.text) as {
+        entities: Array<{ entity_id?: string; id?: string }>;
+      };
+      const entityId = parsed.entities[0]?.entity_id ?? parsed.entities[0]?.id;
+      expect(entityId).toBeTruthy();
+
+      const snapshotFields = await readSnapshotFields(entityId as string);
+      expect(snapshotFields.name).toBe(probeName);
+      expect(snapshotFields.content).toBe("REG-5 full-payload probe body");
+    });
+
+    it("HTTP POST /store: full payload is 200, not 500, error_code never DB_QUERY_FAILED, entity created and retrievable", async () => {
+      const probeName = `reg5-http-${randomUUID()}`;
+      const port = 18176;
+      const server = createServer(app);
+      await new Promise<void>((resolve, reject) => {
+        server.listen(port, "127.0.0.1", () => resolve());
+        server.once("error", reject);
+      });
+
+      try {
+        const resp = await fetch(`http://127.0.0.1:${port}/store`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: TEST_USER_ID,
+            idempotency_key: `reg5-http-${randomUUID()}`,
+            entities: [fullPayload(probeName)],
+          }),
+        });
+
+        expect(resp.status).toBe(200);
+        const body = (await resp.json()) as {
+          error_code?: string;
+          entities?: Array<{ entity_id?: string; id?: string }>;
+        };
+        expect(body.error_code).toBeUndefined();
+        expect(body.entities?.length).toBeGreaterThan(0);
+
+        const entityId = body.entities![0]!.entity_id ?? body.entities![0]!.id;
+        expect(entityId).toBeTruthy();
+
+        const snapshotFields = await readSnapshotFields(entityId as string);
+        expect(snapshotFields.name).toBe(probeName);
+        expect(snapshotFields.content).toBe("REG-5 full-payload probe body");
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    it("CLI `neotoma store --entities`: full payload exits 0, entity created and retrievable", async () => {
+      const probeName = `reg5-cli-${randomUUID()}`;
+      const entitiesJson = JSON.stringify([fullPayload(probeName)]).replace(/"/g, '\\"');
+
+      const { stdout, stderr } = await execAsync(
+        `${CLI_PATH} store --entities "${entitiesJson}" --user-id "${TEST_USER_ID}" --idempotency-key "reg5-cli-${randomUUID()}" --json`
+      );
+
+      expect(stderr).not.toMatch(/error|exception|fail(ed)?|TypeError/i);
+
+      const result = JSON.parse(stdout) as {
+        entities?: Array<{ entity_id?: string; id?: string }>;
+      };
+      expect(Array.isArray(result.entities)).toBe(true);
+      expect(result.entities!.length).toBeGreaterThan(0);
+
+      const entityId = result.entities![0]!.entity_id ?? result.entities![0]!.id;
+      expect(entityId).toBeTruthy();
+
+      const snapshotFields = await readSnapshotFields(entityId as string);
+      expect(snapshotFields.name).toBe(probeName);
+      expect(snapshotFields.content).toBe("REG-5 full-payload probe body");
     });
   });
 
