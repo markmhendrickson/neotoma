@@ -11,36 +11,20 @@ export function formatInspectorUserBadge(email: string | undefined | null, userI
   return formatInspectorUserId(userId);
 }
 
-export const RELATIONSHIP_TYPES = [
-  "PART_OF",
-  "CORRECTS",
-  "REFERS_TO",
-  "SETTLES",
-  "DUPLICATE_OF",
-  "DEPENDS_ON",
-  "SUPERSEDES",
-  "EMBEDS",
-  "works_at",
-  "owns",
-  "manages",
-  "part_of",
-  "related_to",
-  "depends_on",
-  "references",
-  "transacted_with",
-  "member_of",
-  "reports_to",
-  "located_at",
-  "created_by",
-  "funded_by",
-  "acquired_by",
-  "subsidiary_of",
-  "partner_of",
-  "competitor_of",
-  "supplies_to",
-  "contracted_with",
-  "invested_in",
-] as const;
+/**
+ * Relationship types are NOT hardcoded here (#1972 / G25).
+ *
+ * This was a 28-member literal — one of sixteen copies of the same vocabulary,
+ * any of which could drift from the enforcement point with no test failing.
+ * The vocabulary is now a runtime registry; call `list_relationship_types` and
+ * render what comes back.
+ *
+ * DELIBERATELY NO HARDCODED FALLBACK. Falling back to a static list on fetch
+ * failure would silently restore exactly the bug this change removes — the UI
+ * would look fine while offering a vocabulary the server does not have. Render
+ * an error instead.
+ */
+export const RELATIONSHIP_TYPES_SOURCE_TOOL = "list_relationship_types" as const;
 
 export const ENTITY_TYPE_COLORS: Record<string, string> = {
   contact: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200",
