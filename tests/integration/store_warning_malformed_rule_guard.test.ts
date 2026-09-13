@@ -13,10 +13,11 @@
  * Fix: skip any rule whose `fields` is not a non-empty array (src/actions.ts,
  * src/server.ts).
  *
- * This suite drives the real store call sites across all three exposed
+ * This suite drives the real store call sites across all four exposed
  * surfaces — storeStructuredForApi (API path, also reached by MCP's
  * NeotomaServer.store which delegates internally), the real Express HTTP
- * route (POST /store), and the CLI's `store` command over a child process —
+ * route (POST /store), the CLI's `store` command over a child process, and
+ * NeotomaClient.store over its real HTTP transport —
  * against a schema seeded with the real condition-shaped malformed rule,
  * mirroring the entity type's actual DB-stored schema. It asserts the
  * reported effect: store() of an entity under the malformed schema resolves
@@ -28,7 +29,7 @@
  *
  * Cross-surface parity (neotoma#2165 acceptance criteria; policy
  * cross_surface_contract_parity_tested_all_surfaces, ent_2ad0677fe23c0c1878ae43e8):
- * MCP, HTTP, and CLI must all show the same success effect for the same
+ * MCP, HTTP, CLI, and SDK must all show the same success effect for the same
  * malformed-schema payload. See the "cross-surface parity" describe block.
  */
 
@@ -41,6 +42,8 @@ import { readFileSync } from "node:fs";
 import { storeStructuredForApi } from "../../src/actions.js";
 import { app } from "../../src/actions.js";
 import { NeotomaServer } from "../../src/server.js";
+import { NeotomaClient } from "../../packages/client/src/index.js";
+import type { StoreInput, StoreResult } from "../../packages/client/src/index.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { db } from "../../src/db.js";
 import { cleanupEntityType, cleanupTestSchema } from "../helpers/cleanup_helpers.js";
@@ -176,6 +179,30 @@ async function injectStoreWarningsPastValidator(
     reloadedRules?.length,
     "the injected store_warnings did not survive the read-back — the store path would never see them, so these tests would pass vacuously"
   ).toBe(rules.length);
+}
+
+/** Exercise the public SDK facade over its real HTTP transport, never a mock. */
+async function sdkStore(input: StoreInput): Promise<StoreResult> {
+  const server = createServer(app);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing SDK test server port");
+  const client = new NeotomaClient({
+    transport: "http",
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    // This fixture uses the server's loopback no-auth mode (the nil test user).
+    // Suppress the SDK's default placeholder bearer; no production token is used.
+    headers: { Authorization: "" },
+  });
+  try {
+    return await client.store(input);
+  } finally {
+    await client.dispose();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 }
 
 /** Read back an entity's persisted snapshot fields directly from the DB. */
@@ -410,6 +437,17 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       expect(snapshotFields.content).toBe("probe body");
     });
 
+    it("SDK store(): minimal payload persists retrievable name and content", async () => {
+      const name = `sdk-minimal-${randomUUID()}`;
+      const result = await sdkStore({
+        entities: [{ entity_type: ENTITY_TYPE, name, content: "probe body" }],
+        idempotency_key: `sdk-minimal-${randomUUID()}`,
+      });
+      const entityId = result.entities?.[0]?.entity_id;
+      expect(entityId).toBeTruthy();
+      expect(await readSnapshotFields(entityId!)).toMatchObject({ name, content: "probe body" });
+    });
+
     it("parity: MCP, HTTP, and CLI store the identical payload with the identical effect (no surface diverges)", async () => {
       const commonPayload = (probeName: string) => ({
         entity_type: ENTITY_TYPE,
@@ -489,6 +527,17 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
   // require every type to declare store_warnings.
   // ---------------------------------------------------------------------
   describe("control: reference_note (no store_warnings declared) still stores 200", () => {
+    it("SDK store(): no-rule control still persists with the guard reverted", async () => {
+      const title = `sdk-control-${randomUUID()}`;
+      const result = await sdkStore({
+        entities: [{ entity_type: "reference_note", title, content: "control body" }],
+        idempotency_key: `sdk-control-${randomUUID()}`,
+      });
+      const entityId = result.entities?.[0]?.entity_id;
+      expect(entityId).toBeTruthy();
+      expect(await readSnapshotFields(entityId!)).toMatchObject({ title, content: "control body" });
+    });
+
     it("stores a reference_note with title+content successfully", async () => {
       const result = await storeStructuredForApi({
         userId: TEST_USER_ID,
@@ -596,6 +645,24 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       expect(warnings).toBeDefined();
       const warningForEntity = warnings?.find((w) => w.entity_id === entityId);
       expect(warningForEntity?.code).toBe("MISSING_CONTENT_FIELD");
+    });
+
+    it("SDK store(): absent content persists with MISSING_CONTENT_FIELD", async () => {
+      const name = `sdk-no-content-${randomUUID()}`;
+      const result = await sdkStore({
+        entities: [{ entity_type: CONTENT_FIELD_ENTITY_TYPE, name }],
+        idempotency_key: `sdk-no-content-${randomUUID()}`,
+      });
+      const entityId = result.entities?.[0]?.entity_id;
+      expect(entityId).toBeTruthy();
+      const fields = await readSnapshotFields(entityId!);
+      expect(fields.name).toBe(name);
+      expect(fields.content == null || fields.content === "").toBe(true);
+      expect(result.store_warnings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ entity_id: entityId, code: "MISSING_CONTENT_FIELD" }),
+        ])
+      );
     });
 
     it("HTTP POST /store: skill-shaped entity without content is 200, not 500, error_code is not DB_QUERY_FAILED", async () => {
@@ -1035,7 +1102,7 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
   // REG-5 (neotoma#2165 QA plan, full realistic payload): repeats the
   // reporter's full payload shape — name, slug, description, content,
   // triggers[], supported_harnesses[], user_invocable, enabled, version,
-  // file_path, repository_name — across MCP, HTTP, and CLI. A minimal
+  // file_path, repository_name — across MCP, HTTP, CLI, and SDK. A minimal
   // {name, content} payload passing does not exclude a bug that only
   // manifests on the full shape or on one particular field (e.g. an array
   // or boolean field tripping something the warning evaluator or the
@@ -1043,7 +1110,7 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
   // minimal-payload tests: entity created, retrievable, content persisted,
   // no DB_QUERY_FAILED, no throw.
   // ---------------------------------------------------------------------
-  describe("REG-5: full realistic payload (all 11 reporter fields) across all three surfaces", () => {
+  describe("REG-5: full realistic payload (all 11 reporter fields) across all four surfaces", () => {
     function fullPayload(probeName: string) {
       return {
         entity_type: ENTITY_TYPE,
@@ -1060,6 +1127,18 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
         repository_name: "neotoma",
       };
     }
+
+    it("SDK store(): full payload persists retrievable name and content", async () => {
+      const name = `sdk-full-${randomUUID()}`;
+      const payload = fullPayload(name);
+      const result = await sdkStore({
+        entities: [payload],
+        idempotency_key: `sdk-full-${randomUUID()}`,
+      });
+      const entityId = result.entities?.[0]?.entity_id;
+      expect(entityId).toBeTruthy();
+      expect(await readSnapshotFields(entityId!)).toMatchObject({ name, content: payload.content });
+    });
 
     it("MCP store(): full payload resolves without throwing, entity created and retrievable", async () => {
       const probeName = `reg5-mcp-${randomUUID()}`;
