@@ -6541,22 +6541,46 @@ export class NeotomaServer {
       }
       const schemaDef = schemaEntry?.schema_definition;
       const storeWarningRules = schemaDef?.store_warnings;
-      if (storeWarningRules?.length) {
-        for (const rule of storeWarningRules) {
-          const hasIdentityField = rule.fields.some(
-            (f) =>
-              entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
-          );
-          if (!hasIdentityField) {
-            schemaStoreWarnings.push({
-              code: rule.code,
-              message: rule.message,
-              observation_index: i,
-              entity_type: e.entityType,
-              entity_id: e.entityId,
-            });
+      try {
+        if (Array.isArray(storeWarningRules) && storeWarningRules.length > 0) {
+          for (const rule of storeWarningRules) {
+            // Legacy rows predate registration-time validation. Check the complete
+            // canonical shape before evaluating an advisory or emitting metadata.
+            // Keep the nullish check first: reading rule.fields can itself throw.
+            // Schema migration remains a separate follow-up to issue #2165.
+            if (
+              !rule ||
+              typeof rule !== "object" ||
+              !Array.isArray(rule.fields) ||
+              rule.fields.length === 0 ||
+              rule.fields.some((field) => typeof field !== "string") ||
+              typeof rule.code !== "string" ||
+              typeof rule.message !== "string"
+            ) {
+              logger.warn(
+                `[store] Skipping malformed store_warnings rule: entity_type=${e.entityType} code=${typeof rule?.code === "string" ? rule.code : "unknown"}`
+              );
+              continue;
+            }
+            const hasIdentityField = rule.fields.some(
+              (f) =>
+                entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
+            );
+            if (!hasIdentityField) {
+              schemaStoreWarnings.push({
+                code: rule.code,
+                message: rule.message,
+                observation_index: i,
+                entity_type: e.entityType,
+                entity_id: e.entityId,
+              });
+            }
           }
         }
+      } catch {
+        // A schema advisory must never turn an already committed store into an error.
+        // Do not interpolate the rejected schema value or exception into diagnostics.
+        logger.warn("[store] Skipping store_warnings evaluation after an advisory failure");
       }
 
       // Schema-driven content_field warning: when a schema declares
