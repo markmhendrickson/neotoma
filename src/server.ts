@@ -85,7 +85,7 @@ import {
 } from "./services/session_info.js";
 import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
 import {
-  getInstanceSkills,
+  getInstanceSkillsResult,
   renderInstanceSkillsSection,
   type InstanceSkill,
 } from "./services/skills/instance_skills.js";
@@ -732,9 +732,22 @@ export class NeotomaServer {
     // latter, so the filesystem scan alone leaves MCP-only clients unable to
     // discover any skill the instance holds (issue #2046). Union both sources
     // so either deployment shape surfaces its skills.
+    //
+    // Gated by `config.mcpInstanceSkillHints`, which defaults ON: an operator
+    // who wants the section gone sets NEOTOMA_MCP_INSTANCE_SKILL_HINTS=0, and
+    // the lookup is then skipped entirely rather than performed and discarded,
+    // leaving the instructions byte-identical to what they were before this
+    // feature existed.
+    //
+    // As with standing rules, an empty list is ambiguous: it means either "no
+    // skill rows" or "the read failed". Carry the distinction so a broken read
+    // is never presented to an agent as a confident "this instance has none".
     let instanceSkills: InstanceSkill[] = [];
-    if (this.authenticatedUserId) {
-      instanceSkills = await getInstanceSkills(this.authenticatedUserId);
+    let instanceSkillsLookupFailed = false;
+    if (this.authenticatedUserId && config.mcpInstanceSkillHints) {
+      const result = await getInstanceSkillsResult(this.authenticatedUserId);
+      instanceSkills = result.skills;
+      instanceSkillsLookupFailed = result.lookup_failed;
     }
 
     const filesystemSkills = this.getAvailableSkills();
@@ -744,10 +757,17 @@ export class NeotomaServer {
 
     // An instance with no skill rows is a complete no-op: the renderer returns
     // null and the instructions block is left exactly as it was.
-    const skillsSection = renderInstanceSkillsSection(
-      instanceSkills,
-      config.mcpCompactInstructions
-    );
+    //
+    // A FAILED read is not a no-op, though. The agent reads prose, not
+    // serverInfo, so the unavailable state is stated here too — otherwise the
+    // only signal lives in a field the consumer of the instruction block never
+    // looks at, and the failure stays effectively silent where it matters.
+    const skillsSection = instanceSkillsLookupFailed
+      ? "[INSTANCE SKILLS]\nThis instance's graph-stored skills could not be read for this session, so " +
+        "the list below (if any) is incomplete. Do NOT tell the user this instance has no skills. " +
+        "Treat its skills as unknown, retry on a later connection, and check the server logs for " +
+        "the `[instance_skills]` warning if this persists."
+      : renderInstanceSkillsSection(instanceSkills, config.mcpCompactInstructions);
     // Nested rather than variadic: `composeClientInstructions` takes one
     // section, and each call no-ops on an empty one, so an instance with no
     // policy and no skill rows gets byte-identical instructions to before.
@@ -780,6 +800,13 @@ export class NeotomaServer {
               }
             : {}),
           available_skills: availableSkills,
+          ...(instanceSkillsLookupFailed
+            ? {
+                skills_unavailable: true,
+                skills_note:
+                  "Instance-stored skills could not be read for this session. An empty or filesystem-only available_skills here does NOT mean this instance has no skills — treat the instance's skills as unknown rather than absent, and say so rather than telling the user none exist.",
+              }
+            : {}),
         },
       },
       instructions,
