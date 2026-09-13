@@ -325,3 +325,27 @@ Keeping the recipes in sync with server response shapes (`structured.entities[].
 - `docs/developer/agent_instructions.md` — Index for canonical vs harness files
 - `docs/developer/agent_instructions_sync_rules.mdc` — Maintainer contract (canonical-first)
 - `src/server.ts` — Loads this file via `getMcpInteractionInstructions()`
+
+## Relationship type discovery and registration
+
+The vocabulary is instance data. Call `list_relationship_types` (CLI:
+`neotoma relationship-types list`) before using an unfamiliar edge type. If the
+meaning is absent, an authorized principal calls `register_relationship_type`
+(CLI: `neotoma relationship-types register --relationship-type knows --description
+"Explicit acquaintance"`). Registration defaults to user scope; global scope needs
+an explicit global permission in the registration grant. An absent grant is refused,
+including clients with no agent identity. Obtain a grant through the operator's
+normal grant-administration process; do not retry with wider scope.
+
+Refresh cached tool definitions after registration, verify the census includes the
+type, create the edge, and read it back with its type filter. Endpoint type hints,
+inverse and symmetry are advisory. Acyclic declarations are enforced on every edge
+creation surface and cannot be removed by re-registering metadata.
+
+To re-type the historical `related_to` + `metadata.relation="knows"` convention,
+register `knows`, list the old edges, and select only those with that exact metadata
+value. For each selected edge, create `knows` with the same endpoints and provenance
+metadata, read it back, then soft-delete the old edge. Do not delete the original
+before verification. Repeating the same endpoints/type is idempotent; unrelated
+`related_to` edges remain unchanged. This is an explicit consumer migration, never
+automatic registry side effect.

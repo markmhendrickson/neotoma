@@ -257,7 +257,10 @@ describe("CLI init interactive flows", () => {
         JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
       );
       await fs.writeFile(path.join(configuredRepoRoot, "src", "cli", "index.ts"), "// marker\n");
-      await writeCliConfig(homeDir, { project_root: configuredRepoRoot, repo_root: configuredRepoRoot });
+      await writeCliConfig(homeDir, {
+        project_root: configuredRepoRoot,
+        repo_root: configuredRepoRoot,
+      });
 
       await withTempCwd(async (cwd) => {
         await fs.writeFile(
@@ -299,7 +302,15 @@ describe("CLI init interactive flows", () => {
         const defaultCli = await loadCli();
         try {
           await expectExitZero(() =>
-            defaultCli.runCli(["node", "cli", "init", "--skip-db", "--skip-env", "--auth-mode", "dev_local"])
+            defaultCli.runCli([
+              "node",
+              "cli",
+              "init",
+              "--skip-db",
+              "--skip-env",
+              "--auth-mode",
+              "dev_local",
+            ])
           );
         } finally {
           restoreTty();
@@ -316,7 +327,15 @@ describe("CLI init interactive flows", () => {
         const advancedCli = await loadCli();
         try {
           await expectExitZero(() =>
-            advancedCli.runCli(["node", "cli", "init", "--advanced", "--skip-db", "--auth-mode", "dev_local"])
+            advancedCli.runCli([
+              "node",
+              "cli",
+              "init",
+              "--advanced",
+              "--skip-db",
+              "--auth-mode",
+              "dev_local",
+            ])
           );
         } finally {
           restoreTty();
@@ -324,10 +343,12 @@ describe("CLI init interactive flows", () => {
         expect(advancedFlow.prompts.join(" ")).toMatch(/Path to Neotoma source checkout/i);
         expect(advancedFlow.prompts.join(" ")).toMatch(/Apply MCP \+ CLI updates to:/i);
         expect(
-          advancedFlow.prompts.filter((prompt) => /Path to Neotoma source checkout/i.test(prompt)).length
+          advancedFlow.prompts.filter((prompt) => /Path to Neotoma source checkout/i.test(prompt))
+            .length
         ).toBe(1);
         expect(
-          advancedFlow.prompts.filter((prompt) => /Apply MCP \+ CLI updates to:/i.test(prompt)).length
+          advancedFlow.prompts.filter((prompt) => /Apply MCP \+ CLI updates to:/i.test(prompt))
+            .length
         ).toBe(1);
         const sourcePromptIndex = advancedFlow.prompts.findIndex((prompt) =>
           /Path to Neotoma source checkout/i.test(prompt)
@@ -350,7 +371,16 @@ describe("CLI init interactive flows", () => {
         const { runCli } = await loadCli();
         try {
           await expectExitZero(() =>
-            runCli(["node", "cli", "init", "--advanced", "--skip-db", "--skip-env", "--auth-mode", "dev_local"])
+            runCli([
+              "node",
+              "cli",
+              "init",
+              "--advanced",
+              "--skip-db",
+              "--skip-env",
+              "--auth-mode",
+              "dev_local",
+            ])
           );
         } finally {
           restoreTty();
@@ -372,13 +402,24 @@ describe("CLI init interactive flows", () => {
         const { runCli } = await loadCli();
         try {
           await expectExitZero(() =>
-            runCli(["node", "cli", "init", "--advanced", "--skip-db", "--skip-env", "--auth-mode", "dev_local"])
+            runCli([
+              "node",
+              "cli",
+              "init",
+              "--advanced",
+              "--skip-db",
+              "--skip-env",
+              "--auth-mode",
+              "dev_local",
+            ])
           );
         } finally {
           restoreTty();
         }
         const prompts = flow.prompts.join(" ");
-        expect(prompts).toMatch(/Configure MCP configuration \(add\/update MCP servers\)\? \[Y\/n\]:/i);
+        expect(prompts).toMatch(
+          /Configure MCP configuration \(add\/update MCP servers\)\? \[Y\/n\]:/i
+        );
       });
     });
   });
@@ -470,14 +511,7 @@ describe("CLI init interactive flows", () => {
         const { runCli } = await loadCli();
         try {
           await expectExitZero(() =>
-            runCli([
-              "node",
-              "cli",
-              "init",
-              "--skip-db",
-              "--openai-api-key",
-              "test-openai-key",
-            ])
+            runCli(["node", "cli", "init", "--skip-db", "--openai-api-key", "test-openai-key"])
           );
         } finally {
           restoreTty();
@@ -494,23 +528,33 @@ describe("CLI init interactive flows", () => {
   });
 
   it("prefers NEOTOMA_DATA_DIR from selected env file", async () => {
-    await withTempHome(async (homeDir) => {
-      const envDir = path.join(homeDir, ".config", "neotoma");
-      const envPath = path.join(envDir, ".env");
-      const configuredDataDir = path.join(homeDir, "Documents", "data");
-      await fs.mkdir(envDir, { recursive: true });
-      await fs.writeFile(envPath, `NEOTOMA_DATA_DIR=${configuredDataDir}\n`);
+    // This case deliberately exercises the user-level env fallback, against a
+    // synthetic HOME. A test-shaped process refuses that fallback by default
+    // (issue #2387), so opt in explicitly — the synthetic home holds no real data.
+    const previousAllow = process.env.NEOTOMA_ALLOW_USER_ENV_IN_TEST;
+    process.env.NEOTOMA_ALLOW_USER_ENV_IN_TEST = "1";
+    try {
+      await withTempHome(async (homeDir) => {
+        const envDir = path.join(homeDir, ".config", "neotoma");
+        const envPath = path.join(envDir, ".env");
+        const configuredDataDir = path.join(homeDir, "Documents", "data");
+        await fs.mkdir(envDir, { recursive: true });
+        await fs.writeFile(envPath, `NEOTOMA_DATA_DIR=${configuredDataDir}\n`);
 
-      const { resolveInitDataDirDefaults } = await loadCli();
-      const defaults = await resolveInitDataDirDefaults({
-        repoRoot: null,
-        envPath,
-        homeDir,
-        cwd: homeDir,
+        const { resolveInitDataDirDefaults } = await loadCli();
+        const defaults = await resolveInitDataDirDefaults({
+          repoRoot: null,
+          envPath,
+          homeDir,
+          cwd: homeDir,
+        });
+
+        expect(defaults.configuredEnvDataDir).toBe(configuredDataDir);
+        expect(defaults.defaultDataDir).toBe(configuredDataDir);
       });
-
-      expect(defaults.configuredEnvDataDir).toBe(configuredDataDir);
-      expect(defaults.defaultDataDir).toBe(configuredDataDir);
-    });
+    } finally {
+      if (previousAllow === undefined) delete process.env.NEOTOMA_ALLOW_USER_ENV_IN_TEST;
+      else process.env.NEOTOMA_ALLOW_USER_ENV_IN_TEST = previousAllow;
+    }
   });
 });

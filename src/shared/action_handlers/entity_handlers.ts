@@ -708,6 +708,22 @@ async function countVisibleEntities(params: {
   //     (services/entity_merge.ts steps 7 and 9).
   // So counting snapshot rows already excludes both, and the default listing —
   // what agents and apps actually issue — is a single COUNT(*).
+  //
+  // Known asymmetry with the PAGE path: getDeletedEntityIds
+  // (services/entity_queries.ts) separates "never-observed" (no snapshot row,
+  // but also no observation row — live) from "genuinely deleted" (no snapshot
+  // row AND a deletion observation) via a bounded existence probe against
+  // `observations`. This count does not do that probe, so a never-observed
+  // entity is excluded from the DEFAULT count while still appearing on the
+  // PAGE. Accepted per the same rationale documented on the filtered path
+  // below (#2267 review): both writers that create a bare `entities` row do so
+  // as a precursor to writing its first observation in the same flow, so the
+  // never-observed state is transient in production. Closing this gap would
+  // require the same bounded probe here, reintroducing per-request
+  // observation-log cost proportional to the unresolved-candidate count — the
+  // exact overhead this fix removes. Revisit if a write path is ever added
+  // that leaves entities in the never-observed state for longer than a single
+  // transaction.
   const countLiveSnapshots = () => {
     let q = db.from("entity_snapshots").select("entity_id", { count: "exact", head: true });
     q = q.eq("user_id", userId);

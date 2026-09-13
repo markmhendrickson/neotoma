@@ -22,6 +22,9 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { NeotomaServer } from "../../src/server.js";
+import { storeStructuredForApi } from "../../src/actions.js";
+import { BUILT_IN_RELATIONSHIP_TYPES } from "../../src/services/relationship_types/seed_registry.js";
 import { db } from "../../src/db.js";
 import { RelationshipsService } from "../../src/services/relationships.js";
 import {
@@ -139,8 +142,8 @@ describe("G25: relationship-type registration (#1972)", () => {
     }
   });
 
-  it("keeps the four canonical types working unchanged", async () => {
-    for (const relationshipType of ["DEPENDS_ON", "PART_OF", "REFERS_TO", "DUPLICATE_OF"]) {
+  it("keeps every seeded type working unchanged", async () => {
+    for (const { relationship_type: relationshipType } of BUILT_IN_RELATIONSHIP_TYPES) {
       const created = await service.createRelationship({
         relationship_type: relationshipType,
         source_entity_id: eid(),
@@ -148,6 +151,111 @@ describe("G25: relationship-type registration (#1972)", () => {
         user_id: TEST_USER,
       });
       expect(created.relationship_type).toBe(relationshipType);
+      const listed = await service.getRelationshipsByType(relationshipType, false, TEST_USER);
+      expect(listed.some((r) => r.relationship_key === created.relationship_key)).toBe(true);
+      await softDeleteRelationship(
+        created.relationship_key,
+        relationshipType,
+        created.source_entity_id,
+        created.target_entity_id,
+        TEST_USER
+      );
+      expect(
+        (await service.getRelationshipsByType(relationshipType, false, TEST_USER)).some(
+          (r) => r.relationship_key === created.relationship_key
+        )
+      ).toBe(false);
+      await restoreRelationship(
+        created.relationship_key,
+        relationshipType,
+        created.source_entity_id,
+        created.target_entity_id,
+        TEST_USER
+      );
+      expect(
+        (await service.getRelationshipsByType(relationshipType, false, TEST_USER)).some(
+          (r) => r.relationship_key === created.relationship_key
+        )
+      ).toBe(true);
     }
   });
+  it("isolates user registrations and exposes global registrations to both users", async () => {
+    const other = "00000000-0000-0000-0000-0000000a2503";
+    await relationshipTypeRegistry.register({
+      relationship_type: "g25_private",
+      user_id: TEST_USER,
+    });
+    expect(await relationshipTypeRegistry.get("g25_private", TEST_USER)).not.toBeNull();
+    expect(await relationshipTypeRegistry.get("g25_private", other)).toBeNull();
+    await relationshipTypeRegistry.register({
+      relationship_type: "knows",
+      scope: "global",
+      created_by: TEST_USER,
+    });
+    expect(await relationshipTypeRegistry.get("knows", TEST_USER)).not.toBeNull();
+    expect(await relationshipTypeRegistry.get("knows", other)).not.toBeNull();
+    expect(
+      (
+        await service.createRelationship({
+          relationship_type: "knows",
+          source_entity_id: eid(),
+          target_entity_id: eid(),
+          user_id: TEST_USER,
+        })
+      ).relationship_type
+    ).toBe("knows");
+  });
+
+  it.each(["mcp", "rest"])(
+    "stores all thirteen registered types through %s and refuses unknown types before persistence",
+    async (surface) => {
+      const server = new NeotomaServer();
+      (server as any).authenticatedUserId = TEST_USER;
+      const store = (entities: Record<string, unknown>[], relationships: any[], key: string) =>
+        surface === "mcp"
+          ? (server as any).store({ entities, relationships, idempotency_key: key })
+          : storeStructuredForApi({
+              userId: TEST_USER,
+              entities,
+              relationships,
+              idempotencyKey: key,
+              sourcePriority: 100,
+            });
+      for (const type of STAGE_ONE_TYPES) {
+        const source = eid(),
+          target = eid();
+        await store(
+          [{ entity_type: "task", title: `g25-${surface}-${type}` }],
+          [{ relationship_type: type, source_entity_id: source, target_entity_id: target }],
+          `g25-${process.pid}-${surface}-${type}`
+        );
+        expect(
+          (await service.getRelationshipsByType(type, false, TEST_USER)).some(
+            (r) => r.source_entity_id === source && r.target_entity_id === target
+          )
+        ).toBe(true);
+      }
+      const before = await db
+        .from("entities")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", TEST_USER);
+      expect(before.error).toBeNull();
+      await expect(
+        store(
+          [{ entity_type: "task", title: `g25-refused-${surface}` }],
+          [{ relationship_type: "G25_UNKNOWN_TYPE", source_index: 0, target_entity_id: eid() }],
+          `g25-refused-${process.pid}-${surface}`
+        )
+      ).rejects.toMatchObject({
+        code: "unregistered_relationship_type",
+        hint: expect.stringContaining("list_relationship_types"),
+      });
+      const after = await db
+        .from("entities")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", TEST_USER);
+      expect(after.error).toBeNull();
+      expect(after.count).toBe(before.count);
+    }
+  );
 });

@@ -3,6 +3,8 @@
 # Keys must match tool names in server.ts. Parameter descriptions remain in code.
 
 tools:
+  list_relationship_types: "Discover the registered relationship vocabulary visible to the authenticated user, including types with no edges. Read this before writing an unfamiliar edge. Registration metadata is advisory except acyclic, which is enforced."
+  register_relationship_type: "Register a relationship type after discovering the vocabulary with list_relationship_types. Requires an active grant with register_relationship_type and relationship_types permission; global scope additionally needs explicit global permission. Defaults to user scope. Refresh cached tool definitions after registration, then write the edge and read it back."
   retrieve_file_url: "Retrieve a signed URL for accessing a file"
   retrieve_entity_snapshot: "Retrieve the current snapshot of an entity with provenance information. Supports historical snapshots via 'at' parameter."
   list_observations: "List all observations for a given entity"

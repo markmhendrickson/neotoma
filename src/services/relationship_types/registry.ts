@@ -300,6 +300,17 @@ export class RelationshipTypeRegistryService {
       }
     }
 
+    // Tenant metadata must never remove a global structural protection. Also
+    // preserve an existing local protection when re-registering metadata.
+    const global = (await this.resolveAll()).find((r) => r.relationship_type === relationshipType);
+    if ((exact?.acyclic === true || global?.acyclic === true) && params.acyclic !== true) {
+      throw new RelationshipTypeRegistrationError({
+        code: "relationship_type_protection_narrowing",
+        message: `Cannot remove acyclic protection from "${relationshipType}".`,
+        hint: "Preserve acyclic: true when re-registering this relationship type.",
+      });
+    }
+
     const definition: RelationshipTypeDefinition = {
       ...(params.description !== undefined ? { description: params.description } : {}),
       ...(params.source_entity_types ? { source_entity_types: params.source_entity_types } : {}),
@@ -359,16 +370,23 @@ export class RelationshipTypeRegistryService {
    * resolvable by user B; a global type is resolvable by both.
    */
   private async resolveAll(userId?: string): Promise<RelationshipTypeRegistration[]> {
-    const base = db
+    const columns =
+      "id, relationship_type, registry_version, definition, state, created_at, created_by, user_id, scope, metadata";
+    // Separate parameterized queries also work on SQLite, whose OR grammar
+    // does not implement nested PostgREST and(). Never interpolate tenant IDs.
+    const globalRows = await db
       .from(RELATIONSHIP_TYPE_REGISTRY_TABLE)
-      .select(
-        "id, relationship_type, registry_version, definition, state, created_at, created_by, user_id, scope, metadata"
-      );
-    const query = userId
-      ? base.or(`scope.eq.global,and(scope.eq.user,user_id.eq.${userId})`)
-      : base.eq("scope", "global");
-
-    const { data, error } = await query;
+      .select(columns)
+      .eq("scope", "global");
+    const userRows = userId
+      ? await db
+          .from(RELATIONSHIP_TYPE_REGISTRY_TABLE)
+          .select(columns)
+          .eq("scope", "user")
+          .eq("user_id", userId)
+      : { data: [], error: null };
+    const data = [...(globalRows.data ?? []), ...(userRows.data ?? [])];
+    const error = globalRows.error ?? userRows.error;
     if (error) {
       throw new RelationshipTypeRegistrationError({
         code: "relationship_type_registry_unavailable",
