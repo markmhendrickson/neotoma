@@ -84,6 +84,11 @@ import {
   type SessionOriginInfo,
 } from "./services/session_info.js";
 import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
+import {
+  getInstanceSkills,
+  renderInstanceSkillsSection,
+  type InstanceSkill,
+} from "./services/skills/instance_skills.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
@@ -316,8 +321,13 @@ export class NeotomaServer {
    * separate discovery round-trip.
    *
    * Returns an empty array when the `skills/` directory is absent (e.g. in
-   * development checkouts that have not yet staged skill assets, or in test
-   * environments with stripped package layouts).
+   * development checkouts that have not yet staged skill assets, in test
+   * environments with stripped package layouts, or on a hosted instance whose
+   * skills live in the graph rather than on disk).
+   *
+   * This is only one of two skill sources. Graph-stored `skill` entities are
+   * read separately by `getInstanceSkills()` and unioned with this list in
+   * {@link buildAuthenticatedInitializeResponse} (issue #2046).
    */
   private getAvailableSkills(): string[] {
     const roots = [config.projectRoot, resolveNeotomaPackageRoot()];
@@ -699,7 +709,9 @@ export class NeotomaServer {
     } catch (err) {
       logger.warn(`[instance_policy] instructions render skipped: ${(err as Error).message}`);
     }
-    const instructions = composeClientInstructions(baseInstructions, policySection);
+    // Deferred until the instance-skills section is rendered below, so both
+    // appended sections compose through the same helper rather than one going
+    // through it and the other being concatenated on afterwards.
 
     // Load standing rules for the authenticated user and inject them so agents
     // apply them from the first turn of the session (issue #184).
@@ -715,7 +727,34 @@ export class NeotomaServer {
       standingRulesLookupFailed = result.lookup_failed;
     }
 
-    const availableSkills = this.getAvailableSkills();
+    // Skills reach agents two ways: mirrored to a local skills directory, or
+    // stored in the graph as `skill` rows. A hosted instance has only the
+    // latter, so the filesystem scan alone leaves MCP-only clients unable to
+    // discover any skill the instance holds (issue #2046). Union both sources
+    // so either deployment shape surfaces its skills.
+    let instanceSkills: InstanceSkill[] = [];
+    if (this.authenticatedUserId) {
+      instanceSkills = await getInstanceSkills(this.authenticatedUserId);
+    }
+
+    const filesystemSkills = this.getAvailableSkills();
+    const availableSkills = Array.from(
+      new Set([...filesystemSkills, ...instanceSkills.map((s) => s.name)])
+    ).sort();
+
+    // An instance with no skill rows is a complete no-op: the renderer returns
+    // null and the instructions block is left exactly as it was.
+    const skillsSection = renderInstanceSkillsSection(
+      instanceSkills,
+      config.mcpCompactInstructions
+    );
+    // Nested rather than variadic: `composeClientInstructions` takes one
+    // section, and each call no-ops on an empty one, so an instance with no
+    // policy and no skill rows gets byte-identical instructions to before.
+    const instructions = composeClientInstructions(
+      composeClientInstructions(baseInstructions, policySection),
+      skillsSection
+    );
 
     return {
       protocolVersion: "2025-11-25",
