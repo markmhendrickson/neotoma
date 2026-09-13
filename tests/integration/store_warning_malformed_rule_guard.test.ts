@@ -33,7 +33,7 @@
  * malformed-schema payload. See the "cross-surface parity" describe block.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
@@ -46,6 +46,7 @@ import { NeotomaClient } from "../../packages/client/src/index.js";
 import type { StoreInput, StoreResult } from "../../packages/client/src/index.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { db } from "../../src/db.js";
+import { logger } from "../../src/utils/logger.js";
 import { cleanupEntityType, cleanupTestSchema } from "../helpers/cleanup_helpers.js";
 
 const execAsync = promisify(exec);
@@ -1306,7 +1307,10 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
     it("src/actions.ts: a malformed rule is skipped (continue), not merely logged", () => {
       const loop = extractStoreWarningsLoop(actionsSource);
       const guardIndex = loop.indexOf("Array.isArray(rule.fields)");
-      const nextBraceRegion = loop.slice(guardIndex, guardIndex + 400);
+      const nextBraceRegion = loop.slice(
+        guardIndex,
+        loop.indexOf("const hasIdentityField", guardIndex)
+      );
       expect(
         nextBraceRegion.includes("continue"),
         "the malformed-rule branch must `continue` past the `.some(` call, not merely warn and fall through into it"
@@ -1331,7 +1335,10 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
     it("src/server.ts: a malformed rule is skipped (continue), not merely logged (MCP path)", () => {
       const loop = extractStoreWarningsLoop(serverSource);
       const guardIndex = loop.indexOf("Array.isArray(rule.fields)");
-      const nextBraceRegion = loop.slice(guardIndex, guardIndex + 400);
+      const nextBraceRegion = loop.slice(
+        guardIndex,
+        loop.indexOf("const hasIdentityField", guardIndex)
+      );
       expect(
         nextBraceRegion.includes("continue"),
         "the malformed-rule branch must `continue` past the `.some(` call, not merely warn and fall through into it"
@@ -1630,4 +1637,95 @@ describe("store_warnings malformed-rule guard (issue: skill store 500)", () => {
       }
     });
   });
+});
+
+describe("legacy store warning metadata validation", () => {
+  const types: string[] = [];
+  afterEach(() => vi.restoreAllMocks());
+  afterAll(async () => {
+    for (const type of types) {
+      await cleanupEntityType(type, TEST_USER_ID);
+      await cleanupTestSchema(type, TEST_USER_ID);
+    }
+  });
+  const validRule = { code: "VALID_CONTROL", fields: ["content"], message: "content absent" };
+  for (const [label, invalidRule] of [
+    ["advisory_exception", { code: "IGNORED", message: "legacy" }],
+    ["field", { code: "INVALID_FIELD", fields: [7], message: "invalid field" }],
+    ["code", { code: 7, fields: ["content"], message: "invalid code" }],
+    ["message", { code: "INVALID_MESSAGE", fields: ["content"], message: 7 }],
+  ] as const) {
+    for (const surface of ["API", "MCP"] as const) {
+      it(
+        label === "advisory_exception"
+          ? `${surface} contains an advisory exception after commit`
+          : `${surface} skips invalid ${label} metadata and preserves a valid later warning`,
+        async () => {
+          const type = `sw_metadata_${label}_${surface.toLowerCase()}_${Date.now()}`;
+          types.push(type);
+          await schemaRegistry.register({
+            entity_type: type,
+            schema_version: "1.0.0",
+            schema_definition: {
+              fields: { name: { type: "string" }, content: { type: "string" } },
+              canonical_name_fields: ["name"],
+            },
+            reducer_config: { merge_policies: {} },
+            user_id: TEST_USER_ID,
+            user_specific: true,
+            activate: true,
+          });
+          await injectStoreWarningsPastValidator(type, [invalidRule, validRule]);
+          const reloaded = await schemaRegistry.loadActiveSchema(type, TEST_USER_ID);
+          expect(reloaded?.schema_definition.store_warnings).toEqual([invalidRule, validRule]);
+          if (label === "advisory_exception") {
+            const originalWarn = logger.warn.bind(logger);
+            vi.spyOn(logger, "warn").mockImplementation((message, ...args) => {
+              if (String(message).startsWith("[store] Skipping malformed store_warnings rule")) {
+                throw new Error("synthetic advisory fault");
+              }
+              return originalWarn(message, ...args);
+            });
+          }
+          const name = `metadata-${randomUUID()}`;
+          const entities = [{ entity_type: type, name }];
+          let result: {
+            entities: Array<{ entity_id?: string; id?: string }>;
+            store_warnings?: Array<{ code: string; message: string }>;
+          };
+          if (surface === "API") {
+            result = await storeStructuredForApi({
+              userId: TEST_USER_ID,
+              entities,
+              sourcePriority: 100,
+              idempotencyKey: randomUUID(),
+            });
+          } else {
+            const server = new NeotomaServer();
+            (server as unknown as Record<string, unknown>).authenticatedUserId = TEST_USER_ID;
+            const response = await (
+              server as unknown as {
+                store: (
+                  p: Record<string, unknown>
+                ) => Promise<{ content: Array<{ text: string }> }>;
+              }
+            ).store({ entities, idempotency_key: randomUUID() });
+            result = JSON.parse(response.content[0]!.text);
+          }
+          const id = result.entities[0]?.entity_id ?? result.entities[0]?.id;
+          expect(id).toBeTruthy();
+          expect(await readSnapshotFields(id!)).toMatchObject({ name });
+          if (label !== "advisory_exception")
+            expect(result.store_warnings).toContainEqual(
+              expect.objectContaining({ code: validRule.code, message: validRule.message })
+            );
+          expect(
+            (result.store_warnings ?? []).filter((warning) =>
+              [7, "INVALID_FIELD", "INVALID_MESSAGE"].includes(warning.code)
+            )
+          ).toEqual([]);
+        }
+      );
+    }
+  }
 });

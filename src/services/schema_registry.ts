@@ -1547,7 +1547,7 @@ export class SchemaRegistryService {
           ) {
             console.warn(
               `[schema_registry] updateSchemaIncremental: dropping malformed store_warnings ` +
-                `rule (code: ${(rule as { code?: unknown } | null)?.code ?? "unknown"}) carried ` +
+                `rule (code: ${typeof rule?.code === "string" ? rule.code : "unknown"}) carried ` +
                 `forward from entity_type "${options.entity_type}". It could not be evaluated ` +
                 `at store time either; re-declare it as { code, fields, message }.`
             );

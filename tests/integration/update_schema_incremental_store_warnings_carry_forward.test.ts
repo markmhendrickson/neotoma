@@ -23,7 +23,7 @@
  * model a legacy row written before the validator existed. Same technique as
  * tests/integration/update_schema_incremental_envelope.test.ts.
  */
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 
@@ -69,6 +69,26 @@ function addUnrelatedField(entityType: string) {
 }
 
 describe("updateSchemaIncremental carries a malformed store_warnings forward safely", () => {
+  it("uses a safe diagnostic label for rejected non-string code metadata", async () => {
+    const type = `sw_carry_diagnostic_${STAMP}`;
+    ALL_TYPES.push(type);
+    await insertLegacySchema(type, [{ code: 7, message: "invalid legacy metadata" }]);
+    const before = await schemaRegistry.loadActiveSchema(type);
+    expect(before?.schema_definition.store_warnings).toEqual([
+      { code: 7, message: "invalid legacy metadata" },
+    ]);
+    const warn = vi.spyOn(console, "warn");
+    try {
+      await addUnrelatedField(type);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("rule (code: unknown)"));
+      const after = await schemaRegistry.loadActiveSchema(type);
+      expect(after?.schema_definition.fields).toHaveProperty("summary");
+      expect(after?.schema_definition.store_warnings).toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   afterAll(async () => {
     for (const t of ALL_TYPES) {
       await db.from("schema_registry").delete().eq("entity_type", t);

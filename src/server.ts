@@ -6541,51 +6541,46 @@ export class NeotomaServer {
       }
       const schemaDef = schemaEntry?.schema_definition;
       const storeWarningRules = schemaDef?.store_warnings;
-      if (storeWarningRules?.length) {
-        for (const rule of storeWarningRules) {
-          // A store_warnings rule fires when none of its `fields` are present.
-          // Guard against a malformed rule (no `fields` array, e.g. a legacy
-          // `condition`-shaped entry): it cannot evaluate "missing identity
-          // field", so skip it rather than throwing on `undefined.some`.
-          //
-          // The `rule` null/undefined check must come FIRST. `rule.fields` is
-          // dereferenced on `rule` itself as the first sub-expression, so a
-          // `null` or `undefined` rule throws
-          // `TypeError: Cannot read properties of null (reading 'fields')`
-          // before `Array.isArray` can protect anything — the same crash class
-          // this guard exists to close. Only `null`/`undefined` throw here:
-          // a primitive such as `123` coerces safely and `Array.isArray`
-          // already skips it, so the risk is specifically nullish, not "any
-          // non-object".
-          //
-          // Follow-up (Neotoma issue ent_93ef2baa28951b8d331641e3): migrate
-          // the offending schema's DB store_warnings rule to the canonical
-          // `fields`-shaped form so it stops being silently skipped here.
-          if (
-            !rule ||
-            typeof rule !== "object" ||
-            !Array.isArray(rule.fields) ||
-            rule.fields.length === 0
-          ) {
-            logger.warn(
-              `[store] Skipping malformed store_warnings rule (no fields array): entity_type=${e.entityType} code=${rule?.code ?? "unknown"}`
+      try {
+        if (Array.isArray(storeWarningRules) && storeWarningRules.length > 0) {
+          for (const rule of storeWarningRules) {
+            // Legacy rows predate registration-time validation. Check the complete
+            // canonical shape before evaluating an advisory or emitting metadata.
+            // Keep the nullish check first: reading rule.fields can itself throw.
+            // Schema migration remains a separate follow-up to issue #2165.
+            if (
+              !rule ||
+              typeof rule !== "object" ||
+              !Array.isArray(rule.fields) ||
+              rule.fields.length === 0 ||
+              rule.fields.some((field) => typeof field !== "string") ||
+              typeof rule.code !== "string" ||
+              typeof rule.message !== "string"
+            ) {
+              logger.warn(
+                `[store] Skipping malformed store_warnings rule: entity_type=${e.entityType} code=${typeof rule?.code === "string" ? rule.code : "unknown"}`
+              );
+              continue;
+            }
+            const hasIdentityField = rule.fields.some(
+              (f) =>
+                entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
             );
-            continue;
-          }
-          const hasIdentityField = rule.fields.some(
-            (f) =>
-              entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
-          );
-          if (!hasIdentityField) {
-            schemaStoreWarnings.push({
-              code: rule.code,
-              message: rule.message,
-              observation_index: i,
-              entity_type: e.entityType,
-              entity_id: e.entityId,
-            });
+            if (!hasIdentityField) {
+              schemaStoreWarnings.push({
+                code: rule.code,
+                message: rule.message,
+                observation_index: i,
+                entity_type: e.entityType,
+                entity_id: e.entityId,
+              });
+            }
           }
         }
+      } catch {
+        // A schema advisory must never turn an already committed store into an error.
+        // Do not interpolate the rejected schema value or exception into diagnostics.
+        logger.warn("[store] Skipping store_warnings evaluation after an advisory failure");
       }
 
       // Schema-driven content_field warning: when a schema declares

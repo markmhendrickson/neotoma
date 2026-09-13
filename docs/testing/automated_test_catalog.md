@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **608**
-- Backend and repo Vitest files: **573**
+- Total automated test files: **609**
+- Backend and repo Vitest files: **574**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 167 |
 | Vitest service tests | 45 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 173 |
+| Vitest integration tests | 174 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 19 |
 | Vitest security tests | 9 |
@@ -408,7 +408,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (173):**
+**Files (174):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -580,6 +580,7 @@ flowchart TD
 - `tests/integration/turn_summary.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
 - `tests/integration/update_schema_incremental_envelope.test.ts`
+- `tests/integration/update_schema_incremental_store_warnings_carry_forward.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 - `tests/integration/wellknown_discovery_unauthenticated.test.ts`
 
