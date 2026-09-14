@@ -77,6 +77,26 @@ async function createEntity(server: TestServer, label: string): Promise<string> 
   return entityId;
 }
 
+async function cleanupEntity(entityId: string): Promise<void> {
+  const { data: observations } = await db
+    .from("observations")
+    .select("source_id")
+    .eq("entity_id", entityId);
+  const sourceIds = Array.from(
+    new Set(
+      (observations ?? [])
+        .map((row: { source_id?: string | null }) => row.source_id)
+        .filter((value: unknown): value is string => typeof value === "string")
+    )
+  );
+  await db.from("timeline_events").delete().eq("entity_id", entityId);
+  await db.from("entity_snapshots").delete().eq("entity_id", entityId);
+  await db.from("raw_fragments").delete().eq("entity_id", entityId);
+  await db.from("observations").delete().eq("entity_id", entityId);
+  await db.from("entities").delete().eq("id", entityId);
+  if (sourceIds.length > 0) await db.from("sources").delete().in("id", sourceIds);
+}
+
 async function cleanupType(): Promise<void> {
   const { data: entities } = await db
     .from("entities")
@@ -178,6 +198,55 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
     expect(snap.snapshot.notes).toBe("checkpoint two");
     expect(typeof snap.provenance.notes).toBe("string");
     expect(snap.provenance.notes).not.toHaveLength(0);
+  });
+
+  it("built-in task notes and description use the shipped correction policy", async () => {
+    const title = `Built-in task scalar correction ${randomUUID()}`;
+    const stored = parse(
+      await server.store({
+        user_id: USER_ID,
+        idempotency_key: `task-seed-${randomUUID()}`,
+        commit: true,
+        entities: [
+          {
+            entity_type: "task",
+            schema_version: "1.0",
+            title,
+            status: "in_progress",
+            notes: "initial task notes",
+            description: "initial task description",
+          },
+        ],
+      })
+    );
+    const entityId = stored.entities?.[0]?.entity_id;
+    expect(typeof entityId).toBe("string");
+
+    try {
+      for (const field of ["notes", "description"] as const) {
+        const values = [`first task ${field}`, `second task ${field}`];
+        let secondObservationId = "";
+        for (const [index, value] of values.entries()) {
+          const correction = parse(
+            await server.correct({
+              user_id: USER_ID,
+              entity_id: entityId,
+              entity_type: "task",
+              field,
+              value,
+              idempotency_key: `task-${field}-${index}-${randomUUID()}`,
+            })
+          );
+          if (index === 1) secondObservationId = correction.observation_id;
+        }
+
+        const snap = await snapshot(server, entityId);
+        expect(snap.snapshot[field]).toBe(values[1]);
+        expect(snap.provenance[field]).toBe(secondObservationId);
+      }
+    } finally {
+      await cleanupEntity(entityId);
+    }
   });
 
   it("REST /correct readback returns the second same-priority scalar correction", async () => {
