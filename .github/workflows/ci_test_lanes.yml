@@ -138,6 +138,14 @@ jobs:
       - name: Run cross-surface contract-parity integration tests
         run: npm run test:contract-parity
 
+      # #2046 instance-skill MCP initialize effect regression. The service has
+      # unit coverage, but that can mock away backend-driver SQL mistakes. This
+      # integration test seeds real rows and drives MCP initialize through the
+      # built server so the PR lane fails if stored enabled skills do not reach
+      # the agent-visible initialize payload.
+      - name: Run instance-skill initialize effect regression (#2046)
+        run: npx vitest run --no-file-parallelism tests/integration/instance_skills_initialize_effect.test.ts
+
       # Concurrent-backend (PR #1944) effect-verified regressions. These two
       # tests existed but ran in NO PR lane (test:unit excludes tests/integration
       # and tests/scripts; only a hand-picked contract-parity subset ran here),
