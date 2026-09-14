@@ -70,3 +70,108 @@ tools:
   get_issue_status: "Return issue status and thread messages. Provide entity_id or issue_number (issue_number is an integer). Pass guest_access_token when token-scoped remote read-through is needed."
   npm_check_update: "Check if a newer npm version is available. Returns updateAvailable, message, suggestedCommand, and when include_release_notes is true optional release_url, release_notes_excerpt, breaking_changes_excerpt, enrichment_error. When include_capability_delta is true, adds new_tools (tools added since currentVersion), removed_tools (tools removed since currentVersion), capability_delta_recommendation (upgrade guidance string), and capability_delta_note (present ONLY when delta computation degraded — e.g. unparseable versions or missing manifest — its absence signals no degradation). Call at session start to encourage user to upgrade."
   neotoma_turn_summary: "FU-2026-05-002. Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
+
+# Required for every MCP tool. `read` has no persistence or egress; `write`
+# changes Neotoma state; `external` can contact or publish beyond this instance.
+# The server derives protocol annotations from this catalog. New tool registrations
+# must add a class here or tools/list and the server card fail closed at startup.
+effect_classes:
+  retrieve_file_url: read
+  retrieve_entity_snapshot: read
+  list_observations: read
+  retrieve_field_provenance: read
+  create_relationship: write
+  create_relationships: write
+  list_relationships: read
+  query_contacts_at_company: read
+  get_relationship_snapshot: read
+  retrieve_entities: read
+  list_timeline_events: read
+  retrieve_entity_by_identifier: read
+  identify_entity_by_signals: read
+  retrieve_related_entities: read
+  retrieve_graph_neighborhood: read
+  store: write
+  parse_file: read
+  correct: write
+  merge_entities: write
+  split_entity: write
+  list_potential_duplicates: read
+  delete_entity: write
+  delete_relationship: write
+  restore_entity: write
+  restore_relationship: write
+  get_entity_type_counts: read
+  list_entity_types: read
+  describe_entity_type: read
+  describe_instance_policy: read
+  analyze_schema_candidates: read
+  audit_undeclared_fragments: read
+  get_schema_recommendations: read
+  update_schema_incremental: write
+  register_schema: write
+  create_interpretation: write
+  list_interpretations: read
+  get_authenticated_user: read
+  get_session_identity: read
+  health_check_snapshots: read
+  list_recent_changes: read
+  submit_issue: external
+  add_issue_message: external
+  get_issue_status: external
+  sync_issues: external
+  submit_entity: write
+  add_entity_message: write
+  get_entity_submission_status: external
+  list_entity_submissions: read
+  sync_entity_submissions: external
+  subscribe: external
+  unsubscribe: write
+  list_subscriptions: read
+  get_subscription_status: read
+  add_peer: external
+  remove_peer: write
+  list_peers: read
+  get_peer_status: external
+  sync_peer: external
+  resolve_sync_conflict: write
+  npm_check_update: external
+  neotoma_turn_summary: read
+  publish_rendered_page: external
+  manage_bundles: write
+
+# The protocol defaults for a mutating or external tool are deliberately
+# restrictive. These overrides only make a narrower, handler-backed claim.
+annotation_overrides:
+  create_relationship:
+    destructiveHint: false
+  create_relationships:
+    destructiveHint: false
+  store:
+    destructiveHint: false
+  correct:
+    destructiveHint: false
+  restore_entity:
+    destructiveHint: false
+  restore_relationship:
+    destructiveHint: false
+  create_interpretation:
+    destructiveHint: false
+  submit_entity:
+    destructiveHint: false
+  add_entity_message:
+    destructiveHint: false
+  subscribe:
+    destructiveHint: false
+  add_peer:
+    destructiveHint: false
+  publish_rendered_page:
+    destructiveHint: false
+  get_issue_status:
+    readOnlyHint: true
+  get_entity_submission_status:
+    readOnlyHint: true
+  get_peer_status:
+    readOnlyHint: true
+  npm_check_update:
+    readOnlyHint: true

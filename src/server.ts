@@ -17,13 +17,13 @@ import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
-import { buildToolDefinitions } from "./tool_definitions.js";
+import { buildToolDefinitions, NEOTOMA_TOOL_NAMES } from "./tool_definitions.js";
+import { loadToolEffectCatalog, type ToolEffectCatalog } from "./shared/tool_effect_catalog.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
@@ -217,8 +217,9 @@ export class NeotomaServer {
   /** Browser app origin resolved by HTTP transport or explicit public URL config. */
   private sessionAppOrigin: string | null = null;
   private sessionAppOriginSource: SessionOriginInfo["source"] | null = null;
-  /** Tool descriptions loaded from docs/developer/mcp/tool_descriptions.yaml; empty Map if file missing */
+  /** Catalog-derived tool descriptions and risk metadata. Missing/invalid entries stop startup. */
   private toolDescriptions: Map<string, string> = new Map();
+  private toolEffectCatalog!: ToolEffectCatalog;
   /** In-memory cache for npm registry dist-tags: key = "packageName:distTag", value = { version, until } */
   private registryCache = new Map<string, { version: string; until: number }>();
   private static REGISTRY_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -240,7 +241,11 @@ export class NeotomaServer {
       }
     );
 
-    this.toolDescriptions = this.loadToolDescriptionsMap();
+    this.toolEffectCatalog = loadToolEffectCatalog(
+      join(this.mcpDocsPath(), "tool_descriptions.yaml"),
+      NEOTOMA_TOOL_NAMES
+    );
+    this.toolDescriptions = this.toolEffectCatalog.descriptions;
     this.setupInitializeHandler();
     this.setupToolHandlers();
     this.setupResourceHandlers();
@@ -291,20 +296,6 @@ export class NeotomaServer {
       // File missing or unreadable; use fallback
     }
     return fallback;
-  }
-
-  private loadToolDescriptionsMap(): Map<string, string> {
-    const path = join(this.mcpDocsPath(), "tool_descriptions.yaml");
-    try {
-      const raw = readFileSync(path, "utf-8");
-      const data = yaml.load(raw) as { tools?: Record<string, string> } | undefined;
-      if (data?.tools && typeof data.tools === "object") {
-        return new Map(Object.entries(data.tools));
-      }
-    } catch {
-      // File missing or invalid; use empty Map so tools keep inline descriptions
-    }
-    return new Map();
   }
 
   /**
@@ -1900,7 +1891,8 @@ export class NeotomaServer {
         tools: buildToolDefinitions(
           this.toolDescriptions,
           TIMELINE_WIDGET_RESOURCE_URI,
-          TURN_SUMMARY_WIDGET_RESOURCE_URI
+          TURN_SUMMARY_WIDGET_RESOURCE_URI,
+          this.toolEffectCatalog
         ).map((def) => ({
           name: def.name,
           description: def.description,
