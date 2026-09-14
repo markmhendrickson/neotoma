@@ -1936,6 +1936,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/corrections/transaction": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Atomically compare and correct multiple entities
+     * @description Append declared-field corrections in one scoped database transaction.
+     *     Every entity's type, observation count and expected snapshot fields must
+     *     match inside the write transaction. Any validation, policy, write or
+     *     read-back failure rolls back all changes. Reuse the identical request
+     *     and idempotency key after uncertainty; changed payload reuse conflicts.
+     *     This primitive does not decide or authorize application-level approval.
+     */
+    post: operations["correctTransaction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/correct": {
     parameters: {
       query?: never;
@@ -8087,6 +8112,115 @@ export interface operations {
             /** @description Non-blocking warnings about entity type naming anti-patterns (redundant suffixes, non-snake_case, overly generic names, etc.). Registration succeeds even when warnings are present. */
             name_lint_warnings: string[];
           };
+        };
+      };
+    };
+  };
+  correctTransaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          user_id?: string;
+          idempotency_key: string;
+          entities: {
+            entity_id: string;
+            entity_type: string;
+            expected_observation_count: number;
+            /** @description Declared expected values; missing differs from null. Observation count guards the whole entity. */
+            expected_snapshot: {
+              [key: string]: unknown;
+            };
+            changes: {
+              field: string;
+              value: unknown;
+            }[];
+          }[];
+        };
+      };
+    };
+    responses: {
+      /** @description Committed atomically, or identical request already committed. Snapshots reflect current stored state on replay. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {string} */
+            status: "applied" | "replayed";
+            entities: ({
+              entity_id: string;
+              entity_type: string;
+              snapshot: {
+                [key: string]: unknown;
+              };
+              observation_count: number;
+            } & {
+              [key: string]: unknown;
+            })[];
+          };
+        };
+      };
+      /** @description Invalid transaction, undeclared fields or instance policy denial; nothing committed. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["ErrorEnvelope"]
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"];
+        };
+      };
+      /** @description Authentication required. */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Calling agent capability, attribution or protected-type policy disallows a correction. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description A transaction target is unavailable in the authenticated graph. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Stale precondition, changed idempotency payload or snapshot mismatch; no new changes committed. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Transaction failed and was rolled back. */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

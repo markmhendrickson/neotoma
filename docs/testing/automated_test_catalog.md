@@ -61,17 +61,17 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **606**
-- Backend and repo Vitest files: **571**
+- Total automated test files: **608**
+- Backend and repo Vitest files: **573**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 167 |
+| Vitest unit tests | 168 |
 | Vitest service tests | 44 |
-| Source-adjacent tests | 66 |
+| Source-adjacent tests | 67 |
 | Vitest integration tests | 172 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 19 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (167):**
+**Files (168):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -157,6 +157,7 @@ flowchart TD
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/conversation_session_uuid_bridge.test.ts`
+- `tests/unit/correction_transaction_error_parity.test.ts`
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
@@ -334,7 +335,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (66):**
+**Files (67):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -363,6 +364,7 @@ flowchart TD
 - `src/services/canonical_mirror_git.test.ts`
 - `src/services/canonical_mirror.test.ts`
 - `src/services/capability_delta.test.ts`
+- `src/services/correction_transaction.test.ts`
 - `src/services/docs/doc_frontmatter.test.ts`
 - `src/services/docs/docs_root.test.ts`
 - `src/services/docs/index_builder.test.ts`
