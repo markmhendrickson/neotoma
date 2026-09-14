@@ -63,6 +63,22 @@ function rankForObservationSource(
   return r === undefined ? Number.MAX_SAFE_INTEGER : r;
 }
 
+function timestampMs(value: string | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+}
+
+function compareObservationRecencyThenId(a: Observation, b: Observation): number {
+  const observedDelta = timestampMs(b.observed_at) - timestampMs(a.observed_at);
+  if (observedDelta !== 0) return observedDelta;
+
+  const createdDelta = timestampMs(b.created_at) - timestampMs(a.created_at);
+  if (createdDelta !== 0) return createdDelta;
+
+  return a.id.localeCompare(b.id);
+}
+
 export interface EntitySnapshot {
   entity_id: string;
   entity_type: string;
@@ -348,12 +364,13 @@ export class ObservationReducer {
       const rankA = rankForObservationSource(a, observationSourceRank);
       const rankB = rankForObservationSource(b, observationSourceRank);
       if (rankA !== rankB) return rankA - rankB;
-      // Tie breaker
-      if (tieBreaker === "observed_at") {
-        return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-      }
-      // source_priority is already the primary sort, so just use id
-      return a.id.localeCompare(b.id);
+      // Same numeric priority and source-kind tier: fall through to recency.
+      // `tie_breaker: "source_priority"` is retained for compatibility with
+      // existing schemas where source_priority is the declared trust axis; once
+      // the primary priority comparison ties, repeated ordinary corrections at
+      // that same tier still express replacement intent, so the newer write
+      // must win before the final stable id fallback.
+      return compareObservationRecencyThenId(a, b);
     });
 
     return {
@@ -390,8 +407,8 @@ export class ObservationReducer {
       const rankA = rankForObservationSource(a, observationSourceRank);
       const rankB = rankForObservationSource(b, observationSourceRank);
       if (rankA !== rankB) return rankA - rankB;
-      // Final: observed_at DESC
-      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
+      // Final: observed_at DESC, then created_at DESC, then id ASC.
+      return compareObservationRecencyThenId(a, b);
     });
 
     return {

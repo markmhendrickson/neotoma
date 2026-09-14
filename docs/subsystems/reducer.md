@@ -106,9 +106,12 @@ function highestPriority(
   field: string,
   observations: Observation[]
 ): { value: any; source_observation_id: string } {
-  const sorted = observations.sort((a, b) => 
-    b.source_priority - a.source_priority || 
-    b.observed_at.getTime() - a.observed_at.getTime()
+  const sorted = observations.sort((a, b) =>
+    b.source_priority - a.source_priority ||
+    observationSourceRank(a) - observationSourceRank(b) ||
+    b.observed_at.getTime() - a.observed_at.getTime() ||
+    b.created_at.getTime() - a.created_at.getTime() ||
+    a.id.localeCompare(b.id)
   );
   return {
     value: sorted[0].fields[field],
@@ -116,6 +119,14 @@ function highestPriority(
   };
 }
 ```
+
+Same-priority scalar corrections use that same order. A correction does not need
+to invent priority `1001` to replace an earlier normal correction: two correction
+observations at priority `1000` keep higher `observation_source` precedence, then
+the later `observed_at`/`created_at` wins, with `id ASC` used only when both
+timestamps are equal. Correction receipts should still be followed by independent
+snapshot readback; a response status alone is not proof of the effective value.
+
 **Use Cases:**
 - `vendor_name` in invoices (official documents > receipts)
 - `merchant_name` in receipts (bank statements > receipts)
