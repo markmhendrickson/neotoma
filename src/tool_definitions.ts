@@ -520,7 +520,7 @@ export function buildToolDefinitions(
     {
       name: "correct",
       description:
-        "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation.",
+        "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect.",
       inputSchema: {
         type: "object",
         properties: {
