@@ -50,7 +50,7 @@ import {
 } from "./services/store_relationships.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
-import { StorePolicyUnavailableError } from "./services/instance_policy.js";
+import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
@@ -4974,6 +4974,13 @@ function handleApiError(
     return res
       .status(error.statusCode)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (error instanceof StorePolicyDeniedError) {
+    logWarn(logContext || "StorePolicyDenied", req, {
+      denied_count: error.denied.length,
+      reason_codes: [...new Set(error.denied.map((denial) => denial.reason_code))].sort(),
+    });
+    return res.status(400).json({ error: error.toErrorEnvelope() });
   }
   if (error instanceof StorePolicyUnavailableError) {
     // 503, not 400: the write was refused because the instance could not read
