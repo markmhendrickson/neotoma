@@ -1317,6 +1317,19 @@
       ]
     },
     {
+      "path": "/sources/upload",
+      "method": "POST",
+      "operation_id": "uploadSource",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/sources/{id}",
       "method": "GET",
       "operation_id": "getSourceById",

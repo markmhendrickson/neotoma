@@ -726,6 +726,9 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
 ### Store
 
 - `neotoma store`:
+  - `--file-path <path>`: Read a client-local file; non-localhost APIs receive multipart bytes automatically. Localhost APIs retain server-local path semantics. `--source-upload` forces byte upload.
+  - `--source-id <id>`: Attach an existing uploaded source; can be combined with entities and interpretation provenance.
+  - `neotoma upload <path>` uses the same automatic remote multipart transport.
   - Preferred structured input: `--entities <json>` or `--file <path>`
   - Compatibility alias: `--json=<json>` maps to structured `--entities` for backward compatibility.
     - Use `--json=` (equals, no space) so the payload is parsed as entities input.
@@ -738,16 +741,18 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
 
 ### Ingest
 
-- `neotoma ingest`: Atomic structured-entities + source-file ingest (composes `/store`).
+- `neotoma ingest`: Structured entities with a source file (composes `/store`; remote source bytes are uploaded first).
   - `--entities <path>` (required): JSON file containing the entity array extracted by the caller.
   - `--source-file <path>` (required): Raw source artifact (PDF, transcript, CSV, etc.) attached as provenance.
   - `--user-id <id>` / `--idempotency-key <key>` / `--file-idempotency-key <key>`: same semantics as `neotoma store`.
   - `--plan` / `--dry-run`: Preview planned actions without committing.
   - `--strict`: Refuse silent merges (schema `canonical_name_fields` must match, or `--target-id` must be supplied).
-  - `--source-upload` (v0.5.1+): Force base64 upload of the source file via `file_content`. Use this when the CLI and API run on different machines so the server can't read the CLI's local filesystem.
+  - `--source-upload`: Force multipart upload of the source file, including for localhost APIs.
   - `--source-content` (v0.5.1+): Alias for `--source-upload`.
-  - Auto-upload (v0.5.1+): when the resolved base URL is non-localhost (anything other than `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`), the CLI automatically switches from `file_path` to `file_content` so remote deployments work without any flag. Localhost base URLs continue to send `file_path` so the server reads the artifact directly from disk.
-  - Upload size limit: the server caps JSON bodies at 10 MB (`express.json({ limit: "10mb" })`). Accounting for base64 overhead (~1.37×), the CLI refuses to upload source files larger than ~7.5 MB with a clear error pointing operators at a localhost API as the alternative.
+  - Auto-upload (v0.5.1+): when the resolved base URL is non-localhost (anything other than `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`), the CLI automatically uploads to `/sources/upload` and passes the returned `source_id` to `/store` so remote deployments work without any flag. Localhost base URLs continue to send `file_path` so the server reads the artifact directly from disk.
+  - AAuth signatures cover the complete multipart Content-Digest; the server verifies it before storing bytes.
+  - Upload size limit: multipart bypasses the JSON/base64 limit. The client and server each enforce `NEOTOMA_MAX_UPLOAD_BYTES` (default 512 MiB); the server remains authoritative. Receipt streams to disk, then storage materializes one file buffer.
+  - Remote file `--plan` / `--dry-run` refuses before uploading. Preview with `store --source-id` for an already uploaded source instead.
 
 ### MCP/CLI parity note
 

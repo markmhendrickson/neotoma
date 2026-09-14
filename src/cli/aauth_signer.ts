@@ -303,7 +303,7 @@ export async function mintCliAgentTokenJwt(
 export interface CliSignedFetchOptions {
   method: string;
   headers?: Record<string, string>;
-  body?: string;
+  body?: string | Uint8Array<ArrayBuffer>;
   signal?: AbortSignal;
   configOverride?: LoadedSignerConfig;
 }
