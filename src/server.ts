@@ -2167,6 +2167,8 @@ export class NeotomaServer {
         return await this.store(args);
       case "parse_file":
         return await this.parseFile(args);
+      case "correct_transaction":
+        return await this.correctTransaction(args);
       case "correct":
         return await this.correct(args);
       case "merge_entities":
@@ -6887,6 +6889,26 @@ export class NeotomaServer {
   }
 
   // FU-125: MCP correct() Tool
+  private async correctTransaction(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { applyCorrectionTransaction, CorrectionTransactionError } =
+      await import("./services/correction_transaction.js");
+    const body =
+      args as import("./services/correction_transaction.js").CorrectionTransactionOptions;
+    const userId = this.getAuthenticatedUserId(body?.user_id);
+    try {
+      return this.buildTextResponse(await applyCorrectionTransaction({ ...body, user_id: userId }));
+    } catch (error) {
+      if (error instanceof CorrectionTransactionError)
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
+        });
+      throw error;
+    }
+  }
+
   private async correct(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {

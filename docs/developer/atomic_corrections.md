@@ -1,0 +1,13 @@
+# Atomic corrections across entities
+
+`POST /corrections/transaction` (`correct_transaction` over MCP) applies a bounded set of ordinary correction observations in one existing database transaction. The CLI uses `neotoma request --operation correctTransaction --body '<json>'`. It is additive; existing single-entity correction behavior is unchanged.
+
+Each of 1–50 unique targets supplies `entity_id`, actual `entity_type`, `expected_observation_count`, `expected_snapshot` fields and 1–50 unique `{field,value}` changes. Every changed field must be declared by the target's active schema. Read the current scoped snapshots immediately before constructing the transaction. The count catches concurrent writes even when timestamps coincide; expected fields additionally identify the state the caller reviewed.
+
+The server authenticates the graph, applies the existing agent correction capability policy, and checks all targets inside the database transaction. A missing/cross-graph target, stale precondition, invalid field, failed write or correction that does not win the reducer rolls back all observations and snapshots. Existing observation/entity notifications are buffered until commit; a rolled-back attempt emits none.
+
+The required `idempotency_key` belongs to the authenticated graph and complete canonical request. An exact retry returns `status: replayed` without new writes or notifications; changed payload with the same key fails. Receipts reuse the committed correction observations and their canonical hash. Responses contain current scoped snapshots, including on replay, rather than a frozen historical response. After an uncertain network response, retry the identical payload/key before deciding whether to construct a new transition. Do not overwrite a conflict or escalate correction priority to force it to win.
+
+This is a State Layer primitive. It does not interpret approvals, allocate application capacity, fetch external documents or certify human consent. The caller must derive its business transition and authorization from its own reviewed inputs, and include all affected entities in the transaction. The database commit cannot make an external document immutable; applications must verify external revisions through authorized APIs and retain their revision proof separately.
+
+Validation uses isolated SQLite data: concurrent distinct transactions sharing one remaining resource permit only one winner; exact concurrent replays produce one commit; an injected second-write failure rolls back the first; reducer mismatch, scope violations and changed replay payloads fail without partial state. See `src/services/correction_transaction.test.ts` and the authenticated HTTP tenant matrix.

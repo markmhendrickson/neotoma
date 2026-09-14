@@ -11150,6 +11150,28 @@ app.post("/register_schema", async (req, res) => {
 });
 
 // POST /correct - Create correction observation to override field value
+app.post("/corrections/transaction", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.body?.user_id as string | undefined);
+    const { applyCorrectionTransaction, CorrectionTransactionError } =
+      await import("./services/correction_transaction.js");
+    try {
+      return res.json(await applyCorrectionTransaction({ ...req.body, user_id: userId }));
+    } catch (error) {
+      if (error instanceof CorrectionTransactionError) {
+        const status =
+          error.code === "VALIDATION_ERROR" ? 400 : error.code === "RESOURCE_NOT_FOUND" ? 404 : 409;
+        return sendError(res, status, error.code, error.message, {
+          hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
+        });
+      }
+      throw error;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Correction transaction failed and was rolled back.");
+  }
+});
+
 app.post("/correct", async (req, res) => {
   const parsed = CorrectEntityRequestSchema.safeParse(req.body);
   if (!parsed.success) {
