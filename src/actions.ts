@@ -2971,6 +2971,25 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
   }
 });
 
+/**
+ * Send an authorize-endpoint refusal as plain text.
+ *
+ * `res.send(string)` defaults to `text/html`, which makes the body an HTML sink.
+ * That matters here because this endpoint is reached by a BROWSER, before any
+ * authentication, with a `redirect_uri` supplied by whoever crafted the link —
+ * so anything echoed from the request into an HTML body would execute on this
+ * instance's own origin. Setting `text/plain` removes the sink rather than
+ * filtering it, which is what makes it safe to name the rejected redirect_uri
+ * in the body below.
+ *
+ * Plain text (rather than the canonical JSON ErrorEnvelope) is also the right
+ * shape for the reader: this renders in a browser address bar mid-redirect, for
+ * a human. Declared as `text/plain` in openapi.yaml under `mcpOAuthAuthorize`.
+ */
+function sendAuthorizeRefusal(res: express.Response, status: number, message: string) {
+  return res.status(status).type("text/plain").send(message);
+}
+
 // RFC 8414 authorization endpoint (GET) for Cursor and other OAuth clients
 app.get("/mcp/oauth/authorize", async (req, res) => {
   try {
@@ -2990,11 +3009,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
 
     if (!redirect_uri) {
       logger.warn("[MCP OAuth] Authorize rejected: missing redirect_uri");
-      return res.status(400).send("redirect_uri is required");
+      return sendAuthorizeRefusal(res, 400, "redirect_uri is required");
     }
     if (!state) {
       logger.warn("[MCP OAuth] Authorize rejected: missing state");
-      return res.status(400).send("state is required");
+      return sendAuthorizeRefusal(res, 400, "state is required");
     }
     const isOpenAiCustomGptRedirect =
       redirect_uri &&
@@ -3005,7 +3024,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       logger.warn("[MCP OAuth] Authorize rejected: missing PKCE for non-OpenAI redirect", {
         redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
       });
-      return res.status(400).send("code_challenge and code_challenge_method=S256 are required");
+      return sendAuthorizeRefusal(
+        res,
+        400,
+        "code_challenge and code_challenge_method=S256 are required"
+      );
     }
     if (!hasPkce && isOpenAiCustomGptRedirect) {
       // Allow OAuth without client PKCE for OpenAI Custom GPT only (weaker security; see docs).
@@ -3016,9 +3039,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       return res.redirect(`/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`);
     }
     if (dev_stub === "1" || dev_stub === "true") {
-      return res
-        .status(400)
-        .send("dev_stub is disabled. OAuth requires key authentication via /mcp/oauth/key-auth.");
+      return sendAuthorizeRefusal(
+        res,
+        400,
+        "dev_stub is disabled. OAuth requires key authentication via /mcp/oauth/key-auth."
+      );
     }
 
     if (config.storageBackend === "local") {
@@ -3029,14 +3054,35 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         // proxy) so an Inspector callback on this instance's own origin is allowed.
         const selfHost = req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.get("host");
         if (!isRedirectUriAllowedForTunnel(redirect_uri, selfHost)) {
+          // Name the config variable and whether it is even set: an operator who
+          // has configured a callback and still gets refused otherwise has no way
+          // to tell a typo from an unset variable from an exact-match miss.
+          const trustedCount = config.oauthTrustedCallbackUrls.length;
+          const sanitizedRedirectUri = sanitizeRedirectUriForLog(redirect_uri);
           logger.warn("[MCP OAuth] Authorize rejected: redirect_uri not allowed for tunnel", {
-            redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+            redirect_uri: sanitizedRedirectUri,
+            trusted_callback_urls_configured: trustedCount,
           });
-          return res
-            .status(400)
-            .send(
-              "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, localhost, loopback, or trusted callback URLs (OpenAI/Claude)."
-            );
+          return sendAuthorizeRefusal(
+            res,
+            400,
+            "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, localhost, loopback, or trusted callback URLs (OpenAI/Claude). " +
+              // Echo what the server actually compared. An operator on a hosted
+              // deploy has no log access, and every likely failure here is a
+              // NEAR miss (trailing slash, port, case, a dot segment that
+              // resolved) — indistinguishable from a typo or a client-side bug
+              // without seeing the value the server saw. Safe to echo because
+              // this response is text/plain (see sendAuthorizeRefusal) and
+              // because the value is sanitized: scheme, host and path only,
+              // with query and fragment — where the code and state live —
+              // already stripped.
+              (sanitizedRedirectUri
+                ? `The server compared: ${sanitizedRedirectUri} (query and fragment ignored). `
+                : "") +
+              (trustedCount > 0
+                ? `This instance has ${trustedCount} operator-configured callback URL(s) in NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS; none matched. That list is matched on the EXACT full callback URL: scheme, host, port and path must all agree. The host is compared case-insensitively and the path case-sensitively; a trailing slash and a default port (:443) are insignificant; query and fragment are ignored; and plaintext http: is only honoured for loopback hosts.`
+                : "To trust a self-hosted app's callback, set NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS to its exact full callback URL (for example https://app.example.com/auth/callback).")
+          );
         }
       }
 
@@ -3102,7 +3148,7 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
     return res.redirect(result.authUrl);
   } catch (error: any) {
     logError("MCPOAuthAuthorize", req, error);
-    return res.status(500).send(error.message ?? "Authorization failed");
+    return sendAuthorizeRefusal(res, 500, error.message ?? "Authorization failed");
   }
 });
 
@@ -5323,28 +5369,30 @@ app.get("/schemas/:entity_type", async (req, res) => {
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
-    // Handle authentication - support both Ed25519 and session tokens
-    const headerAuth = req.headers.authorization || "";
-    let userId: string | undefined = req.query.user_id as string | undefined;
-
-    if (headerAuth.startsWith("Bearer ")) {
-      const token = headerAuth.slice("Bearer ".length).trim();
-
-      // Try to validate as Ed25519 bearer token first
-      const registered = ensurePublicKeyRegistered(token);
-      if (!registered || !isBearerTokenValid(token)) {
-        // Try to validate as session token
-        try {
-          const { validateSessionToken } = await import("./services/mcp_auth.js");
-          const validated = await validateSessionToken(token);
-          // Use validated user ID if not provided in query
-          userId = userId || validated.userId;
-        } catch {
-          // Not a valid token - continue without user_id (will try global schema)
-        }
-      }
-      // If Ed25519 token is valid, use user_id from query (Ed25519 tokens don't contain user info)
-    }
+    // SECURITY (GHSA-f48j-993h-g6qr): `user_id` selects the schema SCOPE that
+    // loadActiveSchema reads — a user-scoped row shadows the global one — so it
+    // carries the safety meaning for this route and must be validated against
+    // the authenticated principal, never used as supplied.
+    //
+    // This route previously initialised `userId` straight from
+    // `req.query.user_id` and ran its own Bearer/session handling, so the query
+    // value became the scope rather than a request for one. That bespoke block
+    // is removed in favour of the shared guard its sibling GET /schemas already
+    // uses. Nothing is lost by removing it: the app-wide auth middleware runs
+    // ahead of this route (this path is not on the public allowlist, which is
+    // only /openapi*.yaml, /health and /ready), validates Ed25519 bearers
+    // *including the request signature*, falls through to the same
+    // validateSessionToken for session bearers, stamps the principal, and 401s
+    // an unresolvable token. The route-level copy did strictly less — no
+    // signature verification, and a silent fall-through that kept the
+    // caller-supplied id when validation failed.
+    //
+    // Legitimate callers are unaffected: the CLI's optional --user-id and the
+    // eval harness pass nothing by default, so the principal resolves itself,
+    // and getAuthenticatedUserId still honours the local-dev override for CLI
+    // and dev flows. Built-in/code-defined schema discovery is unchanged — it
+    // is the fallback below, reached the same way once the scope is resolved.
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Try to load active schema (global or user-specific), then fallback to code-defined schemas
     let schema = await schemaRegistry.loadActiveSchema(entityType, userId);
@@ -5372,9 +5420,18 @@ app.get("/schemas/:entity_type", async (req, res) => {
 
     return res.json(schema);
   } catch (error) {
-    logError("APIError:schema_detail", req, error);
-    const message = error instanceof Error ? error.message : "Failed to get schema";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
+    // Routed through handleApiError so a rejected user_id surfaces as 403 and an
+    // unresolved principal as 401 — the same mapping GET /schemas gets. The
+    // previous bespoke catch turned every failure into a 500, which would have
+    // reported the guard's refusal as a server fault.
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get schema",
+      "DB_QUERY_FAILED",
+      "APIError:schema_detail"
+    );
   }
 });
 
