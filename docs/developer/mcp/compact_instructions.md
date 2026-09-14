@@ -47,7 +47,7 @@ The Neotoma server has two compact-mode payloads:
 
 Both contain the same `MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES` content. The header line differs so agents and operators can distinguish an intentional compact deployment from a fallback caused by a broken doc path.
 
-Compact mode also narrows the `[INSTANCE SKILLS]` section appended for graph-stored skills: names are listed without descriptions, and the section header says so. See the `Instance-stored skills` entry under `[INITIALIZATION]` in [`instructions.md`](./instructions.md) for both rendered examples. That section is controlled independently by `NEOTOMA_MCP_INSTANCE_SKILL_HINTS` (default on; set `0` to omit it entirely).
+Compact mode also narrows the `[INSTANCE SKILLS]` section appended for graph-stored skills: names are listed without descriptions, and the section header says so while still instructing agents to match ordinary user intent against the catalog before fetching the selected skill body. See the `Instance-stored skills` entry under `[INITIALIZATION]` in [`instructions.md`](./instructions.md) for both rendered examples. That section is controlled independently by `NEOTOMA_MCP_INSTANCE_SKILL_HINTS` (default on; set `0` to omit it entirely).
 
 ---
 

@@ -456,8 +456,11 @@ export function renderInstanceSkillsSection(
     "[INSTANCE SKILLS]\n" +
     `This instance stores ${skills.length} skill${skills.length === 1 ? "" : "s"} as \`skill\` ` +
     "entities in the graph. They are available to this session even though no local skills " +
-    `directory is present. ${listed}; to run one, first fetch its full ` +
-    `body with ${INSTANCE_SKILL_FETCH_HINT}, then follow that body's instructions.`;
+    `directory is present. ${listed}. Match ordinary user intent against this catalog; the user ` +
+    "does not need to say Neotoma, Ateles, a skill name, or an entity id. If one skill clearly " +
+    "matches the authorized instance context, select it; if several could match, clarify only " +
+    `that ambiguity. To run one, first fetch its full body with ${INSTANCE_SKILL_FETCH_HINT}, ` +
+    "then follow that body's constraints, execution steps, and readback requirements.";
 
   const footer = omitted > 0 ? `\n…and ${omitted} more (fetch by name as above).` : "";
 

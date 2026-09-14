@@ -370,6 +370,9 @@ describe("renderInstanceSkillsSection — fetch hint", () => {
     const section = renderInstanceSkillsSection(skills, false)!;
 
     expect(section).toContain(INSTANCE_SKILL_FETCH_HINT);
+    expect(section).toContain("Match ordinary user intent against this catalog");
+    expect(section).toContain("does not need to say Neotoma, Ateles, a skill name, or an entity id");
+    expect(section).toContain("readback requirements");
     // The hint must direct agents at a tool that actually exists.
     expect(section).toContain("retrieve_entity_by_identifier");
     expect(section).toContain('entity_type "skill"');
