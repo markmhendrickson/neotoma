@@ -1,6 +1,6 @@
 /**
  * v0.5.1 regression test: `neotoma ingest` must auto-upload the source
- * artifact as `file_content` (base64) when the base URL is non-localhost,
+ * artifact via multipart and `source_id` when the base URL is non-localhost,
  * and must send `file_path` (server-side disk read) when the base URL is
  * localhost. The `--source-upload` / `--source-content` flags force upload
  * regardless of base URL.
@@ -45,23 +45,5 @@ describe("ingest command help surface (audit)", () => {
     expect(stdout).toMatch(/--source-upload/);
     expect(stdout).toMatch(/--source-content/);
     expect(stdout).toMatch(/non-localhost|localhost|Auto-detected/i);
-  });
-});
-
-describe("ingest compiled bundle includes auto-upload and size-guard wiring", () => {
-  it("chooses file_content over file_path when uploading and enforces a size cap", async () => {
-    const { readFile } = await import("node:fs/promises");
-    const path = await import("node:path");
-    const compiled = await readFile(
-      path.resolve(__dirname, "../../dist/cli/index.js"),
-      "utf-8"
-    );
-    // Transport branch: file_content vs file_path.
-    expect(compiled).toMatch(/body\.file_content\s*=/);
-    expect(compiled).toMatch(/body\.file_path\s*=/);
-    // Localhost auto-detect hook.
-    expect(compiled).toMatch(/isLocalhostBaseUrl/);
-    // Size guard with clear error text.
-    expect(compiled).toMatch(/remote upload limit/);
   });
 });

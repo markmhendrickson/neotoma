@@ -13,7 +13,7 @@
  *   - A skill may EMBEDS one or more `file_asset` entities (source=skill,
  *     target=file_asset), each carrying source_id/content_hash/mime_type/
  *     original_filename/file_size on its snapshot (set by
- *     ensureUnstructuredAssetEntity in src/server.ts).
+ *     ensureAssetEntity in src/services/asset_entity.ts).
  */
 
 import type { NeotomaApiClient } from "../shared/api_client.js";

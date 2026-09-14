@@ -452,7 +452,7 @@ export function buildToolDefinitions(
       name: "store",
       description: desc(
         "store",
-        "Save, create, or record entities and files into Neotoma. Use this tool to store any structured data — tasks, notes, contacts, transactions, events, plans, issues, receipts, decisions, or any other entity type. Also handles file uploads (base64 or path). Alias names: store, save, create entity, add record, ingest, persist. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments."
+        "Save, create, or record entities and files into Neotoma. Use this tool to store any structured data — tasks, notes, contacts, transactions, events, plans, issues, receipts, decisions, or any other entity type. Also handles file uploads. Alias names: store, save, create entity, add record, ingest, persist. For files, provide exactly one ingress: (1) file_path — only when the Neotoma server can read that path (co-located / shared FS); remote clients get ERR_FILE_PATH_IS_SERVER_LOCAL; (2) file_content (base64) + mime_type — small inlines only (~7.5 MB useful after base64 / JSON body limit); (3) source_id — handle from POST /sources/upload (multipart/form-data); required for remote clients and anything large. Upload first, then store({ source_id }); bytes are not re-sent. There is no MCP multipart upload tool. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments."
       ),
       inputSchema: {
         ...storeBaseSchema,
@@ -462,17 +462,22 @@ export function buildToolDefinitions(
           file_content: {
             type: "string",
             description:
-              "Base64-encoded file content. Use file_path for local files instead of base64 encoding.",
+              "Base64-encoded file content for small inlines only (~7.5 MB useful after base64 / JSON body limit). Prefer file_path when co-located with the server; prefer POST /sources/upload → source_id for remote or large files. Mutually exclusive with file_path and source_id.",
           },
           file_path: {
             type: "string",
             description:
               "A path on the SERVER's filesystem, not yours. The file is read by the Neotoma instance, so this only works when your client runs on the same machine as the instance — the axis is co-located vs remote, not desktop vs web. Against a hosted or otherwise remote instance it cannot see your disk and is rejected with ERR_FILE_PATH_IS_SERVER_LOCAL. To send a file from a remote client: upload the bytes (POST /sources/upload, multipart/form-data) and pass the returned source_id, or inline small files with file_content (base64) + mime_type. MIME type is auto-detected from the content or extension when not provided.",
           },
+          source_id: {
+            type: "string",
+            description:
+              "Handle for bytes already uploaded via POST /sources/upload (multipart/form-data). This is the route for remote clients and for anything large: file_path is read on the server's filesystem, and file_content is capped by the JSON body limit at roughly 7.5 MB after base64. Upload first, then pass the returned source_id here — the bytes are not re-sent.",
+          },
           mime_type: {
             type: "string",
             description:
-              "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path (auto-detected from extension)",
+              "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path or source_id (auto-detected from content or extension)",
           },
           original_filename: {
             type: "string",

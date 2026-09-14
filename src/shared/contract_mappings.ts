@@ -307,6 +307,16 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "request --operation getSourceById",
   },
   {
+    // Byte ingress for remote callers (#2325). HTTP-only by nature: the body
+    // is a multipart stream, which the MCP JSON-RPC envelope cannot carry —
+    // that limitation is the reason this route exists.
+    operationId: "uploadSource",
+    method: "post",
+    path: "/sources/upload",
+    adapter: "cli",
+    cliCommand: "request --operation uploadSource",
+  },
+  {
     operationId: "getSourceRelationships",
     method: "get",
     path: "/sources/{id}/relationships",

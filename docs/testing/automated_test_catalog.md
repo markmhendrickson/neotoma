@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **606**
-- Backend and repo Vitest files: **571**
+- Total automated test files: **608**
+- Backend and repo Vitest files: **573**
 - Frontend Vitest files: **9**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 167 |
 | Vitest service tests | 44 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 172 |
+| Vitest integration tests | 174 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 19 |
 | Vitest security tests | 9 |
@@ -407,7 +407,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (172):**
+**Files (174):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -550,6 +550,7 @@ flowchart TD
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
+- `tests/integration/sources_upload_roundtrip.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
@@ -565,6 +566,7 @@ flowchart TD
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
+- `tests/integration/store_source_id_transport_parity.test.ts`
 - `tests/integration/store_source_priority_ignored_warning.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`

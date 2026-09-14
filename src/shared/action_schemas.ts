@@ -728,6 +728,14 @@ export const StoreRequestSchema = z
     file_idempotency_key: z.string().min(1).optional(),
     file_content: z.string().optional(),
     file_path: z.string().optional(),
+    /**
+     * Handle for bytes already uploaded via POST /sources/upload (#2325).
+     *
+     * The route a remote caller has to attach a file: `file_path` resolves on
+     * the server's filesystem, and `file_content` is capped by the JSON body
+     * limit at roughly 7.5 MB of actual file after base64.
+     */
+    source_id: z.string().min(1).optional(),
     mime_type: z.string().min(1).optional(),
     original_filename: z.string().optional(),
     source_storage: z.enum(["inline", "reference"]).optional().default("inline"),
@@ -748,11 +756,12 @@ export const StoreRequestSchema = z
       const hasEntities = Boolean(data.entities && data.entities.length > 0);
       const hasFileContent = Boolean(data.file_content && data.mime_type);
       const hasFilePath = Boolean(data.file_path);
-      return hasEntities || hasFileContent || hasFilePath;
+      const hasSourceId = Boolean(data.source_id);
+      return hasEntities || hasFileContent || hasFilePath || hasSourceId;
     },
     {
       message:
-        "Must provide either entities, file_path, or file_content with mime_type (or use intake.mode='overflow')",
+        "Must provide either entities, file_path, source_id (from POST /sources/upload), or file_content with mime_type (or use intake.mode='overflow')",
     }
   );
 

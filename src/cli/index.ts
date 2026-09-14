@@ -26,6 +26,7 @@ import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
 import { createApiClient } from "../shared/api_client.js";
+import { hashSourceFile, uploadSourceFile } from "./source_upload.js";
 import { WIN_SHELL, shellOnWin } from "../shared/spawn_platform.js";
 import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { parseSchemaFields } from "./parse_schema_fields.js";
@@ -895,7 +896,7 @@ async function resolveBaseUrl(option?: string, config?: Config): Promise<string>
 /**
  * Return true when `baseUrl` points at the same machine as the CLI, so the
  * server can read a local `file_path` directly from disk. Non-localhost URLs
- * cannot (e.g. remote API deployments) and must receive file_content upload.
+ * cannot (e.g. remote API deployments) and must receive uploaded source bytes.
  */
 export function isLocalhostBaseUrl(baseUrl: string): boolean {
   try {
@@ -14852,7 +14853,9 @@ program
   .description("Store structured entities, unstructured files, or both in one request")
   .option("--entities <json>", "Inline JSON array of entities (legacy structured store)")
   .option("--file <path>", "Path to JSON file containing entity array (legacy structured store)")
-  .option("--file-path <path>", "Path to any file to store (unstructured pipeline)")
+  .option("--file-path <path>", "Client-local file; automatically uploaded for non-localhost APIs")
+  .option("--source-id <id>", "Existing source uploaded to this API")
+  .option("--source-upload", "Upload file bytes even for a localhost API")
   .option("--file-content <content>", "Inline file content to store")
   .option("--user-id <id>", "User ID for the operation")
   .option(
@@ -14893,8 +14896,9 @@ program
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
+    const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
     const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      baseUrl,
       token,
     });
 
@@ -14937,7 +14941,7 @@ program
       }
     }
     const hasStructured = Array.isArray(entities) && (entities as unknown[]).length > 0;
-    const hasUnstructured = Boolean(opts.filePath || opts.fileContent);
+    const hasUnstructured = Boolean(opts.filePath || opts.fileContent || opts.sourceId);
 
     if (!hasStructured && !hasUnstructured) {
       throw new Error(
@@ -14948,7 +14952,9 @@ program
     let unstructuredBody: Record<string, unknown> = {};
     if (hasUnstructured) {
       let originalFilename: string | undefined;
-      if (opts.filePath) {
+      if (opts.sourceId) {
+        unstructuredBody = { source_id: opts.sourceId };
+      } else if (opts.filePath) {
         const resolvedPath = path.isAbsolute(opts.filePath)
           ? opts.filePath
           : path.resolve(process.cwd(), opts.filePath);
@@ -14959,6 +14965,20 @@ program
           mime_type: inferMimeTypeForPath(resolvedPath),
           original_filename: originalFilename,
         };
+        if (opts.sourceUpload || !isLocalhostBaseUrl(baseUrl)) {
+          if (opts.plan || opts.dryRun)
+            throw new Error(
+              "Remote file upload writes a source; use --source-id for an existing source when planning."
+            );
+          unstructuredBody = {
+            source_id: await uploadSourceFile(api, resolvedPath, {
+              mimeType: inferMimeTypeForPath(resolvedPath),
+              idempotencyKey:
+                opts.fileIdempotencyKey ?? (!hasStructured ? opts.idempotencyKey : undefined),
+              userId: opts.userId,
+            }),
+          };
+        }
       } else {
         const fileBuffer = Buffer.from(opts.fileContent as string, "utf-8");
         originalFilename = undefined;
@@ -15121,12 +15141,9 @@ program
   )
   .option(
     "--source-upload",
-    "Force base64 upload of the source file via file_content (required for non-localhost API). Auto-detected when base URL is not localhost."
+    "Force multipart upload of source bytes. Auto-detected when base URL is not localhost."
   )
-  .option(
-    "--source-content",
-    "Alias for --source-upload; send the source file as file_content rather than a server-side file_path."
-  )
+  .option("--source-content", "Alias for --source-upload; transfer source bytes to the API.")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -15157,7 +15174,7 @@ program
       ? opts.sourceFile
       : path.resolve(process.cwd(), opts.sourceFile);
     await fs.access(sourcePath);
-    const sourceBuffer = await fs.readFile(sourcePath);
+    const sourceSize = (await fs.stat(sourcePath)).size;
     const sourceMime = inferMimeTypeForPath(sourcePath);
     const sourceBasename = path.basename(sourcePath);
 
@@ -15166,34 +15183,16 @@ program
 
     // Transport selection for the source artifact:
     //   - Localhost base URL: send `file_path` (server reads disk).
-    //   - Non-localhost base URL: send `file_content` (base64) so a remote
-    //     server that cannot see our filesystem still gets the artifact.
+    //   - Non-localhost base URL: upload multipart bytes and store the source_id.
     //   - `--source-upload` / `--source-content`: force upload regardless.
     const forceUpload = Boolean(opts.sourceUpload || opts.sourceContent);
     const isLocalhost = isLocalhostBaseUrl(baseUrl);
     const shouldUpload = forceUpload || !isLocalhost;
 
-    // CLI-side size guard: server enforces a 10 MB JSON body limit via
-    // `express.json({ limit: "10mb" })` in src/actions.ts. Base64 encoding
-    // inflates payloads ~1.37x, so the raw file limit is ~7.5 MB. Abort early
-    // with a clear message instead of a cryptic 413 from the server.
-    const SERVER_JSON_BODY_LIMIT_BYTES = 10 * 1024 * 1024; // must match express.json limit
-    const MAX_UPLOADABLE_BYTES = Math.floor(SERVER_JSON_BODY_LIMIT_BYTES * 0.72);
-    if (shouldUpload && sourceBuffer.length > MAX_UPLOADABLE_BYTES) {
-      throw new Error(
-        `Source file ${sourceBasename} is ${sourceBuffer.length} bytes, which exceeds the ` +
-          `remote upload limit of ~${MAX_UPLOADABLE_BYTES} bytes (server JSON body cap: ` +
-          `${SERVER_JSON_BODY_LIMIT_BYTES} bytes, minus base64 overhead). Host the file on a ` +
-          `localhost API (use --base-url http://127.0.0.1:<port>) and retry without --source-upload.`
-      );
-    }
-
     const idempotencyKey =
       opts.idempotencyKey ??
-      createIdempotencyKey({ entities, source_file: sourceBasename, size: sourceBuffer.length });
-    const fileIdempotencyKey =
-      opts.fileIdempotencyKey ??
-      (await import("node:crypto")).createHash("sha256").update(sourceBuffer).digest("hex");
+      createIdempotencyKey({ entities, source_file: sourceBasename, size: sourceSize });
+    const fileIdempotencyKey = opts.fileIdempotencyKey ?? (await hashSourceFile(sourcePath));
 
     const body: Record<string, unknown> = {
       entities,
@@ -15206,7 +15205,15 @@ program
       strict,
     };
     if (shouldUpload) {
-      body.file_content = sourceBuffer.toString("base64");
+      if (!commit)
+        throw new Error(
+          "Remote file upload writes a source; use store --source-id for an existing source when planning."
+        );
+      body.source_id = await uploadSourceFile(api, sourcePath, {
+        mimeType: sourceMime,
+        idempotencyKey: fileIdempotencyKey,
+        userId: opts.userId,
+      });
     } else {
       body.file_path = sourcePath;
     }
@@ -15239,7 +15246,7 @@ program
         path: sourcePath,
         original_filename: sourceBasename,
         mime_type: sourceMime,
-        size_bytes: sourceBuffer.length,
+        size_bytes: sourceSize,
       },
       entities_total: entitiesList.length,
       action_counts: actionCounts,
@@ -15387,10 +15394,10 @@ program
       }
 
       const originalFilename = path.basename(resolvedPath);
-      const fileBuffer = await fs.readFile(resolvedPath);
       const mimeType = opts.mimeType ?? inferMimeTypeForPath(resolvedPath);
 
       if (opts.local) {
+        const fileBuffer = await fs.readFile(resolvedPath);
         // Fix #172: default NEOTOMA_DATA_DIR to <cwd>/data when not set so
         // --local uses the current project data dir rather than the npm
         // package install dir (which is what config.ts resolves to when the
@@ -15442,13 +15449,21 @@ program
       // Default: send to API server.
       const config = await readConfig();
       const token = await getCliToken();
+      const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
       const api = createApiClient({
-        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        baseUrl,
         token,
       });
 
       const body = {
-        file_path: resolvedPath,
+        ...(isLocalhostBaseUrl(baseUrl)
+          ? { file_path: resolvedPath }
+          : {
+              source_id: await uploadSourceFile(api, resolvedPath, {
+                mimeType,
+                idempotencyKey: opts.idempotencyKey,
+              }),
+            }),
         mime_type: mimeType,
         original_filename: originalFilename,
         idempotency_key: opts.idempotencyKey,

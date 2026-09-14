@@ -60,9 +60,10 @@ function buildMaybeSignedFetch(enabled: boolean, requireCliAAuth = false): typeo
         headers[key] = value;
       });
     }
-    let body = typeof init?.body === "string" ? init.body : undefined;
+    let body: string | Uint8Array<ArrayBuffer> | undefined =
+      typeof init?.body === "string" ? init.body : undefined;
     if (body === undefined && request && method !== "GET" && method !== "HEAD") {
-      body = await request.clone().text();
+      body = new Uint8Array(await request.clone().arrayBuffer());
     }
     try {
       if (requireCliAAuth) {
