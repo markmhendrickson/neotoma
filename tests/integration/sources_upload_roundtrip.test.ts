@@ -31,7 +31,9 @@
  */
 
 import crypto from "node:crypto";
-import { createServer } from "node:http";
+import fs from "node:fs";
+import { createServer, request as httpRequest } from "node:http";
+import os from "node:os";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app, canonicalAauthAuthority } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -41,6 +43,21 @@ const API_PORT = 18131;
 const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
 const sha256 = (buf: Buffer) => crypto.createHash("sha256").update(buf).digest("hex");
+
+async function uploadTempDirs(): Promise<string[]> {
+  return (await fs.promises.readdir(os.tmpdir())).filter((entry) =>
+    entry.startsWith("neotoma-upload-")
+  );
+}
+
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 2_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return predicate();
+}
 
 /**
  * Build a multipart/form-data body by hand.
@@ -508,6 +525,44 @@ describe("POST /sources/upload — remote byte ingress (#2325)", () => {
     expect(response.status).toBe(400);
     const payload = (await response.json()) as { error_code?: string };
     expect(payload.error_code).toBe("ERR_UPLOAD_NO_FILE");
+  });
+
+  it("settles an interrupted multipart upload and removes its temporary payload", async () => {
+    // A real socket disconnect is the important case: `req.pipe(busboy)` does
+    // not turn it into Busboy's normal close/error events. The test waits until
+    // receipt has created a temp directory before destroying the client, so a
+    // route that never began handling the request cannot pass vacuously.
+    const before = new Set(await uploadTempDirs());
+    const boundary = `----neotomaInterrupted${crypto.randomBytes(12).toString("hex")}`;
+    const head = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="interrupted.bin"\r\n` +
+        "Content-Type: application/octet-stream\r\n\r\n"
+    );
+    const client = httpRequest({
+      hostname: "127.0.0.1",
+      port: API_PORT,
+      path: `/sources/upload?user_id=${TEST_USER_ID}`,
+      method: "POST",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    });
+    // Destroying a live request normally reports ECONNRESET; the assertion is
+    // about the server-side receipt lifecycle, so consume that expected error.
+    client.on("error", () => {});
+    client.write(head);
+    client.write(crypto.randomBytes(1024 * 1024));
+
+    const started = await waitFor(async () =>
+      (await uploadTempDirs()).some((dir) => !before.has(dir))
+    );
+    expect(started).toBe(true);
+    client.destroy();
+
+    const cleaned = await waitFor(async () =>
+      (await uploadTempDirs()).every((dir) => before.has(dir))
+    );
+    // The receiver rejects only after its writer has shut down, and its outer
+    // cleanup then removes this directory. A pending receiver leaves it here.
+    expect(cleaned).toBe(true);
   });
 });
 

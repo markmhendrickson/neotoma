@@ -4919,6 +4919,7 @@ export class NeotomaServer {
         mime_type: parsed.mime_type,
         original_filename: parsed.original_filename,
         source_priority: parsed.source_priority,
+        commit: parsed.commit,
         // Propagate by-reference storage to the file leg (#1827): without this the
         // recursive store() defaults to inline and silently copies the bytes.
         source_storage: parsed.source_storage,
@@ -4975,6 +4976,7 @@ export class NeotomaServer {
           mime_type: parsed.mime_type,
           original_filename: parsed.original_filename,
           source_priority: parsed.source_priority,
+          commit: parsed.commit,
           // Propagate by-reference storage to the file leg (#1827): without this the
           // recursive store() defaults to inline and silently copies the bytes.
           source_storage: parsed.source_storage,
@@ -5021,6 +5023,24 @@ export class NeotomaServer {
       const uploadedMimeType =
         parsed.mime_type || sourceRow.mime_type || "application/octet-stream";
       const uploadedFilename = parsed.original_filename || sourceRow.original_filename || undefined;
+
+      // Source handles are read-only inputs to a dry run. Do not resolve the
+      // asset entity in plan mode: resolving creates the entity and its
+      // observation, which would make commit:false durable on this leg even
+      // though structured planning correctly performs no writes.
+      if (parsed.commit === false) {
+        return this.buildTextResponse({
+          source_id: sourceRow.id,
+          content_hash: sourceRow.content_hash,
+          file_size: sourceRow.file_size,
+          mime_type: uploadedMimeType,
+          original_filename: uploadedFilename ?? null,
+          storage_mode: "uploaded",
+          deduplicated: true,
+          plan: true,
+          commit: false,
+        });
+      }
 
       const uploadedAssetInfo = await this.ensureUnstructuredAssetEntity({
         userId,

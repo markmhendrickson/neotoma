@@ -125,6 +125,37 @@ describe("store(source_id) — HTTP/MCP transport parity (#2352)", () => {
     return JSON.parse(result.content[0].text) as Record<string, unknown>;
   }
 
+  async function storeArgsOverHttp(
+    args: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const response = await fetch(`${API_BASE}/store`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ user_id: TEST_USER_ID, ...args }),
+    });
+    expect(response.status).toBe(200);
+    return (await response.json()) as Record<string, unknown>;
+  }
+
+  async function storeArgsOverMcp(args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const result = await (
+      mcpServer as unknown as {
+        store: (input: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
+      }
+    ).store({ user_id: TEST_USER_ID, ...args });
+    return JSON.parse(result.content[0].text) as Record<string, unknown>;
+  }
+
+  async function assetEntityIds(): Promise<string[]> {
+    const { data, error } = await db
+      .from("entities")
+      .select("id")
+      .eq("user_id", TEST_USER_ID)
+      .eq("entity_type", "file_asset");
+    if (error) throw error;
+    return (data ?? []).map((entity: { id: string }) => entity.id).sort();
+  }
+
   /** The asset entity + observation each transport actually left in the graph. */
   async function graphEffect(sourceId: string) {
     const { data: observations } = await db
@@ -244,6 +275,78 @@ describe("store(source_id) — HTTP/MCP transport parity (#2352)", () => {
       expect(response.status).toBe(200);
       const httpPayload = await response.json();
       expect(httpPayload.unstructured.asset_entity_id).toBe(payload.unstructured.asset_entity_id);
+    }
+  );
+
+  it.each([
+    ["HTTP", storeArgsOverHttp],
+    ["MCP", storeArgsOverMcp],
+  ] as const)(
+    "does not create an asset for source-only commit:false over %s",
+    async (_surface, store) => {
+      const sourceId = await uploadBytes(
+        Buffer.from(`dry-source-only-${_surface}-${crypto.randomUUID()}`),
+        "dry-source-only.txt"
+      );
+      const beforeEntities = await assetEntityIds();
+      expect((await graphEffect(sourceId)).observationCount).toBe(0);
+
+      const plan = await store({
+        source_id: sourceId,
+        idempotency_key: `dry-source-only-${_surface}-${sourceId}`,
+        commit: false,
+      });
+
+      expect(plan.source_id).toBe(sourceId);
+      expect(plan.commit).toBe(false);
+      expect((await graphEffect(sourceId)).observationCount).toBe(0);
+      expect(await assetEntityIds()).toEqual(beforeEntities);
+
+      await store({
+        source_id: sourceId,
+        idempotency_key: `commit-source-only-${_surface}-${sourceId}`,
+        commit: true,
+      });
+      expect((await graphEffect(sourceId)).entityTypes).toEqual(["file_asset"]);
+    }
+  );
+
+  it.each([
+    ["HTTP", storeArgsOverHttp],
+    ["MCP", storeArgsOverMcp],
+  ] as const)(
+    "does not create an asset for combined source_id commit:false over %s",
+    async (_surface, store) => {
+      const sourceId = await uploadBytes(
+        Buffer.from(`dry-combined-${_surface}-${crypto.randomUUID()}`),
+        "dry-combined.txt"
+      );
+      const beforeEntities = await assetEntityIds();
+      const entity = {
+        entity_type: "note",
+        title: `dry-combined-${_surface}-${sourceId}`,
+        body: "planned source-backed note",
+      };
+      const dryArgs = {
+        source_id: sourceId,
+        entities: [entity],
+        interpretation: { source_ref: "unstructured" as const },
+        idempotency_key: `dry-combined-${_surface}-${sourceId}`,
+        commit: false,
+      };
+
+      const plan = await store(dryArgs);
+      expect(plan.unstructured).toMatchObject({ source_id: sourceId, commit: false });
+      expect(plan.structured).toMatchObject({ commit: false });
+      expect((await graphEffect(sourceId)).observationCount).toBe(0);
+      expect(await assetEntityIds()).toEqual(beforeEntities);
+
+      await store({
+        ...dryArgs,
+        idempotency_key: `commit-combined-${_surface}-${sourceId}`,
+        commit: true,
+      });
+      expect((await graphEffect(sourceId)).entityTypes).toContain("file_asset");
     }
   );
 });

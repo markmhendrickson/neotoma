@@ -31,6 +31,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { Request } from "express";
 
@@ -132,7 +133,6 @@ export async function receiveUploadedFile(
       const fields: Record<string, string> = {};
       const hash = crypto.createHash("sha256");
       const requestHash = crypto.createHash("sha256");
-      req.on("data", (chunk: Buffer) => requestHash.update(chunk));
 
       let sizeBytes = 0;
       let sawFile = false;
@@ -140,15 +140,58 @@ export async function receiveUploadedFile(
       let invalidFields = false;
       let settled = false;
       let pending: Promise<void> = Promise.resolve();
+      let activeFileStream: Readable | undefined;
+      let activePipeline: AbortController | undefined;
       let originalFilename: string | undefined;
       let clientMimeType: string | undefined;
+
+      const onRequestData = (chunk: Buffer) => requestHash.update(chunk);
+      const removeRequestListeners = () => {
+        req.off("data", onRequestData);
+        req.off("aborted", onRequestAborted);
+        req.off("error", onRequestError);
+        req.off("close", onRequestClose);
+      };
 
       const fail = (error: Error) => {
         if (settled) return;
         settled = true;
+        removeRequestListeners();
         req.unpipe(bb);
-        reject(error);
+        // A client disconnect is not a Busboy parse error. Stop both parser
+        // and writer explicitly, then reject only after the writer settles so
+        // the outer cleanup cannot race an open file descriptor.
+        activePipeline?.abort();
+        activeFileStream?.destroy();
+        if (!bb.destroyed) bb.destroy(error);
+        void pending.catch(() => {}).then(() => reject(error));
       };
+
+      const onRequestAborted = () => {
+        fail(new UploadError("ERR_UPLOAD_ABORTED", "The uploading client disconnected.", 499));
+      };
+      const onRequestError = (error: Error) => {
+        fail(
+          new UploadError(
+            "ERR_UPLOAD_REQUEST_FAILED",
+            `The upload request failed before completion: ${error.message}`,
+            400
+          )
+        );
+      };
+      const onRequestClose = () => {
+        // `close` also happens on normal completed requests. `complete` is
+        // finalized just after this event in some Node HTTP paths, so defer the
+        // check one turn rather than misclassifying a valid request as aborted.
+        setImmediate(() => {
+          if (!req.complete) onRequestAborted();
+        });
+      };
+
+      req.on("data", onRequestData);
+      req.once("aborted", onRequestAborted);
+      req.once("error", onRequestError);
+      req.once("close", onRequestClose);
 
       bb.on("field", (name, value, info) => {
         if (
@@ -184,7 +227,11 @@ export async function receiveUploadedFile(
           truncated = true;
         });
 
-        pending = pipeline(stream, fs.createWriteStream(tempPath)).catch((error: Error) => {
+        activeFileStream = stream;
+        activePipeline = new AbortController();
+        pending = pipeline(stream, fs.createWriteStream(tempPath), {
+          signal: activePipeline.signal,
+        }).catch((error: Error) => {
           fail(
             new UploadError(
               "ERR_UPLOAD_WRITE_FAILED",
@@ -271,6 +318,7 @@ export async function receiveUploadedFile(
             );
           }
           settled = true;
+          removeRequestListeners();
           resolve({
             tempPath,
             contentHash: hash.digest("hex"),

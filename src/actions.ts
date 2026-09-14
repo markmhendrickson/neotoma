@@ -8823,6 +8823,24 @@ async function handleStorePost(
         const uploadedFilename =
           parsed.data.original_filename || sourceRow.original_filename || undefined;
 
+        // A source handle is already durable, but resolving it for a plan must
+        // not create the derived asset entity or its observation. Structured
+        // plan mode makes the same guarantee, so the combined path has to
+        // carry it through this independently implemented unstructured leg.
+        if (parsed.data.commit === false) {
+          return {
+            source_id: sourceRow.id,
+            content_hash: sourceRow.content_hash,
+            file_size: sourceRow.file_size,
+            mime_type: uploadedMimeType,
+            original_filename: uploadedFilename ?? null,
+            storage_mode: "uploaded",
+            deduplicated: true,
+            plan: true,
+            commit: false,
+          };
+        }
+
         const { ensureAssetEntity } = await import("./services/asset_entity.js");
         const uploadedAssetInfo = await ensureAssetEntity({
           userId,
