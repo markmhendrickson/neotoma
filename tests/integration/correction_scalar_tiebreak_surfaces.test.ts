@@ -1,16 +1,30 @@
 import { createServer } from "node:http";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 
+vi.mock("../../src/embeddings.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/embeddings.js")>();
+  return {
+    ...original,
+    generateEmbedding: vi.fn().mockResolvedValue(null),
+  };
+});
+
 const USER_ID = LOCAL_DEV_USER_ID;
 const TYPE = "test_scalar_tiebreak_2394";
-const API_PORT = 18294;
-const API_BASE = `http://127.0.0.1:${API_PORT}`;
+const execFileAsync = promisify(execFile);
+const CLI_PATH = resolve("dist/cli/index.js");
+let apiBase: string;
 
 type McpTextResult = { content: Array<{ type?: string; text: string }> };
 
@@ -27,6 +41,18 @@ function parse(result: McpTextResult): Record<string, any> {
 
 async function snapshot(server: TestServer, entityId: string): Promise<Record<string, any>> {
   return parse(await server.retrieveEntitySnapshot({ entity_id: entityId, format: "json" }));
+}
+
+async function runCliJson(args: string[]): Promise<Record<string, any>> {
+  const { stdout } = await execFileAsync(process.execPath, [
+    CLI_PATH,
+    "--json",
+    "--api-only",
+    "--base-url",
+    apiBase,
+    ...args,
+  ]);
+  return JSON.parse(stdout.trim());
 }
 
 async function createEntity(server: TestServer, label: string): Promise<string> {
@@ -113,10 +139,13 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
     });
 
     httpServer = createServer(app);
-    await new Promise<void>((resolve, reject) => {
-      httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
+    await new Promise<void>((resolveListen, reject) => {
+      httpServer.listen(0, "127.0.0.1", () => resolveListen());
       httpServer.once("error", reject);
     });
+    const address = httpServer.address();
+    if (!address || typeof address === "string") throw new Error("expected TCP listen address");
+    apiBase = `http://127.0.0.1:${address.port}`;
   });
 
   afterAll(async () => {
@@ -154,7 +183,7 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
     const entityId = await createEntity(server, `http-correct-${randomUUID()}`);
 
     for (const value of ["description one", "description two"]) {
-      const response = await fetch(`${API_BASE}/correct`, {
+      const response = await fetch(`${apiBase}/correct`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -181,7 +210,7 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
     for (const value of ["batch one", "batch two"]) {
       const before = await snapshot(server, entityId);
       const response = await fetch(
-        `${API_BASE}/entities/${encodeURIComponent(entityId)}/batch_correct`,
+        `${apiBase}/entities/${encodeURIComponent(entityId)}/batch_correct`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -238,5 +267,76 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
 
     const snap = await snapshot(server, entityId);
     expect(snap.snapshot.notes).toBe("trusted store value");
+  });
+
+  it("CLI corrections create materializes the second same-priority scalar correction", async () => {
+    const entityId = await createEntity(server, `cli-correct-${randomUUID()}`);
+
+    for (const [index, value] of ["cli checkpoint one", "cli checkpoint two"].entries()) {
+      const result = await runCliJson([
+        "corrections",
+        "create",
+        entityId,
+        "--entity-type",
+        TYPE,
+        "--field-name",
+        "notes",
+        "--corrected-value",
+        value,
+        "--user-id",
+        USER_ID,
+        "--idempotency-key",
+        `cli-correct-${index}-${randomUUID()}`,
+      ]);
+      expect(result.entity_id).toBe(entityId);
+      expect(typeof result.correction_id).toBe("string");
+    }
+
+    const snap = await snapshot(server, entityId);
+    expect(snap.snapshot.notes).toBe("cli checkpoint two");
+    expect(typeof snap.provenance.notes).toBe("string");
+  });
+
+  it("CLI edit materializes successive same-priority scalar corrections", async () => {
+    const entityId = await createEntity(server, `cli-edit-${randomUUID()}`);
+    const editorDir = await mkdtemp(join(tmpdir(), "neotoma-2394-editor-"));
+
+    try {
+      for (const [index, value] of ["edit checkpoint one", "edit checkpoint two"].entries()) {
+        const editorPath = join(editorDir, `editor-${index}.mjs`);
+        await writeFile(
+          editorPath,
+          [
+            'import { readFileSync, writeFileSync } from "node:fs";',
+            "const file = process.argv.at(-1);",
+            'const input = readFileSync(file, "utf8");',
+            `const output = input.replace(/^notes:.*$/m, ${JSON.stringify(`notes: ${value}`)});`,
+            'if (output === input) throw new Error("notes field not found");',
+            "writeFileSync(file, output);",
+          ].join("\n")
+        );
+
+        const result = await runCliJson([
+          "edit",
+          entityId,
+          "--user-id",
+          USER_ID,
+          "--editor",
+          `${process.execPath} ${editorPath}`,
+        ]);
+        expect(result).toMatchObject({
+          success: true,
+          status: "applied",
+          entity_id: entityId,
+          fields_changed: ["notes"],
+        });
+      }
+
+      const snap = await snapshot(server, entityId);
+      expect(snap.snapshot.notes).toBe("edit checkpoint two");
+      expect(typeof snap.provenance.notes).toBe("string");
+    } finally {
+      await rm(editorDir, { recursive: true, force: true });
+    }
   });
 });

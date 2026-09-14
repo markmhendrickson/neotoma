@@ -70,11 +70,13 @@ function timestampMs(value: string | null | undefined): number {
 }
 
 function compareObservationRecencyThenId(a: Observation, b: Observation): number {
-  const observedDelta = timestampMs(b.observed_at) - timestampMs(a.observed_at);
-  if (observedDelta !== 0) return observedDelta;
+  const observedA = timestampMs(a.observed_at);
+  const observedB = timestampMs(b.observed_at);
+  if (observedA !== observedB) return observedB > observedA ? 1 : -1;
 
-  const createdDelta = timestampMs(b.created_at) - timestampMs(a.created_at);
-  if (createdDelta !== 0) return createdDelta;
+  const createdA = timestampMs(a.created_at);
+  const createdB = timestampMs(b.created_at);
+  if (createdA !== createdB) return createdB > createdA ? 1 : -1;
 
   return a.id.localeCompare(b.id);
 }

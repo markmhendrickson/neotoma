@@ -121,6 +121,50 @@ describe("ObservationReducer highest_priority same-tier scalar ordering (#2394)"
     expect(snapshot!.provenance.description).toBe("obs_zzz_second_sorts_last");
   });
 
+  it("uses id ASC only after both timestamps tie and is stable across input order", async () => {
+    const firstById = obs({
+      id: "obs_000_wins_final_tie",
+      fields: { notes: "stable winner" },
+    });
+    const secondById = obs({
+      id: "obs_zzz_loses_final_tie",
+      fields: { notes: "stable loser" },
+    });
+
+    for (const observations of [
+      [firstById, secondById],
+      [secondById, firstById],
+    ]) {
+      const snapshot = await reducer.computeSnapshot(entityId, observations);
+      expect(snapshot!.snapshot.notes).toBe("stable winner");
+      expect(snapshot!.provenance.notes).toBe("obs_000_wins_final_tie");
+    }
+  });
+
+  it("falls through malformed timestamps deterministically instead of returning NaN", async () => {
+    const older = obs({
+      id: "obs_000_older_created",
+      observed_at: "not-a-date",
+      created_at: "2026-01-01T00:00:00.000Z",
+      fields: { description: "older" },
+    });
+    const newer = obs({
+      id: "obs_zzz_newer_created",
+      observed_at: "also-not-a-date",
+      created_at: "2026-01-02T00:00:00.000Z",
+      fields: { description: "newer" },
+    });
+
+    for (const observations of [
+      [older, newer],
+      [newer, older],
+    ]) {
+      const snapshot = await reducer.computeSnapshot(entityId, observations);
+      expect(snapshot!.snapshot.description).toBe("newer");
+      expect(snapshot!.provenance.description).toBe("obs_zzz_newer_created");
+    }
+  });
+
   it("still lets higher numeric source_priority beat a newer lower-priority correction", async () => {
     const trusted = obs({
       id: "obs_trusted_priority",
