@@ -127,6 +127,21 @@ the later `observed_at`/`created_at` wins, with `id ASC` used only when both
 timestamps are equal. Correction receipts should still be followed by independent
 snapshot readback; a response status alone is not proof of the effective value.
 
+This ordering applies to every field whose active built-in or custom schema
+declares `highest_priority`, and to every same-priority observation on that
+field; it is not limited to observations created by the correction tools. The
+change does not alter `most_specific` fields. Deploying the reducer does not
+rewrite existing snapshots in bulk. A later store or correction recomputes the
+entity it touches, while untouched snapshots keep their prior projection until
+they are explicitly recomputed. For a deliberate rollout, first call
+`POST /recompute_snapshots_by_type` with `dry_run: true`, then recompute each
+affected entity type and verify the returned counts and errors plus representative
+snapshot values and provenance. To roll back, revert the reducer before further
+bulk recomputation. If snapshots were already recomputed, recompute the affected
+types again after the rollback to restore the prior projection. Observations are
+immutable, so this changes which value is materialized without deleting source
+history.
+
 **Use Cases:**
 - `vendor_name` in invoices (official documents > receipts)
 - `merchant_name` in receipts (bank statements > receipts)

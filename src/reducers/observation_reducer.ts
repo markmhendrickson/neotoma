@@ -409,8 +409,8 @@ export class ObservationReducer {
       const rankA = rankForObservationSource(a, observationSourceRank);
       const rankB = rankForObservationSource(b, observationSourceRank);
       if (rankA !== rankB) return rankA - rankB;
-      // Final: observed_at DESC, then created_at DESC, then id ASC.
-      return compareObservationRecencyThenId(a, b);
+      // Final: observed_at DESC
+      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
     });
 
     return {

@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
+import { resolveOwnedObservations } from "../../src/services/attachment_resolution.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 
@@ -233,6 +234,106 @@ describe("same-tier scalar corrections update readable snapshots (#2394)", () =>
 
     const snap = await snapshot(server, entityId);
     expect(snap.snapshot.notes).toBe("batch two");
+  });
+
+  it("explicit type recomputation updates a pre-existing custom-schema snapshot", async () => {
+    const entityId = await createEntity(server, `recompute-${randomUUID()}`);
+    const candidateA = parse(
+      await server.correct({
+        user_id: USER_ID,
+        entity_id: entityId,
+        entity_type: TYPE,
+        field: "notes",
+        value: "recompute candidate a",
+        idempotency_key: `recompute-a-${randomUUID()}`,
+      })
+    );
+    const candidateB = parse(
+      await server.correct({
+        user_id: USER_ID,
+        entity_id: entityId,
+        entity_type: TYPE,
+        field: "notes",
+        value: "recompute candidate b",
+        idempotency_key: `recompute-b-${randomUUID()}`,
+      })
+    );
+
+    const current = await snapshot(server, entityId);
+    const sharedObservedAt = "2026-01-01T00:00:00.000Z";
+    const correctionIds = [candidateA.observation_id, candidateB.observation_id];
+    const { error: observedAtError } = await db
+      .from("observations")
+      .update({ observed_at: sharedObservedAt })
+      .in("id", correctionIds)
+      .eq("user_id", USER_ID);
+    expect(observedAtError).toBeNull();
+
+    const reducerInput = await resolveOwnedObservations(entityId, USER_ID);
+    expect(reducerInput).not.toBeNull();
+    const reducerOrderedCorrections = (reducerInput ?? []).filter((observation) =>
+      correctionIds.includes(observation.id)
+    );
+    expect(reducerOrderedCorrections).toHaveLength(2);
+    const [staleObservation, desiredObservation] = reducerOrderedCorrections;
+    const staleValue = staleObservation.fields.notes;
+    const desiredValue = desiredObservation.fields.notes;
+
+    for (const [observationId, createdAt] of [
+      [staleObservation.id, "2026-01-01T00:00:01.000Z"],
+      [desiredObservation.id, "2026-01-01T00:00:02.000Z"],
+    ] as const) {
+      const { error } = await db
+        .from("observations")
+        .update({ created_at: createdAt })
+        .eq("id", observationId)
+        .eq("user_id", USER_ID);
+      expect(error).toBeNull();
+    }
+
+    const { error: staleSnapshotError } = await db
+      .from("entity_snapshots")
+      .update({
+        snapshot: { ...current.snapshot, notes: staleValue },
+        provenance: { ...current.provenance, notes: staleObservation.id },
+      })
+      .eq("entity_id", entityId)
+      .eq("user_id", USER_ID);
+    expect(staleSnapshotError).toBeNull();
+
+    const staleSnapshot = await snapshot(server, entityId);
+    expect(staleSnapshot.snapshot.notes).toBe(staleValue);
+    expect(staleSnapshot.provenance.notes).toBe(staleObservation.id);
+
+    const dryRunResponse = await fetch(`${apiBase}/recompute_snapshots_by_type`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity_type: TYPE, dry_run: true }),
+    });
+    expect(dryRunResponse.status).toBe(200);
+    const dryRun = (await dryRunResponse.json()) as {
+      dry_run?: boolean;
+      entity_ids?: string[];
+    };
+    expect(dryRun.dry_run).toBe(true);
+    expect(dryRun.entity_ids).toContain(entityId);
+
+    const recomputeResponse = await fetch(`${apiBase}/recompute_snapshots_by_type`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity_type: TYPE }),
+    });
+    expect(recomputeResponse.status).toBe(200);
+    const recompute = (await recomputeResponse.json()) as {
+      recomputed?: number;
+      errors?: number;
+    };
+    expect(recompute.errors).toBe(0);
+    expect(recompute.recomputed).toBeGreaterThanOrEqual(1);
+
+    const refreshed = await snapshot(server, entityId);
+    expect(refreshed.snapshot.notes).toBe(desiredValue);
+    expect(refreshed.provenance.notes).toBe(desiredObservation.id);
   });
 
   it("store still respects a legitimately higher-priority scalar source over a later normal correction", async () => {
