@@ -230,10 +230,15 @@ regardless of which was written more recently.
 
 ### `tie_breaker` options
 
-| Value                     | Behavior within the same `source_priority` tier    |
-| ------------------------- | -------------------------------------------------- |
-| `"observed_at"` (default) | Most recent observation wins                       |
-| `"source_priority"`       | Falls through to `id ASC` (stable, not time-based) |
+| Value                     | `highest_priority` behavior after the priority and source-kind tiers tie | `most_specific` behavior after specificity ties                      |
+| ------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `"observed_at"` (default) | Newest `observed_at`, then newest `created_at`, then `id ASC`            | Source-kind rank, then newest `observed_at`                          |
+| `"source_priority"`       | Same as `"observed_at"`; retained as a compatibility spelling            | Numeric source priority, source-kind rank, then newest `observed_at` |
+
+For `highest_priority`, numeric source priority is already the primary trust axis, so
+the two configured values intentionally converge once that tier ties. The distinction
+remains meaningful for `most_specific`, where `"source_priority"` adds numeric source
+priority between specificity and source-kind rank.
 
 ---
 
