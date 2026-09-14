@@ -165,6 +165,31 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
     await cleanupUserData(userB);
   });
 
+  describe("/corrections/transaction", () => {
+    it("cannot correct another user's entity", async () => {
+      const result = await callEndpoint("/corrections/transaction", {
+        user_id: userA.userId,
+        idempotency_key: "tenant-matrix-correction-transaction",
+        entities: [
+          {
+            entity_id: userB.entityId,
+            entity_type: "test",
+            expected_observation_count: 1,
+            expected_snapshot: {},
+            changes: [{ field: "marker", value: "forbidden" }],
+          },
+        ],
+      });
+      expect(result.status).toBe(404);
+      const rows = await db
+        .from("observations")
+        .select("fields")
+        .eq("entity_id", userB.entityId)
+        .eq("user_id", userB.userId);
+      expect(JSON.stringify(rows.data)).not.toContain("forbidden");
+    });
+  });
+
   describe("/instance-policy", () => {
     // MUST 5 requires a row for every new authenticated endpoint. This one is
     // deliberately the INVERSE of the usual assertion, and the distinction is
