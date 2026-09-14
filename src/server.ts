@@ -83,13 +83,18 @@ import {
   resolveConfiguredSessionOrigin,
   type SessionOriginInfo,
 } from "./services/session_info.js";
-import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
+import {
+  getInstructionEntitiesResult,
+  toLegacyStandingRules,
+  type InstructionEntity,
+} from "./services/standing_rules.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   getCurrentAAuthAdmission,
+  getCurrentAgentIdentity,
   getCurrentAttributionDecision,
   runWithRequestContext,
 } from "./services/request_context.js";
@@ -701,19 +706,38 @@ export class NeotomaServer {
     }
     const instructions = composeClientInstructions(baseInstructions, policySection);
 
-    // Load standing rules for the authenticated user and inject them so agents
-    // apply them from the first turn of the session (issue #184).
-    let standingRules: StandingRule[] = [];
-    // An empty rules array is ambiguous — it means either "no rules configured"
-    // or "the lookup failed". Carry the distinction into the payload so an
-    // agent is never handed an empty policy that is actually a broken read
-    // (#2131).
+    // Load instruction-bearing entities for the authenticated user and inject
+    // them so agents apply them from the first turn of the session (#184),
+    // across every configured entity type rather than `standing_rule` alone
+    // (#2054).
+    let instructionEntities: InstructionEntity[] = [];
+    // An empty array is ambiguous — it means either "nothing configured" or
+    // "the lookup failed". Carry the distinction into the payload so an agent
+    // is never handed an empty policy that is actually a broken read (#2131).
     let standingRulesLookupFailed = false;
     if (this.authenticatedUserId) {
-      const result = await getActiveStandingRulesResult(this.authenticatedUserId);
-      standingRules = result.rules;
+      // Domain matching uses the AAuth-verified agent subject only. The
+      // self-reported `clientName` on the same identity is deliberately not
+      // used: a client that could name its own domain could pull another
+      // agent's domain-scoped policies into its session.
+      const agentIdentity = getCurrentAgentIdentity()?.sub ?? null;
+      const result = await getInstructionEntitiesResult(this.authenticatedUserId, {
+        agentIdentity,
+      });
+      instructionEntities = result.entities;
       standingRulesLookupFailed = result.lookup_failed;
     }
+
+    // Strip the internal ranking/domain fields: the injected item schema is
+    // an explicit allowlist, so a field added to InstructionEntity later
+    // cannot reach the wire without a deliberate change here.
+    const injectedInstructionEntities = instructionEntities.map((entity) => ({
+      entity_id: entity.entity_id,
+      entity_type: entity.entity_type,
+      title: entity.title,
+      text: entity.text,
+      ...(entity.scope !== undefined ? { scope: entity.scope } : {}),
+    }));
 
     const availableSkills = this.getAvailableSkills();
 
@@ -732,7 +756,11 @@ export class NeotomaServer {
             }
           : {}),
         _neotoma: {
-          standing_rules: standingRules,
+          instruction_entities: injectedInstructionEntities,
+          // Deprecated alias for one minor release so consumers reading
+          // `standing_rules` keep working through the rename. Same entities,
+          // reshaped to the legacy item shape. Drop at the next minor.
+          standing_rules: toLegacyStandingRules(instructionEntities),
           ...(standingRulesLookupFailed
             ? {
                 standing_rules_unavailable: true,
