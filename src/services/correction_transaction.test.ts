@@ -1,7 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "../db.js";
 import { getDb } from "../repositories/db/connection.js";
-import { schemaRegistry } from "./schema_registry.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { substrateEventBus } from "../events/substrate_event_bus.js";
