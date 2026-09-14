@@ -46,6 +46,115 @@ export interface EntitySchema {
  * These are used as fallbacks when no schema is registered in the database.
  */
 export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
+  transcription: {
+    entity_type: "transcription",
+    schema_version: "2.0.0",
+    metadata: {
+      label: "Transcription",
+      description: "Text derived from audio with capture and transcription provenance.",
+      category: "knowledge",
+    },
+    schema_definition: {
+      // Optional fields preserve historical imports. New ingestion clients verify
+      // their required contract after storage. Recording identity is separate
+      // from a derivation's identity: do not re-key transcripts by audio hash.
+      identity_opt_out: "heuristic_canonical_name",
+      fields: {
+        transcription_id: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        audio_file_path: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        audio_file_name: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        source_directory: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        language: { type: "string", required: false, preserveCase: true, preserveWhitespace: true },
+        transcription_text: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        title: { type: "string", required: false, preserveCase: true, preserveWhitespace: true },
+        import_source_file: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        audio_file_path_data_dir_relative: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        audio_content_sha256: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        original_source_file: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        data_source: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        transcription_engine: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        transcription_model: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        capture_method: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        consent_basis: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+        transcription_date: { type: "date", required: false },
+        import_date: { type: "date", required: false },
+        audio_duration_seconds: { type: "number", required: false },
+        file_size_bytes: { type: "number", required: false },
+      },
+    },
+    reducer_config: { merge_policies: {} },
+  },
+
   holding: {
     entity_type: "holding",
     schema_version: "1.0",

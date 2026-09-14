@@ -122,6 +122,7 @@ export interface FieldDefinition {
   required?: boolean;
   validator?: string;
   preserveCase?: boolean; // Preserve case for this field during canonicalization
+  preserveWhitespace?: boolean; // Preserve exact whitespace, including line endings
   description?: string; // Field description
   converters?: ConverterDefinition[]; // Field type converters
   /** Declarative write-time value constraints for this field. See {@link FieldConstraints}. */
