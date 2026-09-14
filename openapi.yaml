@@ -7368,17 +7368,20 @@ paths:
                         snapshot: {type: object, additionalProperties: true}
                         observation_count: {type: integer}
         "400":
-          description: Invalid transaction or undeclared fields; nothing committed.
+          description: Invalid transaction, undeclared fields or instance policy denial; nothing committed.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ErrorEnvelope"
+                  - $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope"
         "401":
           description: Authentication required.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/ErrorEnvelope"}
         "403":
-          description: Calling agent or instance policy disallows a correction.
+          description: Calling agent capability, attribution or protected-type policy disallows a correction.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/ErrorEnvelope"}

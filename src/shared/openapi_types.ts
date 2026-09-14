@@ -8167,13 +8167,15 @@ export interface operations {
           };
         };
       };
-      /** @description Invalid transaction or undeclared fields; nothing committed. */
+      /** @description Invalid transaction, undeclared fields or instance policy denial; nothing committed. */
       400: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
+          "application/json":
+            | components["schemas"]["ErrorEnvelope"]
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"];
         };
       };
       /** @description Authentication required. */
@@ -8185,7 +8187,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description Calling agent or instance policy disallows a correction. */
+      /** @description Calling agent capability, attribution or protected-type policy disallows a correction. */
       403: {
         headers: {
           [name: string]: unknown;

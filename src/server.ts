@@ -91,6 +91,7 @@ import {
 } from "./services/skills/instance_skills.js";
 import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
+import { AgentCapabilityError } from "./services/agent_capabilities.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
@@ -2066,6 +2067,11 @@ export class NeotomaServer {
           // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
           // envelope carries `min_tier` / `current_tier` / `hint` in the MCP
           // `data` field (see src/services/attribution_policy.ts).
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof AgentCapabilityError) {
+          // Capability and protected-type denials are client policy failures,
+          // with the same actionable envelope as authenticated REST writes.
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
         if (error instanceof OverridePolicyViolationError) {
