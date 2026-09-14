@@ -1563,6 +1563,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "store",
   "parse_file",
   "correct",
+  "correct_transaction",
   "merge_entities",
   "split_entity",
   "list_potential_duplicates",
