@@ -16,6 +16,12 @@ This document reconciles two independently-derived views of who Neotoma is for:
 - **[ICP from functionality](icp_from_functionality.md)** (functional view): derived only from a first-principles audit of what the code does.
 - **The existing ICP materials** (market view): `primary_icp.md`, `secondary_icps.md`, `future_icps.md`, `profiles.md`, `developer_release_targeting.md`, `general_release_criteria.md`, `prioritized_pain_points_and_failure_modes.md`, `qualification_survey.md`. These are derived from market research, topology analysis, and go-to-market strategy (TAM, channels, business model). Most are now marked `visibility: internal` (see "Visibility decision" below).
 
+> **Update, 2026-09-15 — the O1 durable-ICP decision, reconciled against this document rather than re-deciding it.** The canonical roles assigned below still stand and are not reopened: `icp_from_functionality.md` remains the public statement, the market docs remain internal, and this document remains the bridge. What the O1 decision changed is a claim *inside* the agreement table, not the role assignment.
+>
+> The table's "Disposition" row recorded both views as agreeing on *"comfortable with infrastructure-level abstractions."* The operator has ruled that the durable ICP is the person who feels the pain of ad-hoc agent state and **will not build their own state infrastructure**; the infrastructure builder is an early-adopter cohort. That row is corrected below, and it is the only row affected.
+>
+> **This does not weaken the reconciliation's central finding.** The two views were derived from different inputs and still name the same buyer. The disposition row was the one place where both views had inherited the same wrong inference — that because the install path was infrastructural, the user must be too. That is an inference about the delivery mechanism, not about the person, and the functional audit could not have distinguished the two: code can show that install is CLI-driven, but it cannot show whether that is the intended audience or an unfixed defect. Correcting it in both views simultaneously is a reconciliation, not a new divergence.
+
 The two views were produced from different inputs and they agree on the core. That agreement is a useful signal: the audience the market research targets is the same audience the code actually serves.
 
 ## Agreement on the primary ICP
@@ -28,7 +34,7 @@ Both views name the same primary archetype, the person who builds and operates a
 | Modes | Operator, builder, and debugger are modes of one person | "Three modes, not separate personas": infrastructure engineering, building agent systems, operating across tools |
 | Tools | Claude Code, Cursor, ChatGPT, Codex, and others, wired together | Same multi-agent stack |
 | Core pain | Memory does not carry over; facts conflict; corrections do not stick; no audit trail | Chronic "sync tax" plus acute "agent acted on bad state" |
-| Disposition | CLI-comfortable, infrastructure-level | "Comfortable with infrastructure-level abstractions" |
+| Disposition | Technically fluent about state; wants to own the data, not the plumbing | Same — "technically fluent without being infrastructure-oriented" (revised 2026-09-15 per O1; previously "comfortable with infrastructure-level abstractions" in both columns) |
 
 The functional audit independently confirms the market archetype. No contradiction exists on the primary ICP.
 
@@ -36,6 +42,7 @@ The functional audit independently confirms the market archetype. No contradicti
 
 - **Developers building on a state layer** (functional secondary) maps to **Toolchain Integrators** and the **Internal-Tools Engineer at a model lab** (market secondaries): both are downstream of primary-ICP validation and build on Neotoma's API surface and guarantees.
 - **Exclusions match.** The functional view's "not for casual note-taking / PKM / hosted-chat users" matches the market view's explicitly "Not Pursued" AI-for-Management-Work cohort and the "Not for" list in the README.
+- **One exclusion was wrong in every view and has been corrected in all of them (2026-09-15).** All three surfaces — `icp_from_functionality.md`, `primary_icp.md` (D4), and the README — excluded people who "need zero-install onboarding." Under O1 that line disqualified the actual buyer. Each now excludes only the durable boundary: a prospect who requires that nothing run on their own machine. The agreement between the views is preserved because the correction was applied to all of them in one pass; a partial fix would have created a real contradiction where none existed.
 
 ## Net-new from the functional audit
 
@@ -65,6 +72,8 @@ The existing ICP strategy docs previously carried no `visibility` frontmatter, s
 `icp_from_functionality.md` and this reconciliation doc remain `public` so the "Use Cases > Ideal Customer Profiles" surface still has a clean, public ICP. The change is metadata-only and reversible per file; revert any file by removing or flipping its `visibility` frontmatter.
 
 ## Recommended follow-ups for the market materials
+
+0. **(New, 2026-09-15)** `profiles.md` (~2,500 lines) has not been audited against the O1 decision. Its persona narratives, pricing tiers, and buyer nominations were written when the archetype was infrastructure-oriented, and some of them almost certainly still describe that person as the buyer. It was left unmodified in this pass deliberately: rewriting persona narratives is a market-research judgement, not a mechanical propagation of a ruling. Treat it as the largest known unreconciled surface.
 
 1. Add the security-operator secondary ICP to `secondary_icps.md`, grounded in the attestation/grants/provenance functionality.
 2. Note the federated multi-device/small-group tertiary in `future_icps.md`.

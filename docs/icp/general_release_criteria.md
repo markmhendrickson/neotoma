@@ -13,6 +13,8 @@ Criteria for exiting the developer release and entering general release. The dev
 
 **Related docs:** [`primary_icp.md`](./primary_icp.md) (durable ICP definition) · [`developer_release_targeting.md`](./developer_release_targeting.md) (dev release targeting and activation risks) · [`adopter_dependency_commitments.md`](../foundation/adopter_dependency_commitments.md) (the orthogonal _dependency-safety_ lens — stability/governance/exit commitments an adopter holds us to, distinct from the go-to-market readiness gates here)
 
+> **Guided-install decision, 2026-09-15 — what it changes here.** The operator has prioritized a **guided installation with branded UI** as the intended onboarding path, in place of expecting the buyer to install via npm/CLI or to onboard through their own harness. Three things in this document were written around the npm path and are revised below: Gate 3(a) and (c), and the `gate4_install_path_friction` sub-gate. **What does not change:** the gates are outcome gates — they measure whether a person reached sustained usage unaided — and that outcome is path-independent. The thresholds are not lowered because the path got easier; if guided install ships and the gates still fail, the gates were right. **Honest status:** guided install is not shipped as of this revision. Every gate below is still measured against the npm/CLI path today, and the guided-path wording takes effect when that path exists. Guided install is also not zero-install — the user still installs on their own machine — so nothing here should be read as a hosted or no-install claim. See [`developer_release_targeting.md`](./developer_release_targeting.md) activation milestone 1.
+
 > **Two lenses, not one.** This document is the _go-to-market_ readiness gate (can Neotoma sustain unassisted adoption at scale?). It is distinct from [`adopter_dependency_commitments.md`](../foundation/adopter_dependency_commitments.md), the _dependency-safety_ bar (is it safe for an external product to build on the substrate?). A version can satisfy one before the other; they are tracked separately on purpose.
 
 ---
@@ -59,9 +61,9 @@ General release readiness means sufficient evidence on all three.
 
 **Threshold:** 2+ users have gone from discovery to active usage without direct intervention, where each user satisfies all three of the following:
 
-- **(a) Install completed on the evaluator's actual machine** — not a screen-share over the founder's machine, not a guided pairing session, not a sandbox set up by the team.
+- **(a) Install completed on the evaluator's actual machine, by whichever path the product offers them** — not a screen-share over the founder's machine, not a pairing session with a human, not a sandbox set up by the team. Under the guided-install decision, completing a guided installer **does** satisfy (a): the product doing the work is the intended design, and is categorically different from a person doing it for them. What (a) excludes is *human* assistance, not *product* assistance.
 - **(b) First sustained-write session within 7 days of install** — observation activity that goes beyond a single test write and reflects real workflow usage.
-- **(c) No synchronous help between discovery and that first sustained-write** — no personal walkthrough, no DM troubleshooting, no live debugging of the install path or MCP setup.
+- **(c) No synchronous help from a person between discovery and that first sustained-write** — no personal walkthrough, no DM troubleshooting, no live debugging of the install path or MCP setup. In-product guidance, error messages that guide recovery, and an agent configuring Neotoma on the user's instruction are not "help" in this sense; they are the product working.
 
 Pre-install evaluators (those who have not completed install on their own machine) do not vacuously satisfy this gate. Self-reported intent to install does not count.
 
@@ -88,7 +90,7 @@ Each of the activation risk classes from [`developer_release_targeting.md`](./de
 | **UX friction**                                                                 | Error messages guide recovery; successful storage is confirmed to user; duplicate entity edge cases resolved or surfaced gracefully                                                                                                | Pending                                                    |
 | **Trust barrier**                                                               | SBOM or dependency audit published (if proven to be a real blocker); supply chain posture surfaced in install docs                                                                                                                 | Pending                                                    |
 | **Prior bad experience**                                                        | Onboarding surface includes integrity-first framing; at least one user-facing comparison (fuzzy memory vs. Neotoma guarantees) exists                                                                                              | Pending                                                    |
-| **Install-path friction** (`gate4_install_path_friction`)                       | Cold install on evaluator's actual machine completes with ≤2 approval prompts, in ≤5 minutes, respecting version-managed Node (Mise / asdf / nvm / volta), and emits a canonical `installed at <path>` line                        | Failing — 0/3 round-2 fresh-install attempts met threshold |
+| **Install-path friction** (`gate4_install_path_friction`)                       | Cold install on the evaluator's actual machine completes unaided, in ≤5 minutes, ending in a state the evaluator can verify — Neotoma running, its data location known, and at least one tool connected. **Guided path (intended, not shipped):** measured end-to-end; the evaluator is never asked to resolve a package-manager or PATH problem. **npm/CLI path (current):** ≤2 approval prompts, respects version-managed Node (Mise / asdf / nvm / volta), emits a canonical `installed at <path>` line. | Failing — 0/3 round-2 fresh-install attempts met threshold. **This result is the evidence base for the guided-install decision**: three evaluators who wanted the product did not reach it by the npm path. |
 | **Retrieval transparency** (`gate4_retrieval_transparency`)                     | The harness surfaces a visible breadcrumb of which observations the agent just used during a turn (e.g. "read N observations from Neotoma"), enabling the user to verify what informed an agent response                           | Pending                                                    |
 | **Privacy / local-LLM compatibility** (`gate4_privacy_local_llm_compatibility`) | A documented `/local-llm` (or equivalent) surface plus a working walkthrough for at least one local-LLM topology (Ollama / LM Studio / Alaris-class), including a Neotoma-CLI-without-MCP path for harnesses that do not speak MCP | Pending                                                    |
 
@@ -150,7 +152,7 @@ General release is not primarily a feature gate — it's an audience and support
 ### What doesn't necessarily change
 
 - **Feature set:** General release doesn't require new features. It requires that existing features work reliably, are well-documented, and deliver value without hand-holding.
-- **ICP scope:** The primary ICP remains the same. General release expands the surface area within the same ICP, not the ICP itself. Broadening to knowledge workers, small teams, or enterprise happens post-general-release.
+- **ICP scope:** The primary ICP remains the same. General release expands the surface area within the same ICP, not the ICP itself. Broadening to knowledge workers, small teams, or enterprise happens post-general-release. Note that under the O1 decision the ICP is the buyer who will not build their own state infrastructure — so a guided install is *within* the current ICP scope, not a broadening of it. Shipping it is not ICP drift; it is removing a barrier that was screening the ICP out.
 - **Pricing / packaging:** Can remain unchanged unless adoption evidence suggests a different model.
 
 ---
@@ -187,7 +189,7 @@ Signs that the developer release is being extended past its useful life:
 
 - **Perpetual "one more feature":** Adding features to avoid the exposure of general release. The dev release should validate, not perfect.
 - **Hand-holding as retention:** Active users who only succeed because of personal support. This masks onboarding gaps that will break at scale.
-- **ICP drift under pressure:** Broadening the target because the first-five aren't converting. If the first-five don't convert, the answer is to diagnose why — not to find a different audience.
+- **ICP drift under pressure:** Broadening the target because the first-five aren't converting. If the first-five don't convert, the answer is to diagnose why — not to find a different audience. **The converse failure is equally real:** treating a delivery defect as an ICP signal. When evaluators who match the ICP fail to install, that is a defect to fix, not evidence that the ICP should be narrowed toward whoever can get past it. Narrowing toward the people who survive the install path selects for the infrastructure builder the O1 decision explicitly de-targeted.
 - **Confusing usage with validation:** High observation volume from one or two power users is not the same as validated adoption across five independent users.
 
 ---
@@ -210,12 +212,14 @@ Signs that the developer release is being extended past its useful life:
 
 1. All six gates must be met before recommending general release
 2. Gates are evidence-based — assertions without observed data do not count
-3. Do not recommend expanding ICP scope as a substitute for meeting adoption gates within the current ICP
+3. Do not recommend expanding ICP scope as a substitute for meeting adoption gates within the current ICP; equally, do not narrow the ICP toward whoever clears the current install path
 4. Distinguish between activation success (Gate 1) and retention success (Gate 2) — both are required
 5. Architecture validation (Gate 5) is a hard blocker — a single integrity failure undermines the core value prop
 
 ---
 
 ## Revision history
+
+- **2026-09-15:** Applied the durable-ICP decision (O1) and the guided-install decision. Gate 3(a) and (c) now distinguish *product* assistance (permitted, and the intended design) from *human* assistance (still disqualifying). `gate4_install_path_friction` restated as an outcome threshold with separate guided and npm/CLI criteria; thresholds unchanged. Added the note that a failed install is a delivery defect rather than an ICP signal, and the matching anti-pattern. No gate was added, removed, or loosened.
 
 - **2026-05-15:** Tightened Gate 3 to require install on evaluator's actual machine, first sustained-write within 7 days, and no synchronous help in between — closing the "vacuously true" pre-install loophole. Added Gate 4 sub-gates for `gate4_install_path_friction`, `gate4_retrieval_transparency`, and `gate4_privacy_local_llm_compatibility`. Promoted `gate4_cognitive_coldstart` to a first-class Gate 4 sub-gate with explicit ≤25% `friction|blocked` threshold. Updated Readiness Assessment Template to reflect new sub-gates. Backed by the 16-evaluator feedback corpus (see `docs/private/customer-development/aggregate_round2_2026_05_15_feedback_analysis.md`).
