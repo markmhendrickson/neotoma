@@ -5584,18 +5584,74 @@ export class NeotomaServer {
           throw mismatchErr;
         }
 
-        const { data: existingObservations, error: obsError } = await db
+        // Combined stores with interpretation.source_ref=unstructured write
+        // observations against the unstructured source, while the structured
+        // JSON source still owns the idempotency key. Exact replay must look
+        // up observations on the interpretation source when one was selected,
+        // then resolve the entities this request stored — sibling provenance
+        // rows (e.g. audio_asset) and other interpretations of the same bytes
+        // must not displace them.
+        const observationSourceId =
+          options.interpretationSourceId ??
+          (typeof interpretation?.source_id === "string" ? interpretation.source_id : undefined) ??
+          existingSource.id;
+        const requestedEntities = entities.map((entity) => {
+          const raw = { ...(entity as Record<string, unknown>) };
+          const entityType =
+            (typeof raw.entity_type === "string" && raw.entity_type) ||
+            (typeof raw.type === "string" && raw.type) ||
+            "";
+          delete raw.entity_type;
+          delete raw.type;
+          return { entityType, fields: raw };
+        });
+        const requestedEntityTypes = new Set(
+          requestedEntities.map((entity) => entity.entityType).filter(Boolean)
+        );
+
+        const { data: existingObservationRows, error: obsError } = await db
           .from("observations")
           .select("id, entity_id, entity_type")
-          .eq("source_id", existingSource.id)
+          .eq("source_id", observationSourceId)
           .eq("user_id", userId);
 
         if (obsError) {
           throw new Error(`Failed to fetch existing observations: ${obsError.message}`);
         }
 
+        const { getSnapshot: getSnapshotForReplay } =
+          await import("./services/snapshot_computation.js");
+
+        let existingObservations = existingObservationRows ?? [];
+        if (observationSourceId !== existingSource.id && requestedEntityTypes.size > 0) {
+          const typeFiltered = existingObservations.filter((obs: { entity_type: string }) =>
+            requestedEntityTypes.has(obs.entity_type)
+          );
+          const fieldMatched: typeof typeFiltered = [];
+          for (const obs of typeFiltered) {
+            let snapshot: Record<string, unknown> | null = null;
+            try {
+              const snap = await getSnapshotForReplay(obs.entity_id, userId);
+              snapshot = (snap?.snapshot as Record<string, unknown> | undefined) ?? null;
+            } catch {
+              snapshot = null;
+            }
+            if (!snapshot) continue;
+            const matches = requestedEntities.some((requested) => {
+              if (requested.entityType && requested.entityType !== obs.entity_type) {
+                return false;
+              }
+              return Object.entries(requested.fields).every(
+                ([key, value]) => snapshot![key] === value
+              );
+            });
+            if (matches) fieldMatched.push(obs);
+          }
+          existingObservations = fieldMatched.length > 0 ? fieldMatched : typeFiltered;
+        }
+
         const existingEntityIds =
-          existingObservations?.map(
+          existingObservations.map(
             (obs: { id: string; entity_id: string; entity_type: string }) => obs.entity_id
           ) ?? [];
         const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
@@ -5616,8 +5672,6 @@ export class NeotomaServer {
         // one. No new observation is written, so we read the persisted snapshot
         // directly. Mark each entry `deduplicated: true` so callers can tell a
         // replay from a fresh write.
-        const { getSnapshot: getSnapshotForReplay } =
-          await import("./services/snapshot_computation.js");
         const replaySnapshotByEntityId = new Map<string, Record<string, unknown>>();
         for (const replayEntityId of new Set<string>(existingEntityIds as string[])) {
           try {
@@ -5640,7 +5694,7 @@ export class NeotomaServer {
         return this.buildTextResponse({
           source_id: existingSource.id,
           entities:
-            existingObservations?.map(
+            existingObservations.map(
               (obs: { id: string; entity_id: string; entity_type: string }) => ({
                 entity_id: obs.entity_id,
                 entity_type: obs.entity_type,

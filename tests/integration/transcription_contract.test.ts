@@ -146,4 +146,50 @@ describe("transcription schema and source contract", () => {
       expect(source.data?.content_hash).toBe(expected.audio_content_sha256);
     }
   );
+
+  it("exact combined replay with unstructured interpretation returns the stored entity", async () => {
+    const schema = getSchemaDefinition("transcription");
+    expect(schema).not.toBeNull();
+    await seedTestSchema(server, "transcription", schema!.schema_definition.fields, {
+      user_specific: true,
+      user_id: userId,
+    });
+    const replayAudio = Buffer.from(`Synthetic replay recording ${randomUUID()}`);
+    const expected = {
+      title: `Replay ${randomUUID()}`,
+      transcription_text: "Exact replay transcript.\n",
+      audio_content_sha256: createHash("sha256").update(replayAudio).digest("hex"),
+      original_source_file: "synthetic-replay.wav",
+      capture_method: "voice_memo",
+      transcription_engine: "local_whisper_cpp",
+      consent_basis: "unknown",
+      file_size_bytes: replayAudio.length,
+    };
+    const idempotencyKey = `transcription-replay-${randomUUID()}`;
+    const args = {
+      user_id: userId,
+      idempotency_key: idempotencyKey,
+      file_idempotency_key: `${idempotencyKey}-file`,
+      entities: [{ entity_type: "transcription", ...expected }],
+      file_content: replayAudio.toString("base64"),
+      mime_type: "audio/wav",
+      original_filename: `synthetic-replay-${userId}.wav`,
+      interpretation: { source_ref: "unstructured" as const },
+    };
+    const firstRaw = await server.store(args);
+    const first = JSON.parse(firstRaw.content[0].text);
+    const firstRow = first.structured?.entities?.[0];
+    expect(firstRow?.entity_id).toBeTruthy();
+    if (firstRow?.entity_id) entities.push(firstRow.entity_id);
+    if (first.unstructured?.source_id) sources.push(first.unstructured.source_id);
+
+    const replayRaw = await server.store(args);
+    const replay = JSON.parse(replayRaw.content[0].text);
+    const replayRow = replay.structured?.entities?.[0];
+    expect(replay.structured?.entities ?? []).not.toEqual([]);
+    expect(replayRow?.entity_id).toBe(firstRow.entity_id);
+    expect(replayRow?.entity_type).toBe("transcription");
+    expect(replayRow?.deduplicated).toBe(true);
+    expect(replay.unstructured?.source_id).toBe(first.unstructured?.source_id);
+  });
 });
