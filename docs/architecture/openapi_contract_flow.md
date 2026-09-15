@@ -21,10 +21,11 @@ Follow this order; do not skip steps:
 2. **Run `npm run openapi:generate`.** Regenerates `src/shared/openapi_types.ts` and formats it with Prettier so the output is byte-stable and matches `npm run format:check`. Commit the regenerated file in the same change as the spec. CI re-runs this generate and fails if the committed file drifts (the "OpenAPI types are in sync with openapi.yaml" step in `ci_test_lanes.yml`), so always regenerate rather than hand-editing the file.
 
    > Note: Use `npm run openapi:generate`, not the bare `openapi-typescript` binary. The raw binary output uses a different indentation width than the committed file and produces a spurious whole-file diff; the npm script appends the Prettier pass that keeps the output stable.
+
 3. **Update `src/shared/contract_mappings.ts`.** Every `operationId` needs a row declaring `adapter: "mcp" | "cli" | "both" | "infra"` and, where applicable, `mcpTool` and `cliCommand` names.
 4. **Implement / update the handler** in `src/actions.ts` (or wherever the route is registered). Use the generated types for the request and response shape.
 5. **Wire MCP / CLI surfaces** if `adapter` includes them:
-   - MCP: add / update `src/tool_definitions.ts` and dispatch in `src/server.ts`; update `docs/developer/mcp/tool_descriptions.yaml`.
+   - MCP: add / update `src/tool_definitions.ts` and dispatch in `src/server.ts`; update `docs/developer/mcp/tool_descriptions.yaml`, including the new tool's required `effect_classes` entry. The catalog fails closed when its effect inventory and the registered MCP inventory diverge.
    - CLI: add / update the command in `src/cli/index.ts`; register coverage in `tests/cli/cli_command_coverage_guard.test.ts`.
 6. **Run contract tests.** Minimum: `npm test -- tests/contract/`. The relevant gates are:
    - `tests/contract/contract_mapping.test.ts` — every OpenAPI `operationId` has a mapping row.
@@ -127,13 +128,13 @@ components:
 
 **Surfaces that carry attribution:**
 
-| Response schema / field                    | Carrier                    |
-|--------------------------------------------|----------------------------|
-| `Observation.metadata`                     | Inline AgentAttribution    |
-| `RelationshipSnapshot.provenance`          | Inline AgentAttribution    |
-| `Source.source_metadata`                   | Inline AgentAttribution    |
-| `Interpretation.interpretation_config`     | Inline AgentAttribution    |
-| `TimelineEvent.properties`                 | Inline AgentAttribution    |
+| Response schema / field                | Carrier                 |
+| -------------------------------------- | ----------------------- |
+| `Observation.metadata`                 | Inline AgentAttribution |
+| `RelationshipSnapshot.provenance`      | Inline AgentAttribution |
+| `Source.source_metadata`               | Inline AgentAttribution |
+| `Interpretation.interpretation_config` | Inline AgentAttribution |
+| `TimelineEvent.properties`             | Inline AgentAttribution |
 
 Keys are optional; clients MUST treat missing keys as "no attribution available
 at that tier" and fall back to `attribution_tier: "anonymous"`.
@@ -148,7 +149,7 @@ Provenance" for the full semantic contract and
 
 ## Agent instructions (MCP + CLI runtime instructions)
 
-Agent-facing behavioral rules are not described by `openapi.yaml`. They live in `docs/developer/mcp/instructions.md` and `docs/developer/cli_agent_instructions.md`, kept in parity by `docs/developer/agent_instructions_sync_rules.mdc`. The spec describes *what* the API does; the instructions describe *how* an agent should call it. Keep them separate and synchronized.
+Agent-facing behavioral rules are not described by `openapi.yaml`. They live in `docs/developer/mcp/instructions.md` and `docs/developer/cli_agent_instructions.md`, kept in parity by `docs/developer/agent_instructions_sync_rules.mdc`. The spec describes _what_ the API does; the instructions describe _how_ an agent should call it. Keep them separate and synchronized.
 
 ## Related documents
 
