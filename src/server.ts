@@ -5641,7 +5641,8 @@ export class NeotomaServer {
             requestedEntityTypes.has(obs.entity_type)
           );
           const keyMatched = typeFiltered.filter(
-            (obs) => typeof obs.idempotency_key === "string" && obs.idempotency_key === idempotencyKey
+            (obs) =>
+              typeof obs.idempotency_key === "string" && obs.idempotency_key === idempotencyKey
           );
           const fieldMatched: ReplayObservation[] = [];
           for (const obs of typeFiltered) {
