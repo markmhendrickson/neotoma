@@ -234,6 +234,7 @@ Two eval systems run in CI, testing different layers (do not conflate them):
 
 - **`agentic_evals` lane** (`npm run eval:tier1`) runs the `tests/fixtures/agentic_eval/*.json` fixtures: the **hook-lifecycle** layer (replays `beforeSubmitPrompt`/`postToolUse`/`stop` events through harness adapters against a mock server). Asserts the hook stack's turn-lifecycle compliance.
 - **`eval_scenarios` lane** (`npm run eval:scenarios`) runs `packages/eval-harness/scenarios/*` in **replay** against a real in-process isolated Neotoma server: the **agent-tool-driving** layer (an agent calls `store`/`correct`/`merge`/… and the call executes for real). This is the CI gate for tool-behavior evals — the hook-lifecycle fixtures cannot express "agent calls correct". Replay needs no API key (committed cassettes).
+- **`build_landing_page_*` scenarios** (neotoma#2418) run on **`eval_scenarios` only**. Do not add Tier-1 `tests/fixtures/agentic_eval/*.json` fixtures for these ids, and do not use `npm run eval:tier1` to gate them — the eight-stage skill contract needs cassette + isolated-server graph asserts.
 
 **Quarantine.** A scenario whose `meta.quarantine` is set is *skipped* (not failed) by the runner, with the reason logged, so the `eval_scenarios` lane stays green on a clean main while a known gap is tracked + fixed. The value references the tracking issue (e.g. `neotoma#1726: …`). Un-quarantine as the underlying support lands.
 

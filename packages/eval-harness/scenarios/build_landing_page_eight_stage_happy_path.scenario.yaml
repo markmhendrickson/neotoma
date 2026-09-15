@@ -1,0 +1,89 @@
+meta:
+  id: build_landing_page_eight_stage_happy_path
+  description: >
+    Full eight-stage happy path. Asserts entity.exists for each stage type with RUN-scoped where,
+    plus PART_OF/REFERS_TO chain with source/target entity types. Clone base: correct_overrides_snapshot.
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - happy_path
+
+seed_strategy: generated
+source_pattern: "Synthetic build-landing-page stage-contract coverage for neotoma#2418 / ateles#1026."
+privacy_transform: "Fully synthetic product; no PII."
+
+seed_entities:
+  - entity_type: plan
+    title: "blp_hp_2418"
+
+system_prompt: >
+  You are executing the build-landing-page skill entity contract against Neotoma.
+  Stage map: 1 target_persona, 2 cta, 3 research_finding, 4 rendered_page_template,
+  5 specification, 6 analysis, 7 design_system, 8 rendered_page.
+  Per stage: check upstream → write only declared fields → read-back → PART_OF plan + REFERS_TO upstream.
+  Stamp the run token into the declared isolation field for each type.
+  Never invent ICP/persona when required context is missing — surface a blocker.
+  Updating rendered_page uses correct on html_body, never publish_rendered_page.
+
+user_prompt: |
+  Run build-landing-page for synthetic product run token blp_hp_2418. Execute all eight stages with isolation fields set to blp_hp_2418.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  - type: entity.exists
+    entity_type: "target_persona"
+    where:
+      name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "cta"
+    where:
+      name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "research_finding"
+    where:
+      title: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "rendered_page_template"
+    where:
+      name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "specification"
+    where:
+      title: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "analysis"
+    where:
+      title: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "design_system"
+    where:
+      design_system_name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "rendered_page"
+    where:
+      title: "blp_hp_2418"
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "target_persona"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    op: "gte"
+    value: 8
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "cta"
+    target_entity_type: "target_persona"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    op: "gte"
+    value: 7

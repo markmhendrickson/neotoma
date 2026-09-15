@@ -63,6 +63,37 @@ scenarios/             # One `*.scenario.yaml` per behavior
 cassettes/             # Committed JSON cassettes (regenerated nightly)
 ```
 
+## Skill stage-contract scenarios
+
+Six stub/replay scenarios cover the ateles `build-landing-page` skill stage
+contract (neotoma#2418; unblocks ateles#1026 qa). They live **only** in this
+package (`eval:scenarios` / `eval_scenarios` CI lane) — do **not** look for
+them under `npm run eval:tier1` or `tests/fixtures/agentic_eval/*.json`.
+Clone shape from `scenarios/correct_overrides_snapshot.scenario.yaml`. Isolation
+uses a RUN token in declared fields (not an undeclared `run_marker`); always
+scope `entity.count` / negative existence with matching `where:`.
+
+| `meta.id` | Fail mode caught |
+|---|---|
+| `build_landing_page_eight_stage_happy_path` | Missing stage entity or PART_OF/REFERS_TO edge |
+| `build_landing_page_upstream_reuse_no_duplicate` | Duplicate `target_persona` instead of reuse |
+| `build_landing_page_json_string_decision_register` | JSON-string ICP misread → empty/invented persona |
+| `build_landing_page_readback_fail_closed` | Proceeding after unverified write (empty `rendered_page` = pass) |
+| `build_landing_page_stage8_correct_verify` | `publish_rendered_page` noop / unstable id instead of `correct` |
+| `build_landing_page_missing_context_blocks` | Invented ICP/page when context is missing |
+
+```bash
+# From packages/eval-harness after npm run build:
+node dist/cli.js run --scenario build_landing_page
+
+# From repo root (eval_scenarios lane — not eval:tier1):
+npm run eval:scenarios -- --scenario build_landing_page_eight_stage_happy_path
+npm run eval:scenarios -- --scenario build_landing_page
+
+# Missing cassette: record once, then commit under cassettes/
+node dist/cli.js run --mode record --scenario build_landing_page_eight_stage_happy_path
+```
+
 ## Adding a scenario
 
 1. Drop a YAML file in `scenarios/<id>.scenario.yaml`.

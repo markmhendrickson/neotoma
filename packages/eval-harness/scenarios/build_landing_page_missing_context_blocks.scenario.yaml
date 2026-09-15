@@ -1,0 +1,51 @@
+meta:
+  id: build_landing_page_missing_context_blocks
+  description: >
+    Fail mode: inventing an ICP/page when context is missing would create
+    target_persona or rendered_page under RUN blp_miss_2418. Empty entities
+    plus an explicit blocker reply is the PASS condition.
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - missing-context
+
+seed_strategy: generated
+source_pattern: "build-landing-page scope rule: never invent ICP (neotoma#2418)."
+privacy_transform: "Fully synthetic; no PII."
+
+seed_entities:
+  - entity_type: plan
+    title: blp_miss_2418
+
+system_prompt: >
+  You implement build-landing-page with the scope rule overriding stage-1
+  "derive if nothing exists": when no target_persona, category_definition,
+  or decision-register ICP exists for plan blp_miss_2418, STOP and surface
+  a blocker. Never invent ICP. Never create rendered_page. Persist the
+  conversation + user message via store, then reply with an explicit
+  blocker.
+
+user_prompt: |
+  Build a landing page for plan blp_miss_2418. There is no ICP context.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  - type: reply_text.contains
+    pattern: "(blocker|missing ICP|cannot proceed|insufficient context)"
+  - type: entity.count
+    entity_type: target_persona
+    where:
+      name: blp_miss_2418
+    op: eq
+    value: 0
+  - type: entity.count
+    entity_type: rendered_page
+    where:
+      title: blp_miss_2418
+    op: eq
+    value: 0
