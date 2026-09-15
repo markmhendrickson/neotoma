@@ -47,8 +47,9 @@ export async function mintMcpHttpSession(
   resolveAppOrigin: (req: Request) => AppOriginResolution
 ): Promise<MintedMcpHttpSession> {
   const serverInstance = new NeotomaServer();
-  const connectionIdFromReq = (req.headers["x-connection-id"] ||
-    req.headers["X-Connection-Id"]) as string | undefined;
+  const connectionIdFromReq = (req.headers["x-connection-id"] || req.headers["X-Connection-Id"]) as
+    | string
+    | undefined;
   if (connectionIdFromReq) {
     serverInstance.setSessionConnectionId(connectionIdFromReq);
   }
@@ -145,7 +146,10 @@ async function handleTransportOnSink(
       return out;
     }) as typeof res.end;
 
-    transport.handleRequest(req, res, body).then(() => setTimeout(finish, 50)).catch(reject);
+    transport
+      .handleRequest(req, res, body)
+      .then(() => setTimeout(finish, 50))
+      .catch(reject);
   });
 }
 

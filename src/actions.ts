@@ -2063,7 +2063,11 @@ app.all("/mcp", async (req, res) => {
 
     if (!transport && req.method === "POST" && isInitializeRequest(req.body)) {
       // Client-driven initialize: mint a fresh session (ignores any stale session id).
-      const minted = await mintMcpHttpSession(req, mcpSessionMaps, resolvePublicAppOriginFromRequest);
+      const minted = await mintMcpHttpSession(
+        req,
+        mcpSessionMaps,
+        resolvePublicAppOriginFromRequest
+      );
       transport = minted.transport;
       serverInstance = minted.serverInstance;
     } else if (
