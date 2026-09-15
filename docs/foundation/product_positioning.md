@@ -9,20 +9,24 @@ This section maps Neotoma to April Dunford’s five core positioning choices plu
 | **Competitive alternatives** | Homebrew SQLite/Postgres, git + markdown stacks, flat JSON/YAML, one-off agent memory implementations, and VC-funded retrieval memory (Mem0, Zep, LangChain-style patterns). Provider-native chat memory is a parallel alternative for conversation-only use cases. See §7.4. |
 | **Unique attributes** | Privacy-first user-controlled architecture; deterministic, schema-first extraction with hash-based IDs and reproducible state; cross-tool MCP access; versioned observations with field-level provenance and immutability guarantees. See §7.2. |
 | **Value themes** | Two primary themes: (1) **Tax removal** — stop being the human sync layer; subsumes continuity (one memory across tools) and sovereignty (your data, your control). (2) **State integrity** — prove your agent isn't operating on bad data; subsumes accountability (reconstruct what an agent knew at decision time). All copy should clearly serve one of these two themes. Pain-forward phrasing in §7.3. |
-| **Best-fit customers** | One archetype — the **personal agentic OS builder/operator** — in three operational modes: debugging infrastructure, building pipelines, operating across tools. Not three separate personas. See `docs/icp/primary_icp.md`. Evaluator context in §7.5 (agents with tool use “get it” faster than search-only evals). |
-| **Market category** | Primary external frame: **cross-tool memory for AI agents** (ICP vocabulary). Architecture frame ("deterministic state layer," "DPME") used internally and after the fold. Previously: Named category hypothesis: **Deterministic Personal Memory Engine (DPME)** (§7.2) — a *new category* play with a higher education tax; use when the audience already grasps the stack diagram. |
+| **Best-fit customers** | One archetype — the **personal agentic OS builder/operator** — in three operational modes: debugging infrastructure, building pipelines, operating across tools. Not three separate personas. **"Power user" is retired** as a buyer term (it names both the core ICP and an explicit non-target in live docs) and **"indie hacker" is a narrower subsegment, not a synonym**; see [`../icp/README.md`](../icp/README.md) for the canonical statement, the synonym mapping, and the open ICP questions. See `docs/icp/primary_icp.md`. Evaluator context in §7.5 (agents with tool use “get it” faster than search-only evals). |
+| **Market category** | **The system of record for AI agents** — single category noun, with the definite article, on every surface (decided 2026-08-21, superseding "shared governed state layer" and retiring the other ten nouns the positioning audit counted: state layer, agent memory, deterministic memory, memory system, memory graph, memory infrastructure, truth layer, truth engine, substrate, Rosetta Stone, DPME). The category is an **authority claim**, not a mechanism claim — see [`core_identity.md`](core_identity.md). Rationale: legible to technical buyers at near-zero education tax, and it makes **correctness rather than recall** the category criterion, which is the criterion Neotoma can win on. "Cross-tool memory for AI agents" is retired as a category frame: it names the retrieval category and invites comparison against retrieval-memory vendors on recall. |
 | **Relevant trends** | Proliferation of LLM apps that need private data + feedback loops; localhost / private-environment agents; agent evaluation and AEO as a discovery path (§7.1, §7.5). |
 | **Positioning statement (internal)** | For people building an operating system for their AI agents, Neotoma is the deterministic, privacy-first memory layer that gives cross-tool agents shared, verifiable state—not another notes app or provider-locked chat memory. |
-| **Extended positioning (coordination-aware)** | For operators running distributed agent fleets, Neotoma is the state layer that gives agents shared, verifiable state and real-time awareness of state changes — enabling agent-to-agent coordination without centralized orchestration. (Use after the user has adopted Neotoma for memory; coordination is a power-user expansion of state integrity, not a new value theme.) |
+| **Extended positioning (coordination-aware)** | For operators running distributed agent fleets, Neotoma is the system of record that gives agents shared, verifiable state and real-time awareness of state changes — enabling agent-to-agent coordination without centralized orchestration. (Use after the user has adopted Neotoma for memory; coordination is a power-user expansion of state integrity, not a new value theme.) |
 | **Key proof points** | Field evaluator quotes ("State integrity, not retrieval quality — that's the gap nobody else is filling"); open docs and repo checks on append-only/versioned models; memory guarantees table; MCP integration surface. See §7.2 and §7.5. |
-| **Primary message (external)** | "Your agents forget. Neotoma makes them remember." Lead with pain using ICP vocabulary; architecture terms only after the fold. Aligned with §7.3 (“your agents forget what they knew yesterday,” “one memory across AI tools,” “CI/CD for agent state”) before layering architecture terms. |
+| **Primary message (external)** | Lead with the **integrity** failure, never the recall failure. Copy must never say an agent *forgot* — forgetting is the recall framing and any retrieval vendor answers it with better recall (decided 2026-08-21, `never_say_the_agent_forgot`). The accurate framing is that nothing was committed to a record: a fact held in context was never written anywhere authoritative, so there is nothing to forget and nothing to correct. Three non-overlapping scenarios: WRITE ("neither the fact nor the fix stuck"), DIVERGENCE ("your agents disagree silently"), RECONSTRUCTION ("you cannot reconstruct why"). **Retired:** "Your agents forget. Neotoma makes them remember." and "your agents forget what they knew yesterday" — both concede the recall axis. Every scenario must pass the competitor test: if mem0, Zep, or any retrieval vendor could plausibly claim to solve it, it frames their category and must be rewritten. |
 | **Sales narrative** | Problem: fragmented tool-specific memory and non-replayable state → old way: files, CRUD DBs, or retrieval-only memory → new way: structured, versioned substrate with provenance → proof: guarantees, cross-tool access, deterministic behavior. |
 | **Content strategy** | Comparison and guarantee pages for agent evaluation; stack-level narrative (substrate beneath LLM apps); case-style stories for homebrew migration; avoid leading cold audiences with “deterministic” before felt pain (§7.3). |
 
 **Positioning quality (0–10 rubric from the skill): ~8.** Differentiation, alternatives, and value themes are strong. Homepage now leads with ICP pain vocabulary and tax-removal framing. Remaining gaps: category education for DPME with new audiences; expanding proof points beyond single evaluator quote.
 
 ## 7.1 Positioning
-Neotoma is **not a PKM or app**. Neotoma is:
+
+Neotoma is **the system of record for AI agents**, and **not a PKM or app**.
+
+The descriptions below are *supporting* frames. None of them may lead a definition or stand in as the category noun — each one was counted in the 2026-08-21 positioning audit as a competing noun, and all were retired in favour of the single one above:
+
 - A **substrate** for AI tools
 - A **structured memory system** for personal/professional data (documents + agent-created data)
 - A **data foundation** beneath all AI interactions
@@ -31,12 +35,12 @@ Neotoma is **not a PKM or app**. Neotoma is:
 
 Neotoma serves both human-in-the-loop workflows (people using AI tools) and agentic systems that need a deterministic, queryable memory substrate (agent frameworks, orchestration pipelines, observability stacks).
 
-**Marketing positioning:**
-- "Structured personal data memory for AI agents"
-- "Memory infrastructure for agentic systems"
-- "Cross-platform memory that works with all your AI tools"
-- "The truth engine behind your AI tools"
-- "The foundation for agent-native personal computing"
+**Marketing positioning** — *historical; retained for provenance, not for use.* Every line below leads with memory or recall and therefore frames the retrieval category. Replace with problem-led copy per the Primary message row in §7.0:
+- ~~"Structured personal data memory for AI agents"~~
+- ~~"Memory infrastructure for agentic systems"~~
+- ~~"Cross-platform memory that works with all your AI tools"~~
+- ~~"The truth engine behind your AI tools"~~
+- ~~"The foundation for agent-native personal computing"~~
 - "The private data substrate that LLM app layers depend on for context engineering"
 
 **Substrate Positioning in LLM Stack:**
@@ -351,9 +355,9 @@ Consolidated inventory of short-form phrases. Use for hero copy, subheadlines, C
 
 | Phrase | Origin | Best slot |
 |--------|--------|-----------|
-| "The state layer for AI agents." | Footer tagline | Tagline, meta descriptions |
-| "System of record for AI agents." | Synthesis from feedback | Category creation, blog, HN |
-| "Truth Layer." | Evaluator | Technical shorthand, architecture discussions |
+| **"The system of record for AI agents."** | **DECIDED 2026-08-21 — the category noun** | **Every surface: tagline, meta descriptions, nav, footer, category creation, blog, HN. Always with the definite article.** |
+| ~~"The state layer for AI agents."~~ | Former footer tagline | **RETIRED** — names the mechanism, not the authority |
+| ~~"Truth Layer."~~ | Evaluator | **RETIRED** as a noun; the underlying idea survives in the category above |
 | "git for what your agents know." | Hero subcopy | Analogy for developers, social |
 | "Those tools store files. Neotoma understands files." | Positioning doc | Competitive contrast (PKM/notes tools) |
 | "Other memory solutions give your agents a notepad. Neotoma gives them a ledger." | Proposed | Competitive contrast (Mem0/Zep), social, blog |
@@ -362,7 +366,7 @@ Consolidated inventory of short-form phrases. Use for hero copy, subheadlines, C
 | "Your agents don't have a memory problem. They have a state problem." | Proposed | Reframing opener, blog, HN comments |
 | "The nervous system for your agent fleet." | Simon feedback analysis | Power users running distributed agents; after the fold |
 | "Your agents don't just remember. They sense." | Proposed | Upgrade from passive memory to active coordination; after the fold |
-| "A state layer that signals, not just stores." | Proposed | Technical positioning, architecture discussions; after the fold |
+| "A system of record that signals, not just stores." | Proposed (reworded from "state layer", 2026-09-15) | Technical positioning, architecture discussions; after the fold |
 | "Your strategy is state. Neotoma stores it." | Proposed (state-layer reframe 2026-05-08) | Positioning vs. ad-hoc plan/decision storage; technical audiences who confuse strategy with state-management |
 
 **Note on the "nervous system" metaphor:** It belongs only on marketing/positioning surfaces (this doc, blog content, README hero copy, social). Foundation and architecture docs (`core_identity.md`, `philosophy.md`, `layered_architecture.md`, `architecture.md`, `product_principles.md`, `composability_analysis.md`, `data_models.md`) use precise architectural language — "event emission," "subscription," "webhook delivery," "fire-and-forget signaling" — not biological analogies. This keeps the substrate/marketing boundary defensible and pre-empts metaphor-induced scope creep (learning, adaptation, autonomy implications).
