@@ -56,6 +56,8 @@ export interface InterpretationOptions {
   sourceId: string;
   extractedData: Record<string, unknown>[];
   config: InterpretationConfig;
+  /** When set, stamped onto created observations for exact idempotent replay. */
+  idempotencyKey?: string;
 }
 
 export const UNKNOWN_FIELDS_HINT =
@@ -330,7 +332,7 @@ export async function runInterpretation(
   options: InterpretationOptions
 ): Promise<InterpretationResult> {
   enforceAttributionPolicy("interpretations", getCurrentAgentIdentity());
-  const { userId, sourceId, extractedData, config } = options;
+  const { userId, sourceId, extractedData, config, idempotencyKey } = options;
 
   // Validate that the source exists before creating an interpretation
   const { data: sourceCheck, error: sourceCheckError } = await db
@@ -697,6 +699,7 @@ export async function runInterpretation(
         fields: canonicalFields, // Store canonical fields, not raw
         canonical_hash: canonicalHash, // Store hash for deduplication
         user_id: userId,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
       };
 
       let { error: obsError } = await db.from("observations").insert(observationData);

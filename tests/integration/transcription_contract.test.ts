@@ -192,4 +192,74 @@ describe("transcription schema and source contract", () => {
     expect(replayRow?.deduplicated).toBe(true);
     expect(replay.unstructured?.source_id).toBe(first.unstructured?.source_id);
   });
+
+  it("exact combined replay after correct does not return sibling transcription on shared unstructured source", async () => {
+    const schema = getSchemaDefinition("transcription");
+    expect(schema).not.toBeNull();
+    await seedTestSchema(server, "transcription", schema!.schema_definition.fields, {
+      user_specific: true,
+      user_id: userId,
+    });
+
+    const sharedAudio = Buffer.from(`Shared sibling audio ${randomUUID()}`);
+    const sharedSha = createHash("sha256").update(sharedAudio).digest("hex");
+    const baseFields = {
+      transcription_text: "Shared audio transcript body.\n",
+      audio_content_sha256: sharedSha,
+      original_source_file: "shared-sibling.wav",
+      capture_method: "voice_memo",
+      transcription_engine: "local_whisper_cpp",
+      consent_basis: "unknown",
+      file_size_bytes: sharedAudio.length,
+    };
+    const titleA = `Sibling A ${randomUUID()}`;
+    const titleB = `Sibling B ${randomUUID()}`;
+    const keyA = `transcription-sibling-a-${randomUUID()}`;
+    const keyB = `transcription-sibling-b-${randomUUID()}`;
+
+    const storeArgs = (title: string, idempotencyKey: string) => ({
+      user_id: userId,
+      idempotency_key: idempotencyKey,
+      file_idempotency_key: `${idempotencyKey}-file`,
+      entities: [{ entity_type: "transcription", title, ...baseFields }],
+      file_content: sharedAudio.toString("base64"),
+      mime_type: "audio/wav",
+      original_filename: `shared-sibling-${userId}.wav`,
+      interpretation: { source_ref: "unstructured" as const },
+    });
+
+    const firstA = JSON.parse((await server.store(storeArgs(titleA, keyA))).content[0].text);
+    const firstB = JSON.parse((await server.store(storeArgs(titleB, keyB))).content[0].text);
+    const idA = firstA.structured?.entities?.[0]?.entity_id as string | undefined;
+    const idB = firstB.structured?.entities?.[0]?.entity_id as string | undefined;
+    expect(idA).toBeTruthy();
+    expect(idB).toBeTruthy();
+    expect(idA).not.toBe(idB);
+    if (idA) entities.push(idA);
+    if (idB) entities.push(idB);
+    for (const id of [
+      firstA.unstructured?.source_id,
+      firstB.unstructured?.source_id,
+      firstA.structured?.source_id,
+      firstB.structured?.source_id,
+    ]) {
+      if (id) sources.push(id);
+    }
+    expect(firstA.unstructured?.source_id).toBe(firstB.unstructured?.source_id);
+
+    await server.correct({
+      user_id: userId,
+      entity_id: idA,
+      entity_type: "transcription",
+      field: "title",
+      value: `Corrected ${titleA}`,
+      idempotency_key: `correct-title-a-${randomUUID()}`,
+    });
+
+    const replay = JSON.parse((await server.store(storeArgs(titleA, keyA))).content[0].text);
+    const replayIds = (replay.structured?.entities ?? []).map(
+      (row: { entity_id: string }) => row.entity_id
+    );
+    expect(replayIds).toEqual([idA]);
+  });
 });
