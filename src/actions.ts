@@ -81,6 +81,13 @@ import {
 } from "./services/file_input_diagnostics.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import {
+  adoptRecoveredSessionId,
+  completeSyntheticMcpHandshake,
+  mintMcpHttpSession,
+  unknownSessionJsonRpcBody,
+  type McpHttpSessionMaps,
+} from "./mcp_http_session.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
@@ -2039,65 +2046,74 @@ app.all("/mcp", async (req, res) => {
       ? mcpServerInstances.get(sessionId)
       : undefined;
 
+    const mcpSessionMaps: McpHttpSessionMaps = {
+      transports: mcpTransports,
+      servers: mcpServerInstances,
+    };
+
+    const rpcIdForUnknownSession =
+      req.body &&
+      typeof req.body === "object" &&
+      !Array.isArray(req.body) &&
+      "id" in req.body &&
+      (typeof (req.body as { id: unknown }).id === "string" ||
+        typeof (req.body as { id: unknown }).id === "number")
+        ? (req.body as { id: string | number }).id
+        : null;
+
     if (!transport && req.method === "POST" && isInitializeRequest(req.body)) {
-      // Create new server instance for each session to ensure clean auth state
-      // This ensures OAuth flow is required for each new connection
-      serverInstance = new NeotomaServer();
-      const connectionIdFromReq = (req.headers["x-connection-id"] ||
-        req.headers["X-Connection-Id"]) as string | undefined;
-      if (connectionIdFromReq) {
-        serverInstance.setSessionConnectionId(connectionIdFromReq);
-      }
-      const appOrigin = resolvePublicAppOriginFromRequest(req);
-      serverInstance.setSessionAppOrigin(appOrigin.origin ?? null, appOrigin.source ?? null);
-
-      // Create new transport for initialization
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sid) => {
-          if (transport) {
-            mcpTransports.set(sid, transport);
-            // Store server instance by session ID to preserve authentication state
-            mcpServerInstances.set(sid, serverInstance!);
-            logger.info(`[MCP HTTP] Session initialized: ${sid}, server instance stored`);
-          }
-        },
-      });
-
-      transport.onclose = () => {
-        if (transport?.sessionId) {
-          mcpTransports.delete(transport.sessionId);
-          mcpServerInstances.delete(transport.sessionId);
-          logger.error(`[MCP HTTP] Session closed: ${transport.sessionId}`);
+      // Client-driven initialize: mint a fresh session (ignores any stale session id).
+      const minted = await mintMcpHttpSession(req, mcpSessionMaps, resolvePublicAppOriginFromRequest);
+      transport = minted.transport;
+      serverInstance = minted.serverInstance;
+    } else if (
+      !transport &&
+      req.method === "POST" &&
+      typeof sessionId === "string" &&
+      sessionId.length > 0 &&
+      req.body &&
+      typeof req.body === "object" &&
+      !isInitializeRequest(req.body)
+    ) {
+      // Recover-in-place (neotoma#2100): authenticated POST with an unknown session
+      // id and a non-initialize body mints a new transport, completes a server-side
+      // initialize handshake, then serves the original call under the new session id.
+      // Auth already passed above — do not mint on 401 paths.
+      try {
+        const minted = await mintMcpHttpSession(
+          req,
+          mcpSessionMaps,
+          resolvePublicAppOriginFromRequest
+        );
+        const handshakeOk = await completeSyntheticMcpHandshake(minted.transport);
+        const recoveredSessionId = minted.transport.sessionId;
+        if (!handshakeOk || !recoveredSessionId) {
+          logger.warn(
+            `[MCP HTTP] Recover-in-place handshake failed for stale Mcp-Session-Id (first 8 chars): ${sessionId.slice(0, 8)}...`
+          );
+          return res.status(404).json(unknownSessionJsonRpcBody(rpcIdForUnknownSession));
         }
-      };
-
-      // Connect transport to server
-      await serverInstance.runHTTP(transport);
+        transport = minted.transport;
+        serverInstance = minted.serverInstance;
+        adoptRecoveredSessionId(req, recoveredSessionId);
+        logger.info(
+          `[MCP HTTP] Recovered unknown/expired session (stale first 8: ${sessionId.slice(0, 8)}...) → new session ${recoveredSessionId.slice(0, 8)}...`
+        );
+      } catch (recoverError: unknown) {
+        logger.warn(
+          `[MCP HTTP] Recover-in-place failed for stale Mcp-Session-Id (first 8 chars): ${sessionId.slice(0, 8)}...`,
+          recoverError
+        );
+        return res.status(404).json(unknownSessionJsonRpcBody(rpcIdForUnknownSession));
+      }
     } else if (!transport) {
-      const rpcId =
-        req.body &&
-        typeof req.body === "object" &&
-        !Array.isArray(req.body) &&
-        "id" in req.body &&
-        (typeof (req.body as { id: unknown }).id === "string" ||
-          typeof (req.body as { id: unknown }).id === "number")
-          ? (req.body as { id: string | number }).id
-          : null;
       const hadSessionHeader = typeof sessionId === "string" && sessionId.length > 0;
       if (hadSessionHeader) {
+        // GET/DELETE unknown session, or POST only after mint/handshake failure above.
         logger.warn(
-          `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}... often wrong replica behind a load balancer, API restart, or stale client state`
+          `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}... server restart or stale client state`
         );
-        return res.status(404).json({
-          jsonrpc: "2.0",
-          error: {
-            code: -32001,
-            message:
-              "Not Found: MCP session is unknown or expired on this API instance. The client should re-initialize by sending a new InitializeRequest without a session ID. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance).",
-          },
-          id: rpcId,
-        });
+        return res.status(404).json(unknownSessionJsonRpcBody(rpcIdForUnknownSession));
       }
       return res.status(400).json({
         jsonrpc: "2.0",
@@ -2106,7 +2122,7 @@ app.all("/mcp", async (req, res) => {
           message:
             "Bad Request: No MCP session on this request. Send an initialize JSON-RPC message first, then include the mcp-session-id response header on every subsequent POST.",
         },
-        id: rpcId,
+        id: rpcIdForUnknownSession,
       });
     }
 

@@ -138,6 +138,12 @@ jobs:
       - name: Run cross-surface contract-parity integration tests
         run: npm run test:contract-parity
 
+      # #2100 MCP HTTP recover-in-place + remaining 404 copy + stdio proxy session-loss
+      # safety net. test:unit excludes tests/integration and does not guarantee
+      # src/proxy/*.test.ts coverage on every PR lane; wire the effect evals here.
+      - name: Run MCP session recover-in-place contract coverage (#2100)
+        run: npx vitest run --no-file-parallelism tests/integration/mcp_session_recover_in_place.test.ts tests/integration/mcp_session_404_reconnect.test.ts src/proxy/mcp_stdio_proxy.test.ts tests/unit/mcp_proxy.test.ts
+
       # #2046 instance-skill MCP initialize effect regression. The service has
       # unit coverage, but that can mock away backend-driver SQL mistakes. This
       # integration test seeds real rows and drives MCP initialize through the

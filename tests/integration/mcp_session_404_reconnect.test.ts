@@ -1,9 +1,8 @@
 /**
- * neotoma#1923: MCP streamable-HTTP session handling must reply `404 Not
- * Found` (not `503 Service Unavailable`) to a POST carrying an unknown or
- * expired `mcp-session-id`, so spec-compliant clients auto-reinitialize
- * (MCP Streamable HTTP transport spec, Session Management §4) instead of
- * treating the server as unavailable and giving up.
+ * neotoma#1923 / #2100: remaining unknown-session paths (GET/DELETE) still reply
+ * `404 Not Found` with `MCP session is unknown` so proxy recovery keeps matching.
+ * Authenticated POST recover-in-place lives in
+ * `tests/integration/mcp_session_recover_in_place.test.ts`.
  *
  * Boots the real Express `app` (src/actions.ts) on a loopback port with no
  * auth configured, so requests are admitted via the local dev-http path —
@@ -121,18 +120,16 @@ describe("POST /mcp unknown-session handling (#1923)", () => {
     rmSync(ctx.tmpRoot, { recursive: true, force: true });
   }
 
-  it("returns 404 (not 503) with a spec-aligned re-initialize message for an unknown mcp-session-id", async () => {
+  it("returns 404 (not 503) with restart-first copy for GET with an unknown mcp-session-id", async () => {
     const ctx = await bootApp();
     try {
       const fakeSessionId = randomUUID();
       const res = await fetch(`${ctx.baseUrl}/mcp`, {
-        method: "POST",
+        method: "GET",
         headers: {
-          "Content-Type": "application/json",
           Accept: "application/json, text/event-stream",
           "mcp-session-id": fakeSessionId,
         },
-        body: nonInitializeBody(1),
       });
 
       expect(res.status).toBe(404);
@@ -141,38 +138,23 @@ describe("POST /mcp unknown-session handling (#1923)", () => {
       const body = (await res.json()) as JsonRpcErrorBody;
       expect(Object.keys(body).sort()).toEqual(["error", "id", "jsonrpc"]);
       expect(body.jsonrpc).toBe("2.0");
-      expect(body.id).toBe(1);
       expect(body.error?.code).toBe(-32001);
       expect(typeof body.error?.message).toBe("string");
 
       const message = (body.error?.message ?? "").toLowerCase();
       expect(message).not.toContain("service unavailable");
-      expect(message).not.toContain("unavailable");
-      expect(message).toMatch(/session.*(unknown|expired)/);
-      expect(message).toMatch(/re-?initializ/);
-      expect(message).toMatch(/replica|sticky/);
+      expect(message).toMatch(/mcp session is unknown/);
+      expect(message).toMatch(/restart|stale|re-?initializ/);
+      expect(message).not.toMatch(/replica|sticky/);
     } finally {
       await teardownApp(ctx);
     }
   });
 
-  it("branch matrix: only the (hadSessionHeader=true, unknown session, non-init) case changes to 404", async () => {
+  it("branch matrix: initialize mint + no-header 400 remain; POST recover moved to #2100", async () => {
     const ctx = await bootApp();
     try {
-      // Row 1: session header present but unknown, non-initialize -> 404 (the fix).
-      const unknownSessionRes = await fetch(`${ctx.baseUrl}/mcp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/event-stream",
-          "mcp-session-id": randomUUID(),
-        },
-        body: nonInitializeBody(10),
-      });
-      expect(unknownSessionRes.status).toBe(404);
-
-      // Row 2: session header present but unknown, initialize request -> unaffected,
-      // still 200 with a freshly minted session (init branch ignores stale session ids).
+      // Row 1: session header present but unknown, initialize → 200 with a new session.
       const initWithStaleSessionRes = await fetch(`${ctx.baseUrl}/mcp`, {
         method: "POST",
         headers: {
@@ -185,7 +167,7 @@ describe("POST /mcp unknown-session handling (#1923)", () => {
       expect(initWithStaleSessionRes.status).toBe(200);
       expect(initWithStaleSessionRes.headers.get("mcp-session-id")).toBeTruthy();
 
-      // Row 3: no session header, non-initialize -> unchanged 400 Bad Request.
+      // Row 2: no session header, non-initialize → unchanged 400 Bad Request.
       const noSessionRes = await fetch(`${ctx.baseUrl}/mcp`, {
         method: "POST",
         headers: {
@@ -198,7 +180,7 @@ describe("POST /mcp unknown-session handling (#1923)", () => {
       const noSessionBody = (await noSessionRes.json()) as JsonRpcErrorBody;
       expect(noSessionBody.error?.code).toBe(-32000);
 
-      // Row 4: no session header, initialize -> unchanged 200 with a new session.
+      // Row 3: no session header, initialize → unchanged 200 with a new session.
       const freshInitRes = await fetch(`${ctx.baseUrl}/mcp`, {
         method: "POST",
         headers: {
@@ -214,24 +196,9 @@ describe("POST /mcp unknown-session handling (#1923)", () => {
     }
   });
 
-  it("reconnect round-trip: 404 on stale session, then a session-less initialize succeeds and registers a new transport", async () => {
+  it("session-less initialize still registers a transport usable for follow-up POSTs", async () => {
     const ctx = await bootApp();
     try {
-      const staleSessionId = randomUUID();
-
-      // Step 1: simulate a post-restart client replaying its old session id.
-      const staleRes = await fetch(`${ctx.baseUrl}/mcp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/event-stream",
-          "mcp-session-id": staleSessionId,
-        },
-        body: nonInitializeBody(20),
-      });
-      expect(staleRes.status).toBe(404);
-
-      // Step 2: spec-compliant client behavior on 404 — re-initialize with NO session id.
       const reinitRes = await fetch(`${ctx.baseUrl}/mcp`, {
         method: "POST",
         headers: {
@@ -243,10 +210,7 @@ describe("POST /mcp unknown-session handling (#1923)", () => {
       expect(reinitRes.status).toBe(200);
       const newSessionId = reinitRes.headers.get("mcp-session-id");
       expect(newSessionId).toBeTruthy();
-      expect(newSessionId).not.toBe(staleSessionId);
 
-      // Step 3: the new session id is live and usable for a subsequent request —
-      // proves recovery actually completed, not just that initialize returned 200.
       const followUpRes = await fetch(`${ctx.baseUrl}/mcp`, {
         method: "POST",
         headers: {
