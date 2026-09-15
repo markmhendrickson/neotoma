@@ -357,6 +357,28 @@ export const config = {
   mcpCompactInstructions:
     (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "1" ||
     (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "true",
+  /**
+   * When false, MCP `initialize` skips the graph-stored skill lookup entirely
+   * and the instructions block is byte-identical to what it was before
+   * instance skill hints existed (#2046).
+   *
+   * Defaults to ON, unlike `mcpCompactInstructions` above. The feature exists
+   * because a hosted instance's skills are otherwise undiscoverable to an
+   * MCP-only client, and a discovery fix that an operator has to find and
+   * enable does not fix discovery. Instances with no `skill` rows already
+   * render nothing, so the default costs them one bounded read and no
+   * instruction bytes; the flag is the escape hatch for an operator who wants
+   * the section gone regardless.
+   *
+   * Note the polarity: this reads the env var for an explicit OFF, where the
+   * compact flag reads it for an explicit ON. Only `0`/`false` disable it, so
+   * an unset or unparseable value keeps the documented default rather than
+   * silently turning the feature off.
+   */
+  mcpInstanceSkillHints: !(
+    (process.env.NEOTOMA_MCP_INSTANCE_SKILL_HINTS || "").toLowerCase() === "0" ||
+    (process.env.NEOTOMA_MCP_INSTANCE_SKILL_HINTS || "").toLowerCase() === "false"
+  ),
   oauthClientId: process.env.NEOTOMA_OAUTH_CLIENT_ID || "",
   /**
    * Additional exact callback URLs an operator trusts to receive an authorization

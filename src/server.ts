@@ -84,6 +84,11 @@ import {
   type SessionOriginInfo,
 } from "./services/session_info.js";
 import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
+import {
+  getInstanceSkillsResult,
+  renderInstanceSkillsSection,
+  type InstanceSkill,
+} from "./services/skills/instance_skills.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
@@ -316,8 +321,13 @@ export class NeotomaServer {
    * separate discovery round-trip.
    *
    * Returns an empty array when the `skills/` directory is absent (e.g. in
-   * development checkouts that have not yet staged skill assets, or in test
-   * environments with stripped package layouts).
+   * development checkouts that have not yet staged skill assets, in test
+   * environments with stripped package layouts, or on a hosted instance whose
+   * skills live in the graph rather than on disk).
+   *
+   * This is only one of two skill sources. Graph-stored `skill` entities are
+   * read separately by `getInstanceSkills()` and unioned with this list in
+   * {@link buildAuthenticatedInitializeResponse} (issue #2046).
    */
   private getAvailableSkills(): string[] {
     const roots = [config.projectRoot, resolveNeotomaPackageRoot()];
@@ -699,7 +709,9 @@ export class NeotomaServer {
     } catch (err) {
       logger.warn(`[instance_policy] instructions render skipped: ${(err as Error).message}`);
     }
-    const instructions = composeClientInstructions(baseInstructions, policySection);
+    // Deferred until the instance-skills section is rendered below, so both
+    // appended sections compose through the same helper rather than one going
+    // through it and the other being concatenated on afterwards.
 
     // Load standing rules for the authenticated user and inject them so agents
     // apply them from the first turn of the session (issue #184).
@@ -715,7 +727,54 @@ export class NeotomaServer {
       standingRulesLookupFailed = result.lookup_failed;
     }
 
-    const availableSkills = this.getAvailableSkills();
+    // Skills reach agents two ways: mirrored to a local skills directory, or
+    // stored in the graph as `skill` rows. A hosted instance has only the
+    // latter, so the filesystem scan alone leaves MCP-only clients unable to
+    // discover any skill the instance holds (issue #2046). Union both sources
+    // so either deployment shape surfaces its skills.
+    //
+    // Gated by `config.mcpInstanceSkillHints`, which defaults ON: an operator
+    // who wants the section gone sets NEOTOMA_MCP_INSTANCE_SKILL_HINTS=0, and
+    // the lookup is then skipped entirely rather than performed and discarded,
+    // leaving the instructions byte-identical to what they were before this
+    // feature existed.
+    //
+    // As with standing rules, an empty list is ambiguous: it means either "no
+    // skill rows" or "the read failed". Carry the distinction so a broken read
+    // is never presented to an agent as a confident "this instance has none".
+    let instanceSkills: InstanceSkill[] = [];
+    let instanceSkillsLookupFailed = false;
+    if (this.authenticatedUserId && config.mcpInstanceSkillHints) {
+      const result = await getInstanceSkillsResult(this.authenticatedUserId);
+      instanceSkills = result.skills;
+      instanceSkillsLookupFailed = result.lookup_failed;
+    }
+
+    const filesystemSkills = this.getAvailableSkills();
+    const availableSkills = Array.from(
+      new Set([...filesystemSkills, ...instanceSkills.map((s) => s.name)])
+    ).sort();
+
+    // An instance with no skill rows is a complete no-op: the renderer returns
+    // null and the instructions block is left exactly as it was.
+    //
+    // A FAILED read is not a no-op, though. The agent reads prose, not
+    // serverInfo, so the unavailable state is stated here too — otherwise the
+    // only signal lives in a field the consumer of the instruction block never
+    // looks at, and the failure stays effectively silent where it matters.
+    const skillsSection = instanceSkillsLookupFailed
+      ? "[INSTANCE SKILLS]\nThis instance's graph-stored skills could not be read for this session, so " +
+        "the list below (if any) is incomplete. Do NOT tell the user this instance has no skills. " +
+        "Treat its skills as unknown, retry on a later connection, and check the server logs for " +
+        "the `[instance_skills]` warning if this persists."
+      : renderInstanceSkillsSection(instanceSkills, config.mcpCompactInstructions);
+    // Nested rather than variadic: `composeClientInstructions` takes one
+    // section, and each call no-ops on an empty one, so an instance with no
+    // policy and no skill rows gets byte-identical instructions to before.
+    const instructions = composeClientInstructions(
+      composeClientInstructions(baseInstructions, policySection),
+      skillsSection
+    );
 
     return {
       protocolVersion: "2025-11-25",
@@ -741,6 +800,13 @@ export class NeotomaServer {
               }
             : {}),
           available_skills: availableSkills,
+          ...(instanceSkillsLookupFailed
+            ? {
+                skills_unavailable: true,
+                skills_note:
+                  "Instance-stored skills could not be read for this session. An empty or filesystem-only available_skills here does NOT mean this instance has no skills — treat the instance's skills as unknown rather than absent, and say so rather than telling the user none exist.",
+              }
+            : {}),
         },
       },
       instructions,
