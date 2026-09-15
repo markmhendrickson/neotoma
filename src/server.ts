@@ -5584,18 +5584,95 @@ export class NeotomaServer {
           throw mismatchErr;
         }
 
-        const { data: existingObservations, error: obsError } = await db
+        // Combined stores with interpretation.source_ref=unstructured write
+        // observations against the unstructured source, while the structured
+        // JSON source still owns the idempotency key. Exact replay must look
+        // up observations on the interpretation source when one was selected,
+        // then resolve the entities this request stored — sibling provenance
+        // rows (e.g. audio_asset) and other interpretations of the same bytes
+        // must not displace them.
+        const observationSourceId =
+          options.interpretationSourceId ??
+          (typeof interpretation?.source_id === "string" ? interpretation.source_id : undefined) ??
+          existingSource.id;
+        const requestedEntities = entities.map((entity) => {
+          const raw = { ...(entity as Record<string, unknown>) };
+          const entityType =
+            (typeof raw.entity_type === "string" && raw.entity_type) ||
+            (typeof raw.type === "string" && raw.type) ||
+            "";
+          delete raw.entity_type;
+          delete raw.type;
+          return { entityType, fields: raw };
+        });
+        const requestedEntityTypes = new Set(
+          requestedEntities.map((entity) => entity.entityType).filter(Boolean)
+        );
+
+        const { data: existingObservationRows, error: obsError } = await db
           .from("observations")
-          .select("id, entity_id, entity_type")
-          .eq("source_id", existingSource.id)
+          .select("id, entity_id, entity_type, fields, idempotency_key")
+          .eq("source_id", observationSourceId)
           .eq("user_id", userId);
 
         if (obsError) {
           throw new Error(`Failed to fetch existing observations: ${obsError.message}`);
         }
 
+        const { getSnapshot: getSnapshotForReplay } =
+          await import("./services/snapshot_computation.js");
+
+        type ReplayObservation = {
+          id: string;
+          entity_id: string;
+          entity_type: string;
+          fields?: Record<string, unknown> | null;
+          idempotency_key?: string | null;
+        };
+
+        let existingObservations: ReplayObservation[] = existingObservationRows ?? [];
+        if (observationSourceId !== existingSource.id && requestedEntityTypes.size > 0) {
+          // Shared unstructured sources can host multiple same-typed
+          // interpretations (plus siblings like audio_asset). Match against the
+          // observation's stored fields / idempotency_key — never the current
+          // entity snapshot, which drifts after correct() and used to fall open
+          // to every same-typed row on the source (PR #2393 QA).
+          const typeFiltered = existingObservations.filter((obs) =>
+            requestedEntityTypes.has(obs.entity_type)
+          );
+          const keyMatched = typeFiltered.filter(
+            (obs) =>
+              typeof obs.idempotency_key === "string" && obs.idempotency_key === idempotencyKey
+          );
+          const fieldMatched: ReplayObservation[] = [];
+          for (const obs of typeFiltered) {
+            const obsFields =
+              obs.fields && typeof obs.fields === "object"
+                ? (obs.fields as Record<string, unknown>)
+                : null;
+            if (!obsFields) continue;
+            const matches = requestedEntities.some((requested) => {
+              if (requested.entityType && requested.entityType !== obs.entity_type) {
+                return false;
+              }
+              return Object.entries(requested.fields).every(
+                ([key, value]) => obsFields[key] === value
+              );
+            });
+            if (matches) fieldMatched.push(obs);
+          }
+          const resolved = keyMatched.length > 0 ? keyMatched : fieldMatched;
+          if (resolved.length === 0 && typeFiltered.length >= 1) {
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `ERR_IDEMPOTENCY_AMBIGUOUS: idempotency_key "${idempotencyKey}" matched a structured source whose interpretation source has ${typeFiltered.length} same-typed observation(s), but none match the requested fields or idempotency_key. Refusing to return sibling interpretations.`
+            );
+          }
+          existingObservations = resolved;
+        }
+
         const existingEntityIds =
-          existingObservations?.map(
+          existingObservations.map(
             (obs: { id: string; entity_id: string; entity_type: string }) => obs.entity_id
           ) ?? [];
         const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
@@ -5616,8 +5693,6 @@ export class NeotomaServer {
         // one. No new observation is written, so we read the persisted snapshot
         // directly. Mark each entry `deduplicated: true` so callers can tell a
         // replay from a fresh write.
-        const { getSnapshot: getSnapshotForReplay } =
-          await import("./services/snapshot_computation.js");
         const replaySnapshotByEntityId = new Map<string, Record<string, unknown>>();
         for (const replayEntityId of new Set<string>(existingEntityIds as string[])) {
           try {
@@ -5640,7 +5715,7 @@ export class NeotomaServer {
         return this.buildTextResponse({
           source_id: existingSource.id,
           entities:
-            existingObservations?.map(
+            existingObservations.map(
               (obs: { id: string; entity_id: string; entity_type: string }) => ({
                 entity_id: obs.entity_id,
                 entity_type: obs.entity_type,
@@ -5707,6 +5782,7 @@ export class NeotomaServer {
         userId,
         sourceId: resolvedInterpretationSourceId,
         extractedData: entities,
+        idempotencyKey,
         config: {
           provider: "agent",
           model_id: "unknown",
@@ -6241,6 +6317,7 @@ export class NeotomaServer {
           user_id: userId,
           identity_basis: resolverTrace.identityBasis,
           identity_rule: resolverTrace.identityRule,
+          ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
           ...(Object.keys(structuredAttribution).length > 0
             ? { provenance: structuredAttribution }
             : {}),
