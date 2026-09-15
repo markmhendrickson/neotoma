@@ -3,17 +3,20 @@
  * to block a write (#2067, #2165, #2170).
  *
  * The unit suite (`tests/unit/store_warning_rule.test.ts`) covers the evaluator
- * in isolation. This suite covers the property at the layer callers actually
- * hit: the HTTP `/store` endpoint. That distinction is the whole defect — the
- * throw originated in an advisory code path but surfaced to callers as an HTTP
- * 500 `DB_QUERY_FAILED`, which read as a database fault and sent three separate
- * investigations looking at reducer and identity config rather than at a
- * warning rule (issues #2067, #2165, #2170).
+ * in isolation. This suite covers the property at the layers callers actually
+ * hit: HTTP `POST /store` and MCP `executeTool("store")`. That distinction is
+ * the whole defect — the throw originated in an advisory code path but surfaced
+ * to callers as HTTP 500 `DB_QUERY_FAILED` / MCP `-32603`, which read as a
+ * database fault and sent three separate investigations looking at reducer and
+ * identity config rather than at a warning rule (issues #2067, #2165, #2170).
  *
  * The rules registered here reproduce the shape found on the live `skill`
  * (v2.6.0), `agent_definition` (v1.8.0), and `operator_profile` (v1.2.0)
  * schemas, which declare `condition: { missing_all_of: [...] }` where the
  * evaluator previously assumed a flat `fields: string[]`.
+ *
+ * Cross-surface parity (ent_2ad0677fe23c0c1878ae43e8): the CONDITION_TYPE /
+ * UNKNOWN_TYPE matrix is driven on both HTTP and MCP with the same payloads.
  */
 
 import { createServer } from "node:http";
@@ -99,11 +102,56 @@ async function httpStore(body: Record<string, unknown>): Promise<{
   return { status: res.status, json: (await res.json()) as StoreResponse };
 }
 
+/**
+ * Drive MCP `store` through the real CallToolRequestSchema dispatch
+ * (`executeTool`) — same path `/mcp` tools/call uses (see
+ * tests/helpers/store_reference_parity.ts).
+ */
+async function mcpStore(
+  server: InstanceType<typeof NeotomaServer>,
+  args: Record<string, unknown>
+): Promise<{ rawText: string; json: StoreResponse; threw: unknown | null }> {
+  const dispatch = server as unknown as {
+    executeTool: (
+      name: string,
+      args: unknown
+    ) => Promise<{ content: Array<{ type: string; text: string }> }>;
+    authenticatedUserId?: string;
+  };
+  dispatch.authenticatedUserId = TEST_USER_ID;
+  try {
+    const result = await dispatch.executeTool("store", {
+      user_id: TEST_USER_ID,
+      ...args,
+    });
+    const rawText = result.content[0]?.text ?? "";
+    return { rawText, json: JSON.parse(rawText) as StoreResponse, threw: null };
+  } catch (err) {
+    return { rawText: "", json: {}, threw: err };
+  }
+}
+
+/** Assert the MCP path did not surface the pre-fix TypeError / -32603 failure. */
+function expectMcpStoreSucceeded(result: {
+  rawText: string;
+  json: StoreResponse;
+  threw: unknown | null;
+}): void {
+  expect(result.threw, `MCP store threw: ${String(result.threw)}`).toBeNull();
+  expect(result.rawText).not.toMatch(/TypeError|Cannot read properties of undefined/);
+  expect(result.json.error_code).not.toBe("DB_QUERY_FAILED");
+  expect(result.rawText).not.toContain("-32603");
+  expect(result.json.error_code).toBeUndefined();
+  // MCP store envelope reports entities (no top-level `success` boolean).
+  expect(result.json.entities?.length).toBeGreaterThan(0);
+}
+
 let seq = 0;
 const key = (label: string) => `store-warning-cond-${label}-${Date.now()}-${seq++}`;
 
 describe("store_warnings: declarative `condition` rules do not block writes (#2165)", () => {
   let httpServer: ReturnType<typeof createServer>;
+  let mcpServer: InstanceType<typeof NeotomaServer>;
 
   beforeAll(async () => {
     httpServer = createServer(app);
@@ -111,6 +159,7 @@ describe("store_warnings: declarative `condition` rules do not block writes (#21
       httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
       httpServer.once("error", reject);
     });
+    mcpServer = new NeotomaServer();
 
     // A rule shaped exactly like the one on the live `skill` schema.
     if (!(await schemaRegistry.loadActiveSchema(CONDITION_TYPE, TEST_USER_ID))) {
@@ -234,6 +283,44 @@ describe("store_warnings: declarative `condition` rules do not block writes (#21
     expect(warning?.message).toContain("SOME_FUTURE_RULE");
     expect(warning?.message).toContain("present_any_of");
   });
+
+  // ─── MCP path (cross-surface parity with HTTP cases above) ─────────────────
+
+  it("MCP: stores an entity whose schema declares a `condition` rule (was -32603)", async () => {
+    const result = await mcpStore(mcpServer, {
+      idempotency_key: key("mcp-satisfied"),
+      entities: [{ entity_type: CONDITION_TYPE, name: "mcp-cond-satisfied", content: "# a real body" }],
+    });
+    expectMcpStoreSucceeded(result);
+    const codes = (result.json.store_warnings ?? []).map((w) => w.code);
+    expect(codes).not.toContain("MISSING_CONTENT_FIELD");
+  });
+
+  it("MCP: emits the declared warning when the named field is absent (write still succeeds)", async () => {
+    const result = await mcpStore(mcpServer, {
+      idempotency_key: key("mcp-fired"),
+      entities: [{ entity_type: CONDITION_TYPE, name: "mcp-cond-fired" }],
+    });
+    expectMcpStoreSucceeded(result);
+    const warning = (result.json.store_warnings ?? []).find((w) => w.code === "MISSING_CONTENT_FIELD");
+    expect(warning).toBeDefined();
+    expect(warning?.entity_type).toBe(CONDITION_TYPE);
+    expect(warning?.message).toBe("test type has no content body.");
+  });
+
+  it("MCP: fail-open STORE_WARNING_RULE_NOT_EVALUATED for unknown condition key", async () => {
+    const result = await mcpStore(mcpServer, {
+      idempotency_key: key("mcp-unknown"),
+      entities: [{ entity_type: UNKNOWN_TYPE, name: "mcp-unknown-cond", content: "# body" }],
+    });
+    expectMcpStoreSucceeded(result);
+    const warning = (result.json.store_warnings ?? []).find(
+      (w) => w.code === "STORE_WARNING_RULE_NOT_EVALUATED"
+    );
+    expect(warning).toBeDefined();
+    expect(warning?.message).toContain("SOME_FUTURE_RULE");
+    expect(warning?.message).toContain("present_any_of");
+  });
 });
 
 /**
@@ -244,26 +331,19 @@ describe("store_warnings: declarative `condition` rules do not block writes (#21
  * goal itself was unreachable — the write half failed for `entity_type:
  * "skill"` specifically, so nothing ever reached the injection half. This
  * drives the whole chain in one test: register a `skill` schema carrying the
- * production `condition` rule, store a skill through the real HTTP endpoint,
+ * production `condition` rule, store a skill through MCP `executeTool("store")`,
  * then read it back off MCP `initialize`.
  */
-describe("end-to-end: a skill written through /store reaches MCP initialize", () => {
-  let httpServer: ReturnType<typeof createServer>;
+describe("end-to-end: a skill written through MCP store reaches MCP initialize", () => {
   let server: InstanceType<typeof NeotomaServer>;
   const E2E_SKILL = "e2e-store-to-initialize-skill";
-  const E2E_DESCRIPTION = "Written through /store, read back off MCP initialize.";
-  const E2E_PORT = 18264;
+  const E2E_DESCRIPTION = "Written through MCP store, read back off MCP initialize.";
 
   beforeAll(async () => {
     process.env.NEOTOMA_CONNECTION_ID = "test-connection-bypass";
-    httpServer = createServer(app);
-    await new Promise<void>((resolve, reject) => {
-      httpServer.listen(E2E_PORT, "127.0.0.1", () => resolve());
-      httpServer.once("error", reject);
-    });
 
     // Re-register `skill` carrying the rule shape found live on the operator's
-    // instance (v2.6.0). This is what made every skill write a 500.
+    // instance (v2.6.0). This is what made every skill write a 500 / -32603.
     await schemaRegistry.register({
       entity_type: "skill",
       schema_version: "2.6.0-test",
@@ -297,32 +377,24 @@ describe("end-to-end: a skill written through /store reaches MCP initialize", ()
     delete process.env.NEOTOMA_CONNECTION_ID;
     await cleanupEntityType("skill", TEST_USER_ID);
     await cleanupTestSchema("skill", TEST_USER_ID);
-    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   }, 60000);
 
-  it("stores the skill and surfaces it at initialize", async () => {
-    const res = await fetch(`http://127.0.0.1:${E2E_PORT}/store`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        idempotency_key: key("e2e"),
-        entities: [
-          {
-            entity_type: "skill",
-            name: E2E_SKILL,
-            description: E2E_DESCRIPTION,
-            content: "# e2e skill\nFull body.",
-            enabled: true,
-          },
-        ],
-      }),
+  it("stores the skill via MCP and surfaces it at initialize", async () => {
+    const storeResult = await mcpStore(server, {
+      idempotency_key: key("e2e-mcp"),
+      entities: [
+        {
+          entity_type: "skill",
+          name: E2E_SKILL,
+          description: E2E_DESCRIPTION,
+          content: "# e2e skill\nFull body.",
+          enabled: true,
+        },
+      ],
     });
-    const json = (await res.json()) as StoreResponse;
 
-    // Half one: the write. This is the step that returned DB_QUERY_FAILED.
-    expect(json.error_code).toBeUndefined();
-    expect(res.status).toBe(200);
-    expect(json.success).toBe(true);
+    // Half one: the write. This is the step that returned DB_QUERY_FAILED / -32603.
+    expectMcpStoreSucceeded(storeResult);
 
     // Half two: the injection. Reads the same surface an MCP client reads.
     const result = await callInitialize(server);
