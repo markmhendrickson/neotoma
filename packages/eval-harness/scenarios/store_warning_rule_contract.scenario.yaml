@@ -1,0 +1,189 @@
+meta:
+  id: store_warning_rule_contract
+  description: "Replay synthetic schema registration and real HTTP store calls.
+    Assert persisted fields, both warning spellings, advisory failure recovery,
+    and malformed lists. Design basis:
+    docs/foundation/schema_agnostic_design_rules.md#constraints;
+    docs/testing/testing_standard.md#integration-tests."
+  tags:
+    - tier2
+    - store
+    - schema
+    - eval-coverage
+seed_strategy: generated
+source_pattern: Schema-declared advisory warnings must never block writes and
+  malformed conditions must report STORE_WARNING_RULE_NOT_EVALUATED.
+privacy_transform: Synthetic schemas and entities only. Scripted replay
+  cassette, no recorded user data or model output.
+system_prompt: Store each supplied synthetic entity under its declared warning rule.
+user_prompt: Exercise declarative, flat, unknown, partial, empty and mixed
+  field-list warning rules.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 0
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_condition_present
+    where:
+      name: condition_present
+      content: body
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_key: store_warnings.0
+    present: false
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 1
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_condition_absent
+    where:
+      name: condition_absent
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_subset:
+      store_warnings:
+        - code: MISSING_BODY
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 2
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 2
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_flat_present
+    where:
+      name: flat_present
+      content: body
+  - type: tool_result.matches
+    tool_name: store
+    which: 2
+    result_key: store_warnings.0
+    present: false
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 3
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 3
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_flat_absent
+    where:
+      name: flat_absent
+  - type: tool_result.matches
+    tool_name: store
+    which: 3
+    result_subset:
+      store_warnings:
+        - code: MISSING_BODY
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 4
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 4
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_unknown
+    where:
+      name: unknown
+      content: body
+  - type: tool_result.matches
+    tool_name: store
+    which: 4
+    result_subset:
+      store_warnings:
+        - code: STORE_WARNING_RULE_NOT_EVALUATED
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 5
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 5
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_partial
+    where:
+      name: partial
+      content: body
+  - type: tool_result.matches
+    tool_name: store
+    which: 5
+    result_subset:
+      store_warnings:
+        - code: STORE_WARNING_RULE_NOT_EVALUATED
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 6
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 6
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_empty_list
+    where:
+      name: empty_list
+      content: body
+  - type: tool_result.matches
+    tool_name: store
+    which: 6
+    result_subset:
+      store_warnings:
+        - code: STORE_WARNING_RULE_NOT_EVALUATED
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 7
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 7
+    result_subset:
+      success: true
+  - type: entity.exists
+    entity_type: qa_warning_mixed_list
+    where:
+      name: mixed_list
+      content: body
+  - type: tool_result.matches
+    tool_name: store
+    which: 7
+    result_subset:
+      store_warnings:
+        - code: STORE_WARNING_RULE_NOT_EVALUATED

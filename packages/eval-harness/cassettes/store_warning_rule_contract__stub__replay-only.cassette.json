@@ -1,0 +1,426 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_warning_rule_contract",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-15T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Exercise declarative, flat, unknown, partial, empty and mixed field-list warning rules.",
+  "system_prompt": "Store each supplied synthetic entity under its declared warning rule.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_condition_present",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "condition": {
+                "missing_all_of": [
+                  "content"
+                ]
+              }
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_condition_present",
+            "name": "condition_present",
+            "content": "body"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-condition_present"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_condition_absent",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "condition": {
+                "missing_all_of": [
+                  "content"
+                ]
+              }
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_condition_absent",
+            "name": "condition_absent"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-condition_absent"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_flat_present",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "fields": [
+                "content"
+              ]
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 4
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_flat_present",
+            "name": "flat_present",
+            "content": "body"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-flat_present"
+      },
+      "sequence": 5
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_flat_absent",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "fields": [
+                "content"
+              ]
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 6
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_flat_absent",
+            "name": "flat_absent"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-flat_absent"
+      },
+      "sequence": 7
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_unknown",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "condition": {
+                "present_any_of": [
+                  "content"
+                ]
+              }
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 8
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_unknown",
+            "name": "unknown",
+            "content": "body"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-unknown"
+      },
+      "sequence": 9
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_partial",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "condition": {
+                "missing_all_of": [
+                  "content"
+                ],
+                "only_when_kind": "doc"
+              }
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 10
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_partial",
+            "name": "partial",
+            "content": "body"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-partial"
+      },
+      "sequence": 11
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_empty_list",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "condition": {
+                "missing_all_of": []
+              }
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 12
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_empty_list",
+            "name": "empty_list",
+            "content": "body"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-empty_list"
+      },
+      "sequence": 13
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_warning_mixed_list",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ],
+          "store_warnings": [
+            {
+              "code": "MISSING_BODY",
+              "message": "Body missing.",
+              "condition": {
+                "missing_all_of": [
+                  "content",
+                  7
+                ]
+              }
+            }
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 14
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_warning_mixed_list",
+            "name": "mixed_list",
+            "content": "body"
+          }
+        ],
+        "idempotency_key": "store_warning_rule_contract-mixed_list"
+      },
+      "sequence": 15
+    }
+  ],
+  "assistant_text": ""
+}
