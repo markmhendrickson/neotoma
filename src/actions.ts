@@ -30,6 +30,7 @@ import { attributionContext } from "./middleware/attribution_context.js";
 import { dbAbortContext } from "./middleware/db_abort_context.js";
 import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
 import { buildSessionInfo, normalizeSessionOrigin } from "./services/session_info.js";
+import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
@@ -8222,13 +8223,15 @@ export async function storeStructuredForApi(params: {
       const storeWarningRules = schemaDef?.store_warnings;
       if (storeWarningRules?.length) {
         for (const rule of storeWarningRules) {
-          const hasIdentityField = rule.fields.some(
-            (f) => r.fields[f] !== undefined && r.fields[f] !== null && r.fields[f] !== ""
-          );
-          if (!hasIdentityField) {
+          // Never inline the condition check here: a rule shape the evaluator
+          // does not understand must yield a warning, never a throw. A thrown
+          // TypeError from an advisory rule surfaced as DB_QUERY_FAILED and
+          // made whole entity types unwritable (issue #2409).
+          const evaluation = evaluateStoreWarningRule(rule, r.fields);
+          if (evaluation.fired) {
             schemaStoreWarnings.push({
-              code: rule.code,
-              message: rule.message,
+              code: evaluation.code,
+              message: evaluation.message,
               observation_index: r.observation_index,
               entity_type: r.entity_type,
               entity_id: r.entity_id,

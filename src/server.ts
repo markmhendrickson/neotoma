@@ -89,6 +89,7 @@ import {
   renderInstanceSkillsSection,
   type InstanceSkill,
 } from "./services/skills/instance_skills.js";
+import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
@@ -6686,14 +6687,15 @@ export class NeotomaServer {
       const storeWarningRules = schemaDef?.store_warnings;
       if (storeWarningRules?.length) {
         for (const rule of storeWarningRules) {
-          const hasIdentityField = rule.fields.some(
-            (f) =>
-              entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
-          );
-          if (!hasIdentityField) {
+          // Never inline the condition check here: a rule shape the evaluator
+          // does not understand must yield a warning, never a throw. A thrown
+          // TypeError from an advisory rule surfaced as DB_QUERY_FAILED and
+          // made whole entity types unwritable (issue #2409).
+          const evaluation = evaluateStoreWarningRule(rule, entityFields);
+          if (evaluation.fired) {
             schemaStoreWarnings.push({
-              code: rule.code,
-              message: rule.message,
+              code: evaluation.code,
+              message: evaluation.message,
               observation_index: i,
               entity_type: e.entityType,
               entity_id: e.entityId,
