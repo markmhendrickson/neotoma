@@ -55,8 +55,8 @@ export async function mintMcpHttpSession(
   const appOrigin = resolveAppOrigin(req);
   serverInstance.setSessionAppOrigin(appOrigin.origin ?? null, appOrigin.source ?? null);
 
-  let transport!: StreamableHTTPServerTransport;
-  transport = new StreamableHTTPServerTransport({
+  // Callback closes over `transport` and runs after construction completes.
+  const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     onsessioninitialized: (sid) => {
       maps.transports.set(sid, transport);
