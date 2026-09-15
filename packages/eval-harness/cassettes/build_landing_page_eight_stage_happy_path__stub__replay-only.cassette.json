@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_eight_stage_happy_path",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-15T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Build a landing page for the synthetic product under plan title blp_hp_2418.\nRun all eight stages and stamp blp_hp_2418 on every stage entity.\n",
+  "system_prompt": "You implement the build-landing-page skill entity contract.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stages",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-blp-hp-2418" },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-hp-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Build a landing page for the synthetic product under plan title blp_hp_2418."
+          },
+          { "entity_type": "plan", "title": "blp_hp_2418" },
+          {
+            "entity_type": "target_persona",
+            "name": "blp_hp_2418",
+            "archetype": "SyntheticOpsLead",
+            "core_jtbd": "Ship durable agent memory"
+          },
+          {
+            "entity_type": "cta",
+            "name": "blp_hp_2418",
+            "title": "Install Neotoma",
+            "content": "Primary CTA: Install. Metric: install conversion."
+          },
+          {
+            "entity_type": "research_finding",
+            "title": "blp_hp_2418",
+            "summary": "Install CTAs need first-screen clarity for ops leads."
+          },
+          {
+            "entity_type": "rendered_page_template",
+            "name": "blp_hp_2418",
+            "description": "Install-CTA landing template",
+            "core_rule": "First screen must make the install CTA obvious."
+          },
+          {
+            "entity_type": "specification",
+            "title": "blp_hp_2418",
+            "content": "Headline: Durable agent memory. CTA: Install Neotoma."
+          },
+          {
+            "entity_type": "analysis",
+            "title": "blp_hp_2418",
+            "summary": "Inventory for stage 8 assembly",
+            "source_artifacts": ["repo:README.md"],
+            "gaps": "none"
+          },
+          {
+            "entity_type": "design_system",
+            "design_system_name": "blp_hp_2418",
+            "status": "active",
+            "content": "Assets (locators only):\n- logo: synthetic://blp_hp_2418/logo"
+          },
+          {
+            "entity_type": "rendered_page",
+            "title": "blp_hp_2418",
+            "slug": "blp_hp_2418",
+            "html_body": "<h1>Durable agent memory</h1><p>Install Neotoma</p>"
+          }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 },
+          { "relationship_type": "PART_OF", "source_index": 3, "target_index": 2 },
+          { "relationship_type": "PART_OF", "source_index": 4, "target_index": 2 },
+          { "relationship_type": "PART_OF", "source_index": 5, "target_index": 2 },
+          { "relationship_type": "PART_OF", "source_index": 6, "target_index": 2 },
+          { "relationship_type": "PART_OF", "source_index": 7, "target_index": 2 },
+          { "relationship_type": "PART_OF", "source_index": 8, "target_index": 2 },
+          { "relationship_type": "PART_OF", "source_index": 9, "target_index": 2 },
+          { "relationship_type": "PART_OF", "source_index": 10, "target_index": 2 },
+          { "relationship_type": "REFERS_TO", "source_index": 4, "target_index": 3 },
+          { "relationship_type": "REFERS_TO", "source_index": 5, "target_index": 4 },
+          { "relationship_type": "REFERS_TO", "source_index": 6, "target_index": 5 },
+          { "relationship_type": "REFERS_TO", "source_index": 7, "target_index": 6 },
+          { "relationship_type": "REFERS_TO", "source_index": 8, "target_index": 7 },
+          { "relationship_type": "REFERS_TO", "source_index": 9, "target_index": 8 },
+          { "relationship_type": "REFERS_TO", "source_index": 10, "target_index": 9 }
+        ]
+      },
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Completed all eight stages for blp_hp_2418 — persona through rendered_page, each PART_OF the plan and REFERS_TO its upstream stage."
+}

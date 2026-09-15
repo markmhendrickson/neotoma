@@ -246,6 +246,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       effectiveProfile,
       assistantText: driverResult.assistantText,
       toolCalls: driverResult.toolCalls,
+      scenarioId: plan.scenario.meta.id,
     });
     pass = assertionFailures.length === 0;
     if (!pass) {
