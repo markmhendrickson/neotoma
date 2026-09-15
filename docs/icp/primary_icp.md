@@ -11,9 +11,22 @@ visibility: internal
 
 > Reconciliation: this is the internal, market-derived view of the primary ICP. The public, functionally-grounded statement is [ICP from functionality](icp_from_functionality.md). See [ICP reconciliation](icp_reconciliation.md) for how the two relate (they agree on the primary ICP).
 
+> **Durable ICP decision (O1, 2026-09-15).** The archetype below is **not** the person who would build their own state infrastructure. The durable target is the technically fluent operator who **feels the pain of ad-hoc agent state but lacks the appetite or capacity to build their own state infrastructure**. The infrastructure builder — the person most able to roll their own — is an **early-adopter cohort and a validator of the problem space**, not the target. The sharpest filter is the one first written in [`developer_release_targeting.md`](./developer_release_targeting.md): *would they describe "setting up Neotoma" as a worthwhile Saturday project, but "building their own state layer" as a distraction from real work?* That filter admits the target and excludes the builder.
+>
+> This inverts the parent/child relation these two documents previously declared. `developer_release_targeting.md` no longer names a narrower wedge inside a broader durable archetype; it now describes **the same buyer, scoped to the developer release**, and this document holds the durable definition of that buyer. See [Who this document is for, and how it relates to developer release targeting](#who-this-document-is-for-and-how-it-relates-to-developer-release-targeting).
+
 ## Scope
 
 The primary ICP: people constructing an operating system for their own AI agents across personal and professional life domains.
+
+### Who this document is for, and how it relates to developer release targeting
+
+| Document | Holds | Temporal? |
+| --- | --- | --- |
+| **This document** (`primary_icp.md`) | The **durable** definition of the buyer: archetype, pain, qualification and disqualification criteria, adoption triggers, channels, B2B mechanics | No — durable |
+| [`developer_release_targeting.md`](./developer_release_targeting.md) | The **same buyer**, scoped to the developer release: who the first five are, what blocks their activation, and the status of each mitigation | Yes — retired when the developer release ends |
+
+The two documents describe one buyer. They are not a broad definition and a narrow wedge inside it. Where `developer_release_targeting.md` states a trait of the buyer that this document does not, the trait belongs here and is quoted there; where it states a *release-scoped* fact (an activation milestone, a mitigation status), that fact stays there and does not generalize.
 
 **Related docs:** [`profiles.md`](./profiles.md) (detailed profiles) · [`secondary_icps.md`](./secondary_icps.md) · [`future_icps.md`](./future_icps.md) · [`developer_release_targeting.md`](./developer_release_targeting.md) (release-scoped targeting, activation risks, and status tracking) · [`business_model.md`](../private/strategy/business_model.md) (canonical business model, pricing, revenue mechanics) · [`strategic_market_analysis.md`](../private/strategy/strategic_market_analysis.md) (industry evolution and topology framework) · [`distribution_financing_strategy.md`](../private/strategy/distribution_financing_strategy.md) (B2D distribution and financing)
 
@@ -22,6 +35,8 @@ The primary ICP: people constructing an operating system for their own AI agents
 ## The Archetype
 
 The primary ICP spends significant effort, attention, and emotional energy compensating for the absence of reliable agent state. Neotoma does not add a capability — it removes the tax.
+
+They are **technically fluent without being infrastructure-oriented**. They are comfortable with APIs, agent workflows, and the tools of their trade; their energy goes toward the thing they are building, not the plumbing underneath it. They are patching around the problem today — a growing set of markdown files, a Notion database they know is a dead end, re-prompting — and have not hit, and do not intend to hit, the point of building state infrastructure of their own. The person most able to build their own is a validator of the problem, not the buyer (see [Non-ICP Boundaries](#non-icp-boundaries)).
 
 They wire together multi-agent stacks (Claude Code, Cursor, ChatGPT, custom scripts) to manage finances, contacts, content, health, code, BD pipelines, and other domains — building infrastructure primarily for themselves, secondarily for systems they ship to others.
 
@@ -41,7 +56,7 @@ The chronic tax is what the ICP tolerates daily. The acute crisis is what conver
 - State coordinated across multiple tools or agents
 - Evolving personal/professional context over time
 - Experiencing drift, conflicts, or unreproducible decisions
-- Comfortable with infrastructure-level abstractions
+- Reasons comfortably about state, provenance, and correctness as *concepts* — without wanting to own the infrastructure that provides them
 - Using AI as autonomous pipeline, not just thought partner
 
 ### Success state
@@ -256,14 +271,18 @@ A person meeting **3+** is likely qualified; **5+** is strongly qualified.
 | Q7 | **Experiences non-reproducible agent behavior** | Same inputs produce different outputs across sessions |
 | Q8 | **Needs to debug, trace, or audit agent decisions** | Reconstructs what an agent did; writes defensive checkpoint code |
 | Q9 | **Manages evolving context over time** | Contacts, tasks, financial data, projects, health — domains that accumulate and change |
-| Q10 | **Comfortable with infrastructure-level tooling** | Willing to install via npm/CLI; reads API docs |
+| Q10 | **Technically fluent about state, without wanting to own infrastructure** | Can reason about versioning, provenance, and correctness, and reads docs when something breaks — but treats building a state layer as a distraction from real work rather than an appealing project |
 | Q11 | **Has experienced a failure caused by unreliable agent state** | Lost real work, made a bad decision, or discovered the agent operating on wrong/stale/hallucinated state. Strongest single qualifier — a concrete loss event creates urgency. |
+
+**Note on Q10 (revised 2026-09-15).** Q10 previously read *"Comfortable with infrastructure-level tooling — willing to install via npm/CLI; reads API docs."* Under the durable ICP decision (O1) that wording was a **barrier, not a qualifier**: willingness to install via npm and the CLI selects for the infrastructure builder this ICP explicitly does not target, and screens out the buyer it does. Q10 now qualifies on *fluency about state* rather than *willingness to operate an install path*, so it discriminates on the trait that predicts the purchase rather than on the friction of today's delivery mechanism. **Q11 is unaffected and remains the strongest single qualifier.** Numbering and the 3+/5+ thresholds are unchanged: Q10 was restated in place, not removed, so no criterion was renumbered and no scorecard built against this table shifts meaning.
+
+**Weighting.** Q11 carries the most weight (a concrete loss event). Q2, Q3, and Q5 carry the next most (the pain is present and being paid for). Q10 is a **fit** criterion rather than a **pain** criterion: it does not create urgency, it predicts whether the person will adopt a product rather than build a substitute. Q6 ("has built or is building their own memory/state system") is a genuine two-sided signal — it proves the pain is real, but at its extreme it becomes disqualifier D12. Read Q6 as qualifying when it describes *patching* (markdown, flat JSON, a Notion database), and as approaching D12 when it describes *engineering* (a maintained MCP + Postgres stack of their own).
 
 **Strongest qualifier combinations:**
 - Q1 + Q2 + Q5 → operational mode (context janitor paying the re-prompting tax)
 - Q2 + Q7 + Q8 → infra mode (log archaeologist who can't replay agent state)
 - Q2 + Q4 + Q6 → builder mode (building on unreliable memory, compensating with custom state)
-- Q11 + Q2 + Q10 → burned adopter (experienced concrete failure — highest conversion likelihood)
+- Q11 + Q2 + Q10 → burned adopter (experienced concrete failure, technically fluent enough to understand why it happened, and unwilling to build the fix themselves — highest conversion likelihood)
 
 ### Disqualification criteria
 
@@ -274,7 +293,9 @@ A person meeting **3+** is likely qualified; **5+** is strongly qualified.
 | D1 | **No agent or AI-tool workflows** | No surface area for the problem |
 | D2 | **Human drives every turn** (thought-partner pattern) | Human is the state layer by design |
 | D3 | **Building their own state layer as a product** | Won't adopt external dependency for core value prop |
-| D4 | **Requires zero-install, no-config onboarding** | Neotoma requires npm + CLI/MCP configuration |
+| D4 | **Requires a fully hosted product with no local component** | Neotoma runs on the user's own machine and holds their data there. Wanting a guided, branded installation is *not* a disqualifier — that is the intended path (see the note below); wanting someone else to run the service is. |
+
+**Note on D4 (revised 2026-09-15).** D4 previously read *"Requires zero-install, no-config onboarding — Neotoma requires npm + CLI/MCP configuration."* As written it disqualified the durable ICP: the buyer this document targets is precisely the person who will not assemble an install from a terminal. Install friction is **our defect to fix, not the prospect's to qualify on** — `general_release_criteria.md` records 0 of 3 round-2 fresh-install attempts clearing the install-path gate, which is evidence about Neotoma, not about those three evaluators. D4 now disqualifies only on the architectural boundary that is genuinely durable: Neotoma is local-first, so a prospect who requires that nobody run anything on their own hardware is out of scope. **Honest status:** guided installation is the *intended* path and is not shipped today; npm and the CLI remain the real install path as of this revision. Guided is not zero-install either — the user still installs software on their own machine and still makes decisions about where their data lives. Do not describe the product as zero-install.
 
 **Note on D3 — adjacent platform builders.** Identity vendors, agent-framework maintainers, and auth-protocol authors fall under D3 as disqualifiers for conversion, but they are partnership and integration targets, not anti-targets. Neotoma should compose under their primitives, not compete with their roadmaps.
 <!-- Source: ent_3f183584ebe4b89081cf9f75 -->
@@ -290,7 +311,7 @@ A person meeting **3+** is likely qualified; **5+** is strongly qualified.
 | D9 | **No debugging, tracing, or compliance needs** | Core value props have no pull |
 | D10 | **Single-session usage pattern** | No state evolution to manage |
 | D11 | **Occasional AI use** (weekly or less) | Insufficient frequency for pain to compound |
-| D12 | **Willing and able to build and maintain their own state infrastructure** | Capable DIY builders who roll their own MCP + Postgres (or equivalent) for personal use. They validate the problem space but prefer custom solutions. Not the same as D3 (building state as product) — these are personal-infra builders. They may convert later when maintenance burden exceeds adoption cost, but are not near-term adopters. |
+| D12 | **Willing and able to build and maintain their own state infrastructure** | Capable DIY builders who roll their own MCP + Postgres (or equivalent) for personal use. They validate the problem space but prefer custom solutions. Not the same as D3 (building state as product) — these are personal-infra builders. They may convert later when maintenance burden exceeds adoption cost, but are not near-term adopters. **Under the O1 decision this is the sharpest of the soft disqualifiers**: it names the cohort that the archetype was previously written to attract. Treat a strong D12 as outweighing several qualifiers — the appetite to build is the single trait most predictive of non-adoption, because the alternative this person compares Neotoma against is their own weekend. |
 
 ### Deepening follow-ups
 
@@ -317,7 +338,9 @@ The [`/evaluate`](https://neotoma.io/evaluate) page is the canonical source for 
 
 **Platform builders:** People with engineering teams who build their own state layer as product. State management is their core value prop. However, custom layers eventually hit the same pain Neotoma solves — silent overwrites, no conflict detection, manual schema migrations, no cross-tool sync. When maintenance cost exceeds adoption cost, they re-enter the funnel.
 
-**Capable DIY builders:** Technically strong individuals who build their own state infra for personal use (custom MCP + Postgres, homegrown validation layers). They validate the problem space strongly — often independently arriving at the same architectural conclusions (schema constraints, multi-agent review hooks, deterministic validation). But they prefer to own and control the full stack. They are later adopters, not early ones. The people who can build their own are not the ones who adopt first.
+**Capable DIY builders — the early-adopter cohort, not the target.** Technically strong individuals who build their own state infra for personal use (custom MCP + Postgres, homegrown validation layers). They validate the problem space strongly — often independently arriving at the same architectural conclusions (schema constraints, multi-agent review hooks, deterministic validation). That independent convergence is the most useful thing they give us, and it is worth soliciting deliberately.
+
+Some of them do adopt, and early, because the install path today rewards exactly their skills. **Do not read that adoption as ICP validation.** They are a cohort that arrives first because the current delivery mechanism is shaped for them, not because they are who the product is for; their feedback is strong evidence about the architecture and weak evidence about the market. Under the O1 decision (2026-09-15) they are named as an **early-adopter cohort**: welcome, useful, listened to on correctness, and explicitly not the audience that targeting, onboarding, or roadmap decisions optimize for. The people who can build their own are not the ones the product is for. Read their retention with particular care — a DIY builder who churns is telling you about your maintenance burden, and one who stays is not telling you the ICP is right.
 
 **Thought-partner users:** Heavy AI users whose continuity needs are about context and voice, not deterministic state versioning. The human drives every turn; they are not running autonomous pipelines.
 
