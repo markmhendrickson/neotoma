@@ -18,7 +18,7 @@
  * surfaced to callers as `DB_QUERY_FAILED`, which made an advisory warning
  * rule an unconditional, undiagnosable write failure for every entity of that
  * type — on `commit: false` dry runs too, since the evaluator runs before the
- * commit decision. See issue #2409.
+ * commit decision. See issues #2067, #2165, #2170.
  *
  * Two properties follow from "a warning must not be able to block a write",
  * and this module exists to hold both in one place:

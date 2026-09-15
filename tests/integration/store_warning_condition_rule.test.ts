@@ -1,6 +1,6 @@
 /**
  * Integration tests: a schema-declared `store_warnings` rule must never be able
- * to block a write (#2409).
+ * to block a write (#2067, #2165, #2170).
  *
  * The unit suite (`tests/unit/store_warning_rule.test.ts`) covers the evaluator
  * in isolation. This suite covers the property at the layer callers actually
@@ -102,7 +102,7 @@ async function httpStore(body: Record<string, unknown>): Promise<{
 let seq = 0;
 const key = (label: string) => `store-warning-cond-${label}-${Date.now()}-${seq++}`;
 
-describe("store_warnings: declarative `condition` rules do not block writes (#2409)", () => {
+describe("store_warnings: declarative `condition` rules do not block writes (#2165)", () => {
   let httpServer: ReturnType<typeof createServer>;
 
   beforeAll(async () => {
@@ -178,9 +178,7 @@ describe("store_warnings: declarative `condition` rules do not block writes (#24
     // "Cannot read properties of undefined (reading 'some')".
     const { status, json } = await httpStore({
       idempotency_key: key("satisfied"),
-      entities: [
-        { entity_type: CONDITION_TYPE, name: "cond-satisfied", content: "# a real body" },
-      ],
+      entities: [{ entity_type: CONDITION_TYPE, name: "cond-satisfied", content: "# a real body" }],
     });
     expect(json.error_code).toBeUndefined();
     expect(status).toBe(200);
@@ -239,7 +237,7 @@ describe("store_warnings: declarative `condition` rules do not block writes (#24
 });
 
 /**
- * End-to-end: the operator's actual goal (#2409 + #2046).
+ * End-to-end: the originating goal (#2165 write + #2046 injection).
  *
  * The two halves of "skills are writable on an instance and injected into a
  * harness via MCP" have separate test coverage, and both were green while the

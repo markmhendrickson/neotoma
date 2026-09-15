@@ -1,5 +1,6 @@
 /**
- * Unit tests for schema-declared `store_warnings` rule evaluation (#2409).
+ * Unit tests for schema-declared `store_warnings` rule evaluation.
+ * Covers the defect behind #2067, #2165, #2170.
  *
  * The defect these cover: the two store paths inlined `rule.fields.some(...)`,
  * which threw `TypeError: Cannot read properties of undefined (reading 'some')`
@@ -49,7 +50,7 @@ describe("evaluateStoreWarningRule — flat `fields` spelling (pre-existing beha
   });
 });
 
-describe("evaluateStoreWarningRule — declarative `condition.missing_all_of` (#2409)", () => {
+describe("evaluateStoreWarningRule — declarative `condition.missing_all_of` (#2165)", () => {
   /**
    * Verbatim shape of the rule on the live `skill` schema (v2.6.0) that made
    * `entity_type: "skill"` unwritable on the operator's instance.

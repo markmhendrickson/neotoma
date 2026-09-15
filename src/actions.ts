@@ -8226,7 +8226,7 @@ export async function storeStructuredForApi(params: {
           // Never inline the condition check here: a rule shape the evaluator
           // does not understand must yield a warning, never a throw. A thrown
           // TypeError from an advisory rule surfaced as DB_QUERY_FAILED and
-          // made whole entity types unwritable (issue #2409).
+          // made whole entity types unwritable (#2165, #2170).
           const evaluation = evaluateStoreWarningRule(rule, r.fields);
           if (evaluation.fired) {
             schemaStoreWarnings.push({
