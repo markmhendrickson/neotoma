@@ -82,17 +82,19 @@ Functionally enabled but not the design center:
 ## Who Neotoma is not for (functionally)
 
 - **Casual note-takers and PKM/Obsidian-style users.** There is no human-first editing experience; the model is agent-written observations with corrections, not freeform documents.
-- **Users who need zero-install, hosted onboarding.** Setup requires npm, the CLI, and operator decisions.
+- **Users who need a fully hosted product with no local component.** Neotoma runs on your machine and keeps your data there; that is the architecture, not a stage. Wanting an easier installation is not the same thing and is not a mismatch — see the note below.
 - **Teams wanting a managed multi-tenant SaaS today.** Storage is local-only in preview; tenancy exists as `user_id` scoping, not a hosted product.
 - **Platform builders whose core product is the memory or state engine itself.** Neotoma is that engine; it is meant to be built upon, not rebuilt.
 - **Pure retrieval/RAG use cases.** The system optimizes for deterministic state integrity, versioning, and audit, not similarity recall (semantic search is an optional secondary capability).
+
+**A note on installation.** This list deliberately no longer excludes people who want a guided installation. Neotoma is for people who want to own their agents' state, not for people who enjoy assembling an install from a terminal — and an earlier version of this list conflated the two. **As of 2026-09-15, setup is npm plus the CLI**; a guided installation is the intended path and is not shipped. Guided is not zero-install: the software runs on your machine either way.
 
 ## Qualification signals
 
 Someone is in the primary ICP if most of these are true:
 
 - They already use two or more AI agents or assistants and feel the cost of fragmented memory.
-- They are comfortable installing an npm CLI and running a local service.
+- They are willing to run a service on their own machine and to own the data it holds. (Today that means installing an npm CLI; a guided installation is intended. Comfort with the current install path is not itself a fit signal — it is friction we intend to remove.)
 - They want their data on their own machine and care that it is never used for training.
 - They want to correct facts once and trust the correction holds and is traceable.
 - They run agents they want to constrain and audit, or they intend to build on the API.
