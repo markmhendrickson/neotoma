@@ -19,8 +19,9 @@ them costly to cross.
 
 ## The substantive position
 
-Neotoma exists to provide a deterministic state layer for AI agent memory,
-built on write integrity rather than retrieval performance. The architectural
+Neotoma exists to be the system of record for AI agents — the designated
+place where a fact about agent-held state is settled — built on write
+integrity rather than retrieval performance. The architectural
 commitments named in [`core_identity.md`](core_identity.md) and
 [`philosophy.md`](philosophy.md) (append-only observations, hash-based entity
 identity, schema-bound writes, pipeline provenance, replayable timelines,
