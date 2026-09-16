@@ -199,7 +199,7 @@ Two further audiences follow from the same code: individuals running a personal 
 
 It is not aimed at casual note-taking, PKM/Obsidian-style human-driven knowledge bases, or users who need a zero-install hosted product (Neotoma requires npm and the CLI today).
 
-Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md).
+Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md) — the canonical public ICP statement. For how it relates to the other ICP documents and which is canonical for which surface, see [ICP reconciliation](docs/icp/icp_reconciliation.md).
 
 ## Status
 

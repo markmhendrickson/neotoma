@@ -8,7 +8,7 @@ This document defines that problem. For the felt-experience mapping to ICP vocab
 
 The ICP wires together multi-agent stacks (Claude Code, Cursor, ChatGPT, custom scripts) across personal and professional domains — finances, contacts, content, health, code, BD pipelines. State does not survive the seams:
 
-- **Across sessions:** Agents lose what they knew yesterday. The user re-explains context every cold start.
+- **Across sessions:** Nothing was committed to a record. A fact that lived only in one session's context was never written anywhere authoritative, so there is nothing to retrieve and nothing to correct — the user re-establishes it every cold start. (Stated this way deliberately: an agent "forgetting" is the recall framing, which any retrieval vendor answers with better recall. See `never_say_the_agent_forgot`, decided 2026-08-21.)
 - **Across tools:** A correction made in Claude is invisible in Cursor; a decision recorded in ChatGPT is absent when the next agent runs.
 - **Across agents in a pipeline:** Agent A's output feeds Agent B, but there is no shared, verifiable substrate guaranteeing what Agent B reads is what Agent A meant to write.
 - **Across time:** Last-write-wins silently overwrites earlier observations; contradictions go undetected; supersession (a later fact should replace an earlier one) fails without trace.
@@ -16,6 +16,8 @@ The ICP wires together multi-agent stacks (Claude Code, Cursor, ChatGPT, custom 
 Provider memory (ChatGPT Memory, Claude Memory, Gemini Personal Context) is conversation-only and platform-locked. Retrieval-based systems (Mem0, Zep, LangChain memory) re-derive structure every session — entity names resolve inconsistently, no provenance, no replay. File-based workarounds (CLAUDE.md, SOUL.md, markdown CRMs, JSON heartbeats) hit scaling limits and trigger compensatory tooling at any real size.
 
 **No system holds canonical, deterministic, cross-tool state that agents can write to and read from with integrity guarantees.**
+
+Stated as the category problem: **there is no designated place where a fact about agent state is settled.** Every failure above is a consequence of that absence rather than a separate defect. When no copy is authoritative, "which one is current?" has no answer in principle — not merely an answer that is expensive to compute. Better recall cannot supply one, because recall returns what was found, not what counts. That is why the answer is an authority claim (see [`core_identity.md`](core_identity.md)) rather than a better memory mechanism.
 
 ## 6.2 The Chronic Tax: Re-Prompting and Manual Sync
 

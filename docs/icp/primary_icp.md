@@ -590,6 +590,7 @@ Ordered by how quickly each data type delivers value.
 
 ### Required Co-Loaded Documents
 
+- [`docs/icp/README.md`](README.md) (**first** — the ICP index: which of the ten ICP documents is canonical for which surface, which informal buyer synonyms are retired or mapped, and the open disagreements between the market documents that no document resolves)
 - `docs/NEOTOMA_MANIFEST.md` (always)
 - `README.md` and `docs/foundation/product_positioning.md` (for current developer-review scope and positioning)
 - `docs/icp/profiles.md` (for detailed profiles)

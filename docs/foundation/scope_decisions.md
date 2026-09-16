@@ -17,7 +17,7 @@ Should Neotoma ship a non-technical graphical management UI and a zero-configura
 
 ### Decision
 
-**No.** Non-technical GUI and zero-config install are **out of scope** for the current release trajectory. Neotoma remains a developer-facing / power-user-facing state layer distributed via MCP, installed and configured by the user (or their agent) on their own machine.
+**No.** Non-technical GUI and zero-config install are **out of scope** for the current release trajectory. Neotoma remains a developer-facing system of record for AI agents, distributed via MCP and installed and configured by the user (or their agent) on their own machine.
 
 ### Rationale
 
