@@ -2142,10 +2142,20 @@ export class SchemaRegistryService {
       .eq("schema_version", version);
 
     const candidates = (rows ?? []) as Array<Pick<SchemaRegistryEntry, "scope" | "user_id">>;
+    // Security (#2356 follow-up): the caller always just registered the row it
+    // means to activate — either its own user-scoped override (`userId` set)
+    // or the global row (`userId` undefined). Match only those two shapes.
+    // A prior `candidates[0]` catch-all fell through to *any* remaining row,
+    // including another principal's private `scope: "user"` override, when a
+    // caller-chosen version string collided with a foreign row and neither of
+    // the first two predicates matched. That let `POST /register_schema`
+    // mutate (deactivate) a foreign user's schema by version-string collision.
+    // Fail closed instead: if neither this principal's row nor a global row
+    // exists at this version, there is nothing this caller is authorized to
+    // activate.
     const schema =
       candidates.find((r) => r.scope === "user" && !!userId && r.user_id === userId) ??
-      candidates.find((r) => r.scope !== "user") ??
-      candidates[0];
+      candidates.find((r) => r.scope !== "user");
 
     if (!schema) {
       throw new Error(`Schema not found: ${entityType} version ${version}`);
