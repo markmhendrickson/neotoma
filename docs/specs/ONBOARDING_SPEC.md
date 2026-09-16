@@ -37,9 +37,9 @@ This document does NOT cover:
 - Long-term user education (help docs, tooltips)
 - Advanced features (multi-user, integrations setup)
 
-## 0. Agent-Driven Onboarding (Activation Model)
+## 0. Agent-Driven Onboarding (Primary Activation Model)
 
-The preferred activation model is agent-driven and evaluation-led. The outer funnel is:
+The primary activation model is agent-driven and evaluation-led. The outer funnel is:
 
 **evaluation → installation → activation → tooling config**
 
@@ -311,7 +311,7 @@ Quick Stats
 - Full navigation visible
 - All features unlocked
 ## 4. Activation Milestones
-### 4.0 Agent-Driven Activation (Activation Model)
+### 4.0 Agent-Driven Activation (Primary Activation Model)
 | Milestone | Definition | Metric | Target |
 | --- | --- | --- | --- |
 | **Evaluated** | Agent assessed fit, tool constraints, and likely first data to store | `agent_evaluation_total` | N/A |
