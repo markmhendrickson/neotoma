@@ -115,6 +115,26 @@ describe("durable-good extraction clause (ateles#1014, neotoma#2238)", () => {
     expect(body).toMatch(/do NOT claim the user owns nothing/);
   });
 
+  it("backfills the transaction gap on an empty device retrieve (ux empty-state)", () => {
+    // An empty `device` result is not the end of the answer: it must be
+    // cross-checked against `transaction` for keepable-good purchases that
+    // were never backfilled into a `device`, and the gap disclosed rather
+    // than silently reported as "you own nothing".
+    const body = mcpFencedBody();
+    expect(body).toMatch(/entity_type: "transaction"/);
+    expect(body).toMatch(/disclose the gap explicitly/);
+    expect(body).toMatch(/offer to backfill a `device` entity/);
+  });
+
+  it("asks once before storing an ambiguous durable-vs-consumable item (ux error-state)", () => {
+    // No silent guess on an ambiguous line item, and no stalled extraction —
+    // the transaction still lands immediately; only the device is deferred.
+    const region = clauseRegion();
+    expect(region).toMatch(/ask the user once to disambiguate/);
+    expect(region).toMatch(/do NOT silently guess a `device`/);
+    expect(region).toMatch(/store the `transaction` immediately/);
+  });
+
   /**
    * Compact mode deliberately carries NO durable-good line.
    *
