@@ -11,6 +11,21 @@ export function formatInspectorUserBadge(email: string | undefined | null, userI
   return formatInspectorUserId(userId);
 }
 
+/**
+ * #2228: under shared-graph mode, `user_id` is the graph being operated on,
+ * NOT the signed-in person — the id must never be labeled in a way that lets
+ * it read as the viewer's own identity. Shared by the Settings page and the
+ * sidebar footer, the two surfaces that display this id.
+ */
+export function inspectorUserIdLabel(sharedGraph: boolean | undefined): string {
+  return sharedGraph ? "Graph User ID" : "User ID";
+}
+
+/** Same rule as {@link inspectorUserIdLabel}, for the tooltip/detail variant. */
+export function inspectorUserIdDetailLabel(sharedGraph: boolean | undefined): string {
+  return sharedGraph ? "Shared graph User ID" : "User ID";
+}
+
 export const RELATIONSHIP_TYPES = [
   "PART_OF",
   "CORRECTS",

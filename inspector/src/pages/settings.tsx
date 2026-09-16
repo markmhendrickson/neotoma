@@ -25,7 +25,11 @@ import { JsonViewer } from "@/components/shared/json_viewer";
 import { AttributionSummary } from "@/components/shared/attribution_summary";
 import { SessionAttestationCard } from "@/components/shared/session_attestation_card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatInspectorUserId } from "@/lib/constants";
+import {
+  formatInspectorUserId,
+  inspectorUserIdDetailLabel,
+  inspectorUserIdLabel,
+} from "@/lib/constants";
 import { areDestructiveActionsHidden, isApiUrlOverrideDisabled } from "@/lib/sandbox";
 import { readStoredSandboxSession } from "@/lib/sandbox_session";
 import { toast } from "sonner";
@@ -364,7 +368,7 @@ export default function SettingsPage() {
                       operated on, not the signer — label it so, rather than
                       letting it read as the viewer's own id (#2228). */}
                   <span className="text-muted-foreground">
-                    {me.data.shared_graph ? "Graph User ID" : "User ID"}
+                    {inspectorUserIdLabel(me.data.shared_graph)}
                   </span>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -374,7 +378,7 @@ export default function SettingsPage() {
                     </TooltipTrigger>
                     <TooltipContent side="left" className="max-w-sm">
                       <p className="text-xs text-muted-foreground">
-                        {me.data.shared_graph ? "Shared graph User ID" : "User ID"}
+                        {inspectorUserIdDetailLabel(me.data.shared_graph)}
                       </p>
                       <p className="font-mono text-xs break-all">{me.data.user_id}</p>
                     </TooltipContent>

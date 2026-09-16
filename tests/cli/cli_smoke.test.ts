@@ -14,6 +14,15 @@ type CliModule = {
     clientId: string;
     devStub?: boolean;
   }) => string;
+  formatAlreadySignedIn: (
+    me: {
+      user_id?: string;
+      email?: string;
+      authenticated_user_id?: string;
+      shared_graph?: boolean;
+    },
+    outputMode: "json" | "text"
+  ) => { json: Record<string, unknown> } | { text: string };
 };
 
 type ReadlineMockState = {
@@ -158,6 +167,65 @@ describe("cli smoke tests", () => {
     });
     const parsed = new URL(url);
     expect(parsed.searchParams.get("dev_stub")).toBe("1");
+  });
+
+  describe("formatAlreadySignedIn (#2228 identity vs. graph-scope labeling)", () => {
+    it("labels the signer's email and the shared graph scope separately, in text mode", async () => {
+      const { formatAlreadySignedIn } = await loadCli();
+      const result = formatAlreadySignedIn(
+        {
+          user_id: "shared-graph-id",
+          email: "teammate@example.com",
+          authenticated_user_id: "teammate-own-id",
+          shared_graph: true,
+        },
+        "text"
+      );
+      expect("text" in result).toBe(true);
+      const text = (result as { text: string }).text;
+      // The email is the signer; the id printed after it is labeled as the
+      // GRAPH scope, never presented as if it were the signer's own id.
+      expect(text).toContain("teammate@example.com");
+      expect(text).toContain("shared graph shared-graph-id");
+    });
+
+    it("labels the signer's email and the shared graph scope separately, in JSON mode", async () => {
+      const { formatAlreadySignedIn } = await loadCli();
+      const result = formatAlreadySignedIn(
+        {
+          user_id: "shared-graph-id",
+          email: "teammate@example.com",
+          authenticated_user_id: "teammate-own-id",
+          shared_graph: true,
+        },
+        "json"
+      );
+      expect("json" in result).toBe(true);
+      const json = (result as { json: Record<string, unknown> }).json;
+      expect(json.email).toBe("teammate@example.com");
+      expect(json.user_id).toBe("shared-graph-id");
+      expect(json.shared_graph).toBe(true);
+      expect(json.authenticated_user_id).toBe("teammate-own-id");
+    });
+
+    it("omits shared-graph fields entirely for a non-shared-graph response", async () => {
+      const { formatAlreadySignedIn } = await loadCli();
+      const textResult = formatAlreadySignedIn(
+        { user_id: "own-id", email: "solo@example.com", shared_graph: false },
+        "text"
+      );
+      const text = (textResult as { text: string }).text;
+      expect(text).toContain("solo@example.com");
+      expect(text).not.toContain("shared graph");
+
+      const jsonResult = formatAlreadySignedIn(
+        { user_id: "own-id", email: "solo@example.com", shared_graph: false },
+        "json"
+      );
+      const json = (jsonResult as { json: Record<string, unknown> }).json;
+      expect(json).not.toHaveProperty("shared_graph");
+      expect(json).not.toHaveProperty("authenticated_user_id");
+    });
   });
 
   it("prints auth status when not authenticated", async () => {
