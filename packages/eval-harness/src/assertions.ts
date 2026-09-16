@@ -110,6 +110,41 @@ async function fetchObservations(
   }
 }
 
+/**
+ * Filter relationships by their ENDPOINT entity types.
+ *
+ * `source_entity_type` / `target_entity_type` were declared on
+ * `ExpectedAssertion` from the start but never read by this file, so a
+ * predicate carrying them asserted only "some edge of this relationship_type
+ * exists" — a stage-N -> stage-N-1 `REFERS_TO` assertion passed on ANY
+ * unrelated `REFERS_TO` anywhere in the graph. That is a silent false green,
+ * not a stricter assertion that happened to pass (neotoma#2418).
+ *
+ * The `GET /relationships` payload carries `source_entity_type` and
+ * `target_entity_type` on every row, so the filter is applied client-side
+ * here — the same posture as `entity.count`, whose `where` the isolated
+ * server also does not honor. A row MISSING the endpoint-type key does not
+ * match: an unknown endpoint has to fail the restrictive branch rather than
+ * pass it, or the filter reintroduces the false green it exists to close.
+ */
+function relationshipEndpointsMatch(
+  rel: Record<string, unknown>,
+  sourceType: string | undefined,
+  targetType: string | undefined
+): boolean {
+  if (sourceType && rel.source_entity_type !== sourceType) return false;
+  if (targetType && rel.target_entity_type !== targetType) return false;
+  return true;
+}
+
+/** Human-readable suffix naming the endpoint constraint in failure messages. */
+function endpointLabel(predicate: ExpectedAssertion): string {
+  const parts: string[] = [];
+  if (predicate.source_entity_type) parts.push(`source_entity_type=${predicate.source_entity_type}`);
+  if (predicate.target_entity_type) parts.push(`target_entity_type=${predicate.target_entity_type}`);
+  return parts.length ? ` with ${parts.join(", ")}` : "";
+}
+
 function whereMatches(
   entity: Record<string, unknown>,
   where: Record<string, unknown> | undefined
@@ -378,14 +413,21 @@ export async function evaluatePredicate(
           ? [predicate.relationship_type]
           : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
-      const rels = lists.flat();
+      const allOfType = lists.flat();
+      const rels = allOfType.filter((r) =>
+        relationshipEndpointsMatch(r, predicate.source_entity_type, predicate.target_entity_type)
+      );
       if (rels.length > 0) return null;
       const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
       return {
         predicate,
-        message: `Expected at least one ${label} relationship, got 0.`,
+        message: `Expected at least one ${label} relationship${endpointLabel(predicate)}, got 0 (${allOfType.length} of that relationship_type exist, none with those endpoint types).`,
         expected: predicate,
-        actual: rels,
+        actual: allOfType.map((r) => ({
+          relationship_type: r.relationship_type,
+          source_entity_type: r.source_entity_type,
+          target_entity_type: r.target_entity_type,
+        })),
       };
     }
     case "turn_compliance.backfilled": {
@@ -477,14 +519,18 @@ export async function evaluatePredicate(
           ? [predicate.relationship_type]
           : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
-      const rels = lists.flat();
+      const rels = lists
+        .flat()
+        .filter((r) =>
+          relationshipEndpointsMatch(r, predicate.source_entity_type, predicate.target_entity_type)
+        );
       const expected = typeof predicate.value === "number" ? predicate.value : 0;
       const op = predicate.op ?? "eq";
       if (compareNumber(rels.length, op, expected)) return null;
       const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
       return {
         predicate,
-        message: `Expected relationship.count of "${label}" ${op} ${expected}, got ${rels.length}.`,
+        message: `Expected relationship.count of "${label}"${endpointLabel(predicate)} ${op} ${expected}, got ${rels.length}.`,
         expected: { op, value: expected },
         actual: rels.length,
       };

@@ -254,3 +254,114 @@ describe("#1703 snapshot.field_present / field_absent", () => {
     expect(await evaluatePredicate(p, ctx())).toBeNull();
   });
 });
+
+describe("#2418 relationship endpoint-type filtering", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Stub `GET /relationships` with a fixed row set. */
+  function stubRelationships(rows: Array<Record<string, unknown>>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ relationships: rows, total: rows.length }),
+      })) as never
+    );
+  }
+
+  // The graph holds one REFERS_TO edge that is NOT the one under test. Before
+  // the fix, `source_entity_type`/`target_entity_type` were declared but never
+  // read, so this row satisfied a stage-8 -> stage-7 assertion. Reverting
+  // `relationshipEndpointsMatch` turns each "fails" case below green again —
+  // which is the false green the filter exists to close.
+  const unrelatedEdge = {
+    relationship_type: "REFERS_TO",
+    source_entity_type: "conversation_message",
+    target_entity_type: "conversation",
+  };
+  const stageEdge = {
+    relationship_type: "REFERS_TO",
+    source_entity_type: "rendered_page",
+    target_entity_type: "design_system",
+  };
+
+  it("relationship.exists fails when only an edge with other endpoint types exists", async () => {
+    stubRelationships([unrelatedEdge]);
+    const p: ExpectedAssertion = {
+      type: "relationship.exists",
+      relationship_type: "REFERS_TO",
+      source_entity_type: "rendered_page",
+      target_entity_type: "design_system",
+    };
+    const fail = await evaluatePredicate(p, ctx());
+    expect(fail).not.toBeNull();
+    expect(fail!.message).toContain("source_entity_type=rendered_page");
+    // The message must say edges of the type DO exist, so the author is not
+    // sent hunting for a missing store when the endpoints are the problem.
+    expect(fail!.message).toContain("1 of that relationship_type exist");
+  });
+
+  it("relationship.exists passes when the endpoint types match", async () => {
+    stubRelationships([unrelatedEdge, stageEdge]);
+    const p: ExpectedAssertion = {
+      type: "relationship.exists",
+      relationship_type: "REFERS_TO",
+      source_entity_type: "rendered_page",
+      target_entity_type: "design_system",
+    };
+    expect(await evaluatePredicate(p, ctx())).toBeNull();
+  });
+
+  it("filters on source alone and on target alone", async () => {
+    stubRelationships([unrelatedEdge, stageEdge]);
+    const sourceOnly: ExpectedAssertion = {
+      type: "relationship.exists",
+      relationship_type: "REFERS_TO",
+      source_entity_type: "rendered_page",
+    };
+    expect(await evaluatePredicate(sourceOnly, ctx())).toBeNull();
+    const targetOnly: ExpectedAssertion = {
+      type: "relationship.exists",
+      relationship_type: "REFERS_TO",
+      target_entity_type: "specification",
+    };
+    expect(await evaluatePredicate(targetOnly, ctx())).not.toBeNull();
+  });
+
+  it("a row missing the endpoint-type key does NOT match (fail closed)", async () => {
+    stubRelationships([{ relationship_type: "PART_OF" }]);
+    const p: ExpectedAssertion = {
+      type: "relationship.exists",
+      relationship_type: "PART_OF",
+      source_entity_type: "target_persona",
+    };
+    expect(await evaluatePredicate(p, ctx())).not.toBeNull();
+  });
+
+  it("relationship.count counts only endpoint-matching edges", async () => {
+    stubRelationships([unrelatedEdge, stageEdge, unrelatedEdge]);
+    const p: ExpectedAssertion = {
+      type: "relationship.count",
+      relationship_type: "REFERS_TO",
+      source_entity_type: "rendered_page",
+      target_entity_type: "design_system",
+      op: "eq",
+      value: 1,
+    };
+    expect(await evaluatePredicate(p, ctx())).toBeNull();
+    // Unfiltered the same graph holds 3 — proving the filter, not the total.
+    const unfiltered: ExpectedAssertion = {
+      type: "relationship.count",
+      relationship_type: "REFERS_TO",
+      op: "eq",
+      value: 3,
+    };
+    expect(await evaluatePredicate(unfiltered, ctx())).toBeNull();
+  });
+
+  it("an unconstrained predicate is unaffected (back-compat)", async () => {
+    stubRelationships([unrelatedEdge]);
+    const p: ExpectedAssertion = { type: "relationship.exists", relationship_type: "REFERS_TO" };
+    expect(await evaluatePredicate(p, ctx())).toBeNull();
+  });
+});
