@@ -18,6 +18,8 @@ This document reconciles two independently-derived views of who Neotoma is for:
 
 The two views were produced from different inputs and they agree on the core. That agreement is a useful signal: the audience the market research targets is the same audience the code actually serves.
 
+> **This document reconciles the functional and market views. It does not reconcile the market documents against each other** — which is where the remaining contradictions live, and which [`README.md`](README.md), the internal ICP index, does. Start there for the per-surface noun table, the retired and mapped informal buyer synonyms, and the open disagreements that need an operator decision. The conclusions below stand unchanged.
+
 ## Agreement on the primary ICP
 
 Both views name the same primary archetype, the person who builds and operates agents:

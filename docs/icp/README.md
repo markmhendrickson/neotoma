@@ -11,7 +11,18 @@ tags: [icp, consolidation, positioning]
 
 # ICP Index and Consolidation
 
-This is the entry point for `docs/icp/`. It exists because the directory holds **ten** documents naming buyers, and a writer had no way to tell which one to use. Measured across `docs/` before this document was written: **"indie hacker" 25 mentions, "power user" 23, "personal agentic OS builder/operator" 7** — the supposedly canonical term was outranked 3:1 and 7:1 by two informal ones.
+This is the entry point for `docs/icp/`. It exists because the directory holds **ten** documents naming buyers, and a writer had no way to tell which one to use. Measured across `docs/` at this PR's parent commit `34370a54` (identical to `origin/main` at the time of writing): **"indie hacker" 103 occurrences, "power user" 39, "personal agentic OS builder" 17** — the supposedly canonical term is outranked 2.6:1 and 6.1:1 by two informal ones.
+
+The measurement is reproducible. Each figure is the output of:
+
+```sh
+# run from the repo root; counts occurrences, case-insensitively, under docs/
+git grep -hoiE "indie hacker"                 34370a54 -- docs | wc -l   # 103
+git grep -hoiE "power user"                   34370a54 -- docs | wc -l   #  39
+git grep -hoiE "personal agentic OS builder"  34370a54 -- docs | wc -l   #  17
+```
+
+Two notes on method, because an earlier revision of this line was wrong. **`-i` is load-bearing**: the figures first published here (25 / 23 / 7) came from a case-*sensitive* grep over a pattern containing capitals mid-string, which silently dropped every match whose casing differed — roughly three quarters of them. And the count is of **occurrences**, not lines: `git grep -c` counts matching lines and returns 102 / 39 / 17, since one line can name a term twice. The builder term is counted on its stem, which subsumes the `/operator`, plural, and title-case variants the docs use interchangeably. Figures move as `docs/` changes, which is why the commit is named: re-run against `34370a54` to reproduce these exactly.
 
 It does **not** re-decide what [`icp_reconciliation.md`](icp_reconciliation.md) already settled. That document assigned canonical roles (public vs. internal) and established that the functional and market views agree on the primary ICP. Both conclusions stand. What it did *not* do — and what this document does — is reconcile the internal market documents **against each other**, which is where the actual contradictions live.
 
@@ -31,6 +42,16 @@ At personal scale this developer-operator is one individual who is at once the o
 | Internal — strategy, sizing, channels, GTM | "personal agentic OS builder/operator" | [`primary_icp.md`](primary_icp.md) |
 
 These are **two names for one buyer**, not two buyers. This is by design per `icp_reconciliation.md`; the defect was that nothing told a writer which to reach for. Never introduce a third.
+
+**Which category noun to use where** — the buyer and the category are separate choices, and a writer who gets the buyer right can still get the category wrong:
+
+| Surface | Use | Source |
+|---|---|---|
+| Any copy naming what Neotoma *is* | "the system of record for AI agents" (with the definite article) | [`core_identity.md`](../foundation/core_identity.md), decision `category_noun_singularity` (2026-08-21) |
+| Architecture docs naming the State Layer / Operational Layer boundary | "state layer", as an **invariant** — never as the category | [`layered_architecture.md`](../foundation/layered_architecture.md) |
+| Any copy naming the problem | The integrity failure — nothing was committed to a record | `never_say_the_agent_forgot` (2026-08-21), [`redlines.md` R13](../foundation/redlines.md#never-say-the-agent-forgot) |
+
+**"Memory layer" is a job to be done, not the category.** The canonical ICP statement quoted above says the buyer needs "a persistent, deterministic, auditable memory layer" — that is correct and stays, because it describes *what the buyer is shopping for*. It is not licence to call Neotoma a memory layer. The distinction is load-bearing: stated as a category, "memory layer" invites a comparison against retrieval-memory vendors on recall quality, an axis Neotoma does not compete on and does not need to win. Stated as the buyer's job, it names the need that the system of record satisfies. Rule of thumb: "memory layer" may follow *"who need a…"*; it may never follow *"Neotoma is a…"*.
 
 ## 2. Informal synonyms: retired or mapped
 
