@@ -13,12 +13,16 @@ function findProcessOnPort(port) {
     throw new Error(`Invalid port number: ${port}`);
   }
 
+  // Keep default in sync with DEFAULT_PROCESS_PROBE_TIMEOUT_MS in src/cli/process_probe.ts
+  const PROCESS_PROBE_TIMEOUT_MS =
+    Number(process.env.NEOTOMA_PROCESS_PROBE_TIMEOUT_MS) || 5000;
+
   try {
     if (platform() === 'win32') {
       // Windows: Use netstat to find process using port
       const result = execSync(
         `netstat -ano | findstr :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: PROCESS_PROBE_TIMEOUT_MS }
       );
       const lines = result.trim().split('\n').filter(Boolean);
       const pids = new Set();
@@ -38,7 +42,7 @@ function findProcessOnPort(port) {
       // behaviour when lsof exits non-zero.
       const result = execSync(
         `lsof -ti :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: PROCESS_PROBE_TIMEOUT_MS }
       );
       const pids = result.trim().split('\n').filter(Boolean);
       return pids.map(Number);
@@ -46,6 +50,10 @@ function findProcessOnPort(port) {
   } catch (error) {
     // lsof/netstat returns non-zero exit code when no process found
     if (error.status === 1 || error.code === 1) {
+      return [];
+    }
+    // Timeout must not rethrow — same advisory empty as exit-1 (Accipiter UX).
+    if (error.code === 'ETIMEDOUT' || error.killed === true) {
       return [];
     }
     throw error;

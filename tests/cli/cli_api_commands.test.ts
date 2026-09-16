@@ -53,7 +53,7 @@ describe("CLI api commands", () => {
   describe("api stop", () => {
     /**
      * Runs with NEOTOMA_API_STOP_DRY_RUN=1 so the command reports
-     * `stop_ran: false` and kills nothing.
+     * `stop_ran: false`, `dry_run: true`, and kills nothing.
      *
      * Previously this ran for real, where `api stop --env dev` SIGKILLs
      * whatever holds port 3080 — on a developer machine that is their own dev
@@ -61,9 +61,7 @@ describe("CLI api commands", () => {
      * asserting the shape of a JSON payload must not terminate unrelated
      * processes to do it. Note that cwd is NOT a way to avoid this: the CLI
      * resolves its repo root from the script's own location, so running from a
-     * temp directory still finds `scripts/kill_port.js` and still kills. Both
-     * branches of `stop_ran` emit the same four keys, so the contract under
-     * test is unchanged.
+     * temp directory still finds `scripts/kill_port.js` and still kills.
      */
     it(
       "should return stop payload in JSON mode",
@@ -79,6 +77,9 @@ describe("CLI api commands", () => {
         expect(result.env).toBe("dev");
         expect(result.port).toBe(3080);
         expect(result.stop_ran).toBe(false);
+        expect(result.dry_run).toBe(true);
+        expect(String(result.message).toLowerCase()).toContain("dry-run");
+        expect(String(result.message).toLowerCase()).not.toContain("source root");
       },
       PROBE_TEST_TIMEOUT_MS
     );
@@ -89,7 +90,7 @@ describe("CLI api commands", () => {
      * Read-only: enumerates listeners on the candidate ports. The assertion
      * deliberately does not constrain `processes.length` — whether anything is
      * listening on 3080/3180 depends on the machine, and a probe that times out
-     * legitimately reports an empty list.
+     * legitimately reports an empty/partial list with probe_status ≠ ok.
      */
     it(
       "should list API processes in JSON mode",
@@ -98,8 +99,10 @@ describe("CLI api commands", () => {
         const result = JSON.parse(stdout);
         expect(result).toHaveProperty("processes");
         expect(result).toHaveProperty("ports_checked");
+        expect(result).toHaveProperty("probe_status");
         expect(Array.isArray(result.processes)).toBe(true);
         expect(result.ports_checked).toEqual([3080, 3180]);
+        expect(["ok", "timed_out", "unavailable"]).toContain(result.probe_status);
       },
       PROBE_TEST_TIMEOUT_MS
     );
