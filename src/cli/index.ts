@@ -1431,7 +1431,9 @@ export function formatAlreadySignedIn(
         ...(me.shared_graph
           ? {
               shared_graph: true,
-              authenticated_user_id: me.authenticated_user_id,
+              ...(me.authenticated_user_id
+                ? { authenticated_user_id: me.authenticated_user_id }
+                : {}),
             }
           : {}),
       },

@@ -5,9 +5,16 @@ export function formatInspectorUserId(userId: string): string {
   return userId === LOCAL_DEV_USER_ID ? "Local user" : userId;
 }
 
-export function formatInspectorUserBadge(email: string | undefined | null, userId: string): string {
+export function formatInspectorUserBadge(
+  email: string | undefined | null,
+  userId: string,
+  sharedGraph?: boolean
+): string {
   const trimmed = email?.trim();
   if (trimmed) return trimmed;
+  // #2228 residual: under shared-graph, missing email means unknown signer —
+  // never substitute the graph principal (that re-mislabels identity).
+  if (sharedGraph) return "Unknown identity — sign in again";
   return formatInspectorUserId(userId);
 }
 

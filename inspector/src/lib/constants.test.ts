@@ -28,6 +28,18 @@ describe("inspector identity labeling (#2228)", () => {
       expect(formatInspectorUserBadge("   ", "shared-graph-id")).toBe("shared-graph-id");
     });
 
+    it("does not substitute the graph id under shared-graph when email is unknown", () => {
+      expect(formatInspectorUserBadge(undefined, "shared-graph-id", true)).toBe(
+        "Unknown identity — sign in again"
+      );
+      expect(formatInspectorUserBadge(null, "shared-graph-id", true)).toBe(
+        "Unknown identity — sign in again"
+      );
+      expect(formatInspectorUserBadge("   ", "shared-graph-id", true)).toBe(
+        "Unknown identity — sign in again"
+      );
+    });
+
     it("labels the local dev user distinctly", () => {
       expect(formatInspectorUserBadge(undefined, LOCAL_DEV_USER_ID)).toBe("Local user");
     });

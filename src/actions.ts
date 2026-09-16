@@ -4370,11 +4370,14 @@ app.get("/me", async (req, res) => {
     const sandboxMode: NeotomaSandboxModeName | null =
       _resolvedServerMode ?? (_localSandboxActive ? "local_sandbox" : null);
     // #2228: report identity and scope as two things, not one.
-    //   user_id            — the graph being operated on (unchanged meaning)
-    //   email              — WHO is signed in; under shared-graph mode this is
-    //                        the teammate's verified address, not the owner's
-    //   authenticated_user_id / shared_graph — present only when the two differ,
-    //                        so non-shared-graph responses keep their old shape
+    //   user_id               — the graph being operated on (unchanged meaning)
+    //   email                 — WHO is signed in when known; may be absent on a
+    //                           pre-migration shared-graph residual (unknown,
+    //                           not owner-fabricated)
+    //   shared_graph          — true whenever this session is on a shared graph,
+    //                           including the degraded residual with no recorded
+    //                           signer (must not require authenticated_user_id)
+    //   authenticated_user_id — present only when the remapped signer id is set
     const signedInUserId = (req as any).signedInUserId as string | undefined;
     const sharedGraph = (req as any).signedInSharedGraph === true;
     return res.json({
@@ -4382,9 +4385,8 @@ app.get("/me", async (req, res) => {
       email: email ?? undefined,
       storage,
       ...(sandboxMode ? { sandbox_mode: sandboxMode } : {}),
-      ...(sharedGraph && signedInUserId
-        ? { authenticated_user_id: signedInUserId, shared_graph: true }
-        : {}),
+      ...(sharedGraph ? { shared_graph: true } : {}),
+      ...(signedInUserId ? { authenticated_user_id: signedInUserId } : {}),
     });
   } catch (error: any) {
     logError("GetMe", req, error);

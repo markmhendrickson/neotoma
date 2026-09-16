@@ -44,7 +44,7 @@ export function SidebarUserFooter({ collapsed }: SidebarUserFooterProps) {
     return null;
   }
 
-  const label = formatInspectorUserBadge(me.data.email, me.data.user_id);
+  const label = formatInspectorUserBadge(me.data.email, me.data.user_id, me.data.shared_graph);
   const isHealthy = health.data?.ok === true;
   const viteInspectorEnv = getInspectorEnvironment();
   const inspectorEnv = resolveInspectorBadgeEnvironment(serverInfo.data?.neotoma_env, viteInspectorEnv);

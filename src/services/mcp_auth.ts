@@ -5,6 +5,7 @@
  */
 
 import { getDb } from "../repositories/db/connection.js";
+import { getSharedGraphUserId } from "./google_oidc.js";
 import { getLocalAuthUserById } from "./local_auth.js";
 
 export interface ValidatedUser {
@@ -82,23 +83,39 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
   // #2228: `user_id` is the graph scope and stays the sole basis for data
   // access. The email, in contrast, must describe the person signed in. When
   // shared-graph mode remapped the scope, the connection row carries the
-  // signer's verified identity; prefer it. Rows without it — every
-  // non-shared-graph session, and every row written before the migration —
-  // fall back to resolving the email from `user_id`, which is both correct and
-  // unchanged for them.
+  // signer's verified identity; prefer it.
+  //
+  // Rows without authenticated_*:
+  //   - Non-shared-graph (E4): fall back to getLocalAuthUserById(user_id) —
+  //     user_id IS the signer, so the lookup is correct.
+  //   - Shared-graph residual (E4b): user_id is the SHARED OWNER. Looking up
+  //     email from it fabricates the owner's address as "who signed in" —
+  //     the #2228 failure class until re-auth. Omit email and still emit
+  //     sharedGraph so consumers degrade instead of mislabeling.
   const authenticatedEmail = connection.authenticated_email ?? undefined;
   const authenticatedUserId = connection.authenticated_user_id ?? undefined;
-  const email = authenticatedEmail ?? (await getLocalAuthUserById(connection.user_id))?.email;
+  const sharedOwnerId = getSharedGraphUserId();
+  const isSharedGraphScope = Boolean(sharedOwnerId && connection.user_id === sharedOwnerId);
 
-  // "Shared graph" is a statement about this session: the signer's own user_id
-  // is not the graph being operated on. Derived from the row rather than from
-  // the env var so it stays true for a session established before the setting
-  // changed, and so a defensive row with an email but no id does not claim it.
-  const sharedGraph = Boolean(authenticatedUserId && authenticatedUserId !== connection.user_id);
+  let email: string | undefined = authenticatedEmail;
+  if (!email && !isSharedGraphScope) {
+    email = (await getLocalAuthUserById(connection.user_id))?.email;
+  }
+
+  // Remapped identity columns, OR a shared-scope row with no recorded signer
+  // (pre-migration residual — degraded but still shared-graph).
+  const sharedGraph =
+    Boolean(authenticatedUserId && authenticatedUserId !== connection.user_id) ||
+    (isSharedGraphScope && !authenticatedEmail);
 
   return {
     userId: connection.user_id,
-    email,
-    ...(sharedGraph ? { authenticatedUserId, sharedGraph: true } : {}),
+    ...(email ? { email } : {}),
+    ...(sharedGraph
+      ? {
+          sharedGraph: true as const,
+          ...(authenticatedUserId ? { authenticatedUserId } : {}),
+        }
+      : {}),
   };
 }

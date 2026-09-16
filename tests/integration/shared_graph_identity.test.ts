@@ -424,6 +424,59 @@ describe("#2228 shared-graph sign-in: identity alongside scope", () => {
   });
 
   /**
+   * E4b — same pre-migration NULL identity columns, but under shared-graph
+   * with user_id = shared owner. Must NOT fabricate the owner's email, and
+   * MUST emit degraded shared_graph so consumers fail closed.
+   */
+  it("omits fabricated owner email and emits degraded shared_graph for pre-migration shared-scope rows", async () => {
+    process.env.NEOTOMA_SHARED_GRAPH_USER_ID = SHARED_GRAPH_USER_ID;
+
+    const ownerDb = await getDb();
+    await ownerDb
+      .prepare(
+        "INSERT OR IGNORE INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      )
+      .run(
+        SHARED_GRAPH_USER_ID,
+        OWNER_EMAIL,
+        "x",
+        "x",
+        new Date().toISOString(),
+        new Date().toISOString(),
+        null
+      );
+
+    const residualToken = `local_access_${randomUUID().replace(/-/g, "")}`;
+    const residualConnection = `conn_residual_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+    await ownerDb
+      .prepare(
+        "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .run(
+        randomUUID(),
+        SHARED_GRAPH_USER_ID,
+        residualConnection,
+        `local_refresh_${randomUUID().replace(/-/g, "")}`,
+        residualToken,
+        new Date(Date.now() + 3600_000).toISOString(),
+        null,
+        null,
+        new Date().toISOString(),
+        null
+      );
+
+    const { status, body } = await getMe(residualToken);
+    expect(status).toBe(200);
+    expect(body.user_id).toBe(SHARED_GRAPH_USER_ID);
+    // Fail closed: unknown signer, never the owner's address.
+    expect(body.email).toBeUndefined();
+    expect(body.email).not.toBe(OWNER_EMAIL);
+    expect(body.shared_graph).toBe(true);
+    expect(body.authenticated_user_id).toBeUndefined();
+  });
+
+  /**
    * E6 — the allowlist still rejects before any identity is bound. A fix that
    * recorded identity earlier in the flow could admit a non-allowlisted signer;
    * assert no session and no connection row result.

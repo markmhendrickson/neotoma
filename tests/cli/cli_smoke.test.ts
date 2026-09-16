@@ -226,6 +226,28 @@ describe("cli smoke tests", () => {
       expect(json).not.toHaveProperty("shared_graph");
       expect(json).not.toHaveProperty("authenticated_user_id");
     });
+
+    it("labels shared-graph residual with no email without inventing a signer", async () => {
+      const { formatAlreadySignedIn } = await loadCli();
+      const textResult = formatAlreadySignedIn(
+        { user_id: "shared-graph-id", shared_graph: true },
+        "text"
+      );
+      const text = (textResult as { text: string }).text;
+      expect(text).toContain("shared graph shared-graph-id");
+      expect(text).not.toMatch(/@/);
+      expect(text).not.toContain("undefined");
+
+      const jsonResult = formatAlreadySignedIn(
+        { user_id: "shared-graph-id", shared_graph: true },
+        "json"
+      );
+      const json = (jsonResult as { json: Record<string, unknown> }).json;
+      expect(json.shared_graph).toBe(true);
+      expect(json.user_id).toBe("shared-graph-id");
+      expect(json.email).toBeUndefined();
+      expect(json.authenticated_user_id).toBeUndefined();
+    });
   });
 
   it("prints auth status when not authenticated", async () => {

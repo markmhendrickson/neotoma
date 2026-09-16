@@ -390,14 +390,24 @@ export default function SettingsPage() {
                     <span>{me.data.email}</span>
                   </div>
                 )}
+                {me.data.shared_graph && !me.data.email && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Signed in as</span>
+                    <span className="text-right text-muted-foreground">
+                      Unknown —{" "}
+                      <span className="text-foreground">sign in again</span> to record who you are
+                    </span>
+                  </div>
+                )}
                 {me.data.shared_graph && (
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-muted-foreground">Graph</span>
                     <span className="text-right">
                       <Badge variant="secondary">Shared graph</Badge>
                       <span className="block text-xs text-muted-foreground mt-1">
-                        You are signed in as yourself, working in a graph shared with your team.
-                        Everything you read and write belongs to that shared graph.
+                        {me.data.email
+                          ? "You are signed in as yourself, working in a graph shared with your team. Everything you read and write belongs to that shared graph."
+                          : "Working in a shared graph. Re-authenticate so this session records your identity."}
                       </span>
                     </span>
                   </div>

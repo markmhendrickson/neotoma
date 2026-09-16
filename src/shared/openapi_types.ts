@@ -4604,11 +4604,11 @@ export interface operations {
           "application/json": {
             /** @description Graph scope: the user_id all reads and writes are scoped to. Under shared-graph mode this is the shared graph owner, not the signed-in user. */
             user_id?: string;
-            /** @description Email of the signed-in user. Under shared-graph mode this is the verified address of the teammate who signed in, not the graph owner's. */
+            /** @description Email of the signed-in user when known. Under shared-graph mode this is the verified address of the teammate who signed in, not the graph owner's. May be absent when the signed-in identity was never recorded (pre-migration shared-graph residual); consumers must treat absence as unknown, not as the graph owner. */
             email?: string;
-            /** @description Per-email user_id of the signed-in user. Present only when it differs from user_id (shared-graph mode); omitted otherwise. */
+            /** @description Per-email user_id of the signed-in user. Present only when it differs from user_id (fully remapped shared-graph session). Omitted on non-shared-graph sessions and on degraded shared-graph residuals that have no recorded signer (shared_graph may still be true). */
             authenticated_user_id?: string;
-            /** @description True when this session operates on a shared graph whose owner is not the signed-in user. Omitted otherwise. */
+            /** @description True when this session operates on a shared graph. May be true without authenticated_user_id when the connection row predates identity columns (degraded residual until re-auth). Omitted on non-shared-graph sessions. */
             shared_graph?: boolean;
             storage?: {
               /** @enum {string} */

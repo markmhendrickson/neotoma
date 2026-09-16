@@ -3038,20 +3038,27 @@ paths:
                   email:
                     type: string
                     description: >-
-                      Email of the signed-in user. Under shared-graph mode this
-                      is the verified address of the teammate who signed in, not
-                      the graph owner's.
+                      Email of the signed-in user when known. Under shared-graph
+                      mode this is the verified address of the teammate who
+                      signed in, not the graph owner's. May be absent when the
+                      signed-in identity was never recorded (pre-migration
+                      shared-graph residual); consumers must treat absence as
+                      unknown, not as the graph owner.
                   authenticated_user_id:
                     type: string
                     description: >-
                       Per-email user_id of the signed-in user. Present only when
-                      it differs from user_id (shared-graph mode); omitted
-                      otherwise.
+                      it differs from user_id (fully remapped shared-graph
+                      session). Omitted on non-shared-graph sessions and on
+                      degraded shared-graph residuals that have no recorded
+                      signer (shared_graph may still be true).
                   shared_graph:
                     type: boolean
                     description: >-
-                      True when this session operates on a shared graph whose
-                      owner is not the signed-in user. Omitted otherwise.
+                      True when this session operates on a shared graph. May be
+                      true without authenticated_user_id when the connection row
+                      predates identity columns (degraded residual until
+                      re-auth). Omitted on non-shared-graph sessions.
                   storage:
                     type: object
                     properties:
