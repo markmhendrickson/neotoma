@@ -122,7 +122,7 @@ describe("evaluateStoreWarningRule — unknown rule shapes fail open and legibly
     // write was not blocked — the whole point of failing open.
     expect(result.message).toContain("present_any_of");
     expect(result.message).toContain("SOME_RULE");
-    expect(result.message).toContain("NOT blocked");
+    expect(result.message).toContain("did NOT block");
   });
 
   it("does not evaluate a partially-understood condition", () => {
@@ -169,5 +169,120 @@ describe("evaluateStoreWarningRule — unknown rule shapes fail open and legibly
 
   it("declares `missing_all_of` as a supported condition key", () => {
     expect(SUPPORTED_CONDITION_KEYS).toContain("missing_all_of");
+  });
+});
+
+/**
+ * A field list is taken whole or not at all.
+ *
+ * The first revision of this evaluator filtered non-string entries out of a
+ * declared list, so `missing_all_of: ["content", 7]` became `["content"]` and
+ * was evaluated as though the schema author had written it — with `content`
+ * present the rule was suppressed and nothing was reported at all. That is a
+ * partially understood condition repaired by guessing, which is the defect
+ * class this whole module exists to fix. These cases pin the opposite: a list
+ * with any unusable entry is rejected intact and reported.
+ */
+describe("evaluateStoreWarningRule — a malformed field list is reported, never salvaged", () => {
+  const mixed: StoreWarningRuleInput = {
+    code: "MISSING_BODY",
+    message: "Body missing.",
+    condition: { missing_all_of: ["content", 7] },
+  };
+
+  it("reports a mixed-type `condition.missing_all_of` instead of evaluating the string entries", () => {
+    // The exact shape from the committed contract scenario: with `content`
+    // present, salvaging to ["content"] suppresses the rule silently.
+    const result = evaluateStoreWarningRule(mixed, { content: "body" });
+    expect(result.code).toBe(STORE_WARNING_RULE_NOT_EVALUATED);
+    expect(result.notEvaluated).toBe(true);
+    expect(result.fired).toBe(true);
+  });
+
+  it("reports the mixed list whether or not the salvageable field is present", () => {
+    // Salvaging happened to fire on an absent field, which is how the defect
+    // stayed invisible: only the present-field case looked wrong.
+    const result = evaluateStoreWarningRule(mixed, {});
+    expect(result.code).toBe(STORE_WARNING_RULE_NOT_EVALUATED);
+    expect(result.notEvaluated).toBe(true);
+  });
+
+  it("names the path, the offending entry, and that nothing was discarded", () => {
+    const result = evaluateStoreWarningRule(mixed, { content: "body" });
+    expect(result.message).toContain("MISSING_BODY");
+    expect(result.message).toContain("condition.missing_all_of");
+    expect(result.message).toContain("index 1");
+    expect(result.message).toContain("rejected intact");
+    expect(result.message).toContain("did NOT block");
+  });
+
+  it("applies the same rule to the flat `fields` spelling", () => {
+    const result = evaluateStoreWarningRule(
+      { code: "MISSING_BODY", message: "m", fields: ["content", 7] },
+      { content: "body" }
+    );
+    expect(result.code).toBe(STORE_WARNING_RULE_NOT_EVALUATED);
+    expect(result.message).toContain("`fields`");
+    expect(result.message).not.toContain("condition.missing_all_of");
+  });
+
+  it.each([
+    ["an empty list", { missing_all_of: [] }],
+    ["a non-array", { missing_all_of: "content" }],
+    ["an all-numeric list", { missing_all_of: [1, 2] }],
+    ["a list holding an empty string", { missing_all_of: ["content", ""] }],
+    ["a list holding null", { missing_all_of: ["content", null] }],
+    ["a list holding a nested array", { missing_all_of: ["content", ["a"]] }],
+  ])("reports %s rather than evaluating any readable part", (_label, condition) => {
+    const result = evaluateStoreWarningRule(
+      { code: "R", message: "m", condition },
+      { content: "body" }
+    );
+    expect(result.code).toBe(STORE_WARNING_RULE_NOT_EVALUATED);
+    expect(result.notEvaluated).toBe(true);
+  });
+
+  it("names only the unsupported keys of a partially understood condition", () => {
+    // Reporting every key would send a schema author looking at the one they
+    // wrote correctly.
+    const result = evaluateStoreWarningRule(
+      {
+        code: "R",
+        message: "m",
+        condition: { missing_all_of: ["content"], only_when_kind: "doc" },
+      },
+      { content: "body" }
+    );
+    expect(result.message).toContain("only_when_kind");
+    // `missing_all_of` still appears in the "Supported condition keys" list;
+    // what must not happen is its being named as one of the unsupported keys.
+    expect(result.message).toContain('unrecognised condition key ["only_when_kind"]');
+  });
+
+  it("leaves well-formed lists behaving exactly as before", () => {
+    const declarative: StoreWarningRuleInput = {
+      code: "C",
+      message: "m",
+      condition: { missing_all_of: ["content"] },
+    };
+    const flat: StoreWarningRuleInput = { code: "C", message: "m", fields: ["content"] };
+    for (const rule of [declarative, flat]) {
+      expect(evaluateStoreWarningRule(rule, { content: "body" })).toMatchObject({
+        fired: false,
+        code: "C",
+        notEvaluated: false,
+      });
+      expect(evaluateStoreWarningRule(rule, {})).toMatchObject({
+        fired: true,
+        code: "C",
+        notEvaluated: false,
+      });
+    }
+  });
+
+  it("does not claim the entity was persisted", () => {
+    // A dry run and an independently failed write both reach this path.
+    const result = evaluateStoreWarningRule(mixed, { content: "body" });
+    expect(result.message).not.toMatch(/write proceeded|data stored|was saved/i);
   });
 });
