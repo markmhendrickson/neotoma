@@ -19,8 +19,9 @@ them costly to cross.
 
 ## The substantive position
 
-Neotoma exists to provide a deterministic state layer for AI agent memory,
-built on write integrity rather than retrieval performance. The architectural
+Neotoma exists to be the system of record for AI agents — the designated
+place where a fact about agent-held state is settled — built on write
+integrity rather than retrieval performance. The architectural
 commitments named in [`core_identity.md`](core_identity.md) and
 [`philosophy.md`](philosophy.md) (append-only observations, hash-based entity
 identity, schema-bound writes, pipeline provenance, replayable timelines,
@@ -179,6 +180,24 @@ their terms to compete. This is narrative contamination. The redline is marketin
 copy or product positioning that implies Neotoma is "also" a retrieval system,
 "also" an embeddings system, or "also" memory-as-cognition. Neotoma is the
 state-integrity position. Other positions exist; Neotoma is not them.
+
+<a id="never-say-the-agent-forgot"></a>
+**`never_say_the_agent_forgot` (decided 2026-08-21) is the sharpest instance of
+this redline, and the one crossed most often.** Copy must never say an agent
+*forgot*. Forgetting is the recall framing, and any retrieval vendor answers it
+with better recall — so stating the problem that way argues their case. The
+accurate framing is that nothing was committed to a record: a fact held only in
+context was never written anywhere authoritative, so there is nothing to forget
+and nothing to correct. Retired outright: "Your agents forget. Neotoma makes
+them remember." and "your agents forget what they knew yesterday." The test any
+problem statement must pass is the competitor test — if mem0, Zep, or any
+retrieval vendor could plausibly claim to solve the scenario as written, it
+frames their category and must be rewritten. Verbatim quotation of user research
+is exempt: what a user said is evidence, not Neotoma's own voice. Canonical
+statement in
+[`product_positioning.md`](product_positioning.md) ("Primary message
+(external)"); applied in
+[`problem_statement.md`](problem_statement.md).
 
 ### R14. No pricing model that punishes integrity use
 

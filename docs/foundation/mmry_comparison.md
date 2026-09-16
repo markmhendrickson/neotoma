@@ -3,7 +3,7 @@
 **Overall Assessment: Complementary, Not Competitive**
 mmry.io and Neotoma operate in adjacent but distinct market segments with minimal direct competition:
 - **Different Data Domains:** mmry indexes web content (social media, videos, bookmarks); Neotoma structures personal data (PDFs, images, receipts, agent-created data)
-- **Different User Problems:** mmry solves "I can't find that thing I saw online"; Neotoma solves "AI agents have no memory across sessions"
+- **Different User Problems:** mmry solves "I can't find that thing I saw online"; Neotoma solves "my agents disagree about what is true, and nothing settles it" — an authority problem, not a recall one (`never_say_the_agent_forgot`, 2026-08-21)
 - **Different Value Propositions:** mmry enables rediscovery of consumed web content; Neotoma enables structured memory for AI agents
 - **Different Integration Models:** mmry uses optional local inference (Ollama); Neotoma uses core MCP integration for agent memory
 **Competitive Risk: Low**
@@ -19,10 +19,10 @@ mmry.io and Neotoma operate in adjacent but distinct market segments with minima
 **Market Context:**
 Both products address fragmented personal data but through fundamentally different lenses:
 - mmry = horizontal search tool for web content consumption
-- Neotoma = use-case-specific memory substrate for AI-native workflows
+- Neotoma = the system of record for AI agents — authority over what is currently true, not breadth of recall
 ## Executive Summary
 **mmry.io** is a privacy-first personal search engine that indexes content you've already seen online (Twitter, Reddit, YouTube, bookmarks) to enable search across your digital history.
-**Neotoma** is a deterministic state layer that transforms fragmented personal data into structured, queryable knowledge for AI agents via MCP.
+**Neotoma** is the system of record for AI agents: the place where a fact about agent-held state is settled, built on deterministic, versioned writes and exposed to agents via MCP.
 Both products address fragmented personal data, but serve fundamentally different use cases: mmry focuses on **searching web content you've consumed**, while Neotoma focuses on **structuring documents and conversation context for AI agents**.
 ## Core Value Propositions
 ### mmry.io
@@ -132,7 +132,7 @@ Both products address fragmented personal data, but serve fundamentally differen
 | **Primary Use**        | Rediscovering web content you've seen          | Structuring documents for AI agent memory                              |
 | **Structure**          | Indexed text/media                             | Schema-first structured records with entities and timelines            |
 | **AI Integration**     | Optional local inference (Ollama)              | Core MCP integration for agent memory                                  |
-| **Target Problem**     | "I can't find that thing I saw online"         | "AI agents have no memory across sessions"                             |
+| **Target Problem**     | "I can't find that thing I saw online"         | "My agents disagree about what is true, and nothing settles it"        |
 | **User Workflow**      | Import web content → Search                    | Upload documents / Agent conversations → Structured memory → AI access |
 | **Coordination model** | None — search-only, polling                    | Event-driven signaling: agents subscribe to entity changes; substrate emits webhooks/SSE on writes (best-effort delivery; no other tool in homebrew or VC-funded competitive set offers this) |
 | **Architecture model** | Search engine — indexes existing web content for recall; no write surface, no state evolution, no agent integration beyond optional local inference | Data-plane substrate — stores, serves, and signals canonical state; action-plane tools (Gmail MCP, Slack, etc.) consume state from Neotoma rather than managing their own; scales at O(P+W) rather than O(P×W) per-pipeline-per-service integrations |

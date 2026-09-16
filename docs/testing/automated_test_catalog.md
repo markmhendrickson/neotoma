@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **615**
-- Backend and repo Vitest files: **580**
-- Frontend Vitest files: **9**
+- Total automated test files: **618**
+- Backend and repo Vitest files: **582**
+- Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 171 |
+| Vitest unit tests | 172 |
 | Vitest service tests | 44 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 177 |
+| Vitest integration tests | 178 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 19 |
 | Vitest security tests | 9 |
@@ -81,7 +81,7 @@ flowchart TD
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 9 |
+| Frontend Vitest tests | 10 |
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (171):**
+**Files (172):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -208,6 +208,7 @@ flowchart TD
 - `tests/unit/mcp_initialize_version.test.ts`
 - `tests/unit/mcp_instance_skill_hints.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
+- `tests/unit/mcp_instruction_token_budget.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
 - `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
@@ -411,7 +412,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (177):**
+**Files (178):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -472,6 +473,7 @@ flowchart TD
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/http_related_entities_multihop.test.ts`
 - `tests/integration/http_store_reference_source.test.ts`
+- `tests/integration/icp_evaluate_surface_parity.test.ts`
 - `tests/integration/idempotency_collision.test.ts`
 - `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
@@ -767,8 +769,9 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (9):**
+**Files (10):**
 - `frontend/src/bridge/websocket.test.ts`
+- `frontend/src/components/subpages/EvaluatePage.icp_fit.test.tsx`
 - `frontend/src/lib/idempotency.test.ts`
 - `frontend/src/site/mdx_site_registry.test.ts`
 - `frontend/src/site/repo_meta_client.test.ts`

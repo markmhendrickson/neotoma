@@ -197,9 +197,9 @@ Neotoma is primarily for developers building and operating AI agents who need a 
 
 Two further audiences follow from the same code: individuals running a personal cross-assistant memory (the built-in types are personal-information shaped, and the single-user SQLite plus Inspector path serves one person across assistants), and operators of a shared or hosted instance (OAuth, hardware-attested agent identity, per-agent grants, guest submission, peer federation, and Docker or Fly deploy targets).
 
-It is not aimed at casual note-taking, PKM/Obsidian-style human-driven knowledge bases, or users who need a zero-install hosted product (Neotoma requires npm and the CLI today).
+It is not aimed at casual note-taking, PKM/Obsidian-style human-driven knowledge bases, or users who need a fully hosted product with nothing running on their own machine — Neotoma is local-first by design, and that part is not a temporary state. Installation is: today it is npm and the CLI, and a guided installation is intended but not yet available. If today's install path is what stands between you and trying it, that is our problem to fix, not a sign you are the wrong user.
 
-Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md).
+Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md) — the canonical public ICP statement. For how it relates to the other ICP documents and which is canonical for which surface, see [ICP reconciliation](docs/icp/icp_reconciliation.md).
 
 ## Status
 
