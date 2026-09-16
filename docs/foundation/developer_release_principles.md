@@ -47,7 +47,7 @@ Characteristics:
 - Coordinating state across tools
 - Managing evolving context over time
 - Experiencing drift, conflicts, or unreproducible decisions
-- Comfortable with infrastructure-level abstractions
+- Reasons comfortably about state, provenance, and correctness — without wanting to own the infrastructure that provides them (revised 2026-09-15 per the O1 durable-ICP decision; previously "comfortable with infrastructure-level abstractions", which named the early-adopter cohort rather than the buyer. See `../icp/primary_icp.md`.)
 
 Typical environments:
 
@@ -64,6 +64,7 @@ Not the target user:
 - Note-taking workflows
 - Productivity tooling
 - Personal knowledge management
+- Builders who want to own the state layer themselves (an early-adopter cohort and a validator of the problem — not the buyer)
 
 Required signal:
 
@@ -175,6 +176,8 @@ Over:
 Correct reaction:
 
 > This looks serious but maybe not for me.
+
+**One reaction that is never correct: "this looks serious, but I can't get it installed."** Narrow ICP means narrow on *who has the problem*, never narrow on *who can survive the setup*. Depth belongs in the architecture and in what the product will tell you about its own state — not in the install path. Selecting for people who can fight through an install selects for the builder cohort the durable ICP explicitly excludes. (Added 2026-09-15; see `scope_decisions.md` SD-001 amendment.)
 
 Incorrect reaction:
 
