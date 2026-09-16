@@ -143,9 +143,12 @@ def begin_turn(session_id: str, turn_id: str | None) -> tuple[str, str]:
     a turn boundary. Every later hook in the same turn reads this value rather
     than minting its own, so the whole turn agrees on one identity.
 
-    A harness-supplied `turn_id` is preferred and used verbatim. Otherwise a
-    counter increments per session — deliberately NOT a timestamp, so two
-    calls a millisecond apart cannot land in different turns.
+    A harness-supplied `turn_id` is preferred and used verbatim, EXCEPT when
+    it is shaped like one of the counter's own `t{n}` ids, in which case it is
+    prefixed out of that namespace — otherwise it could name a turn this
+    session had already issued. Otherwise a counter increments per session —
+    deliberately NOT a timestamp, so two calls a millisecond apart cannot land
+    in different turns.
 
     THE COUNTER IS MONOTONIC PER SESSION, INDEPENDENT OF THE DISPLAYED ID.
     It counts turns opened in this session, not turns that happened to be
