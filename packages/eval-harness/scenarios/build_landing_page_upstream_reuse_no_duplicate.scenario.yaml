@@ -37,6 +37,7 @@ models:
     model: replay-only
 
 expected:
+  # Marker-scoped: the settled persona is still there, and still exactly one.
   - type: entity.count
     entity_type: target_persona
     where:
@@ -47,3 +48,39 @@ expected:
     entity_type: target_persona
     where:
       name: blp_reuse_2418
+
+  # ...and UNSCOPED: no SECOND persona under any other name.
+  #
+  # The marker-scoped count above cannot fail on the re-derive this scenario
+  # exists to catch. A stage that re-decides a settled ICP does not reuse the
+  # old name — it writes "<product> ICP (revised)". Appending such a store to
+  # this cassette passed every marker-scoped assert. The scenario seeds exactly
+  # one persona and the cassette stores only conversation rows besides, so
+  # unscoped eq 1 is exactly "the seeded one, and nothing else".
+  - type: entity.count
+    entity_type: target_persona
+    op: eq
+    value: 1
+  # The settled fields were not overwritten by a re-derived variant.
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp_reuse_2418
+      core_jtbd: Keep agent memory durable
+
+  # Effect at the TOOL layer, independent of what a duplicate was named:
+  # reusing needs retrieve, never store.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: target_persona
+    op: eq
+    value: 0
+  # ...and the agent actually looked before deciding to reuse.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: target_persona
+    op: gte
+    value: 1

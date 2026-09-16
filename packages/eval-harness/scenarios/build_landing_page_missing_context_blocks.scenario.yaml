@@ -1,9 +1,11 @@
 meta:
   id: build_landing_page_missing_context_blocks
   description: >
-    Fail mode: inventing an ICP/page when context is missing would create
-    target_persona or rendered_page under RUN blp_miss_2418. Empty entities
-    plus an explicit blocker reply is the PASS condition.
+    Fail mode: inventing an ICP/page when context is missing. Empty entities
+    plus an explicit blocker reply is the PASS condition. Asserted BOTH under
+    the RUN marker and unscoped, because an invention under a different name
+    evades a marker-scoped count — the agent that invents an ICP has no reason
+    to name it after the run.
   tags:
     - tier2
     - skill:build-landing-page
@@ -37,6 +39,8 @@ models:
 expected:
   - type: reply_text.contains
     pattern: "(blocker|missing ICP|cannot proceed|insufficient context)"
+
+  # Marker-scoped: nothing was invented under this run's name.
   - type: entity.count
     entity_type: target_persona
     where:
@@ -49,3 +53,61 @@ expected:
       title: blp_miss_2418
     op: eq
     value: 0
+
+  # ...and UNSCOPED: nothing was invented under any OTHER name either.
+  #
+  # The marker-scoped counts above cannot fail on the failure this scenario
+  # exists to catch. An agent that invents an ICP because none was settled has
+  # no reason to name it after the run marker — it names it after the product.
+  # Appending a `target_persona` named "Acme ops lead" and a `rendered_page`
+  # titled "Acme landing page" to this cassette passed every marker-scoped
+  # assert. A negative assert that cannot fail on a renamed artifact is
+  # decoration.
+  #
+  # Unscoped eq 0 is safe here precisely because the scenario seeds neither
+  # type and the cassette stores only conversation rows: any entity of either
+  # type is, by construction, invented.
+  - type: entity.count
+    entity_type: target_persona
+    op: eq
+    value: 0
+  - type: entity.count
+    entity_type: rendered_page
+    op: eq
+    value: 0
+  # No category_definition invented to stand in for the missing ruling.
+  - type: entity.count
+    entity_type: category_definition
+    op: eq
+    value: 0
+
+  # Effect at the TOOL layer, independent of what the entity ended up named.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: target_persona
+    op: eq
+    value: 0
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: rendered_page
+    op: eq
+    value: 0
+
+  # The stop is DELIBERATE: absence was established across the consume-paths,
+  # not merely assumed by an agent that never looked.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: target_persona
+    op: gte
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: category_definition
+    op: gte
+    value: 1

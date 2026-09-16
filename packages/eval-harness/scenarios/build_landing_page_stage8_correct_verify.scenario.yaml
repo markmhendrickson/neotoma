@@ -1,16 +1,18 @@
 meta:
   id: build_landing_page_stage8_correct_verify
   description: >
-    Fail mode: using publish_rendered_page (success-noop) or recreating the
-    page would leave MARKER_A, create a second page, or skip correct on
-    html_body. Stable id + MARKER_B via correct is the pass.
+    Fail mode: a rebuild that RECREATES the page under a new id, or one that
+    returns success while the stored body never moves (the success-noop) —
+    either leaves MARKER_A, or creates a second page. Body updated in place
+    via correct on html_body, ONE page under the marker with a stable id, and
+    MARKER_B present with MARKER_A gone, is the pass.
   tags:
     - tier2
     - skill:build-landing-page
     - stage8-correct
 
 seed_strategy: generated
-source_pattern: "build-landing-page stage-8 correct (not publish) (neotoma#2418)."
+source_pattern: "A stage-8 update that returns success while the stored body is unchanged, or that recreates the page under a new id, is indistinguishable from a good rebuild in the run report (neotoma#2418)."
 privacy_transform: "Fully synthetic; no PII."
 
 seed_entities:
@@ -22,21 +24,52 @@ seed_entities:
     html_body: "<p>MARKER_A</p>"
 
 system_prompt: >
-  You implement build-landing-page stage 8 update. Isolation token
-  blp_s8_2418. An existing rendered_page already has title/slug
-  blp_s8_2418. Update html_body with correct (field html_body) — NEVER
-  publish_rendered_page. Keep the entity id stable. Persist conversation.
+  You implement the build-landing-page BUILD stage, updating an existing
+  page. Isolation token blp_s8_2418; a rendered_page already has title/slug
+  blp_s8_2418.
+
+  Update the body in place with correct on html_body, passing the existing
+  page's entity_id, and keep the entity id stable so the share URL does not
+  change. Then VERIFY by fetching the page back and checking a known string
+  from the new copy is present and the previous marker is gone — a success
+  response with a stale or blank body is a known failure mode, not a
+  hypothetical one. Persist conversation.
 
 user_prompt: |
-  Rebuild the landing page for blp_s8_2418. Correct the existing
-  rendered_page html_body to contain MARKER_B (replace MARKER_A). Do not
-  call publish_rendered_page.
+  Rebuild the landing page for blp_s8_2418. Update the existing
+  rendered_page body to contain MARKER_B, replacing MARKER_A.
 
 host_tools: []
 
 models:
   - provider: stub
     model: replay-only
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DELIBERATELY OMITTED: `mcp_tool.invocations publish_rendered_page eq 0`.
+#
+# This scenario carried that assert, plus a system_prompt saying "NEVER
+# publish_rendered_page" and a user_prompt saying "Do not call
+# publish_rendered_page". All three are removed, because the skill they
+# encoded now says the opposite.
+#
+# markmhendrickson/ateles#1026 (head 57494466) discharged an arch BLOCKING
+# finding and the skill's own stage-8 text now reads: "Neither call is banned
+# and neither substitutes for the other. Do not read 'use correct' as 'never
+# publish', and do not read 'publish mints the link' as 'publish is how you
+# update the body.'" — `correct` updates html_body and leaves the guest token
+# intact because the token is page-scoped; `publish_rendered_page` mints or
+# re-surfaces the share link and is MCP-only, so a REST 404 is by design.
+#
+# Keeping the assert would pin, as expected behaviour, a rule the canonical
+# skill explicitly rejects — and would turn a correct implementation red.
+#
+# Nothing is lost. What is asserted instead is the EFFECT both readings agree
+# on, and it still catches every failure the assert was meant to: dropping the
+# `correct` call (the success-noop) fails the correct-with-id, body-marker and
+# MARKER_A asserts; recreating the page under a new id fails the marker-scoped
+# count, the unscoped count, and the store-payload assert.
+# ─────────────────────────────────────────────────────────────────────────────
 
 expected:
   - type: mcp_tool.invocations
@@ -46,10 +79,6 @@ expected:
     arg_subset:
       field: html_body
       entity_id: ent_c014c446092723f046af596f
-  - type: mcp_tool.invocations
-    tool_name: publish_rendered_page
-    op: eq
-    value: 0
   - type: entity.count
     entity_type: rendered_page
     where:
@@ -73,3 +102,29 @@ expected:
       title: blp_s8_2418
       html_body: "<p>MARKER_B</p>"
     field: html_body
+
+  # UNSCOPED: the rebuild updated in place — it did not leave a second page
+  # behind under some other title. The marker-scoped eq 1 above cannot fail on
+  # a recreate that titles the new page differently; the scenario seeds exactly
+  # one rendered_page and the cassette stores only conversation rows besides.
+  - type: entity.count
+    entity_type: rendered_page
+    op: eq
+    value: 1
+  # ...and the build stage stored no new page entity at all. Assembly updates;
+  # it does not create.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: rendered_page
+    op: eq
+    value: 0
+  # The stage verified by fetching the page back rather than trusting the
+  # correct call's own success response.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: rendered_page
+    op: gte
+    value: 1

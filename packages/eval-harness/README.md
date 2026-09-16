@@ -70,17 +70,39 @@ contract (neotoma#2418; unblocks ateles#1026 qa). They live **only** in this
 package (`eval:scenarios` / `eval_scenarios` CI lane) — do **not** look for
 them under `npm run eval:tier1` or `tests/fixtures/agentic_eval/*.json`.
 Clone shape from `scenarios/correct_overrides_snapshot.scenario.yaml`. Isolation
-uses a RUN token in declared fields (not an undeclared `run_marker`); always
-scope `entity.count` / negative existence with matching `where:`.
+uses a RUN token in declared fields (not an undeclared `run_marker`, which
+`/store` routes to `raw_fragments` where `where:` can never match).
 
 | `meta.id` | Fail mode caught |
 |---|---|
-| `build_landing_page_eight_stage_happy_path` | Missing stage entity or PART_OF/REFERS_TO edge |
-| `build_landing_page_upstream_reuse_no_duplicate` | Duplicate `target_persona` instead of reuse |
-| `build_landing_page_json_string_decision_register` | JSON-string ICP misread → empty/invented persona |
-| `build_landing_page_readback_fail_closed` | Proceeding after unverified write (empty `rendered_page` = pass) |
-| `build_landing_page_stage8_correct_verify` | `publish_rendered_page` noop / unstable id instead of `correct` |
-| `build_landing_page_missing_context_blocks` | Invented ICP/page when context is missing |
+| `build_landing_page_eight_stage_happy_path` | A stage skips its store, writes to an undeclared field, drops a link, or re-derives an upstream artifact instead of consuming it |
+| `build_landing_page_upstream_reuse_no_duplicate` | A settled ICP re-derived instead of read — including under a different name |
+| `build_landing_page_json_string_decision_register` | JSON-string register read as an object (the false zero) → empty/invented persona |
+| `build_landing_page_readback_fail_closed` | Proceeding after an unverified write (empty `rendered_page` = pass) |
+| `build_landing_page_stage8_correct_verify` | A rebuild that recreates the page under a new id, or returns success while the body never moves |
+| `build_landing_page_missing_context_blocks` | An ICP invented when nothing settled it — including under a different name |
+
+**Scope every count, then add an unscoped one where absence is the claim.** A
+`where:` on the RUN token proves the *marked* artifact is right. It cannot fail
+on an artifact invented under another name, and an agent that invents an ICP
+names it after the product, never after the run token. So the scenarios whose
+pass condition is "nothing was invented" or "nothing was duplicated" pair each
+marker-scoped count with an unscoped `eq 0` / `eq 1`, plus an
+`mcp_tool.invocations` assert on the store payload. Both of those scenarios
+passed the renaming mutation before that pairing existed.
+
+**Empty is sometimes the PASS.** In `readback_fail_closed` and
+`missing_context_blocks` the absence of a `rendered_page` (and of an invented
+`target_persona`) is the asserted success condition. Do not "fix" a failure
+there by making the run produce entities.
+
+**The build stage does not assert `publish_rendered_page == 0`.** It once did.
+ateles#1026 (head `57494466`) settled that `correct` on `html_body` and
+`publish_rendered_page` do different jobs and neither is banned, so the
+scenario asserts the *effect* — body updated in place against the seeded id,
+one page under the marker, markers moved. The rationale is in the scenario
+file; `tests/unit/build_landing_page_scenarios_bind.test.ts` fails if it is
+re-added.
 
 ```bash
 # From packages/eval-harness after npm run build:

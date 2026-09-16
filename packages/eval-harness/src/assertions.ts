@@ -93,9 +93,18 @@ async function fetchRelationships(
 }
 
 /**
- * Resolve entity_type for relationship endpoints. Prefers fields already on
+ * Resolve entity_type for relationship endpoints. Prefers the fields already on
  * the relationship row (`source_entity_type` / `target_entity_type`); falls
- * back to fetching entities by id when those fields are absent.
+ * back to LOOKING THE ENTITY UP by id when those fields are absent.
+ *
+ * Both paths are authoritative reads, not inference: an entity id has exactly
+ * one type, so a type learned from one row is a fact about that id wherever it
+ * appears. Where neither path resolves an id, the type stays UNKNOWN and the
+ * caller drops the edge — unknown must stay distinct from a conclusion, and
+ * the default branch of a safety-bearing classification has to be the
+ * restrictive one. Inferring a type for an unresolvable endpoint would be a
+ * guess presented as a verdict, and would hand back the false green the
+ * endpoint filter exists to close (neotoma#2418).
  */
 async function resolveEndpointTypes(
   ctx: AssertionContext,
@@ -154,6 +163,10 @@ export async function filterRelationshipsByEndpointTypes(
   return rels.filter((rel) => {
     const sid = String(rel.source_entity_id ?? "");
     const tid = String(rel.target_entity_id ?? "");
+    // FAIL CLOSED on an unresolved endpoint: `typeById.get` returns undefined,
+    // which never equals a requested type, so the edge is dropped rather than
+    // admitted. Stated explicitly because the safe behaviour here is load
+    // bearing and easy to "simplify" away.
     if (sourceEntityType && typeById.get(sid) !== sourceEntityType) return false;
     if (targetEntityType && typeById.get(tid) !== targetEntityType) return false;
     return true;
@@ -163,9 +176,20 @@ export async function filterRelationshipsByEndpointTypes(
 const ISOLATION_HINT =
   "Add where: { <declared isolation field>: … } — unscoped entity.count is not isolation-safe";
 
-function isolationWhereHint(ctx: AssertionContext, where: Record<string, unknown> | undefined): string {
+function isolationWhereHint(
+  ctx: AssertionContext,
+  where: Record<string, unknown> | undefined,
+  predicate?: ExpectedAssertion
+): string {
   if (where) return "";
   if (!ctx.scenarioId || !/^build_landing_page_/.test(ctx.scenarioId)) return "";
+  // A DELIBERATE unscoped eq-0 / eq-1 is the stronger assertion, not the
+  // authoring defect: it is how a scenario catches an artifact invented under
+  // a name the marker cannot see (an agent inventing an ICP names it after the
+  // product, never after the run token). Hinting "add where" there would push
+  // an author to weaken the very assert that closes the evasion, so the hint
+  // is withheld for that shape and kept for everything else.
+  if (predicate?.op === "eq" && (predicate.value === 0 || predicate.value === 1)) return "";
   return ` ${ISOLATION_HINT}`;
 }
 
@@ -412,7 +436,7 @@ export async function evaluatePredicate(
         predicate,
         message: `Expected at least one entity of type ${typeLabel}${
           predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
-        }, found ${all.length}.${isolationWhereHint(ctx, predicate.where)}`,
+        }, found ${all.length}.${isolationWhereHint(ctx, predicate.where, predicate)}`,
         expected: predicate,
         actual: all.map((e) => ({
           entity_type: e.entity_type,
@@ -436,7 +460,7 @@ export async function evaluatePredicate(
         predicate,
         message: `Expected entity.count of "${predicate.entity_type}"${
           predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
-        } ${op} ${expected}, got ${entities.length}.${isolationWhereHint(ctx, predicate.where)}`,
+        } ${op} ${expected}, got ${entities.length}.${isolationWhereHint(ctx, predicate.where, predicate)}`,
         expected: { op, value: expected },
         actual: entities.length,
       };

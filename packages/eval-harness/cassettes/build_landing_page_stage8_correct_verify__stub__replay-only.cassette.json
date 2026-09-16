@@ -8,8 +8,8 @@
     "recorded_at": "2026-09-15T00:00:00.000Z",
     "cost_usd": 0
   },
-  "user_prompt": "Rebuild the landing page for blp_s8_2418. Correct the existing\nrendered_page html_body to contain MARKER_B (replace MARKER_A). Do not\ncall publish_rendered_page.\n",
-  "system_prompt": "You implement build-landing-page stage 8 update.\n",
+  "user_prompt": "Rebuild the landing page for blp_s8_2418. Update the existing\nrendered_page body to contain MARKER_B, replacing MARKER_A.\n",
+  "system_prompt": "(see scenario system_prompt)",
   "tool_calls": [
     {
       "name": "register_schema",
@@ -17,19 +17,42 @@
         "entity_type": "rendered_page",
         "schema_definition": {
           "fields": {
-            "title": { "type": "string", "required": true },
-            "html_body": { "type": "string", "required": true },
-            "slug": { "type": "string", "required": false },
-            "custom_css": { "type": "string", "required": false }
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "html_body": {
+              "type": "string",
+              "required": true
+            },
+            "slug": {
+              "type": "string",
+              "required": false
+            },
+            "custom_css": {
+              "type": "string",
+              "required": false
+            }
           },
-          "canonical_name_fields": ["slug", "title"]
+          "canonical_name_fields": [
+            "slug",
+            "title"
+          ]
         },
         "reducer_config": {
           "merge_policies": {
-            "title": { "strategy": "last_write" },
-            "html_body": { "strategy": "last_write" },
-            "slug": { "strategy": "last_write" },
-            "custom_css": { "strategy": "last_write" }
+            "title": {
+              "strategy": "last_write"
+            },
+            "html_body": {
+              "strategy": "last_write"
+            },
+            "slug": {
+              "strategy": "last_write"
+            },
+            "custom_css": {
+              "strategy": "last_write"
+            }
           }
         },
         "schema_version": "1.0",
@@ -42,7 +65,10 @@
       "input": {
         "idempotency_key": "blp-s8-2418-user",
         "entities": [
-          { "entity_type": "conversation", "conversation_id": "conv-blp-s8-2418" },
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-blp-s8-2418"
+          },
           {
             "entity_type": "conversation_message",
             "turn_key": "conv-blp-s8-2418:1",
@@ -52,7 +78,11 @@
           }
         ],
         "relationships": [
-          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 }
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
         ]
       },
       "sequence": 1
@@ -67,7 +97,18 @@
         "idempotency_key": "blp-s8-2418-correct-html"
       },
       "sequence": 2
+    },
+    {
+      "name": "retrieve_entities",
+      "sequence": 3,
+      "input": {
+        "entity_type": "rendered_page",
+        "filters": {
+          "title": "blp_s8_2418"
+        },
+        "limit": 5
+      }
     }
   ],
-  "assistant_text": "Corrected rendered_page ent_c014c446092723f046af596f html_body to MARKER_B (no publish_rendered_page)."
+  "assistant_text": "Updated the page in place: corrected html_body on rendered_page ent_c014c446092723f046af596f, so the entity id \u2014 and the share URL \u2014 is unchanged.\nVerified by fetching the page back rather than trusting the response: MARKER_B is present and MARKER_A is gone. No second page was created.\n"
 }
