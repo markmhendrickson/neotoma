@@ -5,10 +5,32 @@ export function formatInspectorUserId(userId: string): string {
   return userId === LOCAL_DEV_USER_ID ? "Local user" : userId;
 }
 
-export function formatInspectorUserBadge(email: string | undefined | null, userId: string): string {
+export function formatInspectorUserBadge(
+  email: string | undefined | null,
+  userId: string,
+  sharedGraph?: boolean
+): string {
   const trimmed = email?.trim();
   if (trimmed) return trimmed;
+  // #2228 residual: under shared-graph, missing email means unknown signer —
+  // never substitute the graph principal (that re-mislabels identity).
+  if (sharedGraph) return "Unknown identity — sign in again";
   return formatInspectorUserId(userId);
+}
+
+/**
+ * #2228: under shared-graph mode, `user_id` is the graph being operated on,
+ * NOT the signed-in person — the id must never be labeled in a way that lets
+ * it read as the viewer's own identity. Shared by the Settings page and the
+ * sidebar footer, the two surfaces that display this id.
+ */
+export function inspectorUserIdLabel(sharedGraph: boolean | undefined): string {
+  return sharedGraph ? "Graph User ID" : "User ID";
+}
+
+/** Same rule as {@link inspectorUserIdLabel}, for the tooltip/detail variant. */
+export function inspectorUserIdDetailLabel(sharedGraph: boolean | undefined): string {
+  return sharedGraph ? "Shared graph User ID" : "User ID";
 }
 
 export const RELATIONSHIP_TYPES = [

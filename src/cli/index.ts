@@ -1405,6 +1405,49 @@ export function hintOf(error: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * #2228: the `/me` payload separates "who you are" (`email`) from "whose
+ * graph you operate on" (`user_id`). Under shared-graph mode those describe
+ * different people, so the CLI must not let a bare `user_id` read as the
+ * signer's own identity. Pure formatting logic pulled out of the `auth login`
+ * already-signed-in branch so it is covered without driving the network/
+ * filesystem side effects the rest of that command performs.
+ */
+export function formatAlreadySignedIn(
+  me: {
+    user_id?: string;
+    email?: string;
+    authenticated_user_id?: string;
+    shared_graph?: boolean;
+  },
+  outputMode: "json" | "text"
+): { json: Record<string, unknown> } | { text: string } {
+  if (outputMode === "json") {
+    return {
+      json: {
+        message: "Already signed in",
+        user_id: me.user_id,
+        email: me.email,
+        ...(me.shared_graph
+          ? {
+              shared_graph: true,
+              ...(me.authenticated_user_id
+                ? { authenticated_user_id: me.authenticated_user_id }
+                : {}),
+            }
+          : {}),
+      },
+    };
+  }
+  let text = "Already signed in";
+  if (me.user_id ?? me.email) {
+    const scope = me.shared_graph ? `shared graph ${me.user_id}` : me.user_id;
+    text += ` (${[me.email, scope].filter(Boolean).join(", ")})`;
+  }
+  text += ".\n";
+  return { text };
+}
+
 function formatApiError(error: unknown): string {
   if (error && typeof error === "object") {
     const o = error as Record<string, unknown>;
@@ -7396,23 +7439,21 @@ const authLoginCommand = authCommand
       try {
         const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
         if (res.ok) {
-          const me = (await res.json()) as { user_id?: string; email?: string };
-          if (outputMode === "json") {
-            writeOutput(
-              {
-                message: "Already signed in",
-                base_url: baseUrl,
-                user_id: me.user_id,
-                email: me.email,
-              },
-              outputMode
-            );
+          // #2228: `email` is who is signed in; `user_id` is the graph being
+          // operated on. Under shared-graph mode they describe different
+          // people, so print the scope rather than letting the id read as the
+          // signer's own.
+          const me = (await res.json()) as {
+            user_id?: string;
+            email?: string;
+            authenticated_user_id?: string;
+            shared_graph?: boolean;
+          };
+          const formatted = formatAlreadySignedIn(me, outputMode === "json" ? "json" : "text");
+          if ("json" in formatted) {
+            writeOutput({ ...formatted.json, base_url: baseUrl }, outputMode);
           } else {
-            process.stdout.write("Already signed in");
-            if (me.user_id ?? me.email) {
-              process.stdout.write(` (${[me.email, me.user_id].filter(Boolean).join(", ")})`);
-            }
-            process.stdout.write(".\n");
+            process.stdout.write(formatted.text);
           }
           return;
         }
