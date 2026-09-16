@@ -6157,6 +6157,16 @@ paths:
                 include_entities:
                   type: boolean
                   default: true
+                limit:
+                  type: integer
+                  default: 200
+                  minimum: 1
+                  maximum: 1000
+                  description: >-
+                    Maximum relationships to traverse and return. Bounds both the
+                    edge list and the entities hydrated from it. When more exist
+                    than the limit allows, the response sets `truncated: true` and
+                    carries `traversed_relationships` plus a narrowing hint.
       responses:
         "200":
           description: Related entities

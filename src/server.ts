@@ -19,6 +19,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
+import { applyResponseBudget } from "./mcp_response_budget.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
@@ -2708,8 +2709,23 @@ export class NeotomaServer {
       return value;
     };
     // Use compact JSON (no indentation) to reduce response size and avoid Cursor file-writing threshold
+    const serialized = JSON.stringify(data, replacer);
+
+    // Response-size guard (#2432). This is the single point every MCP tool
+    // result serializes through, so bounding it here binds all of them and
+    // cannot be bypassed by a tool that forgets to opt in. MCP results persist
+    // in the client's context for the rest of the session, so an oversized
+    // result is re-sent on every later turn rather than paid once.
+    const budgeted = applyResponseBudget(serialized, config.mcpMaxResponseChars);
+    if (budgeted.truncated) {
+      logger.warn(
+        `[mcp] response withheld: ${budgeted.originalChars} chars exceeds the ` +
+          `${config.mcpMaxResponseChars}-char limit (NEOTOMA_MCP_MAX_RESPONSE_CHARS)`
+      );
+    }
+
     return {
-      content: [{ type: "text", text: JSON.stringify(data, replacer) }],
+      content: [{ type: "text", text: budgeted.text }],
     };
   }
 
@@ -4053,19 +4069,44 @@ export class NeotomaServer {
       // frontier, so count it as traversed.
       hopsTraversed = hop + 1;
       if (nextLevel.length === 0) break;
+      // Stop descending once the cap is reached (#2432). Checked between hops
+      // rather than only at the end so a wide graph does not fan out for
+      // further hops whose results would be discarded anyway.
+      if (allRelationships.length >= parsed.limit) break;
       currentLevel = nextLevel;
     }
 
+    // Apply the relationship cap (#2432). This traversal previously had no
+    // bound at all, so a hub entity returned every edge it had — and MCP
+    // results persist in context for the rest of the session, so that was
+    // re-sent on every later turn.
+    const relationshipsTruncated = allRelationships.length > parsed.limit;
+    const relationships = relationshipsTruncated
+      ? allRelationships.slice(0, parsed.limit)
+      : allRelationships;
+
+    // Hydrate only the entities the RETAINED relationships actually reference,
+    // so the cap bounds the entity payload too rather than only the edge list.
+    const retainedEntityIds = relationshipsTruncated
+      ? new Set(
+          relationships.flatMap((rel) =>
+            [rel.source_entity_id, rel.target_entity_id].filter(
+              (id: string) => id !== parsed.entity_id && relatedEntityIds.has(id)
+            )
+          )
+        )
+      : relatedEntityIds;
+
     // Get entity details if requested
     let entities: any[] = [];
-    if (parsed.include_entities && relatedEntityIds.size > 0) {
+    if (parsed.include_entities && retainedEntityIds.size > 0) {
       const { data: entityData, error: entityError } = await db
         .from("entities")
         .select("*")
         .eq("user_id", userId)
         .order("canonical_name", { ascending: true })
         .order("id", { ascending: true })
-        .in("id", Array.from(relatedEntityIds));
+        .in("id", Array.from(retainedEntityIds));
 
       if (!entityError && entityData) {
         entities = entityData;
@@ -4075,7 +4116,7 @@ export class NeotomaServer {
           .from("entity_snapshots")
           .select("*")
           .eq("user_id", userId)
-          .in("entity_id", Array.from(relatedEntityIds));
+          .in("entity_id", Array.from(retainedEntityIds));
 
         if (!snapError && snapshots) {
           const snapshotMap = new Map(
@@ -4091,10 +4132,23 @@ export class NeotomaServer {
 
     return this.buildTextResponse({
       entities,
-      relationships: allRelationships,
+      relationships,
       total_entities: entities.length,
-      total_relationships: allRelationships.length,
+      total_relationships: relationships.length,
       hops_traversed: hopsTraversed,
+      // State truncation explicitly (#2432). A silently capped list reads as a
+      // complete one, which is how a caller concludes an entity has 200 edges
+      // when it has thousands.
+      truncated: relationshipsTruncated,
+      ...(relationshipsTruncated
+        ? {
+            limit: parsed.limit,
+            traversed_relationships: allRelationships.length,
+            truncation_hint:
+              "More relationships exist than the limit allows. Raise `limit`, narrow " +
+              "`relationship_types`, or set `direction` to one side.",
+          }
+        : {}),
     });
   }
 
