@@ -104,6 +104,8 @@ neotoma schemas audit-fragments contact         # one entity type
 
 It is read-only (declares nothing) and reports, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag. Use it before drafting `neotoma schemas update` (`update_schema_incremental`) / `register_schema` work to pick the high-occurrence fields to promote first.
 
+**Scope mismatch (`ERR_SCHEMA_SCOPE_MISMATCH`):** when `neotoma schemas update` reports this error and `found_scope` is `user`, retry with `neotoma schemas update --user-specific`. Do not run `neotoma schemas register` for that error. Canonical behavioral rule: `neotoma instructions print` (search "Schema scope mismatch").
+
 ## Retrieval command quick reference (CLI backup)
 
 When MCP is not available and prompt context may depend on prior memory:
