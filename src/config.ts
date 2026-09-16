@@ -3,6 +3,8 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { existsSync, readFileSync } from "fs";
 
+import { resolveMaxResponseChars } from "./mcp_response_budget.js";
+
 // Use NEOTOMA_ENV only to avoid conflicts when running as MCP in other workspaces
 // (host NODE_ENV would incorrectly override Neotoma's dev/prod choice)
 const env = process.env.NEOTOMA_ENV || "development";
@@ -357,6 +359,21 @@ export const config = {
   mcpCompactInstructions:
     (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "1" ||
     (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "true",
+  /**
+   * Ceiling, in characters, on a serialized MCP tool result (#2432).
+   *
+   * MCP results persist in the client's context for the rest of the session,
+   * so an oversized response is re-sent on every later turn rather than paid
+   * once. Nothing bounded this before: every `MAX_` in the query path is a row
+   * count, so a few large rows passed every limit (#1669 observed 105,066- and
+   * 83,773-char responses).
+   *
+   * Resolution FAILS TOWARD THE SMALLER RESULT — absent, malformed, or
+   * implausibly small values all fall back to the default rather than to
+   * "unbounded", so a typo cannot silently restore the old behaviour. See
+   * `resolveMaxResponseChars` for the full rule.
+   */
+  mcpMaxResponseChars: resolveMaxResponseChars(process.env.NEOTOMA_MCP_MAX_RESPONSE_CHARS),
   /**
    * When false, MCP `initialize` skips the graph-stored skill lookup entirely
    * and the instructions block is byte-identical to what it was before

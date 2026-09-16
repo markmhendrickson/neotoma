@@ -873,6 +873,20 @@ export const RetrieveRelatedEntitiesSchema = z.object({
   direction: z.enum(["inbound", "outbound", "both"]).optional().default("both"),
   max_hops: z.number().int().positive().optional().default(1),
   include_entities: z.boolean().optional().default(true),
+  /**
+   * Maximum relationships to traverse and return (#2432).
+   *
+   * This traversal had NO bound of any kind before: each hop ran
+   * `.select("*")` with no `.limit()`, and `max_hops` multiplied that rather
+   * than capping it, so a hub entity returned every edge it had. MCP results
+   * persist in the client's context for the rest of the session, so that cost
+   * was re-paid on every later turn.
+   *
+   * Defaults to 200, matching the ceiling `observations_limit` above already
+   * uses for the same reason. A caller who genuinely needs more asks for it
+   * explicitly, which is the polarity an unbounded default had backwards.
+   */
+  limit: z.number().int().positive().max(1000).optional().default(200),
 });
 
 /**
