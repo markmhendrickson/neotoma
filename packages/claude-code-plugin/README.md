@@ -16,11 +16,13 @@ It pairs with the Neotoma MCP server for agent-driven structured storage — hoo
 
 | Hook | Purpose |
 | --- | --- |
-| `SessionStart` | Records the Claude Code session as a `conversation` entity. |
+| `SessionStart` | Records the Claude Code session as a `conversation` entity, and opens the `agent_session` runtime/resume record (harness + native session id, git env, `claude --resume` command). |
 | `UserPromptSubmit` | Injects retrieval context (recent timeline + `@identifier` matches) via `additionalContext`, and captures the user message as `agent_message`. |
 | `PostToolUse` | Logs a `tool_invocation` observation for every tool call — passive observability. |
 | `PreCompact` | Snapshots a `context_event` marker before Claude Code summarizes the context window. |
-| `Stop` | Persists the assistant's final reply as an `agent_message` safety net. |
+| `Stop` | Persists the assistant's final reply as an `agent_message` safety net, refreshes the `agent_session` (`last_activity_at`), and snapshots the transcript as a content-addressed `session_transcript` index entity. |
+
+`agent_session` and `session_transcript` are the runtime/resume layer: the `agent_session` records which harness produced the session, its native resume id, and the git env to reconstruct it; the `session_transcript` is the content-addressed (SHA-256) index of the raw JSONL transcript artifact. The harness value is always `claude-code` (hyphen), matching Neotoma's convention and the `agent_session` joint identity `["harness","native_session_id"]`. The Stop hook records the transcript index only; uploading the transcript bytes to the sources bucket is handled out-of-band by backfill tooling.
 
 The plugin deliberately does not do LLM-based entity extraction from chat or tool output. That stays in the agent's hands via MCP, preserving Neotoma's "no inference" guarantee.
 
