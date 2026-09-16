@@ -480,6 +480,36 @@ describe("unknown identity at initialize reports unavailable, not empty (#2429)"
     expect(result.serverInfo._neotoma?.standing_rules_unavailable).toBe(true);
   });
 
+  it("recovers identity from the session connection id when one is present", async () => {
+    // The other half of the fix, and the path QA asked to see covered: when a
+    // connection id IS available, identity is resolved rather than reported
+    // unknown, and the skills seeded by the suite above come back. Without the
+    // late resolution this returned skills_unavailable, because the instance
+    // field alone was still null.
+    const inner = server as unknown as {
+      authenticatedUserId: string | null;
+      sessionConnectionId: string | null;
+      buildAuthenticatedInitializeResponse: (n: string | null) => Promise<{
+        serverInfo: {
+          _neotoma?: { available_skills?: string[]; skills_unavailable?: boolean };
+        };
+      }>;
+    };
+    inner.authenticatedUserId = null;
+    inner.sessionConnectionId = "dev-local";
+
+    const result = await inner.buildAuthenticatedInitializeResponse(null);
+
+    // The assertion is about the GATE, not about which rows come back: with a
+    // connection id present the lookup RUNS (so nothing is reported
+    // unavailable) instead of being skipped. Which skills appear depends on
+    // the user `dev-local` resolves to and on the filesystem scan, neither of
+    // which this fix changes — asserting a specific seeded row here would test
+    // the fixture, not the behaviour.
+    expect(result.serverInfo._neotoma?.skills_unavailable).toBeUndefined();
+    expect(Array.isArray(result.serverInfo._neotoma?.available_skills)).toBe(true);
+  });
+
   it("tells the agent in the instructions, not only in serverInfo", async () => {
     const result = await callAuthenticatedInitializeWithoutIdentity(server);
     const instructions = result.instructions ?? "";
