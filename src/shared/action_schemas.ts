@@ -961,7 +961,15 @@ export const UpdateSchemaIncrementalRequestSchema = z
       .array(z.union([z.string(), z.object({ composite: z.array(z.string()) })]))
       .optional(),
     schema_version: z.string().optional(),
-    user_specific: z.boolean().default(false),
+    // #2374: stays OPTIONAL with no `.default()`. Whether the caller stated
+    // an explicit scope intent is itself meaningful — `updateSchemaIncremental`
+    // now defers to whatever scope its OWN read resolved when this is
+    // omitted, and only treats it as a hard override when present. A
+    // `.default(false)` here would erase that distinction before the
+    // service ever saw it, which is exactly how the write-scope bug
+    // shipped: every caller that didn't think about scope got `false`
+    // indistinguishable from a caller who explicitly wanted global.
+    user_specific: z.boolean().optional(),
     user_id: z.string().optional(),
     activate: z.boolean().default(true),
     migrate_existing: z.boolean().default(false),

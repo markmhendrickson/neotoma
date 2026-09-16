@@ -588,6 +588,7 @@ flowchart TD
 - `tests/integration/turn_summary_mcp_apps.test.ts`
 - `tests/integration/turn_summary.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
+- `tests/integration/update_schema_incremental_defect_cluster.test.ts`
 - `tests/integration/update_schema_incremental_envelope.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 - `tests/integration/wellknown_discovery_unauthenticated.test.ts`

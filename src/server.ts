@@ -4665,11 +4665,17 @@ export class NeotomaServer {
     // updateSchemaIncremental cannot proceed (it has no baseline to extend).
     // Return a structured non-throwing response with a hint instead of propagating
     // an opaque internal error. Callers should use register_schema first.
+    //
+    // #2374: pass userId here UNCONDITIONALLY, not gated on
+    // `parsed.user_specific`. This existence check must resolve the SAME
+    // row `updateSchemaIncremental` itself will resolve inside the call
+    // below (loadActiveSchema(entity_type, userId), user-scoped-preferred).
+    // Gating it on `user_specific` meant a caller who left that field
+    // unset — the common case — had this guard check the GLOBAL row while
+    // the actual update read/resolved the USER row, which could disagree
+    // about whether a baseline schema even exists.
     const { loadCodeDefinedSchemaEntry } = await import("./services/schema_registry.js");
-    const registeredSchema = await schemaRegistry.loadActiveSchema(
-      parsed.entity_type,
-      parsed.user_specific ? userId : undefined
-    );
+    const registeredSchema = await schemaRegistry.loadActiveSchema(parsed.entity_type, userId);
     if (!registeredSchema) {
       const codeDefinedSchema = await loadCodeDefinedSchemaEntry(parsed.entity_type);
       if (!codeDefinedSchema) {
@@ -4698,6 +4704,14 @@ export class NeotomaServer {
     }
 
     try {
+      // #2374: pass `user_specific` through EXACTLY as the caller sent it —
+      // `undefined` when omitted, `true`/`false` when explicit. The Zod
+      // schema no longer defaults this field (see action_schemas.ts), so
+      // `updateSchemaIncremental` can tell "no stated intent, defer to
+      // whatever scope the read resolves" apart from "explicitly global."
+      // Likewise pass `userId` unconditionally: the service decides for
+      // itself whether to use it, based on the resolved scope, not on
+      // whether this handler pre-guessed `user_specific`.
       const updatedSchema = await schemaRegistry.updateSchemaIncremental({
         entity_type: parsed.entity_type,
         fields_to_add: parsed.fields_to_add,
@@ -4705,15 +4719,31 @@ export class NeotomaServer {
         canonical_name_fields: parsed.canonical_name_fields,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
-        user_id: parsed.user_specific ? userId : undefined,
+        user_id: userId,
         activate: parsed.activate,
         migrate_existing: parsed.migrate_existing,
-        // For global schemas user_id above is undefined, but migrate_existing must
-        // still scope to the authenticated caller so raw_fragments stored by this
-        // user are promoted.  Pass the resolved userId whenever we are doing a
-        // migration, regardless of user_specific.
+        // For global schemas user_id above may still be used for migration
+        // scoping even when the write itself resolves global — pass the
+        // resolved userId whenever a migration was requested, regardless of
+        // the write scope.
         migrate_user_id: parsed.migrate_existing ? userId : undefined,
+        // #2197: this was validated by UpdateSchemaIncrementalRequestSchema
+        // (which already declares `force`) but never forwarded to the
+        // service, so the entity-type naming guards had no reachable
+        // override from MCP even before the tool's inputSchema omitted it.
+        force: parsed.force,
       });
+
+      // #2379: derive `migrated_existing` from the ACTUAL migration result,
+      // never from `parsed.migrate_existing` (the request echo). A request
+      // to migrate that promoted nothing is a real, reportable outcome —
+      // not indistinguishable success.
+      const migrationResult = updatedSchema.migration_result;
+      // #2374: report the scope this call ACTUALLY wrote to — read off the
+      // persisted row (`updatedSchema.scope`), never re-derived from the
+      // request's `user_specific`, which may have been omitted and deferred
+      // to whatever scope the read resolved.
+      const scopeWritten = updatedSchema.scope === "user" ? "user" : "global";
 
       return this.buildTextResponse({
         success: true,
@@ -4729,8 +4759,14 @@ export class NeotomaServer {
           (updatedSchema.schema_definition as { canonical_name_fields?: unknown })
             .canonical_name_fields ?? null,
         activated: parsed.activate,
-        migrated_existing: parsed.migrate_existing,
-        scope: parsed.user_specific ? "user" : "global",
+        migrated_existing: (migrationResult?.migrated_count ?? 0) > 0,
+        // Present only when migrate_existing was requested — a caller that
+        // never asked for migration should not see fabricated zero-skip data.
+        ...(migrationResult ? { migration_result: migrationResult } : {}),
+        scope: scopeWritten,
+        // #2374: name which user's row this was, when scoped, so a caller
+        // relying on this response never has to guess or re-derive it.
+        ...(scopeWritten === "user" ? { user_id: updatedSchema.user_id ?? null } : {}),
       });
     } catch (error: any) {
       // Detect R2 identity-configuration error from the base schema.
@@ -4792,6 +4828,11 @@ export class NeotomaServer {
         user_id: parsed.user_specific ? userId : undefined, // Only set user_id if user_specific
         user_specific: parsed.user_specific,
         activate: parsed.activate,
+        // #2197: this was validated by RegisterSchemaRequestSchema (which
+        // already declares `force`) but never forwarded to the service, so
+        // the entity-type naming guards had no reachable override from MCP
+        // even after the tool's inputSchema is fixed to accept the param.
+        force: parsed.force,
       });
 
       return this.buildTextResponse({

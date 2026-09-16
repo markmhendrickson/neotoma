@@ -86,12 +86,23 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     return mock;
   };
 
-  // Helper to mock activate() calls (3 database calls: select, update deactivate, update activate)
-  const mockActivateCalls = () => {
+  // Helper to mock activate() calls. #2389/#2374 fix: activate() now resolves
+  // its target row via one scoped, id-targeted lookup (array select, not
+  // .single()) instead of an unscoped .single() — so a shared version string
+  // in the other scope can no longer be ambiguous or get over-matched. The
+  // lookup mock below is consumed by whichever of the two branches
+  // activate() takes (scoped-by-userId, or the unscoped global branch), and
+  // resolves an array (`data: [...]`) rather than a single object.
+  const mockActivateCalls = (
+    row: { id?: string; scope?: string; user_id?: string | null } = {}
+  ) => {
+    const resolvedRow = {
+      id: row.id ?? "activated-row-id",
+      scope: row.scope ?? "global",
+      user_id: row.user_id ?? null,
+    };
     const mockSelect = createChainableQuery({
-      single: vi.fn().mockResolvedValue({
-        data: { scope: "global", user_id: null },
-      }),
+      then: (resolve: any) => Promise.resolve({ data: [resolvedRow], error: null }).then(resolve),
     });
 
     // For deactivate: create chainable query where update() returns the query itself
@@ -99,6 +110,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       update: vi.fn(),
       eq: vi.fn(),
       is: vi.fn(),
+      not: vi.fn(),
       then: vi.fn((resolve: any) => Promise.resolve({}).then(resolve)),
       catch: vi.fn(),
     };
@@ -106,8 +118,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     mockUpdateDeactivate.update.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.eq.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.is.mockReturnValue(mockUpdateDeactivate);
+    mockUpdateDeactivate.not.mockReturnValue(mockUpdateDeactivate);
 
-    // For activate: similar setup
+    // For activate: similar setup — now targets by id only (single .eq call).
     const mockUpdateActivate: any = {
       update: vi.fn(),
       eq: vi.fn(),
@@ -117,7 +130,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     mockUpdateActivate.update.mockReturnValue(mockUpdateActivate);
     mockUpdateActivate.eq.mockReturnValue(mockUpdateActivate);
 
-    return { mockSelect, mockUpdateDeactivate, mockUpdateActivate };
+    return { mockSelect, mockUpdateDeactivate, mockUpdateActivate, resolvedRow };
   };
 
   beforeEach(() => {
