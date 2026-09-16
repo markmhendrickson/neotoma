@@ -17,12 +17,17 @@
 > **Honest status.** The guided installer is **intended and not shipped.** As of this revision the real install path is npm plus the CLI. Guided is **not** zero-install: a download and a local runtime remain, and the user still decides where their data lives. No surface should describe Neotoma as zero-install.
 >
 > The 13-step flow specification itself lives in `docs/specs/CLI_ONBOARDING_SPEC.md`, which is not yet merged to `main`. When it merges, this narrowing applies to it as written here.
+>
+> **Primacy vocabulary (do not collapse these):**
+>
+> - **Install front door** — intended: guided architecture-revealing GUI; **today (shipped):** npm + CLI. Terminal is no longer the *primary install surface* for first-time users.
+> - **Activation model** — agent-driven (evaluation → install → activation → tooling) remains the preferred *how value is produced* path. Web UI signup→upload remains complementary *activation*, not the install front door, and is not the SD-001 architecture-revealing installer.
 
 ## Scope
 This document covers:
 - First-run experience flow for both agent-driven (CLI/MCP) and web UI paths
 - Agent-driven discovery, ingestion, and timeline reconstruction (the Installation Aha)
-- Web UI onboarding (signup → first upload → first extraction) as a complementary path
+- Web UI onboarding (signup → first upload → first extraction) as a complementary *activation* path (not the install front door; distinct from the architecture-revealing installer)
 - Activation milestones and success criteria
 - Messaging and tone
 - Error and fail states
@@ -32,9 +37,9 @@ This document does NOT cover:
 - Long-term user education (help docs, tooltips)
 - Advanced features (multi-user, integrations setup)
 
-## 0. Agent-Driven Onboarding (Primary Path)
+## 0. Agent-Driven Onboarding (Activation Model)
 
-The primary onboarding path is agent-driven and evaluation-led. The outer funnel is:
+The preferred activation model is agent-driven and evaluation-led. The outer funnel is:
 
 **evaluation → installation → activation → tooling config**
 
@@ -306,7 +311,7 @@ Quick Stats
 - Full navigation visible
 - All features unlocked
 ## 4. Activation Milestones
-### 4.0 Agent-Driven Activation (Primary Path)
+### 4.0 Agent-Driven Activation (Activation Model)
 | Milestone | Definition | Metric | Target |
 | --- | --- | --- | --- |
 | **Evaluated** | Agent assessed fit, tool constraints, and likely first data to store | `agent_evaluation_total` | N/A |
