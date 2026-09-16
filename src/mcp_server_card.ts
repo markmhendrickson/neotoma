@@ -1,26 +1,16 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import * as yaml from "js-yaml";
 import { config } from "./config.js";
-import { buildToolDefinitions } from "./tool_definitions.js";
+import { buildToolDefinitions, NEOTOMA_TOOL_NAMES } from "./tool_definitions.js";
 import { readPackageVersion } from "./shared/package_version.js";
+import { loadToolEffectCatalog } from "./shared/tool_effect_catalog.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
 const TURN_SUMMARY_WIDGET_RESOURCE_URI = "ui://neotoma/turn-summary";
 
-function loadToolDescriptionsMap(): Map<string, string> {
+function loadToolCatalog() {
   const yamlPath = join(config.projectRoot, ...MCP_DOCS_SUBDIR, "tool_descriptions.yaml");
-  try {
-    const raw = readFileSync(yamlPath, "utf-8");
-    const data = yaml.load(raw) as { tools?: Record<string, string> } | undefined;
-    if (data?.tools && typeof data.tools === "object") {
-      return new Map(Object.entries(data.tools));
-    }
-  } catch {
-    // Missing or invalid YAML; inline descriptions from tool_definitions apply.
-  }
-  return new Map();
+  return loadToolEffectCatalog(yamlPath, NEOTOMA_TOOL_NAMES);
 }
 
 /**
@@ -28,11 +18,12 @@ function loadToolDescriptionsMap(): Map<string, string> {
  * Tool list matches `NeotomaServer` listTools; no DB access; safe for unauthenticated GET.
  */
 export function buildSmitheryServerCard(): Record<string, unknown> {
-  const toolDescriptions = loadToolDescriptionsMap();
+  const toolCatalog = loadToolCatalog();
   const tools = buildToolDefinitions(
-    toolDescriptions,
+    toolCatalog.descriptions,
     TIMELINE_WIDGET_RESOURCE_URI,
-    TURN_SUMMARY_WIDGET_RESOURCE_URI
+    TURN_SUMMARY_WIDGET_RESOURCE_URI,
+    toolCatalog
   ).map((def) => ({
     name: def.name,
     description: def.description,
