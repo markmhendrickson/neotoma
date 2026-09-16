@@ -11,6 +11,7 @@ import * as readline from "node:readline";
 import type { Command } from "commander";
 import { dim, getTerminalWidth } from "../format.js";
 import { CANDIDATE_API_PORTS } from "../config.js";
+import { execFileProcessProbeSync, resolveProcessProbeTimeoutMs } from "../process_probe.js";
 
 export type OutputMode = "json" | "pretty";
 
@@ -407,11 +408,15 @@ export function extractTcpListenPortFromLsofNameField(value: string): number | n
 
 function readListenTcpPortsByPid(): Map<number, Set<number>> {
   try {
-    const raw = execFileSync("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pn"], {
+    const raw = execFileProcessProbeSync("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pn"], {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
+      // A cold `lsof` can block for tens of seconds walking kernel socket
+      // state. Listen ports only enrich the rows, so timing out drops to the
+      // same empty map the catch below already returns when lsof is unavailable.
+      timeout: resolveProcessProbeTimeoutMs(),
     });
-    return parseLsofPnOutput(raw);
+    return parseLsofPnOutput(String(raw));
   } catch {
     return new Map();
   }
