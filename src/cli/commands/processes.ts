@@ -410,6 +410,11 @@ function readListenTcpPortsByPid(): Map<number, Set<number>> {
     const raw = execFileSync("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pn"], {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
+      // A cold `lsof` can block for tens of seconds walking kernel socket
+      // state (see PROCESS_PROBE_TIMEOUT_MS in src/cli/index.ts). Listen ports
+      // only enrich the rows, so timing out drops to the same empty map the
+      // catch below already returns when lsof is unavailable.
+      timeout: 5000,
     });
     return parseLsofPnOutput(raw);
   } catch {

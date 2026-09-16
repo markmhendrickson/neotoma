@@ -11921,6 +11921,27 @@ logsCommand
 type NeotomaProcessRow = { pid: number; port: number; command: string; label: string };
 
 /**
+ * Hard ceiling on every process-inspection subprocess (`lsof`, `ps`, `netstat`).
+ *
+ * #2377 follow-up: `lsof` enumerates network files by walking kernel socket
+ * state, and on a cold cache — or with an unresponsive mount or socket in the
+ * table — a single call can block for tens of seconds. Measured here at 49.7s
+ * cold against a port with nothing listening on it, then 0.07s warm. `-n -P`
+ * suppress DNS and port-name lookups; they do NOT bound that stall.
+ *
+ * Whichever caller hits `lsof` first pays the cold cost, which is why the CLI
+ * api-commands suite failed only when the full test lane ran (another suite had
+ * not already warmed it) and passed in isolation. Without a timeout the call is
+ * unbounded, so it could exceed vitest's 60s budget and fail the test.
+ *
+ * These commands are advisory: they report which processes hold a port. Timing
+ * out yields "none found", which is the same answer the existing catch blocks
+ * already produce when lsof is absent or returns non-zero. Degrading is
+ * therefore strictly better than hanging.
+ */
+const PROCESS_PROBE_TIMEOUT_MS = 5000;
+
+/**
  * List all Neotoma API server processes (listening on candidate ports). Uses lsof (Unix) or netstat (Windows).
  * Not limited to the process started by this CLI instance.
  */
@@ -11935,6 +11956,7 @@ function listNeotomaServerProcesses(): NeotomaProcessRow[] {
         const out = execSync(`netstat -ano | findstr :${port}`, {
           encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
+          timeout: PROCESS_PROBE_TIMEOUT_MS,
         });
         const pids = new Set<number>();
         for (const line of out.split("\n")) {
@@ -11954,6 +11976,7 @@ function listNeotomaServerProcesses(): NeotomaProcessRow[] {
               {
                 encoding: "utf-8",
                 stdio: ["pipe", "pipe", "pipe"],
+                timeout: PROCESS_PROBE_TIMEOUT_MS,
               }
             );
             const cm = wmic.match(/CommandLine=(.+)/);
@@ -11975,6 +11998,7 @@ function listNeotomaServerProcesses(): NeotomaProcessRow[] {
       const pidsOut = execSync(`lsof -i :${port} -n -P -t`, {
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
+        timeout: PROCESS_PROBE_TIMEOUT_MS,
       });
       const pids = pidsOut
         .trim()
@@ -11988,6 +12012,7 @@ function listNeotomaServerProcesses(): NeotomaProcessRow[] {
           command = execSync(`ps -p ${pid} -o command=`, {
             encoding: "utf-8",
             stdio: ["pipe", "pipe", "pipe"],
+            timeout: PROCESS_PROBE_TIMEOUT_MS,
           })
             .trim()
             .replace(/\s+/g, " ")
@@ -12014,6 +12039,7 @@ async function detectNeotomaMcpStdioProcessCount(): Promise<number> {
     const out = execSync('pgrep -f "run_neotoma_mcp_stdio"', {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
+      timeout: PROCESS_PROBE_TIMEOUT_MS,
     });
     const pids = out
       .trim()
@@ -12369,10 +12395,18 @@ apiCommand
 
     let ran = false;
     try {
-      const scriptExists = await fs
-        .access(killPortScript)
-        .then(() => true)
-        .catch(() => false);
+      // Escape hatch for automated callers that need the payload contract
+      // without the side effect. `api stop` SIGKILLs whatever holds the port,
+      // which on a developer machine is their own dev server — a test
+      // asserting the shape of this JSON must not terminate real processes to
+      // do it. Both branches emit the same keys, so the contract is unchanged.
+      const skipStop = process.env.NEOTOMA_API_STOP_DRY_RUN === "1";
+      const scriptExists =
+        !skipStop &&
+        (await fs
+          .access(killPortScript)
+          .then(() => true)
+          .catch(() => false));
       if (scriptExists) {
         execSync('node "' + killPortScript + '" ' + port, {
           stdio: outputMode === "json" ? "ignore" : "inherit",

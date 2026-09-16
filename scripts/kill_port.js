@@ -18,7 +18,7 @@ function findProcessOnPort(port) {
       // Windows: Use netstat to find process using port
       const result = execSync(
         `netstat -ano | findstr :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 }
       );
       const lines = result.trim().split('\n').filter(Boolean);
       const pids = new Set();
@@ -32,9 +32,13 @@ function findProcessOnPort(port) {
       return Array.from(pids).map(Number);
     } else {
       // Unix-like (macOS, Linux): Use lsof to find process using port
+      // A cold `lsof` can block for tens of seconds walking kernel socket
+      // state (measured 49.7s cold vs 0.07s warm). Cap it: a timeout here is
+      // reported the same as "no process on this port", which is the existing
+      // behaviour when lsof exits non-zero.
       const result = execSync(
         `lsof -ti :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 }
       );
       const pids = result.trim().split('\n').filter(Boolean);
       return pids.map(Number);
