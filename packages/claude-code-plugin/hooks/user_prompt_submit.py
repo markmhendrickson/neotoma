@@ -36,7 +36,9 @@ from _common import (  # noqa: E402
     get_client,
     harness_provenance,
     log,
+    begin_turn,
     make_idempotency_key,
+    turn_identity_fields,
     read_cached_mcp_instructions,
     read_failure_hint,
     read_hook_input,
@@ -100,7 +102,9 @@ def main() -> int:
     payload = read_hook_input()
     prompt = payload.get("prompt") or payload.get("user_prompt") or ""
     session_id = payload.get("session_id") or "claude-code-unknown"
-    turn_id = payload.get("turn_id") or str(int(time.time() * 1000))
+    # #2440: this hook marks the turn boundary; later hooks read what it sets.
+    turn_id = begin_turn(session_id, payload.get("turn_id"))
+    turn_source = "harness" if payload.get("turn_id") else "counter"
 
     client = get_client()
     if client is None:

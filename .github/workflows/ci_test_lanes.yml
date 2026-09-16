@@ -411,6 +411,13 @@ jobs:
       - name: Run Python unit tests
         run: pytest packages/client-python/tests/ -v
 
+      # #2440: the Claude Code hooks are Python and had no lane, so their tests
+      # never ran anywhere. A test nothing executes is documentation, not a
+      # control — and the defect these cover (turn_key minting a per-call
+      # timestamp instead of a turn id) is invisible to every JS lane.
+      - name: Run Claude Code hook unit tests
+        run: pytest packages/claude-code-plugin/hooks/ -v
+
   security_gates:
     # Gate G1–G3 + manifest sync (Track 1 of the pre-release security gates).
     # Always runs the manifest sync check + auth matrix; runs the static

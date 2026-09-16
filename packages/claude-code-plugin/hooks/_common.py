@@ -87,6 +87,129 @@ def make_idempotency_key(session_id: str, turn_id: str, suffix: str) -> str:
     return f"conversation-{safe_session}-{safe_turn}-{suffix}"
 
 
+# --- Turn identity (#2440) --------------------------------------------------
+#
+# `turn_key` is shaped `{session_id}:{turn_id}` and exists so the calls, the
+# user message and the assistant reply belonging to ONE conversational turn can
+# be grouped. It did not do that.
+#
+# Every hook derived its turn as `payload.get("turn_id") or
+# str(int(time.time() * 1000))`. The harness does not supply `turn_id` to
+# `PostToolUse`, so the fallback fired on 100% of rows and every tool call
+# stamped its own wall-clock millisecond. Measured over the full production
+# corpus: 27,155 `tool_invocation` rows produced 27,155 distinct `turn_key`
+# values — a mean of exactly 1.00 calls per turn, against a [TURN LIFECYCLE]
+# contract that mandates a minimum of three.
+#
+# The damage is not that grouping was unavailable. It is that the fallback
+# FABRICATED GROUPABLE IDENTITY: a unique, correctly-shaped, never-failing
+# value that asserts "these calls are in different turns" when the truth is
+# "grouping is unknown". A consumer cannot tell it from real data, so the
+# defect is undetectable by exception handling and can only be noticed by
+# finding the answer implausible. That cost one measurement outright.
+#
+# So absence now has A SINGLE SPELLING and is normalized to it, following the
+# SENTINEL_ASSIGNEES pattern: when no real turn identity is available, say so
+# in a value consumers must handle, rather than inventing one they cannot
+# question.
+
+#: The one spelling of "this row cannot be grouped into a turn".
+UNGROUPED_TURN_ID = "ungrouped"
+
+#: Values that mean the same thing and normalize to `UNGROUPED_TURN_ID`.
+#: Includes the historical shapes so old rows and new agree on one spelling.
+SENTINEL_TURN_IDS = frozenset({"", "none", "null", "unknown", "ungrouped", "-", "n/a"})
+
+
+def _turn_state_path(session_id: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id) or "unknown"
+    return _hook_state_dir() / f"turn-{safe}.json"
+
+
+def begin_turn(session_id: str, turn_id: str | None) -> str:
+    """Open a new turn and persist it for the rest of this turn's hooks.
+
+    Called from `UserPromptSubmit`, which is the only hook that genuinely marks
+    a turn boundary. Every later hook in the same turn reads this value rather
+    than minting its own, so the whole turn agrees on one identity.
+
+    A harness-supplied `turn_id` is preferred and used verbatim. Otherwise a
+    counter increments per session — deliberately NOT a timestamp, so two
+    calls a millisecond apart cannot land in different turns.
+    """
+    resolved = (turn_id or "").strip()
+    if resolved and resolved.lower() not in SENTINEL_TURN_IDS:
+        source = "harness"
+    else:
+        previous = _read_turn_state(session_id)
+        counter = int(previous.get("counter") or 0) + 1
+        resolved = f"t{counter}"
+        source = "counter"
+    _write_turn_state(
+        session_id,
+        {
+            "session_id": session_id,
+            "turn_id": resolved,
+            "source": source,
+            "counter": int(resolved[1:]) if source == "counter" else 0,
+        },
+    )
+    return resolved
+
+
+def resolve_turn_id(session_id: str, turn_id: str | None) -> tuple[str, str]:
+    """Resolve the turn a mid-turn hook belongs to.
+
+    Returns `(turn_id, source)` where `source` is one of `harness`, `state` or
+    `unavailable`. NEVER invents a plausible-looking unique value: when the
+    turn cannot be determined the answer is `UNGROUPED_TURN_ID`, which a
+    consumer can see and exclude, rather than a timestamp it cannot.
+    """
+    candidate = (turn_id or "").strip()
+    if candidate and candidate.lower() not in SENTINEL_TURN_IDS:
+        return candidate, "harness"
+    state = _read_turn_state(session_id)
+    stored = str(state.get("turn_id") or "").strip()
+    if stored and stored.lower() not in SENTINEL_TURN_IDS:
+        return stored, "state"
+    return UNGROUPED_TURN_ID, "unavailable"
+
+
+def turn_identity_fields(turn_source: str) -> dict[str, Any]:
+    """Fields that make a row's turn identity auditable at read time.
+
+    Without this a consumer cannot distinguish a real turn from a fallback,
+    which is the property that made #2440 invisible.
+    """
+    return {
+        "turn_id_source": turn_source,
+        "turn_groupable": turn_source in ("harness", "state"),
+    }
+
+
+def _read_turn_state(session_id: str) -> dict[str, Any]:
+    path = _turn_state_path(session_id)
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception as exc:
+        log("debug", f"turn state parse failed: {exc}")
+        return {}
+
+
+def _write_turn_state(session_id: str, state: dict[str, Any]) -> None:
+    try:
+        directory = _hook_state_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        _turn_state_path(session_id).write_text(json.dumps(state), encoding="utf-8")
+    except Exception as exc:
+        # Best-effort, like every other hook write: a state failure degrades
+        # grouping to `unavailable`, which is legible, and never breaks a turn.
+        log("debug", f"turn state write failed: {exc}")
+
+
 def harness_provenance(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     """Provenance fields every observation written by this plugin carries."""
     fields: dict[str, Any] = {

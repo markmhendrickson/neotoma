@@ -19,6 +19,8 @@ from _common import (  # noqa: E402
     harness_provenance,
     log,
     make_idempotency_key,
+    turn_identity_fields,
+    resolve_turn_id,
     read_hook_input,
     record_conversation_turn,
     write_hook_output,
@@ -33,7 +35,9 @@ def main() -> int:
         return 0
 
     session_id = payload.get("session_id") or "claude-code-unknown"
-    turn_id = payload.get("turn_id") or str(int(time.time() * 1000))
+    # #2440: resolve the turn this hook belongs to; never mint a plausible
+    # unique value, since that fabricates groupable identity.
+    turn_id, turn_source = resolve_turn_id(session_id, payload.get("turn_id"))
     final_text = payload.get("response") or payload.get("assistant_response") or ""
 
     if not final_text:
