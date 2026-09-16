@@ -4665,6 +4665,11 @@ export class NeotomaServer {
     // updateSchemaIncremental cannot proceed (it has no baseline to extend).
     // Return a structured non-throwing response with a hint instead of propagating
     // an opaque internal error. Callers should use register_schema first.
+    //
+    // The scope this guard checks (`parsed.user_specific ? userId : undefined`)
+    // is intentionally left as-is here — the write-scope resolution mechanism
+    // itself (read scope vs. write scope agreement) is #2374/#2378, fixed in
+    // PR #2446, not duplicated in this change (#2454).
     const { loadCodeDefinedSchemaEntry } = await import("./services/schema_registry.js");
     const registeredSchema = await schemaRegistry.loadActiveSchema(
       parsed.entity_type,
@@ -4673,6 +4678,54 @@ export class NeotomaServer {
     if (!registeredSchema) {
       const codeDefinedSchema = await loadCodeDefinedSchemaEntry(parsed.entity_type);
       if (!codeDefinedSchema) {
+        // #2454: this guard's lookup is scope-limited (see comment above), so
+        // it can come up empty even when a schema for this entity_type is
+        // genuinely active in a DIFFERENT scope than the one this call
+        // checked — e.g. describe_entity_type resolved it (unconditional
+        // userId, user-scope-preferred) but this guard's scope-gated lookup
+        // did not. Telling such a caller to `register_schema` is actively
+        // harmful: the type already has an active schema and (per #2374/
+        // #2378) live entities, so registering another schema for it is how
+        // the dual-active-row condition arises — the next incremental call
+        // then merges onto stale state and silently drops fields.
+        //
+        // Distinguish the two cases with one extra, unconditionally-scoped
+        // lookup: does ANY active schema exist for this entity_type at all
+        // (checked with userId passed through regardless of user_specific)?
+        // If so, this is a scope mismatch, not a missing schema — say which
+        // lookup failed and in which scope, and do NOT recommend
+        // register_schema. If not, this is a genuine cold start and the
+        // existing register_schema guidance still applies unchanged.
+        const anyScopeSchema = await schemaRegistry.loadActiveSchema(parsed.entity_type, userId);
+        if (anyScopeSchema) {
+          const guardScope = parsed.user_specific ? "user" : "global";
+          const foundScope = anyScopeSchema.scope ?? "global";
+          return this.buildTextResponse({
+            error: {
+              error_code: "ERR_SCHEMA_SCOPE_MISMATCH",
+              message:
+                `An active schema for entity_type "${parsed.entity_type}" exists in ` +
+                `"${foundScope}" scope, but this call resolved schemas in "${guardScope}" scope ` +
+                "and found none there.",
+              hint:
+                `The existing SchemaDefinition for "${parsed.entity_type}" lives in ` +
+                `"${foundScope}" scope. This call did not check that scope because ` +
+                `user_specific was ${parsed.user_specific ? "true" : "not set (defaults to false)"}. ` +
+                "This entity_type already has an active schema — creating a second one for it " +
+                "risks leaving two active schema_registry rows for the same entity_type (see " +
+                "#2374/#2378), after which the next incremental update can merge onto stale " +
+                `state and drop fields. Instead, retry update_schema_incremental with ` +
+                `user_specific: ${foundScope === "user"} so the call resolves the scope the ` +
+                "schema actually lives in.",
+              details: {
+                entity_type: parsed.entity_type,
+                guard_scope: guardScope,
+                found_scope: foundScope,
+              },
+            },
+          });
+        }
+
         // Canonical standard error envelope (docs/subsystems/errors.md).
         // Nested under `error` so CLI/MCP error handlers can pattern-match the
         // code uniformly. `no_schema_for_entity_type` retained in details for
