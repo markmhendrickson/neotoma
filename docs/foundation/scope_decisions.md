@@ -8,8 +8,17 @@ Each decision records: the question, the decision, the date, the rationale, the 
 
 ## SD-001: Non-Technical GUI and Zero-Config Install
 
-**Date:** 2026-04-09 · **Revisit condition 1 recorded as met:** 2026-09-16
-**Status:** Decided — **Out of scope for MVP and post-MVP through at least v0.5.x**, with the install half reopened. Revisit condition 1 is satisfied (see below). The non-technical **management** GUI remains out of scope on rationales 2, 3, and 4, which are unaffected.
+**Date:** 2026-04-09 · **Amended:** 2026-09-15 · **Revisit condition 1 recorded as met:** 2026-09-16
+**Status:** Decided — **Partially superseded.** The non-technical graphical **management** UI remains out of scope on rationales 2, 3, and 4, which are unaffected. The **install and onboarding** half is reopened: revisit condition 1 is satisfied and a guided installation is the **intended** path. See the amendment below before applying anything in this decision.
+
+### Amendment (2026-09-15, extended 2026-09-16): the install half of this decision is superseded
+
+SD-001 bundled two questions that have now been answered differently. Read it as two decisions:
+
+| Sub-question | Status |
+| --- | --- |
+| Non-technical graphical **management** UI for non-developer end users | **Still out of scope.** Rationale 2, 3, and 4 hold unchanged. |
+| **Install and onboarding** experience | **Superseded.** A guided installation with branded UI is the intended path. |
 
 ### Revisit condition 1 is satisfied (2026-09-16)
 
@@ -31,9 +40,15 @@ What those two jointly permit is an **architecture-revealing installer**: a visu
 
 What remains banned is the **black-box** installer. The load-bearing clause in "One-click installers that hide architecture from the user" is **hiding the architecture**, not the click count. An installer that completes in one click while showing the user what it did is inside the seam; one that completes in ten steps while concealing where the data went is outside it.
 
-**Rationale 3 is not overturned.** Privacy-first and local-first remain at odds with "sign up and we handle the server," and **cloud-hosted turnkey offerings stay out of scope**. Guided installation is **not** zero-install: a download and a local runtime remain, the user still installs software on their own machine, and the user still decides where their data lives. As of this revision the shipped install path is npm plus the CLI; a guided path is **intended and not shipped**. No surface should describe Neotoma as zero-install.
+**Rationale 3 is not overturned — and this is the honesty bound.** Privacy-first and local-first remain at odds with "sign up and we handle the server." That argument is correct and is **not** overturned: **cloud-hosted turnkey offerings stay out of scope**, as does account creation as a precondition for using a local instance. **Guided installation is not zero-install** — a download and a local runtime remain, the user still installs software on their own machine, and the user still decides where their data lives. And as of this revision the shipped install path is **npm plus the CLI**; a guided path is **intended and not shipped**. No surface should describe Neotoma as zero-install, or describe guided install as something a user can use today.
 
-**Design, not implementation.** This records what the product is *for*. It commits to no installer technology, distribution format, or UI framework.
+**What is superseded, precisely.**
+
+- **Rationale 1 is no longer sound as stated.** It reasoned from the ICP — *"this ICP does not need a graphical management UI; they already operate in terminals"* — to the install decision. Under the durable-ICP decision (O1, 2026-09-15, see `../icp/primary_icp.md`), the ICP is the technically fluent operator who does **not** want to own infrastructure. The premise about who the buyer is has changed, so the install conclusion drawn from it does not survive. The *management-UI* conclusion survives on rationale 4's independent grounds (scope discipline protects the State Layer boundary), not on rationale 1.
+- **Rationale 5 is narrowed.** Agent-assisted install remains a good pattern and stays in scope. It is no longer treated as *sufficient*, because it presumes the user already has a capable agent wired up — which is a harness the buyer may not have configured yet, and is precisely the bootstrap the guided path exists to remove.
+- **"One-click installers that hide architecture from the user"** in the out-of-scope list is narrowed to the clause that is actually load-bearing: **hiding the architecture**. A guided installer that is explicit about where data lives, what runs locally, and which agents are granted access does not hide architecture; it explains it at the only moment the user is paying attention.
+
+**Design, not implementation.** This amendment records what the product is *for*. It does not specify an installer technology, a distribution format, or a UI framework, and nothing here should be read as a commitment to one.
 
 ### Question
 
@@ -41,11 +56,11 @@ Should Neotoma ship a non-technical graphical management UI and a zero-configura
 
 ### Decision
 
-**No.** Non-technical GUI and zero-config install are **out of scope** for the current release trajectory. Neotoma remains a developer-facing / power-user-facing state layer distributed via MCP, installed and configured by the user (or their agent) on their own machine.
+**No.** Non-technical GUI and zero-config install are **out of scope** for the current release trajectory. Neotoma remains a developer-facing system of record for AI agents, distributed via MCP and installed and configured by the user (or their agent) on their own machine.
 
 ### Rationale
 
-1. **ICP is not the non-technical consumer.** Per `docs/icp/primary_icp.md`, Neotoma's target user is the personal agentic OS builder/operator across three operational modes (debugging, building, operating). This ICP does not need a graphical management UI; they already operate in terminals, config files, and MCP clients.
+1. **ICP is not the non-technical consumer.** Per `docs/icp/primary_icp.md`, Neotoma's target user is the personal agentic OS builder/operator across three operational modes (debugging, building, operating). This ICP does not need a graphical management UI; they already operate in terminals, config files, and MCP clients. **(Superseded in part, 2026-09-15 — see the Amendment above.** The conclusion "not the non-technical consumer" stands. The supporting claim that the ICP is at home in terminals does not: under O1 the durable ICP is technically fluent but not infrastructure-oriented. This rationale no longer supports the *install* half of the decision.)
 
 2. **The non-technical consumer market is already contested.** Penfield, provider-native memory (ChatGPT, Claude, Gemini), and eventual OS-level memory (Apple, Google) are all pursuing the non-technical user. Competing there would require surrendering Neotoma's defensible differentiators (privacy-first local-first, determinism, verifiability) because those differentiators are not legible to non-technical users and slow down the zero-config install story.
 
@@ -53,17 +68,17 @@ Should Neotoma ship a non-technical graphical management UI and a zero-configura
 
 4. **Scope discipline protects the State Layer boundary.** A consumer GUI would pressure Neotoma to include strategy and execution concerns (reminders, notifications, task management, personality, chat) that violate the core identity (`core_identity.md` §"What Neotoma Is NOT"). The architectural invariant is clearer when the product surface stays narrow.
 
-5. **Power users and agents are the right install vector today.** MCP adapters, per-client install flows, and agent-driven setup are the right primitives for Neotoma's ICP. Agent-assisted install ("your agent installs and configures Neotoma for you") is a more interesting zero-config story than a consumer installer, and it aligns with the state-layer-beneath-agents positioning.
+5. **Power users and agents are the right install vector today.** MCP adapters, per-client install flows, and agent-driven setup are the right primitives for Neotoma's ICP. Agent-assisted install ("your agent installs and configures Neotoma for you") is a more interesting zero-config story than a consumer installer, and it aligns with the state-layer-beneath-agents positioning. **(Narrowed, 2026-09-15.** Agent-assisted install stays in scope and stays valuable. It is no longer treated as sufficient: it assumes the user has already wired up a capable agent, which is the bootstrap problem the guided path addresses.)
 
 ### Target Persona (Explicit)
 
 Neotoma targets the **personal agentic OS builder/operator**, not the general consumer. This persona:
-- Is comfortable with terminals, config files, environment variables, and MCP client setup.
+- Is comfortable with terminals, config files, environment variables, and MCP client setup. **(Superseded 2026-09-15 — see O1 in `../icp/primary_icp.md`.** The durable ICP is technically fluent but not infrastructure-oriented. They can read a config file; they do not want assembling one to be the price of entry.)
 - Runs multiple AI tools (Claude Desktop, Claude Code, Cursor, ChatGPT) and feels the cross-tool memory tax.
 - Cares about verifiability, provenance, and data sovereignty enough to trade convenience for them.
-- Will accept a more involved install in exchange for local-first guarantees.
+- Will accept a more involved install in exchange for local-first guarantees. **(Superseded 2026-09-15.** They will accept *local-first* in exchange for those guarantees. Field evidence says they will not reliably accept a more involved *install*: 0/3 round-2 fresh installs completed.)
 
-Absence of a non-technical GUI is a **feature for this persona**, not a defect. It signals that Neotoma is a serious substrate, not a consumer app.
+Absence of a non-technical **management** GUI is a **feature for this persona**, not a defect: it signals that Neotoma is serious infrastructure, not a consumer app. **That reasoning does not extend to the install path.** A rough install signals nothing about seriousness — it only selects for the infrastructure builder that O1 de-targeted.
 
 ### What Stays In Scope
 
@@ -95,7 +110,8 @@ Reopen this decision if any of the following become true:
 
 - [`core_identity.md`](core_identity.md) — What Neotoma is and is not
 - [`product_positioning.md`](product_positioning.md) — Positioning, differentiation, and ICP framing
-- [`../icp/primary_icp.md`](../icp/primary_icp.md) — Primary ICP definition
+- [`../icp/primary_icp.md`](../icp/primary_icp.md) — Primary ICP definition (durable; carries the O1 decision that amended this one)
+- [`../icp/general_release_criteria.md`](../icp/general_release_criteria.md) — the install-path gate whose 0/3 result met revisit condition 1
 - [`../private/competitive/penfield_competitive_analysis.md`](../private/competitive/penfield_competitive_analysis.md) — Competitor pursuing the consumer gap
 - [`../private/insights/penfield_ai_memory_2026_relevance_analysis.md`](../private/insights/penfield_ai_memory_2026_relevance_analysis.md) — Origin of this decision prompt
 

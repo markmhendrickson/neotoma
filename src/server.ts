@@ -691,6 +691,53 @@ export class NeotomaServer {
     };
   }
 
+  /**
+   * Resolve the user id for initialize-time instruction lookups (standing
+   * rules, instance skills, instance policy).
+   *
+   * `this.authenticatedUserId` is NOT reliably set by the time
+   * {@link buildAuthenticatedInitializeResponse} runs. Every branch of the
+   * initialize handler that assigns it is nested inside `if (connectionId)`,
+   * so a session that authenticates by `Authorization` header without an
+   * `x-connection-id` reaches these lookups with the field still null. That is
+   * the same condition `listTools` already compensates for (see the fallback in
+   * {@link setupToolHandlers}, whose comment records that "authentication
+   * happens in initialize but instance state isn't preserved").
+   *
+   * Gating the lookups on the bare field meant they were SKIPPED rather than
+   * failed for those sessions: `lookup_failed` stayed false, the
+   * `standing_rules_unavailable` / `skills_unavailable` notices never fired,
+   * and an agent was handed a confident empty list. That is precisely the
+   * conflation #2131 introduced those notices to prevent (#2368, #2429).
+   *
+   * Returns the resolved id, or null when identity genuinely cannot be
+   * established — callers MUST treat null as `lookup_failed`, never as "this
+   * instance has none".
+   */
+  private async resolveInstructionLookupUserId(): Promise<string | null> {
+    if (this.authenticatedUserId) return this.authenticatedUserId;
+
+    const connectionId = this.sessionConnectionId;
+    if (!connectionId) return null;
+
+    try {
+      if (connectionId === "dev-local") {
+        const devUser = await ensureLocalDevUser();
+        this.authenticatedUserId = devUser.id;
+        return devUser.id;
+      }
+      const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+      const { userId } = await getAccessTokenForConnection(connectionId);
+      this.authenticatedUserId = userId;
+      logger.info(`[MCP Server] initialize fallback resolved userId: ${userId}`);
+      return userId;
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.warn(`[MCP Server] initialize identity fallback failed: ${msg}`);
+      return null;
+    }
+  }
+
   private async buildAuthenticatedInitializeResponse(updateNotice: string | null) {
     const baseInstructions = updateNotice
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
@@ -722,10 +769,16 @@ export class NeotomaServer {
     // agent is never handed an empty policy that is actually a broken read
     // (#2131).
     let standingRulesLookupFailed = false;
-    if (this.authenticatedUserId) {
-      const result = await getActiveStandingRulesResult(this.authenticatedUserId);
+    // Identity may not be on the instance yet at this point; resolve it the way
+    // listTools does. A null result is an UNKNOWN identity, not an absent user,
+    // so it reports as a failed lookup rather than an empty rule set.
+    const lookupUserId = await this.resolveInstructionLookupUserId();
+    if (lookupUserId) {
+      const result = await getActiveStandingRulesResult(lookupUserId);
       standingRules = result.rules;
       standingRulesLookupFailed = result.lookup_failed;
+    } else {
+      standingRulesLookupFailed = true;
     }
 
     // Skills reach agents two ways: mirrored to a local skills directory, or
@@ -745,10 +798,16 @@ export class NeotomaServer {
     // is never presented to an agent as a confident "this instance has none".
     let instanceSkills: InstanceSkill[] = [];
     let instanceSkillsLookupFailed = false;
-    if (this.authenticatedUserId && config.mcpInstanceSkillHints) {
-      const result = await getInstanceSkillsResult(this.authenticatedUserId);
-      instanceSkills = result.skills;
-      instanceSkillsLookupFailed = result.lookup_failed;
+    if (config.mcpInstanceSkillHints) {
+      if (lookupUserId) {
+        const result = await getInstanceSkillsResult(lookupUserId);
+        instanceSkills = result.skills;
+        instanceSkillsLookupFailed = result.lookup_failed;
+      } else {
+        // Unknown identity. The feature is ON, so silence here would be read as
+        // "this instance stores no skills" — say unknown instead.
+        instanceSkillsLookupFailed = true;
+      }
     }
 
     const filesystemSkills = this.getAvailableSkills();
