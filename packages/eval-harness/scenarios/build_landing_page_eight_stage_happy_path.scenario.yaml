@@ -67,6 +67,8 @@ expected:
     entity_type: "rendered_page"
     where:
       title: "blp_hp_2418"
+  # PART_OF: each of the eight stage entities -> plan, endpoint-scoped so a
+  # wrong-type or misdirected edge cannot hide behind an aggregate count.
   - type: relationship.count
     relationship_type: "PART_OF"
     source_entity_type: "target_persona"
@@ -75,8 +77,48 @@ expected:
     value: 1
   - type: relationship.count
     relationship_type: "PART_OF"
+    source_entity_type: "cta"
+    target_entity_type: "plan"
     op: "gte"
-    value: 8
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "research_finding"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "rendered_page_template"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "specification"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "analysis"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "design_system"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "rendered_page"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  # REFERS_TO: each stage -> its immediately preceding stage, per the stage
+  # map in system_prompt (1 target_persona .. 8 rendered_page).
   - type: relationship.count
     relationship_type: "REFERS_TO"
     source_entity_type: "cta"
@@ -85,5 +127,37 @@ expected:
     value: 1
   - type: relationship.count
     relationship_type: "REFERS_TO"
+    source_entity_type: "research_finding"
+    target_entity_type: "cta"
     op: "gte"
-    value: 7
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "rendered_page_template"
+    target_entity_type: "research_finding"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "specification"
+    target_entity_type: "rendered_page_template"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "analysis"
+    target_entity_type: "specification"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "design_system"
+    target_entity_type: "analysis"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "rendered_page"
+    target_entity_type: "design_system"
+    op: "gte"
+    value: 1

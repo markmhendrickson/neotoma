@@ -34,6 +34,17 @@ models:
     model: replay-only
 
 expected:
+  # An empty cassette (no tool calls at all) must not pass: require the
+  # agent to have actually attempted a stage write and a read-back before
+  # asserting it stopped fail-closed.
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: gte
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    op: gte
+    value: 1
   - type: entity.count
     entity_type: rendered_page
     where:
@@ -44,3 +55,5 @@ expected:
     tool_name: publish_rendered_page
     op: eq
     value: 0
+  - type: reply_text.contains
+    pattern: "stop|blocked|did not (create|build)|no rendered_page"
