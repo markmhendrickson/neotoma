@@ -30,9 +30,12 @@
  * still the correct and un-changed recommendation.
  */
 
+import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { app } from "../../src/actions.js";
 import { NeotomaServer } from "../../src/server.js";
 import { db } from "../../src/db.js";
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 
 const TEST_USER_ID = "00000000-0000-0000-0000-0000002454a1";
 const OTHER_USER_ID = "00000000-0000-0000-0000-0000002454a2";
@@ -41,20 +44,42 @@ const OTHER_USER_ID = "00000000-0000-0000-0000-0000002454a2";
 const USER_SCOPED_ONLY_TYPE = "issue_2454_user_scoped_only_type";
 // An entity_type whose ONLY active schema lives in global scope.
 const GLOBAL_SCOPED_ONLY_TYPE = "issue_2454_global_scoped_only_type";
+// HTTP local auth resolves to LOCAL_DEV_USER_ID — seed a user-scoped-only type
+// for that identity so POST /update_schema_incremental can hit the mismatch.
+const HTTP_USER_SCOPED_ONLY_TYPE = "issue_2454_http_user_scoped_only_type";
+const API_PORT = 18254;
+const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
 async function cleanupTestData(): Promise<void> {
   await db.from("schema_registry").delete().eq("entity_type", USER_SCOPED_ONLY_TYPE);
   await db.from("schema_registry").delete().eq("entity_type", GLOBAL_SCOPED_ONLY_TYPE);
+  await db.from("schema_registry").delete().eq("entity_type", HTTP_USER_SCOPED_ONLY_TYPE);
   await db.from("raw_fragments").delete().eq("entity_type", USER_SCOPED_ONLY_TYPE);
   await db.from("raw_fragments").delete().eq("entity_type", GLOBAL_SCOPED_ONLY_TYPE);
+  await db.from("raw_fragments").delete().eq("entity_type", HTTP_USER_SCOPED_ONLY_TYPE);
+  await db
+    .from("schema_registry")
+    .delete()
+    .eq("entity_type", "issue_2454_truly_unregistered_type");
+  await db
+    .from("schema_registry")
+    .delete()
+    .eq("entity_type", "issue_2454_http_truly_unregistered_type");
 }
 
 describe("update_schema_incremental / describe_entity_type schema-lookup parity (issue #2454)", () => {
   let server: NeotomaServer;
+  let httpServer: ReturnType<typeof createServer>;
 
   beforeAll(async () => {
     await cleanupTestData();
     server = new NeotomaServer();
+
+    httpServer = createServer(app);
+    await new Promise<void>((resolve, reject) => {
+      httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
+      httpServer.once("error", reject);
+    });
 
     // Seed a schema active ONLY in user scope, for TEST_USER_ID.
     const { error: userInsertError } = await db.from("schema_registry").insert({
@@ -98,9 +123,32 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
       user_id: null,
     });
     expect(globalInsertError).toBeFalsy();
+
+    // HTTP local path authenticates as LOCAL_DEV_USER_ID — seed a user-scoped
+    // schema for that identity so REST can reproduce the same mismatch.
+    const { error: httpUserInsertError } = await db.from("schema_registry").insert({
+      entity_type: HTTP_USER_SCOPED_ONLY_TYPE,
+      schema_version: "1.0",
+      schema_definition: {
+        identity_opt_out: "heuristic_canonical_name",
+        fields: {
+          name: { type: "string" },
+        },
+      },
+      reducer_config: {
+        merge_policies: {
+          name: { strategy: "last_write", tie_breaker: "observed_at" },
+        },
+      },
+      active: true,
+      scope: "user",
+      user_id: LOCAL_DEV_USER_ID,
+    });
+    expect(httpUserInsertError).toBeFalsy();
   });
 
   afterAll(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     await cleanupTestData();
   });
 
@@ -199,6 +247,17 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
     };
     expect(describeBody.field_names).toContain("status");
     expect(describeBody.field_names).toContain("name");
+
+    // Dual-active effect: recovery via user_specific must leave exactly one
+    // active schema_registry row for this entity_type — not a second active
+    // row alongside the original (#2374/#2378 dual-active failure mode).
+    const { data: activeRows, error: activeRowsError } = await db
+      .from("schema_registry")
+      .select("id, schema_version, scope, active")
+      .eq("entity_type", USER_SCOPED_ONLY_TYPE)
+      .eq("active", true);
+    expect(activeRowsError).toBeFalsy();
+    expect(activeRows).toHaveLength(1);
   });
 
   it("a caller with NO relationship to the user-scoped schema (different user, no schema of their own) still gets the genuine no-schema response with the register_schema hint intact", async () => {
@@ -220,5 +279,61 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
     };
     expect(body.error?.error_code).toBe("ERR_NO_SCHEMA_FOR_ENTITY_TYPE");
     expect(body.error?.hint).toContain("register_schema");
+  });
+
+  it("HTTP POST /update_schema_incremental without user_specific returns ERR_SCHEMA_SCOPE_MISMATCH for a user-scoped-only type", async () => {
+    const httpRes = await fetch(`${API_BASE}/update_schema_incremental`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entity_type: HTTP_USER_SCOPED_ONLY_TYPE,
+        fields_to_add: [{ field_name: "status", field_type: "string" }],
+      }),
+    });
+    expect(httpRes.status).toBe(200);
+    const body = (await httpRes.json()) as {
+      error?: {
+        error_code?: string;
+        hint?: string;
+        details?: { entity_type?: string; guard_scope?: string; found_scope?: string };
+      };
+    };
+    expect(body.error?.error_code).toBe("ERR_SCHEMA_SCOPE_MISMATCH");
+    expect(body.error?.error_code).not.toBe("ERR_NO_SCHEMA_FOR_ENTITY_TYPE");
+    expect(body.error?.details?.entity_type).toBe(HTTP_USER_SCOPED_ONLY_TYPE);
+    expect(body.error?.details?.guard_scope).toBe("global");
+    expect(body.error?.details?.found_scope).toBe("user");
+    expect(body.error?.hint).toContain("user_specific");
+    expect(body.error?.hint).not.toContain("register_schema");
+  });
+
+  it("HTTP POST /update_schema_incremental cold-start still returns ERR_NO_SCHEMA_FOR_ENTITY_TYPE with register_schema hint", async () => {
+    const httpRes = await fetch(`${API_BASE}/update_schema_incremental`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entity_type: "issue_2454_http_truly_unregistered_type",
+        fields_to_add: [{ field_name: "x", field_type: "string" }],
+      }),
+    });
+    expect(httpRes.status).toBe(200);
+    const body = (await httpRes.json()) as {
+      error?: { error_code?: string; hint?: string };
+    };
+    expect(body.error?.error_code).toBe("ERR_NO_SCHEMA_FOR_ENTITY_TYPE");
+    expect(body.error?.hint).toContain("register_schema");
+  });
+
+  it("CLI schemas update --user-specific maps to request body user_specific (parity N/A beyond flag wiring)", async () => {
+    // Live CLI process against this suite's fixtures is N/A: the flag already
+    // forwards to the same POST /update_schema_incremental body key exercised
+    // above. Guard the wiring so a future CLI rewrite cannot drop it silently.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const cli = readFileSync(join(here, "..", "..", "src", "cli", "index.ts"), "utf8");
+    expect(cli).toContain('.option("--user-specific"');
+    expect(cli).toContain("user_specific: opts.userSpecific");
   });
 });

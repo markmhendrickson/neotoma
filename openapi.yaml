@@ -70,6 +70,57 @@ components:
         timestamp:
           type: string
           format: date-time
+    SchemaRegistryToolErrorResponse:
+      type: object
+      description: |
+        Nested canonical error envelope returned by schema-registry tools
+        (`update_schema_incremental`, and matching MCP tool responses) on HTTP 200
+        when the call cannot proceed. Distinct from the flat `ErrorEnvelope` used
+        by most REST routes — callers must read `error.error_code`.
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - error_code
+            - message
+          properties:
+            error_code:
+              type: string
+              enum:
+                - ERR_SCHEMA_SCOPE_MISMATCH
+                - ERR_NO_SCHEMA_FOR_ENTITY_TYPE
+                - ERR_SCHEMA_MISSING_IDENTITY_CONFIG
+              description: |
+                `ERR_SCHEMA_SCOPE_MISMATCH` — an active schema exists for the
+                entity_type, but in a different scope than this call checked
+                (`details.guard_scope` vs `details.found_scope`). Hint directs
+                the caller to retry with the correct `user_specific` and MUST
+                NOT recommend `register_schema`.
+                `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` — no schema in any scope; hint
+                recommends `register_schema`.
+            message:
+              type: string
+            hint:
+              type: string
+            details:
+              type: object
+              properties:
+                entity_type:
+                  type: string
+                guard_scope:
+                  type: string
+                  description: Scope the existence guard checked (`global` or `user`).
+                  enum: [global, user]
+                found_scope:
+                  type: string
+                  description: Scope where an active schema was found (scope-mismatch only).
+                  enum: [global, user]
+                no_schema_for_entity_type:
+                  type: boolean
+                  description: Present on genuine cold-start (`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`).
+              additionalProperties: true
     RecentConversationRelatedEntity:
       type: object
       properties:
@@ -7189,52 +7240,61 @@ paths:
                   default: false
       responses:
         "200":
-          description: Schema updated
+          description: |
+            Schema updated on success. On a structured schema-registry client
+            error (`ERR_SCHEMA_SCOPE_MISMATCH` or `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`)
+            the same 200 response carries the nested canonical envelope
+            `{ error: { error_code, message, hint, details } }` — matching the
+            MCP tool response so CLI/HTTP/MCP handlers can pattern-match the
+            code uniformly (see docs/reference/error_codes.md Schema Registry).
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  entity_type:
-                    type: string
-                  schema_version:
-                    type: string
-                  fields_added:
-                    type: array
-                    items:
-                      type: string
-                  fields_removed:
-                    type: array
-                    items:
-                      type: string
-                  canonical_name_fields:
-                    description: >-
-                      The identity rule as resolved on the registered schema
-                      after this call — the value supplied if replaced, or the
-                      preserved prior rule otherwise; null when the schema
-                      declares none. Lets a caller confirm the rule without a
-                      second describe_entity_type round trip.
-                    type: array
-                    nullable: true
-                    items:
-                      oneOf:
-                        - type: string
-                        - type: object
-                          required: [composite]
-                          properties:
-                            composite:
-                              type: array
-                              items:
-                                type: string
-                  activated:
-                    type: boolean
-                  migrated_existing:
-                    type: boolean
-                  scope:
-                    type: string
-                additionalProperties: true
+                oneOf:
+                  - type: object
+                    description: Successful incremental update
+                    properties:
+                      success:
+                        type: boolean
+                      entity_type:
+                        type: string
+                      schema_version:
+                        type: string
+                      fields_added:
+                        type: array
+                        items:
+                          type: string
+                      fields_removed:
+                        type: array
+                        items:
+                          type: string
+                      canonical_name_fields:
+                        description: >-
+                          The identity rule as resolved on the registered schema
+                          after this call — the value supplied if replaced, or the
+                          preserved prior rule otherwise; null when the schema
+                          declares none. Lets a caller confirm the rule without a
+                          second describe_entity_type round trip.
+                        type: array
+                        nullable: true
+                        items:
+                          oneOf:
+                            - type: string
+                            - type: object
+                              required: [composite]
+                              properties:
+                                composite:
+                                  type: array
+                                  items:
+                                    type: string
+                      activated:
+                        type: boolean
+                      migrated_existing:
+                        type: boolean
+                      scope:
+                        type: string
+                    additionalProperties: true
+                  - $ref: "#/components/schemas/SchemaRegistryToolErrorResponse"
 
   /register_schema:
     post:

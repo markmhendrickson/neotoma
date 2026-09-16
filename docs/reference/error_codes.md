@@ -111,12 +111,15 @@ handlers can pattern-match the code uniformly.
 | Code                                 | HTTP | Retry? | Description                                                               |
 | ------------------------------------ | ---- | ------ | ------------------------------------------------------------------------- |
 | `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`      | 200  | No     | No registered or code-defined schema exists for the given `entity_type`   |
+| `ERR_SCHEMA_SCOPE_MISMATCH`          | 200  | No     | Active schema exists, but in a different scope than the call checked      |
 | `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 200  | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out` |
 
 **`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`** — raised by `update_schema_incremental` when
 the target `entity_type` has no schema registered in `schema_registry` and no
-code-defined fallback in `schema_definitions.ts`. Incremental update needs a
-baseline to extend, so the call cannot proceed.
+code-defined fallback in `schema_definitions.ts` **in any scope the caller can
+see**. Incremental update needs a baseline to extend, so the call cannot proceed.
+Do **not** use this code when a schema exists in another scope — that is
+`ERR_SCHEMA_SCOPE_MISMATCH` (#2454).
 
 Response shape (canonical envelope):
 
@@ -138,6 +141,35 @@ Remediation: call `analyze_schema_candidates` for field suggestions, then
 `register_schema` with a complete `schema_definition` including either
 `canonical_name_fields` or `identity_opt_out`. Retry
 `update_schema_incremental` once the baseline schema is registered.
+
+**`ERR_SCHEMA_SCOPE_MISMATCH`** — raised by `update_schema_incremental` when the
+existence guard's scope-limited lookup (`user_specific ? user : global`) finds
+no schema, but an active schema for the same `entity_type` exists in a
+**different** scope (typically: `describe_entity_type` resolved a user-scoped
+schema because it always passes `userId`, while the incremental call omitted
+`user_specific` and checked global only). Distinct from a genuine cold start.
+
+Response shape (canonical envelope):
+
+```json
+{
+  "error": {
+    "error_code": "ERR_SCHEMA_SCOPE_MISMATCH",
+    "message": "An active schema for entity_type \"<type>\" exists in \"user\" scope, but this call resolved schemas in \"global\" scope and found none there.",
+    "hint": "…retry update_schema_incremental with user_specific: true…",
+    "details": {
+      "entity_type": "<type>",
+      "guard_scope": "global",
+      "found_scope": "user"
+    }
+  }
+}
+```
+
+Remediation: retry with the `user_specific` value that matches `details.found_scope`
+(`true` for user, `false`/omit for global). The hint MUST NOT recommend
+`register_schema` — registering a second schema for a type that already has an
+active row is how the dual-active-row condition in #2374/#2378 arises.
 
 **`ERR_SCHEMA_MISSING_IDENTITY_CONFIG`** — raised when the existing schema for
 the target `entity_type` lacks both `canonical_name_fields` and

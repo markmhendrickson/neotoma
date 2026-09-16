@@ -2324,6 +2324,49 @@ export interface components {
       /** Format: date-time */
       timestamp?: string;
     };
+    /**
+     * @description Nested canonical error envelope returned by schema-registry tools
+     *     (`update_schema_incremental`, and matching MCP tool responses) on HTTP 200
+     *     when the call cannot proceed. Distinct from the flat `ErrorEnvelope` used
+     *     by most REST routes — callers must read `error.error_code`.
+     */
+    SchemaRegistryToolErrorResponse: {
+      error: {
+        /**
+         * @description `ERR_SCHEMA_SCOPE_MISMATCH` — an active schema exists for the
+         *     entity_type, but in a different scope than this call checked
+         *     (`details.guard_scope` vs `details.found_scope`). Hint directs
+         *     the caller to retry with the correct `user_specific` and MUST
+         *     NOT recommend `register_schema`.
+         *     `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` — no schema in any scope; hint
+         *     recommends `register_schema`.
+         * @enum {string}
+         */
+        error_code:
+          | "ERR_SCHEMA_SCOPE_MISMATCH"
+          | "ERR_NO_SCHEMA_FOR_ENTITY_TYPE"
+          | "ERR_SCHEMA_MISSING_IDENTITY_CONFIG";
+        message: string;
+        hint?: string;
+        details?: {
+          entity_type?: string;
+          /**
+           * @description Scope the existence guard checked (`global` or `user`).
+           * @enum {string}
+           */
+          guard_scope?: "global" | "user";
+          /**
+           * @description Scope where an active schema was found (scope-mismatch only).
+           * @enum {string}
+           */
+          found_scope?: "global" | "user";
+          /** @description Present on genuine cold-start (`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`). */
+          no_schema_for_entity_type?: boolean;
+        } & {
+          [key: string]: unknown;
+        };
+      };
+    };
     RecentConversationRelatedEntity: {
       entity_id?: string;
       entity_type?: string | null;
@@ -8018,33 +8061,42 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Schema updated */
+      /**
+       * @description Schema updated on success. On a structured schema-registry client
+       *     error (`ERR_SCHEMA_SCOPE_MISMATCH` or `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`)
+       *     the same 200 response carries the nested canonical envelope
+       *     `{ error: { error_code, message, hint, details } }` — matching the
+       *     MCP tool response so CLI/HTTP/MCP handlers can pattern-match the
+       *     code uniformly (see docs/reference/error_codes.md Schema Registry).
+       */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            success?: boolean;
-            entity_type?: string;
-            schema_version?: string;
-            fields_added?: string[];
-            fields_removed?: string[];
-            /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
-            canonical_name_fields?:
-              | (
-                  | string
-                  | {
-                      composite: string[];
-                    }
-                )[]
-              | null;
-            activated?: boolean;
-            migrated_existing?: boolean;
-            scope?: string;
-          } & {
-            [key: string]: unknown;
-          };
+          "application/json":
+            | ({
+                success?: boolean;
+                entity_type?: string;
+                schema_version?: string;
+                fields_added?: string[];
+                fields_removed?: string[];
+                /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
+                canonical_name_fields?:
+                  | (
+                      | string
+                      | {
+                          composite: string[];
+                        }
+                    )[]
+                  | null;
+                activated?: boolean;
+                migrated_existing?: boolean;
+                scope?: string;
+              } & {
+                [key: string]: unknown;
+              })
+            | components["schemas"]["SchemaRegistryToolErrorResponse"];
         };
       };
     };
