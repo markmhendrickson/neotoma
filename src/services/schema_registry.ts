@@ -470,8 +470,22 @@ export interface SchemaDefinition {
     /**
      * At least one of these fields must be present in the payload to suppress
      * the warning. If none are found the warning fires.
+     *
+     * Optional: a rule may instead declare `condition`. Exactly one of the two
+     * spellings should be present; a rule declaring neither, or declaring a
+     * condition the evaluator does not implement, emits a
+     * `STORE_WARNING_RULE_NOT_EVALUATED` warning and is otherwise inert. It
+     * never blocks the write — see `src/services/store_warning_rule.ts`.
      */
-    fields: string[];
+    fields?: string[];
+    /**
+     * Declarative spelling of the same idea. `missing_all_of` fires the
+     * warning when every named field is absent (undefined, null, or empty
+     * string) — the equivalent of `fields` with all entries missing.
+     */
+    condition?: {
+      missing_all_of?: string[];
+    };
     /** Human-readable warning message included in the response. */
     message: string;
   }>;
