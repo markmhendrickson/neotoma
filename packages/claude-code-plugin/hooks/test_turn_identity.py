@@ -193,6 +193,46 @@ class TurnIdentityTestCase(unittest.TestCase):
             len(seen), len(set(seen)), f"turn ids reused across turns: {seen}"
         )
 
+    def test_harness_id_cannot_squat_on_the_counter_namespace(self) -> None:
+        """A harness id shaped `t{n}` must not reuse an id the counter minted.
+
+        RED against `545acaf7`: harness ids were stored verbatim with no check
+        against the `t{n}` namespace `begin_turn` mints for itself, so the
+        sequence below produced ['t1', 't2', 't1', 't3'] — four turns, three
+        distinct ids, `t1` used twice.
+
+        This is the rewind defect reached from the other side: the counter no
+        longer goes backwards, but nothing stopped a harness id from landing on
+        an id it had already issued. Same silent merge, same absence of any
+        signal. The earlier uniqueness test used `harness-9`/`harness-10`, which
+        cannot collide by construction, so it never pinned this.
+        """
+        ids = [self.common.begin_turn("s", x)[0] for x in (None, None, "t1", None)]
+        self.assertEqual(
+            len(ids), len(set(ids)), f"harness id reused a counter id: {ids}"
+        )
+
+    def test_namespaced_harness_id_still_groups_the_turn(self) -> None:
+        """Namespacing must not break grouping — the turn still has to resolve.
+
+        A fix that rejected colliding harness ids outright would pass the test
+        above by losing real identity. This pins that the turn is still
+        openable and that later hooks in it read back the same value.
+        """
+        opened, source = self.common.begin_turn("s", "t1")
+        self.assertEqual(source, "harness")
+        self.assertNotEqual(opened, "t1", "must not sit in the counter namespace")
+        later, later_src = self.common.resolve_turn_id("s", None)
+        self.assertEqual(later, opened, "the turn must still group")
+        self.assertEqual(later_src, "state")
+        self.assertIs(self.common.turn_identity_fields(source)["turn_groupable"], True)
+
+    def test_harness_ids_outside_the_counter_namespace_are_verbatim(self) -> None:
+        """Namespacing applies only to the shape that collides."""
+        for supplied in ("real-turn-7", "turn-t1", "t1x", "T1"):
+            opened, _ = self.common.begin_turn("s", supplied)
+            self.assertEqual(opened, supplied, f"{supplied!r} must be used verbatim")
+
     def test_counter_turns_are_strictly_increasing(self) -> None:
         """Pins the direction, so a fix that avoided collision by wandering
         (random suffixes) would not pass.

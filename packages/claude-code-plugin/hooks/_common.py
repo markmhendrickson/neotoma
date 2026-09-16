@@ -120,6 +120,16 @@ UNGROUPED_TURN_ID = "ungrouped"
 #: Includes the historical shapes so old rows and new agree on one spelling.
 SENTINEL_TURN_IDS = frozenset({"", "none", "null", "unknown", "ungrouped", "-", "n/a"})
 
+#: The id shape `begin_turn` mints for itself. A harness id matching this would
+#: collide with the counter's own namespace, so it gets prefixed rather than
+#: used verbatim — see `begin_turn`.
+_COUNTER_ID = re.compile(r"t[0-9]+")
+
+#: Prefix that moves a harness id out of the counter's namespace. Kept distinct
+#: from the `t{n}` shape and stable, so the same harness id always maps to the
+#: same turn and `resolve_turn_id` still reads it back unchanged from state.
+_HARNESS_PREFIX = "h-"
+
 
 def _turn_state_path(session_id: str) -> Path:
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id) or "unknown"
@@ -171,6 +181,13 @@ def begin_turn(session_id: str, turn_id: str | None) -> tuple[str, str]:
     counter = int(previous.get("counter") or 0)
     if resolved and resolved.lower() not in SENTINEL_TURN_IDS:
         source = "harness"
+        # The `t{n}` namespace belongs to the counter. A harness id shaped like
+        # one would silently reuse an id this session already minted — the same
+        # coalescing defect as the rewind, reached from the other side. Namespace
+        # it instead of rejecting it: the harness id is real identity and must
+        # survive, it just may not squat on ids the counter owns.
+        if _COUNTER_ID.fullmatch(resolved):
+            resolved = f"{_HARNESS_PREFIX}{resolved}"
     else:
         counter += 1
         resolved = f"t{counter}"
@@ -258,7 +275,11 @@ def _write_turn_state_confirmed(session_id: str, state: dict[str, Any]) -> bool:
     """
     _write_turn_state(session_id, state)
     stored = _read_turn_state(session_id)
-    return bool(stored) and stored.get("turn_id") == state.get("turn_id")
+    # Compare every field, not just `turn_id`: a partially-written or corrupt
+    # state whose `turn_id` happens to match would otherwise confirm, and the
+    # counter it carries is what the NEXT turn reads. Confirming the field you
+    # care about is not the same as confirming the write.
+    return stored == state
 
 
 def harness_provenance(extra: dict[str, Any] | None = None) -> dict[str, Any]:
