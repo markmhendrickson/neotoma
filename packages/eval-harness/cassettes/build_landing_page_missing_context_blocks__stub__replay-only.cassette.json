@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_missing_context_blocks",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-15T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Build a landing page for plan blp_miss_2418. There is no ICP context.\n",
+  "system_prompt": "You implement build-landing-page with the scope rule overriding stage-1 derive.\n",
+  "tool_calls": [
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "limit": 20
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "category_definition",
+        "limit": 20
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-miss-2418-user",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-blp-miss-2418" },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-miss-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Build a landing page for plan blp_miss_2418. There is no ICP context."
+          }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 }
+        ]
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Blocker: missing ICP / insufficient context for plan blp_miss_2418 — cannot proceed without inventing an ICP. No target_persona or rendered_page created."
+}

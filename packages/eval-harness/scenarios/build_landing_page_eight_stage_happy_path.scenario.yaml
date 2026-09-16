@@ -1,0 +1,314 @@
+meta:
+  id: build_landing_page_eight_stage_happy_path
+  description: >
+    Full happy path across the build-landing-page stage contract: each stage
+    stores ONE entity in a DECLARED field, reads it back, and links it PART_OF
+    the plan and REFERS_TO the upstream it consumed. Fails when a stage skips
+    its store, writes its payload to an undeclared field (which /store routes
+    to raw_fragments, leaving the snapshot without it), drops a stage link, or
+    RE-DERIVES one of the three upstream artifacts that belong to
+    /frame-product-argument instead of consuming it.
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - happy_path
+
+seed_strategy: generated
+source_pattern: "Synthetic build-landing-page stage-contract coverage for neotoma#2418 / ateles#1026."
+privacy_transform: "Fully synthetic product; no PII."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FIVE stages, spanning TWO skills. The id keeps "eight_stage" verbatim.
+#
+# markmhendrickson/ateles#1026 (head 57494466) DECOMPOSED the skill. The ICP,
+# the incumbent, and the chronic/acute pain moved upstream to
+# `/frame-product-argument`; `/build-landing-page` now runs five stages and
+# CONSUMES those three:
+#
+#   upstream  target_persona          ICP + anti-profile          ─┐ owned by
+#   upstream  research_finding        incumbent and its defects    ├ /frame-
+#   upstream  analysis                chronic vs acute pain       ─┘ product-argument
+#   1         rendered_page_template  template
+#   2         cta + specification     CTA and content spec
+#   3         research_finding        best-practice research
+#   4         analysis + design_system input inventory and design system
+#   5         rendered_page           build
+#
+# The three upstream artifacts are SEEDED here, not produced by the run: the
+# skill's own text says "If any is missing, run /frame-product-argument first.
+# Do not derive them here." So this scenario asserts they are consumed and NOT
+# re-created — re-deriving an argument inside the surface is the failure that
+# makes two surfaces argue differently for the same product.
+#
+# The id is unchanged because it is the qa unlock contract named on
+# ateles#1026; renaming it would silently break that reference. Whether six
+# scenarios still covers five stages across two skills is Phoenicurus's call,
+# not this file's — the set was re-pointed, deliberately not expanded.
+#
+# Two types appear twice (research_finding upstream + stage 3; analysis
+# upstream + stage 4), so each instance carries its own declared title and
+# every count is scoped by it — a bare per-type count cannot tell them apart.
+# ─────────────────────────────────────────────────────────────────────────────
+
+seed_entities:
+  - entity_type: plan
+    title: "blp_hp_2418"
+  # ── Settled upstream, from /frame-product-argument. Consumed, never re-derived.
+  - entity_type: target_persona
+    name: "blp_hp_2418"
+    archetype: "finance ops lead at a services firm"
+    core_jtbd: "close the month without chasing spreadsheets"
+    messaging_bad: "anti-profile: controllers who already run an ERP"
+  - entity_type: research_finding
+    title: "blp_hp_2418 incumbent"
+    subject: "What the ICP uses now and how it fails"
+    content: "A shared spreadsheet plus month-end email threads. It fails at handoff: no record of who changed a figure or why."
+  - entity_type: analysis
+    title: "blp_hp_2418 pain"
+    summary: "Chronic pain leads: the untracked correction. Acute (a blown close) is the trigger, not the wedge."
+
+system_prompt: >
+  You are executing the build-landing-page skill's entity contract against
+  Neotoma, for synthetic product run token blp_hp_2418.
+
+  The argument comes from elsewhere. The ICP (target_persona), the incumbent
+  (research_finding "blp_hp_2418 incumbent"), and the chronic/acute pain
+  (analysis "blp_hp_2418 pain") are already settled by
+  /frame-product-argument and are seeded. CONSUME them — retrieve and read
+  them. Do NOT derive them here and do NOT store your own versions: a page is
+  a surface, and deriving the argument inside the surface is how two surfaces
+  end up making different arguments for the same product.
+
+  Then run the five stages of this skill, one entity each:
+    1 rendered_page_template  name  "blp_hp_2418"
+    2 cta                     name  "blp_hp_2418"
+      specification           title "blp_hp_2418"
+    3 research_finding        title "blp_hp_2418 best practice"
+    4 analysis                title "blp_hp_2418 input inventory"
+      design_system  design_system_name "blp_hp_2418"
+    5 rendered_page           title "blp_hp_2418"
+
+  Per stage: check upstream, write only DECLARED fields, read the write back
+  and assert the field you wrote holds the value you wrote, then link it
+  PART_OF the plan and REFERS_TO each upstream entity it consumed. A 2xx and a
+  success:true are not evidence. Stop the run if a stage cannot be verified.
+
+  Category reinforcement is a standing CONSTRAINT applied at the template,
+  spec and build stages — it is not a stage and writes no entity of its own.
+
+user_prompt: |
+  Run build-landing-page for synthetic product run token blp_hp_2418. The argument is already settled — consume it and execute the skill's stages.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # ── The three upstream artifacts survive and still read as settled.
+  - type: entity.exists
+    entity_type: "target_persona"
+    where:
+      name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "research_finding"
+    where:
+      title: "blp_hp_2418 incumbent"
+  - type: entity.exists
+    entity_type: "analysis"
+    where:
+      title: "blp_hp_2418 pain"
+
+  # ── ...and were CONSUMED, not re-derived. One each, and no second copy
+  # under any other name (a re-derive renames rather than reusing).
+  - type: entity.count
+    entity_type: "target_persona"
+    op: "eq"
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: target_persona
+    op: "eq"
+    value: 0
+  - type: entity.count
+    entity_type: "research_finding"
+    where:
+      title: "blp_hp_2418 incumbent"
+    op: "eq"
+    value: 1
+  - type: entity.count
+    entity_type: "analysis"
+    where:
+      title: "blp_hp_2418 pain"
+    op: "eq"
+    value: 1
+  # The agent actually read them rather than assuming them.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: target_persona
+    op: "gte"
+    value: 1
+
+  # ── Each of this skill's five stages stored its entity in a DECLARED field.
+  - type: entity.exists
+    entity_type: "rendered_page_template"
+    where:
+      name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "cta"
+    where:
+      name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "specification"
+    where:
+      title: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "research_finding"
+    where:
+      title: "blp_hp_2418 best practice"
+  - type: entity.exists
+    entity_type: "analysis"
+    where:
+      title: "blp_hp_2418 input inventory"
+  - type: entity.exists
+    entity_type: "design_system"
+    where:
+      design_system_name: "blp_hp_2418"
+  - type: entity.exists
+    entity_type: "rendered_page"
+    where:
+      title: "blp_hp_2418"
+
+  # ── Each duplicated type holds exactly its two distinct instances, so a
+  # missing stage cannot hide behind the upstream one of the same type.
+  - type: entity.count
+    entity_type: "research_finding"
+    where:
+      title: "blp_hp_2418 best practice"
+    op: "eq"
+    value: 1
+  - type: entity.count
+    entity_type: "analysis"
+    where:
+      title: "blp_hp_2418 input inventory"
+    op: "eq"
+    value: 1
+  # One page — the build did not produce a second under another title.
+  - type: entity.count
+    entity_type: "rendered_page"
+    op: "eq"
+    value: 1
+
+  # ── Payloads are on the SNAPSHOT, not in raw_fragments. This is the
+  # contract's read-back clause expressed as an effect.
+  - type: snapshot.field_present
+    entity_type: "analysis"
+    where:
+      title: "blp_hp_2418 input inventory"
+    field: source_artifacts
+  - type: snapshot.field_present
+    entity_type: "rendered_page"
+    where:
+      title: "blp_hp_2418"
+    field: html_body
+
+  # ── PART_OF: each of this skill's stage entities -> plan, endpoint-scoped so
+  # a wrong-type or misdirected edge cannot hide behind an aggregate count.
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "rendered_page_template"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "cta"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "specification"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "research_finding"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "analysis"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "design_system"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "PART_OF"
+    source_entity_type: "rendered_page"
+    target_entity_type: "plan"
+    op: "gte"
+    value: 1
+
+  # ── REFERS_TO: the chain a later session walks instead of guessing which
+  # argument a page was built for. Stage 1 and stage 2 point back across the
+  # skill boundary into /frame-product-argument's artifacts.
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "rendered_page_template"
+    target_entity_type: "analysis"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "cta"
+    target_entity_type: "target_persona"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "specification"
+    target_entity_type: "rendered_page_template"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "research_finding"
+    target_entity_type: "target_persona"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "analysis"
+    target_entity_type: "specification"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "design_system"
+    target_entity_type: "analysis"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "rendered_page"
+    target_entity_type: "design_system"
+    op: "gte"
+    value: 1
+  - type: relationship.count
+    relationship_type: "REFERS_TO"
+    source_entity_type: "rendered_page"
+    target_entity_type: "specification"
+    op: "gte"
+    value: 1

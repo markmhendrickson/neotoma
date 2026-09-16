@@ -1,0 +1,60 @@
+meta:
+  id: build_landing_page_json_string_decision_register
+  description: >
+    Fail mode: treating a JSON-string ICP field as an object yields empty
+    persona markers (invented or blank). Marker values MARKER_ARCH /
+    MARKER_JTBD on the persona under blp_json_2418 prove parse-as-string.
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - json-string-icp
+
+seed_strategy: generated
+source_pattern: "build-landing-page stage-1 path-3 JSON-string decision (neotoma#2418)."
+privacy_transform: "Fully synthetic; no PII."
+
+seed_entities:
+  - entity_type: plan
+    title: blp_json_2418
+    body: '{"archetype":"MARKER_ARCH","core_jtbd":"MARKER_JTBD"}'
+
+system_prompt: >
+  You implement build-landing-page stage 1 path-3. Plan blp_json_2418
+  stores ICP as a JSON-encoded STRING in body — parse the string (do not
+  read it as an object). Project archetype and core_jtbd onto a
+  target_persona with name blp_json_2418. Persist conversation via store.
+
+user_prompt: |
+  Derive the ICP for plan blp_json_2418 from its decision body JSON string.
+  Store target_persona name=blp_json_2418 with the parsed archetype and
+  core_jtbd markers.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp_json_2418
+      archetype: MARKER_ARCH
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp_json_2418
+      core_jtbd: MARKER_JTBD
+  - type: snapshot.field_present
+    entity_type: target_persona
+    where:
+      name: blp_json_2418
+      archetype: MARKER_ARCH
+    field: archetype
+  - type: snapshot.field_present
+    entity_type: target_persona
+    where:
+      name: blp_json_2418
+      core_jtbd: MARKER_JTBD
+    field: core_jtbd

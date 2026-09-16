@@ -1,0 +1,86 @@
+meta:
+  id: build_landing_page_upstream_reuse_no_duplicate
+  description: >
+    Fail mode: stage 1 re-deriving ICP would create a second target_persona
+    under RUN blp_reuse_2418 (count > 1). Empty duplicate = pass.
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - upstream-reuse
+
+seed_strategy: generated
+source_pattern: "build-landing-page stage-1 upstream reuse (neotoma#2418)."
+privacy_transform: "Fully synthetic; no PII."
+
+seed_entities:
+  - entity_type: plan
+    title: blp_reuse_2418
+  - entity_type: target_persona
+    name: blp_reuse_2418
+    archetype: ExistingOpsLead
+    core_jtbd: Keep agent memory durable
+
+system_prompt: >
+  You implement build-landing-page. Isolation token blp_reuse_2418. A
+  target_persona with name blp_reuse_2418 already exists — retrieve and
+  REUSE it; do not store a second persona. You may store conversation
+  bookkeeping and later stages, but never a duplicate target_persona.
+
+user_prompt: |
+  Continue the landing page for plan blp_reuse_2418. Reuse the existing
+  target_persona named blp_reuse_2418; do not create another.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # Marker-scoped: the settled persona is still there, and still exactly one.
+  - type: entity.count
+    entity_type: target_persona
+    where:
+      name: blp_reuse_2418
+    op: eq
+    value: 1
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp_reuse_2418
+
+  # ...and UNSCOPED: no SECOND persona under any other name.
+  #
+  # The marker-scoped count above cannot fail on the re-derive this scenario
+  # exists to catch. A stage that re-decides a settled ICP does not reuse the
+  # old name — it writes "<product> ICP (revised)". Appending such a store to
+  # this cassette passed every marker-scoped assert. The scenario seeds exactly
+  # one persona and the cassette stores only conversation rows besides, so
+  # unscoped eq 1 is exactly "the seeded one, and nothing else".
+  - type: entity.count
+    entity_type: target_persona
+    op: eq
+    value: 1
+  # The settled fields were not overwritten by a re-derived variant.
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp_reuse_2418
+      core_jtbd: Keep agent memory durable
+
+  # Effect at the TOOL layer, independent of what a duplicate was named:
+  # reusing needs retrieve, never store.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: target_persona
+    op: eq
+    value: 0
+  # ...and the agent actually looked before deciding to reuse.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: target_persona
+    op: gte
+    value: 1

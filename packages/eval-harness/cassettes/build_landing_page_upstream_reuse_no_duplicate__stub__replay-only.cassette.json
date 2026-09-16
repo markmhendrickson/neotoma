@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_upstream_reuse_no_duplicate",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-15T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Continue the landing page for plan blp_reuse_2418. Reuse the existing\ntarget_persona named blp_reuse_2418; do not create another.\n",
+  "system_prompt": "You implement build-landing-page. Isolation token blp_reuse_2418.\n",
+  "tool_calls": [
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "limit": 20
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-reuse-2418-user",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-blp-reuse-2418" },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-reuse-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Continue the landing page for plan blp_reuse_2418. Reuse the existing target_persona named blp_reuse_2418; do not create another."
+          }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 }
+        ]
+      },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "Reused existing target_persona blp_reuse_2418 (no second persona stored)."
+}

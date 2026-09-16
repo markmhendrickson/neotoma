@@ -32,6 +32,8 @@ export interface AssertionContext {
    * and tool_result.matches.
    */
   toolCalls?: ToolCall[];
+  /** Scenario meta.id — used for authoring hints (e.g. isolation-scoped counts). */
+  scenarioId?: string;
 }
 
 interface EntitiesQueryResponse {
@@ -88,6 +90,107 @@ async function fetchRelationships(
   } catch {
     return [];
   }
+}
+
+/**
+ * Resolve entity_type for relationship endpoints. Prefers the fields already on
+ * the relationship row (`source_entity_type` / `target_entity_type`); falls
+ * back to LOOKING THE ENTITY UP by id when those fields are absent.
+ *
+ * Both paths are authoritative reads, not inference: an entity id has exactly
+ * one type, so a type learned from one row is a fact about that id wherever it
+ * appears. Where neither path resolves an id, the type stays UNKNOWN and the
+ * caller drops the edge — unknown must stay distinct from a conclusion, and
+ * the default branch of a safety-bearing classification has to be the
+ * restrictive one. Inferring a type for an unresolvable endpoint would be a
+ * guess presented as a verdict, and would hand back the false green the
+ * endpoint filter exists to close (neotoma#2418).
+ */
+async function resolveEndpointTypes(
+  ctx: AssertionContext,
+  rels: Array<Record<string, unknown>>
+): Promise<Map<string, string>> {
+  const typeById = new Map<string, string>();
+  const missing = new Set<string>();
+  for (const rel of rels) {
+    const sid = String(rel.source_entity_id ?? "");
+    const tid = String(rel.target_entity_id ?? "");
+    if (typeof rel.source_entity_type === "string" && sid) {
+      typeById.set(sid, rel.source_entity_type);
+    } else if (sid) {
+      missing.add(sid);
+    }
+    if (typeof rel.target_entity_type === "string" && tid) {
+      typeById.set(tid, rel.target_entity_type);
+    } else if (tid) {
+      missing.add(tid);
+    }
+  }
+  if (missing.size === 0) return typeById;
+
+  const listed = await fetchEntities(ctx);
+  for (const e of listed) {
+    const id = String(e.entity_id ?? e.id ?? "");
+    if (missing.has(id) && typeof e.entity_type === "string") {
+      typeById.set(id, e.entity_type);
+      missing.delete(id);
+    }
+  }
+  for (const id of [...missing]) {
+    try {
+      const res = await fetch(`${ctx.baseUrl}/entities/${encodeURIComponent(id)}`, {
+        method: "GET",
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as Record<string, unknown>;
+      if (typeof json.entity_type === "string") typeById.set(id, json.entity_type);
+    } catch {
+      // leave unresolved; filter will drop the edge
+    }
+  }
+  return typeById;
+}
+
+/** Filter relationships by optional source/target entity types. */
+export async function filterRelationshipsByEndpointTypes(
+  ctx: AssertionContext,
+  rels: Array<Record<string, unknown>>,
+  sourceEntityType?: string,
+  targetEntityType?: string
+): Promise<Array<Record<string, unknown>>> {
+  if (!sourceEntityType && !targetEntityType) return rels;
+  const typeById = await resolveEndpointTypes(ctx, rels);
+  return rels.filter((rel) => {
+    const sid = String(rel.source_entity_id ?? "");
+    const tid = String(rel.target_entity_id ?? "");
+    // FAIL CLOSED on an unresolved endpoint: `typeById.get` returns undefined,
+    // which never equals a requested type, so the edge is dropped rather than
+    // admitted. Stated explicitly because the safe behaviour here is load
+    // bearing and easy to "simplify" away.
+    if (sourceEntityType && typeById.get(sid) !== sourceEntityType) return false;
+    if (targetEntityType && typeById.get(tid) !== targetEntityType) return false;
+    return true;
+  });
+}
+
+const ISOLATION_HINT =
+  "Add where: { <declared isolation field>: … } — unscoped entity.count is not isolation-safe";
+
+function isolationWhereHint(
+  ctx: AssertionContext,
+  where: Record<string, unknown> | undefined,
+  predicate?: ExpectedAssertion
+): string {
+  if (where) return "";
+  if (!ctx.scenarioId || !/^build_landing_page_/.test(ctx.scenarioId)) return "";
+  // A DELIBERATE unscoped eq-0 / eq-1 is the stronger assertion, not the
+  // authoring defect: it is how a scenario catches an artifact invented under
+  // a name the marker cannot see (an agent inventing an ICP names it after the
+  // product, never after the run token). Hinting "add where" there would push
+  // an author to weaken the very assert that closes the evasion, so the hint
+  // is withheld for that shape and kept for everything else.
+  if (predicate?.op === "eq" && (predicate.value === 0 || predicate.value === 1)) return "";
+  return ` ${ISOLATION_HINT}`;
 }
 
 async function fetchObservations(
@@ -333,7 +436,7 @@ export async function evaluatePredicate(
         predicate,
         message: `Expected at least one entity of type ${typeLabel}${
           predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
-        }, found ${all.length}.`,
+        }, found ${all.length}.${isolationWhereHint(ctx, predicate.where, predicate)}`,
         expected: predicate,
         actual: all.map((e) => ({
           entity_type: e.entity_type,
@@ -355,7 +458,9 @@ export async function evaluatePredicate(
       if (compareNumber(entities.length, op, expected)) return null;
       return {
         predicate,
-        message: `Expected entity.count of "${predicate.entity_type}" ${op} ${expected}, got ${entities.length}.`,
+        message: `Expected entity.count of "${predicate.entity_type}"${
+          predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
+        } ${op} ${expected}, got ${entities.length}.${isolationWhereHint(ctx, predicate.where, predicate)}`,
         expected: { op, value: expected },
         actual: entities.length,
       };
@@ -378,12 +483,21 @@ export async function evaluatePredicate(
           ? [predicate.relationship_type]
           : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
-      const rels = lists.flat();
+      const rels = await filterRelationshipsByEndpointTypes(
+        ctx,
+        lists.flat(),
+        predicate.source_entity_type,
+        predicate.target_entity_type
+      );
       if (rels.length > 0) return null;
       const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
+      const endpoint =
+        predicate.source_entity_type || predicate.target_entity_type
+          ? ` source=${predicate.source_entity_type ?? "*"}→target=${predicate.target_entity_type ?? "*"}`
+          : "";
       return {
         predicate,
-        message: `Expected at least one ${label} relationship, got 0.`,
+        message: `Expected at least one ${label} relationship${endpoint}, got 0.`,
         expected: predicate,
         actual: rels,
       };
@@ -477,15 +591,29 @@ export async function evaluatePredicate(
           ? [predicate.relationship_type]
           : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
-      const rels = lists.flat();
+      const rels = await filterRelationshipsByEndpointTypes(
+        ctx,
+        lists.flat(),
+        predicate.source_entity_type,
+        predicate.target_entity_type
+      );
       const expected = typeof predicate.value === "number" ? predicate.value : 0;
       const op = predicate.op ?? "eq";
       if (compareNumber(rels.length, op, expected)) return null;
       const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
+      const endpoint =
+        predicate.source_entity_type || predicate.target_entity_type
+          ? ` source=${predicate.source_entity_type ?? "*"}→target=${predicate.target_entity_type ?? "*"}`
+          : "";
       return {
         predicate,
-        message: `Expected relationship.count of "${label}" ${op} ${expected}, got ${rels.length}.`,
-        expected: { op, value: expected },
+        message: `Expected relationship.count of "${label}"${endpoint} ${op} ${expected}, got ${rels.length}.`,
+        expected: {
+          op,
+          value: expected,
+          source_entity_type: predicate.source_entity_type,
+          target_entity_type: predicate.target_entity_type,
+        },
         actual: rels.length,
       };
     }
