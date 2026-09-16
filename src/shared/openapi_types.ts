@@ -7288,6 +7288,11 @@ export interface operations {
           max_hops?: number;
           /** @default true */
           include_entities?: boolean;
+          /**
+           * @description Maximum relationships to traverse and return. Bounds both the edge list and the entities hydrated from it. When more exist than the limit allows, the response sets `truncated: true` and carries `traversed_relationships` plus a narrowing hint.
+           * @default 200
+           */
+          limit?: number;
         };
       };
     };
