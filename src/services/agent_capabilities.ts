@@ -407,11 +407,11 @@ export function getAgentCapabilitiesSource(): string {
 export function enforceRelationshipTypeCapability(
   relationshipType: string,
   scope: "user" | "global",
-  ctx: AgentCapabilityContext
+  ctx: AgentCapabilityContext | null
 ): void {
   const op: AgentCapabilityOp = "register_relationship_type";
 
-  if (ctx.admitted && ctx.capabilities) {
+  if (ctx?.admitted && ctx.capabilities) {
     const matching = ctx.capabilities.filter((cap) => grantOpMatchesRequested(cap.op, op));
     const types = matching.flatMap((cap) => cap.relationship_types ?? []);
     const coversType = types.includes("*") || types.includes(relationshipType);
@@ -447,31 +447,13 @@ export function enforceRelationshipTypeCapability(
     return;
   }
 
-  // Unadmitted: same default-deny posture as enforceAgentCapability, so this
-  // op is not stricter than the rest of the model during rollout.
-  const enforcedTier =
-    ctx.tier === "hardware" || ctx.tier === "software" || ctx.tier === "operator_attested";
-  if (!enforcedTier) return;
-  if (!isAgentDefaultDenyEnabled()) return;
-
-  const err = new AgentCapabilityError({
+  // Governance registration is always grant-gated, independent of rollout flags.
+  throw new AgentCapabilityError({
     op,
     entityType: relationshipType,
-    agentLabel: ctx.agentLabel,
+    agentLabel: ctx?.agentLabel ?? "unattributed",
     hint:
-      "No active agent_grant matches this AAuth identity and " +
-      "NEOTOMA_AGENT_DEFAULT_DENY is enabled. Create a grant in " +
-      "Inspector → Agents → Grants for this agent or unset the env var.",
+      "Relationship type registration requires an active agent_grant with the " +
+      "register_relationship_type capability. Global scope additionally requires global permission.",
   });
-  logger.warn(
-    JSON.stringify({
-      event: "agent_capability_denied",
-      reason: "default_deny_no_match",
-      op,
-      relationship_type: relationshipType,
-      agent_label: ctx.agentLabel,
-      admitted: false,
-    })
-  );
-  throw err;
 }

@@ -34,6 +34,7 @@ import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyUnavailableError } from "./services/instance_policy.js";
@@ -9077,6 +9078,12 @@ async function handleStorePost(
         },
       });
     }
+    if (error instanceof UnregisteredRelationshipTypeError) {
+      return sendError(res, error.statusCode, error.code, error.message, {
+        relationship_type: error.relationshipType,
+        hint: error.hint,
+      });
+    }
     logError("APIError:store", req, error);
     const message = error instanceof Error ? error.message : "Failed to store payload";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
@@ -9775,6 +9782,12 @@ app.post("/create_relationship", async (req, res) => {
     });
     return res.json(relationship);
   } catch (error) {
+    if (error instanceof UnregisteredRelationshipTypeError) {
+      return sendError(res, error.statusCode, error.code, error.message, {
+        relationship_type: error.relationshipType,
+        hint: error.hint,
+      });
+    }
     logError("RelationshipCreationError:create_relationship", req, error);
     return sendError(
       res,
@@ -11326,9 +11339,7 @@ app.post("/register_relationship_type", async (req, res) => {
       const { enforceRelationshipTypeCapability, contextFromAgentIdentity } =
         await import("./services/agent_capabilities.js");
       const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
-      if (ctx) {
-        enforceRelationshipTypeCapability(registration.relationship_type, registration.scope, ctx);
-      }
+      enforceRelationshipTypeCapability(registration.relationship_type, registration.scope, ctx);
     }
 
     const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =

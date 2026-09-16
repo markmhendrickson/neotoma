@@ -139,6 +139,44 @@ export class RelationshipsService {
     }
   }
 
+  /** Shared by MCP singular/batch, REST and store before the first edge write. */
+  private async assertAcyclicWrite(params: {
+    relationship_type: string;
+    source_entity_id: string;
+    target_entity_id: string;
+    user_id: string;
+  }): Promise<void> {
+    const { isRelationshipTypeAcyclic } = await import("./relationship_types/registry.js");
+    if (!(await isRelationshipTypeAcyclic(params.relationship_type, params.user_id))) return;
+    const edges = await this.getRelationshipsByType(
+      params.relationship_type,
+      false,
+      params.user_id
+    );
+    const graph = new Map<string, string[]>();
+    for (const edge of edges) {
+      const targets = graph.get(edge.source_entity_id) ?? [];
+      targets.push(edge.target_entity_id);
+      graph.set(edge.source_entity_id, targets);
+    }
+    const visited = new Set<string>();
+    const stack = [params.target_entity_id];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (node === params.source_entity_id) {
+        throw new Error(
+          `Creating this relationship would create a cycle among "${params.relationship_type}" edges.`
+        );
+      }
+      if (visited.has(node)) continue;
+      if (visited.size >= 1000) {
+        throw new Error("Acyclic relationship check exceeded its traversal bound; write refused.");
+      }
+      visited.add(node);
+      for (const next of graph.get(node) ?? []) if (!visited.has(next)) stack.push(next);
+    }
+  }
+
   /**
    * Create relationship (creates observation and snapshot)
    */
@@ -153,6 +191,7 @@ export class RelationshipsService {
   }): Promise<RelationshipSnapshot> {
     enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
     await this.assertRegisteredType(params.relationship_type, params.user_id);
+    await this.assertAcyclicWrite(params);
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;
     let sourceId = params.source_id || null;

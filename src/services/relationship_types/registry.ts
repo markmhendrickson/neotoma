@@ -191,6 +191,26 @@ function toRegistration(row: RegistryRow): RelationshipTypeRegistration {
 }
 
 /**
+ * Recognizes the storage layer's "row already exists" shape, so a racing
+ * duplicate INSERT (see the UNIQUE index on `(relationship_type, scope,
+ * user_id, registry_version)`, `sqlite_client.ts` `idx_rel_type_registry_unique`)
+ * can be absorbed as an idempotent no-op instead of surfacing as a 500. Same
+ * matching strategy as `schema_registry_bootstrap.ts`'s
+ * `isDuplicateRegistrationError`, which the doc on `register()` above notes is
+ * dead code THERE because `schema_registry` carries no such constraint — here
+ * the constraint is real, so this check actually fires.
+ */
+function isDuplicateRegistryRowError(error: unknown): boolean {
+  const message = (error as { message?: string } | undefined)?.message ?? "";
+  return (
+    message.includes("UNIQUE constraint") ||
+    message.includes("duplicate key") ||
+    message.includes("unique constraint") ||
+    message.includes("already exists")
+  );
+}
+
+/**
  * Reduce an append-only row set to the effective registration per
  * `(relationship_type, scope, user_id)`: the LATEST row by `created_at`, then
  * by `registry_version` as a deterministic tiebreak when two rows share a
@@ -300,6 +320,17 @@ export class RelationshipTypeRegistryService {
       }
     }
 
+    // Tenant metadata must never remove a global structural protection. Also
+    // preserve an existing local protection when re-registering metadata.
+    const global = (await this.resolveAll()).find((r) => r.relationship_type === relationshipType);
+    if ((exact?.acyclic === true || global?.acyclic === true) && params.acyclic !== true) {
+      throw new RelationshipTypeRegistrationError({
+        code: "relationship_type_protection_narrowing",
+        message: `Cannot remove acyclic protection from "${relationshipType}".`,
+        hint: "Preserve acyclic: true when re-registering this relationship type.",
+      });
+    }
+
     const definition: RelationshipTypeDefinition = {
       ...(params.description !== undefined ? { description: params.description } : {}),
       ...(params.source_entity_types ? { source_entity_types: params.source_entity_types } : {}),
@@ -329,6 +360,31 @@ export class RelationshipTypeRegistryService {
 
     const { error } = await db.from(RELATIONSHIP_TYPE_REGISTRY_TABLE).insert(row);
     if (error) {
+      // Idempotency guard (#2389 failure mode: the same registration racing
+      // itself must never surface as a loud failure). `id` and
+      // `registry_version` are both derived from a millisecond timestamp, so
+      // two calls that land in the same millisecond for the same
+      // (relationship_type, scope, user_id) collide against the UNIQUE index
+      // on that tuple (see sqlite_client.ts `idx_rel_type_registry_unique`).
+      // That collision means "this exact registration already happened" —
+      // the correct response is to hand back the row that is already there,
+      // not to throw. A genuinely different registration (different
+      // definition/state) arriving in the same millisecond is vanishingly
+      // unlikely and, if it happens, the effective row is still resolved
+      // deterministically by `resolveAll`'s `latestPerKey` the moment a
+      // subsequent millisecond ticks over.
+      if (isDuplicateRegistryRowError(error)) {
+        const existing = await db
+          .from(RELATIONSHIP_TYPE_REGISTRY_TABLE)
+          .select(
+            "id, relationship_type, registry_version, definition, state, created_at, created_by, user_id, scope, metadata"
+          )
+          .eq("id", row.id)
+          .single();
+        if (existing.data) {
+          return toRegistration(existing.data as RegistryRow);
+        }
+      }
       throw new RelationshipTypeRegistrationError({
         code: "relationship_type_registration_failed",
         message: `Failed to register relationship type "${relationshipType}": ${error.message}`,
@@ -359,16 +415,23 @@ export class RelationshipTypeRegistryService {
    * resolvable by user B; a global type is resolvable by both.
    */
   private async resolveAll(userId?: string): Promise<RelationshipTypeRegistration[]> {
-    const base = db
+    const columns =
+      "id, relationship_type, registry_version, definition, state, created_at, created_by, user_id, scope, metadata";
+    // Separate parameterized queries also work on SQLite, whose OR grammar
+    // does not implement nested PostgREST and(). Never interpolate tenant IDs.
+    const globalRows = await db
       .from(RELATIONSHIP_TYPE_REGISTRY_TABLE)
-      .select(
-        "id, relationship_type, registry_version, definition, state, created_at, created_by, user_id, scope, metadata"
-      );
-    const query = userId
-      ? base.or(`scope.eq.global,and(scope.eq.user,user_id.eq.${userId})`)
-      : base.eq("scope", "global");
-
-    const { data, error } = await query;
+      .select(columns)
+      .eq("scope", "global");
+    const userRows = userId
+      ? await db
+          .from(RELATIONSHIP_TYPE_REGISTRY_TABLE)
+          .select(columns)
+          .eq("scope", "user")
+          .eq("user_id", userId)
+      : { data: [], error: null };
+    const data = [...(globalRows.data ?? []), ...(userRows.data ?? [])];
+    const error = globalRows.error ?? userRows.error;
     if (error) {
       throw new RelationshipTypeRegistrationError({
         code: "relationship_type_registry_unavailable",

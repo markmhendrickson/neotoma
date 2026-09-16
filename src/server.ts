@@ -60,6 +60,7 @@ import {
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
+import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
   extractTextFromBuffer,
@@ -3388,84 +3389,6 @@ export class NeotomaServer {
     // Use authenticated user_id
     const userId = this.getAuthenticatedUserId();
 
-    // ── CYCLE CHECK (#1972 / G25) ──────────────────────────────────────────
-    //
-    // This check used to be type-blind, tenant-blind and unbounded, and it
-    // was on exactly one of four write paths. All four properties were wrong:
-    //
-    //   - TYPE-BLIND: it built ONE graph from EVERY edge of EVERY type and
-    //     refused any edge closing a loop in that union. Types that legitimately
-    //     coexist on the same entities — a work-model FOLLOWS chain and an
-    //     authority-model ownership fan-in, say — would refuse each other
-    //     though no single-type cycle existed.
-    //   - TENANT-BLIND: the select carried no user_id filter, so on a shared
-    //     instance one tenant's edges could refuse another tenant's write.
-    //   - UNBOUNDED: every create_relationship call loaded the entire
-    //     relationship_snapshots table and walked it with a recursive closure
-    //     rebuilt per call — a latent denial-of-service surface independent of
-    //     correctness.
-    //   - INCONSISTENT: createRelationships (plural), store's relationship leg
-    //     and the REST path did not check at all, so the same edge was refused
-    //     through one door and accepted through three. A check that holds on
-    //     one door of four is not an invariant.
-    //
-    // It is now OPT-IN PER TYPE via the registry's `acyclic` flag, scoped to
-    // edges of that type and that tenant, and depth-bounded. `DEPENDS_ON` and
-    // `PART_OF` carry the flag and keep the protection; a type whose semantics
-    // permit cycles does not, because refusing those is not protection.
-    {
-      const { isRelationshipTypeAcyclic } =
-        await import("./services/relationship_types/registry.js");
-      if (await isRelationshipTypeAcyclic(parsed.relationship_type, userId)) {
-        const { data: sameTypeEdges } = await db
-          .from("relationship_snapshots")
-          .select("source_entity_id, target_entity_id")
-          .eq("relationship_type", parsed.relationship_type)
-          .eq("user_id", userId);
-
-        const graph = new Map<string, Set<string>>();
-        for (const rel of (sameTypeEdges ?? []) as Array<{
-          source_entity_id: string;
-          target_entity_id: string;
-        }>) {
-          if (!graph.has(rel.source_entity_id)) graph.set(rel.source_entity_id, new Set());
-          graph.get(rel.source_entity_id)!.add(rel.target_entity_id);
-        }
-
-        // Iterative, visited-guarded, and depth-bounded. The bound is a
-        // circuit-breaker, not a semantic limit: a hierarchy deeper than this
-        // is pathological, and traversing it on every write is the cost the
-        // unbounded version imposed on everyone.
-        const MAX_CYCLE_CHECK_DEPTH = 1000;
-        const target = parsed.target_entity_id;
-        const source = parsed.source_entity_id;
-        const visited = new Set<string>();
-        const stack: string[] = [target];
-        let closesLoop = target === source;
-        let steps = 0;
-        while (stack.length > 0 && !closesLoop && steps < MAX_CYCLE_CHECK_DEPTH) {
-          steps++;
-          const node = stack.pop()!;
-          if (node === source) {
-            closesLoop = true;
-            break;
-          }
-          if (visited.has(node)) continue;
-          visited.add(node);
-          for (const next of graph.get(node) ?? []) stack.push(next);
-        }
-
-        if (closesLoop) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            `Creating this relationship would create a cycle among "${parsed.relationship_type}" ` +
-              `edges, and that type is registered as acyclic. Register the type without ` +
-              `acyclic: true, or use a type whose semantics permit cycles.`
-          );
-        }
-      }
-    }
-
     try {
       // Create a source for this relationship
       const { data: source, error: sourceError } = await db
@@ -3505,6 +3428,13 @@ export class NeotomaServer {
         created_at: snapshot.last_observation_at,
       });
     } catch (error) {
+      if (error instanceof UnregisteredRelationshipTypeError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          relationship_type: error.relationshipType,
+          hint: error.hint,
+        });
+      }
       // Check for specific error types
       if (error instanceof McpError) {
         throw error;
@@ -4955,9 +4885,7 @@ export class NeotomaServer {
         await import("./services/agent_capabilities.js");
       const { getCurrentAgentIdentity } = await import("./services/request_context.js");
       const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
-      if (ctx) {
-        enforceRelationshipTypeCapability(parsed.relationship_type, parsed.scope, ctx);
-      }
+      enforceRelationshipTypeCapability(parsed.relationship_type, parsed.scope, ctx);
     }
 
     const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =
@@ -5704,6 +5632,14 @@ export class NeotomaServer {
     const { db } = await import("./db.js");
     const { detectFlatPackedRows, FlatPackedRowsError } =
       await import("./services/flat_packed_detection.js");
+
+    // Refuse unknown edge types before any entity/source mutation, matching REST.
+    if (commit && relationships?.length) {
+      const { relationshipsService } = await import("./services/relationships.js");
+      for (const type of new Set(relationships.map((rel) => rel.relationship_type))) {
+        await relationshipsService.assertRegisteredType(type, userId);
+      }
+    }
 
     // Reject flat-packed rows early so MCP clients get a clear error instead
     // of a single corrupted entity snapshot.
