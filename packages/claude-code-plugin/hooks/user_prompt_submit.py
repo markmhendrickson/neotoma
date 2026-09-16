@@ -103,8 +103,10 @@ def main() -> int:
     prompt = payload.get("prompt") or payload.get("user_prompt") or ""
     session_id = payload.get("session_id") or "claude-code-unknown"
     # #2440: this hook marks the turn boundary; later hooks read what it sets.
-    turn_id = begin_turn(session_id, payload.get("turn_id"))
-    turn_source = "harness" if payload.get("turn_id") else "counter"
+    # Source comes from begin_turn, not re-derived from the payload: only
+    # begin_turn knows whether the state write was confirmed, so a caller
+    # re-deriving it would label an ungrouped row as groupable.
+    turn_id, turn_source = begin_turn(session_id, payload.get("turn_id"))
 
     client = get_client()
     if client is None:
@@ -142,6 +144,7 @@ def main() -> int:
                         "sender_kind": "user",
                         "content": prompt,
                         "turn_key": f"{session_id}:{turn_id}",
+                        **turn_identity_fields(turn_source),
                         **harness_provenance({"hook_event": "UserPromptSubmit"}),
                     }
                 ],

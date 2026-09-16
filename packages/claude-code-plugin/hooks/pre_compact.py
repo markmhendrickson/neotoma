@@ -51,6 +51,7 @@ def main() -> int:
         "trigger": trigger,
         "turn_key": f"{session_id}:{turn_id}",
         "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        **turn_identity_fields(turn_source),
         **harness_provenance({"hook_event": "PreCompact"}),
     }
 

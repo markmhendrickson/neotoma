@@ -126,7 +126,7 @@ def _turn_state_path(session_id: str) -> Path:
     return _hook_state_dir() / f"turn-{safe}.json"
 
 
-def begin_turn(session_id: str, turn_id: str | None) -> str:
+def begin_turn(session_id: str, turn_id: str | None) -> tuple[str, str]:
     """Open a new turn and persist it for the rest of this turn's hooks.
 
     Called from `UserPromptSubmit`, which is the only hook that genuinely marks
@@ -136,25 +136,56 @@ def begin_turn(session_id: str, turn_id: str | None) -> str:
     A harness-supplied `turn_id` is preferred and used verbatim. Otherwise a
     counter increments per session — deliberately NOT a timestamp, so two
     calls a millisecond apart cannot land in different turns.
+
+    THE COUNTER IS MONOTONIC PER SESSION, INDEPENDENT OF THE DISPLAYED ID.
+    It counts turns opened in this session, not turns that happened to be
+    counter-named. Deriving it from the displayed id instead (`int(resolved[1:])`
+    when counter-sourced, `0` otherwise) reset it to zero on every harness turn,
+    so the next counter mint reissued `t1` and silently COALESCED two unrelated
+    turns onto one `turn_key`. That is the same fabricated-identity class this
+    module exists to close, one layer down — and a reused id is worse than a
+    fabricated one: a fabricated id splits one turn into many, which reads as
+    implausibly low calls-per-turn; a reused id merges many turns into one,
+    which reads as a plausible number that is simply wrong.
+
+    RETURNS A GROUPABLE ID ONLY WHEN THE STATE WRITE IS CONFIRMED BY READING IT
+    BACK. `UserPromptSubmit` stamps `{session}:{returned}` on the user message
+    while every later hook in the turn reads the state file. If the write did
+    not land, those disagree — the opening row claims a groupable turn that no
+    other row in that turn shares. So absence on this path gets the same single
+    spelling as everywhere else: `UNGROUPED_TURN_ID`. A write that reports
+    success has not necessarily happened; the absence of an exception is not
+    evidence that it did.
+
+    Returns `(turn_id, source)` where `source` is one of `harness`, `counter`
+    or `unavailable` — matching `resolve_turn_id`. The source is returned
+    rather than left for the caller to re-derive from the payload, because a
+    caller re-deriving it cannot see that the write failed and would label an
+    ungrouped row as groupable.
     """
     resolved = (turn_id or "").strip()
+    previous = _read_turn_state(session_id)
+    # High-water mark of counter ids MINTED in this session. A harness turn
+    # carries it forward untouched; it is never recomputed from the displayed
+    # id, which is what let a harness turn reset it to zero.
+    counter = int(previous.get("counter") or 0)
     if resolved and resolved.lower() not in SENTINEL_TURN_IDS:
         source = "harness"
     else:
-        previous = _read_turn_state(session_id)
-        counter = int(previous.get("counter") or 0) + 1
+        counter += 1
         resolved = f"t{counter}"
         source = "counter"
-    _write_turn_state(
-        session_id,
-        {
-            "session_id": session_id,
-            "turn_id": resolved,
-            "source": source,
-            "counter": int(resolved[1:]) if source == "counter" else 0,
-        },
-    )
-    return resolved
+    state = {
+        "session_id": session_id,
+        "turn_id": resolved,
+        "source": source,
+        "counter": counter,
+    }
+    if not _write_turn_state_confirmed(session_id, state):
+        # Fail closed on the field carrying the meaning: say the turn is
+        # ungrouped rather than hand back an id the rest of the turn cannot see.
+        return UNGROUPED_TURN_ID, "unavailable"
+    return resolved, source
 
 
 def resolve_turn_id(session_id: str, turn_id: str | None) -> tuple[str, str]:
@@ -180,10 +211,16 @@ def turn_identity_fields(turn_source: str) -> dict[str, Any]:
 
     Without this a consumer cannot distinguish a real turn from a fallback,
     which is the property that made #2440 invisible.
+
+    `harness`, `state` and `counter` are all real turn identity — an id the
+    turn agrees on. `counter` is what `begin_turn` mints and confirms for the
+    opening row; the later rows of the same turn read it back as `state`.
+    Only `unavailable` is ungroupable, and it is reached solely when the
+    identity could not be established or confirmed.
     """
     return {
         "turn_id_source": turn_source,
-        "turn_groupable": turn_source in ("harness", "state"),
+        "turn_groupable": turn_source in ("harness", "state", "counter"),
     }
 
 
@@ -208,6 +245,20 @@ def _write_turn_state(session_id: str, state: dict[str, Any]) -> None:
         # Best-effort, like every other hook write: a state failure degrades
         # grouping to `unavailable`, which is legible, and never breaks a turn.
         log("debug", f"turn state write failed: {exc}")
+
+
+def _write_turn_state_confirmed(session_id: str, state: dict[str, Any]) -> bool:
+    """Write the turn state and READ IT BACK, returning whether it landed.
+
+    The caller needs to know whether later hooks in this turn will be able to
+    see this turn, and only a read-back answers that. A silent write failure
+    and a successful write are indistinguishable from the absence of an
+    exception alone — and this path has both swallow-and-continue error
+    handling and a state directory that may not be writable.
+    """
+    _write_turn_state(session_id, state)
+    stored = _read_turn_state(session_id)
+    return bool(stored) and stored.get("turn_id") == state.get("turn_id")
 
 
 def harness_provenance(extra: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -55,6 +55,7 @@ def main() -> int:
         "content": final_text,
         "turn_key": f"{session_id}:{turn_id}:assistant",
         "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        **turn_identity_fields(turn_source),
         **harness_provenance({"hook_event": "Stop"}),
     }
 

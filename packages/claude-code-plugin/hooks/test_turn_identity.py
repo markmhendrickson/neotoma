@@ -59,7 +59,7 @@ class TurnIdentityTestCase(unittest.TestCase):
         separates a working turn id from a per-call timestamp.
         """
         session = "session-abc"
-        turn = self.common.begin_turn(session, None)
+        turn, _ = self.common.begin_turn(session, None)
 
         first, first_src = self.common.resolve_turn_id(session, None)
         second, second_src = self.common.resolve_turn_id(session, None)
@@ -79,9 +79,9 @@ class TurnIdentityTestCase(unittest.TestCase):
         wrong, so this pins the other side.
         """
         session = "session-abc"
-        first = self.common.begin_turn(session, None)
+        first, _ = self.common.begin_turn(session, None)
         calls_in_first = self.common.resolve_turn_id(session, None)[0]
-        second = self.common.begin_turn(session, None)
+        second, _ = self.common.begin_turn(session, None)
         calls_in_second = self.common.resolve_turn_id(session, None)[0]
 
         self.assertNotEqual(first, second, "a new turn must get a new id")
@@ -94,7 +94,7 @@ class TurnIdentityTestCase(unittest.TestCase):
         A 13-digit millisecond value is what made every call unique. If one
         ever reappears here, the defect is back regardless of what else passes.
         """
-        turn = self.common.begin_turn("session-abc", None)
+        turn, _ = self.common.begin_turn("session-abc", None)
         self.assertFalse(
             turn.isdigit() and len(turn) == 13,
             f"turn id {turn!r} is a millisecond timestamp — the #2440 shape",
@@ -103,7 +103,7 @@ class TurnIdentityTestCase(unittest.TestCase):
     def test_sessions_do_not_share_turn_state(self) -> None:
         self.common.begin_turn("session-one", None)
         self.common.begin_turn("session-one", None)
-        other = self.common.begin_turn("session-two", None)
+        other, _ = self.common.begin_turn("session-two", None)
         self.assertEqual(other, "t1", "each session counts its own turns")
 
     # --- Absence is legible, not fabricated ------------------------------
@@ -152,9 +152,147 @@ class TurnIdentityTestCase(unittest.TestCase):
         self.assertEqual(source, "harness")
 
     def test_harness_turn_id_survives_into_state(self) -> None:
-        opened = self.common.begin_turn("session-abc", "real-turn-7")
+        opened, _ = self.common.begin_turn("session-abc", "real-turn-7")
         self.assertEqual(opened, "real-turn-7")
         self.assertEqual(self.common.resolve_turn_id("session-abc", None), ("real-turn-7", "state"))
+
+    # --- The counter is monotonic, not derived from the displayed id ------
+
+    def test_counter_survives_harness_turn(self) -> None:
+        """A harness turn must not rewind the session counter.
+
+        RED against the pre-fix line `"counter": int(resolved[1:]) if source
+        == "counter" else 0`: a harness turn stored `counter: 0`, so the next
+        counter mint computed `0 + 1` and reissued `t1` — the id turn 1
+        already used. Actual pre-fix sequence: t1, t2, harness-9, **t1**.
+
+        A reused id is worse than a fabricated one. The original #2440 defect
+        split one turn into many, which shows up as an implausible 1.00
+        calls-per-turn. This one MERGES unrelated turns into one, which shows
+        up as a plausible number that is simply too low, with no signal at all.
+        """
+        self.common.begin_turn("s", None)  # t1
+        self.common.begin_turn("s", None)  # t2
+        self.common.begin_turn("s", "harness-9")
+        third, _ = self.common.begin_turn("s", None)
+        self.assertEqual(third, "t3", "harness turn must not rewind the counter")
+
+    def test_ids_never_repeat_across_mixed_harness_and_counter_turns(self) -> None:
+        """The general property the case above is one instance of.
+
+        Asserting only that `begin_turn` returns an id, or that the id is
+        non-empty, would have passed throughout this defect's life — the ids
+        were always well-formed. Only uniqueness across turns separates the
+        broken code from the fixed code.
+        """
+        seen: list[str] = []
+        for supplied in (None, None, "harness-9", None, "harness-10", None, None):
+            turn, _ = self.common.begin_turn("s", supplied)
+            seen.append(turn)
+        self.assertEqual(
+            len(seen), len(set(seen)), f"turn ids reused across turns: {seen}"
+        )
+
+    def test_counter_turns_are_strictly_increasing(self) -> None:
+        """Pins the direction, so a fix that avoided collision by wandering
+        (random suffixes) would not pass.
+
+        The counter is a high-water mark of ids MINTED, so it advances only on
+        counter turns and a harness turn carries it forward untouched — dense
+        `t1, t2, t3` rather than gappy. What matters is that it never goes
+        backwards, which is the property a harness turn used to break.
+        """
+        self.common.begin_turn("s", None)  # t1
+        self.common.begin_turn("s", "harness-a")  # preserves the mark
+        second, _ = self.common.begin_turn("s", None)  # t2
+        self.common.begin_turn("s", "harness-b")  # preserves the mark
+        last, _ = self.common.begin_turn("s", None)  # t3
+        self.assertEqual(second, "t2")
+        self.assertEqual(last, "t3", "a harness turn must not rewind or skip the counter")
+
+    # --- begin_turn fails closed when the write cannot be confirmed -------
+
+    def test_begin_turn_returns_ungrouped_when_state_write_fails(self) -> None:
+        """RED against the pre-fix line: `begin_turn` ended `return resolved`
+        unconditionally, while `_write_turn_state` logged and swallowed.
+
+        Pre-fix, with an unwritable state dir, `begin_turn` returned `t1` and
+        `resolve_turn_id` returned `ungrouped` — so `UserPromptSubmit` stamped
+        `s:t1` on the user message while every later hook in that same turn
+        stamped `s:ungrouped`. The opening row claimed a groupable turn no
+        other row shared.
+
+        The write failure is SIMULATED rather than assumed unreachable: the
+        state directory is pointed at a path that cannot be created.
+        """
+        os.environ["NEOTOMA_HOOK_STATE_DIR"] = "/proc/nonexistent-cannot-create"
+        importlib.reload(self.common)
+        try:
+            turn, source = self.common.begin_turn("session-abc", None)
+            self.assertEqual(
+                turn,
+                self.common.UNGROUPED_TURN_ID,
+                "an unconfirmed write must not yield a groupable-looking id",
+            )
+            self.assertEqual(source, "unavailable")
+            self.assertIs(
+                self.common.turn_identity_fields(source)["turn_groupable"], False
+            )
+        finally:
+            os.environ["NEOTOMA_HOOK_STATE_DIR"] = self._tmp.name
+            importlib.reload(self.common)
+
+    def test_opening_row_and_later_rows_agree_when_write_fails(self) -> None:
+        """The defect stated as the property that matters to a consumer.
+
+        What went wrong was not a return value in isolation — it was that the
+        user-message row and the tool rows of ONE turn disagreed. This asserts
+        agreement directly, so it fails on any future fix that makes
+        `begin_turn` honest but leaves the two paths out of step.
+        """
+        os.environ["NEOTOMA_HOOK_STATE_DIR"] = "/proc/nonexistent-cannot-create"
+        importlib.reload(self.common)
+        try:
+            opening, opening_src = self.common.begin_turn("session-abc", None)
+            later, later_src = self.common.resolve_turn_id("session-abc", None)
+            self.assertEqual(
+                opening, later, "every hook in one turn must spell the turn the same way"
+            )
+            self.assertEqual(opening_src, later_src)
+        finally:
+            os.environ["NEOTOMA_HOOK_STATE_DIR"] = self._tmp.name
+            importlib.reload(self.common)
+
+    def test_harness_id_is_not_trusted_past_an_unconfirmed_write(self) -> None:
+        """Fail closed on the harness path too.
+
+        A harness-supplied id is real identity, but if it did not reach the
+        state file the later hooks in that turn cannot see it, so the opening
+        row must not claim it groups.
+        """
+        os.environ["NEOTOMA_HOOK_STATE_DIR"] = "/proc/nonexistent-cannot-create"
+        importlib.reload(self.common)
+        try:
+            turn, source = self.common.begin_turn("session-abc", "real-turn-7")
+            self.assertEqual(turn, self.common.UNGROUPED_TURN_ID)
+            self.assertEqual(source, "unavailable")
+        finally:
+            os.environ["NEOTOMA_HOOK_STATE_DIR"] = self._tmp.name
+            importlib.reload(self.common)
+
+    def test_begin_turn_reports_its_own_source(self) -> None:
+        """The caller must not re-derive the source from the payload.
+
+        `user_prompt_submit` used to compute `"harness" if payload.get(
+        "turn_id") else "counter"`, which cannot see a failed write and so
+        would stamp `turn_groupable=true` on an ungrouped row.
+        """
+        _, counter_src = self.common.begin_turn("session-abc", None)
+        self.assertEqual(counter_src, "counter")
+        _, harness_src = self.common.begin_turn("session-abc", "real-turn-7")
+        self.assertEqual(harness_src, "harness")
+        for src in ("counter", "harness"):
+            self.assertIs(self.common.turn_identity_fields(src)["turn_groupable"], True)
 
     # --- Never break a turn ----------------------------------------------
 
