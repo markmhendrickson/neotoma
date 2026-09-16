@@ -48,4 +48,4 @@ You reach the same memory four ways, all backed by one contract:
 
 ## What it is not
 
-Neotoma is not a note-taking app or a personal wiki. It is not a hosted product — it runs on your own machine and your data stays there. Installing it takes npm and the command line today; a guided installation is the intended path. It is not a retrieval cache; similarity search is an optional secondary feature, not the point. For who it suits best, see the [ICP](../icp/icp_from_functionality.md).
+Neotoma is not a note-taking app or a personal wiki. It is not a hosted product — it runs on your own machine and your data stays there. Installing it takes npm and the command line today; a guided installation is intended but not yet available. It is not a retrieval cache; similarity search is an optional secondary feature, not the point. For who it suits best, see the [ICP](../icp/icp_from_functionality.md).

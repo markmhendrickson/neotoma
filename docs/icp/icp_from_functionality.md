@@ -94,7 +94,7 @@ Functionally enabled but not the design center:
 Someone is in the primary ICP if most of these are true:
 
 - They already use two or more AI agents or assistants and feel the cost of fragmented memory.
-- They are willing to run a service on their own machine and to own the data it holds. (Today that means installing an npm CLI; a guided installation is intended. Comfort with the current install path is not itself a fit signal — it is friction we intend to remove.)
+- They are willing to run a service on their own machine and to own the data it holds. (Today that means installing an npm CLI; a guided installation is intended but not yet available. Comfort with the current install path is not itself a fit signal — it is friction we intend to remove.)
 - They want their data on their own machine and care that it is never used for training.
 - They want to correct facts once and trust the correction holds and is traceable.
 - They run agents they want to constrain and audit, or they intend to build on the API.

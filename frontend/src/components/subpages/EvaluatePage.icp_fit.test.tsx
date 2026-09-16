@@ -99,7 +99,12 @@ const LOCALES: readonly LocaleCase[] = [
     buildingIsADistraction: /building your own state layer.*distraction from real work/i,
     fullyHostedScreen: /fully hosted product with nothing running on your own machine/i,
     currentInstallPath: /installation today is npm and CLI/i,
-    guidedNotShipped: /guided installer is intended/i,
+    // Both halves, in one regex: naming the intent alone reads as a shipped
+    // feature. The earlier `/guided installer is intended/i` matched EN copy that
+    // omitted the unshipped half entirely, so it stayed green while the EN<->ES
+    // parity acceptance criterion failed - the review found the omission, this
+    // test did not.
+    guidedNotShipped: /guided installer is intended but not yet available/i,
     installComfort: /\bnpm\b|\bCLIs?\b/i,
     zeroInstallScreen: /zero[- ]install|no[- ]config onboarding/i,
   },
