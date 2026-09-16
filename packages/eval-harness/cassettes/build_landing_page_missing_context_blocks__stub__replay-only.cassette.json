@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_missing_context_blocks",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Build the Meridian Ledger landing page.\n",
+  "system_prompt": "(see scenario system_prompt)",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conv-blp-mc-2418",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-blp-mc-2418"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-mc-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Build the Meridian Ledger landing page."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "search": "Meridian Ledger",
+        "limit": 5
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "category_definition",
+        "search": "Meridian Ledger",
+        "limit": 5
+      },
+      "sequence": 2
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "plan",
+        "search": "Meridian Ledger landing page",
+        "limit": 5
+      },
+      "sequence": 3
+    }
+  ],
+  "assistant_text": "Surfacing a blocker rather than starting the build: nothing has settled the ICP for Meridian Ledger.\nI checked each consume-path \u2014 no target_persona exists, no category_definition exists, and the plan \"blp-mc-2418 Meridian Ledger landing page\" carries no decision register entry for the ICP.\nI have not stored a persona and have not built a page. Deriving one here would put an invented ICP into the record with nothing marking it as invented, and every later stage would rationalize copy against it.\nTo unblock: run /define-category for this product, or point me at the target_persona or the decision that already settled it.\n"
+}

@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_upstream_reuse_no_duplicate",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Run stage 1 of the landing-page build for Meridian Ledger \u2014 settle the ICP.\n",
+  "system_prompt": "(see scenario system_prompt)",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conv-blp-reuse-2418",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-blp-reuse-2418"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-reuse-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Run stage 1 of the landing-page build for Meridian Ledger \u2014 settle the ICP."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "search": "Meridian Ledger",
+        "limit": 5
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_46b8bbab2e1ab6e41d8b9ec3"
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Stage 1 consumed the existing ICP ent_46b8bbab2e1ab6e41d8b9ec3 (\"blp-reuse-2418 ICP\") rather than deriving one.\nIt is current and already PART_OF the plan, so re-deriving it would have re-decided a settled ruling.\nNo target_persona was stored this run. core_jtbd reads 'close the month without chasing spreadsheets'.\n"
+}

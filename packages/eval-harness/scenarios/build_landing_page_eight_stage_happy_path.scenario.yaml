@@ -1,0 +1,243 @@
+meta:
+  id: build_landing_page_eight_stage_happy_path
+  description: >
+    Full staged run of the ateles build-landing-page skill: every stage stores
+    ONE entity in a DECLARED field and links it (PART_OF the plan, REFERS_TO
+    the upstream stage it consumed). Fails when a stage silently skips its
+    store, writes its payload to an undeclared field (which /store routes to
+    raw_fragments, so the snapshot reads empty), or drops a stage link so a
+    later session cannot walk the chain. Scoped to the RUN token
+    "blp-hp-2418" stamped in each type's declared identity field.
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - stage-contract
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: >
+  The skill's stage contract (declared field + read-back + link) had no
+  executable coverage; a stage that stored to raw_fragments or skipped its
+  link would look successful in the run report and be invisible here.
+privacy_transform: "Fully synthetic product ('Meridian Ledger'); no PII, no client identifiers."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEN stages, not eight.
+#
+# The scenario id and neotoma#2418 both say "eight_stage" because that was the
+# skill's shape when the qa lens reviewed it. An operator design revision on
+# markmhendrickson/ateles#1026 splits the incumbent and the pain analysis out
+# of stage 1 and makes category reinforcement a standing CONSTRAINT applied at
+# the template/spec/build stages rather than a stage of its own. The stage
+# LIST is therefore ten:
+#
+#   1  target_persona          ICP
+#   2  research_finding        incumbent — what the ICP uses now, how it fails
+#   3  analysis                pain, chronic vs acute, marking which leads
+#   4  cta                     CTA and success metric
+#   5  research_finding        best-practice research
+#   6  rendered_page_template  template
+#   7  specification           content spec
+#   8  analysis                input-context inventory
+#   9  design_system           design system and assets
+#  10  rendered_page           build
+#
+# The id is kept verbatim because it is the qa unlock contract on ateles#1026;
+# renaming it would silently break that reference. What the scenario ASSERTS is
+# the ten-stage structure.
+#
+# Stages 2 and 5 are both research_finding and stages 3 and 8 are both
+# analysis, so a bare per-type entity.count cannot tell the two instances
+# apart. Each instance carries its own distinct declared title, and every
+# count is scoped by it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+seed_entities:
+  - entity_type: plan
+    title: blp-hp-2418 Meridian Ledger landing page
+    status: active
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system, running the
+  build-landing-page skill for the product "Meridian Ledger". The run is
+  scoped by the RUN token "blp-hp-2418".
+
+  The entity contract binds EVERY stage and a stage is not complete until all
+  four hold: (1) check for an existing upstream entity first and reuse it
+  rather than re-deriving a settled decision; (2) write only DECLARED fields —
+  /store accepts undeclared fields and routes them to raw_fragments, so the
+  write succeeds and the field is NOT on the snapshot; (3) read the write back
+  and assert the field you wrote holds the value you wrote, because a 2xx and
+  success:true are not evidence; (4) link it PART_OF the plan and REFERS_TO
+  each upstream stage entity it consumed.
+
+  Stop the run if a stage's entity cannot be verified.
+
+  Run ten stages, one entity each, in dependency order:
+    1  target_persona         name "blp-hp-2418 ICP"
+    2  research_finding       title "blp-hp-2418 incumbent"
+    3  analysis               title "blp-hp-2418 pain"
+    4  cta                    name "blp-hp-2418 CTA"
+    5  research_finding       title "blp-hp-2418 best practice"
+    6  rendered_page_template name "blp-hp-2418 template"
+    7  specification          title "blp-hp-2418 content spec"
+    8  analysis               title "blp-hp-2418 input inventory"
+    9  design_system          design_system_name "blp-hp-2418 design system"
+   10  rendered_page          title "blp-hp-2418 page"
+
+  Set that exact value in the named DECLARED field for every stage, so the run
+  is isolatable. Category reinforcement is a standing constraint applied at
+  stages 6, 7 and 10 — it is not a stage and writes no entity of its own.
+
+user_prompt: |
+  Build the landing page for Meridian Ledger. Run every stage of the skill.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # ── Each stage stored its entity, in the DECLARED field (a payload routed to
+  # raw_fragments would leave the snapshot without this value and fail here).
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp-hp-2418 ICP
+  - type: entity.exists
+    entity_type: research_finding
+    where:
+      title: blp-hp-2418 incumbent
+  - type: entity.exists
+    entity_type: analysis
+    where:
+      title: blp-hp-2418 pain
+  - type: entity.exists
+    entity_type: cta
+    where:
+      name: blp-hp-2418 CTA
+  - type: entity.exists
+    entity_type: research_finding
+    where:
+      title: blp-hp-2418 best practice
+  - type: entity.exists
+    entity_type: rendered_page_template
+    where:
+      name: blp-hp-2418 template
+  - type: entity.exists
+    entity_type: specification
+    where:
+      title: blp-hp-2418 content spec
+  - type: entity.exists
+    entity_type: analysis
+    where:
+      title: blp-hp-2418 input inventory
+  - type: entity.exists
+    entity_type: design_system
+    where:
+      design_system_name: blp-hp-2418 design system
+  - type: entity.exists
+    entity_type: rendered_page
+    where:
+      title: blp-hp-2418 page
+
+  # ── Stages 2/5 and 3/8 share a type. Counting the type alone would pass with
+  # one instance missing and another stored twice, so each instance is counted
+  # under its own declared title AND the per-type total is pinned at two.
+  - type: entity.count
+    entity_type: research_finding
+    where:
+      title: blp-hp-2418 incumbent
+    op: eq
+    value: 1
+  - type: entity.count
+    entity_type: research_finding
+    where:
+      title: blp-hp-2418 best practice
+    op: eq
+    value: 1
+  - type: entity.count
+    entity_type: analysis
+    where:
+      title: blp-hp-2418 pain
+    op: eq
+    value: 1
+  - type: entity.count
+    entity_type: analysis
+    where:
+      title: blp-hp-2418 input inventory
+    op: eq
+    value: 1
+
+  # ── The build stage produced exactly one page — not a second page per retry.
+  - type: entity.count
+    entity_type: rendered_page
+    where:
+      title: blp-hp-2418 page
+    op: eq
+    value: 1
+
+  # ── The stage payloads are on the SNAPSHOT, not in raw_fragments. This is
+  # the read-back the contract's clause 3 requires, expressed as an effect.
+  - type: snapshot.field_present
+    entity_type: target_persona
+    where:
+      name: blp-hp-2418 ICP
+    field: core_jtbd
+  - type: snapshot.field_present
+    entity_type: analysis
+    where:
+      title: blp-hp-2418 input inventory
+    field: source_artifacts
+  - type: snapshot.field_present
+    entity_type: rendered_page
+    where:
+      title: blp-hp-2418 page
+    field: html_body
+
+  # ── Every stage is PART_OF the plan: ten stage entities + the plan edge set.
+  - type: relationship.count
+    relationship_type: PART_OF
+    op: gte
+    value: 10
+
+  # ── The stage chain is walkable. Each of these names BOTH endpoint types, so
+  # it cannot be satisfied by an unrelated REFERS_TO elsewhere in the graph
+  # (the endpoint filter this PR adds to assertions.ts).
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: research_finding
+    target_entity_type: target_persona
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: analysis
+    target_entity_type: research_finding
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: cta
+    target_entity_type: analysis
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: rendered_page_template
+    target_entity_type: research_finding
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: specification
+    target_entity_type: rendered_page_template
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: analysis
+    target_entity_type: specification
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: design_system
+    target_entity_type: analysis
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: rendered_page
+    target_entity_type: design_system
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+    source_entity_type: rendered_page
+    target_entity_type: specification

@@ -1,0 +1,628 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_eight_stage_happy_path",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Build the landing page for Meridian Ledger. Run every stage of the skill.\n",
+  "system_prompt": "(see scenario system_prompt)",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conv-blp-hp-2418",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-blp-hp-2418"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-hp-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Build the landing page for Meridian Ledger. Run every stage of the skill."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "rendered_page",
+        "schema_version": "1.0",
+        "activate": true,
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string"
+            },
+            "slug": {
+              "type": "string"
+            },
+            "html_body": {
+              "type": "string"
+            },
+            "custom_css": {
+              "type": "string"
+            }
+          },
+          "canonical_name_fields": [
+            "title"
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        }
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "search": "blp-hp-2418 ICP",
+        "limit": 5
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage1",
+        "entities": [
+          {
+            "entity_type": "target_persona",
+            "name": "blp-hp-2418 ICP",
+            "archetype": "finance ops lead at a 20-80 person services firm",
+            "core_jtbd": "close the month without chasing spreadsheets",
+            "messaging_bad": "anti-profile: enterprise controllers who already run an ERP",
+            "one_line_summary": "Ops lead who owns the close and has no finance engineering support."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 3
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "filters": {
+          "name": "blp-hp-2418 ICP"
+        },
+        "limit": 5
+      },
+      "sequence": 4
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_46ef34a0d013cf8cef233d53",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 5
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "research_finding",
+        "search": "blp-hp-2418 incumbent",
+        "limit": 5
+      },
+      "sequence": 6
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage2",
+        "entities": [
+          {
+            "entity_type": "research_finding",
+            "title": "blp-hp-2418 incumbent",
+            "subject": "What the ICP uses now and how it fails",
+            "method": "Review of prior customer-development notes for this product",
+            "content": "Incumbent is a shared spreadsheet plus month-end email threads. It fails at handoff: no record of who changed a figure or why, so every close re-litigates the same corrections."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 7
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "research_finding",
+        "filters": {
+          "title": "blp-hp-2418 incumbent"
+        },
+        "limit": 5
+      },
+      "sequence": 8
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_3c727dc7beb3571d5988d663",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 9
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_3c727dc7beb3571d5988d663",
+        "target_entity_id": "ent_46ef34a0d013cf8cef233d53"
+      },
+      "sequence": 10
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "analysis",
+        "search": "blp-hp-2418 pain",
+        "limit": 5
+      },
+      "sequence": 11
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage3",
+        "entities": [
+          {
+            "entity_type": "analysis",
+            "title": "blp-hp-2418 pain",
+            "summary": "Chronic pain leads: the untracked correction. Acute pain is the trigger, not the wedge.",
+            "content": "CHRONIC (leads): corrections are invisible, so trust in the numbers decays every month. ACUTE: a missed close deadline. The page leads on the chronic pain because the acute one only recurs quarterly."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 12
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "analysis",
+        "filters": {
+          "title": "blp-hp-2418 pain"
+        },
+        "limit": 5
+      },
+      "sequence": 13
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_e53cf83c7839b52b3d1733e8",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 14
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_e53cf83c7839b52b3d1733e8",
+        "target_entity_id": "ent_3c727dc7beb3571d5988d663"
+      },
+      "sequence": 15
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "cta",
+        "search": "blp-hp-2418 CTA",
+        "limit": 5
+      },
+      "sequence": 16
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage4",
+        "entities": [
+          {
+            "entity_type": "cta",
+            "name": "blp-hp-2418 CTA",
+            "title": "Start a tracked close",
+            "content": "PRIMARY CTA: 'Start a tracked close'. SUCCESS METRIC: first close completed with a full correction trail within 30 days. SECONDARY: read the method page."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 17
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "cta",
+        "filters": {
+          "name": "blp-hp-2418 CTA"
+        },
+        "limit": 5
+      },
+      "sequence": 18
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_8589bf6e319c6afb06e23fdc",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 19
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_8589bf6e319c6afb06e23fdc",
+        "target_entity_id": "ent_e53cf83c7839b52b3d1733e8"
+      },
+      "sequence": 20
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "research_finding",
+        "search": "blp-hp-2418 best practice",
+        "limit": 5
+      },
+      "sequence": 21
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage5",
+        "entities": [
+          {
+            "entity_type": "research_finding",
+            "title": "blp-hp-2418 best practice",
+            "subject": "Landing-page best practice for this category",
+            "method": "Review of category-adjacent pages",
+            "content": "Problem-led headline beats product-led. One CTA repeated, not three competing. Proof sits adjacent to the claim it supports."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 22
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "research_finding",
+        "filters": {
+          "title": "blp-hp-2418 best practice"
+        },
+        "limit": 5
+      },
+      "sequence": 23
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_3a701c79caae2f7bfc3a70ce",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 24
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_3a701c79caae2f7bfc3a70ce",
+        "target_entity_id": "ent_e53cf83c7839b52b3d1733e8"
+      },
+      "sequence": 25
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_3a701c79caae2f7bfc3a70ce",
+        "target_entity_id": "ent_8589bf6e319c6afb06e23fdc"
+      },
+      "sequence": 26
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "rendered_page_template",
+        "search": "blp-hp-2418 template",
+        "limit": 5
+      },
+      "sequence": 27
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage6",
+        "entities": [
+          {
+            "entity_type": "rendered_page_template",
+            "name": "blp-hp-2418 template",
+            "description": "Section order for the page, category reinforcement applied.",
+            "content": "1 problem-led hero 2 incumbent-failure contrast 3 chronic-pain narrative 4 method 5 proof 6 CTA repeat. Category noun 'tracked close' appears in the hero and the CTA section."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 28
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "rendered_page_template",
+        "filters": {
+          "name": "blp-hp-2418 template"
+        },
+        "limit": 5
+      },
+      "sequence": 29
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_26d5da45577fa15392d591af",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 30
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_26d5da45577fa15392d591af",
+        "target_entity_id": "ent_3a701c79caae2f7bfc3a70ce"
+      },
+      "sequence": 31
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "specification",
+        "search": "blp-hp-2418 content spec",
+        "limit": 5
+      },
+      "sequence": 32
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage7",
+        "entities": [
+          {
+            "entity_type": "specification",
+            "title": "blp-hp-2418 content spec",
+            "name": "blp-hp-2418 content spec",
+            "content": "Per-section copy spec keyed to the template sections. Hero is problem-led and names the untracked correction. Every section states the category noun once; none introduces a second noun."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 33
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "specification",
+        "filters": {
+          "title": "blp-hp-2418 content spec"
+        },
+        "limit": 5
+      },
+      "sequence": 34
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_60b118dbc9ee72cea611a016",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 35
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_60b118dbc9ee72cea611a016",
+        "target_entity_id": "ent_26d5da45577fa15392d591af"
+      },
+      "sequence": 36
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "analysis",
+        "search": "blp-hp-2418 input inventory",
+        "limit": 5
+      },
+      "sequence": 37
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage8",
+        "entities": [
+          {
+            "entity_type": "analysis",
+            "title": "blp-hp-2418 input inventory",
+            "summary": "Input-context inventory for the build: what exists, what is missing.",
+            "source_artifacts": "logo mark (inline SVG), product screenshot, palette tokens from the design system, the stage-7 copy spec",
+            "gaps": "No customer logos cleared for use; the proof section cites a named metric instead."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 38
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "analysis",
+        "filters": {
+          "title": "blp-hp-2418 input inventory"
+        },
+        "limit": 5
+      },
+      "sequence": 39
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_b555b9fe38391b19a2270271",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 40
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_b555b9fe38391b19a2270271",
+        "target_entity_id": "ent_60b118dbc9ee72cea611a016"
+      },
+      "sequence": 41
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "design_system",
+        "search": "blp-hp-2418 design system",
+        "limit": 5
+      },
+      "sequence": 42
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage9",
+        "entities": [
+          {
+            "entity_type": "design_system",
+            "design_system_name": "blp-hp-2418 design system",
+            "scope": "Landing page only",
+            "content": "Palette ink #14181f, paper #fbfaf7, accent #2f6f5e. Type: one serif display, one sans body. Spacing 8px base. Light and dark both defined; no JavaScript, inline SVG only."
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 43
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "design_system",
+        "filters": {
+          "design_system_name": "blp-hp-2418 design system"
+        },
+        "limit": 5
+      },
+      "sequence": 44
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_fd85b7bc1a36183b3071d1d5",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 45
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_fd85b7bc1a36183b3071d1d5",
+        "target_entity_id": "ent_b555b9fe38391b19a2270271"
+      },
+      "sequence": 46
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "rendered_page",
+        "search": "blp-hp-2418 page",
+        "limit": 5
+      },
+      "sequence": 47
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-hp-2418-stage10",
+        "entities": [
+          {
+            "entity_type": "rendered_page",
+            "title": "blp-hp-2418 page",
+            "slug": "meridian-ledger-blp-hp-2418",
+            "html_body": "<section class=\"hero\"><h1>Every correction to your close, on the record</h1><p>MARKER_BUILD_V1</p></section>"
+          }
+        ],
+        "commit": true
+      },
+      "sequence": 48
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "rendered_page",
+        "filters": {
+          "title": "blp-hp-2418 page"
+        },
+        "limit": 5
+      },
+      "sequence": 49
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_32db473ba29e2b860aa5c83b",
+        "target_entity_id": "ent_4c65a9a893f0abd704cf7aa0"
+      },
+      "sequence": 50
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_32db473ba29e2b860aa5c83b",
+        "target_entity_id": "ent_60b118dbc9ee72cea611a016"
+      },
+      "sequence": 51
+    },
+    {
+      "name": "create_relationship",
+      "input": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_32db473ba29e2b860aa5c83b",
+        "target_entity_id": "ent_fd85b7bc1a36183b3071d1d5"
+      },
+      "sequence": 52
+    }
+  ],
+  "assistant_text": "Ran all ten stages for Meridian Ledger, each storing one entity in a declared field, read back, and linked.\n1 target_persona ent_46ef34a0d013cf8cef233d53 created \u2014 read back on core_jtbd.\n2 research_finding (incumbent) ent_3c727dc7beb3571d5988d663 created \u2014 read back on content.\n3 analysis (pain) ent_e53cf83c7839b52b3d1733e8 created \u2014 chronic pain leads.\n4 cta ent_8589bf6e319c6afb06e23fdc created \u2014 read back on content.\n5 research_finding (best practice) ent_3a701c79caae2f7bfc3a70ce created.\n6 rendered_page_template ent_26d5da45577fa15392d591af created \u2014 category reinforcement applied.\n7 specification ent_60b118dbc9ee72cea611a016 created.\n8 analysis (input inventory) ent_b555b9fe38391b19a2270271 created \u2014 read back on source_artifacts.\n9 design_system ent_fd85b7bc1a36183b3071d1d5 created.\n10 rendered_page ent_32db473ba29e2b860aa5c83b created \u2014 read back on html_body; MARKER_BUILD_V1 present.\n"
+}

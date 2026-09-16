@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_stage8_correct_verify",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Rebuild the Meridian Ledger landing page body from the revised content spec.\n",
+  "system_prompt": "(see scenario system_prompt)",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conv-blp-s8-2418",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-blp-s8-2418"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-s8-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Rebuild the Meridian Ledger landing page body from the revised content spec."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "specification",
+        "filters": {
+          "title": "blp-s8-2418 content spec"
+        },
+        "limit": 5
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "design_system",
+        "filters": {
+          "design_system_name": "blp-s8-2418 design system"
+        },
+        "limit": 5
+      },
+      "sequence": 2
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "rendered_page",
+        "filters": {
+          "title": "blp-s8-2418 page"
+        },
+        "limit": 5
+      },
+      "sequence": 3
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "rendered_page",
+        "schema_version": "1.0",
+        "activate": true,
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string"
+            },
+            "slug": {
+              "type": "string"
+            },
+            "html_body": {
+              "type": "string"
+            },
+            "custom_css": {
+              "type": "string"
+            }
+          },
+          "canonical_name_fields": [
+            "title"
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        }
+      },
+      "sequence": 4
+    },
+    {
+      "name": "correct",
+      "input": {
+        "entity_id": "ent_1bda0c1c3e9765fbf4f4f578",
+        "entity_type": "rendered_page",
+        "field": "html_body",
+        "value": "<section class=\"hero\"><h1>Every correction to your close, on the record</h1><p>MARKER_BODY_B</p></section>",
+        "idempotency_key": "blp-s8-2418-body-v2"
+      },
+      "sequence": 5
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "rendered_page",
+        "filters": {
+          "title": "blp-s8-2418 page"
+        },
+        "limit": 5
+      },
+      "sequence": 6
+    }
+  ],
+  "assistant_text": "Updated the page in place. Entity ent_1bda0c1c3e9765fbf4f4f578 \u2014 same id, so the share URL is unchanged.\nBody updated via correct on html_body, then fetched back: MARKER_BODY_B is present and MARKER_BODY_A is gone.\nNo new page entity was created and no new decision was made in the build \u2014 the copy came from the stage-7 spec and the palette from the design system.\n"
+}

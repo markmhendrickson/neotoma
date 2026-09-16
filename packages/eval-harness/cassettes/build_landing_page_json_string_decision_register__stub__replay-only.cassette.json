@@ -1,0 +1,90 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_json_string_decision_register",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Settle the ICP for the Meridian Ledger landing page from the plan's decision register.\n",
+  "system_prompt": "(see scenario system_prompt)",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conv-blp-json-2418",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-blp-json-2418"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-json-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Settle the ICP for the Meridian Ledger landing page from the plan's decision register."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "search": "Meridian Ledger",
+        "limit": 5
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "plan",
+        "search": "Meridian Ledger landing page",
+        "limit": 5
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-json-2418-stage1",
+        "commit": true,
+        "entities": [
+          {
+            "entity_type": "target_persona",
+            "name": "blp-json-2418 ICP",
+            "archetype": "MARKER_ARCH",
+            "core_jtbd": "MARKER_JTBD",
+            "messaging_bad": "MARKER_ANTI",
+            "one_line_summary": "Projected from the decision register on plan ent_34d4c16c607d1001f641c282 (ruled 2026-09-01); not re-derived."
+          }
+        ]
+      },
+      "sequence": 3
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "target_persona",
+        "filters": {
+          "name": "blp-json-2418 ICP"
+        },
+        "limit": 5
+      },
+      "sequence": 4
+    }
+  ],
+  "assistant_text": "Stage 1 consumed the ruling on plan ent_34d4c16c607d1001f641c282. Its register is a JSON-encoded STRING, so I parsed it rather than reading it as an object \u2014 read as a dict it returns nothing and looks like an empty decision set.\nProjected: archetype=MARKER_ARCH, core_jtbd=MARKER_JTBD, messaging_bad=MARKER_ANTI.\nRead back on the persona snapshot: archetype and core_jtbd both present with the ruled values. Nothing derived.\n"
+}

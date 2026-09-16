@@ -1,0 +1,163 @@
+meta:
+  id: build_landing_page_stage8_correct_verify
+  description: >
+    The build stage updates an EXISTING page. It must update the body in place
+    with `correct` on html_body and verify by fetching the page back: same
+    entity id (so the share URL does not change), new body marker present, old
+    marker gone. Fails when the rebuild recreates the page under a new id, or
+    when the call returns success and the body never moves — the success-noop
+    this stage exists to catch. Scoped to the RUN token "blp-s8-2418".
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - stage-contract
+    - correct
+
+seed_strategy: generated
+source_pattern: >
+  An update path that returns success while the stored body is unchanged
+  (provenance unchanged, observation count unmoved) looks identical in the run
+  report to a successful rebuild; only reading the body back distinguishes them.
+privacy_transform: "Fully synthetic product and page copy; no PII."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DELIBERATELY OMITTED: `mcp_tool.invocations publish_rendered_page eq 0`.
+#
+# neotoma#2418's engineering spec called for that assertion, from the skill
+# text "use correct on html_body, never publish_rendered_page". The arch lens
+# (Waxwing) then filed a BLOCKING finding on markmhendrickson/ateles#1026 that
+# the absolute is false and contradicts the sibling draft-rendered-page skill,
+# where `publish_rendered_page` is the create/publish + guest-token minting
+# path (MCP-only; the REST paths 404 by design) and `correct` on html_body is
+# the body-update path that does NOT invalidate or reissue the token, because
+# the token is page-scoped. Both calls are legitimate for different jobs.
+#
+# Asserting `publish_rendered_page == 0` would pin the disputed rule as
+# expected behavior, which the aggregation of that finding explicitly forbids.
+# A scenario that encodes a contested rule makes the eval the wrong place to
+# settle it and, worse, turns any later reconciliation into a red lane.
+#
+# What is asserted instead is the EFFECT the two readings AGREE on: the body
+# was updated in place via `correct` on html_body against the seeded id, the
+# page kept ONE stable id under the run marker rather than being recreated,
+# and the body markers moved (B present, A gone). Every failure the omitted
+# assertion was meant to catch — recreate-instead-of-update, success-noop —
+# is caught by these, and they stay true whichever way the stage-8 contract is
+# finally worded.
+# ─────────────────────────────────────────────────────────────────────────────
+
+seed_entities:
+  - entity_type: plan
+    title: blp-s8-2418 Meridian Ledger landing page
+    status: active
+  - entity_type: specification
+    title: blp-s8-2418 content spec
+    content: "Hero copy revision: lead on the untracked correction, not the deadline."
+  - entity_type: design_system
+    design_system_name: blp-s8-2418 design system
+    scope: Landing page only
+    content: "Palette ink #14181f, paper #fbfaf7, accent #2f6f5e. Light and dark. No JavaScript."
+  # The page as it stands before this run: body marker A.
+  - entity_type: rendered_page
+    title: blp-s8-2418 page
+    slug: meridian-ledger-blp-s8-2418
+    html_body: "<section class=\"hero\"><h1>Close the books on time</h1><p>MARKER_BODY_A</p></section>"
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system, running the
+  build stage of the build-landing-page skill for "Meridian Ledger", RUN token
+  "blp-s8-2418". Every input is already settled and seeded: the content spec,
+  the design system, and the page itself.
+
+  This stage makes NO new decisions — it is assembly. Update the EXISTING page
+  rather than creating another one, and keep the page's entity id stable
+  across revisions so the URL does not change.
+
+  Update the body in place with `correct` on `html_body`, passing the existing
+  page's entity_id. Then VERIFY by fetching the page back and checking that a
+  known string from the new copy is present and the previous marker is gone —
+  a success response with a stale or blank body is a known failure mode, not a
+  hypothetical one.
+
+  The new hero copy must carry the marker MARKER_BODY_B and must not retain
+  MARKER_BODY_A. No JavaScript; inline SVG only.
+
+user_prompt: |
+  Rebuild the Meridian Ledger landing page body from the revised content spec.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # ── The update went through `correct` on html_body, against the SEEDED id.
+  # Naming the id is what distinguishes an in-place update from a correction
+  # applied to some other page.
+  - type: mcp_tool.invocations
+    tool_name: correct
+    arg_subset:
+      entity_id: ent_1bda0c1c3e9765fbf4f4f578
+      entity_type: rendered_page
+      field: html_body
+    op: gte
+    value: 1
+
+  # ── One page under the run marker: the rebuild updated, it did not recreate.
+  - type: entity.count
+    entity_type: rendered_page
+    where:
+      title: blp-s8-2418 page
+    op: eq
+    value: 1
+  - type: entity.count
+    entity_type: rendered_page
+    op: eq
+    value: 1
+
+  # ── The body actually MOVED. This is the success-noop catch: a call that
+  # returns success while the stored bytes are unchanged fails here.
+  - type: entity.exists
+    entity_type: rendered_page
+    where:
+      title: blp-s8-2418 page
+      html_body: "<section class=\"hero\"><h1>Every correction to your close, on the record</h1><p>MARKER_BODY_B</p></section>"
+  # ...and the previous body is gone, not merely appended alongside.
+  - type: entity.count
+    entity_type: rendered_page
+    where:
+      html_body: "<section class=\"hero\"><h1>Close the books on time</h1><p>MARKER_BODY_A</p></section>"
+    op: eq
+    value: 0
+
+  # ── The id is stable: the page still reads under its original slug, so the
+  # share URL a recipient already holds still resolves.
+  - type: entity.exists
+    entity_type: rendered_page
+    where:
+      title: blp-s8-2418 page
+      slug: meridian-ledger-blp-s8-2418
+  - type: snapshot.field_present
+    entity_type: rendered_page
+    where:
+      title: blp-s8-2418 page
+    field: html_body
+
+  # ── The stage verified by fetching the page back rather than trusting the
+  # correct call's own success response.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: rendered_page
+    op: gte
+    value: 1
+
+  # ── Assembly only: this stage stored no new decision entity.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: rendered_page
+    op: eq
+    value: 0

@@ -1,0 +1,123 @@
+meta:
+  id: build_landing_page_json_string_decision_register
+  description: >
+    The plan's decision register encodes the settled ICP as a JSON-ENCODED
+    STRING in a declared field, not as a nested object. Stage 1 must PARSE the
+    string and project the ruled values into the persona. Reading a JSON string
+    as a dict is a known false zero — it yields nothing and looks like an empty
+    decision set, and the stage then "derives" an ICP that silently contradicts
+    the ruling. Fails when the persona carries invented values instead of the
+    register's markers. Scoped to the RUN token "blp-json-2418".
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - stage-contract
+    - false-zero
+
+seed_strategy: generated
+source_pattern: >
+  A JSON-string field read as an object returns nothing; the caller reports an
+  empty decision set and proceeds to derive from scratch, which looks identical
+  in the run report to a genuine absence of a ruling.
+privacy_transform: "Fully synthetic product and decision register; no PII."
+
+seed_entities:
+  # `body` is a DECLARED plan field. The register rides in it as a JSON string,
+  # which is the shape this scenario exists to exercise. (An undeclared
+  # `decisions` field would be routed to raw_fragments and never reach the
+  # snapshot at all — a different failure, covered by the read-back scenario.)
+  - entity_type: plan
+    title: blp-json-2418 Meridian Ledger landing page
+    status: active
+    body: >-
+      {"icp": {"archetype": "MARKER_ARCH", "core_jtbd": "MARKER_JTBD",
+      "anti_profile": "MARKER_ANTI"}, "ruled_on": "2026-09-01"}
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system, running
+  stage 1 of the build-landing-page skill for "Meridian Ledger", RUN token
+  "blp-json-2418".
+
+  No target_persona exists yet. A plan for this work does, and its decision
+  register has SETTLED the ICP. Read the plan and consume the ruling: in order
+  of preference a target_persona, then a category_definition, then a plan or
+  decision register that has settled it. A settled ICP is settled — this skill
+  reads rulings, it does not reopen them.
+
+  Where the register encodes the ICP as a JSON-encoded STRING field, PARSE it
+  rather than reading it as an object. Reading a JSON string as a dict is a
+  known false zero: it yields nothing and looks like an empty decision set.
+
+  Project the parsed values into a target_persona named "blp-json-2418 ICP",
+  writing the ruled archetype into `archetype`, the ruled job into
+  `core_jtbd`, and the anti-profile into `messaging_bad`, citing the plan id.
+  Do not invent values; do not derive an ICP of your own.
+
+user_prompt: |
+  Settle the ICP for the Meridian Ledger landing page from the plan's decision register.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp-json-2418 ICP
+  - type: entity.count
+    entity_type: target_persona
+    where:
+      name: blp-json-2418 ICP
+    op: eq
+    value: 1
+  # The PARSED values reached the persona. These fail on the false zero: an
+  # unparsed register yields an empty decision set, and whatever the stage
+  # then derives will not carry these markers.
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp-json-2418 ICP
+      archetype: MARKER_ARCH
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp-json-2418 ICP
+      core_jtbd: MARKER_JTBD
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp-json-2418 ICP
+      messaging_bad: MARKER_ANTI
+  # The markers are on the SNAPSHOT, not in raw_fragments — projecting a ruled
+  # value into an undeclared field loses it just as surely as not parsing.
+  - type: snapshot.field_present
+    entity_type: target_persona
+    where:
+      name: blp-json-2418 ICP
+    field: archetype
+  - type: snapshot.field_present
+    entity_type: target_persona
+    where:
+      name: blp-json-2418 ICP
+    field: core_jtbd
+  # Effect at the tool layer: the store carried the ruled values, so a persona
+  # that merely happens to match cannot pass on a later correction.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: target_persona
+          archetype: MARKER_ARCH
+          core_jtbd: MARKER_JTBD
+    op: gte
+    value: 1
+  # The register was actually read before the persona was written.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: plan
+    op: gte
+    value: 1

@@ -1,0 +1,99 @@
+meta:
+  id: build_landing_page_upstream_reuse_no_duplicate
+  description: >
+    A current target_persona for the product already exists and is linked to
+    the plan. Stage 1 must READ it and move on. Fails when the stage
+    re-derives a settled ICP and stores a second persona — the failure the
+    stage contract's clause 1 exists to prevent, because a re-decided ICP
+    makes the page contradict the record. Scoped to the RUN token
+    "blp-reuse-2418".
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - stage-contract
+    - dedup
+
+seed_strategy: generated
+source_pattern: >
+  A stage that silently re-derives an already-settled decision produces a
+  second entity of the same type; nothing in the run report distinguishes
+  that from a legitimate first write.
+privacy_transform: "Fully synthetic product; no PII."
+
+seed_entities:
+  - entity_type: plan
+    title: blp-reuse-2418 Meridian Ledger landing page
+    status: active
+  # The settled ICP. Stage 1 must consume THIS, not write its own.
+  - entity_type: target_persona
+    name: blp-reuse-2418 ICP
+    archetype: finance ops lead at a 20-80 person services firm
+    core_jtbd: close the month without chasing spreadsheets
+    one_line_summary: Settled ICP — ruled before this run and not to be reopened.
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system, running the
+  build-landing-page skill for "Meridian Ledger", RUN token "blp-reuse-2418".
+
+  Stage 1 writes a target_persona — but the entity contract's first clause
+  binds before that: check for an existing upstream entity FIRST. Retrieve by
+  id when one is named, otherwise retrieve_entities for the stage's
+  entity_type and a search for the product. If a current one exists, READ IT
+  and move on. Re-deriving a settled decision is the failure this skill exists
+  to prevent. Do NOT store a second target_persona, and do not store a
+  differently-named variant of the same ICP.
+
+  Report which stage-1 entity you consumed, by id.
+
+user_prompt: |
+  Run stage 1 of the landing-page build for Meridian Ledger — settle the ICP.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The settled persona is still there and still reads as settled.
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      name: blp-reuse-2418 ICP
+  # Exactly ONE persona under the run marker — the seeded one. A second store
+  # (the re-derive failure) makes this 2 and fails.
+  - type: entity.count
+    entity_type: target_persona
+    where:
+      name: blp-reuse-2418 ICP
+    op: eq
+    value: 1
+  # A re-derive that dodges the count above by naming its persona differently
+  # is still caught: the run created no persona of ANY other name. (Scoped by
+  # the seeded name being the only one the scenario introduces.)
+  - type: entity.count
+    entity_type: target_persona
+    op: eq
+    value: 1
+  # The settled fields were not overwritten by a re-derived variant.
+  - type: entity.exists
+    entity_type: target_persona
+    where:
+      core_jtbd: close the month without chasing spreadsheets
+  # Effect-verified at the tool layer: no store call carried a target_persona
+  # payload. Reading and reusing needs retrieve, never store.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: target_persona
+    op: eq
+    value: 0
+  # The agent actually looked before writing — clause 1 as an effect, not a
+  # claim in the reply.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: target_persona
+    op: gte
+    value: 1

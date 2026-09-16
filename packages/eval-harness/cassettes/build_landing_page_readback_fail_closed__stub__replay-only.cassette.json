@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "build_landing_page_readback_fail_closed",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Continue the Meridian Ledger landing page: store the research finding, then build the page.\n",
+  "system_prompt": "(see scenario system_prompt)",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conv-blp-fc-2418",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-blp-fc-2418"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-blp-fc-2418:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Continue the Meridian Ledger landing page: store the research finding, then build the page."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "blp-fc-2418-finding",
+        "commit": true,
+        "entities": [
+          {
+            "entity_type": "task",
+            "title": "blp-fc-2418 finding",
+            "status": "todo",
+            "finding_body": "Incumbent is a shared spreadsheet; it fails at handoff because corrections are untracked."
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "task",
+        "filters": {
+          "title": "blp-fc-2418 finding"
+        },
+        "limit": 5
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Stopping the run. The stage write for \"blp-fc-2418 finding\" returned success, but the read-back does NOT confirm it: `finding_body` is not a declared field on `task`, so /store routed it to raw_fragments and the snapshot has no such key.\nA 2xx is not evidence. Proceeding would build the page on a stage whose content reads as nothing downstream, so I have not created a rendered_page and have made no build-stage call.\nTo resume: put the finding in a declared field (a research_finding's `content`, or task `description`), re-store, read back, then continue.\n"
+}

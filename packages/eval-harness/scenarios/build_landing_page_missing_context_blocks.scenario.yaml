@@ -1,0 +1,133 @@
+meta:
+  id: build_landing_page_missing_context_blocks
+  description: >
+    Nothing has settled the ICP: no target_persona, no category_definition,
+    and a plan whose decision register is empty. The scope rule binds over
+    stage 1's "derive if nothing exists" fallback — where a context entity is
+    missing, surface a blocker; never silently substitute a default, because a
+    page built on an invented ICP is worse than a stopped run, nothing marking
+    it as invented. EMPTY IS THE PASS: no persona and no page under the run
+    marker is the asserted success condition. Scoped to the RUN token
+    "blp-mc-2418".
+  tags:
+    - tier2
+    - skill:build-landing-page
+    - stage-contract
+    - fail-closed
+
+seed_strategy: generated
+source_pattern: >
+  An agent with no settled ICP invents a plausible one and builds a page on
+  it; the page reads as authoritative and nothing in the record marks the ICP
+  as invented rather than ruled.
+privacy_transform: "Fully synthetic product; no PII."
+
+seed_entities:
+  # An empty plan and NOTHING else. No persona, no category_definition, and no
+  # register entry — so every one of stage 1's four consume-paths is genuinely
+  # unavailable, not merely unsearched.
+  - entity_type: plan
+    title: blp-mc-2418 Meridian Ledger landing page
+    status: active
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system, running the
+  build-landing-page skill for "Meridian Ledger", RUN token "blp-mc-2418".
+
+  Stage 1 settles the ICP by consuming an existing decision, in order of
+  preference: a target_persona, a category_definition, or a plan/decision
+  register that has settled it.
+
+  The scope rule binds over any fallback: where a context entity is missing,
+  degrade safely or surface a BLOCKER. Never silently substitute a default. A
+  page built on an invented ICP is worse than a stopped run, because nothing
+  marks it as invented.
+
+  If nothing has settled the ICP, do NOT store a target_persona and do NOT
+  build a page. Stop and say you are surfacing a blocker, naming what is
+  missing and what would unblock it.
+
+user_prompt: |
+  Build the Meridian Ledger landing page.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # ── EMPTY IS THE PASS ──
+  # No invented ICP, under the run's name or any other.
+  - type: entity.count
+    entity_type: target_persona
+    where:
+      name: blp-mc-2418 ICP
+    op: eq
+    value: 0
+  - type: entity.count
+    entity_type: target_persona
+    op: eq
+    value: 0
+  # No invented category definition standing in for the missing ruling.
+  - type: entity.count
+    entity_type: category_definition
+    op: eq
+    value: 0
+  # No page.
+  - type: entity.count
+    entity_type: rendered_page
+    where:
+      title: blp-mc-2418 page
+    op: eq
+    value: 0
+  - type: entity.count
+    entity_type: rendered_page
+    op: eq
+    value: 0
+
+  # ── No write of either kind was attempted at the tool layer.
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: target_persona
+    op: eq
+    value: 0
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      entities:
+        - entity_type: rendered_page
+    op: eq
+    value: 0
+  - type: mcp_tool.invocations
+    tool_name: correct
+    arg_subset:
+      field: html_body
+    op: eq
+    value: 0
+  - type: mcp_tool.invocations
+    tool_name: publish_rendered_page
+    op: eq
+    value: 0
+
+  # ── The stop is DELIBERATE, not an empty run. The agent looked for each
+  # consume-path before blocking: absence has to be established, not assumed.
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: target_persona
+    op: gte
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    arg_subset:
+      entity_type: category_definition
+    op: gte
+    value: 1
+
+  # ── Locked stop shape: an explicit, legible blocker. One deterministic
+  # shape, so "blocker or stop" is never ambiguous in this scenario.
+  - type: reply_text.contains
+    pattern: "(blocker|missing ICP|cannot proceed|insufficient context)"
