@@ -44,7 +44,7 @@ Neotoma ships as an MCP server and REST API with drop-in hook packages (Claude C
 | Storage is a local SQLite file plus content-addressed files under a user-controlled directory; optional at-rest encryption; no training use | The user wants ownership, privacy, and control of their data, not a hosted black box |
 | Three export paths (bounded `MEMORY.md`, JSON snapshot with provenance, full Markdown mirror) | The user values portability and the ability to leave or inspect at any time |
 | Personal and work record types (contacts, tasks, transactions, decisions, events) plus skills for email, finances, conversations, calendar, contacts, and codebases | The user manages their own life and work data, not a single narrow vertical |
-| Agent attribution, grants, capabilities, and hardware attestation on every write | The user runs more than one agent and needs to control and audit what each may do |
+| Agent attribution, grants, capabilities, and hardware attestation on every write | **Infrastructure, not a buyer signal (O3, 2026-09-16).** This machinery is what makes attribution and provenance answerable rather than asserted, so it is load-bearing for the guarantees above. It does not imply a distinct user who adopts Neotoma *for* it. |
 | Deterministic, immutable, fully provenanced state with an Inspector audit trail | The user cares about correctness and being able to trace and trust what agents stored |
 
 ### Jobs to be done
@@ -64,9 +64,13 @@ These are strongly supported by the functionality but are narrower than, or down
 
 The architecture is explicitly a State Layer with no strategy or execution logic inside it. It offers a deterministic, queryable, auditable substrate; a stable OpenAPI contract shared by REST, MCP, and CLI; TypeScript and Python SDKs; idempotent mutating operations; typed relationships; and a subscription/event system. These are the primitives a developer needs to build an Operational Layer (assistants, pipelines, command centers) on top without reimplementing memory, versioning, conflict handling, or audit.
 
-### 2. Security-conscious operators of multi-agent fleets
+### 2. Security-conscious operators of multi-agent fleets — **withdrawn (O3, 2026-09-16)**
 
-Hardware-attested agent identity, trust tiers, attestation revocation checks, agent grants with least-privilege capabilities, per-write attribution, tenant scoping, and an immutable provenance chain are disproportionate investments unless the intended operator runs untrusted or third-party agents and must constrain and audit them. This profile cares about who wrote what, under which key, with what authority.
+**This is not a Neotoma ICP and should not be presented as one.** It was inferred from the functional audit: hardware-attested agent identity, trust tiers, attestation revocation checks, agent grants with least-privilege capabilities, per-write attribution, tenant scoping, and an immutable provenance chain look disproportionate unless someone is being built for.
+
+That inference does not hold here. The investment exists to keep the product's own promises — authority over agent-generated state requires being able to answer who wrote a thing, under what authority, and what they were permitted to do — not to serve a distinct buyer. The nearest named party is *disqualified* at [`primary_icp.md`](./primary_icp.md) D3, and the durable-ICP decision sharpens the mismatch rather than resolving it. The surface is **infrastructure, not a sold feature**: see [`icp_reconciliation.md`](./icp_reconciliation.md#o3-the-attestation-and-capability-grants-surface-is-infrastructure).
+
+The numbering below is left unchanged so existing references to profiles 3 and 4 still resolve.
 
 ### 3. Privacy-focused individuals consolidating a personal data corpus for AI
 
@@ -103,6 +107,6 @@ Someone is in the primary ICP if most of these are true:
 | --- | --- | --- |
 | **Primary: agent developer/operator** | A persistent, deterministic, shared memory layer for the agents they build and run | MCP server + REST API, hook/SDK packages, deterministic snapshots, provenance, idempotency |
 | **Secondary: app/agent developer** | A deterministic state layer to build on | State-Layer boundary, OpenAPI contract, SDKs, subscriptions, idempotency |
-| **Secondary: fleet security operator** | Constrain and audit untrusted agents | Hardware attestation, grants/capabilities, provenance, tenant scoping |
+| ~~**Secondary: fleet security operator**~~ | *Withdrawn (O3, 2026-09-16) — not an ICP.* The attestation and grants surface is infrastructure serving the product's guarantees, not a feature a segment buys. | — |
 | **Secondary: privacy-focused individual** | Own a structured personal corpus for AI | Local storage, document ingestion, encryption, no training |
 | **Tertiary: federated small group** | Shared memory across devices/instances | Peers, conflict resolution, subscriptions, mirror |

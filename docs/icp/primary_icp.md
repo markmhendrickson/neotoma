@@ -175,6 +175,23 @@ A higher-ACV variant of the agency-fleet operator pattern. A senior engineer-con
 
 Team plans drive majority of revenue by M12 (see [`business_model.md`](../private/strategy/business_model.md)). The individual plan is the activation channel; the team plan is the revenue channel. Individual-to-team upgrade target: 20% within 2–3 months.
 
+### O2 — this is a bet on pull-through, and it is named as one
+
+**Resolved 2026-09-16.** The M12 revenue model rests on team plans at €500–€2,500/mo, while [`developer_release_targeting.md`](./developer_release_targeting.md) states that Neotoma is **not** for enterprise buyers: *"they find Neotoma, try it on a weekend, and either adopt it or don't."* Those two statements were both true and never reconciled, which left it unclear whether the revenue model depended on a buyer the targeting document excluded.
+
+**The resolution is that both stand, because they describe different things.** The individual is the **adoption motion**; the team plan is the **revenue realization**. Teams arrive because individual adopters bring Neotoma into work — the champion is someone who already uses it — not because Neotoma sells to teams directly. `developer_release_targeting.md` excludes enterprise buyers as an *acquisition* target, and that exclusion is correct and unchanged. Nothing above changes pricing.
+
+**Stated plainly as an assumption, so it is known rather than unexamined:**
+
+> **The bet:** a material fraction of individual adopters will carry Neotoma into a team context, and that motion — not direct enterprise sales — produces the M12 revenue. If pull-through does not occur at roughly the rate above, the revenue model does not hold, and the response is to re-examine the model rather than to quietly begin selling to enterprises.
+
+**What the bet commits us to, and what it forbids:**
+
+- **Committed:** making the individual→team upgrade frictionless (no re-onboarding, no migration), building the team-visible value that makes a champion's case, and arming the champion with the business case. These are listed under *Facilitating pull-through* above and are the bet's actual work.
+- **Forbidden by the bet, not merely deprioritized:** an enterprise sales motion, procurement-led entry, or targeting that treats a buying committee as the acquisition path. Adding one would not be an acceleration of this plan — it would be the admission that this plan failed, and it should be taken as such rather than slipped in.
+
+**How we would know it is failing.** The individual→team upgrade rate is the instrument: the target is 20% within 2–3 months of individual adoption. A sustained shortfall is the signal to re-open this, and it is the *first* signal — earlier and cleaner than a revenue miss, which arrives too late to act on. First pull-through is expected during Phase 2 (Dec 2026–mid 2027), so the rate is not meaningful before then; treat pre-Phase-2 readings as noise rather than as early refutation.
+
 ---
 
 ## Adoption Triggers
@@ -317,7 +334,9 @@ The [`/evaluate`](https://neotoma.io/evaluate) page is the canonical source for 
 
 **Platform builders:** People with engineering teams who build their own state layer as product. State management is their core value prop. However, custom layers eventually hit the same pain Neotoma solves — silent overwrites, no conflict detection, manual schema migrations, no cross-tool sync. When maintenance cost exceeds adoption cost, they re-enter the funnel.
 
-**Capable DIY builders:** Technically strong individuals who build their own state infra for personal use (custom MCP + Postgres, homegrown validation layers). They validate the problem space strongly — often independently arriving at the same architectural conclusions (schema constraints, multi-agent review hooks, deterministic validation). But they prefer to own and control the full stack. They are later adopters, not early ones. The people who can build their own are not the ones who adopt first.
+**Capable DIY builders — moved to [`secondary_icps.md`](./secondary_icps.md#infrastructure-builders-candidate-a-current-adopters-not-a-future-segment) (2026-09-16).** Technically strong individuals who build their own state infra for personal use (custom MCP + Postgres, homegrown validation layers). They validate the problem space strongly — often independently arriving at the same architectural conclusions — but prefer to own and control the full stack. The people who can build their own are not the ones the product is for.
+
+They are, however, over-represented among **current** adopters, because today's npm/CLI install path rewards their skills. **Their adoption is not ICP validation**: strong evidence about architecture, weak evidence about the market. The full treatment — how to read their feedback, what their retention does and does not tell you, and why the roadmap must not follow them — now lives in `secondary_icps.md`, so that this document stays about **one buyer**. This paragraph is the boundary statement; that section is the profile.
 
 **Thought-partner users:** Heavy AI users whose continuity needs are about context and voice, not deterministic state versioning. The human drives every turn; they are not running autonomous pipelines.
 

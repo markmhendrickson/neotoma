@@ -1,4 +1,23 @@
 # Neotoma Onboarding Specification
+
+> **Onboarding surface decision, 2026-09-16: GUI-first with CLI fallback.**
+>
+> The settled decision `front_door_is_the_npm_cli_wizard` (2026-08-25) is **narrowed, not retired.** The front door becomes a guided, architecture-revealing installer; the npm CLI wizard remains as the fallback path and as the agent-led path.
+>
+> **What changes is the surface. The steps do not.** The CLI onboarding specification's 13-step flow — entry and mode selection, harness detection, optional harness CLI installation, the Stage A local scan, the Stage B consented probes, workflow selection, instance selection, shared-instance join, consent, configuration, web connector configuration, handoff, and the day-two check — is **renderer-agnostic**. Each step is a decision the user makes and a piece of state the flow gathers; none of them presuppose a terminal. They are the largest reusable asset from that work and they carry over to the guided surface intact. Re-deriving them for a GUI would be rework, not design.
+>
+> **What is superseded** is the claim that the terminal is the *primary* surface through which a first-time user meets those steps. That claim rested on the ICP being at home in a terminal, and on install friction being acceptable — both of which the field evidence in [`../icp/general_release_criteria.md`](../icp/general_release_criteria.md) and the revisit-condition finding in [`../foundation/scope_decisions.md`](../foundation/scope_decisions.md) (SD-001) have unseated.
+>
+> **What is explicitly preserved:**
+>
+> - **The CLI path stays supported and first-class.** It is the fallback for users who prefer it and for environments with no display.
+> - **`--yes` and `--json` must keep working.** Agent-led installs depend on a non-interactive, machine-readable path; a guided surface must not be the only way to complete onboarding. `--yes` exists today (`src/cli/index.ts:4673`) and must not regress.
+> - **Every constraint the CLI spec places on a step travels with that step.** In particular, an invitee's join flow renders the same disclosure contract and requires the same explicit accept, whichever surface renders it; and a preview shows capability and shape and never record contents.
+>
+> **Honest status.** The guided installer is **intended and not shipped.** As of this revision the real install path is npm plus the CLI. Guided is **not** zero-install: a download and a local runtime remain, and the user still decides where their data lives. No surface should describe Neotoma as zero-install.
+>
+> The 13-step flow specification itself lives in `docs/specs/CLI_ONBOARDING_SPEC.md`, which is not yet merged to `main`. When it merges, this narrowing applies to it as written here.
+
 ## Scope
 This document covers:
 - First-run experience flow for both agent-driven (CLI/MCP) and web UI paths
