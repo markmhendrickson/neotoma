@@ -128,4 +128,44 @@ describe("contract mappings", () => {
       ).toBe(true);
     }
   });
+
+  // neotoma#2120: POST /rendered-pages/publish was declared here AND documented
+  // in openapi.yaml, but no Express route was ever mounted — so a client
+  // generated from the spec got a method that always 404'd. The suite above
+  // checks mapping-to-spec agreement; nothing checked that a documented path is
+  // actually served. This closes that gap for the whole class.
+  it("mounts an Express route for every documented, non-infra operation path", async () => {
+    const actionsPath = path.resolve(process.cwd(), "src/actions.ts");
+    const source = await fs.readFile(actionsPath, "utf-8");
+
+    const openApiPath = path.resolve(process.cwd(), "openapi.yaml");
+    const spec = yaml.load(await fs.readFile(openApiPath, "utf-8")) as OpenApiSpec;
+    const documentedPaths = new Set(Object.keys(spec.paths || {}));
+
+    // Express route registrations, e.g. app.post("/store", …). Captures the
+    // literal path only; params are normalised below.
+    const mounted = new Set<string>();
+    for (const match of source.matchAll(/app\.(get|post|put|patch|delete)\(\s*"([^"]+)"/g)) {
+      mounted.add(match[2]);
+    }
+
+    // OpenAPI writes params as {id}; Express writes them as :id.
+    const normalise = (p: string): string => p.replace(/\{([^}]+)\}/g, ":$1");
+    const mountedNormalised = new Set([...mounted].map(normalise));
+
+    const missing: string[] = [];
+    for (const mapping of OPENAPI_OPERATION_MAPPINGS) {
+      // "infra" operations are served outside the actions router.
+      if (mapping.adapter === "infra") continue;
+      if (!documentedPaths.has(mapping.path)) continue;
+      if (!mountedNormalised.has(normalise(mapping.path))) {
+        missing.push(`${mapping.method.toUpperCase()} ${mapping.path} (${mapping.operationId})`);
+      }
+    }
+
+    expect(
+      missing,
+      `Documented in openapi.yaml but no route mounted in src/actions.ts:\n  ${missing.join("\n  ")}`
+    ).toEqual([]);
+  });
 });
