@@ -255,9 +255,7 @@ describe("instance skills reach the agent through MCP initialize (#2046)", () =>
     // Locate the rendered line for this skill and assert the payload could not
     // escape it. Asserting on the whole block would be satisfied by the text
     // merely appearing somewhere; the claim is that it stays on ONE line.
-    const line = instructions
-      .split("\n")
-      .find((l) => l.startsWith(`- ${INJECTION_SKILL_NAME}`));
+    const line = instructions.split("\n").find((l) => l.startsWith(`- ${INJECTION_SKILL_NAME}`));
     expect(line, "injection skill did not render as a bullet line").toBeDefined();
 
     // Every structural escape the payload attempted, checked on the line itself.
@@ -396,5 +394,100 @@ describe("instance skill hints respect the config gate (#2046)", () => {
     expect(parse("0")).toBe(false);
     expect(parse("false")).toBe(false);
     expect(parse("FALSE")).toBe(false);
+  });
+});
+
+/**
+ * Regression for #2429 / #2368 / #2187: an AUTHENTICATED session whose identity
+ * is not on the server instance at initialize time must report "unknown", not
+ * "this instance has none".
+ *
+ * The suites above pin `authenticatedUserId` via `test-connection-bypass`, so
+ * they exercise the path where identity is already known. The live failure was
+ * the other path. In the initialize handler every branch that assigns
+ * `authenticatedUserId` is nested inside `if (connectionId)`, so a session
+ * authenticating by `Authorization` header with no `x-connection-id` reached
+ * `buildAuthenticatedInitializeResponse()` with the field still null.
+ *
+ * Gating the lookups on the bare field meant they were SKIPPED rather than
+ * FAILED: `lookup_failed` stayed false, `skills_unavailable` never appeared,
+ * and the agent was handed a confident empty list while the instance held
+ * enabled skill rows. That is the #2131 conflation reappearing, and it is why
+ * the defect survived a release — `serverInfo` and the logs both looked healthy.
+ *
+ * This drives `buildAuthenticatedInitializeResponse()` directly, which is the
+ * post-authentication branch every auth path converges on. An UNauthenticated
+ * request is a different case handled by `getUnauthenticatedResponse()`, where
+ * reporting no skills is correct rather than a defect.
+ *
+ * Asserting the unavailable SIGNAL rather than a recovered skill list is
+ * deliberate: with nothing to resolve identity from, the honest answer is an
+ * explicit "unknown", never an invented identity.
+ */
+describe("unknown identity at initialize reports unavailable, not empty (#2429)", () => {
+  let server: NeotomaServer;
+  let priorConnectionId: string | undefined;
+
+  /** Drive the authenticated branch with `authenticatedUserId` left unset. */
+  async function callAuthenticatedInitializeWithoutIdentity(srv: NeotomaServer) {
+    const inner = srv as unknown as {
+      authenticatedUserId: string | null;
+      sessionConnectionId: string | null;
+      buildAuthenticatedInitializeResponse: (n: string | null) => Promise<{
+        instructions?: string;
+        serverInfo: {
+          _neotoma?: {
+            available_skills?: string[];
+            skills_unavailable?: boolean;
+            skills_note?: string;
+            standing_rules_unavailable?: boolean;
+          };
+        };
+      }>;
+    };
+    // Exactly the observed state: authenticated, but identity not on the
+    // instance and no connection id to recover it from.
+    inner.authenticatedUserId = null;
+    inner.sessionConnectionId = null;
+    return inner.buildAuthenticatedInitializeResponse(null);
+  }
+
+  beforeAll(async () => {
+    priorConnectionId = process.env.NEOTOMA_CONNECTION_ID;
+    delete process.env.NEOTOMA_CONNECTION_ID;
+    server = new NeotomaServer();
+  });
+
+  afterAll(() => {
+    if (priorConnectionId === undefined) delete process.env.NEOTOMA_CONNECTION_ID;
+    else process.env.NEOTOMA_CONNECTION_ID = priorConnectionId;
+  });
+
+  it("flags skills as unavailable rather than silently omitting the section", async () => {
+    const result = await callAuthenticatedInitializeWithoutIdentity(server);
+
+    // The precise regression: before the fix this was `undefined`, which an
+    // agent reads as "no skills on this instance".
+    expect(result.serverInfo._neotoma?.skills_unavailable).toBe(true);
+    expect(result.serverInfo._neotoma?.skills_note).toBeTruthy();
+  });
+
+  it("flags standing rules as unavailable too, not as an empty policy", async () => {
+    const result = await callAuthenticatedInitializeWithoutIdentity(server);
+
+    // Same gate, same conflation (#2187/#2131): an agent must not read an
+    // unresolved identity as "no rules configured" and proceed unrestricted.
+    expect(result.serverInfo._neotoma?.standing_rules_unavailable).toBe(true);
+  });
+
+  it("tells the agent in the instructions, not only in serverInfo", async () => {
+    const result = await callAuthenticatedInitializeWithoutIdentity(server);
+    const instructions = result.instructions ?? "";
+
+    // #2187's point: an agent reads prose, not `_neotoma`. A signal that lives
+    // only in a field the consumer never looks at is not a signal.
+    expect(instructions.split("\n").some((l) => l === "[INSTANCE SKILLS]")).toBe(true);
+    expect(instructions).toMatch(/could not be read/i);
+    expect(instructions).toMatch(/Do NOT tell the user this instance has no skills/i);
   });
 });
