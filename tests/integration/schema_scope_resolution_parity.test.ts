@@ -317,3 +317,71 @@ describe("activate stays inside one scope partition (#2356)", () => {
     expect(Boolean(userRow?.active)).toBe(false);
   });
 });
+
+/**
+ * Security (#2356 follow-up): `activate`'s candidate-selection previously
+ * fell through to `candidates[0]` — the first row returned by an unordered
+ * `SELECT` — whenever neither the caller's own user-scoped row nor a global
+ * row matched at that version. A caller-chosen `schema_version` string on
+ * `POST /register_schema` can be crafted to collide with an existing FOREIGN
+ * user's private override version, steering that fallback onto the foreign
+ * row and deactivating it. This pins that `activate` now fails closed instead
+ * of resolving to a row that isn't the caller's own or global.
+ */
+describe("activate never falls through to a foreign user's row (#2356 security)", () => {
+  const T = `activate_foreign_${Date.now()}`;
+  const COLLIDING_VERSION = "7.0.0";
+
+  beforeAll(async () => {
+    // Only a FOREIGN user's private override exists at this version — no
+    // global row, and no row owned by USER.
+    const { error } = await db.from("schema_registry").insert({
+      entity_type: T,
+      schema_version: COLLIDING_VERSION,
+      schema_definition: {
+        fields: fields(["a"]),
+        identity_opt_out: "heuristic_canonical_name",
+      },
+      reducer_config: { merge_policies: {} },
+      active: false,
+      scope: "user",
+      user_id: OTHER_USER,
+    });
+    expect(error).toBeFalsy();
+  });
+
+  afterAll(async () => {
+    await db.from("schema_registry").delete().eq("entity_type", T);
+  });
+
+  it("activating as a different principal at the colliding version throws rather than mutating the foreign row", async () => {
+    await expect(schemaRegistry.activate(T, COLLIDING_VERSION, USER)).rejects.toThrow(
+      /Schema not found/
+    );
+
+    const foreignRow = (
+      await db
+        .from("schema_registry")
+        .select("active")
+        .eq("entity_type", T)
+        .eq("user_id", OTHER_USER)
+    ).data?.[0] as { active: unknown } | undefined;
+    // The foreign row must be untouched — still inactive.
+    expect(Boolean(foreignRow?.active)).toBe(false);
+  });
+
+  it("activating unscoped (no userId) at the colliding version also throws rather than adopting the foreign row", async () => {
+    await expect(schemaRegistry.activate(T, COLLIDING_VERSION)).rejects.toThrow(
+      /Schema not found/
+    );
+
+    const foreignRow = (
+      await db
+        .from("schema_registry")
+        .select("active")
+        .eq("entity_type", T)
+        .eq("user_id", OTHER_USER)
+    ).data?.[0] as { active: unknown } | undefined;
+    expect(Boolean(foreignRow?.active)).toBe(false);
+  });
+});
