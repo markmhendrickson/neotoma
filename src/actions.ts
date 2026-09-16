@@ -11075,7 +11075,70 @@ app.post("/update_schema_incremental", async (req, res) => {
       force = false,
     } = parsed.data;
 
-    const { schemaRegistry } = await import("./services/schema_registry.js");
+    const { schemaRegistry, loadCodeDefinedSchemaEntry } =
+      await import("./services/schema_registry.js");
+
+    // #2454 REST parity with MCP `updateSchemaIncremental`: the existence guard
+    // is scope-limited (`user_specific ? userId : undefined`). When that lookup
+    // misses but a schema is active in another scope, return
+    // ERR_SCHEMA_SCOPE_MISMATCH — never ERR_NO_SCHEMA_FOR_ENTITY_TYPE with a
+    // register_schema hint. Write-scope rematch itself remains #2446.
+    const registeredSchema = await schemaRegistry.loadActiveSchema(
+      entity_type,
+      user_specific ? userId : undefined
+    );
+    if (!registeredSchema) {
+      const codeDefinedSchema = await loadCodeDefinedSchemaEntry(entity_type);
+      if (!codeDefinedSchema) {
+        const anyScopeSchema = await schemaRegistry.loadActiveSchema(entity_type, userId);
+        if (anyScopeSchema) {
+          const guardScope = user_specific ? "user" : "global";
+          const foundScope = anyScopeSchema.scope ?? "global";
+          return res.status(200).json({
+            error: {
+              error_code: "ERR_SCHEMA_SCOPE_MISMATCH",
+              message:
+                `An active schema for entity_type "${entity_type}" exists in ` +
+                `"${foundScope}" scope, but this call resolved schemas in "${guardScope}" scope ` +
+                "and found none there.",
+              hint:
+                `The existing SchemaDefinition for "${entity_type}" lives in ` +
+                `"${foundScope}" scope. This call did not check that scope because ` +
+                `user_specific was ${user_specific ? "true" : "not set (defaults to false)"}. ` +
+                "This entity_type already has an active schema — creating a second one for it " +
+                "risks leaving two active schema_registry rows for the same entity_type (see " +
+                "#2374/#2378), after which the next incremental update can merge onto stale " +
+                "state and drop fields. Instead, retry update_schema_incremental with " +
+                `user_specific: ${foundScope === "user"} so the call resolves the scope the ` +
+                "schema actually lives in.",
+              details: {
+                entity_type,
+                guard_scope: guardScope,
+                found_scope: foundScope,
+              },
+            },
+          });
+        }
+
+        return res.status(200).json({
+          error: {
+            error_code: "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
+            message: `No schema is registered for entity_type "${entity_type}".`,
+            hint:
+              "No schema is registered for this entity_type. " +
+              "update_schema_incremental requires an existing SchemaDefinition to extend. " +
+              "Call register_schema first with a full schema_definition that includes " +
+              "canonical_name_fields (or identity_opt_out), then optionally call " +
+              "update_schema_incremental to add more fields. " +
+              "Use analyze_schema_candidates to get field suggestions before registering.",
+            details: {
+              entity_type,
+              no_schema_for_entity_type: true,
+            },
+          },
+        });
+      }
+    }
 
     let newSchema;
     try {

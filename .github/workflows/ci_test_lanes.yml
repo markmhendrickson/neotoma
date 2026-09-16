@@ -196,6 +196,9 @@ jobs:
       - name: Run DB-worker abandonment survival regressions (#2316/#2324)
         run: npx vitest run --no-file-parallelism tests/integration/db_abort_client_disconnect_survival.test.ts
 
+      - name: Run schema-lookup scope-mismatch regression (#2454)
+        run: npx vitest run --no-file-parallelism tests/integration/update_schema_incremental_scope_mismatch.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline

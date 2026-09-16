@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **618**
-- Backend and repo Vitest files: **582**
+- Total automated test files: **620**
+- Backend and repo Vitest files: **584**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 171 |
+| Vitest unit tests | 172 |
 | Vitest service tests | 44 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 179 |
+| Vitest integration tests | 180 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 19 |
 | Vitest security tests | 9 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (171):**
+**Files (172):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -209,6 +209,7 @@ flowchart TD
 - `tests/unit/mcp_instruction_doc.test.ts`
 - `tests/unit/mcp_instruction_token_budget.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
+- `tests/unit/mcp_instructions_schema_scope_mismatch.test.ts`
 - `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
@@ -411,7 +412,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (179):**
+**Files (180):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -589,6 +590,7 @@ flowchart TD
 - `tests/integration/turn_summary.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
 - `tests/integration/update_schema_incremental_envelope.test.ts`
+- `tests/integration/update_schema_incremental_scope_mismatch.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 - `tests/integration/wellknown_discovery_unauthenticated.test.ts`
 
