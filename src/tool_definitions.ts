@@ -518,6 +518,13 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "correct_transaction",
+      description:
+        "Atomically compare and correct declared fields on multiple entities. Supply each loaded observation count and expected fields. Any conflict, denied write or snapshot mismatch rolls back every change. Retry the identical request and key after uncertainty. This primitive does not authorize application-level approval.",
+      inputSchema: getOpenApiInputSchemaOrThrow("correct_transaction"),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    {
       name: "correct",
       description:
         "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect.",
@@ -1556,6 +1563,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "store",
   "parse_file",
   "correct",
+  "correct_transaction",
   "merge_entities",
   "split_entity",
   "list_potential_duplicates",

@@ -7281,6 +7281,126 @@ paths:
                       type: string
                 additionalProperties: false
 
+  /corrections/transaction:
+    post:
+      summary: Atomically compare and correct multiple entities
+      description: |
+        Append declared-field corrections in one scoped database transaction.
+        Every entity's type, observation count and expected snapshot fields must
+        match inside the write transaction. Any validation, policy, write or
+        read-back failure rolls back all changes. Reuse the identical request
+        and idempotency key after uncertainty; changed payload reuse conflicts.
+        This primitive does not decide or authorize application-level approval.
+      operationId: correctTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idempotency_key, entities]
+              properties:
+                user_id:
+                  type: string
+                idempotency_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                entities:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [entity_id, entity_type, expected_observation_count, expected_snapshot, changes]
+                    properties:
+                      entity_id:
+                        type: string
+                        minLength: 1
+                      entity_type:
+                        type: string
+                        minLength: 1
+                      expected_observation_count:
+                        type: integer
+                        minimum: 0
+                      expected_snapshot:
+                        type: object
+                        additionalProperties: true
+                        description: Declared expected values; missing differs from null. Observation count guards the whole entity.
+                      changes:
+                        type: array
+                        minItems: 1
+                        maxItems: 50
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [field, value]
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            value: {}
+      responses:
+        "200":
+          description: Committed atomically, or identical request already committed. Snapshots reflect current stored state on replay.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, entities]
+                properties:
+                  status:
+                    type: string
+                    enum: [applied, replayed]
+                  entities:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                      description: Current entity snapshot and available provenance metadata.
+                      required: [entity_id, entity_type, snapshot, observation_count]
+                      properties:
+                        entity_id: {type: string}
+                        entity_type: {type: string}
+                        snapshot: {type: object, additionalProperties: true}
+                        observation_count: {type: integer}
+        "400":
+          description: Invalid transaction, undeclared fields or instance policy denial; nothing committed.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ErrorEnvelope"
+                  - $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope"
+        "401":
+          description: Authentication required.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "403":
+          description: Calling agent capability, attribution or protected-type policy disallows a correction.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "404":
+          description: A transaction target is unavailable in the authenticated graph.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "409":
+          description: Stale precondition, changed idempotency payload or snapshot mismatch; no new changes committed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "500":
+          description: Transaction failed and was rolled back.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+
   /correct:
     post:
       summary: Create correction

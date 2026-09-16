@@ -195,3 +195,5 @@ Load when configuring or documenting agent behavior, or when choosing between MC
 - `docs/foundation/what_to_store.md` — Canonical rubric for what facts are worth storing
 - `docs/developer/agent_cli_configuration.md` — Agent CLI configuration and MCP/CLI strategy
 - `docs/developer/cli_reference.md` — CLI command reference
+
+Atomic correction transport: `neotoma request --operation correctTransaction --body '<json>'` uses the same contract as MCP `correct_transaction`. See `docs/developer/atomic_corrections.md` and the canonical behavioral instructions for retry and precondition semantics.

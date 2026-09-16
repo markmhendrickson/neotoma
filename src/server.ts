@@ -91,6 +91,7 @@ import {
 } from "./services/skills/instance_skills.js";
 import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
+import { AgentCapabilityError } from "./services/agent_capabilities.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
@@ -2068,6 +2069,11 @@ export class NeotomaServer {
           // `data` field (see src/services/attribution_policy.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
+        if (error instanceof AgentCapabilityError) {
+          // Capability and protected-type denials are client policy failures,
+          // with the same actionable envelope as authenticated REST writes.
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
         if (error instanceof OverridePolicyViolationError) {
           // Same structured-envelope contract for override-policy rejections:
           // clients branch on `OVERRIDE_POLICY_VIOLATION` via the MCP `data`
@@ -2234,6 +2240,8 @@ export class NeotomaServer {
         return await this.store(args);
       case "parse_file":
         return await this.parseFile(args);
+      case "correct_transaction":
+        return await this.correctTransaction(args);
       case "correct":
         return await this.correct(args);
       case "merge_entities":
@@ -7032,6 +7040,26 @@ export class NeotomaServer {
   }
 
   // FU-125: MCP correct() Tool
+  private async correctTransaction(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { applyCorrectionTransaction, CorrectionTransactionError } =
+      await import("./services/correction_transaction.js");
+    const body =
+      args as import("./services/correction_transaction.js").CorrectionTransactionOptions;
+    const userId = this.getAuthenticatedUserId(body?.user_id);
+    try {
+      return this.buildTextResponse(await applyCorrectionTransaction({ ...body, user_id: userId }));
+    } catch (error) {
+      if (error instanceof CorrectionTransactionError)
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
+        });
+      throw error;
+    }
+  }
+
   private async correct(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
