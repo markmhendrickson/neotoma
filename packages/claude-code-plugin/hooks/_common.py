@@ -87,6 +87,204 @@ def make_idempotency_key(session_id: str, turn_id: str, suffix: str) -> str:
     return f"conversation-{safe_session}-{safe_turn}-{suffix}"
 
 
+# --- Turn identity (#2440) --------------------------------------------------
+#
+# `turn_key` is shaped `{session_id}:{turn_id}` and exists so the calls, the
+# user message and the assistant reply belonging to ONE conversational turn can
+# be grouped. It did not do that.
+#
+# Every hook derived its turn as `payload.get("turn_id") or
+# str(int(time.time() * 1000))`. The harness does not supply `turn_id` to
+# `PostToolUse`, so the fallback fired on 100% of rows and every tool call
+# stamped its own wall-clock millisecond. Measured over the full production
+# corpus: 27,155 `tool_invocation` rows produced 27,155 distinct `turn_key`
+# values — a mean of exactly 1.00 calls per turn, against a [TURN LIFECYCLE]
+# contract that mandates a minimum of three.
+#
+# The damage is not that grouping was unavailable. It is that the fallback
+# FABRICATED GROUPABLE IDENTITY: a unique, correctly-shaped, never-failing
+# value that asserts "these calls are in different turns" when the truth is
+# "grouping is unknown". A consumer cannot tell it from real data, so the
+# defect is undetectable by exception handling and can only be noticed by
+# finding the answer implausible. That cost one measurement outright.
+#
+# So absence now has A SINGLE SPELLING and is normalized to it, following the
+# SENTINEL_ASSIGNEES pattern: when no real turn identity is available, say so
+# in a value consumers must handle, rather than inventing one they cannot
+# question.
+
+#: The one spelling of "this row cannot be grouped into a turn".
+UNGROUPED_TURN_ID = "ungrouped"
+
+#: Values that mean the same thing and normalize to `UNGROUPED_TURN_ID`.
+#: Includes the historical shapes so old rows and new agree on one spelling.
+SENTINEL_TURN_IDS = frozenset({"", "none", "null", "unknown", "ungrouped", "-", "n/a"})
+
+#: The id shape `begin_turn` mints for itself. A harness id matching this would
+#: collide with the counter's own namespace, so it gets prefixed rather than
+#: used verbatim — see `begin_turn`.
+_COUNTER_ID = re.compile(r"t[0-9]+")
+
+#: Prefix that moves a harness id out of the counter's namespace. Kept distinct
+#: from the `t{n}` shape and stable, so the same harness id always maps to the
+#: same turn and `resolve_turn_id` still reads it back unchanged from state.
+_HARNESS_PREFIX = "h-"
+
+
+def _turn_state_path(session_id: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id) or "unknown"
+    return _hook_state_dir() / f"turn-{safe}.json"
+
+
+def begin_turn(session_id: str, turn_id: str | None) -> tuple[str, str]:
+    """Open a new turn and persist it for the rest of this turn's hooks.
+
+    Called from `UserPromptSubmit`, which is the only hook that genuinely marks
+    a turn boundary. Every later hook in the same turn reads this value rather
+    than minting its own, so the whole turn agrees on one identity.
+
+    A harness-supplied `turn_id` is preferred and used verbatim, EXCEPT when
+    it is shaped like one of the counter's own `t{n}` ids, in which case it is
+    prefixed out of that namespace — otherwise it could name a turn this
+    session had already issued. Otherwise a counter increments per session —
+    deliberately NOT a timestamp, so two calls a millisecond apart cannot land
+    in different turns.
+
+    THE COUNTER IS MONOTONIC PER SESSION, INDEPENDENT OF THE DISPLAYED ID.
+    It counts turns opened in this session, not turns that happened to be
+    counter-named. Deriving it from the displayed id instead (`int(resolved[1:])`
+    when counter-sourced, `0` otherwise) reset it to zero on every harness turn,
+    so the next counter mint reissued `t1` and silently COALESCED two unrelated
+    turns onto one `turn_key`. That is the same fabricated-identity class this
+    module exists to close, one layer down — and a reused id is worse than a
+    fabricated one: a fabricated id splits one turn into many, which reads as
+    implausibly low calls-per-turn; a reused id merges many turns into one,
+    which reads as a plausible number that is simply wrong.
+
+    RETURNS A GROUPABLE ID ONLY WHEN THE STATE WRITE IS CONFIRMED BY READING IT
+    BACK. `UserPromptSubmit` stamps `{session}:{returned}` on the user message
+    while every later hook in the turn reads the state file. If the write did
+    not land, those disagree — the opening row claims a groupable turn that no
+    other row in that turn shares. So absence on this path gets the same single
+    spelling as everywhere else: `UNGROUPED_TURN_ID`. A write that reports
+    success has not necessarily happened; the absence of an exception is not
+    evidence that it did.
+
+    Returns `(turn_id, source)` where `source` is one of `harness`, `counter`
+    or `unavailable` — matching `resolve_turn_id`. The source is returned
+    rather than left for the caller to re-derive from the payload, because a
+    caller re-deriving it cannot see that the write failed and would label an
+    ungrouped row as groupable.
+    """
+    resolved = (turn_id or "").strip()
+    previous = _read_turn_state(session_id)
+    # High-water mark of counter ids MINTED in this session. A harness turn
+    # carries it forward untouched; it is never recomputed from the displayed
+    # id, which is what let a harness turn reset it to zero.
+    counter = int(previous.get("counter") or 0)
+    if resolved and resolved.lower() not in SENTINEL_TURN_IDS:
+        source = "harness"
+        # The `t{n}` namespace belongs to the counter. A harness id shaped like
+        # one would silently reuse an id this session already minted — the same
+        # coalescing defect as the rewind, reached from the other side. Namespace
+        # it instead of rejecting it: the harness id is real identity and must
+        # survive, it just may not squat on ids the counter owns.
+        if _COUNTER_ID.fullmatch(resolved):
+            resolved = f"{_HARNESS_PREFIX}{resolved}"
+    else:
+        counter += 1
+        resolved = f"t{counter}"
+        source = "counter"
+    state = {
+        "session_id": session_id,
+        "turn_id": resolved,
+        "source": source,
+        "counter": counter,
+    }
+    if not _write_turn_state_confirmed(session_id, state):
+        # Fail closed on the field carrying the meaning: say the turn is
+        # ungrouped rather than hand back an id the rest of the turn cannot see.
+        return UNGROUPED_TURN_ID, "unavailable"
+    return resolved, source
+
+
+def resolve_turn_id(session_id: str, turn_id: str | None) -> tuple[str, str]:
+    """Resolve the turn a mid-turn hook belongs to.
+
+    Returns `(turn_id, source)` where `source` is one of `harness`, `state` or
+    `unavailable`. NEVER invents a plausible-looking unique value: when the
+    turn cannot be determined the answer is `UNGROUPED_TURN_ID`, which a
+    consumer can see and exclude, rather than a timestamp it cannot.
+    """
+    candidate = (turn_id or "").strip()
+    if candidate and candidate.lower() not in SENTINEL_TURN_IDS:
+        return candidate, "harness"
+    state = _read_turn_state(session_id)
+    stored = str(state.get("turn_id") or "").strip()
+    if stored and stored.lower() not in SENTINEL_TURN_IDS:
+        return stored, "state"
+    return UNGROUPED_TURN_ID, "unavailable"
+
+
+def turn_identity_fields(turn_source: str) -> dict[str, Any]:
+    """Fields that make a row's turn identity auditable at read time.
+
+    Without this a consumer cannot distinguish a real turn from a fallback,
+    which is the property that made #2440 invisible.
+
+    `harness`, `state` and `counter` are all real turn identity — an id the
+    turn agrees on. `counter` is what `begin_turn` mints and confirms for the
+    opening row; the later rows of the same turn read it back as `state`.
+    Only `unavailable` is ungroupable, and it is reached solely when the
+    identity could not be established or confirmed.
+    """
+    return {
+        "turn_id_source": turn_source,
+        "turn_groupable": turn_source in ("harness", "state", "counter"),
+    }
+
+
+def _read_turn_state(session_id: str) -> dict[str, Any]:
+    path = _turn_state_path(session_id)
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception as exc:
+        log("debug", f"turn state parse failed: {exc}")
+        return {}
+
+
+def _write_turn_state(session_id: str, state: dict[str, Any]) -> None:
+    try:
+        directory = _hook_state_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        _turn_state_path(session_id).write_text(json.dumps(state), encoding="utf-8")
+    except Exception as exc:
+        # Best-effort, like every other hook write: a state failure degrades
+        # grouping to `unavailable`, which is legible, and never breaks a turn.
+        log("debug", f"turn state write failed: {exc}")
+
+
+def _write_turn_state_confirmed(session_id: str, state: dict[str, Any]) -> bool:
+    """Write the turn state and READ IT BACK, returning whether it landed.
+
+    The caller needs to know whether later hooks in this turn will be able to
+    see this turn, and only a read-back answers that. A silent write failure
+    and a successful write are indistinguishable from the absence of an
+    exception alone — and this path has both swallow-and-continue error
+    handling and a state directory that may not be writable.
+    """
+    _write_turn_state(session_id, state)
+    stored = _read_turn_state(session_id)
+    # Compare every field, not just `turn_id`: a partially-written or corrupt
+    # state whose `turn_id` happens to match would otherwise confirm, and the
+    # counter it carries is what the NEXT turn reads. Confirming the field you
+    # care about is not the same as confirming the write.
+    return stored == state
+
+
 def harness_provenance(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     """Provenance fields every observation written by this plugin carries."""
     fields: dict[str, Any] = {
