@@ -414,6 +414,12 @@ jobs:
       - name: Run Python unit tests
         run: pytest packages/client-python/tests/ -v
 
+      # The hook packages are Python and had no lane, so nothing executed their
+      # tests and a total write failure in both was invisible to every JS lane.
+      # A test nothing runs is documentation, not a control.
+      - name: Run hook unit tests (Claude Code plugin + codex)
+        run: pytest packages/claude-code-plugin/hooks/ packages/codex-hooks/hooks/ -v
+
   security_gates:
     # Gate G1–G3 + manifest sync (Track 1 of the pre-release security gates).
     # Always runs the manifest sync check + auth matrix; runs the static
