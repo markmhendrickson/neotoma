@@ -61,21 +61,21 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **620**
-- Backend and repo Vitest files: **584**
+- Total automated test files: **622**
+- Backend and repo Vitest files: **586**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 172 |
+| Vitest unit tests | 173 |
 | Vitest service tests | 44 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 180 |
 | Vitest CLI tests | 78 |
 | Vitest contract tests | 19 |
-| Vitest security tests | 9 |
+| Vitest security tests | 10 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (172):**
+**Files (173):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -151,6 +151,7 @@ flowchart TD
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
 - `tests/unit/config_db_backend.test.ts`
+- `tests/unit/config_mcp_instruction_entities.test.ts`
 - `tests/unit/config_refuses_user_env_under_test.test.ts`
 - `tests/unit/config_sqlite_path.test.ts`
 - `tests/unit/config_trusted_callbacks.test.ts`
@@ -710,10 +711,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (9):**
+**Files (10):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
+- `tests/security/instruction_entities_tenant_isolation.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`

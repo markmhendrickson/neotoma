@@ -61,6 +61,32 @@ Neotoma’s MCP `initialize` result **must** advertise the same **server capabil
 
 Implementation: `NEOTOMA_MCP_DECLARED_CAPABILITIES` in `src/server.ts` is spread into both authenticated and unauthenticated `initialize` handlers so it stays aligned with the `Server` constructor. See `docs/developer/mcp_cursor_setup.md` (troubleshooting) and `docs/developer/mcp/proxy.md`.
 
+### 1.2 Session instruction injection (`serverInfo._neotoma.instruction_entities`)
+
+The authenticated `initialize` result carries the instance's durable agent instructions under `serverInfo._neotoma.instruction_entities`, so an agent applies them from its first turn without a separate query.
+
+Item schema:
+
+| Field | Type | Notes |
+|---|---|---|
+| `entity_id` | string | Stable id. The array is an **index**: retrieve the full entity by this id for detail not projected here. |
+| `entity_type` | string | The source type, e.g. `standing_rule`, `agent_policy`. Consumers MUST read this rather than assuming one type. |
+| `title` | string | Short label. Falls back to the entity's canonical name. |
+| `text` | string | The operative instruction. Mapped per type (`standing_rule.rule_text`, `agent_policy.rule`). |
+| `scope` | string (optional) | Present only when the entity declares one. |
+
+The projection is an explicit allowlist. No other field reaches the client — in particular `agent_policy.body` (long-form provenance) is **never** injected, both to keep the session prompt affordable and as a data-minimization control, since `body` is the field most likely to accumulate incidental personal data.
+
+Which types are injected is per-instance configuration: `NEOTOMA_MCP_INSTRUCTION_ENTITY_TYPES` (default `standing_rule,agent_policy`), `NEOTOMA_MCP_INSTRUCTION_SCOPES` (default `global,swarm`), `NEOTOMA_MCP_INSTRUCTION_MAX_ENTITIES` (default `50`). See `docs/developer/environment/SETUP_ENV_MAPPINGS.md`.
+
+Ordering is deterministic across mixed types: shared rank descending, then `title` ascending. `agent_policy.rule_kind` maps to `mandatory` = 300, `recommended` = 200, `operating_discipline` = 100; `standing_rule.priority` is used as authored. Sorting happens **before** the cap, and anything dropped by the cap is logged with its `entity_id`.
+
+Scope filtering is a **union**: an entity is included if its `scope` is in the configured set **or** its `domain` matches the session's server-resolved agent identity. Domain matching uses the AAuth-verified agent subject only — never client-supplied `clientInfo`. With no resolved agent identity, only the configured scopes apply.
+
+Fail-soft: an unauthenticated session, a query error, or a malformed setting yields `[]` and never blocks `initialize`. When the lookup itself failed, `standing_rules_unavailable: true` and `standing_rules_note` accompany the empty array so an agent can distinguish "no instructions configured" from "could not read them".
+
+**Deprecated:** `serverInfo._neotoma.standing_rules` carries the same entities reshaped to the legacy `{ entity_id, title, rule_text, scope?, priority }` shape, where `priority` is the shared rank. It is emitted for **one minor release** so existing consumers keep working through the rename, and is removed at the following minor. New consumers MUST read `instruction_entities`.
+
 ## 2. Authentication
 
 **REQUIRED:** All MCP connections MUST authenticate using OAuth (recommended) or session tokens (deprecated).

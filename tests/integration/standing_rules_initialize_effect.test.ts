@@ -40,6 +40,16 @@ const RULE_TITLE = "Effect Test Rule";
 const entityId = `ent_test_sr_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
 /**
+ * #2054: the same effect assertion for `agent_policy`, the type the loader
+ * was never able to reach. Distinctive text again, and a `body` that must
+ * never appear on the wire.
+ */
+const POLICY_RULE = "SCOPE TEST POLICY — this text must reach serverInfo._neotoma.";
+const POLICY_TITLE = "Effect Test Policy";
+const POLICY_BODY = "LONG FORM PROVENANCE THAT MUST NEVER BE INJECTED";
+const policyEntityId = `ent_test_ap_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+/**
  * Invoke the server's real `initialize` handler.
  *
  * `test-connection-bypass` is the repo's existing test-auth path (server.ts):
@@ -51,6 +61,13 @@ const entityId = `ent_test_sr_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 async function callInitialize(server: NeotomaServer): Promise<{
   serverInfo: {
     _neotoma?: {
+      instruction_entities?: Array<{
+        entity_id: string;
+        entity_type: string;
+        title: string;
+        text: string;
+        scope?: string;
+      }>;
       standing_rules?: Array<{ entity_id: string; title: string; rule_text: string }>;
       standing_rules_unavailable?: boolean;
       standing_rules_note?: string;
@@ -120,12 +137,46 @@ async function seedStandingRule(): Promise<void> {
   });
 }
 
+/** Seed an `agent_policy` the way the reduction layer stores one (#2054). */
+async function seedAgentPolicy(): Promise<void> {
+  const snapshot = {
+    title: POLICY_TITLE,
+    rule: POLICY_RULE,
+    body: POLICY_BODY,
+    status: "active",
+    rule_kind: "mandatory",
+    scope: "global",
+  };
+
+  await db.from("entities").insert({
+    id: policyEntityId,
+    user_id: USER_ID,
+    entity_type: "agent_policy",
+    canonical_name: POLICY_TITLE,
+    merged_to_entity_id: null,
+  });
+
+  await db.from("entity_snapshots").insert({
+    entity_id: policyEntityId,
+    user_id: USER_ID,
+    entity_type: "agent_policy",
+    schema_version: "1.0.0",
+    canonical_name: POLICY_TITLE,
+    snapshot,
+    observation_count: 1,
+    last_observation_at: new Date().toISOString(),
+    provenance: {},
+    computed_at: new Date().toISOString(),
+  });
+}
+
 describe("standing rules reach the agent through MCP initialize (#2131)", () => {
   let server: NeotomaServer;
 
   beforeAll(async () => {
     process.env.NEOTOMA_CONNECTION_ID = "test-connection-bypass";
     await seedStandingRule();
+    await seedAgentPolicy();
     server = new NeotomaServer();
   });
 
@@ -133,6 +184,8 @@ describe("standing rules reach the agent through MCP initialize (#2131)", () => 
     delete process.env.NEOTOMA_CONNECTION_ID;
     await cleanupEntitySnapshot(entityId);
     await cleanupTestEntity(entityId);
+    await cleanupEntitySnapshot(policyEntityId);
+    await cleanupTestEntity(policyEntityId);
   });
 
   it("delivers a stored enabled rule in serverInfo._neotoma.standing_rules", async () => {
@@ -160,5 +213,59 @@ describe("standing rules reach the agent through MCP initialize (#2131)", () => 
     // agent would treat a working policy as unknown.
     expect(result.serverInfo._neotoma?.standing_rules_unavailable).toBeUndefined();
     expect(result.serverInfo._neotoma?.standing_rules_note).toBeUndefined();
+  });
+
+  // #2054 — the reported gap, asserted at the effect level. The unit tests
+  // mock the DB, so they verify branching but not that a real stored
+  // agent_policy survives the real query, the real projection and the real
+  // handler all the way onto the wire.
+  it("delivers a stored active agent_policy in serverInfo._neotoma.instruction_entities", async () => {
+    const result = await callInitialize(server);
+
+    const entities = result.serverInfo._neotoma?.instruction_entities;
+    expect(entities, "initialize returned no instruction_entities array").toBeDefined();
+
+    const seeded = entities?.find((e) => e.entity_id === policyEntityId);
+    expect(
+      seeded,
+      `seeded agent_policy ${policyEntityId} did not reach initialize; got ${JSON.stringify(entities)}`
+    ).toBeDefined();
+
+    expect(seeded?.entity_type).toBe("agent_policy");
+    // The field mismatch, end to end: the text comes off `rule`.
+    expect(seeded?.text).toBe(POLICY_RULE);
+    expect(seeded?.title).toBe(POLICY_TITLE);
+    expect(seeded?.scope).toBe("global");
+  });
+
+  it("still delivers the standing rule on the canonical key", async () => {
+    const result = await callInitialize(server);
+    const entities = result.serverInfo._neotoma?.instruction_entities;
+    const seeded = entities?.find((e) => e.entity_id === entityId);
+    expect(seeded, "standing rule missing from instruction_entities").toBeDefined();
+    expect(seeded?.entity_type).toBe("standing_rule");
+    expect(seeded?.text).toBe(RULE_TEXT);
+  });
+
+  it("never puts agent_policy body on the wire", async () => {
+    const result = await callInitialize(server);
+    // Checked against the whole payload, not just the one item: body must not
+    // reach the session through the canonical key or the deprecated alias.
+    expect(JSON.stringify(result.serverInfo._neotoma)).not.toContain(POLICY_BODY);
+  });
+
+  it("dual-emits the deprecated standing_rules alias in the legacy shape", async () => {
+    const result = await callInitialize(server);
+
+    const legacy = result.serverInfo._neotoma?.standing_rules;
+    expect(legacy, "deprecated standing_rules alias was dropped").toBeDefined();
+
+    // A legacy consumer reading `rule_text` keeps working, including for the
+    // agent_policy-derived item.
+    const legacyPolicy = legacy?.find((r) => r.entity_id === policyEntityId);
+    expect(legacyPolicy?.rule_text).toBe(POLICY_RULE);
+
+    const legacyRule = legacy?.find((r) => r.entity_id === entityId);
+    expect(legacyRule?.rule_text).toBe(RULE_TEXT);
   });
 });
