@@ -133,10 +133,7 @@ function main(): void {
   }
 
   // Build manifest
-  const toolsManifest: Record<
-    string,
-    { addedInVersion: string; removedInVersion?: string }
-  > = {};
+  const toolsManifest: Record<string, { addedInVersion: string; removedInVersion?: string }> = {};
 
   for (const [tool, version] of [...toolFirstVersion.entries()].sort(([a], [b]) =>
     a < b ? -1 : a > b ? 1 : 0
@@ -164,21 +161,27 @@ function main(): void {
   const jsonOutput = JSON.stringify(manifest, null, 2) + "\n";
 
   if (checkMode) {
+    const staleMessage = [
+      "❌ capability_manifest.json is out of date with tracked capabilities.",
+      "  Run: npm run generate:capability-manifest",
+      "  Then commit the result and push.",
+    ].join("\n");
+
     // Read the committed file and compare
     let existing: string;
     try {
       existing = readFileSync(outPath, "utf-8");
     } catch {
-      console.error(`FAIL: ${outPath} does not exist. Run npm run generate:capability-manifest`);
+      console.error(staleMessage);
       process.exit(1);
     }
     if (existing === jsonOutput) {
-      console.log("OK: capability_manifest.json is up-to-date.");
+      console.log(
+        "✅ capability_manifest.json verified fresh (auto-merged via merge=union if applicable)."
+      );
       process.exit(0);
     } else {
-      console.error(
-        "FAIL: capability_manifest.json is stale. Run: npm run generate:capability-manifest"
-      );
+      console.error(staleMessage);
       process.exit(1);
     }
   }
