@@ -121,7 +121,12 @@ export function emitEntityLifecycle(params: {
   user_id: string;
   entity_id: string;
   entity_type: string;
-  event_type: "entity.deleted" | "entity.restored" | "entity.merged" | "entity.split";
+  event_type:
+    | "entity.deleted"
+    | "entity.restored"
+    | "entity.merged"
+    | "entity.split"
+    | "entity.unmerged";
   timestamp: string;
   observation_id?: string;
   source_id?: string;

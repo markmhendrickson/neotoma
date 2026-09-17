@@ -555,15 +555,23 @@ export function buildToolDefinitions(
       name: "merge_entities",
       description: desc(
         "merge_entities",
-        "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged."
+        "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged. Reversible — see unmerge_entities. The response's merge_id is required to undo this merge later."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("merge_entities"),
+    },
+    {
+      name: "unmerge_entities",
+      description: desc(
+        "unmerge_entities",
+        "Reverses a prior merge_entities call: restores the source entity, repoints its observations, and restores any relationship rows the merge deleted or repointed. Requires the merge_id returned by merge_entities, not entity ids."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("unmerge_entities"),
     },
     {
       name: "split_entity",
       description: desc(
         "split_entity",
-        "Inverse of merge_entities (R5). Re-point a predicate-selected subset of an entity's observations onto a new or pre-existing entity to repair over-merges. Schema-agnostic predicate; observation content is never modified. Idempotent via (user_id, idempotency_key)."
+        "Re-split an entity that holds observations belonging to distinct things (R5). Re-points a predicate-selected subset of an entity's observations onto a new or pre-existing entity — use it to repair over-merges from heuristic resolution, such as the pre-v1.2 name_key:title collapse on session-scoped types. This is a repair tool, NOT a merge-undo: to reverse a specific merge_entities call use unmerge_entities(merge_id), which replays that merge's recorded inverse. Schema-agnostic predicate; observation content is never modified. Idempotent via (user_id, idempotency_key)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("split_entity"),
     },
@@ -1557,6 +1565,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "parse_file",
   "correct",
   "merge_entities",
+  "unmerge_entities",
   "split_entity",
   "list_potential_duplicates",
   "delete_entity",
