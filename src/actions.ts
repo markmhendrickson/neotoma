@@ -11367,7 +11367,7 @@ app.post("/register_relationship_type", async (req, res) => {
     } catch (err) {
       if (err instanceof RelationshipTypeRegistrationError) {
         logWarn("ValidationError:register_relationship_type", req, { error: err.message });
-        return sendError(res, err.statusCode, err.code.toUpperCase(), `${err.message} ${err.hint}`);
+        return sendError(res, err.statusCode, err.code, err.message, { hint: err.hint });
       }
       throw err;
     }

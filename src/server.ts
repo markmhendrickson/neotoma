@@ -4921,7 +4921,10 @@ export class NeotomaServer {
       });
     } catch (error: any) {
       if (error instanceof RelationshipTypeRegistrationError) {
-        throw new McpError(ErrorCode.InvalidParams, `${error.message} ${error.hint}`);
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          hint: error.hint,
+        });
       }
       throw error;
     }

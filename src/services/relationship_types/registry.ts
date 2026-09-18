@@ -166,13 +166,34 @@ export class RelationshipTypeRegistrationError extends Error {
   }
 }
 
+/**
+ * Parse a registry row's `definition` column.
+ *
+ * `acyclic` is the ONE enforced field on this shape (see the field doc above)
+ * — it is the field that carries the safety meaning, so an unreadable value
+ * must take the RESTRICTIVE branch for THAT field specifically, not the
+ * permissive one. An empty `{}` on failure would make `isRelationshipTypeAcyclic`
+ * read `undefined !== true` as "not acyclic" and skip the DFS entirely,
+ * silently turning a corrupt row into an unchecked one — exactly the
+ * fail-open-on-the-safety-field shape `docs/foundation/principles.md` §5
+ * rules out. A malformed `definition` (hand-edited row, partial write, a
+ * future migration) is treated as acyclic: true and nothing else, so cycle
+ * checking is never skipped by corruption while every other advisory field
+ * (description, source/target types, inverse, symmetric) is correctly absent
+ * rather than fabricated.
+ */
 function parseDefinition(raw: RegistryRow["definition"]): RelationshipTypeDefinition {
   if (!raw) return {};
   if (typeof raw !== "string") return raw;
   try {
     return JSON.parse(raw) as RelationshipTypeDefinition;
-  } catch {
-    return {};
+  } catch (err) {
+    logger.warn(
+      `[RelationshipTypeRegistry] unreadable definition; failing closed with acyclic: true: ${
+        (err as Error).message
+      }`
+    );
+    return { acyclic: true };
   }
 }
 

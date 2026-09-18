@@ -3,7 +3,11 @@ import { runWithRequestContext } from "../../src/services/request_context.js";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { RelationshipsService } from "../../src/services/relationships.js";
-import { relationshipTypeRegistry } from "../../src/services/relationship_types/registry.js";
+import {
+  relationshipTypeRegistry,
+  RELATIONSHIP_TYPE_REGISTRY_TABLE,
+  invalidateRelationshipTypeCache,
+} from "../../src/services/relationship_types/registry.js";
 import { enforceRelationshipTypeCapability } from "../../src/services/agent_capabilities.js";
 
 const user = "00000000-0000-0000-0000-0000000a2502";
@@ -145,5 +149,46 @@ describe("relationship registry security regression", () => {
         user_id: user,
       })
     ).rejects.toThrow(/graph unavailable/);
+  });
+  it("fails closed on an unreadable definition instead of skipping the cycle check", async () => {
+    // A definition that cannot be parsed as JSON must not be read as "no
+    // definition, therefore not acyclic, therefore skip the DFS". The field
+    // carries the safety meaning here (`acyclic`), so an unreadable value
+    // must take the RESTRICTIVE branch (treated as acyclic => cycle-checked),
+    // not the permissive one. Insert the corrupt row directly, bypassing
+    // `register()`'s JSON.stringify, since that is the only way a malformed
+    // `definition` column reaches this path in practice (a hand-edited row,
+    // a partial write, a future migration).
+    const relationshipType = "G25_CORRUPT_DEFINITION";
+    await db.from(RELATIONSHIP_TYPE_REGISTRY_TABLE).insert({
+      id: `reltype_${relationshipType}_user_${user}_corrupt`,
+      relationship_type: relationshipType,
+      registry_version: "corrupt",
+      definition: "{not valid json",
+      state: "active",
+      created_at: new Date().toISOString(),
+      created_by: user,
+      user_id: user,
+      scope: "user",
+      metadata: "{}",
+    });
+    invalidateRelationshipTypeCache();
+
+    const a = "ent_g25_corrupt_a",
+      b = "ent_g25_corrupt_b";
+    await service.createRelationship({
+      relationship_type: relationshipType,
+      source_entity_id: a,
+      target_entity_id: b,
+      user_id: user,
+    });
+    await expect(
+      service.createRelationship({
+        relationship_type: relationshipType,
+        source_entity_id: b,
+        target_entity_id: a,
+        user_id: user,
+      })
+    ).rejects.toThrow(/cycle/i);
   });
 });
