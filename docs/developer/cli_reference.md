@@ -674,7 +674,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--file <path>`: create a batch from a JSON array, or an object with `relationships: [...]`. Each entry uses `relationship_type`, `source_entity_id`, `target_entity_id`, and optional `metadata`.
 - `neotoma relationships list <entityId>`:
   - `--direction <direction>`: inbound, outbound, or both
-- `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is one of: PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS.
+- `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is any type registered on the instance — the vocabulary is a runtime registry — call `list_relationship_types` to read what an instance accepts, and `register_relationship_type` to add to it.
 - `neotoma relationships restore <relationshipType> <sourceEntityId> <targetEntityId>`: Restore a deleted relationship (creates restoration observation). Optional: `--reason <reason>`.
 
 ### Timeline

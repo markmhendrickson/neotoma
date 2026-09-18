@@ -12,7 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 
-import { RelationshipTypeSchema } from "../../src/shared/action_schemas.js";
+import { BUILT_IN_RELATIONSHIP_TYPES } from "../../src/services/relationship_types/seed_registry.js";
 
 const manifestPath = path.resolve(
   __dirname,
@@ -64,8 +64,13 @@ describe("generic sandbox showcase manifest", () => {
     expect(dangling, `dangling refs: ${dangling.join(", ")}`).toEqual([]);
   });
 
-  it("every relationship_type is a valid RelationshipType", () => {
-    const valid = new Set(RelationshipTypeSchema.options as readonly string[]);
+  it("every relationship_type is one the showcase instance will have registered", () => {
+    // #1972 / G25: `RelationshipTypeSchema` is no longer an enum with
+    // `.options` — the vocabulary is a runtime registry. The manifest seeds a
+    // fresh sandbox, so the types it may use are the BUILT-INS, which is what
+    // the boot seeder puts in that instance's registry. A manifest naming a
+    // type nobody registers would write nothing on that instance.
+    const valid = new Set(BUILT_IN_RELATIONSHIP_TYPES.map((t) => t.relationship_type));
     const bad = (manifest.relationships ?? [])
       .map((r) => r.relationship_type)
       .filter((t) => !valid.has(t));
