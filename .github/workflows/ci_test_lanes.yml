@@ -199,6 +199,12 @@ jobs:
       - name: Run schema-lookup scope-mismatch regression (#2454)
         run: npx vitest run --no-file-parallelism tests/integration/update_schema_incremental_scope_mismatch.test.ts
 
+      # #2356 schema-scope surface parity. The integration file already existed
+      # but this lane never ran it, so a surface that dropped user_id could
+      # still merge. Keep it beside the other schema-lookup regression.
+      - name: Run schema-scope surface parity (#2356)
+        run: npx vitest run --no-file-parallelism tests/integration/schema_scope_surface_parity.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline

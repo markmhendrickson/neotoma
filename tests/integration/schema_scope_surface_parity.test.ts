@@ -8,9 +8,10 @@
  * this PR broke no test anywhere.
  *
  * This file closes that. It boots the real Express app and the real
- * NeotomaServer and drives all three surfaces that expose schema versions:
+ * NeotomaServer and drives every surface that exposes schema versions:
  *
  *   HTTP  GET /schemas                 (list)
+ *   HTTP  GET /schemas/:entity_type    (per-type)
  *   MCP   list_entity_types            (list)
  *   MCP   describe_entity_type         (per-type)
  *
@@ -112,6 +113,21 @@ describe("schema scope parity across surfaces (#2356)", () => {
     expect(row?.schema_version).toBe(USER_VERSION);
   });
 
+  it("HTTP GET /schemas/:entity_type reports the principal's resolved version", async () => {
+    const res = await fetch(
+      `${API_BASE}/schemas/${encodeURIComponent(TYPE)}?user_id=${USER_ID}`
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      schema_version?: string;
+      schema_definition?: { fields?: Record<string, unknown> };
+    };
+    // The body is the schema row, not `{ schemas: [] }`. "1.18.0" sorts below
+    // "1.3.0" as a string, so a lexical pick of the global row omits scoped_marker.
+    expect(body.schema_version).toBe(USER_VERSION);
+    expect(body.schema_definition?.fields).toHaveProperty(USER_ONLY_FIELD);
+  });
+
   it("MCP list_entity_types agrees with the HTTP list", async () => {
     const out = await callTool(server, "listEntityTypes", { user_id: USER_ID, keyword: TYPE });
     const body = JSON.parse(out.content[0].text) as {
@@ -133,12 +149,17 @@ describe("schema scope parity across surfaces (#2356)", () => {
     expect(body.field_names).toContain(USER_ONLY_FIELD);
   });
 
-  it("all three surfaces return the SAME version as each other", async () => {
+  it("all surfaces return the SAME version as each other", async () => {
     const httpRes = await fetch(`${API_BASE}/schemas?user_id=${USER_ID}&keyword=${TYPE}`);
     const httpBody = (await httpRes.json()) as {
       schemas?: Array<{ entity_type: string; schema_version: string }>;
     };
     const httpVersion = (httpBody.schemas ?? []).find((t) => t.entity_type === TYPE)?.schema_version;
+
+    const perTypeRes = await fetch(
+      `${API_BASE}/schemas/${encodeURIComponent(TYPE)}?user_id=${USER_ID}`
+    );
+    const perTypeVersion = ((await perTypeRes.json()) as { schema_version?: string }).schema_version;
 
     const listOut = await callTool(server, "listEntityTypes", { user_id: USER_ID, keyword: TYPE });
     const listBody = JSON.parse(listOut.content[0].text) as {
@@ -149,8 +170,8 @@ describe("schema scope parity across surfaces (#2356)", () => {
     const descOut = await callTool(server, "describeEntityType", { entity_type: TYPE, user_id: USER_ID });
     const descVersion = (JSON.parse(descOut.content[0].text) as { schema_version?: string }).schema_version;
 
-    // The bug, stated as an assertion: these three disagreed.
-    expect(new Set([httpVersion, listVersion, descVersion]).size).toBe(1);
+    // The bug, stated as an assertion: these disagreed.
+    expect(new Set([httpVersion, perTypeVersion, listVersion, descVersion]).size).toBe(1);
   });
 
   it("a principal with no scoped row sees global, not another principal's override", async () => {
