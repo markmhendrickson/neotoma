@@ -1405,6 +1405,18 @@ export function hintOf(error: unknown): string | undefined {
   return undefined;
 }
 
+/** Preserve a REST ErrorEnvelope when a CLI command crosses the API boundary. */
+function cliApiError(error: unknown): Error {
+  const detail = formatApiError(error);
+  const serverCode = errorCodeOf(error);
+  if (!serverCode) return new Error(detail);
+  return new CliHintError(detail, {
+    code: serverCode,
+    message: detail,
+    ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+  });
+}
+
 /**
  * #2228: the `/me` payload separates "who you are" (`email`) from "whose
  * graph you operate on" (`user_id`). Under shared-graph mode those describe
@@ -12611,7 +12623,7 @@ relationshipTypesCommand
         include_edge_counts: opts.includeEdgeCount,
       },
     });
-    if (error) throw new Error(formatApiError(error));
+    if (error) throw cliApiError(error);
     writeOutput(data, resolveOutputMode());
   });
 relationshipTypesCommand
@@ -12643,7 +12655,7 @@ relationshipTypesCommand
         target_entity_types: opts.targetEntityTypes?.split(","),
       },
     });
-    if (error) throw new Error(formatApiError(error));
+    if (error) throw cliApiError(error);
     writeOutput(data, resolveOutputMode());
   });
 const relationshipsCommand = program.command("relationships").description("Relationship commands");

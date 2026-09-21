@@ -96,5 +96,15 @@ describe("relationship-types CLI", () => {
     );
     expect(result.exitCode).toBe(1);
     expect(String(result.error) + result.stderr).toMatch(/capability|not permitted/i);
+    expect((result.error as { hint?: { code?: string; hint?: string } })?.hint).toMatchObject({
+      code: expect.stringMatching(/capability/i),
+      hint: expect.stringMatching(/agent_grant|capability/i),
+    });
+  });
+
+  it("preserves the server error code when list rejects an invalid scope", async () => {
+    const result = await runNeotomaCli([...args, "list", "--scope", "not-a-scope"], {});
+    expect(result.exitCode).toBe(1);
+    expect((result.error as { hint?: { code?: string } })?.hint?.code).toMatch(/validation/i);
   });
 });
