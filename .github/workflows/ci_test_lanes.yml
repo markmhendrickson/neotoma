@@ -199,6 +199,13 @@ jobs:
       - name: Run schema-lookup scope-mismatch regression (#2454)
         run: npx vitest run --no-file-parallelism tests/integration/update_schema_incremental_scope_mismatch.test.ts
 
+      # #2356 schema-scope parity. Surface parity alone stays green when
+      # last-arrival wins, because that file inserts the user row second.
+      # Resolution parity seeds the global row last and is what fails if
+      # listEntityTypes drops isHigherPrecedenceSchemaRow.
+      - name: Run schema-scope parity (#2356)
+        run: npx vitest run --no-file-parallelism tests/integration/schema_scope_surface_parity.test.ts tests/integration/schema_scope_resolution_parity.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline
