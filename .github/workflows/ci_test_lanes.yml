@@ -174,6 +174,13 @@ jobs:
       - name: Run entity-query read-latency regressions (#2266)
         run: npx vitest run --no-file-parallelism tests/integration/entity_query_deleted_count.test.ts
 
+      # #2009/#2010 soft-delete read-path enforcement. The baseline job runs
+      # `test:unit`, which excludes tests/integration, so the regression suite
+      # must be named explicitly here to make tombstone filtering on
+      # list_observations and retrieve_related_entities a binding PR gate.
+      - name: Run soft-delete read-path enforcement regressions (#2009)
+        run: npx vitest run --no-file-parallelism tests/integration/soft_delete_read_path_enforcement.test.ts
+
       # #2316/#2324 DB-worker abandonment survival. The same gap as the two steps
       # above, and the one that cost the most: this suite already existed and
       # already asserted the right property, but `test:unit` excludes

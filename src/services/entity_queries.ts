@@ -235,7 +235,7 @@ export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: str
  * chunk, plus (only when never-observed rows are actually present) one bounded
  * indexed existence probe against `observations`.
  */
-async function getDeletedEntityIds(
+export async function getDeletedEntityIds(
   candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
   userId?: string
 ): Promise<Set<string>> {
@@ -296,6 +296,48 @@ async function getDeletedEntityIds(
   }
 
   return deletedEntityIds;
+}
+
+/**
+ * Resolve which of `entityIds` are tombstoned, for callers that only hold
+ * bare ids (no `merged_to_entity_id`) — e.g. ids discovered by walking
+ * `relationship_snapshots` rather than by selecting from `entities`.
+ *
+ * This is a thin adapter over `getDeletedEntityIds`, the single source of
+ * truth for tombstone checks (see its docstring for the merged-away /
+ * never-observed distinction). It fetches `merged_to_entity_id` for the
+ * given ids and forwards to `getDeletedEntityIds`, so every read path
+ * inherits the same carve-outs as `queryEntities` without duplicating the
+ * merged-away logic per call site. Prefer `getDeletedEntityIds` directly
+ * when the caller already has `merged_to_entity_id` on hand (it costs no
+ * extra query in that case).
+ *
+ * @param entityIds - Candidate entity IDs to test.
+ * @param userId - Optional tenant scope, forwarded to both the lookup below
+ *   and `getDeletedEntityIds`.
+ */
+export async function getDeletedEntityIdsById(
+  entityIds: string[],
+  userId?: string
+): Promise<Set<string>> {
+  if (entityIds.length === 0) {
+    return new Set<string>();
+  }
+
+  let candidateQuery = db.from("entities").select("id, merged_to_entity_id").in("id", entityIds);
+  if (userId) {
+    candidateQuery = candidateQuery.eq("user_id", userId);
+  }
+  const { data: candidateRows, error } = await candidateQuery;
+
+  if (error) {
+    throw new Error(`Failed to resolve deleted entities: ${error.message}`);
+  }
+
+  return getDeletedEntityIds(
+    (candidateRows || []) as Array<{ id: string; merged_to_entity_id?: string | null }>,
+    userId
+  );
 }
 
 /**
