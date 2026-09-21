@@ -288,7 +288,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (44):**
+**Files (46):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -319,6 +319,8 @@ flowchart TD
 - `tests/services/raw_fragments_isolation.test.ts`
 - `tests/services/raw_storage_mime_map.test.ts`
 - `tests/services/raw_storage.test.ts`
+- `tests/services/relationship_type_registration.test.ts`
+- `tests/services/relationship_type_security.test.ts`
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
 - `tests/services/schema_recommendation.test.ts`
@@ -601,7 +603,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (78):**
+**Files (79):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -667,6 +669,7 @@ flowchart TD
 - `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`
 - `tests/cli/processes_command.test.ts`
+- `tests/cli/relationship_types_cli.test.ts`
 - `tests/cli/reporter_setup.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`
@@ -703,6 +706,7 @@ flowchart TD
 - `tests/contract/package_contents.test.ts`
 - `tests/contract/package_scripts.test.ts`
 - `tests/contract/relationship_type_enum_parity.test.ts`
+- `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`

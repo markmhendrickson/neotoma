@@ -84,36 +84,38 @@ export const FieldProvenanceRequestSchema = z.object({
   field: z.string(),
 });
 
-export const RelationshipTypeSchema = z.enum([
-  "PART_OF",
-  "CORRECTS",
-  "REFERS_TO",
-  "SETTLES",
-  "DUPLICATE_OF",
-  "DEPENDS_ON",
-  "SUPERSEDES",
-  "EMBEDS",
-  "works_at",
-  "owns",
-  "manages",
-  "part_of",
-  "related_to",
-  "depends_on",
-  "references",
-  "transacted_with",
-  "member_of",
-  "reports_to",
-  "located_at",
-  "created_by",
-  "funded_by",
-  "acquired_by",
-  "subsidiary_of",
-  "partner_of",
-  "competitor_of",
-  "supplies_to",
-  "contracted_with",
-  "invested_in",
-]);
+/**
+ * Relationship-type SHAPE validation (#1972 / G25).
+ *
+ * This was a closed 28-member `z.enum`. It is now a naming rule only:
+ * MEMBERSHIP is decided against the runtime registry at the single enforcement
+ * point in `services/relationships.ts`, not here.
+ *
+ * Splitting the two is the point. A Zod enum here was one of sixteen places
+ * the vocabulary was written down and the only one of them a caller's error
+ * message came from, so a type registered at runtime would have been refused
+ * by the parser before the service that knew about it ever ran. Shape is
+ * static and belongs here; membership is dynamic and does not.
+ *
+ * The pattern is casing-agnostic by necessity: the seeded vocabulary already
+ * contains `PART_OF` and `part_of`, and `DEPENDS_ON` and `depends_on`.
+ */
+export const RELATIONSHIP_TYPE_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+export const RELATIONSHIP_TYPE_SHAPE_HINT =
+  "Relationship type must be identifier-shaped: a letter, then letters, digits or " +
+  "underscores, 1-64 characters. Call list_relationship_types to see the vocabulary " +
+  "this instance accepts, or register_relationship_type to add to it.";
+
+export const RelationshipTypeSchema = z.string().superRefine((value, ctx) => {
+  if (!RELATIONSHIP_TYPE_NAME_PATTERN.test(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${RELATIONSHIP_TYPE_SHAPE_HINT} Received: ${JSON.stringify(value)}`,
+      params: { code: "invalid_relationship_type_name", hint: RELATIONSHIP_TYPE_SHAPE_HINT },
+    });
+  }
+});
 
 export const CreateRelationshipRequestSchema = z.object({
   relationship_type: RelationshipTypeSchema,
@@ -148,7 +150,11 @@ const StoreRelationshipTargetEndpointSchema = z.union([
 
 export const StoreRelationshipInputSchema = z
   .object({
-    relationship_type: z.string(),
+    // Same shape rule as CreateRelationshipRequestSchema — previously a bare
+    // z.string() here while create_relationship carried a 28-member enum, so
+    // the two doors advertised different vocabularies. Membership is still the
+    // service's job against the registry.
+    relationship_type: RelationshipTypeSchema,
     source_index: z.number().int().min(0).optional(),
     source_entity_id: z.string().min(1).optional(),
     target_index: z.number().int().min(0).optional(),
