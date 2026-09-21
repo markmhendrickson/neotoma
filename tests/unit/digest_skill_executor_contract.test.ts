@@ -4,6 +4,21 @@ import { describe, expect, it } from "vitest";
 
 import { resolveNeotomaPackageRoot } from "../../src/mcp_instruction_doc.js";
 
+interface Executor {
+  kind: string;
+  name: string;
+  status: string;
+  ref?: string;
+}
+
+interface ExecutorCase {
+  id: string;
+  lookup: "verified" | "verified-empty" | "unreadable";
+  task: string | null;
+  tracking_defect?: string;
+  executor: Executor;
+}
+
 function readDigestSkill(): string {
   const overridePath = process.env.NEOTOMA_DIGEST_SKILL_CONTRACT_PATH?.trim();
   return readFileSync(
@@ -12,28 +27,81 @@ function readDigestSkill(): string {
   );
 }
 
-describe("digest skill executor visibility contract", () => {
-  it("shows a live executor for every remaining workstream", () => {
-    const skill = readDigestSkill();
+function readExecutorFixture(skill: string): ExecutorCase[] {
+  const match = skill.match(/```json digest-executor-fixture\n([\s\S]*?)\n```/);
+  if (!match) throw new Error("digest executor behavior fixture is missing");
+  return JSON.parse(match[1]) as ExecutorCase[];
+}
 
-    expect(skill).toContain("Every remaining workstream also names its **live executor**");
-    expect(skill).toContain("Owner and executor are different facts.");
-    expect(skill).toContain("label the workstream `queued — unassigned`");
+function renderFixtureCase(entry: ExecutorCase) {
+  return {
+    workboard: {
+      executor:
+        entry.executor.kind === "unassigned" || entry.executor.kind === "unknown"
+          ? entry.executor.kind
+          : `${entry.executor.kind}: ${entry.executor.name}`,
+      status: entry.executor.status,
+      task: entry.task ?? "task: missing",
+      trackingDefect: entry.tracking_defect ?? null,
+    },
+    persistedExecutor: { ...entry.executor },
+  };
+}
+
+describe("digest skill executor visibility behavior", () => {
+  const skill = readDigestSkill();
+  const cases = readExecutorFixture(skill);
+
+  it("renders a verified peer session and persists the same executor", () => {
+    const peer = cases.find((entry) => entry.id === "peer-session");
+    expect(peer).toBeDefined();
+
+    const rendered = renderFixtureCase(peer!);
+    expect(rendered.workboard).toMatchObject({
+      executor: "peer_session: review-task",
+      status: "in progress",
+      task: "ent_review",
+    });
+    expect(rendered.persistedExecutor).toEqual(peer!.executor);
+    expect(rendered.persistedExecutor.kind).toBe("peer_session");
   });
 
-  it("keeps live work visible when the durable task binding is missing", () => {
-    const skill = readDigestSkill();
+  it("keeps live work visible when its durable task binding is missing", () => {
+    const missingTask = cases.find((entry) => entry.id === "missing-task");
+    expect(missingTask).toBeDefined();
 
-    expect(skill).toContain("label the durable binding `task: missing`");
-    expect(skill).toContain("surface the missing task binding as a tracking defect");
+    const rendered = renderFixtureCase(missingTask!);
+    expect(rendered.workboard).toEqual({
+      executor: "background_task: export-42",
+      status: "running",
+      task: "task: missing",
+      trackingDefect: "task: missing",
+    });
+    expect(rendered.persistedExecutor).toEqual(missingTask!.executor);
   });
 
-  it("persists executor state only as the nested tasks_claimed object", () => {
-    const skill = readDigestSkill();
+  it("distinguishes verified-empty from unreadable live state", () => {
+    const unassigned = cases.find((entry) => entry.lookup === "verified-empty");
+    const unreadable = cases.find((entry) => entry.lookup === "unreadable");
+    expect(unassigned).toBeDefined();
+    expect(unreadable).toBeDefined();
 
-    expect(skill).toContain("`executor` is a compact nested object `{kind, name, status, ref?}`");
+    expect(renderFixtureCase(unassigned!).workboard).toMatchObject({
+      executor: "unassigned",
+      status: "queued",
+    });
+    expect(renderFixtureCase(unreadable!).workboard).toMatchObject({
+      executor: "unknown",
+      status: "live state unreadable",
+    });
+    expect(unassigned!.executor).not.toEqual(unreadable!.executor);
+  });
+
+  it("documents the complete nested executor and schema contract", () => {
+    expect(skill).toContain("The active `session_digest` schema is **v1.4.0**");
+    expect(skill).toContain('Write `schema_version: "1.4.0"`');
     expect(skill).toContain(
-      "`root_session | subagent | background_task | automation | operator | external_party | unassigned`"
+      "`root_session | subagent | background_task | automation | peer_session | operator | external_party | unassigned | unknown`"
     );
     expect(skill).toContain("Do not add separate top-level executor fields to `session_digest`.");
   });
