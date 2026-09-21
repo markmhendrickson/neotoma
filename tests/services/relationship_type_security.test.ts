@@ -165,7 +165,14 @@ describe("relationship registry security regression", () => {
     await expect(getActiveRelationshipTypeNames(user)).resolves.toContain("G25_STALE_TYPE");
 
     now.mockReturnValue(6_001);
-    await expect(getActiveRelationshipTypeNames(user)).rejects.toThrow(/registry unavailable/);
+    await expect(
+      service.createRelationship({
+        relationship_type: "G25_STALE_TYPE",
+        source_entity_id: "ent_g25_stale_source",
+        target_entity_id: "ent_g25_stale_target",
+        user_id: user,
+      })
+    ).rejects.toThrow(/registry unavailable/);
     expect(activeTypeNames).toHaveBeenCalledTimes(2);
   });
   it("fails closed on an unreadable definition instead of skipping the cycle check", async () => {
