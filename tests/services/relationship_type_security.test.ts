@@ -6,6 +6,7 @@ import { RelationshipsService } from "../../src/services/relationships.js";
 import {
   relationshipTypeRegistry,
   RELATIONSHIP_TYPE_REGISTRY_TABLE,
+  getActiveRelationshipTypeNames,
   invalidateRelationshipTypeCache,
 } from "../../src/services/relationship_types/registry.js";
 import { enforceRelationshipTypeCapability } from "../../src/services/agent_capabilities.js";
@@ -17,7 +18,10 @@ beforeEach(async () => {
   await db.from("relationship_snapshots").delete().eq("user_id", user);
   await db.from("relationship_observations").delete().eq("user_id", user);
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  invalidateRelationshipTypeCache();
+});
 
 describe("relationship registry security regression", () => {
   it.each(["/create_relationship", "/store"])(
@@ -149,6 +153,20 @@ describe("relationship registry security regression", () => {
         user_id: user,
       })
     ).rejects.toThrow(/graph unavailable/);
+  });
+  it("refuses a relationship write when the registry cannot refresh an expired cache", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const activeTypeNames = vi
+      .spyOn(relationshipTypeRegistry, "activeTypeNames")
+      .mockResolvedValueOnce(new Set(["G25_STALE_TYPE"]))
+      .mockRejectedValueOnce(new Error("registry unavailable"));
+
+    invalidateRelationshipTypeCache();
+    await expect(getActiveRelationshipTypeNames(user)).resolves.toContain("G25_STALE_TYPE");
+
+    now.mockReturnValue(6_001);
+    await expect(getActiveRelationshipTypeNames(user)).rejects.toThrow(/registry unavailable/);
+    expect(activeTypeNames).toHaveBeenCalledTimes(2);
   });
   it("fails closed on an unreadable definition instead of skipping the cycle check", async () => {
     // A definition that cannot be parsed as JSON must not be read as "no

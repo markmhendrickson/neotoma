@@ -566,23 +566,15 @@ export async function getActiveRelationshipTypeNames(userId?: string): Promise<S
   if (cachedNames && cachedNames.key === key && cachedNames.expiresAt > now) {
     return cachedNames.names;
   }
-  try {
-    const names = await relationshipTypeRegistry.activeTypeNames(userId);
-    cachedNames = { key, names, expiresAt: now + CACHE_TTL_MS };
-    return names;
-  } catch (err) {
-    // A registry read failure must not take down every relationship write. Fall
-    // back to the last known good set if we have one; otherwise rethrow, since
-    // silently accepting ANY type would be worse than refusing.
-    if (cachedNames && cachedNames.key === key) {
-      logger.warn(
-        `[RelationshipTypeRegistry] read failed, serving stale membership set: ` +
-          `${(err as Error).message}`
-      );
-      return cachedNames.names;
-    }
-    throw err;
-  }
+  // Registry membership is the relationship-vocabulary enforcement point.
+  // Once the bounded cache expires, a failed refresh must refuse the write:
+  // serving the stale set could keep a remotely deactivated type writable for
+  // the duration of an outage. This matches the agent-grant cache, which also
+  // propagates refresh failures after its TTL rather than serving stale
+  // authorization state.
+  const names = await relationshipTypeRegistry.activeTypeNames(userId);
+  cachedNames = { key, names, expiresAt: now + CACHE_TTL_MS };
+  return names;
 }
 
 /** Whether a type is registered as acyclic for this caller. */
