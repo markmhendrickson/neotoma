@@ -1,6 +1,6 @@
 ---
 name: status
-description: Mid-session status report. Summarizes what's been achieved so far this session and what work remains, in succinct qualitative prose and bullets with only light technical detail. Read-only — stores nothing, files nothing. Invoke any time to take stock without closing the session.
+description: Mid-session status report. Summarizes what's been achieved so far this session and what work remains, in succinct qualitative prose and bullets with only light technical detail. Read-only for domain work; its only write is session_digest bookkeeping. Invoke any time to take stock without closing the session.
 triggers:
   - /status
   - session status
@@ -22,8 +22,8 @@ This skill is **user-level** (`~/.claude/skills/status/`), so it is available in
 
 ## How it differs from `/end`
 
-- **`/status` is read-only.** It does NOT store entities, file tasks, write memory, invoke `store-neotoma`, or render the `🧠 Neotoma` turn report. It just reports. (Read-only retrieval of an existing plan is allowed — see Project-aware mode — but it never writes.)
-- **`/end` is the closing audit** — it files and persists. Reach for `/end` at the natural close of a session; reach for `/status` any time mid-session to check in.
+- **`/status` is read-only for domain work.** It does NOT store domain entities, file tasks, write memory, invoke `store-neotoma`, or render the `🧠 Neotoma` turn report. Its one permitted write is the `session_digest` bookkeeping entity described below.
+- **`/end` is the closing audit** — it files and persists domain work. Reach for `/end` at the natural close of a session; reach for `/status` any time mid-session to check in.
 
 ## Whole-session coverage (read the transcript when context is partial)
 
@@ -70,13 +70,94 @@ A short qualitative summary of what's actually been completed and verified — f
 
 ### Remaining
 
-What's still open, as the user would think about it — not an exhaustive TODO dump. Bullet list, each item phrased as the outstanding outcome, optionally tagged with where it stands:
+What's still open, as the user would think about it — not an exhaustive TODO dump. Bullet list, each item phrased as the outstanding outcome, tagged with where it stands and its live executor:
 
 - **In progress** — started but not finished this session.
 - **Next up** — agreed/obvious next steps not yet begun.
 - **Blocked / waiting** — anything depending on CI, a remote agent, a scheduled task, the operator, or a third party (name the blocker in a few words).
 
+Every remaining workstream names both the accountable **owner** when known and the live **executor** carrying it now. Those are different facts. Never infer execution from an owner field, plan prose, a prior digest, or another stale summary. Resolve it from the current harness's agent tree, background tasks, automations, and peer-session list.
+
+Use these states precisely:
+
+- A verified live executor names its kind, human-readable name, live status, and available task, thread, agent, or automation reference.
+- A successful lookup with no active executor is `queued — unassigned`.
+- An unavailable, failed, or unreadable live-state source is `executor unknown — live state unreadable`. Do not collapse this to `unassigned`, and do not recommend a duplicate handoff until the source can be retried.
+- A verified wait on the operator or an external party is `waiting — <name>`.
+- Live work without a durable task id stays visible, carries the executor reference, labels the binding `task: missing`, and reports that missing binding as a tracking defect.
+
+Use `peer_session` when another live session is carrying the work. Do not collapse a verified peer session to `unassigned`.
+
 If something was explicitly dropped or deferred, note it in one line so the user knows it wasn't forgotten.
+
+#### Executor example
+
+| Workstream             | Owner | Executor                     | Status                | Task            | Tracking defect |
+| ---------------------- | ----- | ---------------------------- | --------------------- | --------------- | --------------- |
+| Peer-owned review      | Robin | `peer_session: review-task`  | in progress           | `ent_review`    | —               |
+| Queued follow-up       | Robin | `unassigned`                 | queued                | `ent_followup`  | —               |
+| State lookup failed    | Robin | `unknown`                    | live state unreadable | `ent_lookup`    | —               |
+| Unbound background run | Robin | `background_task: export-42` | running               | `task: missing` | `task: missing` |
+
+The behavior-level fixture below is the machine-checkable source for this example. The displayed workboard and persisted `tasks_claimed[].executor` must resolve to the same executor.
+
+```json digest-executor-fixture
+[
+  {
+    "id": "peer-session",
+    "lookup": "verified",
+    "task": "ent_review",
+    "executor": {
+      "kind": "peer_session",
+      "name": "review-task",
+      "status": "in progress",
+      "ref": "thread-review"
+    }
+  },
+  {
+    "id": "unassigned",
+    "lookup": "verified-empty",
+    "task": "ent_followup",
+    "executor": { "kind": "unassigned", "name": "unassigned", "status": "queued" }
+  },
+  {
+    "id": "unreadable",
+    "lookup": "unreadable",
+    "task": "ent_lookup",
+    "executor": { "kind": "unknown", "name": "unknown", "status": "live state unreadable" }
+  },
+  {
+    "id": "missing-task",
+    "lookup": "verified",
+    "task": null,
+    "tracking_defect": "task: missing",
+    "executor": {
+      "kind": "background_task",
+      "name": "export-42",
+      "status": "running",
+      "ref": "background-export-42"
+    }
+  }
+]
+```
+
+## Session digest bookkeeping
+
+After composing the report, store or update exactly one `session_digest` entity for the root session lineage. This is bookkeeping about the session, never domain data, and is `/status`'s only write.
+
+The active `session_digest` schema is **v1.4.0**. Write `schema_version: "1.4.0"`, use a stable `session_key` of `<harness>:<root-session-id>`, and update the same entity on later runs with idempotency key `session-digest-<root-session-id>`.
+
+Before writing, retrieve the active schema and require a declared `tasks_claimed` field of type `array`. Neotoma schemas project top-level fields; they do not declare item keys inside an array. The nested executor is therefore an extension of the declared `tasks_claimed` array's value contract, not a new top-level field. If `tasks_claimed` is absent or has another type, do not write: report a schema blocker instead of routing executor data into an undeclared field.
+
+For every outstanding or blocked obligation, write:
+
+`{claim, status_claimed, evidence_pointers, verification_state, verification_note, verified_at, mutability, executor}`
+
+The nested `executor` is `{kind, name, status, ref?}`. `kind` is one of `root_session | subagent | background_task | automation | peer_session | operator | external_party | unassigned | unknown`. Do not add separate top-level executor fields to `session_digest`.
+
+The workboard line and the nested object must name the same executor and status. A live executor with no durable task id remains an obligation with its executor reference, while the missing task binding is recorded as a tracking defect. Use `unknown` only when live state could not be read; use `unassigned` only after a successful lookup found nobody active.
+
+Preserve `verified_at` and `mutability` when extending an existing item. Read the stored entity back and verify the nested executor before claiming the bookkeeping write succeeded. If Neotoma is unavailable, say so in one line and still deliver the prose report.
 
 ## Format and tone rules
 
@@ -84,7 +165,7 @@ If something was explicitly dropped or deferred, note it in one line so the user
 - **Qualitative prose and/or bullets.** A short lead paragraph per section is welcome; long nested checklists are not.
 - **Light technical detail only.** Include a file path, entity ID, or PR number only when it helps the user *find* the work — never raw tool output, diffs, command logs, or schema chatter.
 - **Outcomes, not mechanics.** Describe what changed for the user, not which tools were called to do it.
-- **No new work.** Do not start tasks, store data, or propose a long plan; if the user wants to close out and persist, point them at `/end`.
+- **No new domain work.** Do not start tasks, store domain data, or propose a long plan; if the user wants to close out and persist, point them at `/end`.
 
 ## Suggested shape
 
@@ -98,9 +179,9 @@ Achieved
 - <outcome>
 
 Remaining
-- <outcome> — in progress
-- <outcome> — next up
-- <outcome> — blocked on <thing>
+- <outcome> — in progress — owner: <accountable person> — executor: <kind/name/status/ref>
+- <outcome> — queued — owner: <accountable person> — executor: unassigned
+- <outcome> — blocked — owner: <accountable person> — executor: unknown (live state unreadable)
 ```
 
 Adapt freely: if the session has achieved a lot and has little remaining (or vice versa), let the sections breathe accordingly. If almost nothing has happened yet, say so in a sentence rather than padding.
@@ -125,7 +206,7 @@ If no plan is found, silently fall back to the session-only report — do not an
 
 ## Verbose variant
 
-`/status verbose` produces a fuller read-out while keeping the same structure and the same read-only, outcomes-first discipline. Relative to the default:
+`/status verbose` produces a fuller read-out while keeping the same structure and the same domain-read-only, outcomes-first discipline. Relative to the default:
 
 - Each **Achieved** bullet may carry a second clause of context — *why* it mattered or what it unblocks — and may include the navigation anchor inline.
 - **Remaining** items may note the dependency or the reason they're still open, not just the tag.
@@ -134,8 +215,11 @@ If no plan is found, silently fall back to the session-only report — do not an
 
 ## Constraints
 
-- MUST report on the whole session: when context is partial (a compaction boundary is present, the session is multi-day / many-turn, or the user flags missed work), reconstruct the full arc from the transcript JSONL *before* reporting; never present a tail-only read-out as complete. If the transcript is unreadable, report from context with an explicit coverage caveat.
-- MUST be read-only: no `store`, no task filing, no memory writes, no `store-neotoma`, no `🧠 Neotoma` turn report. Project-aware mode may *read* a plan but MUST NOT correct or write it (that's `/update-plan`). Reading the transcript JSONL is a read and is allowed.
+- MUST report on the whole session: when context is partial (a compaction boundary is present, the session is multi-day / many-turn, or the user flags missed work), reconstruct the full arc from the transcript JSONL *before* reporting; never present a tail-only read-out as complete. If the transcript is unreadable, report from context with an explicit coverage caveat and the `unknown` executor state where relevant.
+- MUST be read-only for domain work. Its only write is one `session_digest` bookkeeping entity per root lineage, using stable identity and read-back verification. Project-aware mode may *read* a plan but MUST NOT correct or write it.
+- MUST resolve every remaining workstream's executor live and distinguish verified-empty (`unassigned`) from unreadable (`unknown`).
+- MUST keep live work visible when its durable task binding is missing and label that gap `task: missing` as a tracking defect.
+- MUST persist the same executor in each outstanding or blocked `tasks_claimed` obligation as a nested `{kind, name, status, ref?}` object, including `peer_session` when applicable.
 - MUST keep technical detail light — anchors for navigation only, never logs or diffs — in both default and verbose modes.
 - MUST separate genuinely-completed work from outstanding/in-progress work; do not report attempts as achievements.
 - Default `/status` MUST stay succinct; resist turning the report into a full audit (that's `/end`). `verbose` adds context, never mechanics.
