@@ -92,12 +92,12 @@ If something was explicitly dropped or deferred, note it in one line so the user
 
 #### Executor example
 
-| Workstream             | Owner | Executor                     | Status                   | Task            |
-| ---------------------- | ----- | ---------------------------- | ------------------------ | --------------- |
-| Peer-owned review      | Robin | `peer_session: review-task`  | in progress              | `ent_review`    |
-| Queued follow-up       | Robin | `unassigned`                 | queued                   | `ent_followup`  |
-| State lookup failed    | Robin | `unknown`                    | live state unreadable    | `ent_lookup`    |
-| Unbound background run | Robin | `background_task: export-42` | running; tracking defect | `task: missing` |
+| Workstream             | Owner | Executor                     | Status                | Task            | Tracking defect |
+| ---------------------- | ----- | ---------------------------- | --------------------- | --------------- | --------------- |
+| Peer-owned review      | Robin | `peer_session: review-task`  | in progress           | `ent_review`    | —               |
+| Queued follow-up       | Robin | `unassigned`                 | queued                | `ent_followup`  | —               |
+| State lookup failed    | Robin | `unknown`                    | live state unreadable | `ent_lookup`    | —               |
+| Unbound background run | Robin | `background_task: export-42` | running               | `task: missing` | `task: missing` |
 
 The behavior-level fixture below is the machine-checkable source for this example. The displayed workboard and persisted `tasks_claimed[].executor` must resolve to the same executor.
 
@@ -145,17 +145,19 @@ The behavior-level fixture below is the machine-checkable source for this exampl
 
 After composing the report, store or update exactly one `session_digest` entity for the root session lineage. This is bookkeeping about the session, never domain data, and is `/status`'s only write.
 
-The active `session_digest` schema is **v1.4.0**. Write `schema_version: "1.4.0"`, use a stable `session_key` of `<harness>:<root-session-id>`, and update the same entity on later runs. The schema's `tasks_claimed` array accepts the nested executor object; this change does not add a top-level schema field.
+The active `session_digest` schema is **v1.4.0**. Write `schema_version: "1.4.0"`, use a stable `session_key` of `<harness>:<root-session-id>`, and update the same entity on later runs with idempotency key `session-digest-<root-session-id>`.
+
+Before writing, retrieve the active schema and require a declared `tasks_claimed` field of type `array`. Neotoma schemas project top-level fields; they do not declare item keys inside an array. The nested executor is therefore an extension of the declared `tasks_claimed` array's value contract, not a new top-level field. If `tasks_claimed` is absent or has another type, do not write: report a schema blocker instead of routing executor data into an undeclared field.
 
 For every outstanding or blocked obligation, write:
 
-`{claim, status_claimed, evidence_pointers, verification_state, verification_note, executor}`
+`{claim, status_claimed, evidence_pointers, verification_state, verification_note, verified_at, mutability, executor}`
 
 The nested `executor` is `{kind, name, status, ref?}`. `kind` is one of `root_session | subagent | background_task | automation | peer_session | operator | external_party | unassigned | unknown`. Do not add separate top-level executor fields to `session_digest`.
 
 The workboard line and the nested object must name the same executor and status. A live executor with no durable task id remains an obligation with its executor reference, while the missing task binding is recorded as a tracking defect. Use `unknown` only when live state could not be read; use `unassigned` only after a successful lookup found nobody active.
 
-Read the stored entity back and verify the nested executor before claiming the bookkeeping write succeeded. If Neotoma is unavailable, say so in one line and still deliver the prose report.
+Preserve `verified_at` and `mutability` when extending an existing item. Read the stored entity back and verify the nested executor before claiming the bookkeeping write succeeded. If Neotoma is unavailable, say so in one line and still deliver the prose report.
 
 ## Format and tone rules
 

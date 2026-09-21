@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { resolveNeotomaPackageRoot } from "../../src/mcp_instruction_doc.js";
+import { validateFieldsWithConverters } from "../../src/services/field_validation.js";
+import type { FieldDefinition } from "../../src/services/schema_registry.js";
 
 interface Executor {
   kind: string;
@@ -100,9 +102,35 @@ describe("digest skill executor visibility behavior", () => {
   it("documents the complete nested executor and schema contract", () => {
     expect(skill).toContain("The active `session_digest` schema is **v1.4.0**");
     expect(skill).toContain('Write `schema_version: "1.4.0"`');
+    expect(skill).toContain("idempotency key `session-digest-<root-session-id>`");
+    expect(skill).toContain("verification_note, verified_at, mutability, executor");
     expect(skill).toContain(
       "`root_session | subagent | background_task | automation | peer_session | operator | external_party | unassigned | unknown`"
     );
     expect(skill).toContain("Do not add separate top-level executor fields to `session_digest`.");
+  });
+
+  it("preserves the nested executor through the declared tasks_claimed array", () => {
+    const peer = cases.find((entry) => entry.id === "peer-session")!;
+    const tasksClaimed = [
+      {
+        claim: "Peer-owned review",
+        status_claimed: "outstanding",
+        evidence_pointers: ["thread-review"],
+        verification_state: "confirmed",
+        verification_note: "live peer session read",
+        verified_at: "2026-09-21T15:00:00Z",
+        mutability: "perishable",
+        executor: peer.executor,
+      },
+    ];
+    const fields: Record<string, FieldDefinition> = {
+      tasks_claimed: { type: "array", required: false },
+    };
+
+    const result = validateFieldsWithConverters({ tasks_claimed: tasksClaimed }, fields);
+
+    expect(result.unknownFields).toEqual({});
+    expect(result.validFields.tasks_claimed).toEqual(tasksClaimed);
   });
 });
