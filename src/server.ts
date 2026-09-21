@@ -11,7 +11,11 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { db } from "./db.js";
-import { isValidSnapshotFieldName } from "./services/entity_queries.js";
+import {
+  filterObservationsForDeletedEntities,
+  getDeletedEntityIdsById,
+  isValidSnapshotFieldName,
+} from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
@@ -4238,6 +4242,10 @@ export class NeotomaServer {
     };
 
     if (parsed.node_type === "entity") {
+      if ((await getDeletedEntityIdsById([parsed.node_id], userId)).has(parsed.node_id)) {
+        throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.node_id}`);
+      }
+
       // Get entity
       const { data: entity, error: entityError } = await db
         .from("entities")
@@ -4273,16 +4281,33 @@ export class NeotomaServer {
           .eq("user_id", userId);
 
         if (!relError && relationships) {
-          result.relationships = relationships;
+          const deletedEndpointIds = await getDeletedEntityIdsById(
+            relationships.flatMap(
+              (relationship: { source_entity_id: string; target_entity_id: string }) => [
+                relationship.source_entity_id,
+                relationship.target_entity_id,
+              ]
+            ),
+            userId
+          );
+          const liveRelationships = relationships.filter(
+            (relationship: { source_entity_id: string; target_entity_id: string }) =>
+              !deletedEndpointIds.has(relationship.source_entity_id) &&
+              !deletedEndpointIds.has(relationship.target_entity_id)
+          );
+
+          result.relationships = liveRelationships;
           const relatedEntityIds = new Set<string>();
-          relationships.forEach((rel: { source_entity_id: string; target_entity_id: string }) => {
-            if (rel.source_entity_id !== parsed.node_id) {
-              relatedEntityIds.add(rel.source_entity_id);
+          liveRelationships.forEach(
+            (rel: { source_entity_id: string; target_entity_id: string }) => {
+              if (rel.source_entity_id !== parsed.node_id) {
+                relatedEntityIds.add(rel.source_entity_id);
+              }
+              if (rel.target_entity_id !== parsed.node_id) {
+                relatedEntityIds.add(rel.target_entity_id);
+              }
             }
-            if (rel.target_entity_id !== parsed.node_id) {
-              relatedEntityIds.add(rel.target_entity_id);
-            }
-          });
+          );
 
           // Get related entities
           if (relatedEntityIds.size > 0) {
@@ -4310,11 +4335,12 @@ export class NeotomaServer {
           .limit(100);
 
         if (!obsError && observations) {
-          result.observations = observations;
+          const safeObservations = await filterObservationsForDeletedEntities(observations, userId);
+          result.observations = safeObservations;
 
           // Get sources for observations
-          if (includeSources && observations.length > 0) {
-            const sourceIds = observations
+          if (includeSources && safeObservations.length > 0) {
+            const sourceIds = safeObservations
               .map((obs: any) => obs.source_id)
               .filter((id: string) => id);
             if (sourceIds.length > 0) {
@@ -4373,45 +4399,61 @@ export class NeotomaServer {
       }
 
       // Get observations from this source
-      const { data: observations, error: obsError } = await db
-        .from("observations")
-        .select("*")
-        .eq("source_id", parsed.node_id)
-        .eq("user_id", userId);
+      if (parsed.include_observations) {
+        const { data: observations, error: obsError } = await db
+          .from("observations")
+          .select("*")
+          .eq("source_id", parsed.node_id)
+          .eq("user_id", userId);
 
-      if (!obsError && observations) {
-        result.observations = observations;
+        if (!obsError && observations) {
+          const safeObservations = await filterObservationsForDeletedEntities(observations, userId);
+          result.observations = safeObservations;
 
-        // Get entities mentioned in observations
-        if (observations.length > 0) {
-          const entityIds = observations
-            .map((obs: any) => obs.entity_id)
-            .filter((id: string) => id);
-          if (entityIds.length > 0) {
-            const { data: entities, error: entError } = await db
-              .from("entities")
-              .select("*")
-              .in("id", entityIds)
-              .eq("user_id", userId);
+          // Get entities mentioned in observations
+          if (safeObservations.length > 0) {
+            const entityIds = safeObservations
+              .map((obs: any) => obs.entity_id)
+              .filter((id: string) => id);
+            if (entityIds.length > 0) {
+              const { data: entities, error: entError } = await db
+                .from("entities")
+                .select("*")
+                .in("id", entityIds)
+                .eq("user_id", userId);
 
-            if (!entError && entities) {
-              result.related_entities = entities;
+              if (!entError && entities) {
+                result.related_entities = entities;
 
-              // Get relationships for these entities
-              if (parsed.include_relationships && entities.length > 0) {
-                const { data: relationships, error: relError } = await db
-                  .from("relationship_snapshots")
-                  .select("*")
-                  .or(
-                    `source_entity_id.in.(${entityIds.join(
-                      ","
-                    )}),target_entity_id.in.(${entityIds.join(",")})`
-                  )
-                  .eq("user_id", userId)
-                  .limit(1000);
+                // Get relationships for these entities
+                if (parsed.include_relationships && entities.length > 0) {
+                  const { data: relationships, error: relError } = await db
+                    .from("relationship_snapshots")
+                    .select("*")
+                    .or(
+                      `source_entity_id.in.(${entityIds.join(
+                        ","
+                      )}),target_entity_id.in.(${entityIds.join(",")})`
+                    )
+                    .eq("user_id", userId)
+                    .limit(1000);
 
-                if (!relError && relationships) {
-                  result.relationships = relationships;
+                  if (!relError && relationships) {
+                    const deletedEndpointIds = await getDeletedEntityIdsById(
+                      relationships.flatMap(
+                        (relationship: { source_entity_id: string; target_entity_id: string }) => [
+                          relationship.source_entity_id,
+                          relationship.target_entity_id,
+                        ]
+                      ),
+                      userId
+                    );
+                    result.relationships = relationships.filter(
+                      (relationship: { source_entity_id: string; target_entity_id: string }) =>
+                        !deletedEndpointIds.has(relationship.source_entity_id) &&
+                        !deletedEndpointIds.has(relationship.target_entity_id)
+                    );
+                  }
                 }
               }
             }

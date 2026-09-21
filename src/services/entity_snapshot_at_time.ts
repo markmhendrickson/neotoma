@@ -25,6 +25,7 @@ import { logger } from "../utils/logger.js";
 import { resolveAttachmentTarget } from "./attachment_resolution.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import type { Observation } from "../reducers/observation_reducer.js";
+import { getDeletedEntityIds, getDeletedEntityIdsById } from "./entity_queries.js";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -100,6 +101,22 @@ export async function computeEntitySnapshotAtTime(
     return null;
   }
 
+  // A time cutoff is a historical inspection boundary, not a way around the
+  // entity's current deletion state. Deny before replaying an observation set
+  // that may intentionally exclude the later tombstone.
+  const deletedInput = await getDeletedEntityIds(
+    [
+      {
+        id: entityRow.id as string,
+        merged_to_entity_id: entityRow.merged_to_entity_id as string | null | undefined,
+      },
+    ],
+    userId
+  );
+  if (deletedInput.has(entityId)) {
+    return null;
+  }
+
   // #2343: redirect through merge chains using the declared resolution layer
   // rather than the single hop this used to do. The old comment conceded the
   // defect ("one level"); a chain A→B→C left an as-of read on A pointed at B,
@@ -116,6 +133,12 @@ export async function computeEntitySnapshotAtTime(
   // it keeps its own time-bounded query over the resolved id.
   const attachmentTarget = await resolveAttachmentTarget(entityId, userId);
   const resolvedEntityId = attachmentTarget.resolvedEntityId;
+  if (
+    resolvedEntityId !== entityId &&
+    (await getDeletedEntityIdsById([resolvedEntityId], userId)).has(resolvedEntityId)
+  ) {
+    return null;
+  }
   if (attachmentTarget.truncated) {
     logger.warn(
       `[SNAPSHOT_AT_TIME] Attachment resolution for ${entityId} was truncated ` +

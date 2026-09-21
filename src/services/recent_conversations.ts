@@ -3,6 +3,7 @@ import {
   listHookSummariesByTurnKeys,
   type ConversationTurnHookSummary,
 } from "./conversation_turn.js";
+import { getDeletedEntityIdsById } from "./entity_queries.js";
 
 const TS_EPOCH = "1970-01-01T00:00:00.000Z";
 
@@ -187,6 +188,15 @@ WITH msg_stats AS (
     ON ms.entity_id = me.id
   WHERE rs.user_id = ?
     AND rs.relationship_type = 'PART_OF'
+    AND (
+      ms.entity_id IS NOT NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM observations deleted_message_probe
+        WHERE deleted_message_probe.entity_id = me.id
+          AND deleted_message_probe.user_id = me.user_id
+      )
+    )
   GROUP BY rs.target_entity_id
 )
 SELECT
@@ -214,6 +224,15 @@ LEFT JOIN msg_stats
 WHERE c.user_id = ?
   AND c.entity_type = 'conversation'
   AND (c.merged_to_entity_id IS NULL OR trim(ifnull(c.merged_to_entity_id, '')) = '')
+  AND (
+    cs.entity_id IS NOT NULL
+    OR NOT EXISTS (
+      SELECT 1
+      FROM observations deleted_conversation_probe
+      WHERE deleted_conversation_probe.entity_id = c.id
+        AND deleted_conversation_probe.user_id = c.user_id
+    )
+  )
   AND (? IS NULL OR ${CONVERSATION_ACTIVITY_SQL} >= ?)
   AND (? IS NULL OR ${CONVERSATION_ACTIVITY_SQL} <= ?)
   AND (
@@ -259,6 +278,15 @@ WITH msg_stats AS (
     ON ms.entity_id = me.id
   WHERE rs.user_id = ?
     AND rs.relationship_type = 'PART_OF'
+    AND (
+      ms.entity_id IS NOT NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM observations deleted_message_probe
+        WHERE deleted_message_probe.entity_id = me.id
+          AND deleted_message_probe.user_id = me.user_id
+      )
+    )
   GROUP BY rs.target_entity_id
 )
 SELECT
@@ -286,6 +314,15 @@ LEFT JOIN msg_stats
 WHERE c.user_id = ?
   AND c.entity_type = 'conversation'
   AND (c.merged_to_entity_id IS NULL OR trim(ifnull(c.merged_to_entity_id, '')) = '')
+  AND (
+    cs.entity_id IS NOT NULL
+    OR NOT EXISTS (
+      SELECT 1
+      FROM observations deleted_conversation_probe
+      WHERE deleted_conversation_probe.entity_id = c.id
+        AND deleted_conversation_probe.user_id = c.user_id
+    )
+  )
   AND c.id = ?
 LIMIT 1
 `;
@@ -314,6 +351,15 @@ LEFT JOIN entity_snapshots ms
 WHERE rs.user_id = ?
   AND rs.relationship_type = 'PART_OF'
   AND rs.target_entity_id IN (${inClause})
+  AND (
+    ms.entity_id IS NOT NULL
+    OR NOT EXISTS (
+      SELECT 1
+      FROM observations deleted_message_probe
+      WHERE deleted_message_probe.entity_id = me.id
+        AND deleted_message_probe.user_id = me.user_id
+    )
+  )
 `;
 }
 
@@ -359,19 +405,25 @@ async function assembleConversationItems(
       .prepare(buildMessagesSql(conversationIds.length))
       .all(userId, userId, ...conversationIds)) as MessageRow[];
 
-    const normalizedMessages = messageRows.map((row) => ({
-      conversation_id: row.conversation_id,
-      item: {
-        message_id: row.message_id,
-        canonical_name: cleanString(row.canonical_name),
-        role: cleanString(row.role),
-        sender_kind: cleanString(row.sender_kind),
-        content: cleanString(row.content),
-        turn_key: cleanString(row.turn_key),
-        activity_at: latestTs(row.last_observation_at, row.updated_at, row.created_at),
-        related_entities: [] as RecentConversationRelatedEntity[],
-      },
-    }));
+    const deletedMessageIds = await getDeletedEntityIdsById(
+      messageRows.map((row) => row.message_id),
+      userId
+    );
+    const normalizedMessages = messageRows
+      .filter((row) => !deletedMessageIds.has(row.message_id))
+      .map((row) => ({
+        conversation_id: row.conversation_id,
+        item: {
+          message_id: row.message_id,
+          canonical_name: cleanString(row.canonical_name),
+          role: cleanString(row.role),
+          sender_kind: cleanString(row.sender_kind),
+          content: cleanString(row.content),
+          turn_key: cleanString(row.turn_key),
+          activity_at: latestTs(row.last_observation_at, row.updated_at, row.created_at),
+          related_entities: [] as RecentConversationRelatedEntity[],
+        },
+      }));
 
     normalizedMessages.sort((a, b) => {
       if (a.conversation_id !== b.conversation_id) {
@@ -398,7 +450,12 @@ async function assembleConversationItems(
       .prepare(buildRelatedEntitiesSql(messageIds.length))
       .all(userId, userId, ...messageIds)) as RelatedEntityRow[];
 
+    const deletedRelatedEntityIds = await getDeletedEntityIdsById(
+      relatedRows.map((row) => row.entity_id),
+      userId
+    );
     for (const row of relatedRows) {
+      if (deletedRelatedEntityIds.has(row.entity_id)) continue;
       const list = relatedByMessage.get(row.message_id) ?? [];
       list.push({
         entity_id: row.entity_id,
@@ -444,7 +501,7 @@ async function assembleConversationItems(
         row.updated_at,
         row.created_at
       ),
-      message_count: Number(row.message_count ?? messages.length ?? 0),
+      message_count: messages.length,
       latest_write_provenance: parseProvenanceJson(row.latest_write_provenance_json),
       messages,
     };
@@ -489,8 +546,17 @@ export async function listRecentConversations(
       safeOffset
     )) as ConversationRow[];
 
-  const hasMore = conversationRows.length > safeLimit;
-  const conversationsPage = hasMore ? conversationRows.slice(0, safeLimit) : conversationRows;
+  const deletedConversationIds = await getDeletedEntityIdsById(
+    conversationRows.map((row) => row.conversation_id),
+    userId
+  );
+  const liveConversationRows = conversationRows.filter(
+    (row) => !deletedConversationIds.has(row.conversation_id)
+  );
+  const hasMore = liveConversationRows.length > safeLimit;
+  const conversationsPage = hasMore
+    ? liveConversationRows.slice(0, safeLimit)
+    : liveConversationRows;
   const items = await assembleConversationItems(userId, conversationsPage);
 
   return {
@@ -512,6 +578,7 @@ export async function getRecentConversationById(
   const db = await getDb();
   const id = conversationId.trim();
   if (!id) return null;
+  if ((await getDeletedEntityIdsById([id], userId)).has(id)) return null;
   const row = (await db.prepare(CONVERSATION_BY_ID_SQL).get(userId, userId, userId, userId, id)) as
     | ConversationRow
     | undefined;

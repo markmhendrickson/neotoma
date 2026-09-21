@@ -340,6 +340,48 @@ export async function getDeletedEntityIdsById(
   );
 }
 
+function observationFields(row: { fields?: unknown }): Record<string, unknown> | null {
+  if (row.fields && typeof row.fields === "object" && !Array.isArray(row.fields)) {
+    return row.fields as Record<string, unknown>;
+  }
+  if (typeof row.fields === "string") {
+    try {
+      const parsed = JSON.parse(row.fields) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Remove pre-deletion observation content for every tombstoned entity present
+ * in a result set while retaining its deletion audit row. This is the shared
+ * post-query guard for read surfaces that can return observations for more
+ * than one entity (source queries, Inspector filters, graph neighborhoods).
+ */
+export async function filterObservationsForDeletedEntities<
+  T extends { entity_id?: unknown; fields?: unknown },
+>(rows: T[], userId: string): Promise<T[]> {
+  const entityIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.entity_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    )
+  );
+  const deletedEntityIds = await getDeletedEntityIdsById(entityIds, userId);
+  return rows.filter((row) => {
+    if (typeof row.entity_id !== "string" || !deletedEntityIds.has(row.entity_id)) {
+      return true;
+    }
+    return observationFields(row)?._deleted === true;
+  });
+}
+
 /**
  * Query entities with merged entity exclusion
  */

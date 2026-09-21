@@ -2,17 +2,15 @@
  * Integration test: soft-deleted entities are unreadable across EVERY read path.
  *
  * `retrieve_entities` and `retrieve_entity_snapshot` already enforce tombstones
- * via `getDeletedEntityIds` (services/entity_queries.ts). Two other read paths
- * had the same gap and were fixed separately:
- *   - `/retrieve_related_entities`, which returned a tombstoned entity's
- *     children and edges and would traverse FROM a tombstoned root;
- *   - `/list_observations`, which returned the full pre-deletion observations
- *     including all snapshot `fields` — verbatim recovery of deleted content.
+ * via `getDeletedEntityIds` (services/entity_queries.ts). Several other REST,
+ * MCP, and Inspector read paths had the same gap: direct observation queries,
+ * relationship and graph reads, historical snapshots, and recent-conversation
+ * list/detail views could all recover tombstoned data.
  *
  * Both paths are routed through `getDeletedEntityIdsById` — a thin adapter
  * over `getDeletedEntityIds` for callers that only hold bare ids (ids
  * discovered by walking `relationship_snapshots`, not by selecting from
- * `entities`) — so ALL FOUR paths share one definition of "deleted" and
+ * `entities`) — so all paths share one definition of "deleted" and
  * inherit the same merged-away / never-observed carve-outs documented on
  * `getDeletedEntityIds`.
  *
@@ -32,6 +30,7 @@ import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
+import { NeotomaServer } from "../../src/server.js";
 import { softDeleteEntity } from "../../src/services/deletion.js";
 import { mergeEntities } from "../../src/services/entity_merge.js";
 import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
@@ -46,11 +45,16 @@ const SECRET_FIELD = "sdrp_secret_content";
 
 describe("soft-delete read-path enforcement", () => {
   let httpServer: ReturnType<typeof createServer>;
+  let mcpServer: NeotomaServer;
   const suffix = String(process.hrtime.bigint());
   const liveRoot = `ent_sdrp_live_${suffix}`;
   const deletedParent = `ent_sdrp_deleted_${suffix}`;
   const child = `ent_sdrp_child_${suffix}`;
   const entityIds = [liveRoot, deletedParent, child];
+  const sourceId = `src_sdrp_deleted_${suffix}`;
+  const deletedConversation = `ent_sdrp_conversation_${suffix}`;
+  const deletedMessage = `ent_sdrp_message_${suffix}`;
+  const conversationRelationshipKey = `PART_OF:${deletedMessage}:${deletedConversation}`;
 
   // Merged-away fixture: independent of the tombstone graph above so the
   // carve-out tests cannot be satisfied by the tombstone behaviour by accident.
@@ -74,7 +78,20 @@ describe("soft-delete read-path enforcement", () => {
     return { status: resp.status, json: (await resp.json()) as Record<string, any> };
   }
 
+  async function get(path: string) {
+    const resp = await fetch(`${API_BASE}${path}`);
+    return { status: resp.status, json: (await resp.json()) as Record<string, any> };
+  }
+
+  async function callMcp(methodName: string, args: Record<string, unknown>) {
+    const response = await (mcpServer as any)[methodName](args);
+    return JSON.parse(response.content[0].text) as Record<string, any>;
+  }
+
   beforeAll(async () => {
+    mcpServer = new NeotomaServer();
+    (mcpServer as any).authenticatedUserId = TEST_USER_ID;
+
     httpServer = createServer(app);
     await new Promise<void>((resolve, reject) => {
       httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
@@ -90,6 +107,15 @@ describe("soft-delete read-path enforcement", () => {
       }))
     );
 
+    await db.from("sources").insert({
+      id: sourceId,
+      user_id: TEST_USER_ID,
+      content_hash: `hash_${sourceId}`,
+      storage_url: `internal://test/${sourceId}`,
+      mime_type: "text/plain",
+      file_size: 0,
+    });
+
     // One content-bearing observation per entity. The parent's carries the
     // field that must never resurface once the entity is tombstoned.
     await db.from("observations").insert(
@@ -100,6 +126,7 @@ describe("soft-delete read-path enforcement", () => {
         observed_at: "2026-07-01T00:00:00.000Z",
         source_priority: 0,
         fields: { name: id, [SECRET_FIELD]: `secret for ${id}` },
+        source_id: id === deletedParent ? sourceId : null,
         user_id: TEST_USER_ID,
       }))
     );
@@ -124,6 +151,59 @@ describe("soft-delete read-path enforcement", () => {
     // Materialize the tombstone the same way the write path does, so the
     // snapshot-backed endpoints reflect the deletion.
     await recomputeSnapshot(deletedParent, TEST_USER_ID);
+
+    await db.from("entities").insert([
+      {
+        id: deletedConversation,
+        entity_type: "conversation",
+        canonical_name: "deleted conversation fixture",
+        user_id: TEST_USER_ID,
+      },
+      {
+        id: deletedMessage,
+        entity_type: "conversation_message",
+        canonical_name: "deleted conversation message fixture",
+        user_id: TEST_USER_ID,
+      },
+    ]);
+    await db.from("observations").insert([
+      {
+        entity_id: deletedConversation,
+        entity_type: "conversation",
+        schema_version: "1.0",
+        observed_at: "2026-07-01T00:00:00.000Z",
+        source_priority: 0,
+        fields: { title: "Deleted conversation secret" },
+        user_id: TEST_USER_ID,
+      },
+      {
+        entity_id: deletedMessage,
+        entity_type: "conversation_message",
+        schema_version: "1.0",
+        observed_at: "2026-07-01T00:00:01.000Z",
+        source_priority: 0,
+        fields: { role: "user", content: "deleted conversation message secret" },
+        user_id: TEST_USER_ID,
+      },
+    ]);
+    await db.from("relationship_snapshots").insert({
+      relationship_key: conversationRelationshipKey,
+      relationship_type: "PART_OF",
+      source_entity_id: deletedMessage,
+      target_entity_id: deletedConversation,
+      schema_version: "1.0",
+      snapshot: {},
+      user_id: TEST_USER_ID,
+    });
+    await recomputeSnapshot(deletedConversation, TEST_USER_ID);
+    await recomputeSnapshot(deletedMessage, TEST_USER_ID);
+    await softDeleteEntity(
+      deletedConversation,
+      "conversation",
+      TEST_USER_ID,
+      "Inspector route enforcement test"
+    );
+    await recomputeSnapshot(deletedConversation, TEST_USER_ID);
 
     // Merged-away fixture: mergeReferrer -> mergeSurvivor is a live edge added
     // AFTER the merge, so retrieve_related_entities from mergeReferrer reaches
@@ -162,10 +242,22 @@ describe("soft-delete read-path enforcement", () => {
   });
 
   afterAll(async () => {
+    await db
+      .from("relationship_snapshots")
+      .delete()
+      .eq("relationship_key", conversationRelationshipKey);
+    await db
+      .from("entity_snapshots")
+      .delete()
+      .in("entity_id", [deletedConversation, deletedMessage]);
+    await db.from("observations").delete().in("entity_id", [deletedConversation, deletedMessage]);
+    await db.from("entities").delete().in("id", [deletedConversation, deletedMessage]);
+
     await db.from("relationship_snapshots").delete().in("relationship_key", relationshipKeys);
     await db.from("entity_snapshots").delete().in("entity_id", entityIds);
     await db.from("observations").delete().in("entity_id", entityIds);
     await db.from("entities").delete().in("id", entityIds);
+    await db.from("sources").delete().eq("id", sourceId);
 
     await db
       .from("relationship_snapshots")
@@ -306,6 +398,170 @@ describe("soft-delete read-path enforcement", () => {
     const observations = json.observations as Array<{ fields: Record<string, unknown> }>;
     expect(observations.length).toBe(1);
     expect(observations[0].fields[SECRET_FIELD]).toBe(`secret for ${liveRoot}`);
+  });
+
+  it.each([
+    ["GET /entities/:id/observations", `/entities/${deletedParent}/observations`],
+    ["GET /observations", `/observations?entity_id=${encodeURIComponent(deletedParent)}`],
+  ])("%s withholds pre-deletion fields", async (_name, path) => {
+    const { status, json } = await get(path);
+    expect(status).toBe(200);
+    const serialized = JSON.stringify(json);
+    expect(serialized).not.toContain(`secret for ${deletedParent}`);
+    for (const observation of json.observations as Array<{ fields: Record<string, unknown> }>) {
+      expect(observation.fields._deleted).toBe(true);
+    }
+  });
+
+  it("POST /observations/query withholds pre-deletion fields", async () => {
+    const { status, json } = await post("/observations/query", {
+      entity_id: deletedParent,
+      limit: 100,
+      offset: 0,
+    });
+    expect(status).toBe(200);
+    expect(JSON.stringify(json)).not.toContain(`secret for ${deletedParent}`);
+    for (const observation of json.observations as Array<{ fields: Record<string, unknown> }>) {
+      expect(observation.fields._deleted).toBe(true);
+    }
+  });
+
+  it("GET /entities/:id/relationships withholds a tombstoned root", async () => {
+    const { status, json } = await get(`/entities/${deletedParent}/relationships`);
+    expect(status).toBe(404);
+    expect(JSON.stringify(json)).not.toContain(child);
+  });
+
+  it("REST graph neighborhood withholds a tombstoned root and its observation fields", async () => {
+    const { status, json } = await post("/retrieve_graph_neighborhood", {
+      node_id: deletedParent,
+      node_type: "entity",
+      include_relationships: true,
+      include_observations: true,
+      include_sources: true,
+    });
+    expect(status).toBe(200);
+    expect(json.entity).toBeUndefined();
+    expect(json.relationships).toBeUndefined();
+    expect(json.observations).toBeUndefined();
+    expect(JSON.stringify(json)).not.toContain(`secret for ${deletedParent}`);
+  });
+
+  it("REST graph neighborhood drops edges and entities with a tombstoned endpoint", async () => {
+    const { status, json } = await post("/retrieve_graph_neighborhood", {
+      node_id: liveRoot,
+      node_type: "entity",
+      include_relationships: true,
+      include_observations: true,
+    });
+    expect(status).toBe(200);
+    expect(json.relationships).toEqual([]);
+    expect(json.related_entities).toBeUndefined();
+    expect(JSON.stringify(json)).not.toContain(deletedParent);
+  });
+
+  it("REST source neighborhood omits observations belonging to a tombstoned entity", async () => {
+    const { status, json } = await post("/retrieve_graph_neighborhood", {
+      node_id: sourceId,
+      node_type: "source",
+      include_relationships: true,
+      include_observations: true,
+    });
+    expect(status).toBe(200);
+    expect(json.observations).toEqual([]);
+    expect(json.related_entities).toBeUndefined();
+    expect(JSON.stringify(json)).not.toContain(`secret for ${deletedParent}`);
+  });
+
+  it("historical snapshot reads deny a currently tombstoned entity", async () => {
+    const { status, json } = await post("/get_entity_snapshot", {
+      entity_id: deletedParent,
+      at: "2026-07-02T00:00:00.000Z",
+    });
+    expect(status).toBe(404);
+    expect(JSON.stringify(json)).not.toContain(`secret for ${deletedParent}`);
+  });
+
+  it("Inspector conversation detail and list routes withhold a tombstoned conversation", async () => {
+    const detail = await get(`/recent_conversations/${deletedConversation}`);
+    expect(detail.status).toBe(404);
+    expect(JSON.stringify(detail.json)).not.toContain("deleted conversation message secret");
+
+    const list = await get("/recent_conversations?limit=100&offset=0");
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.json)).not.toContain(deletedConversation);
+    expect(JSON.stringify(list.json)).not.toContain("deleted conversation message secret");
+  });
+
+  it("MCP list_observations returns only the tombstone audit row", async () => {
+    const json = await callMcp("listObservations", { entity_id: deletedParent });
+    expect(JSON.stringify(json)).not.toContain(`secret for ${deletedParent}`);
+    for (const observation of json.observations as Array<{ fields: Record<string, unknown> }>) {
+      expect(observation.fields._deleted).toBe(true);
+    }
+  });
+
+  it("MCP retrieve_related_entities withholds a tombstoned root", async () => {
+    const json = await callMcp("retrieveRelatedEntities", {
+      entity_id: deletedParent,
+      direction: "both",
+      max_hops: 2,
+      include_entities: true,
+    });
+    expect(json.entities).toEqual([]);
+    expect(json.relationships).toEqual([]);
+    expect(JSON.stringify(json)).not.toContain(`secret for ${deletedParent}`);
+  });
+
+  it("MCP graph neighborhood rejects a tombstoned entity root", async () => {
+    await expect(
+      (mcpServer as any).retrieveGraphNeighborhood({
+        node_id: deletedParent,
+        node_type: "entity",
+        include_relationships: true,
+        include_observations: true,
+      })
+    ).rejects.toThrow(/Entity not found/);
+  });
+
+  it("MCP graph neighborhood drops edges and entities with a tombstoned endpoint", async () => {
+    const json = await callMcp("retrieveGraphNeighborhood", {
+      node_id: liveRoot,
+      node_type: "entity",
+      include_relationships: true,
+      include_observations: true,
+    });
+    expect(json.relationships).toEqual([]);
+    expect(json.related_entities).toBeUndefined();
+    expect(JSON.stringify(json)).not.toContain(deletedParent);
+  });
+
+  it("MCP historical snapshot reads deny a currently tombstoned entity", async () => {
+    await expect(
+      (mcpServer as any).retrieveEntitySnapshot({
+        entity_id: deletedParent,
+        at: "2026-07-02T00:00:00.000Z",
+      })
+    ).rejects.toThrow(/Entity not found/);
+  });
+
+  it("MCP source neighborhood honors include_observations and filters tombstoned entities", async () => {
+    const withoutObservations = await callMcp("retrieveGraphNeighborhood", {
+      node_id: sourceId,
+      node_type: "source",
+      include_observations: false,
+    });
+    expect(withoutObservations.observations).toBeUndefined();
+
+    const withObservations = await callMcp("retrieveGraphNeighborhood", {
+      node_id: sourceId,
+      node_type: "source",
+      include_observations: true,
+      include_relationships: true,
+    });
+    expect(withObservations.observations).toEqual([]);
+    expect(withObservations.related_entities).toBeUndefined();
+    expect(JSON.stringify(withObservations)).not.toContain(`secret for ${deletedParent}`);
   });
 
   it("keeps the existing snapshot and entity-query paths unchanged (no regression)", async () => {
