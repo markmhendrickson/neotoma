@@ -7,13 +7,12 @@
 
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000001";
-const API_PORT = 18120;
-const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
 /** Build a stable fake Neotoma entity id from a short tag. */
 function makeEntityId(tag: string): string {
@@ -23,6 +22,7 @@ function makeEntityId(tag: string): string {
 
 describe("retrieve_graph_neighborhood pagination", () => {
   let httpServer: ReturnType<typeof createServer>;
+  let API_BASE: string;
 
   // Central node that will accumulate many relationships
   const centerEntityId = makeEntityId(`pgn-center-${Date.now()}`);
@@ -33,10 +33,19 @@ describe("retrieve_graph_neighborhood pagination", () => {
 
   beforeAll(async () => {
     httpServer = createServer(app);
+    // Bind an OS-assigned ephemeral port (0) rather than a hardcoded literal.
+    // A hardcoded port collides with whatever the suite's shared global HTTP
+    // server (vitest.global_setup.ts) is bound to when the two happen to be
+    // given the same preferred port (e.g. the pre-commit hook's port-picker
+    // for `test:integration` starts its search at the same number this file
+    // used to hardcode), producing a nondeterministic EADDRINUSE that depends
+    // entirely on which base port the caller picked that run.
     await new Promise<void>((resolve, reject) => {
-      httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
+      httpServer.listen(0, "127.0.0.1", () => resolve());
       httpServer.once("error", reject);
     });
+    const boundPort = (httpServer.address() as AddressInfo).port;
+    API_BASE = `http://127.0.0.1:${boundPort}`;
 
     // Insert center entity
     await db.from("entities").insert({
