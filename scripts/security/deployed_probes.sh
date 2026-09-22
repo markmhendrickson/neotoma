@@ -154,41 +154,44 @@ probe_route() {
   curl "${curl_args[@]}" "${url}" || echo "000"
 }
 
-# Statuses a `sandbox_allowed: "hosted_ok"` route may ADDITIONALLY return on a
-# sandbox-mode host, on top of (union with, not instead of) its normal
-# expected_*_status. Matches the array the manifest already uses for its
-# explicitly-unauthenticated runtime-only routes (200/204/400/404/405/429),
-# plus 403 for the destructive-route guard
-# (`isDestructiveSandboxRoute` in src/services/sandbox_mode.ts). Union, not
-# replacement, because a handful of routes (e.g. /mcp/oauth/connections,
-# /mcp/oauth/authorization-details) run their OWN bearer check after the
-# generic sandbox fallback stamps an anonymous principal, so they correctly
-# keep returning 401 in sandbox mode too — replacing their expected set
-# outright would turn that still-enforced 401 into a false failure.
-SANDBOX_HOSTED_OK_EXTRA_STATUSES='[200, 204, 400, 403, 404, 405, 429]'
-
-# Statuses a `sandbox_allowed: "none"` route (the destructive-route set —
-# entities/merge, entities/split, health_check_snapshots,
-# update_schema_incremental) may ADDITIONALLY return on a sandbox-mode host.
-# These routes are never reachable anonymously on EITHER host — prod rejects
-# with 401 (no bearer at all), sandbox rejects with 403 (a bearer-less caller
-# DOES resolve to the anonymous sandbox principal there, but
-# `sandboxWriteGate` / `isDestructiveSandboxRoute` then blocks the destructive
-# write outright). Only 403 is added, never 200 — unlike the hosted_ok set
-# above, a "none" route must still never succeed anonymously on any host.
-SANDBOX_DESTRUCTIVE_EXTRA_STATUSES='[403]'
+# Sandbox scoring contract lives in probe_sandbox_scoring.mjs (one source of
+# truth for header discrimination + status widening). Bash consumes it via
+# the module's CLI — do not reintroduce literal status arrays here.
+SCORING_MODULE="${SCRIPT_DIR}/probe_sandbox_scoring.mjs"
+if [[ ! -f "${SCORING_MODULE}" ]]; then
+  echo "deployed_probes.sh: ${SCORING_MODULE} missing." >&2
+  exit 2
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "deployed_probes.sh: node is required to load probe_sandbox_scoring.mjs." >&2
+  exit 2
+fi
 
 # Detect sandbox mode from the LIVE response, not the hostname: the server
 # stamps `X-Neotoma-Sandbox: 1` on every response in local_sandbox or
-# hosted_sandbox mode (sandboxHeaderMiddleware). A plain GET / is enough to
-# observe it, and it must succeed independent of the auth probes below so a
-# probe failure never masks the sandbox-detection result.
+# hosted_sandbox mode (sandboxHeaderMiddleware). Value must be exactly `1`
+# after OWS trim — presence of the header name alone is NOT sandbox (reject
+# 0/false/empty/unknown). Fail-closed on absent header / curl error.
 is_sandbox_host() {
   local host="$1"
-  local header
+  local header value
   header="$(curl -sS -o /dev/null -D - --max-time 10 --retry 2 --retry-delay 3 "${host%/}/health" 2>/dev/null \
     | tr -d '\r' | grep -i '^x-neotoma-sandbox:' || true)"
-  [[ -n "${header}" ]]
+  [[ -z "${header}" ]] && return 1
+  # Strip header name + colon, then rely on isSandboxHeaderValue for trim.
+  value="${header#*:}"
+  node "${SCORING_MODULE}" is-sandbox-header "${value}"
+}
+
+widen_expected_statuses() {
+  local base_json="$1"
+  local sandbox_allowed="$2"
+  local host_is_sandbox="$3"
+  node "${SCORING_MODULE}" widen "$(jq -nc \
+    --argjson base "${base_json}" \
+    --arg sandboxAllowed "${sandbox_allowed}" \
+    --argjson hostIsSandbox "${host_is_sandbox}" \
+    '{base: $base, sandboxAllowed: $sandboxAllowed, hostIsSandbox: $hostIsSandbox}')"
 }
 
 passes=0
@@ -211,16 +214,8 @@ while IFS= read -r host; do
     row_expected_no_auth="$(echo "${row}" | jq -c '.expected_no_auth_status')"
     row_expected_invalid_auth="$(echo "${row}" | jq -c '.expected_invalid_auth_status')"
 
-    if [[ "${host_is_sandbox}" == "true" && "${sandbox_allowed}" == "hosted_ok" ]]; then
-      expected_no_auth="$(jq -c -n --argjson a "${row_expected_no_auth}" --argjson b "${SANDBOX_HOSTED_OK_EXTRA_STATUSES}" '($a + $b) | unique')"
-      expected_invalid_auth="$(jq -c -n --argjson a "${row_expected_invalid_auth}" --argjson b "${SANDBOX_HOSTED_OK_EXTRA_STATUSES}" '($a + $b) | unique')"
-    elif [[ "${host_is_sandbox}" == "true" && "${sandbox_allowed}" == "none" ]]; then
-      expected_no_auth="$(jq -c -n --argjson a "${row_expected_no_auth}" --argjson b "${SANDBOX_DESTRUCTIVE_EXTRA_STATUSES}" '($a + $b) | unique')"
-      expected_invalid_auth="$(jq -c -n --argjson a "${row_expected_invalid_auth}" --argjson b "${SANDBOX_DESTRUCTIVE_EXTRA_STATUSES}" '($a + $b) | unique')"
-    else
-      expected_no_auth="${row_expected_no_auth}"
-      expected_invalid_auth="${row_expected_invalid_auth}"
-    fi
+    expected_no_auth="$(widen_expected_statuses "${row_expected_no_auth}" "${sandbox_allowed}" "${host_is_sandbox}")"
+    expected_invalid_auth="$(widen_expected_statuses "${row_expected_invalid_auth}" "${sandbox_allowed}" "${host_is_sandbox}")"
 
     no_auth_status="$(probe_route "${host}" "${method}" "${route}" "absent")"
     invalid_auth_status="$(probe_route "${host}" "${method}" "${route}" "invalid")"
