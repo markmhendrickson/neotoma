@@ -5,8 +5,12 @@ on:
     - cron: "17 8 * * *"
   workflow_dispatch:
 
+# Extended from `contents: read` to also `issues: write` — needed ONLY by the
+# "Alert on failure" step below, which opens/updates a single tracking issue
+# rather than granting blanket write access to the whole job.
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: remote-integration-nightly
@@ -37,6 +41,7 @@ jobs:
         run: npm run test:remote:critical
 
       - name: Upload Markdown test run report
+        id: upload_report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -44,3 +49,58 @@ jobs:
           path: .vitest/reports/
           if-no-files-found: ignore
           retention-days: 21
+
+      # A scheduled workflow's failure is only a red mark in a tab nobody
+      # opens. Files/updates ONE tracking issue (matched by title) instead of
+      # opening a new issue every night, so the alert stays visible without
+      # becoming its own noise.
+      - name: Alert on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "CI: Remote integration nightly failing";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const artifactId = "${{ steps.upload_report.outputs.artifact-id }}";
+            const artifactUrl = artifactId
+              ? `${runUrl}/artifacts/${artifactId}`
+              : null;
+            const today = new Date().toISOString().slice(0, 10);
+
+            const body = [
+              `**Workflow:** \`remote_integration_nightly.yml\``,
+              `**Date:** ${today}`,
+              `**Run:** ${runUrl}`,
+              artifactUrl
+                ? `**Test run report artifact:** ${artifactUrl}`
+                : `**Test run report artifact:** not available (no report produced, or the upload step did not produce an artifact id — check the run log)`,
+              ``,
+              `The nightly remote critical test suite failed. Check the run log and the linked report for which test(s) regressed.`,
+            ].join("\n");
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const match = existing.find((i) => i.title === title);
+
+            if (match) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: match.number,
+                body,
+              });
+              console.log(`Commented on existing issue #${match.number}`);
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["incident"],
+              });
+              console.log("Opened new tracking issue");
+            }

@@ -58,6 +58,21 @@ const RUNTIME_UNAUTH_ROUTES = [
   { method: "DELETE", path: "/sandbox/session", reason: "Sandbox self-revoke." },
 ];
 
+// Routes the sandbox-mode write gate blocks outright (403) for the anonymous
+// sandbox principal, even though they otherwise require auth. Mirrors
+// `DESTRUCTIVE_ROUTES` in `src/services/sandbox_mode.ts` — that Set is the
+// source of truth; this list MUST be kept in sync with it by hand (the
+// generator is a standalone Node script with no TS import boundary into
+// src/, matching how RUNTIME_UNAUTH_ROUTES above already mirrors runtime
+// behavior this script cannot import).
+const SANDBOX_DESTRUCTIVE_ROUTES = new Set([
+  "POST /entities/merge",
+  "POST /entities/split",
+  "POST /recompute_snapshots_by_type",
+  "POST /health_check_snapshots",
+  "POST /update_schema_incremental",
+]);
+
 function parseArgs(argv) {
   const args = { mode: null, json: false };
   for (let i = 2; i < argv.length; i++) {
@@ -117,18 +132,32 @@ function generateRoutes(openapi) {
         requiresAuth = sec.some((b) => b && Object.prototype.hasOwnProperty.call(b, "bearerAuth"));
       else requiresAuth = globalRequiresBearer;
 
+      const isSandboxDestructive = SANDBOX_DESTRUCTIVE_ROUTES.has(`${method.toUpperCase()} ${apiPath}`);
+
       routes.push({
         path: apiPath,
         method: method.toUpperCase(),
         operation_id: op.operationId || null,
         requires_auth: requiresAuth,
         // Sandbox-mode reachability (plan ent_b4958d038bd41e8694fe0aef Phase 4).
-        // - "none": route requires full auth; sandbox principals rejected
+        // - "none": route is blocked outright for the anonymous sandbox
+        //   principal (the destructive-route write gate; see
+        //   SANDBOX_DESTRUCTIVE_ROUTES above)
         // - "local_only": local_sandbox allowed; hosted_sandbox rejected
-        // - "hosted_ok": both sandbox modes allowed
-        // Default conservative: auth-required routes -> "none", open routes
-        // -> "hosted_ok". Operators tighten via overrides.
-        sandbox_allowed: requiresAuth ? "none" : "hosted_ok",
+        //   (unused today — no route currently draws this distinction)
+        // - "hosted_ok": reachable in sandbox mode
+        //
+        // This does NOT mirror `requires_auth`: the sandbox auth middleware
+        // (actions.ts, ahead of `sandboxWriteGate`) resolves an anonymous
+        // fingerprinted principal for EVERY route when no Bearer is present
+        // and the server is in local_sandbox/hosted_sandbox mode — it is a
+        // global fallback, not an opt-in per route. So an auth-required route
+        // is normally STILL reachable anonymously in sandbox; only the small
+        // destructive-route set is actually blocked (403) there. Marking
+        // every auth-required row "none" (as this generator did before) is
+        // exactly the miscalibration `deployed_probes.sh --hosts <sandbox>`
+        // was scoring as a security failure every week.
+        sandbox_allowed: isSandboxDestructive ? "none" : "hosted_ok",
         // Conservative expectations the matrix asserts. Operators can override
         // via the `overrides` array (e.g. routes that legitimately allow guest
         // tokens via `?guest_access_token=` should set

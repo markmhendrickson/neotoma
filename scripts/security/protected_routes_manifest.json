@@ -84,7 +84,7 @@
       "method": "GET",
       "operation_id": "getAccessPolicies",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -97,7 +97,7 @@
       "method": "GET",
       "operation_id": "getComplianceScorecard",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -110,7 +110,7 @@
       "method": "GET",
       "operation_id": null,
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -123,7 +123,7 @@
       "method": "GET",
       "operation_id": "listAgentGrants",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -136,7 +136,7 @@
       "method": "POST",
       "operation_id": "createAgentGrant",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -149,7 +149,7 @@
       "method": "GET",
       "operation_id": "getAgentGrant",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -162,7 +162,7 @@
       "method": "PATCH",
       "operation_id": "updateAgentGrant",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -175,7 +175,7 @@
       "method": "POST",
       "operation_id": "restoreAgentGrant",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -188,7 +188,7 @@
       "method": "POST",
       "operation_id": "revokeAgentGrant",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -201,7 +201,7 @@
       "method": "POST",
       "operation_id": "suspendAgentGrant",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -214,7 +214,7 @@
       "method": "GET",
       "operation_id": null,
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -227,7 +227,7 @@
       "method": "GET",
       "operation_id": null,
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -240,7 +240,7 @@
       "method": "POST",
       "operation_id": "analyzeSchemaCandidates",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -253,7 +253,7 @@
       "method": "POST",
       "operation_id": "auditUndeclaredFragments",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -265,21 +265,30 @@
       "path": "/auth/dev-signin",
       "method": "POST",
       "operation_id": "devSignIn",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        403,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
-      ]
+        200,
+        400,
+        403,
+        404,
+        405
+      ],
+      "override_applied": true
     },
     {
       "path": "/conversations/{conversation_id}/turn-index",
       "method": "GET",
       "operation_id": "getConversationTurnIndex",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -292,7 +301,7 @@
       "method": "POST",
       "operation_id": "correct",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -305,7 +314,7 @@
       "method": "POST",
       "operation_id": "createRelationship",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -318,7 +327,7 @@
       "method": "POST",
       "operation_id": "createRelationships",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -331,7 +340,7 @@
       "method": "POST",
       "operation_id": "deleteEntity",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -344,7 +353,7 @@
       "method": "POST",
       "operation_id": "deleteRelationship",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -357,7 +366,7 @@
       "method": "GET",
       "operation_id": "listEntities",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -370,7 +379,7 @@
       "method": "GET",
       "operation_id": "listPotentialDuplicates",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -396,7 +405,7 @@
       "method": "POST",
       "operation_id": "queryEntities",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -422,7 +431,7 @@
       "method": "GET",
       "operation_id": "getEntityById",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -435,7 +444,7 @@
       "method": "GET",
       "operation_id": "getEntityObservations",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -448,7 +457,7 @@
       "method": "GET",
       "operation_id": "getEntityRelationships",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -461,7 +470,7 @@
       "method": "GET",
       "operation_id": "eventsStream",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -474,7 +483,7 @@
       "method": "POST",
       "operation_id": "getAuthenticatedUser",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -487,7 +496,7 @@
       "method": "POST",
       "operation_id": "getEntitySnapshot",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -500,7 +509,7 @@
       "method": "POST",
       "operation_id": "getFieldProvenance",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -513,7 +522,7 @@
       "method": "GET",
       "operation_id": "getFileUrl",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -526,7 +535,7 @@
       "method": "POST",
       "operation_id": "getSchemaRecommendations",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -539,7 +548,7 @@
       "method": "POST",
       "operation_id": "getSubscriptionStatus",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -584,7 +593,7 @@
       "method": "POST",
       "operation_id": "identifyEntityBySignals",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -597,7 +606,7 @@
       "method": "GET",
       "operation_id": "describeInstancePolicy",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -610,7 +619,7 @@
       "method": "GET",
       "operation_id": "listInterpretations",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -623,7 +632,7 @@
       "method": "POST",
       "operation_id": "createInterpretation",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -636,7 +645,7 @@
       "method": "POST",
       "operation_id": "issuesAddMessage",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -649,7 +658,7 @@
       "method": "POST",
       "operation_id": "bulkCloseIssues",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -662,7 +671,7 @@
       "method": "POST",
       "operation_id": "bulkRemoveIssues",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -675,7 +684,7 @@
       "method": "POST",
       "operation_id": "issuesGetStatus",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -688,20 +697,22 @@
       "method": "POST",
       "operation_id": "issuesSubmit",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
+        400,
         401
       ],
       "expected_invalid_auth_status": [
         401
-      ]
+      ],
+      "override_applied": true
     },
     {
       "path": "/issues/sync",
       "method": "POST",
       "operation_id": "issuesSync",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -714,7 +725,7 @@
       "method": "POST",
       "operation_id": "listObservationsForEntity",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -727,7 +738,7 @@
       "method": "POST",
       "operation_id": "listRelationshipTypes",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -740,7 +751,7 @@
       "method": "POST",
       "operation_id": "listRelationshipsForEntity",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -753,7 +764,7 @@
       "method": "POST",
       "operation_id": "listSubscriptions",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -766,38 +777,52 @@
       "method": "GET",
       "operation_id": "mcpOAuthAuthorizationDetails",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
       "expected_invalid_auth_status": [
+        400,
         401
-      ]
+      ],
+      "override_applied": true
     },
     {
       "path": "/mcp/oauth/authorize",
       "method": "GET",
       "operation_id": "mcpOAuthAuthorize",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/mcp/oauth/callback",
       "method": "GET",
       "operation_id": "mcpOAuthCallback",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
@@ -805,7 +830,7 @@
       "method": "GET",
       "operation_id": "mcpOAuthListConnections",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -818,7 +843,7 @@
       "method": "DELETE",
       "operation_id": "mcpOAuthRevokeConnection",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -830,91 +855,133 @@
       "path": "/mcp/oauth/initiate",
       "method": "POST",
       "operation_id": "mcpOAuthInitiate",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/mcp/oauth/key-auth",
       "method": "GET",
       "operation_id": "mcpOAuthKeyAuthGet",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/mcp/oauth/key-auth",
       "method": "POST",
       "operation_id": "mcpOAuthKeyAuthPost",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/mcp/oauth/local-login",
       "method": "GET",
       "operation_id": "mcpOAuthLocalLogin",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/mcp/oauth/register",
       "method": "POST",
       "operation_id": "mcpOAuthRegister",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/mcp/oauth/status",
       "method": "GET",
       "operation_id": "mcpOAuthStatus",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/mcp/oauth/token",
       "method": "POST",
       "operation_id": "mcpOAuthToken",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
@@ -922,7 +989,7 @@
       "method": "GET",
       "operation_id": "getMe",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -935,7 +1002,7 @@
       "method": "GET",
       "operation_id": "listObservations",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -948,7 +1015,7 @@
       "method": "POST",
       "operation_id": "createObservation",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -961,7 +1028,7 @@
       "method": "POST",
       "operation_id": "queryObservations",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -993,7 +1060,7 @@
       "method": "GET",
       "operation_id": "listPeers",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1006,7 +1073,7 @@
       "method": "POST",
       "operation_id": "addPeer",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1019,7 +1086,7 @@
       "method": "POST",
       "operation_id": "resolveSyncConflict",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1032,7 +1099,7 @@
       "method": "GET",
       "operation_id": "getPeerStatus",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1045,7 +1112,7 @@
       "method": "DELETE",
       "operation_id": "removePeer",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1058,7 +1125,7 @@
       "method": "POST",
       "operation_id": "syncPeer",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1071,7 +1138,7 @@
       "method": "POST",
       "operation_id": "queryContactsAtCompany",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1100,7 +1167,7 @@
       "method": "GET",
       "operation_id": "getRecentConversations",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1113,7 +1180,7 @@
       "method": "GET",
       "operation_id": "getRecentConversation",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1126,7 +1193,7 @@
       "method": "GET",
       "operation_id": "getRecordActivity",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1139,7 +1206,7 @@
       "method": "POST",
       "operation_id": "registerRelationshipType",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1152,7 +1219,7 @@
       "method": "POST",
       "operation_id": "registerSchema",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1165,7 +1232,7 @@
       "method": "GET",
       "operation_id": "listRelationships",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1178,7 +1245,7 @@
       "method": "POST",
       "operation_id": "getRelationshipSnapshot",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1191,7 +1258,7 @@
       "method": "GET",
       "operation_id": "getRelationshipById",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1204,7 +1271,7 @@
       "method": "POST",
       "operation_id": "publishRenderedPage",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1217,7 +1284,7 @@
       "method": "POST",
       "operation_id": "restoreEntity",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1230,7 +1297,7 @@
       "method": "POST",
       "operation_id": "restoreRelationship",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1243,7 +1310,7 @@
       "method": "POST",
       "operation_id": "retrieveEntityByIdentifier",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1256,7 +1323,7 @@
       "method": "POST",
       "operation_id": "retrieveGraphNeighborhood",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1269,7 +1336,7 @@
       "method": "POST",
       "operation_id": "retrieveRelatedEntities",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1282,7 +1349,7 @@
       "method": "GET",
       "operation_id": "listSchemas",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1295,7 +1362,7 @@
       "method": "GET",
       "operation_id": "getSchemaByEntityType",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1307,13 +1374,19 @@
       "path": "/server-info",
       "method": "GET",
       "operation_id": "getServerInfo",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
@@ -1321,7 +1394,7 @@
       "method": "GET",
       "operation_id": "getSessionInfo",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1334,7 +1407,7 @@
       "method": "GET",
       "operation_id": "listSources",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1347,7 +1420,7 @@
       "method": "GET",
       "operation_id": "getSourceById",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1360,7 +1433,7 @@
       "method": "GET",
       "operation_id": "getSourceRelationships",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1373,7 +1446,7 @@
       "method": "GET",
       "operation_id": "getStats",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1386,7 +1459,7 @@
       "method": "POST",
       "operation_id": "store",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1399,7 +1472,7 @@
       "method": "POST",
       "operation_id": "subscribe",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1412,7 +1485,7 @@
       "method": "POST",
       "operation_id": "listSyncEntities",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1425,7 +1498,7 @@
       "method": "POST",
       "operation_id": "applySyncWebhook",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1438,7 +1511,7 @@
       "method": "GET",
       "operation_id": "listTimeline",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1451,7 +1524,7 @@
       "method": "GET",
       "operation_id": "getTimelineById",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1464,7 +1537,7 @@
       "method": "POST",
       "operation_id": "turnSummary",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1477,7 +1550,7 @@
       "method": "POST",
       "operation_id": "unsubscribe",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1503,7 +1576,7 @@
       "method": "GET",
       "operation_id": "getUsage",
       "requires_auth": true,
-      "sandbox_allowed": "none",
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
         401
       ],
@@ -1750,6 +1823,49 @@
         "expected_invalid_auth_status": [
           200,
           503
+        ]
+      }
+    },
+    {
+      "path": "/mcp/oauth/authorization-details",
+      "method": "GET",
+      "reason": "The handler checks the Authorization header is PRESENT (401 if absent — matches expected_no_auth_status) before it checks the required `authorization_id` query param (400 if absent) — and only after that does it call validateSessionToken to actually validate the bearer. deployed_probes.sh's invalid-bearer probe sends a bogus Bearer header with no authorization_id, so it is scored against the param-validation gate, not the token-validation gate the invalid-bearer probe is meant to exercise. 400 leaks nothing (no token validation ever ran); this is a probe-shape limitation, not weakened auth — a request that supplies authorization_id alongside the same bogus token still correctly reaches validateSessionToken and is rejected.",
+      "fields": {
+        "expected_invalid_auth_status": [
+          400,
+          401
+        ]
+      }
+    },
+    {
+      "path": "/issues/submit",
+      "method": "POST",
+      "reason": "handleIssuesSubmitHttp validates the request body against IssuesSubmitRequestSchema (Zod) BEFORE calling resolveRoutePrincipal. deployed_probes.sh's no-auth probe sends an empty body, which fails schema validation first and returns 400 before the auth check ever runs; the invalid-bearer probe reaches the same empty-body validation and also returns 400 there, but had it carried a valid-shaped body it would fall through to resolveRoutePrincipal -> getAuthenticatedUserId and correctly reject with 401 (confirmed live: an authenticated write still requires a real bearer token; resolveGuestUserId's local-loopback fallback is gated on isLocalRequest(req), which a remote probe never satisfies). No data is returned on the 400 path.",
+      "fields": {
+        "expected_no_auth_status": [
+          400,
+          401
+        ]
+      }
+    },
+    {
+      "path": "/auth/dev-signin",
+      "method": "POST",
+      "reason": "devSignIn is hard-disabled with a 403 on every hosted instance regardless of environment or Authorization header (actions.ts: the development-mode check itself fails, then the handler unconditionally returns 403 'disabled in local-only mode' before any auth check runs). The 403 is a mode gate, not an auth outcome — no bearer check exists on this route to score.",
+      "fields": {
+        "expected_no_auth_status": [
+          200,
+          400,
+          403,
+          404,
+          405
+        ],
+        "expected_invalid_auth_status": [
+          200,
+          400,
+          403,
+          404,
+          405
         ]
       }
     }

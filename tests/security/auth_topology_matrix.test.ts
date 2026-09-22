@@ -292,14 +292,46 @@ describe("auth topology matrix — protected_routes_manifest.json sanity", () =>
     }
   });
 
-  it("every auth-required route defaults to sandbox_allowed=none (operators tighten via overrides)", () => {
+  // The sandbox auth middleware in actions.ts resolves an anonymous
+  // fingerprinted principal for EVERY route (no per-route opt-in) whenever
+  // the server is in local_sandbox/hosted_sandbox mode and no Bearer is
+  // presented — so `requires_auth: true` does NOT imply the route is
+  // unreachable in sandbox mode. `sandbox_allowed` must track the actual
+  // runtime carve-out instead: the destructive-route write gate
+  // (`isDestructiveSandboxRoute` / `DESTRUCTIVE_ROUTES` in
+  // src/services/sandbox_mode.ts), which is the only thing that blocks an
+  // anonymous sandbox caller outright. Asserting `sandbox_allowed === "none"`
+  // for every auth-required row (the previous version of this test) pinned
+  // exactly the miscalibration that scored `sandbox.neotoma.io` as failing
+  // Gate G5 every week for a month even though nothing was exposed: it
+  // encoded "auth-required implies blocked in sandbox", which is false for
+  // every route except the destructive set below.
+  const SANDBOX_DESTRUCTIVE_ROUTES = new Set([
+    "POST /entities/merge",
+    "POST /entities/split",
+    "POST /recompute_snapshots_by_type",
+    "POST /health_check_snapshots",
+    "POST /update_schema_incremental",
+  ]);
+
+  it("only the destructive-route set is sandbox_allowed=none; every other auth-required route is hosted_ok", () => {
     const manifest = loadManifest();
     for (const row of manifest.routes) {
       if (!row.requires_auth) continue;
-      expect(
-        row.sandbox_allowed,
-        `${row.method} ${row.path}: auth-required route must default to sandbox_allowed=none`,
-      ).toBe("none");
+      const key = `${row.method} ${row.path}`;
+      const expected = SANDBOX_DESTRUCTIVE_ROUTES.has(key) ? "none" : "hosted_ok";
+      expect(row.sandbox_allowed, `${key}: expected sandbox_allowed=${expected}`).toBe(expected);
+    }
+  });
+
+  it("every destructive route in the manifest is also declared requires_auth (defense in depth)", () => {
+    const manifest = loadManifest();
+    const manifestPaths = new Set(manifest.routes.map((r) => `${r.method} ${r.path}`));
+    for (const key of SANDBOX_DESTRUCTIVE_ROUTES) {
+      if (!manifestPaths.has(key)) continue; // not every destructive route has an openapi.yaml entry
+      const row = manifest.routes.find((r) => `${r.method} ${r.path}` === key)!;
+      expect(row.requires_auth, `${key} must require auth`).toBe(true);
+      expect(row.sandbox_allowed, `${key} must be sandbox_allowed=none`).toBe("none");
     }
   });
 });

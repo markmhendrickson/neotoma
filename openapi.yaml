@@ -2805,6 +2805,12 @@ paths:
     get:
       summary: Get server info
       operationId: getServerInfo
+      # Unauthenticated by design: version/endpoint metadata only (httpPort,
+      # apiBase, mcpUrl, neotoma_env, version, git_sha, endpoint map) — no
+      # user or account data. `actions.ts` never checks `Authorization` on
+      # this route; a signed-out MCP client needs this to discover how to
+      # connect at all.
+      security: []
       responses:
         "200":
           description: Server info
@@ -2822,6 +2828,10 @@ paths:
     post:
       summary: Initiate MCP OAuth flow
       operationId: mcpOAuthInitiate
+      # Unauthenticated by design: this is the FIRST call of the OAuth
+      # handshake, made before the caller holds any Neotoma bearer token.
+      # `actions.ts` never checks `Authorization` on this route.
+      security: []
       requestBody:
         required: true
         content:
@@ -2843,6 +2853,10 @@ paths:
     get:
       summary: OAuth authorization endpoint
       operationId: mcpOAuthAuthorize
+      # Unauthenticated by design: reached by a user-agent mid-OAuth-redirect
+      # before any bearer token exists. `actions.ts` never checks
+      # `Authorization` on this route.
+      security: []
       parameters:
         - in: query
           name: redirect_uri
@@ -2905,6 +2919,10 @@ paths:
     post:
       summary: OAuth token exchange
       operationId: mcpOAuthToken
+      # Unauthenticated by design: this is where a bearer token is minted, so
+      # the caller cannot present one yet. `actions.ts` never checks
+      # `Authorization` on this route.
+      security: []
       requestBody:
         required: true
         content:
@@ -3000,6 +3018,10 @@ paths:
     get:
       summary: Get OAuth connection status
       operationId: mcpOAuthStatus
+      # Unauthenticated by design: polled mid-handshake before a bearer token
+      # exists, keyed only by an opaque connection_id. `actions.ts` never
+      # checks `Authorization` on this route.
+      security: []
       parameters:
         - in: query
           name: connection_id
@@ -3159,6 +3181,10 @@ paths:
     get:
       summary: OAuth callback endpoint
       operationId: mcpOAuthCallback
+      # Unauthenticated by design: the identity-provider redirect target,
+      # reached before any Neotoma bearer token exists. `actions.ts` never
+      # checks `Authorization` on this route.
+      security: []
       parameters:
         - in: query
           name: code
@@ -3174,6 +3200,11 @@ paths:
     get:
       summary: Key-based authorization page (GET)
       operationId: mcpOAuthKeyAuthGet
+      # Unauthenticated by design: this IS the pre-auth login form (private
+      # key / mnemonic / bearer entry) a caller reaches before it holds a
+      # session. It must render for a signed-out visitor. `actions.ts` never
+      # checks `Authorization` on this route.
+      security: []
       parameters:
         - in: query
           name: next
@@ -3187,6 +3218,12 @@ paths:
     post:
       summary: Key-based authorization submission (POST)
       operationId: mcpOAuthKeyAuthPost
+      # Unauthenticated by design: this is the credential submission that
+      # ESTABLISHES the session; the credential travels in the form body
+      # (bearer_token/private_key_hex/mnemonic), not the Authorization
+      # header, so a probe's invalid bearer header is not what this route
+      # validates. `actions.ts` never checks `Authorization` on this route.
+      security: []
       requestBody:
         content:
           application/x-www-form-urlencoded:
@@ -3205,6 +3242,10 @@ paths:
     get:
       summary: Local login for development (auto-creates dev user)
       operationId: mcpOAuthLocalLogin
+      # Unauthenticated by design: a sign-in entry point reached before any
+      # session exists. `actions.ts` never checks `Authorization` on this
+      # route.
+      security: []
       responses:
         "302":
           description: Redirect after local login
@@ -3213,6 +3254,10 @@ paths:
     post:
       summary: Dynamic Client Registration (RFC 7591)
       operationId: mcpOAuthRegister
+      # Unauthenticated by design: RFC 7591 Dynamic Client Registration is
+      # how a new OAuth client obtains credentials before any bearer token
+      # exists. `actions.ts` never checks `Authorization` on this route.
+      security: []
       requestBody:
         required: true
         content:
@@ -3249,6 +3294,11 @@ paths:
     post:
       summary: Dev-only sign-in endpoint (development mode only)
       operationId: devSignIn
+      # Unauthenticated by design: a sign-in entry point reached before any
+      # session exists. In `actions.ts` it is hard-disabled (403) outside
+      # `development` regardless of any Authorization header — the 403 is a
+      # mode gate, not a bearer check, so it is not an auth outcome to score.
+      security: []
       requestBody:
         content:
           application/json:

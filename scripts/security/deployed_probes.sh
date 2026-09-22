@@ -8,6 +8,26 @@
 #   - Without bearer:    401 / 403 (or the manifest's expected statuses)
 #   - With invalid bearer: 401
 #
+# Sandbox-mode hosts (local_sandbox / hosted_sandbox) are a deliberate
+# exception: `getAuthenticatedUserId` resolves an anonymous fingerprinted
+# principal instead of rejecting, so a `requires_auth: true` route legitimately
+# returns 200/400/403/404 there instead of 401 — that is the designed "try
+# without signing up" UX, not exposure (destructive routes are still blocked
+# with 403; see `isDestructiveSandboxRoute`). Each probed HOST is checked at
+# runtime for the `X-Neotoma-Sandbox: 1` response header the server already
+# stamps on every response in either sandbox mode
+# (`src/services/sandbox_mode.ts` `sandboxHeaderMiddleware`) — never by
+# matching the hostname string, so this script stays portable to any
+# operator's own sandbox deployment. When a host is in sandbox mode, a route
+# whose manifest row has `sandbox_allowed: "hosted_ok"` is scored against the
+# WIDER status set `[200, 204, 400, 403, 404, 405, 429]` (the same set the
+# manifest already uses for its explicitly-unauthenticated runtime-only
+# routes, plus 403 for the destructive-route guard) instead of the route's
+# normal `expected_*_status`. A route with `sandbox_allowed: "none"` is held
+# to its normal expected statuses on every host, sandbox included — so a
+# route that is NOT supposed to be reachable anonymously still fails loudly
+# if sandbox mode ever started letting it through.
+#
 # Output: docs/releases/in_progress/<TAG>/post_deploy_security_probes.md
 # (or `--out <path>`).
 #
@@ -134,19 +154,73 @@ probe_route() {
   curl "${curl_args[@]}" "${url}" || echo "000"
 }
 
+# Statuses a `sandbox_allowed: "hosted_ok"` route may ADDITIONALLY return on a
+# sandbox-mode host, on top of (union with, not instead of) its normal
+# expected_*_status. Matches the array the manifest already uses for its
+# explicitly-unauthenticated runtime-only routes (200/204/400/404/405/429),
+# plus 403 for the destructive-route guard
+# (`isDestructiveSandboxRoute` in src/services/sandbox_mode.ts). Union, not
+# replacement, because a handful of routes (e.g. /mcp/oauth/connections,
+# /mcp/oauth/authorization-details) run their OWN bearer check after the
+# generic sandbox fallback stamps an anonymous principal, so they correctly
+# keep returning 401 in sandbox mode too — replacing their expected set
+# outright would turn that still-enforced 401 into a false failure.
+SANDBOX_HOSTED_OK_EXTRA_STATUSES='[200, 204, 400, 403, 404, 405, 429]'
+
+# Statuses a `sandbox_allowed: "none"` route (the destructive-route set —
+# entities/merge, entities/split, health_check_snapshots,
+# update_schema_incremental) may ADDITIONALLY return on a sandbox-mode host.
+# These routes are never reachable anonymously on EITHER host — prod rejects
+# with 401 (no bearer at all), sandbox rejects with 403 (a bearer-less caller
+# DOES resolve to the anonymous sandbox principal there, but
+# `sandboxWriteGate` / `isDestructiveSandboxRoute` then blocks the destructive
+# write outright). Only 403 is added, never 200 — unlike the hosted_ok set
+# above, a "none" route must still never succeed anonymously on any host.
+SANDBOX_DESTRUCTIVE_EXTRA_STATUSES='[403]'
+
+# Detect sandbox mode from the LIVE response, not the hostname: the server
+# stamps `X-Neotoma-Sandbox: 1` on every response in local_sandbox or
+# hosted_sandbox mode (sandboxHeaderMiddleware). A plain GET / is enough to
+# observe it, and it must succeed independent of the auth probes below so a
+# probe failure never masks the sandbox-detection result.
+is_sandbox_host() {
+  local host="$1"
+  local header
+  header="$(curl -sS -o /dev/null -D - --max-time 10 --retry 2 --retry-delay 3 "${host%/}/health" 2>/dev/null \
+    | tr -d '\r' | grep -i '^x-neotoma-sandbox:' || true)"
+  [[ -n "${header}" ]]
+}
+
 passes=0
 failures=0
 results_json="[]"
 
 while IFS= read -r host; do
   [[ -z "${host}" ]] && continue
-  echo "deployed_probes.sh: probing ${host} (${ROUTE_COUNT} routes)"
+  host_is_sandbox="false"
+  if is_sandbox_host "${host}"; then
+    host_is_sandbox="true"
+  fi
+  echo "deployed_probes.sh: probing ${host} (${ROUTE_COUNT} routes, sandbox_mode=${host_is_sandbox})"
   for i in $(seq 0 $((ROUTE_COUNT - 1))); do
     row="$(echo "${ROUTES_JSON}" | jq ".[${i}]")"
     method="$(echo "${row}" | jq -r '.method')"
     route="$(echo "${row}" | jq -r '.path')"
-    expected_no_auth="$(echo "${row}" | jq -c '.expected_no_auth_status')"
-    expected_invalid_auth="$(echo "${row}" | jq -c '.expected_invalid_auth_status')"
+    sandbox_allowed="$(echo "${row}" | jq -r '.sandbox_allowed // "none"')"
+
+    row_expected_no_auth="$(echo "${row}" | jq -c '.expected_no_auth_status')"
+    row_expected_invalid_auth="$(echo "${row}" | jq -c '.expected_invalid_auth_status')"
+
+    if [[ "${host_is_sandbox}" == "true" && "${sandbox_allowed}" == "hosted_ok" ]]; then
+      expected_no_auth="$(jq -c -n --argjson a "${row_expected_no_auth}" --argjson b "${SANDBOX_HOSTED_OK_EXTRA_STATUSES}" '($a + $b) | unique')"
+      expected_invalid_auth="$(jq -c -n --argjson a "${row_expected_invalid_auth}" --argjson b "${SANDBOX_HOSTED_OK_EXTRA_STATUSES}" '($a + $b) | unique')"
+    elif [[ "${host_is_sandbox}" == "true" && "${sandbox_allowed}" == "none" ]]; then
+      expected_no_auth="$(jq -c -n --argjson a "${row_expected_no_auth}" --argjson b "${SANDBOX_DESTRUCTIVE_EXTRA_STATUSES}" '($a + $b) | unique')"
+      expected_invalid_auth="$(jq -c -n --argjson a "${row_expected_invalid_auth}" --argjson b "${SANDBOX_DESTRUCTIVE_EXTRA_STATUSES}" '($a + $b) | unique')"
+    else
+      expected_no_auth="${row_expected_no_auth}"
+      expected_invalid_auth="${row_expected_invalid_auth}"
+    fi
 
     no_auth_status="$(probe_route "${host}" "${method}" "${route}" "absent")"
     invalid_auth_status="$(probe_route "${host}" "${method}" "${route}" "invalid")"
