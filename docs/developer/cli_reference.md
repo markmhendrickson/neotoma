@@ -282,6 +282,54 @@ CLI behavior can be pinned per invocation via flags or across invocations via en
 
 Any new runtime override must follow this precedence model: add the env var read in the `preAction` hook in `src/cli/index.ts` alongside the existing transport variables, use a `NEOTOMA_`-prefixed name, let an explicit flag override it, and document it in the table above. See `docs/architecture/change_guardrails_rules.mdc` for the cross-cutting guardrails.
 
+### API process inspection / stop (CLI env, no paired flag)
+
+These are read by `neotoma api processes`, `neotoma api stop`, listen-port enrichment, and `scripts/kill_port.js`. They are **not** `preAction` transport overrides.
+
+| Environment variable               | Values / default | Purpose |
+| ---------------------------------- | ---------------- | ------- |
+| `NEOTOMA_API_STOP_DRY_RUN`         | `1` only         | Skip the kill in `neotoma api stop`. JSON includes `stop_ran: false` and **`dry_run: true`** with a dry-run message (not the “run from source root” hint). |
+| `NEOTOMA_PROCESS_PROBE_TIMEOUT_MS` | positive int ms; default `5000` | Cap each process-inspection subprocess (`lsof` / `ps` / `netstat` / `wmic` / `pgrep`). Invalid/empty → default. |
+
+`neotoma api processes --json` always includes additive `probe_status` (`ok` \| `timed_out` \| `unavailable`). Timeout or missing tool must **not** look like a confirmed empty port: human mode writes a stderr warning; JSON may include `warnings[]`.
+
+Examples:
+
+```bash
+NEOTOMA_API_STOP_DRY_RUN=1 neotoma api stop --env dev --json
+```
+
+```json
+{
+  "env": "dev",
+  "port": 3080,
+  "stop_ran": false,
+  "dry_run": true,
+  "message": "[COPY: dry-run] NEOTOMA_API_STOP_DRY_RUN=1 — skipped stopping port 3080 (no processes killed)."
+}
+```
+
+For example, when both port probes time out with the default timeout:
+
+```bash
+neotoma api processes --json
+```
+
+```json
+{
+  "processes": [],
+  "ports_checked": [3080, 3180],
+  "probe_status": "timed_out",
+  "warnings": [
+    {
+      "code": "process_probe_timed_out",
+      "ports": [3080, 3180],
+      "timeout_ms": 5000
+    }
+  ]
+}
+```
+
 ### Peer sync and HTTP API (server process)
 
 These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for outbound peer sync and optional release-note enrichment:

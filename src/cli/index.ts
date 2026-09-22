@@ -74,6 +74,10 @@ import { registerBundlesCommand } from "./commands/bundles.js";
 import { registerPeersCommand } from "./peers.js";
 import { buildInspectorFeedbackAdminUnlockPageUrl } from "./inspector_admin_unlock_url.js";
 import {
+  detectNeotomaMcpStdioProcessCount,
+  listNeotomaServerProcesses,
+} from "./api_server_process_probe.js";
+import {
   accent,
   black,
   blackBox,
@@ -11918,115 +11922,6 @@ logsCommand
   });
 
 /** Result row for a Neotoma server process (any instance, not just this CLI's). */
-type NeotomaProcessRow = { pid: number; port: number; command: string; label: string };
-
-/**
- * List all Neotoma API server processes (listening on candidate ports). Uses lsof (Unix) or netstat (Windows).
- * Not limited to the process started by this CLI instance.
- */
-function listNeotomaServerProcesses(): NeotomaProcessRow[] {
-  const rows: NeotomaProcessRow[] = [];
-  const isWin = process.platform === "win32";
-  const labelForPort = (p: number) => (p === 3180 ? "prod" : p === 3080 ? "dev" : String(p));
-
-  if (isWin) {
-    try {
-      for (const port of CANDIDATE_API_PORTS) {
-        const out = execSync(`netstat -ano | findstr :${port}`, {
-          encoding: "utf-8",
-          stdio: ["pipe", "pipe", "pipe"],
-        });
-        const pids = new Set<number>();
-        for (const line of out.split("\n")) {
-          if (!line.includes(`:${port}`)) continue;
-          const parts = line.trim().split(/\s+/);
-          const last = parts[parts.length - 1];
-          if (last && /^\d+$/.test(last)) {
-            const pid = parseInt(last, 10);
-            if (pid > 0) pids.add(pid);
-          }
-        }
-        for (const pid of pids) {
-          let cmd = "";
-          try {
-            const wmic = execSync(
-              `wmic process where processid=${pid} get commandline /format:list`,
-              {
-                encoding: "utf-8",
-                stdio: ["pipe", "pipe", "pipe"],
-              }
-            );
-            const cm = wmic.match(/CommandLine=(.+)/);
-            cmd = cm ? cm[1].trim().replace(/\r?\n/g, " ").slice(0, 120) : "";
-          } catch {
-            cmd = "(unknown)";
-          }
-          rows.push({ pid, port, command: cmd || "(unknown)", label: labelForPort(port) });
-        }
-      }
-    } catch {
-      // netstat/wmic failed
-    }
-    return rows;
-  }
-
-  for (const port of CANDIDATE_API_PORTS) {
-    try {
-      const pidsOut = execSync(`lsof -i :${port} -n -P -t`, {
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      const pids = pidsOut
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((s) => parseInt(s, 10))
-        .filter((n) => Number.isFinite(n) && n > 0);
-      for (const pid of pids) {
-        let command = "";
-        try {
-          command = execSync(`ps -p ${pid} -o command=`, {
-            encoding: "utf-8",
-            stdio: ["pipe", "pipe", "pipe"],
-          })
-            .trim()
-            .replace(/\s+/g, " ")
-            .slice(0, 100);
-        } catch {
-          command = "(unknown)";
-        }
-        rows.push({ pid, port, command: command || "(unknown)", label: labelForPort(port) });
-      }
-    } catch {
-      // lsof returns non-zero when no process; ignore
-    }
-  }
-  return rows;
-}
-
-/**
- * Detect Neotoma MCP stdio server processes (e.g. spawned by Cursor via run_neotoma_mcp_stdio.sh).
- * Uses pgrep on Unix; returns 0 on Windows or on error. Does not count this CLI process.
- */
-async function detectNeotomaMcpStdioProcessCount(): Promise<number> {
-  if (process.platform === "win32") return 0;
-  try {
-    const out = execSync('pgrep -f "run_neotoma_mcp_stdio"', {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    const pids = out
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((s) => parseInt(s, 10))
-      .filter((n) => Number.isFinite(n) && n > 0 && n !== process.pid);
-    return pids.length;
-  } catch {
-    return 0;
-  }
-}
-
 const apiCommand = program.command("api").description("API runtime status and management");
 
 apiCommand
@@ -12349,6 +12244,10 @@ apiCommand
 apiCommand
   .command("stop")
   .description("Stop the API server process on the configured port")
+  .addHelpText(
+    "after",
+    "\nEnvironment:\n  Pass the global --env flag as --env dev or --env prod.\n  NEOTOMA_API_STOP_DRY_RUN=1 skips the kill and reports stop_ran:false with dry_run:true (tests / CI).\n"
+  )
   .action(async () => {
     const outputMode = resolveOutputMode();
     const envOpt = (program.opts() as { env?: string }).env;
@@ -12362,6 +12261,31 @@ apiCommand
       return;
     }
     const port = envOpt === "prod" ? 3180 : 3080;
+
+    // Escape hatch for automated callers that need the payload contract
+    // without the side effect. Do not share the missing-script / source-root
+    // message — dry-run is an intentional skip, not a failed path resolution.
+    if (process.env.NEOTOMA_API_STOP_DRY_RUN === "1") {
+      const dryRunMessage =
+        "[COPY: dry-run] NEOTOMA_API_STOP_DRY_RUN=1 — skipped stopping port " +
+        port +
+        " (no processes killed).";
+      if (outputMode === "json") {
+        writeOutput(
+          {
+            env: envOpt,
+            port,
+            stop_ran: false,
+            dry_run: true,
+            message: dryRunMessage,
+          },
+          outputMode
+        );
+        return;
+      }
+      process.stdout.write(bold("Stop: ") + dim("dry-run") + " — " + dryRunMessage + nl());
+      return;
+    }
 
     const scriptDir = path.dirname(fileURLToPath(import.meta.url));
     const repoRoot = path.join(scriptDir, "..", "..");
@@ -12390,6 +12314,7 @@ apiCommand
           env: envOpt,
           port,
           stop_ran: ran,
+          dry_run: false,
           message: ran
             ? "Stop command completed for port " + port + "."
             : "Run from Neotoma source root to stop: node scripts/kill_port.js " + port,
@@ -12417,17 +12342,38 @@ apiCommand
   .description("List all Neotoma API server processes (all instances, not just this CLI's)")
   .action(async () => {
     const outputMode = resolveOutputMode();
-    const rows = listNeotomaServerProcesses();
+    const { processes: rows, probe_status, warnings } = listNeotomaServerProcesses();
     if (outputMode === "json") {
-      writeOutput({ processes: rows, ports_checked: CANDIDATE_API_PORTS }, outputMode);
+      writeOutput(
+        {
+          processes: rows,
+          ports_checked: CANDIDATE_API_PORTS,
+          probe_status,
+          ...(warnings ? { warnings } : {}),
+        },
+        outputMode
+      );
       return;
     }
     process.stdout.write(heading("Neotoma API server processes") + nl());
     process.stdout.write(dim("Ports checked: " + CANDIDATE_API_PORTS.join(", ") + nl()));
+    if (probe_status === "timed_out" || probe_status === "unavailable") {
+      const detail =
+        probe_status === "timed_out"
+          ? "[COPY: probe timed out] Process inspection timed out; list may be incomplete (not a confirmed empty port)."
+          : "[COPY: probe unavailable] Process inspection tool unavailable; list may be incomplete (not a confirmed empty port).";
+      process.stderr.write(`neotoma api processes: ${detail}\n`);
+    }
     if (rows.length === 0) {
-      process.stdout.write(
-        dim("No processes listening on " + CANDIDATE_API_PORTS.join(" or ") + ".") + nl()
-      );
+      if (probe_status === "ok") {
+        process.stdout.write(
+          dim("No processes listening on " + CANDIDATE_API_PORTS.join(" or ") + ".") + nl()
+        );
+      } else {
+        process.stdout.write(
+          dim("No process rows returned (probe_status=" + probe_status + ").") + nl()
+        );
+      }
       return;
     }
     const wPid = 8;

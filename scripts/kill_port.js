@@ -6,6 +6,22 @@
 
 import { execSync } from 'child_process';
 import { platform } from 'os';
+import { pathToFileURL } from 'url';
+
+const DEFAULT_PROCESS_PROBE_TIMEOUT_MS = 5000;
+
+/** Keep this plain-JS entry point aligned with src/cli/process_probe.ts. */
+export function resolveProcessProbeTimeoutMs(env = process.env) {
+  const raw = env.NEOTOMA_PROCESS_PROBE_TIMEOUT_MS;
+  if (raw === undefined || raw === '') {
+    return DEFAULT_PROCESS_PROBE_TIMEOUT_MS;
+  }
+  const timeoutMs = Number(raw);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || !Number.isInteger(timeoutMs)) {
+    return DEFAULT_PROCESS_PROBE_TIMEOUT_MS;
+  }
+  return timeoutMs;
+}
 
 function findProcessOnPort(port) {
   const portNum = Number(port);
@@ -13,12 +29,14 @@ function findProcessOnPort(port) {
     throw new Error(`Invalid port number: ${port}`);
   }
 
+  const processProbeTimeoutMs = resolveProcessProbeTimeoutMs();
+
   try {
     if (platform() === 'win32') {
       // Windows: Use netstat to find process using port
       const result = execSync(
         `netstat -ano | findstr :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: processProbeTimeoutMs }
       );
       const lines = result.trim().split('\n').filter(Boolean);
       const pids = new Set();
@@ -32,9 +50,13 @@ function findProcessOnPort(port) {
       return Array.from(pids).map(Number);
     } else {
       // Unix-like (macOS, Linux): Use lsof to find process using port
+      // A cold `lsof` can block for tens of seconds walking kernel socket
+      // state (measured 49.7s cold vs 0.07s warm). Cap it: a timeout here is
+      // reported the same as "no process on this port", which is the existing
+      // behaviour when lsof exits non-zero.
       const result = execSync(
         `lsof -ti :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: processProbeTimeoutMs }
       );
       const pids = result.trim().split('\n').filter(Boolean);
       return pids.map(Number);
@@ -42,6 +64,10 @@ function findProcessOnPort(port) {
   } catch (error) {
     // lsof/netstat returns non-zero exit code when no process found
     if (error.status === 1 || error.code === 1) {
+      return [];
+    }
+    // Timeout must not rethrow — same advisory empty as exit-1 (Accipiter UX).
+    if (error.code === 'ETIMEDOUT' || error.killed === true) {
       return [];
     }
     throw error;
@@ -171,4 +197,7 @@ async function main() {
   }
 }
 
-main();
+const invokedPath = process.argv[1];
+if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
+  main();
+}
