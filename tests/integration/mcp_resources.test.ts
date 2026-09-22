@@ -21,6 +21,11 @@ describe("MCP Resources - Integration", () => {
   });
 
   beforeEach(async () => {
+    // Resource handlers fail closed when no session identity is present.
+    // Exercise their authorized path explicitly instead of inheriting auth
+    // state from a developer environment.
+    (server as unknown as { authenticatedUserId: string | null }).authenticatedUserId = testUserId;
+
     // Cleanup test data
     if (createdRelationshipIds.length > 0) {
       await db.from("relationship_snapshots").delete().in("relationship_key", createdRelationshipIds);
@@ -193,6 +198,14 @@ describe("MCP Resources - Integration", () => {
     });
 
     describe("handleIndividualEntity", () => {
+      it("should refuse an unauthenticated caller", async () => {
+        (server as unknown as { authenticatedUserId: string | null }).authenticatedUserId = null;
+
+        await expect((server as any).handleIndividualEntity("ent_nonexistent")).rejects.toThrow(
+          /Authentication required/
+        );
+      });
+
       it("should return individual entity with snapshot", async () => {
         // Create test entity
         const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
