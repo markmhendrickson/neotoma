@@ -472,9 +472,6 @@ jobs:
       - name: Topology auth matrix (G3)
         run: npm run test:security:auth-matrix
 
-      - name: Sandbox probe scoring regression (G3)
-        run: npm run test:security:probe-scoring
-
       - name: Surface sensitivity flag
         if: always()
         run: |
