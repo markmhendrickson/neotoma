@@ -7533,23 +7533,35 @@ export async function storeStructuredForApi(params: {
   const jsonContent = incomingJsonContent;
   const filenameForStorage = originalFilename?.trim() || undefined;
 
-  const storageResult = await storeRawContent({
-    userId,
-    fileBuffer: Buffer.from(jsonContent, "utf-8"),
-    mimeType: "application/json",
-    originalFilename: filenameForStorage,
-    idempotencyKey,
-    provenance: {
-      upload_method: "api_store",
-      client: "api",
-      source_priority: sourcePriority,
-    },
-  });
+  // Plan mode (`commit: false`, CLI `--plan`/`--dry-run`) must be genuinely
+  // side-effect-free: no `sources` row, no raw-storage upload. storeRawContent
+  // persists both, so it must not run at all when not committing. Everything
+  // storageResult feeds below — resolvedInterpretationSourceId,
+  // observationSourceId, and interpretationId — is consumed exclusively
+  // inside `if (commit)` blocks further down (observation creation, event
+  // emission, auto-linking), so a null placeholder here is never written to
+  // a row; pass 1 entity resolution (resolveEntityWithTrace, below) takes no
+  // source id at all. See docs note at the top of this function and
+  // "--plan/--dry-run performs no source writes".
+  const storageResult = commit
+    ? await storeRawContent({
+        userId,
+        fileBuffer: Buffer.from(jsonContent, "utf-8"),
+        mimeType: "application/json",
+        originalFilename: filenameForStorage,
+        idempotencyKey,
+        provenance: {
+          upload_method: "api_store",
+          client: "api",
+          source_priority: sourcePriority,
+        },
+      })
+    : null;
 
   const resolvedInterpretationSourceId =
     interpretation?.source_id ??
     interpretationSourceId ??
-    (interpretation?.source_ref === "structured" ? storageResult.sourceId : undefined);
+    (interpretation?.source_ref === "structured" ? storageResult?.sourceId : undefined);
   const interpretationId =
     commit && interpretation && resolvedInterpretationSourceId
       ? await createInterpretationRunForSource({
@@ -7558,7 +7570,7 @@ export async function storeStructuredForApi(params: {
           interpretationConfig: interpretation.interpretation_config,
         })
       : null;
-  const observationSourceId = resolvedInterpretationSourceId ?? storageResult.sourceId;
+  const observationSourceId = resolvedInterpretationSourceId ?? storageResult?.sourceId;
 
   // Two-pass: first resolve every entity with trace (so CanonicalNameUnresolvedError
   // / MergeRefusedError land per-observation before any writes), then commit
@@ -8012,6 +8024,18 @@ export async function storeStructuredForApi(params: {
     let snapshotAfter: Record<string, unknown> | null = null;
 
     if (commit) {
+      // Invariant: storageResult is only ever null when `commit` is false
+      // (plan mode skips storeRawContent entirely — see above). Reaching this
+      // branch with a null observationSourceId would mean an observation is
+      // about to be written with no traceable source, which is worse than
+      // failing loudly here.
+      if (observationSourceId === undefined) {
+        throw new Error(
+          "Internal invariant violated: commit=true but no source id was resolved " +
+            "(storeRawContent should have run under commit mode)."
+        );
+      }
+
       const { data: priorSnapRow } = await db
         .from("entity_snapshots")
         .select("snapshot")
@@ -8648,7 +8672,7 @@ export async function storeStructuredForApi(params: {
     success: true,
     replayed: false,
     commit,
-    source_id: commit ? storageResult.sourceId : null,
+    source_id: commit && storageResult ? storageResult.sourceId : null,
     ...(interpretationId
       ? { interpretation_id: interpretationId, interpretation_source_id: observationSourceId }
       : {}),
@@ -8683,7 +8707,7 @@ export async function storeStructuredForApi(params: {
 // target here today. An instance with enforcement: "enforced" still accepts
 // arbitrary raw file content through this path. See the "Known scope
 // boundary" section in src/services/instance_policy.ts's docblock.
-async function storeUnstructuredForApi(params: {
+export async function storeUnstructuredForApi(params: {
   userId: string;
   fileContent?: string;
   fileBuffer?: Buffer;
@@ -8693,6 +8717,16 @@ async function storeUnstructuredForApi(params: {
   originalFilename?: string;
   sourceType?: string;
   storageMode?: "inline" | "reference";
+  /**
+   * Plan mode (CLI `--plan`/`--dry-run`, request `commit: false`): must be
+   * genuinely side-effect-free. Defaults to true (commit) so every existing
+   * caller that never passed this field keeps writing exactly as before.
+   * When false, neither storeRawContent nor storeRawReference runs — no
+   * `sources` row, no raw-storage upload, no reference row — and the
+   * response reports `commit: false` with source-derived fields nulled,
+   * mirroring storeStructuredForApi's plan-mode response shape.
+   */
+  commit?: boolean;
 }) {
   const {
     fileContent,
@@ -8704,6 +8738,7 @@ async function storeUnstructuredForApi(params: {
     sourceType,
     userId,
     storageMode = "inline",
+    commit = true,
   } = params;
   // decodeFileContent rejects non-base64 instead of letting Node discard the
   // invalid characters and store corrupted bytes (#2325).
@@ -8711,6 +8746,35 @@ async function storeUnstructuredForApi(params: {
     fileBuffer ?? (fileContent !== undefined ? decodeFileContent(fileContent) : undefined);
   if (!resolvedFileBuffer && storageMode !== "reference") {
     throw new Error("fileContent or fileBuffer is required for inline storage");
+  }
+
+  if (!commit) {
+    // Nothing to persist in plan mode: no bytes uploaded, no `sources` row,
+    // no reference row. `content_hash` is still safe (and useful) to report
+    // since it's a pure function of the caller's own bytes/path, computed
+    // without touching storage or the database.
+    if (storageMode === "reference") {
+      if (!filePath) {
+        throw new Error("filePath is required for reference storage mode");
+      }
+      return {
+        commit: false,
+        source_id: null,
+        storage_mode: "reference",
+        reference_path: filePath,
+        mime_type: mimeType,
+      };
+    }
+    const { computeContentHash } = await import("./services/raw_storage.js");
+    return {
+      commit: false,
+      source_id: null,
+      content_hash: computeContentHash(resolvedFileBuffer!),
+      file_size: resolvedFileBuffer!.length,
+      deduplicated: false,
+      entities_created: 0,
+      observations_created: 0,
+    };
   }
 
   if (storageMode === "reference") {
@@ -8864,6 +8928,7 @@ async function handleStorePost(
         originalFilename,
         sourceType: (parsed.data as Record<string, unknown>).source_type as string | undefined,
         storageMode: parsed.data.source_storage,
+        commit: parsed.data.commit,
       });
     };
 
