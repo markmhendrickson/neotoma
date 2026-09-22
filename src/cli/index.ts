@@ -1405,6 +1405,18 @@ export function hintOf(error: unknown): string | undefined {
   return undefined;
 }
 
+/** Preserve a REST ErrorEnvelope when a CLI command crosses the API boundary. */
+function cliApiError(error: unknown): Error {
+  const detail = formatApiError(error);
+  const serverCode = errorCodeOf(error);
+  if (!serverCode) return new Error(detail);
+  return new CliHintError(detail, {
+    code: serverCode,
+    message: detail,
+    ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+  });
+}
+
 /**
  * #2228: the `/me` payload separates "who you are" (`email`) from "whose
  * graph you operate on" (`user_id`). Under shared-graph mode those describe
@@ -12590,6 +12602,62 @@ devCommand
 const entitiesCommand = program.command("entities").description("Entity commands");
 const sourcesCommand = program.command("sources").description("Source commands");
 const observationsCommand = program.command("observations").description("Observation commands");
+const relationshipTypesCommand = program
+  .command("relationship-types")
+  .description("Discover and register relationship types");
+relationshipTypesCommand
+  .command("list")
+  .option("--keyword <text>", "Filter names and descriptions")
+  .option("--scope <scope>", "Filter user or global scope")
+  .option("--include-edge-count", "Include counts of written edge rows")
+  .action(async (opts) => {
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/list_relationship_types", {
+      body: {
+        keyword: opts.keyword,
+        scope: opts.scope,
+        include_edge_counts: opts.includeEdgeCount,
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
+relationshipTypesCommand
+  .command("register")
+  .requiredOption("--relationship-type <type>", "Type to register")
+  .option("--description <text>", "Meaning of the edge")
+  .option("--scope <scope>", "user or global (global requires explicit permission)", "user")
+  .option("--acyclic", "Refuse cycles for this type")
+  .option("--inverse <type>", "Advisory inverse type")
+  .option("--symmetric", "Advisory symmetry")
+  .option("--source-entity-types <types>", "Comma-separated advisory source types")
+  .option("--target-entity-types <types>", "Comma-separated advisory target types")
+  .action(async (opts) => {
+    if (!["user", "global"].includes(opts.scope)) throw new Error("--scope must be user or global");
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/register_relationship_type", {
+      body: {
+        relationship_type: opts.relationshipType,
+        description: opts.description,
+        scope: opts.scope,
+        acyclic: opts.acyclic,
+        inverse: opts.inverse,
+        symmetric: opts.symmetric,
+        source_entity_types: opts.sourceEntityTypes?.split(","),
+        target_entity_types: opts.targetEntityTypes?.split(","),
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
 const relationshipsCommand = program.command("relationships").description("Relationship commands");
 const timelineCommand = program.command("timeline").description("Timeline commands");
 const schemasCommand = program.command("schemas").description("Schema commands");
@@ -13794,15 +13862,7 @@ relationshipsCommand
       const effectiveUserId = resolveEffectiveUserId(opts.userId);
       const { data, error } = await api.POST("/relationships/snapshot", {
         body: {
-          relationship_type: relationshipType as
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS",
+          relationship_type: relationshipType,
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
@@ -15382,7 +15442,7 @@ program
     ];
 
     const relationships: Array<{
-      relationship_type: "PART_OF" | "REFERS_TO";
+      relationship_type: string;
       source_index: number;
       target_index: number;
     }> = [

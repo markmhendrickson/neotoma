@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **621**
-- Backend and repo Vitest files: **585**
+- Total automated test files: **627**
+- Backend and repo Vitest files: **591**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,11 +70,11 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 172 |
-| Vitest service tests | 44 |
+| Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 181 |
-| Vitest CLI tests | 78 |
-| Vitest contract tests | 19 |
+| Vitest integration tests | 183 |
+| Vitest CLI tests | 79 |
+| Vitest contract tests | 20 |
 | Vitest security tests | 9 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
@@ -288,7 +288,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (44):**
+**Files (46):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -319,6 +319,8 @@ flowchart TD
 - `tests/services/raw_fragments_isolation.test.ts`
 - `tests/services/raw_storage_mime_map.test.ts`
 - `tests/services/raw_storage.test.ts`
+- `tests/services/relationship_type_registration.test.ts`
+- `tests/services/relationship_type_security.test.ts`
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
 - `tests/services/schema_recommendation.test.ts`
@@ -412,7 +414,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (181):**
+**Files (183):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -555,6 +557,8 @@ flowchart TD
 - `tests/integration/sandbox_seed_token_bypass.test.ts`
 - `tests/integration/sandbox_stale_bearer_fallback.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
+- `tests/integration/schema_scope_resolution_parity.test.ts`
+- `tests/integration/schema_scope_surface_parity.test.ts`
 - `tests/integration/seed_then_works_at_e2e.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/shared_graph_identity.test.ts`
@@ -600,7 +604,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (78):**
+**Files (79):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -666,6 +670,7 @@ flowchart TD
 - `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`
 - `tests/cli/processes_command.test.ts`
+- `tests/cli/relationship_types_cli.test.ts`
 - `tests/cli/reporter_setup.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`
@@ -685,7 +690,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (19):**
+**Files (20):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -702,6 +707,7 @@ flowchart TD
 - `tests/contract/package_contents.test.ts`
 - `tests/contract/package_scripts.test.ts`
 - `tests/contract/relationship_type_enum_parity.test.ts`
+- `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
