@@ -1,4 +1,5 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { listNeotomaServerProcesses } from "../../src/cli/api_server_process_probe.js";
@@ -11,6 +12,36 @@ import {
   mergeProcessProbeStatus,
   resolveProcessProbeTimeoutMs,
 } from "../../src/cli/process_probe.js";
+
+function parseCliReferenceJsonExample(command: string): unknown {
+  const markdown = readFileSync(
+    new URL("../../docs/developer/cli_reference.md", import.meta.url),
+    "utf-8"
+  );
+  const commandBlock = `\`\`\`bash\n${command}\n\`\`\``;
+  const commandIndex = markdown.indexOf(commandBlock);
+  expect(commandIndex).toBeGreaterThanOrEqual(0);
+  const jsonFenceStart = markdown.indexOf("```json\n", commandIndex + commandBlock.length);
+  expect(jsonFenceStart).toBeGreaterThanOrEqual(0);
+  const payloadStart = jsonFenceStart + "```json\n".length;
+  const payloadEnd = markdown.indexOf("\n```", payloadStart);
+  expect(payloadEnd).toBeGreaterThan(payloadStart);
+  return JSON.parse(markdown.slice(payloadStart, payloadEnd));
+}
+
+function resolveKillPortTimeouts(cases: Array<Record<string, string>>): number[] {
+  const moduleUrl = new URL("../../scripts/kill_port.js", import.meta.url).href;
+  const source = [
+    `import { resolveProcessProbeTimeoutMs } from ${JSON.stringify(moduleUrl)};`,
+    `const cases = ${JSON.stringify(cases)};`,
+    "process.stdout.write(JSON.stringify(cases.map(resolveProcessProbeTimeoutMs)));",
+  ].join("\n");
+  const output = execFileSync(process.execPath, ["--input-type=module", "--eval", source], {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return JSON.parse(output) as number[];
+}
 
 describe("process_probe", () => {
   const previousTimeout = process.env.NEOTOMA_PROCESS_PROBE_TIMEOUT_MS;
@@ -29,6 +60,46 @@ describe("process_probe", () => {
     expect(resolveProcessProbeTimeoutMs({ NEOTOMA_PROCESS_PROBE_TIMEOUT_MS: "nope" })).toBe(
       DEFAULT_PROCESS_PROBE_TIMEOUT_MS
     );
+  });
+
+  it("kill_port.js uses the same positive-integer timeout contract", () => {
+    const cases = [
+      {},
+      { NEOTOMA_PROCESS_PROBE_TIMEOUT_MS: "" },
+      { NEOTOMA_PROCESS_PROBE_TIMEOUT_MS: "2500" },
+      { NEOTOMA_PROCESS_PROBE_TIMEOUT_MS: "0" },
+      { NEOTOMA_PROCESS_PROBE_TIMEOUT_MS: "-5" },
+      { NEOTOMA_PROCESS_PROBE_TIMEOUT_MS: "1.5" },
+      { NEOTOMA_PROCESS_PROBE_TIMEOUT_MS: "nope" },
+    ];
+    const expected = cases.map(resolveProcessProbeTimeoutMs);
+    expect(resolveKillPortTimeouts(cases)).toEqual(expected);
+    expect(expected).toEqual([5000, 5000, 2500, 5000, 5000, 5000, 5000]);
+  });
+
+  it("documents complete parseable dry-run and timed-out JSON responses", () => {
+    expect(
+      parseCliReferenceJsonExample("NEOTOMA_API_STOP_DRY_RUN=1 neotoma api stop --env dev --json")
+    ).toEqual({
+      env: "dev",
+      port: 3080,
+      stop_ran: false,
+      dry_run: true,
+      message:
+        "[COPY: dry-run] NEOTOMA_API_STOP_DRY_RUN=1 — skipped stopping port 3080 (no processes killed).",
+    });
+    expect(parseCliReferenceJsonExample("neotoma api processes --json")).toEqual({
+      processes: [],
+      ports_checked: [3080, 3180],
+      probe_status: "timed_out",
+      warnings: [
+        {
+          code: "process_probe_timed_out",
+          ports: [3080, 3180],
+          timeout_ms: 5000,
+        },
+      ],
+    });
   });
 
   it("classifyProcessProbeError distinguishes timeout, empty, unavailable", () => {

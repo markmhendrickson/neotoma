@@ -297,10 +297,37 @@ Examples:
 
 ```bash
 NEOTOMA_API_STOP_DRY_RUN=1 neotoma api stop --env dev --json
-# → { "stop_ran": false, "dry_run": true, "env": "dev", "port": 3080, "message": "…dry-run…" }
+```
 
+```json
+{
+  "env": "dev",
+  "port": 3080,
+  "stop_ran": false,
+  "dry_run": true,
+  "message": "[COPY: dry-run] NEOTOMA_API_STOP_DRY_RUN=1 — skipped stopping port 3080 (no processes killed)."
+}
+```
+
+For example, when both port probes time out with the default timeout:
+
+```bash
 neotoma api processes --json
-# → { "processes": […], "ports_checked": [3080, 3180], "probe_status": "ok"|"timed_out"|"unavailable", … }
+```
+
+```json
+{
+  "processes": [],
+  "ports_checked": [3080, 3180],
+  "probe_status": "timed_out",
+  "warnings": [
+    {
+      "code": "process_probe_timed_out",
+      "ports": [3080, 3180],
+      "timeout_ms": 5000
+    }
+  ]
+}
 ```
 
 ### Peer sync and HTTP API (server process)

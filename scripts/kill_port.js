@@ -6,6 +6,22 @@
 
 import { execSync } from 'child_process';
 import { platform } from 'os';
+import { pathToFileURL } from 'url';
+
+const DEFAULT_PROCESS_PROBE_TIMEOUT_MS = 5000;
+
+/** Keep this plain-JS entry point aligned with src/cli/process_probe.ts. */
+export function resolveProcessProbeTimeoutMs(env = process.env) {
+  const raw = env.NEOTOMA_PROCESS_PROBE_TIMEOUT_MS;
+  if (raw === undefined || raw === '') {
+    return DEFAULT_PROCESS_PROBE_TIMEOUT_MS;
+  }
+  const timeoutMs = Number(raw);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || !Number.isInteger(timeoutMs)) {
+    return DEFAULT_PROCESS_PROBE_TIMEOUT_MS;
+  }
+  return timeoutMs;
+}
 
 function findProcessOnPort(port) {
   const portNum = Number(port);
@@ -13,16 +29,14 @@ function findProcessOnPort(port) {
     throw new Error(`Invalid port number: ${port}`);
   }
 
-  // Keep default in sync with DEFAULT_PROCESS_PROBE_TIMEOUT_MS in src/cli/process_probe.ts
-  const PROCESS_PROBE_TIMEOUT_MS =
-    Number(process.env.NEOTOMA_PROCESS_PROBE_TIMEOUT_MS) || 5000;
+  const processProbeTimeoutMs = resolveProcessProbeTimeoutMs();
 
   try {
     if (platform() === 'win32') {
       // Windows: Use netstat to find process using port
       const result = execSync(
         `netstat -ano | findstr :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: PROCESS_PROBE_TIMEOUT_MS }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: processProbeTimeoutMs }
       );
       const lines = result.trim().split('\n').filter(Boolean);
       const pids = new Set();
@@ -42,7 +56,7 @@ function findProcessOnPort(port) {
       // behaviour when lsof exits non-zero.
       const result = execSync(
         `lsof -ti :${portNum}`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: PROCESS_PROBE_TIMEOUT_MS }
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: processProbeTimeoutMs }
       );
       const pids = result.trim().split('\n').filter(Boolean);
       return pids.map(Number);
@@ -183,4 +197,7 @@ async function main() {
   }
 }
 
-main();
+const invokedPath = process.argv[1];
+if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
+  main();
+}
