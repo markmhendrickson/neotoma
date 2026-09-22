@@ -8,6 +8,7 @@ import {
   announceSkip,
   hasPrerequisite,
 } from "./tests/helpers/test_prerequisites.js";
+import { resolveHarnessForceMode } from "./src/shared/harness_force_mode.js";
 
 /**
  * Fail fast, and legibly, when the compiled server is absent (issue #2090).
@@ -100,9 +101,8 @@ export default async function globalSetup() {
   // written to expect. Force the mode back to the one this environment has
   // always effectively run in, rather than rewriting the test corpus's
   // identity assumptions as a side effect of a bind-host security fix.
-  if (process.env.NEOTOMA_FORCE_MODE === undefined) {
-    process.env.NEOTOMA_FORCE_MODE = "refuse";
-  }
+  // Shared with eval + playwright harnesses via resolveHarnessForceMode.
+  process.env.NEOTOMA_FORCE_MODE = resolveHarnessForceMode(process.env);
 
   const { startHTTPServer } = await import("./src/actions.ts");
   const started = await startHTTPServer();
