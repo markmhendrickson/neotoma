@@ -31,9 +31,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build server (required by integration tests)
-        run: npm run build:server
-
       - name: Run remote critical suite
         env:
           WRITE_TEST_RUN_REPORT: "1"

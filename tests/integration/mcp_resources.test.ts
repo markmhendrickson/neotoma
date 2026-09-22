@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 describe("MCP Resources - Integration", () => {
   let server: NeotomaServer;
   const testUserId = "00000000-0000-0000-0000-000000000000";
+  const foreignUserId = "11111111-1111-1111-1111-111111111111";
   const createdEntityIds: string[] = [];
   const createdSourceIds: string[] = [];
   const createdObservationIds: string[] = [];
@@ -20,15 +21,22 @@ describe("MCP Resources - Integration", () => {
     server = new NeotomaServer();
   });
 
+  const actAs = (userId: string | null) => {
+    (server as unknown as { authenticatedUserId: string | null }).authenticatedUserId = userId;
+  };
+
   beforeEach(async () => {
     // Resource handlers fail closed when no session identity is present.
     // Exercise their authorized path explicitly instead of inheriting auth
     // state from a developer environment.
-    (server as unknown as { authenticatedUserId: string | null }).authenticatedUserId = testUserId;
+    actAs(testUserId);
 
     // Cleanup test data
     if (createdRelationshipIds.length > 0) {
-      await db.from("relationship_snapshots").delete().in("relationship_key", createdRelationshipIds);
+      await db
+        .from("relationship_snapshots")
+        .delete()
+        .in("relationship_key", createdRelationshipIds);
       createdRelationshipIds.length = 0;
     }
     if (createdTimelineEventIds.length > 0) {
@@ -53,7 +61,10 @@ describe("MCP Resources - Integration", () => {
   afterAll(async () => {
     // Final cleanup
     if (createdRelationshipIds.length > 0) {
-      await db.from("relationship_snapshots").delete().in("relationship_key", createdRelationshipIds);
+      await db
+        .from("relationship_snapshots")
+        .delete()
+        .in("relationship_key", createdRelationshipIds);
     }
     if (createdTimelineEventIds.length > 0) {
       await db.from("timeline_events").delete().in("id", createdTimelineEventIds);
@@ -199,10 +210,40 @@ describe("MCP Resources - Integration", () => {
 
     describe("handleIndividualEntity", () => {
       it("should refuse an unauthenticated caller", async () => {
-        (server as unknown as { authenticatedUserId: string | null }).authenticatedUserId = null;
+        actAs(null);
 
         await expect((server as any).handleIndividualEntity("ent_nonexistent")).rejects.toThrow(
           /Authentication required/
+        );
+      });
+
+      it("should hide an owner's entity from another authenticated user", async () => {
+        const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
+        const { error: entityError } = await db.from("entities").insert({
+          id: entityId,
+          entity_type: "test_invoice",
+          canonical_name: "foreign user hidden invoice",
+          user_id: testUserId,
+        });
+        expect(entityError).toBeNull();
+        createdEntityIds.push(entityId);
+
+        const { error: snapshotError } = await db.from("entity_snapshots").insert({
+          entity_id: entityId,
+          entity_type: "test_invoice",
+          schema_version: "1.0",
+          snapshot: { amount: 100 },
+          provenance: {},
+          observation_count: 1,
+          computed_at: new Date().toISOString(),
+          user_id: testUserId,
+          last_observation_at: new Date().toISOString(),
+        });
+        expect(snapshotError).toBeNull();
+
+        actAs(foreignUserId);
+        await expect((server as any).handleIndividualEntity(entityId)).rejects.toThrow(
+          /Entity not found/
         );
       });
 
@@ -247,6 +288,51 @@ describe("MCP Resources - Integration", () => {
     });
 
     describe("handleEntityObservations", () => {
+      it("should hide an owner's observations from another authenticated user", async () => {
+        const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
+        const sourceId = randomUUID();
+        const observationId = randomUUID();
+
+        const { error: entityError } = await db.from("entities").insert({
+          id: entityId,
+          entity_type: "test_invoice",
+          canonical_name: "foreign user hidden observation",
+          user_id: testUserId,
+        });
+        expect(entityError).toBeNull();
+        createdEntityIds.push(entityId);
+
+        const { error: sourceError } = await db.from("sources").insert({
+          id: sourceId,
+          user_id: testUserId,
+          content_hash: `mcp_resource_test_${randomUUID()}`,
+          mime_type: "text/plain",
+          storage_url: "internal://test/mcp-resource-observation",
+          file_size: 0,
+        });
+        expect(sourceError).toBeNull();
+        createdSourceIds.push(sourceId);
+
+        const { error: observationError } = await db.from("observations").insert({
+          id: observationId,
+          entity_id: entityId,
+          entity_type: "test_invoice",
+          schema_version: "1.0",
+          observed_at: new Date().toISOString(),
+          source_priority: 0,
+          source_id: sourceId,
+          fields: { amount: 100 },
+          user_id: testUserId,
+        });
+        expect(observationError).toBeNull();
+        createdObservationIds.push(observationId);
+
+        actAs(foreignUserId);
+        const result = await (server as any).handleEntityObservations(entityId);
+        expect(result.observations).toEqual([]);
+        expect(result.total).toBe(0);
+      });
+
       it("should return empty observations for entity without observations", async () => {
         // Create test entity
         const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
@@ -270,11 +356,51 @@ describe("MCP Resources - Integration", () => {
     });
 
     describe("handleEntityRelationships", () => {
+      it("should hide an owner's relationships from another authenticated user", async () => {
+        const entityId1 = `ent_test_${randomUUID().substring(0, 8)}`;
+        const entityId2 = `ent_test_${randomUUID().substring(0, 8)}`;
+
+        const { error: entityError } = await db.from("entities").insert([
+          {
+            id: entityId1,
+            entity_type: "test_invoice",
+            canonical_name: "foreign user hidden relationship source",
+            user_id: testUserId,
+          },
+          {
+            id: entityId2,
+            entity_type: "test_company",
+            canonical_name: "foreign user hidden relationship target",
+            user_id: testUserId,
+          },
+        ]);
+        expect(entityError).toBeNull();
+        createdEntityIds.push(entityId1, entityId2);
+
+        const relationshipKey = `REFERS_TO:${entityId1}:${entityId2}`;
+        const { error: relationshipError } = await db.from("relationship_snapshots").insert({
+          relationship_key: relationshipKey,
+          relationship_type: "REFERS_TO",
+          source_entity_id: entityId1,
+          target_entity_id: entityId2,
+          schema_version: "1",
+          snapshot: JSON.stringify({}),
+          user_id: testUserId,
+        });
+        expect(relationshipError).toBeNull();
+        createdRelationshipIds.push(relationshipKey);
+
+        actAs(foreignUserId);
+        const result = await (server as any).handleEntityRelationships(entityId1);
+        expect(result.outbound_relationships).toEqual([]);
+        expect(result.inbound_relationships).toEqual([]);
+      });
+
       it("should return relationships for entity", async () => {
         // Create test entities
         const entityId1 = `ent_test_${randomUUID().substring(0, 8)}`;
         const entityId2 = `ent_test_${randomUUID().substring(0, 8)}`;
-        
+
         await db.from("entities").insert([
           {
             id: entityId1,
