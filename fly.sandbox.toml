@@ -43,6 +43,10 @@ primary_region = 'lhr'
   # Must match internal_port (Fly routes to this port on the machine)
   HTTP_PORT = "3180"
   NEOTOMA_HTTP_PORT = "3180"
+  # The HTTP listener now defaults to loopback-only (127.0.0.1). Fly's proxy
+  # reaches this machine over the private 6PN network, not loopback, so the
+  # listener must accept non-loopback connections here — explicit opt-in.
+  NEOTOMA_HTTP_HOST = "0.0.0.0"
 
   # Sandbox-specific behavior: anonymous callers get SANDBOX_PUBLIC_USER_ID,
   # destructive routes gated, X-Neotoma-Sandbox stamped on every response.

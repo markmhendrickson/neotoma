@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **622**
-- Backend and repo Vitest files: **586**
+- Total automated test files: **627**
+- Backend and repo Vitest files: **591**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,12 +70,12 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 172 |
-| Vitest service tests | 44 |
+| Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 182 |
-| Vitest CLI tests | 78 |
-| Vitest contract tests | 19 |
-| Vitest security tests | 9 |
+| Vitest CLI tests | 79 |
+| Vitest contract tests | 20 |
+| Vitest security tests | 10 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -689,7 +689,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (19):**
+**Files (20):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -716,10 +716,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (9):**
+**Files (10):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
+- `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`

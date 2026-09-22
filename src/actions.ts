@@ -12527,13 +12527,38 @@ function assertRouteTableIsReachable(): void {
   assertNoShadowedRoutes(app);
 }
 
-/** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
-function tryListen(
-  port: number
+/**
+ * Resolve the host the HTTP listener should bind to.
+ *
+ * Defaults to loopback-only (`127.0.0.1`) so a self-hosted instance is never
+ * reachable from the LAN unless the operator explicitly opts in. Set
+ * `NEOTOMA_HTTP_HOST` (e.g. `0.0.0.0` for a Fly/Docker deployment fronted by
+ * its own auth, or a tunnel client) to bind elsewhere. This is the single
+ * source of truth for the bind host — `tryListen` passes this value straight
+ * to `app.listen`, and the boot-time sandbox-mode resolver below derives its
+ * `loopbackBindOnly` signal from the same value, so the two can no longer
+ * diverge the way they did prior to #<security-fix> (posture reported
+ * loopback while the socket was actually open on all interfaces).
+ */
+export function resolveHttpBindHost(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = (env.NEOTOMA_HTTP_HOST || "").trim();
+  return raw.length > 0 ? raw : "127.0.0.1";
+}
+
+/** True when the given bind host resolves to a loopback-only address. */
+export function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+}
+
+/** Try to bind on a port/host; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
+export function tryListen(
+  port: number,
+  host: string
 ): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
   return new Promise((resolve, reject) => {
     assertRouteTableIsReachable();
-    const server = app.listen(port, () => {
+    const server = app.listen(port, host, () => {
       // When `port === 0` the OS assigns an ephemeral port. We must report
       // the actually-bound port back to callers (the eval harness's
       // isolated server fixture writes it to NEOTOMA_SESSION_PORT_FILE so
@@ -12756,16 +12781,20 @@ export async function startHTTPServer() {
   // (NEOTOMA_REQUIRE_AUTH=1). Future operator-config integration can
   // extend this without changing the resolver shape.
   //
-  // The bind topology is interpreted from the host the listener will use.
-  // express's app.listen(port) with no host binds to 0.0.0.0/::, which is
-  // explicitly non-loopback — that's the v0.11.1 advisory shape when no
-  // auth is configured. Operators on loopback-only deployments should set
-  // NEOTOMA_HTTP_HOST=127.0.0.1.
+  // The bind topology is interpreted from the host the listener will actually
+  // use. `resolveHttpBindHost()` defaults to `127.0.0.1` and is the SAME
+  // function `tryListen` below passes to `app.listen` — so this posture
+  // check can no longer drift from the real socket the way it did when this
+  // env var was read here but never forwarded to `listen()`. Operators who
+  // need LAN/tunnel reachability set NEOTOMA_HTTP_HOST=0.0.0.0 (or another
+  // explicit non-loopback host) as a deliberate opt-in; the actual bound
+  // address is re-verified against this value right after bind (see the
+  // `tryListen` call site below) and a mismatch is logged loudly rather than
+  // trusted silently.
   // ----------------------------------------------------------------------
   try {
-    const hostEnv = (process.env.NEOTOMA_HTTP_HOST || "").trim().toLowerCase();
-    const loopbackBindOnly =
-      hostEnv === "127.0.0.1" || hostEnv === "localhost" || hostEnv === "::1";
+    const intendedHost = resolveHttpBindHost();
+    const loopbackBindOnly = isLoopbackHost(intendedHost);
     const productionEnv =
       (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
       (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod";
@@ -12841,10 +12870,53 @@ export async function startHTTPServer() {
   // ephemeral ports to avoid colliding with the operator's dev server.
   const triesLimit = basePort === 0 ? 1 : maxTries;
 
+  const bindHost = resolveHttpBindHost();
+
   for (let offset = 0; offset < triesLimit; offset++) {
     const port = basePort + offset;
     try {
-      const { server, port: boundPort } = await tryListen(port);
+      const { server, port: boundPort } = await tryListen(port, bindHost);
+
+      // Re-derive the sandbox-mode posture from the ACTUAL bound address
+      // rather than trusting the pre-bind intent above. `server.address()`
+      // is only available after `listen` resolves, which is why the earlier
+      // banner emission (needed pre-bind so `refuse`+`enforce` can abort
+      // before the socket opens) uses `resolveHttpBindHost()` intent instead.
+      // Both now read the same source of truth, so they should always agree;
+      // this check exists to catch the rare case where Node's own address
+      // normalization (e.g. IPv6 mapping) makes the bound address disagree
+      // with the requested host, so the reported posture never silently
+      // outlives the reality it describes.
+      try {
+        const boundAddr = server.address();
+        const boundHost = boundAddr && typeof boundAddr === "object" ? boundAddr.address : bindHost;
+        const actualLoopbackBindOnly = isLoopbackHost(boundHost);
+        const intendedLoopbackBindOnly = isLoopbackHost(bindHost);
+        if (actualLoopbackBindOnly !== intendedLoopbackBindOnly) {
+          logger.warn(
+            `[sandbox_mode] bind posture mismatch: intended host "${bindHost}" ` +
+              `(loopbackBindOnly=${intendedLoopbackBindOnly}) but server.address() reports ` +
+              `"${boundHost}" (loopbackBindOnly=${actualLoopbackBindOnly}). Re-resolving posture ` +
+              `from the actual bound address.`
+          );
+          const reconciled = resolveSandboxMode({
+            authConfigured: (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1",
+            loopbackBindOnly: actualLoopbackBindOnly,
+            productionEnv:
+              (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
+              (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod",
+            hostedSandboxEnabled: isSandboxMode(),
+            refusePolicy: resolveRefusePolicy(),
+            forceMode: resolveForceMode(),
+          });
+          _resolvedServerMode = reconciled.mode;
+        }
+      } catch (err) {
+        logger.warn(
+          `[sandbox_mode] post-bind posture reconciliation failed: ${(err as Error).message}`
+        );
+      }
+
       if (portFile) {
         fs.writeFileSync(portFile, String(boundPort), "utf-8");
       }

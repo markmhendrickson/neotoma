@@ -80,6 +80,30 @@ export default async function globalSetup() {
   process.env.NEOTOMA_HTTP_PORT = httpPort;
   process.env.HTTP_PORT = httpPort;
 
+  // Pin the boot-time sandbox-mode resolver to "refuse" (a no-op advisory
+  // banner under the default refusePolicy=warn) rather than letting it land
+  // on "local_sandbox".
+  //
+  // Before the HTTP listener bind-host fix, this test server had no
+  // NEOTOMA_HTTP_HOST set and app.listen(port) bound all interfaces, so
+  // loopbackBindOnly was always false here and the resolver always landed on
+  // "refuse" — leaving the shared nil-UUID LOCAL_DEV_USER_ID as the
+  // authenticated principal every test in this suite is written against
+  // (100+ files assert against that literal user id).
+  //
+  // After the fix, the listener genuinely binds loopback-only by default, so
+  // loopbackBindOnly is now accurately true here too — and the resolver
+  // (correctly, by its own design) lands on "local_sandbox" instead, which
+  // activates a per-install fingerprinted principal in place of the nil UUID
+  // (see _localSandboxActive in src/actions.ts). That is the RIGHT behavior
+  // for a real local install; it is not what this shared test harness is
+  // written to expect. Force the mode back to the one this environment has
+  // always effectively run in, rather than rewriting the test corpus's
+  // identity assumptions as a side effect of a bind-host security fix.
+  if (process.env.NEOTOMA_FORCE_MODE === undefined) {
+    process.env.NEOTOMA_FORCE_MODE = "refuse";
+  }
+
   const { startHTTPServer } = await import("./src/actions.ts");
   const started = await startHTTPServer();
   if (started?.port) {
