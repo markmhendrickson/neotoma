@@ -10,8 +10,11 @@
  * process-level `unhandledRejection` listener — rather than the still-unknown
  * source. This file proves that containment rather than the leak itself:
  *
- *   1. An unhandled `WorkerDbAbortError` rejection does not kill the process
- *      and produces the structured diagnostic log line.
+ *   1. An unhandled `WorkerDbAbortError` rejection does not kill the process,
+ *      produces the structured diagnostic log line with the fields the
+ *      containment PR exists to capture, and leaves the process able to serve
+ *      a real, successful DB-backed read afterward — HEALTHY, not merely
+ *      alive.
  *   2. An unhandled rejection of a DIFFERENT error type is untouched — it
  *      still exits non-zero, proving the handler's scope is exactly one
  *      error type and not a general safety net (which would itself be a
@@ -25,10 +28,35 @@
  * in-process assertion pass regardless of whether actions.ts's handler exists
  * at all.
  *
- * The child imports `handleAbandonedAbortRejection` from the real compiled
- * `dist/actions.js` — the exact function the production entrypoint installs —
- * rather than reimplementing its logic, so this test exercises the shipped
- * code, not a copy that could drift from it.
+ * REGRESSION BINDING (the point QA's mutation testing of the first version of
+ * this file found missing): the child does not reimplement the `process.on`
+ * wiring and does not call `installAbandonedAbortContainment()` itself. It
+ * runs the real compiled `dist/actions.js` AS THE ENTRYPOINT — the exact file
+ * `node dist/actions.js` runs in production — with
+ * `NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST=1` (a test-only escape hatch,
+ * inert in production, that skips only the `startHTTPServer()` call so this
+ * suite doesn't pay for a full migration/schema/HTTP boot) so the module's
+ * own `isMainModule` autostart block runs for real and calls
+ * `installAbandonedAbortContainment()` from its actual production call site.
+ * Deleting that call site — while leaving `installAbandonedAbortContainment`
+ * and `handleAbandonedAbortRejection` themselves untouched — removes the only
+ * thing that registers the listener a real boot performs, so this suite goes
+ * red. A version of this test that imported and called the installer (or
+ * reimplemented its `process.on` body) directly would keep passing after that
+ * exact deletion, which is the gap QA's mutation testing found in the first
+ * version of this file. Verified by mutation; see the PR comment for the
+ * verbatim RED/GREEN output.
+ *
+ * The follow-up module (`NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE`, a second
+ * test-only-inert hook in actions.ts) then runs AFTER the real listener is
+ * registered: it opens the real `getDb()` connection (same code path
+ * production uses, pointed at a scratch `NEOTOMA_DATA_DIR`), performs a real
+ * read to warm the reader pool, monkey-patches `logger.error` to capture the
+ * exact structured event object `handleAbandonedAbortRejection` logs (rather
+ * than regex-scraping `util.inspect` text, which line-wraps unpredictably for
+ * long stacks), throws the unhandled rejection, and afterward performs a
+ * SECOND real DB read to prove the process is HEALTHY, not merely alive
+ * (Falco non-blocking finding #1).
  */
 
 import { spawn } from "node:child_process";
@@ -39,48 +67,66 @@ import { afterAll, describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const entryDir = mkdtempSync(path.join(repoRoot, "node_modules", ".neotoma-abort-contain-test-"));
+const dataDirRoot = mkdtempSync(path.join(tmpdir(), "neotoma-abort-contain-data-"));
 const entries: string[] = [];
 let nextEntry = 0;
 
 afterAll(() => {
   for (const entry of entries) rmSync(entry, { force: true });
   rmSync(entryDir, { recursive: true, force: true, maxRetries: 2 });
+  rmSync(dataDirRoot, { recursive: true, force: true, maxRetries: 2 });
 });
 
 /**
- * A minimal script that installs the SAME `unhandledRejection` wiring the
- * production entrypoint (actions.ts, `isMainModule` block) installs — reusing
- * the real `handleAbandonedAbortRejection` export rather than a reimplemented
- * copy — then deliberately produces one unhandled rejection of `errorKind`.
+ * The follow-up module actions.ts imports (for side effects, once its own
+ * real `isMainModule` autostart block — including the production call to
+ * `installAbandonedAbortContainment()` — has already run). It is the only
+ * place that knows about "faults" or "DB checks"; actions.ts itself stays
+ * test-agnostic.
  *
- * Deliberately does not import the whole autostart block (which would boot
- * the full HTTP server, migrations, and schema seeding): that machinery is
- * unrelated to what this suite is about, which is the process-level listener
- * itself. Reusing the actual exported handler function keeps this a real test
- * of shipped code rather than a test of a parallel reimplementation.
+ * Captures the EXACT object `logger.error` is called with (by monkey-patching
+ * the same cached module instance actions.ts imports — Node's ESM loader
+ * caches by resolved path, so this is the same `logger` object) and prints it
+ * as JSON on a marker line, rather than trying to regex-parse `util.inspect`
+ * output, which wraps long `stack` strings across multiple `+`-joined lines
+ * and is not meant to be machine-read.
  */
-function scriptSource(errorKind: "abandoned-abort" | "other"): string {
-  const actionsPath = JSON.stringify(path.join(repoRoot, "dist/actions.js"));
+function followUpSource(errorKind: "abandoned-abort" | "other"): string {
   const workerDbPath = JSON.stringify(
     path.join(repoRoot, "dist/repositories/worker/worker_file_database.js")
   );
+  const loggerPath = JSON.stringify(path.join(repoRoot, "dist/utils/logger.js"));
+  const connectionPath = JSON.stringify(path.join(repoRoot, "dist/repositories/db/connection.js"));
   return `
-import { handleAbandonedAbortRejection } from ${actionsPath};
 import { WorkerDbAbortError } from ${workerDbPath};
+import { logger } from ${loggerPath};
+import { getDb } from ${connectionPath};
 
-// Mirrors the production wiring in actions.ts's isMainModule block: the
-// guarded error type is contained and logged; anything else falls through to
-// the same behavior Node's default --unhandled-rejections=throw would give.
-process.on("unhandledRejection", (reason) => {
-  if (handleAbandonedAbortRejection(reason)) return;
-  console.error("[test-child] unhandled rejection (not contained):", reason);
-  process.exit(1);
-});
+const originalError = logger.error;
+logger.error = (...args) => {
+  const [message, fields] = args;
+  if (typeof message === "string" && message.includes("unhandled WorkerDbAbortError contained")) {
+    process.stdout.write("CONTAINED_EVENT " + JSON.stringify({
+      hasCauseKey: fields !== null && typeof fields === "object" && "cause" in fields,
+      ...fields,
+      // JSON.stringify drops an explicit \`undefined\` value (e.g. cause),
+      // which would silently hide a missing key rather than a present-but-
+      // undefined one — hasCauseKey above is what actually proves presence.
+      stackIsNonEmptyString: typeof fields?.stack === "string" && fields.stack.length > 0,
+    }) + "\\n");
+  }
+  return originalError.apply(logger, args);
+};
 
-process.stdout.write("READY\\n");
+// Warm a REAL reader pool through the exact code path production uses
+// (getDb(), pointed at a scratch NEOTOMA_DATA_DIR) so
+// readerPoolSnapshotForDiagnostics() below has a non-null branch to report,
+// and so the post-rejection check below is a real DB round trip rather than
+// a no-op.
+const db = await getDb();
+const before = await db.prepare("SELECT 1 AS ok").get();
+process.stdout.write("DB_CHECK_BEFORE " + (before && before.ok === 1 ? "ok" : "FAILED") + "\\n");
 
-// A promise nobody attaches a rejection handler to before rejection happens —
-// the exact shape of an abandoned read whose caller has already walked away.
 async function rejectUnhandled() {
   ${
     errorKind === "abandoned-abort"
@@ -91,29 +137,70 @@ async function rejectUnhandled() {
 void rejectUnhandled();
 
 // Proves liveness rather than merely the absence of an immediate exit: still
-// running and still able to do work 1.5s after the rejection fired.
+// running and still able to do work after the rejection fired.
 setInterval(() => {
   process.stdout.write("ALIVE\\n");
 }, 300);
+
+// HEALTHY, not merely alive (Falco non-blocking finding #1): a second real,
+// successful DB-backed read AFTER the contained rejection, on the same
+// connection the diagnostic's readerPoolStats reported on. Delayed so it
+// runs strictly after the unhandled rejection has already been delivered to
+// the process-level listener.
+setTimeout(async () => {
+  try {
+    const after = await db.prepare("SELECT 1 AS ok").get();
+    process.stdout.write("DB_CHECK_AFTER " + (after && after.ok === 1 ? "ok" : "FAILED") + "\\n");
+  } catch (e) {
+    process.stdout.write("DB_CHECK_AFTER FAILED " + String(e && e.message) + "\\n");
+  }
+}, 500);
 `;
 }
 
-/** Spawn the child with PRODUCTION node flags (i.e. none — the default IS throw). */
+/**
+ * Spawn the REAL production entrypoint (`dist/actions.js`) as the child's
+ * main module, with `NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST=1` so it takes
+ * its normal `isMainModule` autostart branch — including the production call
+ * to `installAbandonedAbortContainment()` — without booting the HTTP server,
+ * DB migrations/schema seeding, or listening on a port, none of which this
+ * suite is about. `NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE` points at the
+ * per-case follow-up script above, which actions.ts dynamically imports right
+ * after skipping `startHTTPServer()` — i.e. strictly after the real listener
+ * is already registered.
+ */
 function spawnChild(errorKind: "abandoned-abort" | "other") {
-  const entry = path.join(entryDir, `child-${errorKind}-${process.pid}-${nextEntry++}.mjs`);
-  entries.push(entry);
-  writeFileSync(entry, scriptSource(errorKind));
+  const followUpPath = path.join(
+    entryDir,
+    `followup-${errorKind}-${process.pid}-${nextEntry++}.mjs`
+  );
+  entries.push(followUpPath);
+  writeFileSync(followUpPath, followUpSource(errorKind));
+
+  const dataDir = mkdtempSync(path.join(dataDirRoot, `${errorKind}-`));
 
   // No --unhandled-rejections flag passed: this IS production's configuration.
   // Node 20's default is already `throw` (verified: neither the Dockerfile,
   // fly.toml, nor any package.json start script overrides it), so omitting
   // the flag here is not a weaker test — it is the exact flag production
-  // runs under. Made explicit rather than silently relied upon so a future
-  // change to any of those three files that adds an override is caught by
-  // this comment being wrong, not by a silent behavior change.
-  const proc = spawn(process.execPath, [entry], {
+  // runs under.
+  const actionsEntry = path.join(repoRoot, "dist/actions.js");
+  const proc = spawn(process.execPath, [actionsEntry], {
     cwd: repoRoot,
     stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST: "1",
+      NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE: followUpPath,
+      NEOTOMA_DATA_DIR: dataDir,
+      // readerPoolSnapshotForDiagnostics() only has a non-null branch to
+      // report on the worker-hosted (libsql) backend — sqlite's
+      // AsyncSqliteDatabase implements no readerPoolStats() at all, by
+      // design (see its doc comment in actions.ts). Forcing libsql here is
+      // what makes the readerPoolStats assertion below exercise the real
+      // branch instead of trivially passing on `null`.
+      NEOTOMA_DB_BACKEND: "libsql",
+    },
   });
   let stdout = "";
   let stderr = "";
@@ -144,34 +231,63 @@ function waitForExitOrTimeout(
 }
 
 describe("unhandled WorkerDbAbortError containment (#2483)", () => {
-  it("stays alive and logs a structured event for an unhandled WorkerDbAbortError", async () => {
+  it("stays alive, logs the full structured diagnostic event, and keeps serving after an unhandled WorkerDbAbortError", async () => {
     const { proc, getStdout, getStderr } = spawnChild("abandoned-abort");
     try {
-      const result = await waitForExitOrTimeout(proc, 1_500);
+      const result = await waitForExitOrTimeout(proc, 2_000);
 
       expect(
         result.timedOut,
-        `process should still be running 1.5s after the unhandled WorkerDbAbortError; ` +
+        `process should still be running 2s after the unhandled WorkerDbAbortError; ` +
           `instead it exited (code=${result.exitCode}, signal=${result.signalCode}).\n` +
           `stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
       ).toBe(true);
 
+      const stdout = getStdout();
+
+      expect(stdout).toContain("DB_CHECK_BEFORE ok");
+
       // Liveness beyond "didn't exit yet": the event loop is still turning,
       // proven by the interval continuing to fire.
-      const aliveCount = (getStdout().match(/ALIVE/g) ?? []).length;
+      const aliveCount = (stdout.match(/ALIVE/g) ?? []).length;
       expect(
         aliveCount,
-        `expected the setInterval to keep firing after the rejection; ` +
-          `stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+        `expected the setInterval to keep firing after the rejection; stdout:\n${stdout}`
       ).toBeGreaterThan(0);
 
-      // The structured diagnostic event, from handleAbandonedAbortRejection's
-      // logger.error call — not merely "did not crash" but "reported enough
-      // to find the still-unknown leaking path": name, message, and stack.
-      const stderr = getStderr();
-      expect(stderr).toMatch(/unhandled WorkerDbAbortError contained/);
-      expect(stderr).toMatch(/WorkerDbAbortError/);
-      expect(stderr).toMatch(/DB request aborted by caller/);
+      // HEALTHY, not merely alive (Falco non-blocking #1): a real,
+      // successful DB-backed read must still complete after the contained
+      // rejection, on the same connection the diagnostic reported on.
+      expect(
+        stdout,
+        `expected a post-containment DB_CHECK_AFTER ok line; stdout:\n${stdout}\nstderr:\n${getStderr()}`
+      ).toContain("DB_CHECK_AFTER ok");
+
+      // The structured diagnostic event, captured verbatim from the exact
+      // object handleAbandonedAbortRejection's logger.error call receives —
+      // not a regex match against formatted text, which is what let the
+      // diagnostic-contract gap through review the first time.
+      const eventLine = stdout.split("\n").find((line) => line.startsWith("CONTAINED_EVENT "));
+      expect(
+        eventLine,
+        `expected a CONTAINED_EVENT line; stdout:\n${stdout}\nstderr:\n${getStderr()}`
+      ).toBeDefined();
+      const payload = JSON.parse(eventLine!.slice("CONTAINED_EVENT ".length));
+
+      expect(payload.name).toBe("WorkerDbAbortError");
+      expect(payload.message).toBe("DB request aborted by caller");
+      expect(payload.stackIsNonEmptyString).toBe(true);
+      // `cause` is legitimately undefined for this synthetic rejection (the
+      // class does not set one unless constructed with a cause) — asserting
+      // the KEY is present (not its truthiness) is the diagnostic-contract
+      // ask: the field must be part of the logged event, whatever its value.
+      expect(payload.hasCauseKey).toBe(true);
+      // The DB_CHECK_BEFORE warms a real worker DB ahead of the rejection, so
+      // this branch must be a real (non-null) object, not merely present.
+      expect(payload.readerPoolStats).not.toBeNull();
+      expect(typeof payload.readerPoolStats).toBe("object");
+      expect(typeof payload.uptimeSeconds).toBe("number");
+      expect(payload.uptimeSeconds).toBeGreaterThanOrEqual(0);
     } finally {
       proc.kill("SIGKILL");
     }

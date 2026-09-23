@@ -12943,9 +12943,23 @@ export function handleAbandonedAbortRejection(reason: unknown): boolean {
   return true;
 }
 
-// Only auto-start if not disabled AND if this is the main module
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
-if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+/**
+ * Registers the process-wide containment for the #2483 abandoned-abort
+ * crash: the `unhandledRejection` listener that suppresses an unhandled
+ * `WorkerDbAbortError` (delegating to `handleAbandonedAbortRejection`) and
+ * exits exactly as before for anything else, plus the raised stack trace
+ * limit that makes the resulting diagnostic useful.
+ *
+ * Pulled into its own exported function, called from exactly one production
+ * call site below, so a regression test can prove that call site is load
+ * bearing: deleting it (while leaving this function's body untouched) must
+ * turn `installAbandonedAbortContainment is not called` — i.e. the
+ * regression test — red, because nothing would register the listener a real
+ * boot of this module performs. A test that instead called this function
+ * directly would keep passing even if the production call site were
+ * deleted, which is the exact gap #2483's QA review found.
+ */
+export function installAbandonedAbortContainment(): void {
   // Raised early, before anything can reject, so the NEXT occurrence of the
   // #2483 abort (or any other unhandled rejection) carries async frames past
   // the immediate `onAbort` callsite instead of the default 10. `onAbort`
@@ -12982,6 +12996,12 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
     console.error("[neotoma] unhandled rejection (not contained):", reason);
     process.exit(1);
   });
+}
+
+// Only auto-start if not disabled AND if this is the main module
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+  installAbandonedAbortContainment();
 
   // Exit diagnostics. A long-running server should never reach `beforeExit`:
   // that event only fires when the event loop has drained, i.e. nothing is
@@ -13022,8 +13042,31 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
     });
   }
 
-  startHTTPServer().catch((err) => {
-    console.error("Failed to start HTTP server:", err);
-    process.exit(1);
-  });
+  // Test-only escape hatch, inert in production: both env vars are never set
+  // outside tests/integration/unhandled_abandoned_abort_containment.test.ts.
+  // That suite needs to run THIS module as the real entrypoint — so
+  // `installAbandonedAbortContainment()` above is invoked from the actual
+  // production call site rather than called directly by the test — without
+  // paying for a full HTTP/DB/migration boot on every case. Everything above
+  // this line (containment install, stack trace limit, exit diagnostics,
+  // signal handlers) runs identically to production; only the HTTP server
+  // boot itself is skipped, and control is handed to a test-owned module
+  // (never a repo file — the test writes it to a temp dir) that drives the
+  // rest of the scenario. `actions.ts` itself stays test-agnostic: it knows
+  // only "run whatever module I was pointed at", not anything about faults
+  // or DB checks.
+  if (process.env.NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST === "1") {
+    const testModule = process.env.NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE;
+    if (testModule) {
+      import(testModule).catch((err) => {
+        console.error("[neotoma] test follow-up module failed:", err);
+        process.exit(1);
+      });
+    }
+  } else {
+    startHTTPServer().catch((err) => {
+      console.error("Failed to start HTTP server:", err);
+      process.exit(1);
+    });
+  }
 }
