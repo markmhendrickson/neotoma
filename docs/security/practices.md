@@ -102,6 +102,32 @@ The matrix asserts that an unauthenticated caller is rejected. It does **not** a
 
 ---
 
+## G5 — Deployed probes
+
+**Command:** `bash scripts/security/deployed_probes.sh`  
+**Workflows:** `.github/workflows/sandbox-weekly-security-probes.yml` (weekly, Sunday 00:05 UTC), `.github/workflows/remote_integration_nightly.yml` (nightly)  
+**Blocks on:** Post-deploy release gate only. The scheduled runs are advisory — see below.
+
+### Current behavior
+
+Live HTTP probes against the deployed sandbox (and optionally prod, via `NEOTOMA_PROBE_HOSTS`) re-run the protected-route negative checks from an external host, catching drift that only manifests against the real deployed environment rather than the test suite.
+
+**Operator-facing alert surface:** when a scheduled run fails, the workflow's "Alert on failure" step opens or updates a single GitHub issue titled `CI: Sandbox weekly security probes failing` (or `CI: Remote integration nightly failing` for the nightly suite) rather than leaving the failure as a red run nobody opens. A repeat failure **comments on the existing tracker** instead of opening a duplicate; closing the tracker once the underlying issue is fixed means the next failure **reopens the pattern from scratch** — a fresh open issue with that same title — since discovery only ever matches an *open* issue with that exact title. Tracker discovery uses the issues search API with an exact-title check (`scripts/security/alert_tracker_discovery.mjs`), not simple pagination, so it holds regardless of how many other open issues exist in the repo.
+
+### History
+
+| Date | Change | Motivating advisory |
+|------|--------|---------------------|
+| 2026-05-11 | `deployed_probes.sh` + weekly workflow added | 2026-05-11-inspector-auth-bypass |
+| 2026-09 | "Alert on failure" tracking-issue step added so a scheduled failure surfaces instead of going unnoticed (silent for three straight weeks: 2026-09-06, -09-13, -09-20) | PR #2475 |
+| 2026-09 | Tracker discovery switched from first-page `listForRepo` (silently missed the tracker once the repo passed 100 open issues, opening a weekly/nightly duplicate) to the issues search API | PR #2475 review finding |
+
+### Known gaps
+
+The alert step assumes the tracking issue's title never changes; renaming it manually breaks discovery for future runs (a new tracker gets opened). None currently automates re-closing the tracker once the underlying probe/test failure is fixed — that is a manual step for whoever resolves the incident.
+
+---
+
 ## Pre-release adversarial checklist
 
 **Location:** `.cursor/skills/release/SKILL.md` § Step 3.5  
