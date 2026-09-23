@@ -12953,11 +12953,10 @@ export function handleAbandonedAbortRejection(reason: unknown): boolean {
  * Pulled into its own exported function, called from exactly one production
  * call site below, so a regression test can prove that call site is load
  * bearing: deleting it (while leaving this function's body untouched) must
- * turn `installAbandonedAbortContainment is not called` — i.e. the
- * regression test — red, because nothing would register the listener a real
- * boot of this module performs. A test that instead called this function
- * directly would keep passing even if the production call site were
- * deleted, which is the exact gap #2483's QA review found.
+ * turn the regression suite red, because nothing would register the
+ * listener a real boot of this module performs. A test that instead called
+ * this function directly would keep passing even if the production call
+ * site were deleted, which is the exact gap #2483's QA review found.
  */
 export function installAbandonedAbortContainment(): void {
   // Raised early, before anything can reject, so the NEXT occurrence of the
