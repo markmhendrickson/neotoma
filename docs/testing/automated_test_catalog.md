@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **622**
-- Backend and repo Vitest files: **586**
+- Total automated test files: **627**
+- Backend and repo Vitest files: **591**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,11 +70,11 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 172 |
-| Vitest service tests | 44 |
+| Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 182 |
-| Vitest CLI tests | 78 |
-| Vitest contract tests | 19 |
+| Vitest integration tests | 183 |
+| Vitest CLI tests | 79 |
+| Vitest contract tests | 20 |
 | Vitest security tests | 9 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
@@ -414,7 +414,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (182):**
+**Files (183):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -592,6 +592,7 @@ flowchart TD
 - `tests/integration/tunnel_discovery.test.ts`
 - `tests/integration/turn_summary_mcp_apps.test.ts`
 - `tests/integration/turn_summary.test.ts`
+- `tests/integration/unhandled_abandoned_abort_containment.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
 - `tests/integration/update_schema_incremental_envelope.test.ts`
 - `tests/integration/update_schema_incremental_scope_mismatch.test.ts`
@@ -689,7 +690,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (19):**
+**Files (20):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`

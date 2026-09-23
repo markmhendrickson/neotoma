@@ -11,6 +11,8 @@ import { config } from "./config.js";
 import fs from "fs";
 import path from "path";
 import { writeLocalHttpPortFile } from "./utils/local_http_port_file.js";
+import { WorkerDbAbortError } from "./repositories/worker/worker_file_database.js";
+import { peekCachedDb } from "./repositories/db/connection.js";
 import yaml from "js-yaml";
 import {
   ensurePublicKeyRegistered,
@@ -12873,9 +12875,114 @@ export async function startHTTPServer() {
   }
 }
 
+/**
+ * Structured, best-effort snapshot of the reader pool for the abandoned-abort
+ * diagnostic below (#2483). `peekCachedDb()` never opens a connection and
+ * `readerPoolStats()` is an `@internal` method that only the worker-hosted
+ * (`libsql`) backend implements — duck-typed rather than imported by type, so
+ * a backend without it (or not yet opened) degrades to `null` instead of
+ * throwing from inside a crash handler.
+ */
+function readerPoolSnapshotForDiagnostics(): unknown {
+  try {
+    const current = peekCachedDb() as { readerPoolStats?: () => unknown } | null;
+    if (current && typeof current.readerPoolStats === "function") {
+      return current.readerPoolStats();
+    }
+  } catch {
+    // Diagnostics must never themselves throw or mask the original error.
+  }
+  return null;
+}
+
+/**
+ * Handle an unhandled promise rejection, narrowly for the abandoned-read abort
+ * that crash-looped hosted Neotoma on 2026-09-23 (#2483).
+ *
+ * `guardAbandonedRead` (worker_file_database.ts) attaches a no-op `.catch()`
+ * to every read on the reader pool so a caller who is still listening keeps
+ * getting the real rejection while an abandoned one cannot become unhandled.
+ * That guard is provably complete for every read reachable through
+ * `WorkerStatement` — the prior investigation on #2483 traced every read path
+ * to it and found no fire-and-forget read outside the pattern — but the
+ * production trace shows an unhandled `WorkerDbAbortError` reaching here
+ * anyway, so some path derives a promise the guard never sees (`dispatchRead`,
+ * added by #2338, is the leading suspect per that investigation).
+ *
+ * Because the leaking path is unknown, this contains the SYMPTOM rather than
+ * the cause: log everything needed to find it, and let the process live,
+ * WITHOUT widening the class of error this applies to. `instanceof` (not a
+ * message-substring match) keeps the scope to exactly the one error type this
+ * incident is about — any other unhandled rejection falls through to `handler`
+ * unchanged and exits exactly as it does today. This is deliberately NOT a
+ * general `unhandledRejection` policy: a corrupt migration or an OOM must
+ * still crash the process, as the guard's own doc comment says.
+ *
+ * Returns true when it handled (and thus suppressed) the rejection, so the
+ * caller can decide whether to fall through to prior behavior — kept as a
+ * plain function, rather than registering its own `process.on` listener, so
+ * it composes with whatever the process already does for every other
+ * rejection instead of racing a second competing handler.
+ */
+export function handleAbandonedAbortRejection(reason: unknown): boolean {
+  if (!(reason instanceof WorkerDbAbortError)) return false;
+  try {
+    logger.error("[neotoma] unhandled WorkerDbAbortError contained (#2483)", {
+      name: reason.name,
+      message: reason.message,
+      stack: reason.stack,
+      cause: (reason as { cause?: unknown }).cause,
+      readerPoolStats: readerPoolSnapshotForDiagnostics(),
+      uptimeSeconds: process.uptime(),
+    });
+  } catch {
+    // A diagnostics failure must never re-throw and must never prevent
+    // suppressing the rejection below — that would recreate the exact crash
+    // this handler exists to contain.
+  }
+  return true;
+}
+
 // Only auto-start if not disabled AND if this is the main module
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+  // Raised early, before anything can reject, so the NEXT occurrence of the
+  // #2483 abort (or any other unhandled rejection) carries async frames past
+  // the immediate `onAbort` callsite instead of the default 10. `onAbort`
+  // (worker_file_database.ts) fires from an AbortSignal listener, which is
+  // itself an async boundary — Node's default limit reliably truncates the
+  // trace right at the point that matters, i.e. what SCHEDULED the abort.
+  // 100 is generous relative to the default without being unbounded: V8
+  // captures the stack only when an Error is actually constructed, so the
+  // steady-state cost of a higher ceiling is paid exclusively on the rare
+  // path that already logs a full event, not on every request.
+  Error.stackTraceLimit = 100;
+
+  // Node's default since v15 is `--unhandled-rejections=throw`: an unhandled
+  // rejection is thrown as an uncaught exception, which crashes the process
+  // exactly like the SIGABRT paths above. Nothing in this repo's Dockerfile,
+  // fly.toml, or package.json start scripts overrides that flag, so
+  // production runs under the default — this handler has to actually
+  // suppress the crash for the one error type it targets, not merely observe
+  // it, or the #2483 crash-loop continues unabated under this exact
+  // configuration. Registered before `beforeExit`/`exit`/signal diagnostics
+  // below so it is the first listener the event reaches; Node invokes every
+  // `unhandledRejection` listener the same way regardless of order, but
+  // ordering it first keeps the two related diagnostics adjacent in the
+  // module's control flow.
+  process.on("unhandledRejection", (reason) => {
+    if (handleAbandonedAbortRejection(reason)) return;
+    // Not the guarded error type: preserve today's behavior exactly. Node has
+    // no supported way to "re-throw" an unhandled rejection from inside a
+    // listener — once ANY listener is registered, Node considers the event
+    // handled and will not also invoke its default `--unhandled-rejections`
+    // behavior — so the equivalent is done explicitly: log it the way the
+    // default handler would and exit non-zero, matching the crash this
+    // process would otherwise have had.
+    console.error("[neotoma] unhandled rejection (not contained):", reason);
+    process.exit(1);
+  });
+
   // Exit diagnostics. A long-running server should never reach `beforeExit`:
   // that event only fires when the event loop has drained, i.e. nothing is
   // left holding the process open. In production this happened silently and
