@@ -13054,13 +13054,43 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
   // rest of the scenario. `actions.ts` itself stays test-agnostic: it knows
   // only "run whatever module I was pointed at", not anything about faults
   // or DB checks.
+  //
+  // Security review (Falco, PLAUSIBLE code_injection/test_escape_hatch,
+  // #2484): an ungated `import()` of an env-supplied path at boot is a real
+  // surface if an attacker can influence env vars — often already a stronger
+  // position, but not one to widen further. Narrowed here rather than left
+  // open: refuses when `NODE_ENV === "production"`, and the imported path
+  // must resolve inside this repo's `node_modules/` under the exact prefix
+  // the test's `entryDir` uses, so only a file the test itself just wrote
+  // can be loaded — not an arbitrary path an attacker-controlled env could
+  // otherwise point at.
   if (process.env.NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST === "1") {
     const testModule = process.env.NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE;
-    if (testModule) {
-      import(testModule).catch((err) => {
-        console.error("[neotoma] test follow-up module failed:", err);
+    const allowedTestModuleDir = path.join(process.cwd(), "node_modules");
+    const allowedTestModulePrefix = ".neotoma-abort-contain-test-";
+    if (testModule && process.env.NODE_ENV === "production") {
+      console.error(
+        "[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE is set but NODE_ENV=production; refusing to import it."
+      );
+      process.exit(1);
+    } else if (testModule) {
+      const resolved = path.resolve(testModule);
+      const relative = path.relative(allowedTestModuleDir, resolved);
+      const isUnderAllowedDir = !relative.startsWith("..") && !path.isAbsolute(relative);
+      const dirName = path.basename(path.dirname(resolved));
+      const isAllowedPrefix = dirName.startsWith(allowedTestModulePrefix);
+      if (!isUnderAllowedDir || !isAllowedPrefix) {
+        console.error(
+          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${resolved}) is outside the ` +
+            `allowed test entry directory (${allowedTestModuleDir}/${allowedTestModulePrefix}*); refusing to import it.`
+        );
         process.exit(1);
-      });
+      } else {
+        import(resolved).catch((err) => {
+          console.error("[neotoma] test follow-up module failed:", err);
+          process.exit(1);
+        });
+      }
     }
   } else {
     startHTTPServer().catch((err) => {
