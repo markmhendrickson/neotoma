@@ -42,6 +42,20 @@ export interface CorrectionResult {
 }
 
 export async function createCorrection(params: CreateCorrectionParams): Promise<CorrectionResult> {
+  // #2264 — reject an `@`-prefixed file reference BEFORE anything else.
+  //
+  // First statement in the function on purpose: every transport converges here
+  // (MCP `correct`, HTTP /correct, and batch_correction), so this is the one
+  // place the two cannot diverge, and rejecting ahead of the policy checks and
+  // the row build guarantees a denial writes nothing. `value` is always stored
+  // literally — see CorrectionFileReferenceError for why expanding is refused.
+  if (looksLikeFileReference(params.value)) {
+    throw new CorrectionFileReferenceError(params.field, params.value);
+  }
+  // A deliberate `@@` escape collapses to a literal leading `@`, so a caller
+  // can still store a genuinely at-prefixed path-shaped string.
+  params = { ...params, value: unescapeAtPrefix(params.value) };
+
   enforceAttributionPolicy("corrections", getCurrentAgentIdentity());
   assertCanWriteProtected({
     entity_type: params.entity_type,
@@ -175,6 +189,78 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
  * HTTP `/correct` handler map it to a structured envelope identical in shape to
  * the MCP failure, instead of silently coercing the field to "declared".
  */
+/**
+ * Thrown when `value` looks like an `@`-prefixed file reference.
+ *
+ * `correct()` NEVER expands a file path: `value` is always stored literally.
+ * Passing `@/tmp/body.html` used to write that 19-character string into the
+ * field and report success, destroying whatever the field held — silently, with
+ * an envelope indistinguishable from a real write (#2264).
+ *
+ * Rejecting is deliberately preferred over expanding (ADR on #2264): expansion
+ * would introduce a caller-controlled path → entity field, an exfiltration and
+ * traversal surface, and would make `value` semantics ambiguous forever. A
+ * dedicated `value_path` parameter is deferred to a follow-up that can mirror
+ * `store`'s file trust boundary.
+ */
+export class CorrectionFileReferenceError extends Error {
+  readonly code = "ERR_FILE_REFERENCE_NOT_SUPPORTED";
+  readonly field: string;
+  /** Truncated so a rejected argument cannot spill a long host path into logs. */
+  readonly valuePreview: string;
+  readonly hint: string;
+  constructor(field: string, value: string) {
+    const preview = value.length > 120 ? `${value.slice(0, 120)}…` : value;
+    super(
+      `correct() does not expand file references: \`value\` is always stored literally, ` +
+        `so ${field} would have been set to the literal string ${JSON.stringify(preview)}.`
+    );
+    this.name = "CorrectionFileReferenceError";
+    this.field = field;
+    this.valuePreview = preview;
+    this.hint =
+      "Read the file yourself and pass its contents as `value`, or use a tool that " +
+      "accepts a path (`store` / `publish_rendered_page` take `*_path`). To store a " +
+      "string that genuinely begins with '@', prefix-escape it as '@@'.";
+  }
+}
+
+/**
+ * True when `value` is a string that looks like an `@`-prefixed file reference.
+ *
+ * Narrow on purpose. `@` alone is common in real data — handles (`@markmh`),
+ * emails, npm scopes (`@scope/pkg`), CSS at-rules (`@media …`), decorators.
+ * Only a leading `@` followed by something path-shaped is rejected:
+ *
+ *   - `@/abs/path`, `@./rel`, `@../up`, `@~/home`  → path-ish prefix
+ *   - `@C:\dir\file`                              → Windows drive
+ *   - `@some/dir/file.json`                        → contains a separator
+ *
+ * A single-segment `@word` is NOT rejected: it cannot be distinguished from a
+ * handle, and the destructive case in the field always carried a separator.
+ * An escaped `@@…` is never a reference (see unescapeAtPrefix).
+ */
+export function looksLikeFileReference(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!value.startsWith("@") || value.startsWith("@@")) return false;
+  const rest = value.slice(1);
+  if (!rest) return false;
+  if (/^[./~]/.test(rest)) return true; // @/abs @./rel @../up @~/home
+  if (/^[A-Za-z]:[\\/]/.test(rest)) return true; // @C:\path @C:/path
+  return /[\\/]/.test(rest); // @dir/file.json or @dir\file.json
+}
+
+/**
+ * Collapse a deliberately escaped `@@` prefix to a literal `@`.
+ *
+ * Gives callers a way to store a string that really does start with `@` and a
+ * separator, which the detector would otherwise reject. Applied ONLY to the
+ * leading pair, so `@@a/b` stores `@a/b` and inner text is untouched.
+ */
+export function unescapeAtPrefix(value: unknown): unknown {
+  return typeof value === "string" && value.startsWith("@@") ? value.slice(1) : value;
+}
+
 export class CorrectionSchemaNotFoundError extends Error {
   readonly code = "ERR_NO_SCHEMA_FOR_ENTITY_TYPE";
   readonly entityType: string;

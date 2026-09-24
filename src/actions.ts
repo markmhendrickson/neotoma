@@ -11580,6 +11580,21 @@ app.post("/correct", async (req, res) => {
     // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
     // IO failure is NOT swallowed here — it falls through to the generic 500
     // handler below instead of being coerced into a "declared field" outcome.
+    // #2264 — an `@`-prefixed file reference in `value` is a client error, and
+    // the envelope carries the `hint` the tightening-change obligation requires
+    // (docs/subsystems/errors.md): the caller must know the way out, not just
+    // that it was refused.
+    const { CorrectionFileReferenceError } = await import("./services/correction.js");
+    if (error instanceof CorrectionFileReferenceError) {
+      logWarn("ValidationError:correct", req, { code: error.code });
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          field: error.field,
+          value_preview: error.valuePreview,
+          hint: error.hint,
+        })
+      );
+    }
     const { CorrectionSchemaNotFoundError } = await import("./services/correction.js");
     if (error instanceof CorrectionSchemaNotFoundError) {
       logWarn("ValidationError:correct", req, { code: error.code });

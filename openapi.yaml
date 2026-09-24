@@ -7320,7 +7320,19 @@ paths:
                   type: string
                 field:
                   type: string
-                value: {}
+                value:
+                  description: |
+                    Stored **literally**, always. `correct()` performs no file-path
+                    expansion: a value like `@/tmp/body.html` is NOT read from disk.
+                    Such a value is rejected with
+                    `ERR_FILE_REFERENCE_NOT_SUPPORTED` (400) rather than written,
+                    because storing it would silently overwrite the field with a
+                    filename (#2264). To supply a large value, read the file and
+                    pass its contents here, or use a tool that accepts a path
+                    (`store` and `publish_rendered_page` take `*_path`). To store a
+                    string that genuinely begins with `@` followed by a separator,
+                    escape it as `@@` — the leading pair collapses to one `@`.
+                    A single-segment `@word` (a handle) is accepted unchanged.
                 idempotency_key:
                   type: string
                 user_id:
@@ -7398,8 +7410,17 @@ paths:
             data policy — for example correcting a field whose schema-declared
             `sensitivity_class` exceeds the instance's configured maximum. No
             observation is written. Call `describe_instance_policy` to read the
-            policy before retrying. Other validation errors use the generic
-            `ErrorEnvelope`.
+            policy before retrying.
+
+            `ERR_FILE_REFERENCE_NOT_SUPPORTED` is returned when `value` looks
+            like an `@`-prefixed file reference. `correct()` never expands a
+            path, so accepting it would write the filename over the field and
+            report success (#2264). This is a tightening — the value was
+            previously stored literally — so `details` carries `field`, a
+            truncated `value_preview`, and a `hint` naming the way out. No
+            observation is written.
+
+            Other validation errors use the generic `ErrorEnvelope`.
           content:
             application/json:
               schema:
