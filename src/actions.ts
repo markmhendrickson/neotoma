@@ -6,6 +6,7 @@ import morgan from "morgan";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { db } from "./db.js";
 import { config } from "./config.js";
 import fs from "fs";
@@ -13064,6 +13065,21 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
   // the test's `entryDir` uses, so only a file the test itself just wrote
   // can be loaded — not an arbitrary path an attacker-controlled env could
   // otherwise point at.
+  //
+  // Follow-up hardening (Falco security run 1, #2484 CONFIRMED [BLOCKING]
+  // path_traversal/guard_bypass): the containment checks below used to run
+  // on `path.resolve(testModule)`, a lexical filesystem path, while the
+  // actual load used `import(resolved)`, which the ESM loader parses as a
+  // URL. A percent-encoded `..` segment, or a `?`/`#` delimiter, survives
+  // `path.resolve()` unchanged but is interpreted differently by the URL
+  // parser — so a crafted string could pass both checks yet load a
+  // different file than the one checked. Fixed by resolving through
+  // `fs.realpathSync` BEFORE either check (which also collapses a symlink
+  // to its real target — Falco security run 2, [NON-BLOCKING]
+  // test_escape_hatch symlink bypass) and then importing via
+  // `pathToFileURL(realResolved).href`, so the loader receives the exact
+  // canonical path the guard just checked — not a second, independently
+  // parsed interpretation of the original string.
   if (process.env.NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST === "1") {
     const testModule = process.env.NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE;
     const allowedTestModuleDir = path.join(process.cwd(), "node_modules");
@@ -13074,19 +13090,41 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
       );
       process.exit(1);
     } else if (testModule) {
-      const resolved = path.resolve(testModule);
-      const relative = path.relative(allowedTestModuleDir, resolved);
+      let realResolved: string;
+      let realAllowedTestModuleDir: string;
+      try {
+        // realpathSync resolves symlinks AND collapses any `..`/`.`
+        // segments, encoded or not, to their actual filesystem target —
+        // this is what makes the check below canonical rather than
+        // lexical. It throws if the path (or the allowed dir) doesn't
+        // exist, which is itself a legitimate refusal: a module that
+        // isn't really there under the allowed prefix cannot be the
+        // test's own freshly-written file.
+        realResolved = fs.realpathSync(path.resolve(testModule));
+        realAllowedTestModuleDir = fs.realpathSync(allowedTestModuleDir);
+      } catch (err) {
+        console.error(
+          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${testModule}) could not be resolved ` +
+            `to a real path; refusing to import it. (${err instanceof Error ? err.message : String(err)})`
+        );
+        process.exit(1);
+        throw err;
+      }
+      const relative = path.relative(realAllowedTestModuleDir, realResolved);
       const isUnderAllowedDir = !relative.startsWith("..") && !path.isAbsolute(relative);
-      const dirName = path.basename(path.dirname(resolved));
+      const dirName = path.basename(path.dirname(realResolved));
       const isAllowedPrefix = dirName.startsWith(allowedTestModulePrefix);
       if (!isUnderAllowedDir || !isAllowedPrefix) {
         console.error(
-          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${resolved}) is outside the ` +
-            `allowed test entry directory (${allowedTestModuleDir}/${allowedTestModulePrefix}*); refusing to import it.`
+          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${realResolved}) is outside the ` +
+            `allowed test entry directory (${realAllowedTestModuleDir}/${allowedTestModulePrefix}*); refusing to import it.`
         );
         process.exit(1);
       } else {
-        import(resolved).catch((err) => {
+        // Import the SAME canonical path that was just checked, as a file
+        // URL rather than a second, independently-parsed string — this is
+        // what closes the percent-encoding / `?` / `#` bypass above.
+        import(pathToFileURL(realResolved).href).catch((err) => {
           console.error("[neotoma] test follow-up module failed:", err);
           process.exit(1);
         });

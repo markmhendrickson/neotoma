@@ -60,9 +60,18 @@
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -222,7 +231,10 @@ function waitForExitOrTimeout(
   ms: number
 ): Promise<{ exitCode: number | null; signalCode: string | null; timedOut: boolean }> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve({ exitCode: null, signalCode: null, timedOut: true }), ms);
+    const timer = setTimeout(
+      () => resolve({ exitCode: null, signalCode: null, timedOut: true }),
+      ms
+    );
     proc.once("exit", (exitCode, signalCode) => {
       clearTimeout(timer);
       resolve({ exitCode, signalCode, timedOut: false });
@@ -284,10 +296,7 @@ process.stdout.write("SENTINEL_WRITTEN\\n");
 `;
   }
 
-  function spawnGateChild(opts: {
-    followUpPath: string;
-    nodeEnv?: string;
-  }): {
+  function spawnGateChild(opts: { followUpPath: string; nodeEnv?: string }): {
     proc: ReturnType<typeof spawn>;
     getStdout: () => string;
     getStderr: () => string;
@@ -322,14 +331,8 @@ process.stdout.write("SENTINEL_WRITTEN\\n");
   }
 
   it("refuses and does not import the follow-up module when NODE_ENV=production, even on an allowed path", async () => {
-    const sentinelPath = path.join(
-      entryDir,
-      `sentinel-prod-${process.pid}-${nextEntry++}.marker`
-    );
-    const followUpPath = path.join(
-      entryDir,
-      `followup-prod-${process.pid}-${nextEntry++}.mjs`
-    );
+    const sentinelPath = path.join(entryDir, `sentinel-prod-${process.pid}-${nextEntry++}.marker`);
+    const followUpPath = path.join(entryDir, `followup-prod-${process.pid}-${nextEntry++}.mjs`);
     gateEntries.push(followUpPath, sentinelPath);
     writeFileSync(followUpPath, sentinelFollowUpSource(sentinelPath));
 
@@ -378,8 +381,12 @@ process.stdout.write("SENTINEL_WRITTEN\\n");
       result.exitCode,
       `expected exit code 1 on outside-prefix refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
     ).toBe(1);
+    // The production code now logs the REALPATH (fs.realpathSync), not the
+    // merely lexically-resolved path — on macOS /tmp is itself a symlink to
+    // /private/tmp, so this must match what realpathSync would report, not
+    // path.resolve().
     expect(getStderr()).toContain(
-      `NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${path.resolve(followUpPath)}) is outside the`
+      `NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${realpathSync(followUpPath)}) is outside the`
     );
     expect(getStderr()).toContain("allowed test entry directory");
     expect(
@@ -394,10 +401,7 @@ process.stdout.write("SENTINEL_WRITTEN\\n");
       entryDir,
       `sentinel-control-${process.pid}-${nextEntry++}.marker`
     );
-    const followUpPath = path.join(
-      entryDir,
-      `followup-control-${process.pid}-${nextEntry++}.mjs`
-    );
+    const followUpPath = path.join(entryDir, `followup-control-${process.pid}-${nextEntry++}.mjs`);
     gateEntries.push(followUpPath, sentinelPath);
     writeFileSync(followUpPath, sentinelFollowUpSource(sentinelPath));
 
@@ -424,6 +428,309 @@ process.stdout.write("SENTINEL_WRITTEN\\n");
     } finally {
       if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
     }
+  }, 15_000);
+
+  /**
+   * Builds a follow-up path string that a FILESYSTEM reading keeps inside
+   * `entryDir`, but that the ESM loader's URL parser resolves to
+   * `targetAbsPath`, OUTSIDE `node_modules/`: WHATWG URL parsing decodes each
+   * `%2e%2e` segment as a real `..`, while `path.resolve` / `path.relative` /
+   * `path.basename` treat it as an ordinary directory name. Enough `%2e%2e`
+   * segments to reach `/` (URL `..` clamps at the root), then the real
+   * absolute path of the target, then an optional `suffix`.
+   */
+  function urlEscapeCandidate(targetAbsPath: string, suffix = ""): string {
+    const ups = entryDir
+      .split(path.sep)
+      .filter(Boolean)
+      .map(() => "%2e%2e");
+    return (
+      path.join(
+        entryDir,
+        ...ups,
+        realpathSync(path.dirname(targetAbsPath)),
+        path.basename(targetAbsPath)
+      ) + suffix
+    );
+  }
+
+  /**
+   * Asserts the exploit precondition against the PRE-fix gate: the candidate
+   * passes both lexical checks the gate used to run on `path.resolve()`, AND
+   * the URL parser resolves the same string to `escapeModule`. Without this,
+   * a refusal below could come from a mis-built path rather than from the
+   * protection under test.
+   */
+  function expectLexicallyAllowedButUrlEscapes(candidate: string, escapeModule: string): void {
+    const lexical = path.resolve(candidate);
+    const lexicalRelative = path.relative(path.join(repoRoot, "node_modules"), lexical);
+    expect(
+      !lexicalRelative.startsWith("..") && !path.isAbsolute(lexicalRelative),
+      `setup invariant: candidate must pass the lexical node_modules/ check; relative=${lexicalRelative}`
+    ).toBe(true);
+    expect(
+      path.basename(path.dirname(lexical)).startsWith(".neotoma-abort-contain-test-"),
+      `setup invariant: candidate must pass the lexical prefix check; dir=${path.dirname(lexical)}`
+    ).toBe(true);
+    expect(
+      fileURLToPath(new URL(candidate, "file:///")),
+      "setup invariant: the URL parser must resolve the candidate to the outside module"
+    ).toBe(realpathSync(escapeModule));
+  }
+
+  /**
+   * (a) Falco security run 1, #2484 [BLOCKING] path_traversal/guard_bypass,
+   * percent-encoding half. The pre-fix gate checked `path.resolve(testModule)`
+   * and then ran `import()` on that same string, which the loader parses as
+   * a URL, so `%2e%2e` segments passed the check and walked out of
+   * `node_modules/` at load time. The escape target lives under os.tmpdir(),
+   * in a directory that carries the test prefix, so both pre-fix checks pass
+   * and only the new canonicalization can stop it: `fs.realpathSync` on the
+   * literal string finds no such file and the gate refuses.
+   */
+  it("refuses a percent-encoded '..' path that escapes the allowed prefix, and never runs the outside module", async () => {
+    const outsideDir = mkdtempSync(path.join(tmpdir(), ".neotoma-abort-contain-test-pct-outside-"));
+    gateEntries.push(outsideDir);
+    const escapeSentinel = path.join(outsideDir, "sentinel.marker");
+    const escapeModule = path.join(outsideDir, "escape.mjs");
+    writeFileSync(escapeModule, sentinelFollowUpSource(escapeSentinel));
+
+    const candidate = urlEscapeCandidate(escapeModule);
+    expectLexicallyAllowedButUrlEscapes(candidate, escapeModule);
+
+    const { proc, getStdout, getStderr } = spawnGateChild({
+      followUpPath: candidate,
+      nodeEnv: "test",
+    });
+    try {
+      const result = await waitForExitOrTimeout(proc, 5_000);
+      expect(
+        existsSync(escapeSentinel),
+        `the outside module must NEVER run; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+      ).toBe(false);
+      expect(getStdout()).not.toContain("SENTINEL_WRITTEN");
+      expect(
+        result.exitCode,
+        `expected exit code 1 on refusal; timedOut=${result.timedOut}; stderr:\n${getStderr()}`
+      ).toBe(1);
+      expect(getStderr()).toContain("refusing to import it");
+    } finally {
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+    }
+  }, 15_000);
+
+  /**
+   * (b) Same finding, `?`/`#` half. The loader ends the URL path at the first
+   * `?` or `#`, so everything after it (here, the directory carrying the test
+   * prefix that the pre-fix prefix check looked at) is discarded at load
+   * time. The escape target's own directory carries NO test prefix: the
+   * delimiter alone is what let it past the prefix check.
+   */
+  it("refuses a path containing '?' or '#' that would load an outside module", async () => {
+    for (const delim of ["?", "#"]) {
+      const outsideDir = mkdtempSync(path.join(tmpdir(), "neotoma-abort-gate-delim-outside-"));
+      gateEntries.push(outsideDir);
+      const escapeSentinel = path.join(outsideDir, "sentinel.marker");
+      const escapeModule = path.join(outsideDir, "escape.mjs");
+      writeFileSync(escapeModule, sentinelFollowUpSource(escapeSentinel));
+
+      const candidate = urlEscapeCandidate(
+        escapeModule,
+        `${delim}/.neotoma-abort-contain-test-delim/followup.mjs`
+      );
+      expectLexicallyAllowedButUrlEscapes(candidate, escapeModule);
+
+      const { proc, getStdout, getStderr } = spawnGateChild({
+        followUpPath: candidate,
+        nodeEnv: "test",
+      });
+      try {
+        const result = await waitForExitOrTimeout(proc, 5_000);
+        expect(
+          existsSync(escapeSentinel),
+          `[${delim}] the outside module must NEVER run; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+        ).toBe(false);
+        expect(getStdout()).not.toContain("SENTINEL_WRITTEN");
+        expect(
+          result.exitCode,
+          `[${delim}] expected exit code 1 on refusal; timedOut=${result.timedOut}; stderr:\n${getStderr()}`
+        ).toBe(1);
+        expect(getStderr()).toContain("refusing to import it");
+      } finally {
+        if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+      }
+    }
+  }, 20_000);
+
+  /**
+   * The `pathToFileURL` half of the same fix, which (a) and (b) cannot see
+   * on their own: there `realpathSync` refuses first because the literal
+   * path does not exist. Here the literal path DOES exist on disk, as real
+   * directories named `%2e%2e`, `escape.mjs?` and `escape.mjs#` nested inside
+   * `entryDir`, so `realpathSync` succeeds and both checks pass legitimately.
+   * The gate must then load exactly that checked file. Handing the checked
+   * string to `import()` as-is would let the loader re-parse it as a URL and
+   * load the outside module instead; `pathToFileURL` escapes `%`, `?` and `#`
+   * so the loader receives the path that was checked.
+   */
+  it("imports the exact checked file, never a URL re-interpretation of it, when the literal '%2e%2e' / '?' / '#' path exists", async () => {
+    for (const [label, suffix] of [
+      ["%2e%2e", ""],
+      ["?", "?/.neotoma-abort-contain-test-delim/followup.mjs"],
+      ["#", "#/.neotoma-abort-contain-test-delim/followup.mjs"],
+    ] as const) {
+      const outsideDir = mkdtempSync(
+        path.join(tmpdir(), ".neotoma-abort-contain-test-literal-outside-")
+      );
+      gateEntries.push(outsideDir);
+      const escapeSentinel = path.join(outsideDir, "sentinel.marker");
+      const escapeModule = path.join(outsideDir, "escape.mjs");
+      writeFileSync(escapeModule, sentinelFollowUpSource(escapeSentinel));
+
+      const candidate = urlEscapeCandidate(escapeModule, suffix);
+      expectLexicallyAllowedButUrlEscapes(candidate, escapeModule);
+      mkdirSync(path.dirname(candidate), { recursive: true });
+      const checkedSentinel = path.join(
+        entryDir,
+        `sentinel-literal-${process.pid}-${nextEntry++}.marker`
+      );
+      gateEntries.push(checkedSentinel);
+      writeFileSync(candidate, sentinelFollowUpSource(checkedSentinel));
+
+      const { proc, getStdout, getStderr } = spawnGateChild({
+        followUpPath: candidate,
+        nodeEnv: "test",
+      });
+      try {
+        const result = await waitForExitOrTimeout(proc, 5_000);
+        expect(
+          existsSync(escapeSentinel),
+          `[${label}] the outside module must NEVER run; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+        ).toBe(false);
+        expect(
+          existsSync(checkedSentinel),
+          `[${label}] the checked file must be the one imported; timedOut=${result.timedOut} exitCode=${result.exitCode}; stderr:\n${getStderr()}`
+        ).toBe(true);
+      } finally {
+        if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+      }
+    }
+  }, 30_000);
+
+  /**
+   * Regression coverage for Falco security run 2's [NON-BLOCKING]
+   * test_escape_hatch finding: `path.resolve` does not follow symlinks, so a
+   * symlink planted INSIDE the allowed prefix, pointing OUTSIDE it, passed
+   * the old lexical containment check and was then imported for real.
+   * `fs.realpathSync` (added in the same fix as the URL-vs-path bypass
+   * above) collapses the symlink to its real target before either
+   * containment check runs, so this must now be refused.
+   */
+  it("refuses a symlink inside the allowed prefix that points outside it", async () => {
+    const outsideDir = mkdtempSync(path.join(tmpdir(), "neotoma-abort-gate-symlink-target-"));
+    gateEntries.push(outsideDir);
+    const outsideSentinel = path.join(outsideDir, "sentinel.marker");
+    const outsideModule = path.join(outsideDir, "real.mjs");
+    writeFileSync(outsideModule, sentinelFollowUpSource(outsideSentinel));
+
+    const symlinkPath = path.join(entryDir, `symlink-${process.pid}-${nextEntry++}.mjs`);
+    gateEntries.push(symlinkPath);
+    symlinkSync(outsideModule, symlinkPath);
+
+    const { proc, getStdout, getStderr } = spawnGateChild({
+      followUpPath: symlinkPath,
+      nodeEnv: "test",
+    });
+    const result = await waitForExitOrTimeout(proc, 5_000);
+
+    expect(
+      result.timedOut,
+      `expected the process to exit promptly on refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(false);
+    expect(
+      result.exitCode,
+      `expected exit code 1 refusing a symlink escaping the prefix; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(1);
+    expect(getStderr()).toContain("refusing to import it");
+    expect(
+      existsSync(outsideSentinel),
+      `sentinel outside the prefix must NOT exist — the symlink target must never have been imported; stdout:\n${getStdout()}`
+    ).toBe(false);
+    expect(getStdout()).not.toContain("SENTINEL_WRITTEN");
+  }, 15_000);
+
+  /**
+   * Regression coverage for QA's [NON-BLOCKING] mutation-coverage finding
+   * (comment 5816173356): the existing "outside the allowed prefix" case
+   * uses a path under os.tmpdir(), which fails BOTH the `node_modules/`
+   * containment check and the prefix check simultaneously — so deleting
+   * either check alone left the suite green. This case isolates the
+   * `node_modules/` requirement: a path WITH the correct
+   * `.neotoma-abort-contain-test-*` prefix, but NOT under `node_modules/`.
+   */
+  it("refuses a path with the test prefix but outside node_modules/", async () => {
+    const outsideNodeModulesDir = mkdtempSync(
+      path.join(tmpdir(), ".neotoma-abort-contain-test-outside-nm-")
+    );
+    gateEntries.push(outsideNodeModulesDir);
+    const sentinelPath = path.join(outsideNodeModulesDir, "sentinel.marker");
+    const followUpPath = path.join(outsideNodeModulesDir, "followup.mjs");
+    writeFileSync(followUpPath, sentinelFollowUpSource(sentinelPath));
+
+    const { proc, getStdout, getStderr } = spawnGateChild({
+      followUpPath,
+      nodeEnv: "test",
+    });
+    const result = await waitForExitOrTimeout(proc, 5_000);
+
+    expect(
+      result.timedOut,
+      `expected the process to exit promptly on refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(false);
+    expect(
+      result.exitCode,
+      `expected exit code 1 — right prefix, wrong parent dir; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(1);
+    expect(getStderr()).toContain("refusing to import it");
+    expect(existsSync(sentinelPath), `sentinel must NOT exist; stdout:\n${getStdout()}`).toBe(
+      false
+    );
+    expect(getStdout()).not.toContain("SENTINEL_WRITTEN");
+  }, 15_000);
+
+  /**
+   * Regression coverage for QA's other half of the same finding: a path
+   * that IS under `node_modules/`, but whose directory does NOT carry the
+   * `.neotoma-abort-contain-test-*` prefix.
+   */
+  it("refuses a path inside node_modules/ but without the test prefix", async () => {
+    const wrongPrefixDir = mkdtempSync(
+      path.join(repoRoot, "node_modules", ".not-the-test-prefix-")
+    );
+    gateEntries.push(wrongPrefixDir);
+    const sentinelPath = path.join(wrongPrefixDir, "sentinel.marker");
+    const followUpPath = path.join(wrongPrefixDir, "followup.mjs");
+    writeFileSync(followUpPath, sentinelFollowUpSource(sentinelPath));
+
+    const { proc, getStdout, getStderr } = spawnGateChild({
+      followUpPath,
+      nodeEnv: "test",
+    });
+    const result = await waitForExitOrTimeout(proc, 5_000);
+
+    expect(
+      result.timedOut,
+      `expected the process to exit promptly on refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(false);
+    expect(
+      result.exitCode,
+      `expected exit code 1 — right parent dir, wrong prefix; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(1);
+    expect(getStderr()).toContain("refusing to import it");
+    expect(existsSync(sentinelPath), `sentinel must NOT exist; stdout:\n${getStdout()}`).toBe(
+      false
+    );
+    expect(getStdout()).not.toContain("SENTINEL_WRITTEN");
   }, 15_000);
 });
 
