@@ -196,6 +196,17 @@ jobs:
       - name: Run DB-worker abandonment survival regressions (#2316/#2324)
         run: npx vitest run --no-file-parallelism tests/integration/db_abort_client_disconnect_survival.test.ts
 
+      # #2483 unhandled abandoned-abort containment. QA review of this suite's
+      # first version (PR #2484) found it ran in no PR lane at all — this step
+      # closes that gap the same way the #2316/#2324 step above closes its own.
+      # Forces the libsql backend (NEOTOMA_DB_BACKEND) for the same reason the
+      # step above does: readerPoolSnapshotForDiagnostics() in actions.ts only
+      # has a non-null branch to report on the worker-hosted (libsql) backend,
+      # so a run on better-sqlite3 would pass the readerPoolStats assertion for
+      # the wrong reason (a `null` it never inspected) rather than exercising it.
+      - name: Run abandoned-abort containment regressions (#2483)
+        run: npx vitest run --no-file-parallelism tests/integration/unhandled_abandoned_abort_containment.test.ts
+
       - name: Run schema-lookup scope-mismatch regression (#2454)
         run: npx vitest run --no-file-parallelism tests/integration/update_schema_incremental_scope_mismatch.test.ts
 

@@ -6,11 +6,14 @@ import morgan from "morgan";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { db } from "./db.js";
 import { config } from "./config.js";
 import fs from "fs";
 import path from "path";
 import { writeLocalHttpPortFile } from "./utils/local_http_port_file.js";
+import { WorkerDbAbortError } from "./repositories/worker/worker_file_database.js";
+import { peekCachedDb } from "./repositories/db/connection.js";
 import yaml from "js-yaml";
 import {
   ensurePublicKeyRegistered,
@@ -12873,9 +12876,133 @@ export async function startHTTPServer() {
   }
 }
 
+/**
+ * Structured, best-effort snapshot of the reader pool for the abandoned-abort
+ * diagnostic below (#2483). `peekCachedDb()` never opens a connection and
+ * `readerPoolStats()` is an `@internal` method that only the worker-hosted
+ * (`libsql`) backend implements — duck-typed rather than imported by type, so
+ * a backend without it (or not yet opened) degrades to `null` instead of
+ * throwing from inside a crash handler.
+ */
+function readerPoolSnapshotForDiagnostics(): unknown {
+  try {
+    const current = peekCachedDb() as { readerPoolStats?: () => unknown } | null;
+    if (current && typeof current.readerPoolStats === "function") {
+      return current.readerPoolStats();
+    }
+  } catch {
+    // Diagnostics must never themselves throw or mask the original error.
+  }
+  return null;
+}
+
+/**
+ * Handle an unhandled promise rejection, narrowly for the abandoned-read abort
+ * that crash-looped hosted Neotoma on 2026-09-23 (#2483).
+ *
+ * `guardAbandonedRead` (worker_file_database.ts) attaches a no-op `.catch()`
+ * to every read on the reader pool so a caller who is still listening keeps
+ * getting the real rejection while an abandoned one cannot become unhandled.
+ * That guard is provably complete for every read reachable through
+ * `WorkerStatement` — the prior investigation on #2483 traced every read path
+ * to it and found no fire-and-forget read outside the pattern — but the
+ * production trace shows an unhandled `WorkerDbAbortError` reaching here
+ * anyway, so some path derives a promise the guard never sees (`dispatchRead`,
+ * added by #2338, is the leading suspect per that investigation).
+ *
+ * Because the leaking path is unknown, this contains the SYMPTOM rather than
+ * the cause: log everything needed to find it, and let the process live,
+ * WITHOUT widening the class of error this applies to. `instanceof` (not a
+ * message-substring match) keeps the scope to exactly the one error type this
+ * incident is about — any other unhandled rejection falls through to `handler`
+ * unchanged and exits exactly as it does today. This is deliberately NOT a
+ * general `unhandledRejection` policy: a corrupt migration or an OOM must
+ * still crash the process, as the guard's own doc comment says.
+ *
+ * Returns true when it handled (and thus suppressed) the rejection, so the
+ * caller can decide whether to fall through to prior behavior — kept as a
+ * plain function, rather than registering its own `process.on` listener, so
+ * it composes with whatever the process already does for every other
+ * rejection instead of racing a second competing handler.
+ */
+export function handleAbandonedAbortRejection(reason: unknown): boolean {
+  if (!(reason instanceof WorkerDbAbortError)) return false;
+  try {
+    logger.error("[neotoma] unhandled WorkerDbAbortError contained (#2483)", {
+      name: reason.name,
+      message: reason.message,
+      stack: reason.stack,
+      cause: (reason as { cause?: unknown }).cause,
+      readerPoolStats: readerPoolSnapshotForDiagnostics(),
+      uptimeSeconds: process.uptime(),
+    });
+  } catch {
+    // A diagnostics failure must never re-throw and must never prevent
+    // suppressing the rejection below — that would recreate the exact crash
+    // this handler exists to contain.
+  }
+  return true;
+}
+
+/**
+ * Registers the process-wide containment for the #2483 abandoned-abort
+ * crash: the `unhandledRejection` listener that suppresses an unhandled
+ * `WorkerDbAbortError` (delegating to `handleAbandonedAbortRejection`) and
+ * exits exactly as before for anything else, plus the raised stack trace
+ * limit that makes the resulting diagnostic useful.
+ *
+ * Pulled into its own exported function, called from exactly one production
+ * call site below, so a regression test can prove that call site is load
+ * bearing: deleting it (while leaving this function's body untouched) must
+ * turn the regression suite red, because nothing would register the
+ * listener a real boot of this module performs. A test that instead called
+ * this function directly would keep passing even if the production call
+ * site were deleted, which is the exact gap #2483's QA review found.
+ */
+export function installAbandonedAbortContainment(): void {
+  // Raised early, before anything can reject, so the NEXT occurrence of the
+  // #2483 abort (or any other unhandled rejection) carries async frames past
+  // the immediate `onAbort` callsite instead of the default 10. `onAbort`
+  // (worker_file_database.ts) fires from an AbortSignal listener, which is
+  // itself an async boundary — Node's default limit reliably truncates the
+  // trace right at the point that matters, i.e. what SCHEDULED the abort.
+  // 100 is generous relative to the default without being unbounded: V8
+  // captures the stack only when an Error is actually constructed, so the
+  // steady-state cost of a higher ceiling is paid exclusively on the rare
+  // path that already logs a full event, not on every request.
+  Error.stackTraceLimit = 100;
+
+  // Node's default since v15 is `--unhandled-rejections=throw`: an unhandled
+  // rejection is thrown as an uncaught exception, which crashes the process
+  // exactly like the SIGABRT paths above. Nothing in this repo's Dockerfile,
+  // fly.toml, or package.json start scripts overrides that flag, so
+  // production runs under the default — this handler has to actually
+  // suppress the crash for the one error type it targets, not merely observe
+  // it, or the #2483 crash-loop continues unabated under this exact
+  // configuration. Registered before `beforeExit`/`exit`/signal diagnostics
+  // below so it is the first listener the event reaches; Node invokes every
+  // `unhandledRejection` listener the same way regardless of order, but
+  // ordering it first keeps the two related diagnostics adjacent in the
+  // module's control flow.
+  process.on("unhandledRejection", (reason) => {
+    if (handleAbandonedAbortRejection(reason)) return;
+    // Not the guarded error type: preserve today's behavior exactly. Node has
+    // no supported way to "re-throw" an unhandled rejection from inside a
+    // listener — once ANY listener is registered, Node considers the event
+    // handled and will not also invoke its default `--unhandled-rejections`
+    // behavior — so the equivalent is done explicitly: log it the way the
+    // default handler would and exit non-zero, matching the crash this
+    // process would otherwise have had.
+    console.error("[neotoma] unhandled rejection (not contained):", reason);
+    process.exit(1);
+  });
+}
+
 // Only auto-start if not disabled AND if this is the main module
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+  installAbandonedAbortContainment();
+
   // Exit diagnostics. A long-running server should never reach `beforeExit`:
   // that event only fires when the event loop has drained, i.e. nothing is
   // left holding the process open. In production this happened silently and
@@ -12915,8 +13042,98 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
     });
   }
 
-  startHTTPServer().catch((err) => {
-    console.error("Failed to start HTTP server:", err);
-    process.exit(1);
-  });
+  // Test-only escape hatch, inert in production: both env vars are never set
+  // outside tests/integration/unhandled_abandoned_abort_containment.test.ts.
+  // That suite needs to run THIS module as the real entrypoint — so
+  // `installAbandonedAbortContainment()` above is invoked from the actual
+  // production call site rather than called directly by the test — without
+  // paying for a full HTTP/DB/migration boot on every case. Everything above
+  // this line (containment install, stack trace limit, exit diagnostics,
+  // signal handlers) runs identically to production; only the HTTP server
+  // boot itself is skipped, and control is handed to a test-owned module
+  // (never a repo file — the test writes it to a temp dir) that drives the
+  // rest of the scenario. `actions.ts` itself stays test-agnostic: it knows
+  // only "run whatever module I was pointed at", not anything about faults
+  // or DB checks.
+  //
+  // Security review (Falco, PLAUSIBLE code_injection/test_escape_hatch,
+  // #2484): an ungated `import()` of an env-supplied path at boot is a real
+  // surface if an attacker can influence env vars — often already a stronger
+  // position, but not one to widen further. Narrowed here rather than left
+  // open: refuses when `NODE_ENV === "production"`, and the imported path
+  // must resolve inside this repo's `node_modules/` under the exact prefix
+  // the test's `entryDir` uses, so only a file the test itself just wrote
+  // can be loaded — not an arbitrary path an attacker-controlled env could
+  // otherwise point at.
+  //
+  // Follow-up hardening (Falco security run 1, #2484 CONFIRMED [BLOCKING]
+  // path_traversal/guard_bypass): the containment checks below used to run
+  // on `path.resolve(testModule)`, a lexical filesystem path, while the
+  // actual load used `import(resolved)`, which the ESM loader parses as a
+  // URL. A percent-encoded `..` segment, or a `?`/`#` delimiter, survives
+  // `path.resolve()` unchanged but is interpreted differently by the URL
+  // parser — so a crafted string could pass both checks yet load a
+  // different file than the one checked. Fixed by resolving through
+  // `fs.realpathSync` BEFORE either check (which also collapses a symlink
+  // to its real target — Falco security run 2, [NON-BLOCKING]
+  // test_escape_hatch symlink bypass) and then importing via
+  // `pathToFileURL(realResolved).href`, so the loader receives the exact
+  // canonical path the guard just checked — not a second, independently
+  // parsed interpretation of the original string.
+  if (process.env.NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST === "1") {
+    const testModule = process.env.NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE;
+    const allowedTestModuleDir = path.join(process.cwd(), "node_modules");
+    const allowedTestModulePrefix = ".neotoma-abort-contain-test-";
+    if (testModule && process.env.NODE_ENV === "production") {
+      console.error(
+        "[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE is set but NODE_ENV=production; refusing to import it."
+      );
+      process.exit(1);
+    } else if (testModule) {
+      let realResolved: string;
+      let realAllowedTestModuleDir: string;
+      try {
+        // realpathSync resolves symlinks AND collapses any `..`/`.`
+        // segments, encoded or not, to their actual filesystem target —
+        // this is what makes the check below canonical rather than
+        // lexical. It throws if the path (or the allowed dir) doesn't
+        // exist, which is itself a legitimate refusal: a module that
+        // isn't really there under the allowed prefix cannot be the
+        // test's own freshly-written file.
+        realResolved = fs.realpathSync(path.resolve(testModule));
+        realAllowedTestModuleDir = fs.realpathSync(allowedTestModuleDir);
+      } catch (err) {
+        console.error(
+          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${testModule}) could not be resolved ` +
+            `to a real path; refusing to import it. (${err instanceof Error ? err.message : String(err)})`
+        );
+        process.exit(1);
+        throw err;
+      }
+      const relative = path.relative(realAllowedTestModuleDir, realResolved);
+      const isUnderAllowedDir = !relative.startsWith("..") && !path.isAbsolute(relative);
+      const dirName = path.basename(path.dirname(realResolved));
+      const isAllowedPrefix = dirName.startsWith(allowedTestModulePrefix);
+      if (!isUnderAllowedDir || !isAllowedPrefix) {
+        console.error(
+          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${realResolved}) is outside the ` +
+            `allowed test entry directory (${realAllowedTestModuleDir}/${allowedTestModulePrefix}*); refusing to import it.`
+        );
+        process.exit(1);
+      } else {
+        // Import the SAME canonical path that was just checked, as a file
+        // URL rather than a second, independently-parsed string — this is
+        // what closes the percent-encoding / `?` / `#` bypass above.
+        import(pathToFileURL(realResolved).href).catch((err) => {
+          console.error("[neotoma] test follow-up module failed:", err);
+          process.exit(1);
+        });
+      }
+    }
+  } else {
+    startHTTPServer().catch((err) => {
+      console.error("Failed to start HTTP server:", err);
+      process.exit(1);
+    });
+  }
 }

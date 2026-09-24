@@ -659,7 +659,11 @@ class WorkerConnection {
     this.orphanFinish = undefined;
     if (!worker) return;
     if (wasBusy) await this.awaitWorkerIdle(worker);
-    await worker.terminate();
+    // Guarded the same way the two call sites in `abandon()` are (#2483): a
+    // shutdown-time `terminate()` can race a worker that is still inside a
+    // native call exactly as an abort-time one can, and an unguarded rejection
+    // here would turn a clean shutdown into an unhandled rejection.
+    await worker.terminate().catch(() => {});
   }
 
   /**
