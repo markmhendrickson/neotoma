@@ -7430,6 +7430,18 @@ export class NeotomaServer {
         })
       );
     } catch (corrErr) {
+      // #2264 — an `@`-prefixed file reference is INVALID PARAMS, not an
+      // internal failure. Without this branch the same rejection surfaces as a
+      // 400 on HTTP and an InternalError on MCP, which is precisely the
+      // cross-surface divergence the shared guard exists to prevent. The
+      // message carries the `hint` so an agent can self-repair in-turn.
+      const { CorrectionFileReferenceError } = await import("./services/correction.js");
+      if (corrErr instanceof CorrectionFileReferenceError) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `${corrErr.code}: ${corrErr.message} ${corrErr.hint}`
+        );
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
