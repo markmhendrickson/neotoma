@@ -11,7 +11,11 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { db } from "./db.js";
-import { isValidSnapshotFieldName } from "./services/entity_queries.js";
+import {
+  filterObservationsForDeletedEntities,
+  getDeletedEntityIdsById,
+  isValidSnapshotFieldName,
+} from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
@@ -3263,12 +3267,28 @@ export class NeotomaServer {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
 
+    // A tombstoned entity's pre-deletion observations still carry the full
+    // snapshot `fields`, so returning them would make deleted content
+    // recoverable verbatim. Only the tombstone observation(s) are surfaced,
+    // preserving the audit trail without the content. Mirrors the HTTP
+    // /list_observations handler in actions.ts. Routed through the shared
+    // `getDeletedEntityIds` helper (via the `getDeletedEntityIdsById` id-only
+    // adapter) so this path honours the same merged-away / never-observed
+    // carve-outs as `retrieve_entities`.
+    const { getDeletedEntityIdsById } = await import("./services/entity_queries.js");
+    const deletedEntityIds = await getDeletedEntityIdsById([parsed.entity_id], userId);
+
     let obsQuery = db
       .from("observations")
       .select("*", { count: "exact" })
       .eq("entity_id", parsed.entity_id)
       .eq("user_id", userId);
 
+    if (deletedEntityIds.has(parsed.entity_id)) {
+      // DB predicate, not a post-filter, so limit/offset paginate over the
+      // tombstone-only set rather than over withheld rows.
+      obsQuery = obsQuery.eq("fields->>_deleted", "true");
+    }
     if (parsed.updated_since) {
       obsQuery = obsQuery.gte("observed_at", parsed.updated_since);
     }
@@ -4013,6 +4033,25 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
+    const { getDeletedEntityIdsById } = await import("./services/entity_queries.js");
+
+    // Soft-deleted entities must not be readable through the graph. Traversing
+    // FROM a tombstoned root would leak its edges and children, so the root is
+    // checked before any relationship lookup. Mirrors the HTTP
+    // /retrieve_related_entities handler in actions.ts. Routed through the
+    // shared `getDeletedEntityIds` helper (via the `getDeletedEntityIdsById`
+    // id-only adapter) so this path honours the same merged-away /
+    // never-observed carve-outs as `retrieve_entities`.
+    const rootDeleted = await getDeletedEntityIdsById([parsed.entity_id], userId);
+    if (rootDeleted.has(parsed.entity_id)) {
+      return this.buildTextResponse({
+        entities: [],
+        relationships: [],
+        total_entities: 0,
+        total_relationships: 0,
+        hops_traversed: 0,
+      });
+    }
 
     const visited = new Set<string>([parsed.entity_id]);
     const relatedEntityIds = new Set<string>();
@@ -4083,8 +4122,36 @@ export class NeotomaServer {
       // This hop produced at least one relationship lookup over a non-empty
       // frontier, so count it as traversed.
       hopsTraversed = hop + 1;
-      if (nextLevel.length === 0) break;
-      currentLevel = nextLevel;
+
+      // Tombstoned neighbours are dropped from the frontier so the next hop
+      // never expands through them and leaks their onward edges.
+      const deletedInLevel = await getDeletedEntityIdsById(nextLevel, userId);
+      for (const id of deletedInLevel) {
+        relatedEntityIds.delete(id);
+      }
+      const liveNextLevel = nextLevel.filter((id) => !deletedInLevel.has(id));
+
+      if (liveNextLevel.length === 0) break;
+      currentLevel = liveNextLevel;
+    }
+
+    // Relationships touching a tombstoned entity are withheld even when the
+    // tombstone was discovered on the final hop (whose frontier is not walked).
+    const deletedEndpointIds = await getDeletedEntityIdsById(
+      Array.from(
+        new Set(
+          allRelationships.flatMap((rel: any) => [rel.source_entity_id, rel.target_entity_id])
+        )
+      ),
+      userId
+    );
+    const liveRelationships = allRelationships.filter(
+      (rel: any) =>
+        !deletedEndpointIds.has(rel.source_entity_id) &&
+        !deletedEndpointIds.has(rel.target_entity_id)
+    );
+    for (const id of deletedEndpointIds) {
+      relatedEntityIds.delete(id);
     }
 
     // Get entity details if requested
@@ -4122,9 +4189,9 @@ export class NeotomaServer {
 
     return this.buildTextResponse({
       entities,
-      relationships: allRelationships,
+      relationships: liveRelationships,
       total_entities: entities.length,
-      total_relationships: allRelationships.length,
+      total_relationships: liveRelationships.length,
       hops_traversed: hopsTraversed,
     });
   }
@@ -4147,6 +4214,10 @@ export class NeotomaServer {
     };
 
     if (parsed.node_type === "entity") {
+      if ((await getDeletedEntityIdsById([parsed.node_id], userId)).has(parsed.node_id)) {
+        throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.node_id}`);
+      }
+
       // Get entity
       const { data: entity, error: entityError } = await db
         .from("entities")
@@ -4182,16 +4253,33 @@ export class NeotomaServer {
           .eq("user_id", userId);
 
         if (!relError && relationships) {
-          result.relationships = relationships;
+          const deletedEndpointIds = await getDeletedEntityIdsById(
+            relationships.flatMap(
+              (relationship: { source_entity_id: string; target_entity_id: string }) => [
+                relationship.source_entity_id,
+                relationship.target_entity_id,
+              ]
+            ),
+            userId
+          );
+          const liveRelationships = relationships.filter(
+            (relationship: { source_entity_id: string; target_entity_id: string }) =>
+              !deletedEndpointIds.has(relationship.source_entity_id) &&
+              !deletedEndpointIds.has(relationship.target_entity_id)
+          );
+
+          result.relationships = liveRelationships;
           const relatedEntityIds = new Set<string>();
-          relationships.forEach((rel: { source_entity_id: string; target_entity_id: string }) => {
-            if (rel.source_entity_id !== parsed.node_id) {
-              relatedEntityIds.add(rel.source_entity_id);
+          liveRelationships.forEach(
+            (rel: { source_entity_id: string; target_entity_id: string }) => {
+              if (rel.source_entity_id !== parsed.node_id) {
+                relatedEntityIds.add(rel.source_entity_id);
+              }
+              if (rel.target_entity_id !== parsed.node_id) {
+                relatedEntityIds.add(rel.target_entity_id);
+              }
             }
-            if (rel.target_entity_id !== parsed.node_id) {
-              relatedEntityIds.add(rel.target_entity_id);
-            }
-          });
+          );
 
           // Get related entities
           if (relatedEntityIds.size > 0) {
@@ -4219,11 +4307,12 @@ export class NeotomaServer {
           .limit(100);
 
         if (!obsError && observations) {
-          result.observations = observations;
+          const safeObservations = await filterObservationsForDeletedEntities(observations, userId);
+          result.observations = safeObservations;
 
           // Get sources for observations
-          if (includeSources && observations.length > 0) {
-            const sourceIds = observations
+          if (includeSources && safeObservations.length > 0) {
+            const sourceIds = safeObservations
               .map((obs: any) => obs.source_id)
               .filter((id: string) => id);
             if (sourceIds.length > 0) {
@@ -4282,45 +4371,61 @@ export class NeotomaServer {
       }
 
       // Get observations from this source
-      const { data: observations, error: obsError } = await db
-        .from("observations")
-        .select("*")
-        .eq("source_id", parsed.node_id)
-        .eq("user_id", userId);
+      if (parsed.include_observations) {
+        const { data: observations, error: obsError } = await db
+          .from("observations")
+          .select("*")
+          .eq("source_id", parsed.node_id)
+          .eq("user_id", userId);
 
-      if (!obsError && observations) {
-        result.observations = observations;
+        if (!obsError && observations) {
+          const safeObservations = await filterObservationsForDeletedEntities(observations, userId);
+          result.observations = safeObservations;
 
-        // Get entities mentioned in observations
-        if (observations.length > 0) {
-          const entityIds = observations
-            .map((obs: any) => obs.entity_id)
-            .filter((id: string) => id);
-          if (entityIds.length > 0) {
-            const { data: entities, error: entError } = await db
-              .from("entities")
-              .select("*")
-              .in("id", entityIds)
-              .eq("user_id", userId);
+          // Get entities mentioned in observations
+          if (safeObservations.length > 0) {
+            const entityIds = safeObservations
+              .map((obs: any) => obs.entity_id)
+              .filter((id: string) => id);
+            if (entityIds.length > 0) {
+              const { data: entities, error: entError } = await db
+                .from("entities")
+                .select("*")
+                .in("id", entityIds)
+                .eq("user_id", userId);
 
-            if (!entError && entities) {
-              result.related_entities = entities;
+              if (!entError && entities) {
+                result.related_entities = entities;
 
-              // Get relationships for these entities
-              if (parsed.include_relationships && entities.length > 0) {
-                const { data: relationships, error: relError } = await db
-                  .from("relationship_snapshots")
-                  .select("*")
-                  .or(
-                    `source_entity_id.in.(${entityIds.join(
-                      ","
-                    )}),target_entity_id.in.(${entityIds.join(",")})`
-                  )
-                  .eq("user_id", userId)
-                  .limit(1000);
+                // Get relationships for these entities
+                if (parsed.include_relationships && entities.length > 0) {
+                  const { data: relationships, error: relError } = await db
+                    .from("relationship_snapshots")
+                    .select("*")
+                    .or(
+                      `source_entity_id.in.(${entityIds.join(
+                        ","
+                      )}),target_entity_id.in.(${entityIds.join(",")})`
+                    )
+                    .eq("user_id", userId)
+                    .limit(1000);
 
-                if (!relError && relationships) {
-                  result.relationships = relationships;
+                  if (!relError && relationships) {
+                    const deletedEndpointIds = await getDeletedEntityIdsById(
+                      relationships.flatMap(
+                        (relationship: { source_entity_id: string; target_entity_id: string }) => [
+                          relationship.source_entity_id,
+                          relationship.target_entity_id,
+                        ]
+                      ),
+                      userId
+                    );
+                    result.relationships = relationships.filter(
+                      (relationship: { source_entity_id: string; target_entity_id: string }) =>
+                        !deletedEndpointIds.has(relationship.source_entity_id) &&
+                        !deletedEndpointIds.has(relationship.target_entity_id)
+                    );
+                  }
                 }
               }
             }

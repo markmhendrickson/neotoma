@@ -5124,13 +5124,19 @@ app.get("/entities/:id/observations", async (req, res) => {
 
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
+    const { getDeletedEntityIdsById } = await import("./services/entity_queries.js");
+    const tombstoned = (await getDeletedEntityIdsById([entityId], userId)).has(entityId);
 
     // Get observations for this entity - filter by user_id for security
-    const { data, error, count } = await db
+    let query = db
       .from("observations")
       .select("*", { count: "exact" })
       .eq("entity_id", entityId)
-      .eq("user_id", userId) // SECURITY: Only return observations for authenticated user
+      .eq("user_id", userId); // SECURITY: Only return observations for authenticated user
+    if (tombstoned) {
+      query = query.eq("fields->>_deleted", "true");
+    }
+    const { data, error, count } = await query
       .order("observed_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -5181,6 +5187,12 @@ app.get("/entities/:id/relationships", async (req, res) => {
       }
     }
 
+    const { getDeletedEntityIdsById } = await import("./services/entity_queries.js");
+    const deletedRoot = await getDeletedEntityIdsById([entityId], userId);
+    if (deletedRoot.has(entityId)) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+
     // Get relationships where this entity is the source - filter by user_id
     const { data: outgoing, error: outgoingError } = await db
       .from("relationship_snapshots")
@@ -5206,15 +5218,33 @@ app.get("/entities/:id/relationships", async (req, res) => {
         id: rel.relationship_key,
       }));
 
-    const formattedOutgoing = formatRelationships(outgoing);
-    const formattedIncoming = formatRelationships(incoming);
+    const relationshipRows = [...(outgoing || []), ...(incoming || [])];
+    const deletedEndpoints = await getDeletedEntityIdsById(
+      Array.from(
+        new Set(
+          relationshipRows.flatMap((rel: any) => [rel.source_entity_id, rel.target_entity_id])
+        )
+      ),
+      userId
+    );
+    const liveOutgoing = (outgoing || []).filter(
+      (rel: any) =>
+        !deletedEndpoints.has(rel.source_entity_id) && !deletedEndpoints.has(rel.target_entity_id)
+    );
+    const liveIncoming = (incoming || []).filter(
+      (rel: any) =>
+        !deletedEndpoints.has(rel.source_entity_id) && !deletedEndpoints.has(rel.target_entity_id)
+    );
+
+    const formattedOutgoing = formatRelationships(liveOutgoing);
+    const formattedIncoming = formatRelationships(liveIncoming);
 
     const expandEntities = req.query.expand_entities === "true";
     let relatedEntities: Record<string, any> | undefined;
 
     if (expandEntities) {
       const relatedIds = new Set<string>();
-      for (const rel of [...(outgoing || []), ...(incoming || [])]) {
+      for (const rel of [...liveOutgoing, ...liveIncoming]) {
         if (rel.source_entity_id && rel.source_entity_id !== entityId)
           relatedIds.add(rel.source_entity_id);
         if (rel.target_entity_id && rel.target_entity_id !== entityId)
@@ -6991,6 +7021,8 @@ app.get("/observations", async (req, res) => {
     const entityId = req.query.entity_id as string | undefined;
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
+    const { filterObservationsForDeletedEntities, getDeletedEntityIdsById } =
+      await import("./services/entity_queries.js");
 
     // Build query - ALWAYS filter by authenticated user_id
     let query = db.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
@@ -7001,6 +7033,9 @@ app.get("/observations", async (req, res) => {
 
     if (entityId) {
       query = query.eq("entity_id", entityId);
+      if ((await getDeletedEntityIdsById([entityId], userId)).has(entityId)) {
+        query = query.eq("fields->>_deleted", "true");
+      }
     }
 
     query = query.order("observed_at", { ascending: false });
@@ -7010,12 +7045,15 @@ app.get("/observations", async (req, res) => {
 
     if (error) throw error;
 
-    const rows = (data || []) as Record<string, unknown>[];
-    const enriched = await attachSourceLabelsToObservations(userId, rows);
+    const rows = (data || []) as Array<
+      Record<string, unknown> & { entity_id?: unknown; fields?: unknown }
+    >;
+    const safeRows = await filterObservationsForDeletedEntities(rows, userId);
+    const enriched = await attachSourceLabelsToObservations(userId, safeRows);
 
     return res.json({
       observations: enriched,
-      total: count || 0,
+      total: safeRows.length === rows.length ? count || 0 : safeRows.length,
       limit,
       offset,
     });
@@ -7134,7 +7172,6 @@ app.post("/observations/create", async (req, res) => {
       source_peer_id,
       user_id,
     } = parsed.data;
-
     // SECURITY: Ensure provided user_id matches authenticated user
     if (user_id !== authenticatedUserId) {
       return res
@@ -9423,6 +9460,8 @@ app.post("/observations/query", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { filterObservationsForDeletedEntities, getDeletedEntityIdsById } =
+      await import("./services/entity_queries.js");
 
     const {
       observation_id,
@@ -9444,6 +9483,9 @@ app.post("/observations/query", async (req, res) => {
 
     if (entity_id) {
       query = query.eq("entity_id", entity_id);
+      if ((await getDeletedEntityIdsById([entity_id], userId)).has(entity_id)) {
+        query = query.eq("fields->>_deleted", "true");
+      }
     }
 
     if (entity_type) {
@@ -9470,9 +9512,16 @@ app.post("/observations/query", async (req, res) => {
 
     if (error) throw error;
 
+    const rows = (data || []) as Array<{
+      entity_id?: unknown;
+      fields?: unknown;
+      [key: string]: unknown;
+    }>;
+    const safeRows = await filterObservationsForDeletedEntities(rows, userId);
+
     return res.json({
-      observations: data || [],
-      total: count || 0,
+      observations: safeRows,
+      total: safeRows.length === rows.length ? count || 0 : safeRows.length,
       limit,
       offset,
     });
@@ -9669,9 +9718,26 @@ app.post("/list_observations", async (req, res) => {
   }
 
   const { entity_id, limit = 100, offset = 0, updated_since, created_since } = parsed.data;
+  const userId = await getAuthenticatedUserId(req, req.body?.user_id as string | undefined);
 
-  let query = db.from("observations").select("*").eq("entity_id", entity_id);
+  // A tombstoned entity's pre-deletion observations still carry the full
+  // snapshot `fields`, so returning them would make deleted content recoverable
+  // verbatim. Only the tombstone observation(s) are surfaced, preserving the
+  // audit trail (that it was deleted, when, by whom, why) without the content.
+  // Routed through the shared `getDeletedEntityIds` helper (via the
+  // `getDeletedEntityIdsById` id-only adapter) so this path honours the same
+  // merged-away / never-observed carve-outs as `retrieve_entities`.
+  const { getDeletedEntityIdsById } = await import("./services/entity_queries.js");
+  const deletedEntityIds = await getDeletedEntityIdsById([entity_id], userId);
+  const tombstonedOnly = deletedEntityIds.has(entity_id);
 
+  let query = db.from("observations").select("*").eq("entity_id", entity_id).eq("user_id", userId);
+
+  if (tombstonedOnly) {
+    // Applied as a DB predicate (not a post-filter) so limit/offset paginate
+    // over the tombstone-only set rather than over withheld rows.
+    query = query.eq("fields->>_deleted", "true");
+  }
   if (updated_since) {
     query = query.gte("observed_at", updated_since);
   }
@@ -10100,6 +10166,19 @@ app.post("/retrieve_related_entities", async (req, res) => {
       include_entities = true,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
+    const { getDeletedEntityIdsById } = await import("./services/entity_queries.js");
+
+    // Soft-deleted entities must not be readable through the graph. Traversing
+    // FROM a tombstoned root would leak its edges and children, so the root is
+    // checked before any relationship lookup. Routed through the shared
+    // `getDeletedEntityIds` helper (via the `getDeletedEntityIdsById` id-only
+    // adapter) so this path honours the same merged-away / never-observed
+    // carve-outs as `retrieve_entities`.
+    const rootDeleted = await getDeletedEntityIdsById([entity_id], userId);
+    if (rootDeleted.has(entity_id)) {
+      logDebug("Success:retrieve_related_entities:deleted_root", req, { entity_id });
+      return res.json({ relationships: [], entities: [] });
+    }
 
     // Breadth-first traversal up to max_hops. Mirrors the MCP handler
     // (server.ts retrieveRelatedEntities): a visited set provides cycle
@@ -10167,8 +10246,33 @@ app.post("/retrieve_related_entities", async (req, res) => {
         }
       }
 
-      if (nextLevel.length === 0) break;
-      currentLevel = nextLevel;
+      // Tombstoned neighbours are dropped from the frontier so the next hop
+      // never expands through them and leaks their onward edges.
+      const deletedInLevel = await getDeletedEntityIdsById(nextLevel, userId);
+      for (const id of deletedInLevel) {
+        relatedIds.delete(id);
+      }
+      const liveNextLevel = nextLevel.filter((id) => !deletedInLevel.has(id));
+
+      if (liveNextLevel.length === 0) break;
+      currentLevel = liveNextLevel;
+    }
+
+    // Relationships touching a tombstoned entity are withheld even when the
+    // tombstone was discovered on the final hop (whose frontier is not walked).
+    const deletedEndpointIds = await getDeletedEntityIdsById(
+      Array.from(
+        new Set(relationships.flatMap((rel: any) => [rel.source_entity_id, rel.target_entity_id]))
+      ),
+      userId
+    );
+    const liveRelationships = relationships.filter(
+      (rel: any) =>
+        !deletedEndpointIds.has(rel.source_entity_id) &&
+        !deletedEndpointIds.has(rel.target_entity_id)
+    );
+    for (const id of deletedEndpointIds) {
+      relatedIds.delete(id);
     }
 
     // Get entities if requested
@@ -10189,10 +10293,10 @@ app.post("/retrieve_related_entities", async (req, res) => {
 
     logDebug("Success:retrieve_related_entities", req, {
       entity_id,
-      count: relationships.length,
+      count: liveRelationships.length,
       max_hops,
     });
-    return res.json({ relationships, entities });
+    return res.json({ relationships: liveRelationships, entities });
   } catch (error) {
     return handleApiError(
       req,
@@ -10231,10 +10335,16 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
     // See docs/security/advisories/2026-05-21-relationship-endpoint-
     // tenant-isolation.md for context.
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { filterObservationsForDeletedEntities, getDeletedEntityIdsById } =
+      await import("./services/entity_queries.js");
 
     const result: any = { node_id, node_type };
 
     if (node_type === "entity") {
+      if ((await getDeletedEntityIdsById([node_id], userId)).has(node_id)) {
+        logDebug("Success:retrieve_graph_neighborhood:deleted_root", req, { node_id });
+        return res.json(result);
+      }
       // Get entity
       const { data: entity, error: entityError } = await db
         .from("entities")
@@ -10249,21 +10359,13 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
       // Get relationships if requested
       if (include_relationships) {
-        // Count total relationships for pagination metadata
-        const { count: totalCount, error: countError } = await db
-          .from("relationship_snapshots")
-          .select("*", { count: "exact", head: true })
-          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
-          .eq("user_id", userId);
-
-        const total = countError ? 0 : (totalCount ?? 0);
-        result.total_count = total;
-        result.has_more = offset + limit < total;
-
         // Deterministic ordering before paginating: this query previously had no
         // `.order()` clause, so Postgres scan order (unspecified) decided which
-        // rows landed on each page — non-deterministic across calls. Order by the
-        // mutable `last_observation_at` first, then by the primary key
+        // rows landed on each page — non-deterministic across calls. Fetch the
+        // root's ordered edge set so tombstoned endpoints can be removed before
+        // applying limit/offset; filtering a page after the fact would create
+        // short pages and incorrect pagination metadata. Order by the mutable
+        // `last_observation_at` first, then by the primary key
         // `relationship_key` as a stable, unique tiebreaker so pagination is
         // reproducible (docs/architecture/determinism.md). See issue #368.
         const { data: relationships, error: relError } = await db
@@ -10272,14 +10374,34 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
           .eq("user_id", userId)
           .order("last_observation_at", { ascending: false })
-          .order("relationship_key", { ascending: true })
-          .range(offset, offset + limit - 1);
+          .order("relationship_key", { ascending: true });
 
         if (!relError) {
-          result.relationships = relationships || [];
+          const rawRelationships = relationships || [];
+          const deletedEndpoints = await getDeletedEntityIdsById(
+            Array.from(
+              new Set(
+                rawRelationships.flatMap((relationship: any) => [
+                  relationship.source_entity_id,
+                  relationship.target_entity_id,
+                ])
+              )
+            ),
+            userId
+          );
+          const liveRelationships = rawRelationships.filter(
+            (relationship: any) =>
+              !deletedEndpoints.has(relationship.source_entity_id) &&
+              !deletedEndpoints.has(relationship.target_entity_id)
+          );
+          const total = liveRelationships.length;
+          const pagedRelationships = liveRelationships.slice(offset, offset + limit);
+          result.relationships = pagedRelationships;
+          result.total_count = total;
+          result.has_more = offset + limit < total;
           const relatedEntityIds = Array.from(
             new Set(
-              (relationships || [])
+              pagedRelationships
                 .flatMap((relationship: any) => [
                   relationship.source_entity_id,
                   relationship.target_entity_id,
@@ -10322,7 +10444,10 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
           .eq("user_id", userId);
 
         if (!obsError) {
-          result.observations = observations || [];
+          result.observations = await filterObservationsForDeletedEntities(
+            (observations || []) as Array<{ entity_id?: unknown; fields?: unknown }>,
+            userId
+          );
         }
       }
 
@@ -10354,7 +10479,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
         result.source = source;
       }
 
-      // Get observations from this source
+      // Get observations from this source only when explicitly requested.
       if (include_observations) {
         const { data: observations, error: obsError } = await db
           .from("observations")
@@ -10363,7 +10488,65 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
           .eq("user_id", userId);
 
         if (!obsError) {
-          result.observations = observations || [];
+          const safeObservations = await filterObservationsForDeletedEntities(
+            (observations || []) as Array<{
+              entity_id?: unknown;
+              fields?: unknown;
+              source_id?: unknown;
+            }>,
+            userId
+          );
+          result.observations = safeObservations;
+
+          const entityIds = Array.from(
+            new Set(
+              safeObservations
+                .map((observation) => observation.entity_id)
+                .filter((id): id is string => typeof id === "string" && id.length > 0)
+            )
+          );
+          if (entityIds.length > 0) {
+            const { data: relatedEntities, error: relatedEntitiesError } = await db
+              .from("entities")
+              .select("*")
+              .in("id", entityIds)
+              .eq("user_id", userId);
+
+            if (!relatedEntitiesError) {
+              result.related_entities = relatedEntities || [];
+            }
+
+            if (include_relationships) {
+              const { data: relationships, error: relationshipsError } = await db
+                .from("relationship_snapshots")
+                .select("*")
+                .or(
+                  `source_entity_id.in.(${entityIds.join(
+                    ","
+                  )}),target_entity_id.in.(${entityIds.join(",")})`
+                )
+                .eq("user_id", userId)
+                .limit(1000);
+              if (!relationshipsError && relationships) {
+                const deletedEndpoints = await getDeletedEntityIdsById(
+                  Array.from(
+                    new Set(
+                      relationships.flatMap((relationship: any) => [
+                        relationship.source_entity_id,
+                        relationship.target_entity_id,
+                      ])
+                    )
+                  ),
+                  userId
+                );
+                result.relationships = relationships.filter(
+                  (relationship: any) =>
+                    !deletedEndpoints.has(relationship.source_entity_id) &&
+                    !deletedEndpoints.has(relationship.target_entity_id)
+                );
+              }
+            }
+          }
         }
       }
     }

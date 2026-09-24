@@ -231,6 +231,28 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
     });
   });
 
+  describe("/list_observations", () => {
+    it("user A querying their own entity_id returns only user A's observation", async () => {
+      const { status, json } = await callEndpoint("/list_observations", {
+        entity_id: userA.entityId,
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      expect((json.observations ?? []).map((o: any) => o.id)).toContain(userA.observationId);
+      expect((json.observations ?? []).every((o: any) => o.user_id === userA.userId)).toBe(true);
+    });
+
+    it("user A querying user B's entity_id does NOT return user B's observation", async () => {
+      const { status, json } = await callEndpoint("/list_observations", {
+        entity_id: userB.entityId,
+        user_id: userA.userId,
+      });
+      expect(status).toBe(200);
+      expect((json.observations ?? []).map((o: any) => o.id)).not.toContain(userB.observationId);
+      expect(json.observations).toEqual([]);
+    });
+  });
+
   describe("/retrieve_graph_neighborhood", () => {
     it("user A querying their own node_id returns user A's entity", async () => {
       const { status, json } = await callEndpoint("/retrieve_graph_neighborhood", {

@@ -235,7 +235,7 @@ export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: str
  * chunk, plus (only when never-observed rows are actually present) one bounded
  * indexed existence probe against `observations`.
  */
-async function getDeletedEntityIds(
+export async function getDeletedEntityIds(
   candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
   userId?: string
 ): Promise<Set<string>> {
@@ -296,6 +296,90 @@ async function getDeletedEntityIds(
   }
 
   return deletedEntityIds;
+}
+
+/**
+ * Resolve which of `entityIds` are tombstoned, for callers that only hold
+ * bare ids (no `merged_to_entity_id`) — e.g. ids discovered by walking
+ * `relationship_snapshots` rather than by selecting from `entities`.
+ *
+ * This is a thin adapter over `getDeletedEntityIds`, the single source of
+ * truth for tombstone checks (see its docstring for the merged-away /
+ * never-observed distinction). It fetches `merged_to_entity_id` for the
+ * given ids and forwards to `getDeletedEntityIds`, so every read path
+ * inherits the same carve-outs as `queryEntities` without duplicating the
+ * merged-away logic per call site. Prefer `getDeletedEntityIds` directly
+ * when the caller already has `merged_to_entity_id` on hand (it costs no
+ * extra query in that case).
+ *
+ * @param entityIds - Candidate entity IDs to test.
+ * @param userId - Optional tenant scope, forwarded to both the lookup below
+ *   and `getDeletedEntityIds`.
+ */
+export async function getDeletedEntityIdsById(
+  entityIds: string[],
+  userId?: string
+): Promise<Set<string>> {
+  if (entityIds.length === 0) {
+    return new Set<string>();
+  }
+
+  let candidateQuery = db.from("entities").select("id, merged_to_entity_id").in("id", entityIds);
+  if (userId) {
+    candidateQuery = candidateQuery.eq("user_id", userId);
+  }
+  const { data: candidateRows, error } = await candidateQuery;
+
+  if (error) {
+    throw new Error(`Failed to resolve deleted entities: ${error.message}`);
+  }
+
+  return getDeletedEntityIds(
+    (candidateRows || []) as Array<{ id: string; merged_to_entity_id?: string | null }>,
+    userId
+  );
+}
+
+function observationFields(row: { fields?: unknown }): Record<string, unknown> | null {
+  if (row.fields && typeof row.fields === "object" && !Array.isArray(row.fields)) {
+    return row.fields as Record<string, unknown>;
+  }
+  if (typeof row.fields === "string") {
+    try {
+      const parsed = JSON.parse(row.fields) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Remove pre-deletion observation content for every tombstoned entity present
+ * in a result set while retaining its deletion audit row. This is the shared
+ * post-query guard for read surfaces that can return observations for more
+ * than one entity (source queries, Inspector filters, graph neighborhoods).
+ */
+export async function filterObservationsForDeletedEntities<
+  T extends { entity_id?: unknown; fields?: unknown },
+>(rows: T[], userId: string): Promise<T[]> {
+  const entityIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.entity_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    )
+  );
+  const deletedEntityIds = await getDeletedEntityIdsById(entityIds, userId);
+  return rows.filter((row) => {
+    if (typeof row.entity_id !== "string" || !deletedEntityIds.has(row.entity_id)) {
+      return true;
+    }
+    return observationFields(row)?._deleted === true;
+  });
 }
 
 /**
