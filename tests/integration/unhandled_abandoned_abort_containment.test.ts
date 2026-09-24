@@ -60,7 +60,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -229,6 +229,203 @@ function waitForExitOrTimeout(
     });
   });
 }
+
+/**
+ * Regression coverage for the two refusal branches commit `83fbf0590` added
+ * to the `NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST` /
+ * `NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE` handler in response to Falco's
+ * PLAUSIBLE code-injection finding (#2484 review). QA verified by direct
+ * mutation (reverting both branches back to the pre-fix ungated
+ * `import(testModule)`) that the rest of this suite stays green with the
+ * gate removed entirely — proving nothing here would catch a regression of
+ * it. These three cases close that gap:
+ *
+ *   1. `NODE_ENV=production` refuses even when the path is otherwise
+ *      allowed.
+ *   2. A path outside `node_modules/.neotoma-abort-contain-test-*` refuses
+ *      even when `NODE_ENV` is not production.
+ *   3. Control: inside the allowed prefix, with `NODE_ENV` not production,
+ *      the module IS imported — proving cases 1–2 fail because of the gate
+ *      being tested, not because the follow-up module never runs at all.
+ *
+ * Each case spawns `dist/actions.js` directly (the real production
+ * entrypoint, same as the rest of this file) rather than reimplementing the
+ * gate logic, for the same regression-binding reason given above: a test
+ * that doesn't run the actual branch under test would keep passing after the
+ * branch is deleted.
+ *
+ * The observable effect asserted for a refusal is: (a) the follow-up module
+ * is never imported — proven by the ABSENCE of a sentinel file only the
+ * imported module would create (import failing to even parse would also
+ * fail an accidental "file exists" check the same way, but writeFileSync in
+ * followUpSource always writes valid syntax, so the only way the sentinel
+ * can be missing is that import() was never called); (b) the exact refusal
+ * line actions.ts logs to stderr; and (c) the process exits with code 1
+ * rather than continuing (it does not fall through to starting the HTTP
+ * server or hanging).
+ */
+describe("NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE security gate (#2484 hardening)", () => {
+  const gateEntries: string[] = [];
+  const gateDataDirRoot = mkdtempSync(path.join(tmpdir(), "neotoma-abort-gate-data-"));
+
+  afterAll(() => {
+    for (const entry of gateEntries) rmSync(entry, { force: true, recursive: true });
+    rmSync(gateDataDirRoot, { recursive: true, force: true, maxRetries: 2 });
+  });
+
+  /** A follow-up module whose only observable effect is writing a sentinel
+   * file — so "sentinel absent" is unambiguous proof `import()` never ran,
+   * independent of anything else the module might do. */
+  function sentinelFollowUpSource(sentinelPath: string): string {
+    return `
+import { writeFileSync } from "node:fs";
+writeFileSync(${JSON.stringify(sentinelPath)}, "imported\\n");
+process.stdout.write("SENTINEL_WRITTEN\\n");
+`;
+  }
+
+  function spawnGateChild(opts: {
+    followUpPath: string;
+    nodeEnv?: string;
+  }): {
+    proc: ReturnType<typeof spawn>;
+    getStdout: () => string;
+    getStderr: () => string;
+  } {
+    const dataDir = mkdtempSync(path.join(gateDataDirRoot, "case-"));
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST: "1",
+      NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE: opts.followUpPath,
+      NEOTOMA_DATA_DIR: dataDir,
+    };
+    if (opts.nodeEnv === undefined) {
+      delete env.NODE_ENV;
+    } else {
+      env.NODE_ENV = opts.nodeEnv;
+    }
+    const actionsEntry = path.join(repoRoot, "dist/actions.js");
+    const proc = spawn(process.execPath, [actionsEntry], {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+    });
+    let stdout = "";
+    let stderr = "";
+    proc.stdout?.on("data", (d) => (stdout += String(d)));
+    proc.stderr?.on("data", (d) => (stderr += String(d)));
+    if (process.env.NEOTOMA_ABORT_TEST_DEBUG) {
+      proc.stderr?.on("data", (d) => process.stderr.write("[gate-child] " + String(d)));
+      proc.stdout?.on("data", (d) => process.stderr.write("[gate-childout] " + String(d)));
+    }
+    return { proc, getStdout: () => stdout, getStderr: () => stderr };
+  }
+
+  it("refuses and does not import the follow-up module when NODE_ENV=production, even on an allowed path", async () => {
+    const sentinelPath = path.join(
+      entryDir,
+      `sentinel-prod-${process.pid}-${nextEntry++}.marker`
+    );
+    const followUpPath = path.join(
+      entryDir,
+      `followup-prod-${process.pid}-${nextEntry++}.mjs`
+    );
+    gateEntries.push(followUpPath, sentinelPath);
+    writeFileSync(followUpPath, sentinelFollowUpSource(sentinelPath));
+
+    const { proc, getStdout, getStderr } = spawnGateChild({
+      followUpPath,
+      nodeEnv: "production",
+    });
+    const result = await waitForExitOrTimeout(proc, 5_000);
+
+    expect(
+      result.timedOut,
+      `expected the process to exit promptly on refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(false);
+    expect(
+      result.exitCode,
+      `expected exit code 1 on NODE_ENV=production refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(1);
+    expect(getStderr()).toContain(
+      "NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE is set but NODE_ENV=production; refusing to import it."
+    );
+    expect(
+      existsSync(sentinelPath),
+      `sentinel file must NOT exist — the follow-up module must never have been imported; stdout:\n${getStdout()}`
+    ).toBe(false);
+    expect(getStdout()).not.toContain("SENTINEL_WRITTEN");
+  }, 15_000);
+
+  it("refuses and does not import the follow-up module when the path is outside the allowed node_modules/.neotoma-abort-contain-test-* prefix", async () => {
+    const outsideDir = mkdtempSync(path.join(tmpdir(), "neotoma-abort-gate-outside-"));
+    gateEntries.push(outsideDir);
+    const sentinelPath = path.join(outsideDir, "sentinel.marker");
+    const followUpPath = path.join(outsideDir, "followup.mjs");
+    writeFileSync(followUpPath, sentinelFollowUpSource(sentinelPath));
+
+    const { proc, getStdout, getStderr } = spawnGateChild({
+      followUpPath,
+      nodeEnv: "test",
+    });
+    const result = await waitForExitOrTimeout(proc, 5_000);
+
+    expect(
+      result.timedOut,
+      `expected the process to exit promptly on refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(false);
+    expect(
+      result.exitCode,
+      `expected exit code 1 on outside-prefix refusal; stdout:\n${getStdout()}\nstderr:\n${getStderr()}`
+    ).toBe(1);
+    expect(getStderr()).toContain(
+      `NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${path.resolve(followUpPath)}) is outside the`
+    );
+    expect(getStderr()).toContain("allowed test entry directory");
+    expect(
+      existsSync(sentinelPath),
+      `sentinel file must NOT exist — the follow-up module must never have been imported; stdout:\n${getStdout()}`
+    ).toBe(false);
+    expect(getStdout()).not.toContain("SENTINEL_WRITTEN");
+  }, 15_000);
+
+  it("control: imports the follow-up module when the path IS under the allowed prefix and NODE_ENV is not production", async () => {
+    const sentinelPath = path.join(
+      entryDir,
+      `sentinel-control-${process.pid}-${nextEntry++}.marker`
+    );
+    const followUpPath = path.join(
+      entryDir,
+      `followup-control-${process.pid}-${nextEntry++}.mjs`
+    );
+    gateEntries.push(followUpPath, sentinelPath);
+    writeFileSync(followUpPath, sentinelFollowUpSource(sentinelPath));
+
+    const { proc, getStdout, getStderr } = spawnGateChild({
+      followUpPath,
+      nodeEnv: "test",
+    });
+    try {
+      // The follow-up module here just writes a sentinel and returns — it
+      // doesn't keep the event loop alive like the fault-injection modules
+      // above, so the process exits on its own once the import settles.
+      const result = await waitForExitOrTimeout(proc, 5_000);
+      const stdout = getStdout();
+
+      expect(
+        stdout,
+        `expected the follow-up module to run and print SENTINEL_WRITTEN; stdout:\n${stdout}\nstderr:\n${getStderr()}\ntimedOut=${result.timedOut} exitCode=${result.exitCode}`
+      ).toContain("SENTINEL_WRITTEN");
+      expect(
+        existsSync(sentinelPath),
+        `sentinel file must exist — the follow-up module must have been imported; stdout:\n${stdout}`
+      ).toBe(true);
+      expect(getStderr()).not.toContain("refusing to import it");
+    } finally {
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+    }
+  }, 15_000);
+});
 
 describe("unhandled WorkerDbAbortError containment (#2483)", () => {
   it("stays alive, logs the full structured diagnostic event, and keeps serving after an unhandled WorkerDbAbortError", async () => {
