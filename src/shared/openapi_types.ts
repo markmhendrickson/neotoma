@@ -3662,10 +3662,18 @@ export interface components {
        */
       type?: "User" | "Bot" | "Organization";
       /**
+       * @description Accepted for compatibility, but a request body can only assert an
+       *     external actor: the stored value is always `claim`. The stronger
+       *     tiers are assigned by server-side verification paths (the signed
+       *     GitHub webhook route, AAuth token claims, grant linkage).
        * @default claim
        * @enum {string}
        */
       verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
+      /**
+       * @description Not carried over from a request body; set only by the signed
+       *     GitHub webhook route.
+       */
       delivery_id?: string;
       event_type?: string;
       repository?: string;
