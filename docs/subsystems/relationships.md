@@ -319,6 +319,8 @@ await createRelationshipObservations(
 );
 ```
 
+**Endpoints must be entities the caller owns.** `create_relationship`, `create_relationships` and the relationship leg of `store` (HTTP, MCP and CLI all reach the same `relationshipsService.createRelationship`) require both `source_entity_id` and `target_entity_id` to be existing entities owned by the authenticated user. An endpoint that does not exist and one owned by another user are refused with the same error (`404 RESOURCE_NOT_FOUND` over HTTP, `Entity not found: <id>` over MCP), so the refusal reveals nothing about other users' data. Store the entity first (or in the same `store` call, referenced by index), then link it.
+
 ### 6.2 Querying Relationship Snapshots
 
 **Get Specific Relationship:**
@@ -511,6 +513,7 @@ Load `docs/subsystems/relationships.md` when:
 2. **No hard-coded hierarchies** (use relationships instead)
 3. **Cycles MUST be prevented** for hierarchical types
 4. **Metadata MUST be structured** (use JSONB schema)
+5. **Both endpoints MUST be entities the caller owns** (see § 6.1)
 ### Forbidden Patterns
 - ❌ Hard-coded parent-child foreign keys
 - ❌ Untyped relationships (must specify type)

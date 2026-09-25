@@ -38,6 +38,7 @@ import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
+import { OwnedEntityNotFoundError } from "./services/scoped_reads.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyUnavailableError } from "./services/instance_policy.js";
@@ -9825,6 +9826,11 @@ app.post("/create_relationship", async (req, res) => {
         hint: error.hint,
       });
     }
+    if (error instanceof OwnedEntityNotFoundError) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message, {
+        entity_id: error.entityId,
+      });
+    }
     logError("RelationshipCreationError:create_relationship", req, error);
     return sendError(
       res,
@@ -10049,6 +10055,26 @@ app.get("/get_file_url", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
   const { file_path, expires_in } = parsed.data;
+
+  // Only sign a path that belongs to one of the caller's own sources. A path
+  // owned by another user gets the same response as one that does not exist.
+  try {
+    const userId = await getAuthenticatedUserId(req, undefined);
+    const { getOwnedSourceByStoragePath } = await import("./services/scoped_reads.js");
+    const owned = await getOwnedSourceByStoragePath(file_path, userId);
+    if (!owned) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "File not found");
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to create signed URL",
+      "DB_QUERY_FAILED",
+      "APIError:get_file_url"
+    );
+  }
 
   const parts = file_path.split("/");
   const bucket = parts[0];
@@ -12201,12 +12227,15 @@ app.post("/health_check_snapshots", async (req, res) => {
 
   try {
     const { auto_fix } = parsed.data;
+    // Scoped to the authenticated user, matching the MCP handler.
+    const userId = await getAuthenticatedUserId(req, undefined);
 
     // Query for stale snapshots (observation_count=0 but observations exist)
     const { data: staleSnapshots, error } = await db
       .from("entity_snapshots")
       .select("entity_id, entity_type, observation_count")
-      .eq("observation_count", 0);
+      .eq("observation_count", 0)
+      .eq("user_id", userId);
 
     if (error) {
       logError("DbError:health_check_snapshots", req, error);
@@ -12220,6 +12249,7 @@ app.post("/health_check_snapshots", async (req, res) => {
         .from("observations")
         .select("id")
         .eq("entity_id", snapshot.entity_id)
+        .eq("user_id", userId)
         .limit(1);
 
       if (!obsError && observations && observations.length > 0) {
@@ -12240,11 +12270,8 @@ app.post("/health_check_snapshots", async (req, res) => {
           // the declared layer, and null when the id is redirected — a
           // tombstone owns no snapshot, so auto-fix must skip it rather than
           // upsert the survivor's snapshot under the tombstone's id.
-          // `null` scope, deliberately: this endpoint's observation fetch was
-          // unscoped before #2343, and adding a user_id filter here would
-          // change which rows the reducer sees. Routing the fetch through the
-          // seam is this PR's job; tightening this endpoint's tenancy is not.
-          const observations = await resolveOwnedObservations(entity.entity_id, null);
+          // Scoped to the caller, as the MCP handler is.
+          const observations = await resolveOwnedObservations(entity.entity_id, userId);
           if (observations === null) {
             redirectedCount++;
             continue;
