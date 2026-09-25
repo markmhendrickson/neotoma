@@ -32,11 +32,29 @@ Nothing changes for normal operation: the interactive CLI, the server, and every
 
 `NEOTOMA_ENV` selects the profile: `development` (default) or `production`. The profiles use separate database files, source directories, and logs so a dev stack never touches prod data. Production also changes default ports and tightens auth expectations.
 
-### Production detection also honours `NODE_ENV`
+### Production detection: one rule for every caller
 
-Every production-gated security check (the `/mcp` and REST local-caller gate, webhook URL scheme enforcement, the root-landing mode resolver) now treats the process as production when **either** `NEOTOMA_ENV` resolves to `production`/`prod`, **or** `NEOTOMA_ENV` is unset and `NODE_ENV=production`. An explicit `NEOTOMA_ENV` always wins — setting `NEOTOMA_ENV=development` keeps a process in development even if `NODE_ENV=production` is also set, which matters when Neotoma runs embedded inside a host process (e.g. as an MCP server loaded into another Node workspace) whose own `NODE_ENV` should not dictate Neotoma's profile.
+Every production-gated security check — the `/mcp` and REST local-caller gate, webhook URL scheme enforcement, and the root-landing mode resolver — reads production status through one shared detector (`src/shared/environment.ts`), and that detector applies **the same rule to every caller with no exceptions**:
 
-**Migration note:** before this change, a deploy that set only `NODE_ENV=production` — the shape a bare `Dockerfile` produces with `ENV NODE_ENV=production` and no `NEOTOMA_ENV` — was treated as development by these checks, so a loopback caller on that deploy was granted local-development trust it should not have had. If your deployment relies on `NODE_ENV=production` alone to select Neotoma's production profile for the checks above, no action is needed — it is now honoured. If instead you run a **production-built bundle locally** for development (`NODE_ENV=production` set by your build tooling, with no `NEOTOMA_ENV`), that process is now treated as production by these checks; set `NEOTOMA_ENV=development` explicitly to keep the previous local-development behaviour. This does not change `NEOTOMA_ENV`'s own resolution (data directory, database file, default ports) — those still read `NEOTOMA_ENV` only, as documented above.
+**The process is production when EITHER variable says so.** Concretely:
+
+- `NEOTOMA_ENV` resolves to `production` or `prod` (case-insensitive, trimmed) → production, regardless of `NODE_ENV`.
+- `NEOTOMA_ENV` resolves to `development`, `dev`, or `test` → falls through to `NODE_ENV`: production only if `NODE_ENV=production`.
+- `NEOTOMA_ENV` is set to anything else — unset entirely aside — is **not** treated as an operator's deliberate "not production" choice. A typo, a not-yet-implemented profile name like `staging`, or any other non-recognized value resolves to **production** and never falls through to `NODE_ENV`. One rate-limited warning is written to stderr at first use, naming the unrecognized value and the recognized set, so the mistake is diagnosable rather than a silent downgrade.
+- `NEOTOMA_ENV` is unset → falls through to `NODE_ENV`: production only if `NODE_ENV=production`.
+
+This means an explicit `NEOTOMA_ENV=development` **no longer overrides** a `NODE_ENV=production` set elsewhere (by a host process, a build tool, or a parent shell) — either variable saying production is now sufficient, everywhere this detector is consulted, including webhook URL scheme enforcement. This is a deliberate reversal from an earlier revision of this detector, made because an unconditional "either wins" is the only rule that cannot be loosened by a caller-specific exception: the previous "an explicit `NEOTOMA_ENV` always wins" precedence let `NEOTOMA_ENV=development` alongside `NODE_ENV=production` relax webhook URL scheme enforcement to allow plaintext `http:` deliveries that were previously blocked.
+
+**Migration note:** before ateles ent_1cc5662e217133323890a90f, a deploy that set only `NODE_ENV=production` — the shape a bare `Dockerfile` produces with `ENV NODE_ENV=production` and no `NEOTOMA_ENV` — was treated as development by these checks, so a loopback caller on that deploy was granted local-development trust it should not have had. If your deployment relies on `NODE_ENV=production` alone to select Neotoma's production profile for the checks above, no action is needed — it is now honoured.
+
+**Escape hatch for running a production-built bundle locally.** If you run a **production-built bundle locally** for development (`NODE_ENV=production` set by your build tooling, with no `NEOTOMA_ENV`), that process is now treated as production by these checks. Setting `NEOTOMA_ENV=development` does **not** opt back out — that would reopen the exact loosening described above. Instead:
+
+- Set `NEOTOMA_TRUST_PROD_LOOPBACK=1` (the existing opt-in from the loopback-trust migration) if you specifically need a loopback caller to be treated as local despite the process being production; or
+- Set `NODE_ENV` to something other than `production` (unset it, or `NODE_ENV=development`) if that is within your control, so the process is genuinely not production.
+
+This does not change `NEOTOMA_ENV`'s own resolution for data locality (data directory, database file, default ports) — those still read `NEOTOMA_ENV` only, as documented above, and are unaffected by this section.
+
+**Runtime diagnostics.** A production refusal at the local-caller gate now names which signal caused it — `NEOTOMA_ENV=production is set`, `NODE_ENV=production is set (NEOTOMA_ENV is unset)`, or `NEOTOMA_ENV="<value>" is not a recognized value` — in the rate-limited stderr line it emits, including for the bare-loopback case (a loopback socket with no forwarded-for header at all, the common no-reverse-proxy shape), which previously refused with no diagnostic at all.
 
 ## Core variables
 

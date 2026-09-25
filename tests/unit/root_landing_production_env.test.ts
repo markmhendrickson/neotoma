@@ -40,16 +40,42 @@ describe("resolveLandingMode honours NODE_ENV=production (ateles ent_1cc5662e217
     expect(resolveLandingMode(loopbackReq(), env)).toBe("local");
   });
 
-  it("an explicit NEOTOMA_ENV=development still wins over NODE_ENV=production", () => {
+  it("an explicit NEOTOMA_ENV=development no longer wins over NODE_ENV=production — either saying production wins (fail-closed reversal)", () => {
     const env = {
       NEOTOMA_ENV: "development",
       NODE_ENV: "production",
     } as NodeJS.ProcessEnv;
-    expect(resolveLandingMode(loopbackReq(), env)).toBe("local");
+    expect(resolveLandingMode(loopbackReq(), env)).toBe("personal");
   });
 
   it("matches the existing NEOTOMA_ENV=production behaviour (personal, not local)", () => {
     const env = { NEOTOMA_ENV: "production" } as NodeJS.ProcessEnv;
     expect(resolveLandingMode(loopbackReq(), env)).toBe("personal");
+  });
+
+  describe("table: NEOTOMA_ENV x NODE_ENV -> resolveLandingMode for a bare loopback caller", () => {
+    // Restrictive outcome ("personal") wherever either variable says
+    // production, or NEOTOMA_ENV is unrecognized (e.g. "staging").
+    const CASES: { neotomaEnv?: string; nodeEnv?: string; expected: "local" | "personal" }[] = [
+      { expected: "local" },
+      { nodeEnv: "development", expected: "local" },
+      { nodeEnv: "production", expected: "personal" },
+      { neotomaEnv: "development", expected: "local" },
+      { neotomaEnv: "production", expected: "personal" },
+      { neotomaEnv: "development", nodeEnv: "production", expected: "personal" },
+      { neotomaEnv: "production", nodeEnv: "development", expected: "personal" },
+      { neotomaEnv: "staging", nodeEnv: "development", expected: "personal" },
+      { neotomaEnv: "staging", expected: "personal" },
+    ];
+
+    for (const { neotomaEnv, nodeEnv, expected } of CASES) {
+      const label = `NEOTOMA_ENV=${neotomaEnv ?? "<unset>"}, NODE_ENV=${nodeEnv ?? "<unset>"} -> ${expected}`;
+      it(label, () => {
+        const env: NodeJS.ProcessEnv = {};
+        if (neotomaEnv !== undefined) env.NEOTOMA_ENV = neotomaEnv;
+        if (nodeEnv !== undefined) env.NODE_ENV = nodeEnv;
+        expect(resolveLandingMode(loopbackReq(), env)).toBe(expected);
+      });
+    }
   });
 });
