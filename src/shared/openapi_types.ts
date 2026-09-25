@@ -8260,6 +8260,13 @@ export interface operations {
               edge_count?: number;
             }[];
             total: number;
+            /**
+             * @description Present only when relationship_types is empty. Never infer "no vocabulary exists" from an empty array alone. registry_unseeded means the instance's relationship-type registry (including the built-in vocabulary) failed to seed and is a registry/seed failure that self-repairs on a subsequent read, not a permanent state; call list_relationship_types again rather than concluding no types are available. filtered_to_empty means a supplied keyword matched nothing against an otherwise-populated registry; retry without keyword to see the full vocabulary. Absent when relationship_types is non-empty.
+             * @enum {string}
+             */
+            empty_reason?: "registry_unseeded" | "filtered_to_empty";
+            /** @description Present only alongside empty_reason. Human/agent-readable elaboration of empty_reason and the recommended next call; never present when relationship_types is non-empty. */
+            hint?: string;
           };
         };
       };

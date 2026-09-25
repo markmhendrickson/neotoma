@@ -241,9 +241,38 @@ function isDuplicateRegistryRowError(error: unknown): boolean {
  */
 let lazyRepairAttempted = false;
 
-/** Test-only: allow a fresh lazy-repair attempt on the next read. */
+/**
+ * The single-flight in-progress repair, or null when no repair is running.
+ * Every concurrent caller of `resolveAllWithRepair` awaits the SAME promise
+ * rather than each independently checking-then-setting `lazyRepairAttempted`,
+ * which is racy across an `await` boundary (see `resolveAllWithRepair`'s
+ * doc). Declared alongside `lazyRepairAttempted` since the two together are
+ * one guard, not two independent ones.
+ */
+let inFlightRepair: Promise<void> | null = null;
+
+/**
+ * Test-only: allow a fresh lazy-repair attempt on the next read.
+ *
+ * IMPORTANT SCOPE LIMIT, found while adding REST/CLI surface tests for
+ * #2482 (PR #2511 pm round-2): this resets state only in the CALLING
+ * module's realm. `vitest.global_setup.ts` loads `src/actions.ts` (and
+ * transitively this module) via a SEPARATE `import()` in Vitest's isolated
+ * globalSetup context to boot the shared in-process HTTP test server —
+ * that is a genuinely different module instance from the one a test file's
+ * own top-level `import` resolves, with its own disjoint
+ * `lazyRepairAttempted`/`inFlightRepair` bindings. Calling this from a test
+ * file has NO effect on the live HTTP server's repair state; it only resets
+ * the test file's own (unused-by-the-server) copy. Tests that exercise the
+ * REST/CLI surfaces (which route through the server realm) cannot use this
+ * to force a second repair — the server-realm repair is genuinely one-shot
+ * for the life of the test run, matching the documented per-process
+ * contract. Only MCP-surface tests that instantiate `NeotomaServer()`
+ * directly in the TEST file's own realm see this reset take effect.
+ */
 export function resetRelationshipTypeLazyRepairForTests(): void {
   lazyRepairAttempted = false;
+  inFlightRepair = null;
 }
 
 /**
@@ -527,13 +556,38 @@ export class RelationshipTypeRegistryService {
    * hardcoded vocabulary (arch: extend #2357, do not fork it).
    */
   private async resolveAllWithRepair(userId?: string): Promise<RelationshipTypeRegistration[]> {
-    let all = await this.resolveAll(userId);
+    const all = await this.resolveAll(userId);
     if (all.some((r) => r.scope === "global")) {
       return all;
     }
     if (lazyRepairAttempted) {
       return all;
     }
+    // Single-flight: the empty-registry check above and the flag check/set
+    // below straddle an `await` (`resolveAll`), so two calls arriving close
+    // together can both observe `lazyRepairAttempted === false` before either
+    // sets it — synchronous code between an `await` and the next one does NOT
+    // preempt, but two DIFFERENT async call stacks each resuming past their
+    // own `await this.resolveAll(userId)` can interleave here. Route every
+    // concurrent caller through the SAME in-flight promise instead of letting
+    // a second caller start (and its own late `lazyRepairAttempted = true`
+    // clobber a legitimate reset, e.g. between test cases) a redundant
+    // attempt. The promise itself, not a boolean set post-hoc, is the
+    // single-flight guard.
+    if (!inFlightRepair) {
+      inFlightRepair = this.attemptRepairOnce();
+    }
+    await inFlightRepair;
+    return this.resolveAll(userId);
+  }
+
+  /**
+   * The actual one-shot repair attempt, run at most once concurrently via
+   * `resolveAllWithRepair`'s `inFlightRepair` guard. Always resolves (never
+   * rejects) — a repair failure is logged and reported via `describeEmpty`,
+   * never thrown from a read.
+   */
+  private async attemptRepairOnce(): Promise<void> {
     lazyRepairAttempted = true;
     try {
       const { ensureBuiltInRelationshipTypesSeeded } = await import("./seed_registry.js");
@@ -545,7 +599,6 @@ export class RelationshipTypeRegistryService {
             `${summary.registered.join(", ")}`
         );
         invalidateRelationshipTypeCache();
-        all = await this.resolveAll(userId);
       } else if (summary.failed.length > 0) {
         logger.error(
           `[RelationshipTypeRegistry] global registry resolved empty and lazy repair failed ` +
@@ -555,13 +608,14 @@ export class RelationshipTypeRegistryService {
       }
     } catch (err) {
       // Never let a repair attempt turn a read into a thrown error — the
-      // caller still gets the (possibly still-empty) resolve below, and
-      // `list()` reports why via `empty_reason`.
+      // caller still gets the (possibly still-empty) resolve, and `list()`
+      // reports why via `empty_reason`.
       logger.error(
         `[RelationshipTypeRegistry] lazy repair threw: ${(err as Error).message ?? String(err)}`
       );
+    } finally {
+      inFlightRepair = null;
     }
-    return all;
   }
 
   /**

@@ -39,7 +39,7 @@
  *     regression on the pre-#2482 behavior QA'd by #2357's suites).
  */
 
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { NeotomaServer } from "../../src/server.js";
 import { db } from "../../src/db.js";
 import { generateEntityId } from "../../src/services/entity_resolution.js";
@@ -51,6 +51,59 @@ import {
 } from "../../src/services/relationship_types/registry.js";
 import { BUILT_IN_RELATIONSHIP_TYPES } from "../../src/services/relationship_types/seed_registry.js";
 import { relationshipsService } from "../../src/services/relationships.js";
+import { runCli } from "../../src/cli/index.ts";
+
+/**
+ * #2482 pm round-2 (PR #2511, cross_surface_contract_parity_tested_all_surfaces):
+ * every prior case in this file exercises the MCP surface only
+ * (`server.listRelationshipTypes` / `server.store` / the service layer
+ * directly). The REST route (`actions.ts`) and the CLI (`src/cli/index.ts`,
+ * which itself calls the REST route) carry the matching `empty_reason`/`hint`
+ * wiring in the diff but had no test asserting it reaches an actual HTTP
+ * response or CLI invocation — a REST-path regression in this exact feature
+ * would not have been caught by anything this file previously shipped.
+ */
+function resolveTestApiBaseUrl(): string {
+  const port = process.env.NEOTOMA_SESSION_DEV_PORT || process.env.NEOTOMA_HTTP_PORT || "18080";
+  return `http://127.0.0.1:${port}`;
+}
+
+async function runNeotomaCli(
+  argvSuffix: string[]
+): Promise<{ exitCode: number; stdout: string; stderr: string; error?: unknown }> {
+  const stdoutParts: string[] = [];
+  const stderrParts: string[] = [];
+  const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+    stdoutParts.push(
+      typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString("utf8")
+    );
+    return true;
+  });
+  const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+    stderrParts.push(
+      typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString("utf8")
+    );
+    return true;
+  });
+  const prevExit = process.exitCode;
+  process.exitCode = undefined;
+  let caught: unknown;
+  try {
+    await runCli(["node", "neotoma", ...argvSuffix]);
+  } catch (err) {
+    caught = err;
+  }
+  const exitCode =
+    process.exitCode !== undefined && process.exitCode !== 0
+      ? process.exitCode
+      : caught
+        ? 1
+        : (process.exitCode ?? 0);
+  process.exitCode = prevExit;
+  stdoutSpy.mockRestore();
+  stderrSpy.mockRestore();
+  return { exitCode, stdout: stdoutParts.join(""), stderr: stderrParts.join(""), error: caught };
+}
 
 const TEST_USER = "00000000-0000-0000-0000-0000000a2482";
 let idCounter = 0;
@@ -72,6 +125,35 @@ async function wipeGlobalRegistry(): Promise<void> {
   await db.from(RELATIONSHIP_TYPE_REGISTRY_TABLE).delete().eq("scope", "global");
   invalidateRelationshipTypeCache();
   resetRelationshipTypeLazyRepairForTests();
+}
+
+/**
+ * Directly restores PART_OF/REFERS_TO as effective global registrations,
+ * bypassing the lazy-repair path entirely. Used by REST/CLI surface tests
+ * that need a healthy registry WITHOUT relying on the server realm's
+ * one-shot repair (see the scope note above the REST/CLI describe blocks):
+ * this file's own top-level `beforeEach` deletes both types before every
+ * test via `cleanup()`, and a test that does not itself trigger the one
+ * legitimate server-realm repair needs another way back to a healthy
+ * baseline.
+ */
+async function restorePartOfAndRefersTo(): Promise<void> {
+  await relationshipTypeRegistry.register({
+    relationship_type: "PART_OF",
+    scope: "global",
+    description: "Structural containment: the source is a component of the target.",
+    acyclic: true,
+    created_by: null,
+    allow_case_variant: true,
+  });
+  await relationshipTypeRegistry.register({
+    relationship_type: "REFERS_TO",
+    scope: "global",
+    description: "The source mentions or cites the target.",
+    created_by: null,
+    allow_case_variant: true,
+  });
+  invalidateRelationshipTypeCache();
 }
 
 async function cleanup(): Promise<void> {
@@ -334,6 +416,182 @@ describe("#2482: empty relationship-type registry repairs built-ins on read", ()
     ).rejects.toMatchObject({
       code: "unregistered_relationship_type",
       hint: expect.stringContaining("register_relationship_type"),
+    });
+  });
+
+  /**
+   * SCOPE NOTE, found while writing these REST/CLI surface tests (PR #2511 pm
+   * round-2): `vitest.global_setup.ts` boots the shared in-process HTTP test
+   * server via its OWN isolated `import("./src/actions.ts")`, a genuinely
+   * separate module realm from the one this test file's top-level imports
+   * resolve. `resetRelationshipTypeLazyRepairForTests` (called by
+   * `wipeGlobalRegistry`) therefore has NO EFFECT on the live server's own
+   * `lazyRepairAttempted` state — only on this test file's own, disconnected
+   * copy (see that function's doc for the full explanation). The MCP-surface
+   * tests above are unaffected because `new NeotomaServer()` there is
+   * instantiated through the TEST FILE's own import graph, not the globalSetup
+   * realm.
+   *
+   * Consequence: the server realm's empty→repair transition is genuinely
+   * ONE-SHOT for the life of this whole test run, same as it would be for one
+   * process of a real deployment. `wipeGlobalRegistry` still empties the table
+   * (a real DB effect, visible to every realm), but only the FIRST test below
+   * that hits an empty table through the REST/CLI surface can observe the
+   * repair actually firing; every test after it runs against an
+   * already-healthy registry the first test's repair left behind. Ordered and
+   * commented accordingly — this is not a flaw in the fix, it is what "one
+   * repair per process" means when the test process itself hosts two module
+   * realms of the same file.
+   */
+  describe("REST surface parity (#2482 pm round-2)", () => {
+    it("POST /list_relationship_types never returns a bare empty list, and repairs within the same request (the one legitimate empty-registry repair this server realm gets)", async () => {
+      await wipeGlobalRegistry();
+      const rawGlobalRows = await db
+        .from(RELATIONSHIP_TYPE_REGISTRY_TABLE)
+        .select("id")
+        .eq("scope", "global");
+      expect((rawGlobalRows.data ?? []).length).toBe(0);
+
+      const response = await fetch(`${resolveTestApiBaseUrl()}/list_relationship_types`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ user_id: TEST_USER }),
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as ListResponse;
+
+      expect(body.total).toBeGreaterThanOrEqual(BUILT_IN_RELATIONSHIP_TYPES.length);
+      expect(body.empty_reason).toBeUndefined();
+      const names = new Set(body.relationship_types.map((r) => r.relationship_type));
+      expect(names.has("PART_OF")).toBe(true);
+      expect(names.has("REFERS_TO")).toBe(true);
+    });
+
+    it("POST /store with inline PART_OF and REFERS_TO succeeds over REST on a healthy registry, and both edges read back live", async () => {
+      // No wipe here — see the scope note above. The previous test already
+      // spent this server realm's one repair, so a wipe here would leave the
+      // registry empty with no second repair available, which is not the
+      // scenario this test is proving (that a healthy registry's write path
+      // works over REST — the empty→repair transition itself is proven by
+      // the test above). This file's own `beforeEach` deletes PART_OF and
+      // REFERS_TO before every test (`cleanup()`), so restore them directly
+      // (bypassing the spent repair) rather than relying on the previous
+      // test's state surviving `beforeEach`.
+      await restorePartOfAndRefersTo();
+      expect(await relationshipTypeRegistry.get("PART_OF")).not.toBeNull();
+
+      const child = await ownedEid();
+      const parent = await ownedEid();
+      const message = await ownedEid();
+      const issue = await ownedEid();
+
+      const response = await fetch(`${resolveTestApiBaseUrl()}/store`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          user_id: TEST_USER,
+          entities: [{ entity_type: "g2482_test_node", canonical_name: `g2482-rest-anchor-${eid()}` }],
+          relationships: [
+            { relationship_type: "PART_OF", source_entity_id: child, target_entity_id: parent },
+            { relationship_type: "REFERS_TO", source_entity_id: message, target_entity_id: issue },
+          ],
+          idempotency_key: `g2482-rest-store-${process.pid}-${Date.now()}`,
+        }),
+      });
+      expect(response.status, await response.clone().text()).toBe(200);
+
+      const partOfEdges = await relationshipsService.getRelationshipsByType(
+        "PART_OF",
+        false,
+        TEST_USER
+      );
+      expect(
+        partOfEdges.some((r) => r.source_entity_id === child && r.target_entity_id === parent)
+      ).toBe(true);
+      const refersToEdges = await relationshipsService.getRelationshipsByType(
+        "REFERS_TO",
+        false,
+        TEST_USER
+      );
+      expect(
+        refersToEdges.some((r) => r.source_entity_id === message && r.target_entity_id === issue)
+      ).toBe(true);
+    });
+
+    it("POST /list_relationship_types reports empty_reason: filtered_to_empty for a keyword match on a healthy registry, not registry_unseeded", async () => {
+      // No wipe here: confirms the healthy-registry branch over REST, the
+      // counterpart to the unseeded branch above. `beforeEach`'s `cleanup()`
+      // deletes PART_OF/REFERS_TO specifically, but `describeEmpty`'s
+      // registry_unseeded/filtered_to_empty classification looks at the
+      // WHOLE effective set, and the other 26 built-ins the first test in
+      // this block repaired are untouched by `cleanup()` — so the registry
+      // is still non-empty here without needing a restore.
+      const response = await fetch(`${resolveTestApiBaseUrl()}/list_relationship_types`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          user_id: TEST_USER,
+          keyword: "g2482_definitely_not_a_real_relationship_type_keyword",
+        }),
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as ListResponse;
+      expect(body.total).toBe(0);
+      expect(body.empty_reason).toBe("filtered_to_empty");
+    });
+  });
+
+  describe("CLI surface parity (#2482 pm round-2)", () => {
+    // See the scope note above the REST describe block: the CLI proxies the
+    // REST route in the SAME globalSetup server realm, whose one legitimate
+    // repair was already spent by the REST block above. These tests
+    // therefore assert CLI parity for the fields on an already-healthy
+    // registry rather than re-wiping — the empty→repair transition itself is
+    // already proven end-to-end over REST directly above, and CLI parity for
+    // that specific transition is proven over MCP earlier in this file
+    // (`describeEmpty` test) plus the code-level parity Waxwing's review
+    // confirmed (`relationship-types list` prints the REST body verbatim).
+    it("`relationship-types list` reflects the healthy (post-repair) vocabulary including empty_reason/hint being absent", async () => {
+      // beforeEach's cleanup() deletes PART_OF/REFERS_TO before every test in
+      // this file; restore them directly (the server realm's one repair was
+      // already spent by the REST block above) so this CLI assertion checks
+      // the same "PART_OF/REFERS_TO present" claim the REST test did.
+      await restorePartOfAndRefersTo();
+      const result = await runNeotomaCli([
+        "--json",
+        "--api-only",
+        "--base-url",
+        resolveTestApiBaseUrl(),
+        "relationship-types",
+        "list",
+      ]);
+      expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+      const body = JSON.parse(result.stdout) as ListResponse;
+      expect(body.total).toBeGreaterThanOrEqual(BUILT_IN_RELATIONSHIP_TYPES.length);
+      expect(body.empty_reason).toBeUndefined();
+      expect(
+        body.relationship_types.some((r) => r.relationship_type === "PART_OF")
+      ).toBe(true);
+      expect(
+        body.relationship_types.some((r) => r.relationship_type === "REFERS_TO")
+      ).toBe(true);
+    });
+
+    it("`relationship-types list --keyword <nonsense>` surfaces filtered_to_empty over the CLI, not registry_unseeded", async () => {
+      const result = await runNeotomaCli([
+        "--json",
+        "--api-only",
+        "--base-url",
+        resolveTestApiBaseUrl(),
+        "relationship-types",
+        "list",
+        "--keyword",
+        "g2482_definitely_not_a_real_relationship_type_keyword",
+      ]);
+      expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+      const body = JSON.parse(result.stdout) as ListResponse;
+      expect(body.total).toBe(0);
+      expect(body.empty_reason).toBe("filtered_to_empty");
     });
   });
 });
