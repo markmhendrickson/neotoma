@@ -121,6 +121,14 @@ To discover the actual IP, start the server, make a request through the tunnel, 
 
 `NEOTOMA_TRUSTED_PROXY_IPS` and `NEOTOMA_TRUST_PROD_LOOPBACK=1` are independent and can coexist. `NEOTOMA_TRUST_PROD_LOOPBACK=1` bypasses the XFF check entirely and remains valid for single-host deployments without a tunnel.
 
+**Production rule: a loopback/trusted-only forwarded chain avoids disqualifying a caller but does not, by itself, qualify one.** `x-forwarded-for` can only ever narrow who counts as local, never widen it. A loopback socket whose forwarded chain consists entirely of loopback addresses or already-trusted proxy IPs is treated the same as a loopback socket with no forwarded header at all: in production, it still needs either a nearest hop listed in `NEOTOMA_TRUSTED_PROXY_IPS` or the explicit `NEOTOMA_TRUST_PROD_LOOPBACK=1` opt-in to be treated as local.
+
+A same-host proxy that sends such a chain (e.g. one that happens to inject a loopback address as an XFF entry) is refused with a `401` in production if neither setting is configured. This does not produce the "XFF contains untrusted IP(s)" diagnostic above — that line only fires when a genuinely untrusted IP is present in the chain, and this case has none. Instead it logs a separate, rate-limited diagnostic naming the fix:
+```
+[neotoma] isLocalRequest: production request refused — loopback socket with a forwarded chain of only loopback/trusted hops, but the nearest hop is not itself a configured trusted proxy. Set NEOTOMA_TRUSTED_PROXY_IPS to the nearest hop's address (or its enclosing CIDR), or set NEOTOMA_TRUST_PROD_LOOPBACK=1 for a single-host deployment.
+```
+The message never echoes header values or client IPs — only the setting names an operator needs to act on.
+
 ### OAuth Bearer enforcement on `/mcp` (v0.12+)
 
 Pre-v0.12, an unrecognized OAuth `Bearer` token on `/mcp` could fall through to anonymous attribution if the token was syntactically a UUID. v0.12 closes that gap:

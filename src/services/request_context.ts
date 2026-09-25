@@ -61,6 +61,15 @@ export interface RequestContext {
    * guest to have direct generic `/store` access to every bookkeeping type.
    */
   bypassGuestStoreAccessPolicy?: boolean;
+  /**
+   * Connection id resolved by the `/mcp` HTTP gate for this request: a
+   * development identity the gate assigned or admitted, a connection id it
+   * validated, or `null` when the gate resolved none. The MCP server reads
+   * this, never the request's own `X-Connection-Id` header, so a
+   * connection-id-derived identity always matches the gate's decision.
+   * Absent outside the `/mcp` HTTP route (stdio, REST).
+   */
+  mcpConnectionId?: string | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -122,6 +131,14 @@ export function getCurrentAAuthAdmission(): AAuthAdmissionContext | null {
 }
 
 /**
+ * Read the connection id the `/mcp` HTTP gate resolved for this request, or
+ * `null` when it resolved none (or no gate ran, e.g. stdio).
+ */
+export function getCurrentMcpConnectionId(): string | null {
+  return storage.getStore()?.mcpConnectionId ?? null;
+}
+
+/**
  * Run `fn` with an {@link ExternalActor} attached to the current request
  * context. If a context already exists it is cloned with the actor slot
  * set; if no context is active a minimal one is created. Existing
@@ -139,6 +156,7 @@ export function runWithExternalActor<T>(
     aauthAdmission: existing?.aauthAdmission ?? null,
     externalActor: actor,
     bypassGuestStoreAccessPolicy: existing?.bypassGuestStoreAccessPolicy ?? false,
+    mcpConnectionId: existing?.mcpConnectionId ?? null,
   };
   return storage.run(merged, fn);
 }
