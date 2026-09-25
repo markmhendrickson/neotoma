@@ -14,6 +14,7 @@ import { getCurrentAgentIdentity } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 import { getActiveRelationshipTypeNames } from "./relationship_types/registry.js";
+import { assertEntitiesOwned } from "./scoped_reads.js";
 
 /** Minimal shape of a `relationship_observations` row needed for liveness. */
 interface RelationshipObservationRow {
@@ -191,6 +192,9 @@ export class RelationshipsService {
   }): Promise<RelationshipSnapshot> {
     enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
     await this.assertRegisteredType(params.relationship_type, params.user_id);
+    // Both endpoints must be entities the caller owns. A missing entity and
+    // one owned by another user are refused with the same error.
+    await assertEntitiesOwned([params.source_entity_id, params.target_entity_id], params.user_id);
     await this.assertAcyclicWrite(params);
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;

@@ -79,6 +79,8 @@ neotoma relationships create --source-entity-id <container_id> --target-entity-i
 
 Entity IDs are returned in the `store` response (`entities[].entity_id`). If `relationships create` fails or is unavailable, check `neotoma relationships --help` for current syntax.
 
+Both `--source-entity-id` and `--target-entity-id` must be existing entities owned by the authenticated user; an endpoint that does not exist and one owned by another user are refused identically. Store the entity first, then link it. After a `store` call that named relationships, check the response's `relationships_refused` array rather than assuming every requested edge exists — see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION] and `docs/subsystems/relationships.md` § 6.1.
+
 ## Relationship creation guidance (canonical)
 
 For when and how to link a newly stored entity to existing entities (pre-store candidate discovery, `retrieve_related_entities`, canonical relationship examples, direction convention), see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].

@@ -75,7 +75,7 @@ flowchart TD
 | Vitest integration tests | 191 |
 | Vitest CLI tests | 79 |
 | Vitest contract tests | 20 |
-| Vitest security tests | 11 |
+| Vitest security tests | 12 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -727,7 +727,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (11):**
+**Files (12):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
@@ -736,6 +736,7 @@ flowchart TD
 - `tests/security/rendered_page_csp.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`
 - `tests/security/schemas_per_type_scope_guard.test.ts`
+- `tests/security/scoped_source_and_relationship_reads.test.ts`
 - `tests/security/sort_by_sql_injection.test.ts`
 - `tests/security/store_external_actor_claim.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
