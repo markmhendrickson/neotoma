@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **629**
-- Backend and repo Vitest files: **593**
+- Total automated test files: **630**
+- Backend and repo Vitest files: **594**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 172 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 185 |
+| Vitest integration tests | 186 |
 | Vitest CLI tests | 79 |
 | Vitest contract tests | 20 |
 | Vitest security tests | 9 |
@@ -414,7 +414,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (185):**
+**Files (186):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -453,6 +453,7 @@ flowchart TD
 - `tests/integration/db_abort_client_disconnect_survival.test.ts`
 - `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/describe_instance_policy_auth.test.ts`
+- `tests/integration/describe_instance_policy_lookup_failed_signal.test.ts`
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
