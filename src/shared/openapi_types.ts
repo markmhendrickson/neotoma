@@ -2684,10 +2684,15 @@ export interface components {
       updated_by?: string;
     };
     /**
-     * @description Response shape for `describe_instance_policy`. `policy` is explicitly
-     *     `null` when no policy is configured — never a 404 and never `{}`, so a
-     *     caller can distinguish "this instance has no policy" from "this instance
-     *     denies everything". Read-only; the call creates no observations.
+     * @description Response shape for `describe_instance_policy` and `GET /instance-policy`
+     *     (same underlying lookup, shared shape). `policy` is explicitly `null`
+     *     when no policy is configured — never a 404 and never `{}`, so a caller
+     *     can distinguish "this instance has no policy" from "this instance
+     *     denies everything". `lookup_failed` (and `error`) are present ONLY
+     *     when the underlying read failed, so a caller can further distinguish
+     *     "no policy configured" from "policy state is unknown" — treat the
+     *     latter as restricted, not unrestricted. Read-only; the call creates no
+     *     observations.
      */
     InstancePolicyResponse: {
       /** @description The configured instance policy, or `null` when unset. */

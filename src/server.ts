@@ -4447,6 +4447,19 @@ export class NeotomaServer {
    * distinguishable from "this instance denies everything". `entity_id` matches
    * the HTTP `GET /instance-policy` / CLI `instance-policy show --json` envelope
    * so agents can pass it to `correct()` when updating the policy remotely.
+   *
+   * `lookup_failed` (and `error`) are added ONLY on a failed read, mirroring
+   * `GET /instance-policy` in actions.ts exactly: a remote client reading only
+   * `policy` must see byte-identical responses to before this field existed
+   * (instance_policy_entity_id_surface_parity.test.ts pins the exact
+   * {policy, entity_id} key set on the success path). Before this fix, this
+   * handler called the strict `getInstancePolicyResult()` but discarded
+   * `lookup_failed`/`error` from the result, so a failed lookup and a
+   * genuinely unconfigured instance both collapsed to
+   * `{policy: null, entity_id: null}` on the wire — the same conflation this
+   * PR fixed on four other surfaces, and the one that matters most here since
+   * this PR's own new instructions tell agents to call this tool before their
+   * first write.
    */
   private async describeInstancePolicy(): Promise<{
     content: Array<{ type: string; text: string }>;
@@ -4467,7 +4480,11 @@ export class NeotomaServer {
         {
           type: "text",
           text: JSON.stringify(
-            { policy: result.policy ?? null, entity_id: result.entity_id ?? null },
+            {
+              policy: result.policy ?? null,
+              entity_id: result.entity_id ?? null,
+              ...(result.lookup_failed ? { lookup_failed: true, error: result.error } : {}),
+            },
             null,
             2
           ),
