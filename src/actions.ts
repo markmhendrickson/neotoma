@@ -1457,6 +1457,39 @@ export function isLocalRequest(req: express.Request): boolean {
   return !isProductionEnvironment();
 }
 
+/**
+ * Connection ids that name a development identity rather than a stored OAuth
+ * connection: `dev-local` / `dev-local-http` (assigned by the /mcp gate to a
+ * local caller in development mode) and `test-connection-bypass` (honoured by
+ * the MCP server only under the test runner).
+ */
+const DEVELOPMENT_CONNECTION_IDS: ReadonlySet<string> = new Set([
+  "dev-local",
+  "dev-local-http",
+  "test-connection-bypass",
+]);
+
+export function isDevelopmentConnectionId(value: unknown): boolean {
+  return typeof value === "string" && DEVELOPMENT_CONNECTION_IDS.has(value);
+}
+
+/**
+ * Whether a client-sent development connection id may be honoured for this
+ * request. Mirrors the conditions under which the /mcp gate assigns one
+ * itself, so sending the header never grants more than omitting it:
+ *
+ *   - development mode: encryption disabled, and `isLocalRequest`'s own
+ *     environment rule (non-production `NEOTOMA_ENV`, or the explicit
+ *     `NEOTOMA_TRUST_PROD_LOOPBACK=1` opt-in);
+ *   - a local caller by `isLocalRequest`: loopback socket address, and every
+ *     X-Forwarded-For hop loopback or a configured trusted proxy. Forwarded
+ *     headers can only disqualify a caller, never qualify one.
+ */
+export function developmentConnectionIdAllowed(req: express.Request): boolean {
+  if (config.encryption.enabled) return false;
+  return isLocalRequest(req);
+}
+
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
 /** Exported for tests asserting the cookie maxAge and the server-side session
  *  expiry agree — the invariant setOAuthKeySessionCookie's docstring names. */
@@ -1904,6 +1937,17 @@ app.all("/mcp", async (req, res) => {
       | undefined;
     let bearerValidated = false;
 
+    // Development connection identities are assigned by this gate, not by the
+    // client. A client-sent value is honoured only where the gate would assign
+    // the same identity itself: a local caller in development mode. Anywhere
+    // else it is dropped, so the request is authenticated exactly as if the
+    // header had been omitted. Downstream MCP handlers read the same header, so
+    // it is removed from the request rather than only from this local.
+    if (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req)) {
+      delete req.headers["x-connection-id"];
+      connectionIdHeader = undefined;
+    }
+
     // Key-derived Bearer token is accepted whenever a key source is configured (regardless of
     // NEOTOMA_ENCRYPTION_ENABLED). This lets tunnel setups authenticate via `neotoma auth mcp-token`
     // without enabling full data-at-rest encryption.
@@ -2025,14 +2069,17 @@ app.all("/mcp", async (req, res) => {
       });
     }
 
-    // Validate X-Connection-Id when that is the auth method (no Bearer). Invalid IDs return 401
-    // so Cursor shows Connect button instead of blocking on "Loading tools".
-    // Skip validation for dev-local and dev-local-http (no-auth defaults).
+    // Validate X-Connection-Id when it is the auth method (no Bearer was validated above).
+    // Invalid IDs return 401 so Cursor shows Connect button instead of blocking on
+    // "Loading tools". dev-local and dev-local-http skip lookup: reaching this point they
+    // were either assigned by this gate or passed the local-development check above.
+    // An unvalidated Bearer does not excuse the lookup: the connection id is then the
+    // only credential on the request.
     if (
       connectionIdHeader &&
       connectionIdHeader !== "dev-local" &&
       connectionIdHeader !== "dev-local-http" &&
-      !authHeader?.startsWith("Bearer ")
+      !bearerValidated
     ) {
       try {
         const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
