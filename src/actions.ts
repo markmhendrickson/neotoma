@@ -6,6 +6,7 @@ import morgan from "morgan";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { pathToFileURL } from "node:url";
 import { db } from "./db.js";
 import { config } from "./config.js";
@@ -1355,16 +1356,20 @@ export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = process.en
 
   // Strip IPv4-mapped IPv6 prefix for comparison
   const normalized = ip.trim().replace(/^::ffff:/i, "");
+  // A non-IP string (or a non-IPv4 string reaching the CIDR branch below)
+  // must never land inside a configured range by accident: the dotted-part
+  // coercion below is otherwise lenient about what it accepts as a number.
+  if (!isIP(normalized)) return false;
 
   for (const candidate of candidates) {
     if (candidate === normalized || candidate === ip.trim()) return true;
 
     // Simple IPv4 CIDR check (covers the common case: 100.64.0.0/10 for Cloudflare Tunnel egress)
     const slashIdx = candidate.indexOf("/");
-    if (slashIdx !== -1) {
+    if (slashIdx !== -1 && isIP(normalized) === 4) {
       const cidrBase = candidate.slice(0, slashIdx);
       const prefixLen = parseInt(candidate.slice(slashIdx + 1), 10);
-      if (!isNaN(prefixLen) && prefixLen >= 0 && prefixLen <= 32) {
+      if (!isNaN(prefixLen) && prefixLen >= 0 && prefixLen <= 32 && isIP(cidrBase) === 4) {
         const ipParts = normalized.split(".").map(Number);
         const cidrParts = cidrBase.split(".").map(Number);
         if (ipParts.length === 4 && cidrParts.length === 4) {
@@ -1413,6 +1418,26 @@ function forwardedForValues(req: express.Request): string[] {
 function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
   const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
   return value === "production" || value === "prod";
+}
+
+// Rate-limits the "loopback/trusted chain, but nearest hop isn't itself a
+// trusted proxy" diagnostic below so a hot path (a same-host sidecar that
+// always sends this shape) can't flood stderr. One line per interval is
+// enough for an operator to notice and go fix their config; it never
+// includes header values, only the setting names to use.
+const UNTRUSTED_NEAREST_HOP_LOG_INTERVAL_MS = 60_000;
+let lastUntrustedNearestHopLogAt = 0;
+
+function logUntrustedNearestHopOncePerInterval(): void {
+  const now = Date.now();
+  if (now - lastUntrustedNearestHopLogAt < UNTRUSTED_NEAREST_HOP_LOG_INTERVAL_MS) return;
+  lastUntrustedNearestHopLogAt = now;
+  process.stderr.write(
+    "[neotoma] isLocalRequest: production request refused — loopback socket with a forwarded " +
+      "chain of only loopback/trusted hops, but the nearest hop is not itself a configured " +
+      "trusted proxy. Set NEOTOMA_TRUSTED_PROXY_IPS to the nearest hop's address (or its " +
+      "enclosing CIDR), or set NEOTOMA_TRUST_PROD_LOOPBACK=1 for a single-host deployment.\n"
+  );
 }
 
 /**
@@ -1474,6 +1499,19 @@ export function isLocalRequest(req: express.Request): boolean {
     // unchanged: a loopback socket is local there either way.
     const nearestHop = forwardedFor[forwardedFor.length - 1]!;
     if (isProductionEnvironment() && isTrustedProxyIP(nearestHop)) return true;
+
+    // The chain passed the untrusted-entry check above (every hop is
+    // loopback or a trusted proxy), but in production it still didn't
+    // qualify because the nearest hop specifically isn't a trusted proxy
+    // (e.g. it's loopback, or NEOTOMA_TRUSTED_PROXY_IPS is unset). Without
+    // this line that refusal is silent: the branch above only fires when an
+    // untrusted IP is present, and this chain has none. Only log when the
+    // request is actually about to be refused — not when
+    // NEOTOMA_TRUST_PROD_LOOPBACK=1 will still admit it below. Never echo
+    // header values here — only the setting names an operator needs.
+    if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK !== "1") {
+      logUntrustedNearestHopOncePerInterval();
+    }
   }
 
   if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
