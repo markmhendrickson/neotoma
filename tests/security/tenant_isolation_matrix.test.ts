@@ -555,9 +555,9 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
 
     it("body user_id override does not let user A write into user B's relationship scope", async () => {
       // A bulk batch authored as user A that references user B's entity_id as
-      // a relationship target MUST produce only a user-A-scoped
-      // relationship_snapshot. User B's relationship reads MUST NOT surface
-      // it (no enumeration oracle across the tenant boundary).
+      // a relationship target MUST NOT produce an edge at all: a target the
+      // caller does not own is refused exactly like a missing one. User B's
+      // relationship reads MUST NOT surface anything either.
       const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const srcName = `${TEST_PREFIX}_bulkrel_${suffix}`;
       // The store relationships[] schema requires target_entity_id to match
@@ -614,18 +614,17 @@ describe("Tenant isolation matrix (GHSA-wrr4-782v-jhwh)", () => {
         if (stored?.observation_id) createdObservationIds.push(stored.observation_id);
         if (typeof json.source_id === "string") createdSourceIds.push(json.source_id);
 
-        // Any relationship_snapshot pointing at user B's entity that was
-        // created by this batch MUST be scoped to user A (the batch author),
-        // never silently re-homed into user B's tenant.
+        // No relationship pointing at user B's entity exists in either
+        // user's scope: the edge to a target user A does not own is refused.
         const { data: snaps } = await db
           .from("relationship_snapshots")
           .select("*")
           .eq("target_entity_id", bobTargetId);
-        expect((snaps ?? []).length).toBeGreaterThan(0);
-        for (const snap of snaps ?? []) {
-          expect(snap.user_id).toBe(userA.userId);
-          expect(snap.user_id).not.toBe(userB.userId);
-        }
+        expect(snaps ?? []).toEqual([]);
+        const createdTargets = (json.relationships_created ?? []).map(
+          (r: { target_entity_id?: string }) => r.target_entity_id
+        );
+        expect(createdTargets).not.toContain(bobTargetId);
 
         // The cross-tenant reference MUST NOT appear in user B's reads.
         const { json: bobAfter } = await callEndpoint("/list_relationships", {
