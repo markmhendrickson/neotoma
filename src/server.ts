@@ -5147,6 +5147,20 @@ export class NeotomaServer {
       }
     }
 
+    // #2482: a bare `{ relationship_types: [], total: 0 }` is indistinguishable
+    // from "this instance genuinely has no permitted types", which is never
+    // true once the built-in seed has run. Explain WHY the list is empty
+    // rather than letting a caller read unknown as a conclusion.
+    const emptyReason =
+      registrations.length === 0
+        ? await relationshipTypeRegistry.describeEmpty({
+            user_id: userId,
+            keyword: parsed.keyword,
+            scope: parsed.scope,
+            include_deactivated: parsed.include_deactivated,
+          })
+        : null;
+
     return this.buildTextResponse({
       relationship_types: registrations.map((r) => ({
         ...r,
@@ -5155,6 +5169,7 @@ export class NeotomaServer {
           : {}),
       })),
       total: registrations.length,
+      ...(emptyReason ? { empty_reason: emptyReason.empty_reason, hint: emptyReason.hint } : {}),
     });
   }
 
@@ -5187,11 +5202,11 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId();
 
     {
-      const { enforceRelationshipTypeCapability, contextFromAgentIdentity } =
+      const { enforceRelationshipTypeCapabilityWithHint, contextFromAgentIdentity } =
         await import("./services/agent_capabilities.js");
       const { getCurrentAgentIdentity } = await import("./services/request_context.js");
       const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
-      enforceRelationshipTypeCapability(parsed.relationship_type, parsed.scope, ctx);
+      await enforceRelationshipTypeCapabilityWithHint(parsed.relationship_type, parsed.scope, ctx);
     }
 
     const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =

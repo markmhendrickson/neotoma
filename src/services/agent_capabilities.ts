@@ -559,6 +559,29 @@ export function getAgentCapabilitiesSource(): string {
  * with its own back-compat analysis. Gating only the NEW surface means it is
  * safe from day one with no migration, which is the right asymmetry.
  */
+/**
+ * #2482: when the refused name is one of the BUILT-INs (`PART_OF`,
+ * `REFERS_TO`, ...), telling the caller to get a grant and self-register is
+ * the wrong remedy — built-ins are meant to be seeded, not registered by an
+ * ungranted caller, and `list_relationship_types` already lazy-repairs an
+ * empty registry on read (`registry.ts`'s `resolveAllWithRepair`). If a
+ * built-in still reads as missing after that, the fix is an operator
+ * seed/repair, not a grant edit. Computed lazily (dynamic import) to avoid a
+ * module cycle between `agent_capabilities.ts` and `relationship_types/`.
+ */
+async function builtInRepairHint(relationshipType: string): Promise<string | null> {
+  const { BUILT_IN_RELATIONSHIP_TYPES } = await import("./relationship_types/seed_registry.js");
+  if (!BUILT_IN_RELATIONSHIP_TYPES.some((t) => t.relationship_type === relationshipType)) {
+    return null;
+  }
+  return (
+    `"${relationshipType}" is a built-in relationship type. If it is missing from ` +
+    `list_relationship_types, that is a seed/registry failure the instance should recover from ` +
+    `automatically on the next read (or via operator seed/repair) — it is not something this ` +
+    `grant is meant to fix by registering "${relationshipType}" as a new custom type.`
+  );
+}
+
 export function enforceRelationshipTypeCapability(
   relationshipType: string,
   scope: "user" | "global",
@@ -612,4 +635,35 @@ export function enforceRelationshipTypeCapability(
       "Relationship type registration requires an active agent_grant with the " +
       "register_relationship_type capability. Global scope additionally requires global permission.",
   });
+}
+
+/**
+ * Async wrapper around `enforceRelationshipTypeCapability` that appends the
+ * built-in-aware repair hint to a thrown `AgentCapabilityError`'s message
+ * when the refused name is a built-in (#2482). Callers on a path that can
+ * await (MCP/REST `register_relationship_type` handlers) should prefer this;
+ * `enforceRelationshipTypeCapability` itself stays synchronous for callers
+ * that cannot.
+ */
+export async function enforceRelationshipTypeCapabilityWithHint(
+  relationshipType: string,
+  scope: "user" | "global",
+  ctx: AgentCapabilityContext | null
+): Promise<void> {
+  try {
+    enforceRelationshipTypeCapability(relationshipType, scope, ctx);
+  } catch (err) {
+    if (err instanceof AgentCapabilityError) {
+      const repairHint = await builtInRepairHint(relationshipType);
+      if (repairHint) {
+        throw new AgentCapabilityError({
+          op: err.op,
+          entityType: err.entityType,
+          agentLabel: err.agentLabel,
+          hint: `${err.hint} ${repairHint}`,
+        });
+      }
+    }
+    throw err;
+  }
 }
