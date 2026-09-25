@@ -6332,7 +6332,7 @@ app.post("/agents/grants", async (req, res) => {
       (req.body?.user_id as string | undefined) ?? undefined
     );
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const { createGrant } = await import("./services/agent_grants.js");
+    const { createGrant, grantAdmissionWarnings } = await import("./services/agent_grants.js");
     const grant = await createGrant(userId, {
       label: typeof body.label === "string" ? body.label : "",
       capabilities: Array.isArray(body.capabilities) ? (body.capabilities as any) : [],
@@ -6342,7 +6342,8 @@ app.post("/agents/grants", async (req, res) => {
       match_thumbprint: typeof body.match_thumbprint === "string" ? body.match_thumbprint : null,
       notes: typeof body.notes === "string" ? body.notes : null,
     });
-    return res.status(201).json({ grant });
+    const warnings = grantAdmissionWarnings(grant);
+    return res.status(201).json(warnings.length > 0 ? { grant, warnings } : { grant });
   } catch (error) {
     const mapped = grantsCommonHandlers.errorEnvelopeFromGrantError(error);
     if (mapped) {
@@ -6366,7 +6367,8 @@ app.patch("/agents/grants/:id", async (req, res) => {
       (req.body?.user_id as string | undefined) ?? undefined
     );
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const { updateGrantFields } = await import("./services/agent_grants.js");
+    const { updateGrantFields, grantAdmissionWarnings } =
+      await import("./services/agent_grants.js");
     const updates: Record<string, unknown> = {};
     if (typeof body.label === "string") updates.label = body.label;
     if (Array.isArray(body.capabilities)) updates.capabilities = body.capabilities;
@@ -6379,7 +6381,8 @@ app.patch("/agents/grants/:id", async (req, res) => {
       updates.match_thumbprint = body.match_thumbprint;
     }
     const grant = await updateGrantFields(userId, req.params.id, updates as any);
-    return res.json({ grant });
+    const warnings = grantAdmissionWarnings(grant);
+    return res.json(warnings.length > 0 ? { grant, warnings } : { grant });
   } catch (error) {
     const mapped = grantsCommonHandlers.errorEnvelopeFromGrantError(error);
     if (mapped) {
