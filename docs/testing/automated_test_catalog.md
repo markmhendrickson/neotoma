@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **640**
-- Backend and repo Vitest files: **604**
+- Total automated test files: **643**
+- Backend and repo Vitest files: **607**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 174 |
+| Vitest unit tests | 177 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 191 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (174):**
+**Files (177):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -245,6 +245,7 @@ flowchart TD
 - `tests/unit/request_context.test.ts`
 - `tests/unit/root_landing_git_sha.test.ts`
 - `tests/unit/root_landing_harness_snippets.test.ts`
+- `tests/unit/root_landing_production_env.test.ts`
 - `tests/unit/root_landing_site_nav_drift.test.ts`
 - `tests/unit/safe_request_log_format.test.ts`
 - `tests/unit/sandbox_boot_banner.test.ts`
@@ -262,6 +263,7 @@ flowchart TD
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
+- `tests/unit/shared_environment.test.ts`
 - `tests/unit/sign_in_session_wiring.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
 - `tests/unit/source_priority_ignored_warning.test.ts`
@@ -283,6 +285,7 @@ flowchart TD
 - `tests/unit/usage_digest_redaction.test.ts`
 - `tests/unit/usage_digest_schema.test.ts`
 - `tests/unit/usage_stats.test.ts`
+- `tests/unit/webhook_url_allowed.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
