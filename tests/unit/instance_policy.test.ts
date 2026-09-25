@@ -12,6 +12,7 @@ import {
   evaluateStorePolicy,
   assertStorePolicyAllows,
   renderInstancePolicyInstructions,
+  renderInstancePolicyUnavailableSection,
   StorePolicyDeniedError,
   type InstancePolicy,
   type SchemaResolver,
@@ -453,5 +454,22 @@ describe("instance policy — advisory instruction rendering (#1974)", () => {
       expect(text).toMatch(/rejected/);
       expect(text).not.toMatch(/accepted but violate/);
     });
+  });
+});
+
+describe("instance policy — unreadable-policy signal (unknown, not absent)", () => {
+  it("renders a short, non-empty section distinct from the no-policy case", () => {
+    const section = renderInstancePolicyUnavailableSection();
+    expect(section.length).toBeGreaterThan(0);
+    // Must not collapse to the same empty string a genuinely unconfigured
+    // policy renders as — that collapse is exactly the bug being fixed.
+    expect(section).not.toBe(renderInstancePolicyInstructions(null));
+  });
+
+  it("tells the agent to treat the policy as UNKNOWN, not absent, and act restricted", () => {
+    const section = renderInstancePolicyUnavailableSection();
+    expect(section).toMatch(/UNKNOWN/);
+    expect(section).toMatch(/not absent|not the same as/i);
+    expect(section.split("\n\n").length).toBeLessThanOrEqual(3);
   });
 });

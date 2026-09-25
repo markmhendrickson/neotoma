@@ -746,15 +746,25 @@ export class NeotomaServer {
 
     // Append this instance's declared data policy (#1974) so a cooperating
     // agent knows what this instance is for before its first write, rather than
-    // discovering the rules by being rejected. A read failure or an unset
-    // policy yields an empty section, leaving the instructions byte-identical
-    // to what they were before this feature — the handshake must never fail
-    // because a policy lookup did.
+    // discovering the rules by being rejected. An unset policy yields an empty
+    // section, leaving the instructions byte-identical to what they were before
+    // this feature. A FAILED lookup is not the same as unset — rendering it as
+    // empty is exactly the conflation #2131 fixed for standing rules on this
+    // same surface, so a failed lookup here renders the short "unknown, not
+    // absent" section via getInstancePolicyResult() instead of falling through
+    // to the lossy getInstancePolicy(). The handshake must never fail because a
+    // policy lookup did, hence the outer try/catch.
     let policySection = "";
     try {
-      const { getInstancePolicy, renderInstancePolicyInstructions } =
-        await import("./services/instance_policy.js");
-      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
+      const {
+        getInstancePolicyResult,
+        renderInstancePolicyInstructions,
+        renderInstancePolicyUnavailableSection,
+      } = await import("./services/instance_policy.js");
+      const policyResult = await getInstancePolicyResult();
+      policySection = policyResult.lookup_failed
+        ? renderInstancePolicyUnavailableSection()
+        : renderInstancePolicyInstructions(policyResult.policy);
     } catch (err) {
       logger.warn(`[instance_policy] instructions render skipped: ${(err as Error).message}`);
     }

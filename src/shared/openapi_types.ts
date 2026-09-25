@@ -2700,6 +2700,24 @@ export interface components {
        *     Opaque; do not parse.
        */
       entity_id?: string | null;
+      /**
+       * @description Present and `true` ONLY when the underlying policy read failed —
+       *     omitted entirely on every successful read, including when no
+       *     policy is configured. `policy` stays `null` in both the failed and
+       *     the not-configured case, so a caller that reads only `policy` sees
+       *     no behavior change; `lookup_failed` is what lets a caller tell the
+       *     two apart. A failed lookup means policy state is UNKNOWN, not that
+       *     the instance has no policy — do not treat writes as unrestricted
+       *     when this is `true`. Same conflation #2131 fixed for standing
+       *     rules, reappearing on this response before this field existed.
+       */
+      lookup_failed?: boolean;
+      /**
+       * @description Driver-level message for the failed lookup, present only alongside
+       *     `lookup_failed: true`. For logs and operator diagnostics; not a
+       *     policy statement.
+       */
+      error?: string;
     };
     /**
      * @description A single per-entity policy denial inside an `ERR_STORE_POLICY_DENIED`
