@@ -2012,8 +2012,16 @@ components:
           type: string
           enum: [claim, linked_attestation, oauth_link, webhook_signature]
           default: claim
+          description: |
+            Accepted for compatibility, but a request body can only assert an
+            external actor: the stored value is always `claim`. The stronger
+            tiers are assigned by server-side verification paths (the signed
+            GitHub webhook route, AAuth token claims, grant linkage).
         delivery_id:
           type: string
+          description: |
+            Not carried over from a request body; set only by the signed
+            GitHub webhook route.
         event_type:
           type: string
         repository:
