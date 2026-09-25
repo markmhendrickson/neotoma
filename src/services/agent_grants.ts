@@ -467,6 +467,17 @@ export interface GrantIdentityLookup {
    * a `match_thumbprint`. Diagnostic only; such a grant does not admit.
    */
   unbound_claim_match: boolean;
+  /**
+   * A grant whose `match_thumbprint` equals the presented key, but whose
+   * `status` is `suspended` or `revoked` rather than `active`. Reported
+   * so admission can distinguish "this key was pinned to a grant the
+   * operator turned off" (`grant_suspended` / `grant_revoked`) from
+   * "this key matches nothing" (`no_match`). Only the single
+   * most-recently-observed key-bound inactive grant is reported, mirroring
+   * the tie-break already used for active candidates. `null` when no
+   * key-bound grant matched at all, active or not.
+   */
+  inactive_grant: AgentGrant | null;
 }
 
 /**
@@ -487,7 +498,7 @@ export async function lookupGrantForIdentity(input: {
   const sub = trimOrNull(input.sub);
   const iss = trimOrNull(input.iss);
   const thumbprint = trimOrNull(input.thumbprint);
-  if (!thumbprint) return { grant: null, unbound_claim_match: false };
+  if (!thumbprint) return { grant: null, unbound_claim_match: false, inactive_grant: null };
 
   const key = cacheKeyForIdentity({ sub, iss, thumbprint });
   const now = Date.now();
@@ -537,33 +548,47 @@ async function scanForGrant(input: {
     sortBy: "last_observation_at",
     sortOrder: "desc",
   });
-  if (rows.length === 0) return { grant: null, unbound_claim_match: false };
+  if (rows.length === 0) {
+    return { grant: null, unbound_claim_match: false, inactive_grant: null };
+  }
 
   // queryEntities does not include user_id on the returned shape, so we
   // batch-fetch owners for the matched entities below.
-  const candidates: Array<{
+  type Candidate = {
     entity_id: string;
     snapshot: Record<string, unknown>;
     last_observation_at: string;
     created_at?: string;
-  }> = [];
+  };
+  const activeCandidates: Candidate[] = [];
+  // Key-bound grants whose status is NOT "active" — surfaced so admission
+  // can report grant_revoked / grant_suspended instead of silently
+  // treating a shut-off credential the same as one that never matched.
+  const inactiveCandidates: Candidate[] = [];
   let unboundClaimMatch = false;
 
   for (const row of rows) {
     const snap = row.snapshot ?? {};
-    if (snap.status !== "active") continue;
     const snapTp = trimOrNull(snap.match_thumbprint);
     if (snapTp) {
       // Key-bound grant: the presented key must be the pinned key.
       if (snapTp !== input.thumbprint) continue;
-      candidates.push({
+      const candidate: Candidate = {
         entity_id: row.entity_id,
         snapshot: snap,
         last_observation_at: row.last_observation_at,
         created_at: row.created_at,
-      });
+      };
+      if (snap.status === "active") {
+        activeCandidates.push(candidate);
+      } else {
+        // suspended / revoked (or any other non-active status) — still
+        // reported, never silently dropped like "no grant at all".
+        inactiveCandidates.push(candidate);
+      }
       continue;
     }
+    if (snap.status !== "active") continue;
     // Grant pins no key: it does not admit. Record the match so
     // admission can report why.
     if (claimsMatchGrant(input, trimOrNull(snap.match_sub), trimOrNull(snap.match_iss))) {
@@ -571,13 +596,11 @@ async function scanForGrant(input: {
     }
   }
 
-  if (candidates.length === 0) return { grant: null, unbound_claim_match: unboundClaimMatch };
-
-  candidates.sort((a, b) =>
+  activeCandidates.sort((a, b) =>
     (b.last_observation_at ?? "").localeCompare(a.last_observation_at ?? "")
   );
 
-  for (const cand of candidates) {
+  for (const cand of activeCandidates) {
     const owner = await getGrantOwner(cand.entity_id);
     if (!owner) continue;
     try {
@@ -587,12 +610,37 @@ async function scanForGrant(input: {
           last_observation_at: cand.last_observation_at,
         }),
         unbound_claim_match: false,
+        inactive_grant: null,
       };
     } catch {
       continue;
     }
   }
-  return { grant: null, unbound_claim_match: unboundClaimMatch };
+
+  // No active key-bound grant. Report the most-recently-observed
+  // key-bound inactive grant, if any, so admission can distinguish
+  // grant_revoked/grant_suspended from no_match.
+  inactiveCandidates.sort((a, b) =>
+    (b.last_observation_at ?? "").localeCompare(a.last_observation_at ?? "")
+  );
+  for (const cand of inactiveCandidates) {
+    const owner = await getGrantOwner(cand.entity_id);
+    if (!owner) continue;
+    try {
+      return {
+        grant: null,
+        unbound_claim_match: unboundClaimMatch,
+        inactive_grant: snapshotToGrant(cand.entity_id, owner, cand.snapshot, {
+          created_at: cand.created_at,
+          last_observation_at: cand.last_observation_at,
+        }),
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return { grant: null, unbound_claim_match: unboundClaimMatch, inactive_grant: null };
 }
 
 /** ---------- Write helpers ---------- */

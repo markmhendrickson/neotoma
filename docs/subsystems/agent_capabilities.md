@@ -32,6 +32,7 @@ Implementation:
 | AAuth-verified agent matched to an `active` grant                    | Yes — restricted to declared `(op, entity_type)` pairs on the grant. |
 | AAuth-verified agent with no matching grant                          | Falls through to attribution-only behaviour (no admission, must use Bearer/OAuth). |
 | AAuth-verified agent whose `sub` / `iss` names a grant that pins no key | Not admitted, and capability-gated writes are refused (`capability_denied`) even when Bearer/OAuth authenticates the request, until the grant is pinned. See [Identity rule](#identity-rule). |
+| AAuth-verified agent whose key is pinned to a grant that is `suspended` or `revoked` | Not admitted, and capability-gated writes are refused (`capability_denied`) even when Bearer/OAuth authenticates the request, until the grant is restored to `active`. See [Identity rule](#identity-rule). |
 | Anonymous / unverified-client tier                                   | No admission; subject to attribution policy. |
 
 The canonical use is pinning the Netlify forwarder
@@ -101,18 +102,30 @@ whose `sub` / `iss` match such a grant gets admission reason
 `aauth_admission_key_unbound` warning that points to
 [Pin a key to an existing grant](#pin-a-key-to-an-existing-grant).
 
+A grant's `status` is likewise part of the key binding: a key pinned to
+a grant that is later set to `suspended` or `revoked` stops admitting
+that key's signed requests — the pin does not carry over to "no grant
+at all". Admission reports `grant_revoked` or `grant_suspended`
+accordingly, and the server logs an `aauth_admission_inactive_grant`
+warning naming the grant and its current status. Restoring the grant to
+`active` (Inspector, `PATCH /agents/grants/{id}`, or `correct`) is what
+re-admits it; the key binding itself does not need to be re-pinned.
+
 Authentication and capability limits are separate decisions. A request
 can be authenticated by Bearer or OAuth and also carry an AAuth
 signature; the signature still decides which capability limits apply:
 
-- Signature bound to a grant (`match_thumbprint` matches): the grant's
-  capabilities are the ceiling, whatever authenticated the request.
+- Signature bound to an `active` grant (`match_thumbprint` matches):
+  the grant's capabilities are the ceiling, whatever authenticated the
+  request.
 - Signature whose `sub` / `iss` names a grant that pins no key
-  (`grant_key_unbound`): capability-gated writes (`store`, `correct`,
-  `create_relationship`, relationship-type registration, protected
-  types) are refused with `capability_denied` until the grant is
-  pinned. This does not depend on `NEOTOMA_AGENT_DEFAULT_DENY`, and a
-  Bearer/OAuth credential on the same request does not lift it.
+  (`grant_key_unbound`), or whose key is pinned to a grant that is now
+  `suspended` or `revoked` (`grant_suspended` / `grant_revoked`):
+  capability-gated writes (`store`, `correct`, `create_relationship`,
+  relationship-type registration, protected types) are refused with
+  `capability_denied`. This does not depend on
+  `NEOTOMA_AGENT_DEFAULT_DENY`, and a Bearer/OAuth credential on the
+  same request does not lift it.
 - No grant involved: `NEOTOMA_AGENT_DEFAULT_DENY` decides, as before.
 
 Take the thumbprint from the agent's own key material (for example
@@ -192,9 +205,15 @@ Admission resolves the verified identity to at most one grant:
 
 1. The most recently observed `active` grant whose `match_thumbprint`
    equals the signing key's thumbprint wins.
-2. Otherwise, no admission — the request stays attribution-only. The
-   reason is `grant_key_unbound` when a grant without a thumbprint pin
-   matched `sub` / `iss`, and `no_match` otherwise.
+2. Otherwise, no admission — the request stays attribution-only, and
+   capability-gated writes fail closed rather than falling back to an
+   unrecognized-agent ceiling. The reason is:
+   - `grant_revoked` / `grant_suspended` when the signing key is pinned
+     to a `revoked` / `suspended` grant (a key binding survives a
+     status change — it is not silently treated as unmatched),
+   - `grant_key_unbound` when a grant without a thumbprint pin matched
+     `sub` / `iss`,
+   - `no_match` otherwise.
 
 ## Status lifecycle
 

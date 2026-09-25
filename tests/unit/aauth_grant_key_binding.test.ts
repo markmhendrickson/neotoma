@@ -260,6 +260,113 @@ describe("grant admission requires a key binding", () => {
 });
 
 /**
+ * A caller whose key was pinned to a grant that is later revoked or
+ * suspended must be distinguishable from a caller who never matched any
+ * grant. Regression coverage for PR #2506 round-2 finding (Falco/Waxwing/
+ * Pavo, ffcebdbc2): `scanForGrant` previously dropped non-active grants
+ * before admission's `grant_revoked`/`grant_suspended` branches could ever
+ * run, so a revoked/suspended key-bound grant reported `no_match` — the
+ * same reason as an unrecognized agent.
+ */
+describe("grant admission distinguishes revoked/suspended from no_match", () => {
+  it("key pinned to a revoked grant: admission reason is grant_revoked, not no_match", async () => {
+    const agent = await freshKey();
+    putGrant("ent_grant_revoked", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: agent.thumbprint,
+      status: "revoked",
+    });
+
+    const { admission } = await verifyAndAdmit(await signedRequest(agent, { sub: SUB, iss: ISS }));
+
+    expect(admission.admitted).toBe(false);
+    expect(admission.reason).toBe("grant_revoked");
+    expect(admission.grant_id).toBe("ent_grant_revoked");
+    expect(admission.user_id).toBe(OWNER);
+  });
+
+  it("key pinned to a suspended grant: admission reason is grant_suspended, not no_match", async () => {
+    const agent = await freshKey();
+    putGrant("ent_grant_suspended", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: agent.thumbprint,
+      status: "suspended",
+    });
+
+    const { admission } = await verifyAndAdmit(await signedRequest(agent, { sub: SUB, iss: ISS }));
+
+    expect(admission.admitted).toBe(false);
+    expect(admission.reason).toBe("grant_suspended");
+    expect(admission.grant_id).toBe("ent_grant_suspended");
+    expect(admission.user_id).toBe(OWNER);
+  });
+
+  it("an active grant for the same identity still wins over an unrelated revoked one", async () => {
+    const revokedAgent = await freshKey();
+    const activeAgent = await freshKey();
+    putGrant("ent_grant_revoked_other_key", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: revokedAgent.thumbprint,
+      status: "revoked",
+    });
+    putGrant("ent_grant_active", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: activeAgent.thumbprint,
+    });
+
+    const { admission } = await verifyAndAdmit(
+      await signedRequest(activeAgent, { sub: SUB, iss: ISS })
+    );
+
+    expect(admission.admitted).toBe(true);
+    expect(admission.reason).toBe("admitted");
+    expect(admission.grant_id).toBe("ent_grant_active");
+  });
+
+  it("the most recently observed inactive grant wins when several key-bound grants for the same key are inactive", async () => {
+    const agent = await freshKey();
+    grantRows.push({
+      entity_id: "ent_grant_revoked_older",
+      user_id: OWNER,
+      snapshot: {
+        label: "older revoked",
+        status: "revoked",
+        capabilities: [],
+        match_sub: SUB,
+        match_iss: ISS,
+        match_thumbprint: agent.thumbprint,
+      },
+      last_observation_at: "2026-01-01T00:00:00.000Z",
+      created_at: "2026-01-01T00:00:00.000Z",
+    });
+    grantRows.push({
+      entity_id: "ent_grant_suspended_newer",
+      user_id: OWNER,
+      snapshot: {
+        label: "newer suspended",
+        status: "suspended",
+        capabilities: [],
+        match_sub: SUB,
+        match_iss: ISS,
+        match_thumbprint: agent.thumbprint,
+      },
+      last_observation_at: "2026-06-01T00:00:00.000Z",
+      created_at: "2026-06-01T00:00:00.000Z",
+    });
+
+    const { admission } = await verifyAndAdmit(await signedRequest(agent, { sub: SUB, iss: ISS }));
+
+    expect(admission.admitted).toBe(false);
+    expect(admission.reason).toBe("grant_suspended");
+    expect(admission.grant_id).toBe("ent_grant_suspended_newer");
+  });
+});
+
+/**
  * Capability limits for signed requests that also carry a bearer token.
  *
  * Authentication and the capability ceiling are separate decisions: the
@@ -393,6 +500,93 @@ describe("capability limits for signed requests", () => {
     );
 
     expect(outcome.allowed).toBe(true);
+  });
+
+  /**
+   * Falco's exact reproduction (PR #2506 round-2 security finding,
+   * ent_8f7c5f26774f5ba60ca15b79): a key pinned to a grant that is later
+   * revoked or suspended, presented alongside a bearer token, under the
+   * documented default configuration (NEOTOMA_AGENT_DEFAULT_DENY unset).
+   * Before this fix, admission reported `no_match` for this case and the
+   * write was ALLOWED. It must now be denied, driving the real middleware
+   * chain and the real capability gate end to end — same rigor as the
+   * grant_key_unbound cases above.
+   */
+  it.each(["revoked", "suspended"] as const)(
+    "%s key-bound grant + bearer + signature: a write inside the grant's former scope is denied",
+    async (status) => {
+      const agent = await freshKey();
+      putGrant(`ent_grant_${status}`, {
+        match_sub: SUB,
+        match_iss: ISS,
+        match_thumbprint: agent.thumbprint,
+        capabilities: GRANT_CAPS,
+        status,
+      });
+
+      const outcome = await attemptWrite(
+        withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+        WRITE_TYPE_IN_GRANT
+      );
+
+      expect(outcome.allowed).toBe(false);
+      const error = (outcome as { error: unknown }).error;
+      expect(error).toBeInstanceOf(AgentCapabilityError);
+      expect((error as AgentCapabilityError).code).toBe("capability_denied");
+    }
+  );
+
+  it.each(["revoked", "suspended"] as const)(
+    "%s key-bound grant + bearer + signature: a write outside the grant's former scope is also denied",
+    async (status) => {
+      const agent = await freshKey();
+      putGrant(`ent_grant_${status}_outside`, {
+        match_sub: SUB,
+        match_iss: ISS,
+        match_thumbprint: agent.thumbprint,
+        capabilities: GRANT_CAPS,
+        status,
+      });
+
+      const outcome = await attemptWrite(
+        withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+        WRITE_TYPE_OUTSIDE_GRANT
+      );
+
+      expect(outcome.allowed).toBe(false);
+      expect((outcome as { error: unknown }).error).toBeInstanceOf(AgentCapabilityError);
+    }
+  );
+
+  it("restoring a revoked grant to active re-admits the same key without re-pinning", async () => {
+    const agent = await freshKey();
+    putGrant("ent_grant_restorable", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: agent.thumbprint,
+      capabilities: GRANT_CAPS,
+      status: "revoked",
+    });
+
+    const denied = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+      WRITE_TYPE_IN_GRANT
+    );
+    expect(denied.allowed).toBe(false);
+
+    // Operator restores the grant (same key binding, status flips back).
+    const idx = grantRows.findIndex((r) => r.entity_id === "ent_grant_restorable");
+    grantRows[idx] = {
+      ...grantRows[idx],
+      snapshot: { ...grantRows[idx].snapshot, status: "active" },
+    };
+    clearGrantCacheForTests();
+
+    const allowed = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+      WRITE_TYPE_IN_GRANT
+    );
+    expect(allowed.allowed).toBe(true);
   });
 });
 

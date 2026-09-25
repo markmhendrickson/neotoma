@@ -74,6 +74,7 @@ export async function admitFromAAuthContext(
 
   let grant: AgentGrant | null;
   let unboundClaimMatch = false;
+  let inactiveGrant: AgentGrant | null = null;
   try {
     const lookup = await lookupGrantForIdentity({
       sub: ctx.sub,
@@ -82,6 +83,7 @@ export async function admitFromAAuthContext(
     });
     grant = lookup.grant;
     unboundClaimMatch = lookup.unbound_claim_match;
+    inactiveGrant = lookup.inactive_grant;
   } catch (err) {
     logger.warn("aauth_admission lookup failed", {
       err: err instanceof Error ? err.message : String(err),
@@ -92,6 +94,48 @@ export async function admitFromAAuthContext(
   }
 
   if (!grant) {
+    // The presented key was pinned to a grant that is now suspended or
+    // revoked. Report the specific reason — fail closed — rather than
+    // falling through to grant_key_unbound / no_match, which would give
+    // a shut-off credential the same ceiling as an unrecognized one.
+    if (inactiveGrant) {
+      logger.warn(
+        JSON.stringify({
+          event: "aauth_admission_inactive_grant",
+          sub: ctx.sub ?? null,
+          iss: ctx.iss ?? null,
+          thumbprint_prefix: ctx.thumbprint?.slice(0, 12) ?? null,
+          grant_id: inactiveGrant.grant_id,
+          grant_status: inactiveGrant.status,
+          message:
+            "The presented key is pinned to an agent_grant whose status is " +
+            `"${inactiveGrant.status}", not "active". Admission is refused ` +
+            "and capability-gated writes carrying this signature are denied " +
+            "until the grant is restored to active.",
+        })
+      );
+      if (inactiveGrant.status === "suspended") {
+        return {
+          admitted: false,
+          reason: "grant_suspended",
+          user_id: inactiveGrant.user_id,
+          grant_id: inactiveGrant.grant_id,
+          agent_label: inactiveGrant.label,
+        };
+      }
+      if (inactiveGrant.status === "revoked") {
+        return {
+          admitted: false,
+          reason: "grant_revoked",
+          user_id: inactiveGrant.user_id,
+          grant_id: inactiveGrant.grant_id,
+          agent_label: inactiveGrant.label,
+        };
+      }
+      // Defensive: any other non-active status behaves like no_match
+      // rather than silently admitting.
+      return { admitted: false, reason: reasonForUnmatched(ctx) };
+    }
     if (unboundClaimMatch) {
       logger.warn(
         JSON.stringify({
@@ -116,6 +160,12 @@ export async function admitFromAAuthContext(
     return { admitted: false, reason: reasonForUnmatched(ctx) };
   }
 
+  // Defense in depth, not the primary path: `lookupGrantForIdentity` only
+  // ever returns an active grant in `.grant` (inactive key-bound matches
+  // come back via `.inactive_grant` and are handled above, before this
+  // point). These branches guard the invariant rather than rely on it —
+  // if a future change to the lookup ever let a non-active grant through
+  // as `.grant`, this still fails closed instead of admitting it.
   if (grant.status === "suspended") {
     return {
       admitted: false,

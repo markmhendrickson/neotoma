@@ -26,7 +26,7 @@
 import type { AttributionTier, AgentIdentity } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
 import { getCurrentAAuthAdmission } from "./request_context.js";
-import type { AAuthAdmissionContext } from "./protected_entity_types.js";
+import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
 
 /**
  * Canonical operation identifier. Mirrors the top-level MCP/REST entry
@@ -109,21 +109,62 @@ export interface AgentCapabilityAgent {
  *
  * - `grant`: the signature is bound to an active grant
  *   (`match_thumbprint`); the grant's capabilities are the ceiling.
- * - `deny`: the signature names a grant (by `sub` / `iss`) that pins no
- *   key (admission reason `grant_key_unbound`). The grant cannot be
- *   applied to this key, so capability-gated operations fail closed
- *   until the grant is pinned. This holds however the request
- *   authenticated.
+ * - `deny`: the signature names a grant this key cannot currently use —
+ *   because the grant pins no key (`grant_key_unbound`), or because the
+ *   key WAS pinned to a grant the operator has since turned off
+ *   (`grant_revoked` / `grant_suspended`). Capability-gated operations
+ *   fail closed in all three cases, whatever authenticated the request
+ *   and independent of `NEOTOMA_AGENT_DEFAULT_DENY`.
  * - `none`: no grant applies; `NEOTOMA_AGENT_DEFAULT_DENY` decides.
  */
 export type AgentCapabilityCeiling =
   | { kind: "grant"; capabilities: AgentCapabilityEntry[] }
-  | { kind: "deny"; reason: "grant_key_unbound" }
+  | { kind: "deny"; reason: "grant_key_unbound" | "grant_revoked" | "grant_suspended" }
   | { kind: "none" };
+
+/**
+ * Exhaustive map from every {@link AAuthAdmissionReason} OTHER THAN
+ * `"admitted"` (handled separately, via `admission.admitted`) to the
+ * ceiling it produces.
+ *
+ * This is the fail-closed safety vocabulary itself: every reason the
+ * admission layer can report must have an explicit entry here, and the
+ * TypeScript `Record<...>` type below makes the compiler refuse a build
+ * that adds a new {@link AAuthAdmissionReason} without also classifying
+ * it here. New reasons default to nothing being added silently — a
+ * missing key is a compile error, not a runtime fall-through — and any
+ * reason whose classification is not obviously safe-to-allow must map to
+ * `"deny"`, never `"none"`, per the repo's fail-closed-on-the-safety-field
+ * rule: `none` is a real permissive state (`NEOTOMA_AGENT_DEFAULT_DENY`
+ * decides), so only reasons that genuinely mean "this signature carries
+ * no assertion about any grant" belong there.
+ */
+const CEILING_REASON_MAP: Record<Exclude<AAuthAdmissionReason, "admitted">, "deny" | "none"> = {
+  // The signature names a grant this key cannot currently use — the
+  // grant pins no key, or the key was pinned to a grant since turned
+  // off. Fail closed independent of NEOTOMA_AGENT_DEFAULT_DENY.
+  grant_key_unbound: "deny",
+  grant_revoked: "deny",
+  grant_suspended: "deny",
+  // No grant asserts anything about this identity at all — the signature
+  // is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY governs.
+  no_match: "none",
+  no_grants_for_user: "none",
+  strict_rejected: "none",
+  aauth_disabled: "none",
+  not_signed: "none",
+};
 
 /**
  * Derive the {@link AgentCapabilityCeiling} from an admission record.
  * Pure; exported for tests and diagnostics.
+ *
+ * The `deny` reasons carry the specific {@link AAuthAdmissionReason} they
+ * were classified from (not a generic flag) so denial hints and log
+ * lines can name what actually happened. Any reason not present in
+ * {@link CEILING_REASON_MAP} — which TypeScript will not allow, since the
+ * map type is exhaustive over `AAuthAdmissionReason` — would be a
+ * compile error before it could ever reach here.
  */
 export function capabilityCeilingFromAdmission(
   admission: AAuthAdmissionContext | null | undefined
@@ -131,8 +172,14 @@ export function capabilityCeilingFromAdmission(
   if (admission?.admitted) {
     return { kind: "grant", capabilities: admission.capabilities ?? [] };
   }
-  if (admission?.reason === "grant_key_unbound") {
-    return { kind: "deny", reason: "grant_key_unbound" };
+  const reason = admission?.reason;
+  if (!reason || reason === "admitted") return { kind: "none" };
+  if (CEILING_REASON_MAP[reason] === "deny") {
+    // Narrowed by the Record's key type to the three deny-mapped reasons.
+    return {
+      kind: "deny",
+      reason: reason as "grant_key_unbound" | "grant_revoked" | "grant_suspended",
+    };
   }
   return { kind: "none" };
 }
@@ -359,8 +406,9 @@ function entryCovers(
  *   1. `entityTypes` empty → no-op.
  *   2. `grant` ceiling → every `(op, entity_type)` pair must be covered
  *      by the grant's capabilities. Mismatch → throw.
- *   3. `deny` ceiling (the signature names a grant that pins no key) →
- *      throw, whatever authenticated the request and regardless of
+ *   3. `deny` ceiling (the signature names a grant that pins no key, or
+ *      that WAS pinned to a grant since revoked/suspended) → throw,
+ *      whatever authenticated the request and regardless of
  *      `NEOTOMA_AGENT_DEFAULT_DENY`.
  *   4. `none` ceiling, signature-verified agent (`tier in {hardware,
  *      software, operator_attested}`) AND
@@ -414,21 +462,32 @@ export function enforceAgentCapability(
   }
 
   if (ceiling.kind === "deny") {
+    const hint =
+      ceiling.reason === "grant_revoked"
+        ? "This request is signed by a key that was pinned to an agent_grant " +
+          "that has since been revoked, so capability-gated writes are refused. " +
+          "Restore the grant to active in Inspector → Agents → Grants (or create " +
+          "a new grant and pin it) before this agent can write again."
+        : ceiling.reason === "grant_suspended"
+          ? "This request is signed by a key that was pinned to an agent_grant " +
+            "that is currently suspended, so capability-gated writes are refused. " +
+            "Restore the grant to active in Inspector → Agents → Grants before " +
+            "this agent can write again."
+          : "This request is signed by a key that is not pinned on the agent_grant " +
+            "matching its sub/iss, so the grant's capabilities cannot be applied " +
+            "and capability-gated writes are refused. Set the grant's " +
+            "match_thumbprint to this agent's key thumbprint (see " +
+            `${GRANT_KEY_PIN_DOC}).`;
     const err = new AgentCapabilityError({
       op,
       entityType: distinctTypes[0],
       agentLabel: ctx.agentLabel,
-      hint:
-        "This request is signed by a key that is not pinned on the agent_grant " +
-        "matching its sub/iss, so the grant's capabilities cannot be applied " +
-        "and capability-gated writes are refused. Set the grant's " +
-        "match_thumbprint to this agent's key thumbprint (see " +
-        `${GRANT_KEY_PIN_DOC}).`,
+      hint,
     });
     logger.warn(
       JSON.stringify({
         event: "agent_capability_denied",
-        reason: "grant_key_unbound",
+        reason: ceiling.reason,
         op,
         entity_types: distinctTypes,
         agent_label: ctx.agentLabel,
