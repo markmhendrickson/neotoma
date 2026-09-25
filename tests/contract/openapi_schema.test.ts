@@ -206,4 +206,28 @@ describe("OpenAPI tool schemas", () => {
       }
     });
   });
+
+  describe("StoreUnstructuredResponse — plan-mode fields (#2471)", () => {
+    // storeUnstructuredForApi (src/actions.ts) returns `commit`,
+    // `storage_mode`, `reference_path`, `mime_type`, `entities_created`, and
+    // `observations_created` on every response, but the OpenAPI schema
+    // declared none of them — a schema-conformant client had no declared way
+    // to detect plan mode on this path. Guards against the fields silently
+    // dropping out of the spec again.
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      components?: { schemas?: Record<string, { properties?: Record<string, unknown> }> };
+    };
+    const properties = spec.components?.schemas?.StoreUnstructuredResponse?.properties ?? {};
+
+    it.each([
+      "commit",
+      "storage_mode",
+      "reference_path",
+      "mime_type",
+      "entities_created",
+      "observations_created",
+    ])("declares %s", (field) => {
+      expect(properties[field], `StoreUnstructuredResponse.${field} is undeclared`).toBeTruthy();
+    });
+  });
 });

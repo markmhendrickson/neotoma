@@ -4079,6 +4079,13 @@ export interface components {
       original_filename?: string;
       /** Format: uuid */
       user_id?: string;
+      /**
+       * @description When false, runs in plan/dry-run mode: computes the content hash
+       *     without persisting a source row or uploading raw content. Useful
+       *     for previewing an unstructured store before committing.
+       * @default true
+       */
+      commit?: boolean;
     };
     StoreUnstructuredResponse: {
       source_id?: string;
@@ -4089,6 +4096,46 @@ export interface components {
         [key: string]: unknown;
       };
       entity_ids?: string[];
+      /**
+       * @description Echoes the request's `commit` flag. `false` means this response
+       *     describes a plan/dry-run preview: no source row was persisted and
+       *     no raw content was uploaded. `source_id` is `null` in that case.
+       */
+      commit?: boolean;
+      /**
+       * @description Present when the request used reference storage
+       *     (`source_storage: "reference"`), for both a committed store and a
+       *     plan-mode (`commit: false`) preview. Indicates the response
+       *     describes a reference-mode result rather than the inline-mode
+       *     shape (`content_hash` / `file_size` / `entities_created` /
+       *     `observations_created`).
+       * @enum {string}
+       */
+      storage_mode?: "reference";
+      /**
+       * @description Reference-storage only: the file path this store referenced
+       *     (committed) or would reference if committed (plan mode).
+       */
+      reference_path?: string;
+      /**
+       * @description Reference-storage only: the MIME type resolved for the file
+       *     (echoes the request's `mime_type`, or the value inferred from
+       *     the file extension when omitted). Present for both a committed
+       *     store and a plan-mode preview.
+       */
+      mime_type?: string;
+      /**
+       * @description Inline-storage only. Always `0` today: unstructured store never
+       *     creates entities directly, in either commit or plan mode. Not a
+       *     placeholder for a future non-zero value under commit — if that
+       *     changes, this description will change with it.
+       */
+      entities_created?: number;
+      /**
+       * @description Inline-storage only: always `0`, for the same reason as
+       *     `entities_created`.
+       */
+      observations_created?: number;
     };
     /**
      * @description FU-2026-05-002. Identifies the conversation and the assistant message

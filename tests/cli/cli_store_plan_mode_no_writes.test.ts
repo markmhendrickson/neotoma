@@ -147,7 +147,10 @@ describe("store --plan / --dry-run perform no source writes (structured + unstru
         `${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --plan --json`
       );
       const result = JSON.parse(stdout);
+      expect(result.commit).toBe(false);
       expect(result.source_id).toBeNull();
+      expect(result.entities_created).toBe(0);
+      expect(result.observations_created).toBe(0);
 
       const after = await countSourcesForUser(TEST_USER_ID);
       expect(after - before).toBe(0);
@@ -163,6 +166,7 @@ describe("store --plan / --dry-run perform no source writes (structured + unstru
         `${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --dry-run --json`
       );
       const result = JSON.parse(stdout);
+      expect(result.commit).toBe(false);
       expect(result.source_id).toBeNull();
 
       const after = await countSourcesForUser(TEST_USER_ID);

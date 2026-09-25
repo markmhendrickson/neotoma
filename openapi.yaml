@@ -2456,6 +2456,13 @@ components:
         user_id:
           type: string
           format: uuid
+        commit:
+          type: boolean
+          default: true
+          description: |
+            When false, runs in plan/dry-run mode: computes the content hash
+            without persisting a source row or uploading raw content. Useful
+            for previewing an unstructured store before committing.
     StoreUnstructuredResponse:
       type: object
       properties:
@@ -2474,6 +2481,46 @@ components:
           type: array
           items:
             type: string
+        commit:
+          type: boolean
+          description: |
+            Echoes the request's `commit` flag. `false` means this response
+            describes a plan/dry-run preview: no source row was persisted and
+            no raw content was uploaded. `source_id` is `null` in that case.
+        storage_mode:
+          type: string
+          enum: [reference]
+          description: |
+            Present when the request used reference storage
+            (`source_storage: "reference"`), for both a committed store and a
+            plan-mode (`commit: false`) preview. Indicates the response
+            describes a reference-mode result rather than the inline-mode
+            shape (`content_hash` / `file_size` / `entities_created` /
+            `observations_created`).
+        reference_path:
+          type: string
+          description: |
+            Reference-storage only: the file path this store referenced
+            (committed) or would reference if committed (plan mode).
+        mime_type:
+          type: string
+          description: |
+            Reference-storage only: the MIME type resolved for the file
+            (echoes the request's `mime_type`, or the value inferred from
+            the file extension when omitted). Present for both a committed
+            store and a plan-mode preview.
+        entities_created:
+          type: integer
+          description: |
+            Inline-storage only. Always `0` today: unstructured store never
+            creates entities directly, in either commit or plan mode. Not a
+            placeholder for a future non-zero value under commit — if that
+            changes, this description will change with it.
+        observations_created:
+          type: integer
+          description: |
+            Inline-storage only: always `0`, for the same reason as
+            `entities_created`.
     TurnSummaryRequest:
       type: object
       additionalProperties: false
