@@ -49,6 +49,124 @@ describe("S-1: isLocalRequest socket-based check", () => {
     } as unknown as import("express").Request;
     expect(isLocalRequest(proxied)).toBe(false);
   });
+
+  it("in production, a loopback-only X-Forwarded-For does not make a loopback socket local", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    for (const forwardedFor of ["127.0.0.1", "::1", "127.0.0.1, 127.0.0.2"]) {
+      const req = {
+        headers: { "x-forwarded-for": forwardedFor },
+        socket: { remoteAddress: "127.0.0.1" },
+      } as unknown as import("express").Request;
+      expect(isLocalRequest(req)).toBe(false);
+    }
+  });
+
+  it("in production, a loopback-only X-Forwarded-For is local only with the explicit loopback opt-in", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "1");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(true);
+  });
+
+  it("in production, a loopback/trusted-only chain that fails to qualify logs a rate-limited, PII-free diagnostic", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    vi.resetModules();
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const req = {
+        headers: { "x-forwarded-for": "127.0.0.1" },
+        socket: { remoteAddress: "127.0.0.1" },
+      } as unknown as import("express").Request;
+
+      expect(isLocalRequest(req)).toBe(false);
+
+      const calls = stderrSpy.mock.calls.map((args) => String(args[0]));
+      const diagnostic = calls.find((line) => line.includes("nearest hop is not itself"));
+      expect(diagnostic).toBeDefined();
+      expect(diagnostic).toContain("NEOTOMA_TRUSTED_PROXY_IPS");
+      expect(diagnostic).toContain("NEOTOMA_TRUST_PROD_LOOPBACK=1");
+      // No header values, IPs, or raw XFF content in the message.
+      expect(diagnostic).not.toMatch(/127\.0\.0\.1/);
+      expect(diagnostic).not.toMatch(/x-forwarded-for/i);
+
+      // Rate-limited: a second refusal within the same window logs nothing new.
+      stderrSpy.mockClear();
+      expect(isLocalRequest(req)).toBe(false);
+      const secondCalls = stderrSpy.mock.calls.map((args) => String(args[0]));
+      expect(secondCalls.find((line) => line.includes("nearest hop is not itself"))).toBeUndefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("in production, NEOTOMA_TRUST_PROD_LOOPBACK=1 admits a loopback-only chain without logging the refusal diagnostic", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "1");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    vi.resetModules();
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const req = {
+        headers: { "x-forwarded-for": "127.0.0.1" },
+        socket: { remoteAddress: "127.0.0.1" },
+      } as unknown as import("express").Request;
+      expect(isLocalRequest(req)).toBe(true);
+      const calls = stderrSpy.mock.calls.map((args) => String(args[0]));
+      expect(calls.find((line) => line.includes("nearest hop is not itself"))).toBeUndefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("in production, a forwarded chain whose nearest hop is a configured trusted proxy stays local", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "100.64.0.0/10");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const trusted = {
+      headers: { "x-forwarded-for": "100.64.1.2" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(trusted)).toBe(true);
+    // The nearest hop is loopback, not the configured proxy: not local.
+    const loopbackNearest = {
+      headers: { "x-forwarded-for": "100.64.1.2, 127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(loopbackNearest)).toBe(false);
+  });
+
+  it("isTrustedProxyIP rejects non-IP strings before range math, even inside a configured CIDR", async () => {
+    const { isTrustedProxyIP } = await import("../../src/actions.ts");
+    const env = { NEOTOMA_TRUSTED_PROXY_IPS: "100.64.0.0/10" } as NodeJS.ProcessEnv;
+    expect(isTrustedProxyIP("100.64.1.2", env)).toBe(true);
+    expect(isTrustedProxyIP("not-an-ip", env)).toBe(false);
+    expect(isTrustedProxyIP("100.64.1.2.5", env)).toBe(false);
+    expect(isTrustedProxyIP("100.64.1.2extra", env)).toBe(false);
+  });
+
+  it("in development, a loopback-only X-Forwarded-For over a loopback socket is still local", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "development");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(true);
+  });
 });
 
 describe("S-2: LocalStorageBucket path containment", () => {
