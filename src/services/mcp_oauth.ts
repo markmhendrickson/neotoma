@@ -7,6 +7,7 @@
 import { randomBytes, createHash, createCipheriv, createDecipheriv, randomUUID } from "node:crypto";
 import { getServiceRoleClient, db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import { connectionIdForLog } from "../utils/connection_id_log.js";
 import { config } from "../config.js";
 import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
 import { clearDbCache, getDb } from "../repositories/db/connection.js";
@@ -934,10 +935,13 @@ function auditLog(
     [key: string]: any;
   }
 ): void {
+  // A connection id is a credential: audit lines carry its fingerprint only.
+  const { connectionId, ...rest } = context;
   const auditEntry = {
     event,
     timestamp: new Date().toISOString(),
-    ...context,
+    ...rest,
+    ...(connectionId !== undefined ? { connectionId: connectionIdForLog(connectionId) } : {}),
   };
 
   if (context.success) {
@@ -1061,7 +1065,9 @@ export async function initiateOAuthFlow(
       expiresAt: expiresAt.toISOString(),
     });
     const authUrl = await createAuthUrl(state, codeChallenge, finalRedirectUri);
-    logger.info(`[MCP OAuth] Initiated local OAuth flow for connection: ${connectionId}`);
+    logger.info(
+      `[MCP OAuth] Initiated local OAuth flow for connection (${connectionIdForLog(connectionId)})`
+    );
     auditLog("oauth_flow_initiated", {
       connectionId,
       clientName,
@@ -1114,7 +1120,9 @@ export async function initiateOAuthFlow(
 
   const authUrl = await createAuthUrl(state, codeChallenge, oauthRedirectUri);
 
-  logger.info(`[MCP OAuth] Initiated OAuth flow for connection: ${connectionId}`);
+  logger.info(
+    `[MCP OAuth] Initiated OAuth flow for connection (${connectionIdForLog(connectionId)})`
+  );
 
   // Audit log
   auditLog("oauth_flow_initiated", {
@@ -1486,7 +1494,9 @@ export async function handleOAuthCallback(
     throw createOAuthError.stateInvalid(`Failed to store connection: ${insertError.message}`);
   }
 
-  logger.info(`[MCP OAuth] Connection created: ${stateData.connection_id} for user: ${userId}`);
+  logger.info(
+    `[MCP OAuth] Connection created (${connectionIdForLog(stateData.connection_id)}) for user: ${userId}`
+  );
 
   // Audit log
   auditLog("oauth_callback_success", {
@@ -1526,7 +1536,7 @@ export async function getAccessTokenForConnection(
     const connection = await getLocalConnectionById(connectionId);
     if (!connection) {
       logger.error(
-        `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+        `[MCP OAuth] Connection not found (${connectionIdForLog(connectionId)}) (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
       );
       throw createOAuthError.connectionNotFound(connectionId);
     }
@@ -1543,7 +1553,9 @@ export async function getAccessTokenForConnection(
       };
     }
 
-    logger.info(`[MCP OAuth] Refreshing local access token for connection: ${connectionId}`);
+    logger.info(
+      `[MCP OAuth] Refreshing local access token for connection (${connectionIdForLog(connectionId)})`
+    );
     auditLog("token_refresh_initiated", {
       connectionId,
       userId: connection.user_id,
@@ -1577,7 +1589,7 @@ export async function getAccessTokenForConnection(
 
   if (error || !connection) {
     logger.error(
-      `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+      `[MCP OAuth] Connection not found (${connectionIdForLog(connectionId)}) (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
     );
     throw createOAuthError.connectionNotFound(connectionId);
   }
@@ -1600,7 +1612,9 @@ export async function getAccessTokenForConnection(
     };
   }
 
-  logger.info(`[MCP OAuth] Refreshing access token for connection: ${connectionId}`);
+  logger.info(
+    `[MCP OAuth] Refreshing access token for connection (${connectionIdForLog(connectionId)})`
+  );
   auditLog("token_refresh_initiated", {
     connectionId,
     userId: connection.user_id,
@@ -1650,7 +1664,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
     }
 
     logger.info(
-      `[MCP OAuth] Refreshing local access token for connection: ${connection.connection_id}`
+      `[MCP OAuth] Refreshing local access token for connection (${connectionIdForLog(connection.connection_id)})`
     );
     auditLog("token_refresh_initiated", {
       connectionId: connection.connection_id,
@@ -1690,7 +1704,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
   }
 
   logger.info(
-    `[MCP OAuth] Refreshing access token via refresh_token for connection: ${connection.connection_id}`
+    `[MCP OAuth] Refreshing access token via refresh_token for connection (${connectionIdForLog(connection.connection_id)})`
   );
   auditLog("token_refresh_initiated", {
     connectionId: connection.connection_id,
@@ -2002,7 +2016,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
 
   if (isLocalBackend) {
     await revokeLocalConnection(connectionId, userId);
-    logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
+    logger.info(`[MCP OAuth] Connection revoked (${connectionIdForLog(connectionId)})`);
     auditLog("connection_revoked", {
       connectionId,
       userId,
@@ -2022,7 +2036,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
     throw createOAuthError.connectionNotFound(`Failed to revoke connection: ${error.message}`);
   }
 
-  logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
+  logger.info(`[MCP OAuth] Connection revoked (${connectionIdForLog(connectionId)})`);
 
   // Audit log
   auditLog("connection_revoked", {
