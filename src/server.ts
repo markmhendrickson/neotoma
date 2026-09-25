@@ -3325,12 +3325,16 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(undefined);
 
-    // Get the snapshot to extract provenance
+    // Get the snapshot to extract provenance. Every read below is scoped to
+    // the authenticated user; an entity outside that scope resolves exactly
+    // like one that does not exist.
     const { data: snapshot, error: snapshotError } = await db
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", parsed.entity_id)
+      .eq("user_id", userId)
       .single();
 
     if (snapshotError || !snapshot) {
@@ -3355,6 +3359,7 @@ export class NeotomaServer {
       .from("observations")
       .select("*")
       .eq("id", observationId)
+      .eq("user_id", userId)
       .single();
 
     if (obsError || !observation) {
@@ -3373,6 +3378,7 @@ export class NeotomaServer {
       .from("sources")
       .select("id, mime_type, file_size, original_filename, created_at")
       .eq("id", observation.source_id)
+      .eq("user_id", userId)
       .single();
 
     if (sourceError || !sourceData) {
