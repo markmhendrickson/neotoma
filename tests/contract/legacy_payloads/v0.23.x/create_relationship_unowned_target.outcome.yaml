@@ -2,18 +2,16 @@ endpoint: "POST /create_relationship"
 outcome: rejected
 error_code: RESOURCE_NOT_FOUND
 notes: |
-  Pre-v0.23.x, relationshipsService.createRelationship had no ownership check
-  on source_entity_id / target_entity_id: only the relationship type's
-  registration and acyclic constraint were enforced. A caller could link to
-  any entity id, including one that does not exist or belongs to another
-  user.
+  relationshipsService.createRelationship requires both source_entity_id and
+  target_entity_id to be entities the caller owns, in addition to the
+  relationship type's registration and acyclic constraint.
 
   This fixture uses two well-formed but nonexistent entity ids (the corpus
   cannot seed a real foreign-owned row, but the handler refuses a missing
   entity and another user's entity identically — see
-  docs/subsystems/relationships.md § 6.1). Both endpoints must now be
-  entities the caller owns; the call is refused with
-  `404 RESOURCE_NOT_FOUND` rather than creating a dangling relationship.
+  docs/subsystems/relationships.md § 6.1). An unowned or nonexistent
+  endpoint is refused with `404 RESOURCE_NOT_FOUND` rather than creating a
+  dangling relationship.
 
   The relationship leg of `store` and `create_interpretation` apply the same
   ownership rule but do not fail the call: a refused relationship is reported

@@ -6,7 +6,7 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 ## v0.23.x
 
-- `v0.23.x/create_relationship_unowned_target` seeded as `rejected`. `POST /create_relationship` (and MCP `create_relationship`, and the relationship leg of `store` / `create_interpretation`, all via `relationshipsService.createRelationship`) previously created a relationship to any `source_entity_id` / `target_entity_id` with no ownership check. Both endpoints must now be entities the caller owns; an unowned or nonexistent endpoint is refused with `404 RESOURCE_NOT_FOUND`. `store` and `create_interpretation` report a refused relationship in `relationships_refused` rather than failing the call — see docs/subsystems/relationships.md § 6.1.
+- `v0.23.x/create_relationship_unowned_target` seeded as `rejected`. `POST /create_relationship` (and MCP `create_relationship`, and the relationship leg of `store` / `create_interpretation`, all via `relationshipsService.createRelationship`) requires both `source_entity_id` and `target_entity_id` to be entities the caller owns; an unowned or nonexistent endpoint is refused with `404 RESOURCE_NOT_FOUND`. `store` and `create_interpretation` report a refused relationship in `relationships_refused` rather than failing the call — see docs/subsystems/relationships.md § 6.1.
 
 ## v0.19.0
 
