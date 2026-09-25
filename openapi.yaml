@@ -1612,6 +1612,64 @@ components:
         target_entity_type_label:
           type: string
           nullable: true
+    RelationshipCreated:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was
+        written. Shared by `StoreStructuredResponse.relationships_created`
+        and `CreateInterpretationResponse.relationships_created`. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_type
+        - source_entity_id
+        - target_entity_id
+      properties:
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+    RelationshipRefusal:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was not
+        written. The entities in the call are still stored. Shared by
+        `StoreStructuredResponse.relationships_refused` and
+        `CreateInterpretationResponse.relationships_refused`. An endpoint
+        that does not exist and one owned by another user are both reported
+        as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_index
+        - relationship_type
+        - code
+        - reason
+      properties:
+        relationship_index:
+          type: integer
+          description: Position of the relationship in the request's `relationships` array.
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+        source_index:
+          type: integer
+        target_index:
+          type: integer
+        code:
+          type: string
+          description: |
+            One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+            `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+            `RELATIONSHIP_INVALID_ENTITY_ID`,
+            `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+        reason:
+          type: string
+        hint:
+          type: string
     TimelineEvent:
       type: object
       properties:
@@ -1812,9 +1870,20 @@ components:
             data.
         relationships_created:
           type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
           items:
-            type: object
-            additionalProperties: true
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. See
+            docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
     UsageStats:
       type: object
       description: Aggregate usage statistics computed from local data only.
@@ -2312,6 +2381,23 @@ components:
                     type: integer
                   entity_id:
                     type: string
+        relationships_created:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. An endpoint that
+            does not exist and one owned by another user are both reported as
+            `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
         store_warnings:
           type: array
           description: |

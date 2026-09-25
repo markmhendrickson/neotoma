@@ -1,6 +1,6 @@
 import { NeotomaServer } from "../../src/server.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterAll, afterEach, beforeEach, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { RelationshipsService } from "../../src/services/relationships.js";
 import {
@@ -13,10 +13,36 @@ import { enforceRelationshipTypeCapability } from "../../src/services/agent_capa
 
 const user = "00000000-0000-0000-0000-0000000a2502";
 const service = new RelationshipsService();
+// Relationship endpoints must be entities the caller owns; seed the ids the
+// cases below link.
+const ENDPOINT_IDS = [
+  "ent_g25_cycle_a",
+  "ent_g25_cycle_b",
+  "ent_g25_depth_source",
+  "ent_g25_depth_0",
+  "ent_g25_read_a",
+  "ent_g25_read_b",
+  "ent_g25_stale_source",
+  "ent_g25_stale_target",
+  "ent_g25_corrupt_a",
+  "ent_g25_corrupt_b",
+];
 beforeEach(async () => {
   await db.from("relationship_type_registry").delete().eq("user_id", user);
   await db.from("relationship_snapshots").delete().eq("user_id", user);
   await db.from("relationship_observations").delete().eq("user_id", user);
+  await db.from("entities").delete().in("id", ENDPOINT_IDS);
+  await db.from("entities").insert(
+    ENDPOINT_IDS.map((id) => ({
+      id,
+      user_id: user,
+      entity_type: "g25_test_node",
+      canonical_name: id,
+    }))
+  );
+});
+afterAll(async () => {
+  await db.from("entities").delete().in("id", ENDPOINT_IDS);
 });
 afterEach(() => {
   vi.restoreAllMocks();

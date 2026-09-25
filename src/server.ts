@@ -74,6 +74,13 @@ import {
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
+import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
+import {
+  relationshipRefusalFromError,
+  unresolvedRelationshipRefusal,
+  type StoreRelationshipCreated,
+  type StoreRelationshipRefused,
+} from "./services/store_relationships.js";
 import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
   extractTextFromBuffer,
@@ -2728,15 +2735,18 @@ export class NeotomaServer {
         const { count: entityCount } = await db
           .from("entities")
           .select("*", { count: "exact", head: true })
+          .eq("user_id", userId)
           .is("merged_to_entity_id", null);
 
         const { count: relationshipCount } = await db
           .from("relationship_snapshots")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId);
 
         const { count: sourceCount } = await db
           .from("sources")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId);
 
         resources.push({
           uri: "neotoma://entities",
@@ -2777,7 +2787,7 @@ export class NeotomaServer {
         try {
           const { SchemaRegistryService } = await import("./services/schema_registry.js");
           const schemaRegistry = new SchemaRegistryService();
-          const entityTypes = await schemaRegistry.listEntityTypes();
+          const entityTypes = await schemaRegistry.listEntityTypes(undefined, userId);
           resources.push({
             uri: "neotoma://entity_types",
             name: "Entity Types",
@@ -2794,6 +2804,7 @@ export class NeotomaServer {
           const { data: relationshipTypes, error: rtError } = await db
             .from("relationship_snapshots")
             .select("relationship_type")
+            .eq("user_id", userId)
             .order("relationship_type");
 
           if (!rtError && relationshipTypes && relationshipTypes.length > 0) {
@@ -2945,26 +2956,34 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
     const { expires_in } = parsed;
+    const userId = this.getAuthenticatedUserId();
+    const { getOwnedSource, getOwnedSourceByStoragePath } =
+      await import("./services/scoped_reads.js");
 
-    // --- Reference-source lookup (#1775) ---
-    // If source_id is provided, check if it is a reference source and resolve locally.
+    // --- Source-id lookup (#1775) ---
+    // The source must belong to the authenticated user; a source owned by
+    // anyone else resolves exactly like one that does not exist.
     if (parsed.source_id) {
-      const { data: sourceRow, error: sourceErr } = await db
-        .from("sources")
-        .select("id, storage_mode, reference_path, content_hash, host_id, mime_type")
-        .eq("id", parsed.source_id)
-        .maybeSingle();
-
-      if (sourceErr) {
-        throw new Error(`Failed to look up source: ${sourceErr.message}`);
-      }
+      const sourceRow = await getOwnedSource<{
+        id: string;
+        storage_mode?: string | null;
+        storage_url?: string | null;
+        reference_path?: string | null;
+        content_hash?: string | null;
+        host_id?: string | null;
+        mime_type?: string | null;
+      }>(
+        parsed.source_id,
+        userId,
+        "id, storage_mode, storage_url, reference_path, content_hash, host_id, mime_type"
+      );
 
       if (sourceRow?.storage_mode === "reference") {
         const { resolveReferenceSource } = await import("./services/raw_storage.js");
         const resolution = resolveReferenceSource({
-          reference_path: sourceRow.reference_path,
-          content_hash: sourceRow.content_hash,
-          host_id: sourceRow.host_id,
+          reference_path: sourceRow.reference_path ?? null,
+          content_hash: sourceRow.content_hash ?? null,
+          host_id: sourceRow.host_id ?? null,
         });
 
         if (!resolution.found) {
@@ -2983,30 +3002,34 @@ export class NeotomaServer {
           mime_type: sourceRow.mime_type,
         });
       }
-    }
 
-    // --- Legacy path: storage_url / signed URL ---
-    const file_path = parsed.file_path;
-    if (!file_path) {
-      // If we have a source_id but it's not a reference source, retrieve its storage_url
-      if (parsed.source_id) {
-        const { data: sourceRow, error: sourceErr } = await db
-          .from("sources")
-          .select("storage_url")
-          .eq("id", parsed.source_id)
-          .maybeSingle();
-        if (sourceErr || !sourceRow?.storage_url) {
+      if (!parsed.file_path) {
+        // Not a reference source: sign the owned source's storage_url.
+        if (!sourceRow?.storage_url) {
           throw new Error("Could not resolve storage_url for source");
         }
-        // Fall through with the resolved storage_url as file_path
-        return await this.retrieveFileUrl({
-          file_path: sourceRow.storage_url,
-          expires_in,
-        });
+        return await this.signStoragePath(sourceRow.storage_url, expires_in);
       }
-      throw new Error("file_path or source_id is required");
     }
 
+    // --- Storage-path lookup ---
+    const file_path = parsed.file_path;
+    if (!file_path) {
+      throw new Error("file_path or source_id is required");
+    }
+    // Only sign a path that belongs to one of the caller's own sources.
+    const owned = await getOwnedSourceByStoragePath(file_path, userId);
+    if (!owned) {
+      throw new Error("Could not resolve storage_url for source");
+    }
+    // Sign the matched row's stored location, never the caller's string.
+    return await this.signStoragePath(`${SOURCES_STORAGE_BUCKET}/${owned.storage_url}`, expires_in);
+  }
+
+  private async signStoragePath(
+    file_path: string,
+    expires_in?: number
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const pathParts = file_path.split("/");
     const bucket = pathParts[0];
     const path = pathParts.slice(1).join("/");
@@ -3710,6 +3733,12 @@ export class NeotomaServer {
           code: error.code,
           relationship_type: error.relationshipType,
           hint: error.hint,
+        });
+      }
+      if (error instanceof OwnedEntityNotFoundError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          entity_id: error.entityId,
         });
       }
       // Check for specific error types
@@ -5317,14 +5346,11 @@ export class NeotomaServer {
       },
     });
 
-    const relationshipsCreated: Array<{
-      relationship_type: string;
-      source_entity_id: string;
-      target_entity_id: string;
-    }> = [];
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (parsed.relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
-      for (const rel of parsed.relationships as StoreRelationshipRef[]) {
+      for (const [relIndex, rel] of (parsed.relationships as StoreRelationshipRef[]).entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -5337,20 +5363,31 @@ export class NeotomaServer {
             : typeof rel.target_index === "number"
               ? result.entities[rel.target_index]?.entityId
               : undefined;
-        if (!sourceEntityId || !targetEntityId) continue;
-        await relationshipsService.createRelationship({
-          relationship_type: rel.relationship_type as RelationshipType,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-          source_id: parsed.source_id,
-          metadata: rel.metadata ?? {},
-          user_id: userId,
-        });
-        relationshipsCreated.push({
-          relationship_type: rel.relationship_type,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-        });
+        if (!sourceEntityId || !targetEntityId) {
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
+          continue;
+        }
+        try {
+          await relationshipsService.createRelationship({
+            relationship_type: rel.relationship_type as RelationshipType,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+            source_id: parsed.source_id,
+            metadata: rel.metadata ?? {},
+            user_id: userId,
+          });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
+        } catch (relError) {
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
+          );
+        }
       }
     }
 
@@ -5368,6 +5405,7 @@ export class NeotomaServer {
       unknown_fields: result.unknownFieldNames,
       ...(result.hint ? { hint: result.hint } : {}),
       relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
         ? { no_schema_entity_types: result.noSchemaEntityTypes }
         : {}),
@@ -5596,7 +5634,7 @@ export class NeotomaServer {
       refResponse.asset_entity_id = refAssetInfo.entityId;
       refResponse.asset_entity_type = refAssetInfo.entityType;
 
-      const refEntityIds = await this.getEntityIdsFromSource(refResult.sourceId);
+      const refEntityIds = await this.getEntityIdsFromSource(refResult.sourceId, userId);
       // Dangling-reference invariant: warn if no observations were materialized
       if (refEntityIds.length === 0 && !refResult.deduplicated) {
         refResponse.store_warnings = [
@@ -5649,7 +5687,7 @@ export class NeotomaServer {
     result.asset_entity_id = assetInfo.entityId;
     result.asset_entity_type = assetInfo.entityType;
 
-    const entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
+    const entityIds = await this.getEntityIdsFromSource(storageResult.sourceId, userId);
     let entities: Array<Record<string, unknown>> = [];
     if (entityIds.length > 0) {
       const validEntityIds = entityIds.filter(Boolean);
@@ -5657,14 +5695,16 @@ export class NeotomaServer {
         const { data: entityData, error: entityError } = await db
           .from("entities")
           .select("*")
-          .in("id", validEntityIds);
+          .in("id", validEntityIds)
+          .eq("user_id", userId);
 
         if (!entityError && entityData) {
           entities = entityData as Array<Record<string, unknown>>;
           const { data: snapshots, error: snapError } = await db
             .from("entity_snapshots")
             .select("*")
-            .in("entity_id", validEntityIds);
+            .in("entity_id", validEntityIds)
+            .eq("user_id", userId);
 
           if (!snapError && snapshots) {
             const snapshotMap = new Map(
@@ -5679,7 +5719,7 @@ export class NeotomaServer {
       }
     }
 
-    const relatedData = await this.getRelatedEntitiesAndRelationships(entityIds);
+    const relatedData = await this.getRelatedEntitiesAndRelationships(entityIds, userId);
     result.related_entities = entities;
     result.related_relationships = relatedData.relationships;
 
@@ -5771,11 +5811,12 @@ export class NeotomaServer {
   }
 
   // Helper method to get entity IDs from a source_id
-  private async getEntityIdsFromSource(sourceId: string): Promise<string[]> {
+  private async getEntityIdsFromSource(sourceId: string, userId: string): Promise<string[]> {
     const { data: observations, error } = await db
       .from("observations")
       .select("id, entity_id")
-      .eq("source_id", sourceId);
+      .eq("source_id", sourceId)
+      .eq("user_id", userId);
 
     if (error) {
       console.error("Error fetching observations:", error);
@@ -5813,7 +5854,8 @@ export class NeotomaServer {
 
   // Helper method to retrieve related entities and relationships for entity IDs
   private async getRelatedEntitiesAndRelationships(
-    entityIds: string[]
+    entityIds: string[],
+    userId: string
   ): Promise<{ entities: any[]; relationships: any[] }> {
     if (entityIds.length === 0) {
       return { entities: [], relationships: [] };
@@ -5826,7 +5868,8 @@ export class NeotomaServer {
     const { data: outboundRels, error: outError } = await db
       .from("relationship_snapshots")
       .select("*")
-      .in("source_entity_id", entityIds);
+      .in("source_entity_id", entityIds)
+      .eq("user_id", userId);
 
     if (!outError && outboundRels) {
       allRelationships.push(...outboundRels);
@@ -5838,7 +5881,8 @@ export class NeotomaServer {
     const { data: inboundRels, error: inError } = await db
       .from("relationship_snapshots")
       .select("*")
-      .in("target_entity_id", entityIds);
+      .in("target_entity_id", entityIds)
+      .eq("user_id", userId);
 
     if (!inError && inboundRels) {
       allRelationships.push(...inboundRels);
@@ -5853,7 +5897,8 @@ export class NeotomaServer {
       const { data: entityData, error: entityError } = await db
         .from("entities")
         .select("*")
-        .in("id", Array.from(relatedEntityIds));
+        .in("id", Array.from(relatedEntityIds))
+        .eq("user_id", userId);
 
       if (!entityError && entityData) {
         entities = entityData;
@@ -5862,7 +5907,8 @@ export class NeotomaServer {
         const { data: snapshots, error: snapError } = await db
           .from("entity_snapshots")
           .select("*")
-          .in("entity_id", Array.from(relatedEntityIds));
+          .in("entity_id", Array.from(relatedEntityIds))
+          .eq("user_id", userId);
 
         if (!snapError && snapshots) {
           const snapshotMap = new Map(
@@ -6182,7 +6228,10 @@ export class NeotomaServer {
           existingObservations.map(
             (obs: { id: string; entity_id: string; entity_type: string }) => obs.entity_id
           ) ?? [];
-        const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+        const relatedData = await this.getRelatedEntitiesAndRelationships(
+          existingEntityIds,
+          userId
+        );
         const { data: fragmentRows } = await db
           .from("raw_fragments")
           .select("fragment_key")
@@ -6300,9 +6349,13 @@ export class NeotomaServer {
         },
       });
 
+      // The entities above are already written, so a relationship that
+      // cannot be created is reported rather than failing the whole call.
+      const interpretationRelationshipsCreated: StoreRelationshipCreated[] = [];
+      const interpretationRelationshipsRefused: StoreRelationshipRefused[] = [];
       if (relationships?.length) {
         const { relationshipsService } = await import("./services/relationships.js");
-        for (const rel of relationships) {
+        for (const [relIndex, rel] of relationships.entries()) {
           const sourceEntityId =
             typeof rel.source_entity_id === "string"
               ? rel.source_entity_id
@@ -6315,15 +6368,35 @@ export class NeotomaServer {
               : typeof rel.target_index === "number"
                 ? result.entities[rel.target_index]?.entityId
                 : undefined;
-          if (!sourceEntityId || !targetEntityId) continue;
-          await relationshipsService.createRelationship({
-            relationship_type: rel.relationship_type as RelationshipType,
-            source_entity_id: sourceEntityId,
-            target_entity_id: targetEntityId,
-            source_id: resolvedInterpretationSourceId,
-            metadata: rel.metadata ?? {},
-            user_id: userId,
-          });
+          if (!sourceEntityId || !targetEntityId) {
+            interpretationRelationshipsRefused.push(
+              unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+            );
+            continue;
+          }
+          try {
+            await relationshipsService.createRelationship({
+              relationship_type: rel.relationship_type as RelationshipType,
+              source_entity_id: sourceEntityId,
+              target_entity_id: targetEntityId,
+              source_id: resolvedInterpretationSourceId,
+              metadata: rel.metadata ?? {},
+              user_id: userId,
+            });
+            interpretationRelationshipsCreated.push({
+              relationship_type: rel.relationship_type,
+              source_entity_id: sourceEntityId,
+              target_entity_id: targetEntityId,
+            });
+          } catch (relError) {
+            logger.warn(
+              `store (interpretation): failed to create relationship ${rel.relationship_type} ${sourceEntityId} -> ${targetEntityId}:`,
+              relError instanceof Error ? relError.message : String(relError)
+            );
+            interpretationRelationshipsRefused.push(
+              relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
+            );
+          }
         }
       }
 
@@ -6343,6 +6416,10 @@ export class NeotomaServer {
           ? { no_schema_entity_types: result.noSchemaEntityTypes }
           : {}),
         ...(result.hint ? { hint: result.hint } : {}),
+        relationships_created: interpretationRelationshipsCreated,
+        ...(interpretationRelationshipsRefused.length > 0
+          ? { relationships_refused: interpretationRelationshipsRefused }
+          : {}),
       });
     }
 
@@ -7105,11 +7182,15 @@ export class NeotomaServer {
       }
     }
 
-    // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation)
+    // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation).
+    // Each relationship is created independently: one that cannot be created
+    // is reported in relationships_refused and the rest proceed.
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
       const entityIds = createdEntities.map((e) => e.entityId);
-      for (const rel of relationships) {
+      for (const [relIndex, rel] of relationships.entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -7129,6 +7210,9 @@ export class NeotomaServer {
               `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
               `entities.length=${entityIds.length}); skipping`
           );
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
           continue;
         }
         try {
@@ -7140,10 +7224,18 @@ export class NeotomaServer {
             metadata: rel.metadata ?? {},
             user_id: userId,
           });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
         } catch (relError) {
           logger.warn(
             `store_structured: failed to create relationship ${rel.relationship_type} ${sourceEntityId} -> ${targetEntityId}:`,
             relError instanceof Error ? relError.message : String(relError)
+          );
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
           );
         }
       }
@@ -7151,7 +7243,8 @@ export class NeotomaServer {
 
     // Get related entities and relationships for all created entities
     const relatedData = await this.getRelatedEntitiesAndRelationships(
-      createdEntities.map((e) => e.entityId)
+      createdEntities.map((e) => e.entityId),
+      userId
     );
 
     // Schema-driven store_warnings: non-blocking warnings declared in the schema
@@ -7533,6 +7626,8 @@ export class NeotomaServer {
         : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
+      relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     });
   }
@@ -8045,6 +8140,12 @@ export class NeotomaServer {
     );
 
     if (!result.success) {
+      if (result.not_found) {
+        // Same response for a missing entity and another user's entity.
+        throw new McpError(ErrorCode.InvalidParams, result.error ?? "Entity not found", {
+          code: "RESOURCE_NOT_FOUND",
+        });
+      }
       throw new McpError(ErrorCode.InternalError, result.error ?? "Restore entity failed");
     }
 
@@ -8064,16 +8165,35 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
 
-    const result = await restoreRelationshipService(
-      relationshipKey,
-      parsed.relationship_type,
-      parsed.source_entity_id,
-      parsed.target_entity_id,
-      userId,
-      parsed.reason
-    );
+    let result: Awaited<ReturnType<typeof restoreRelationshipService>>;
+    try {
+      result = await restoreRelationshipService(
+        relationshipKey,
+        parsed.relationship_type,
+        parsed.source_entity_id,
+        parsed.target_entity_id,
+        userId,
+        parsed.reason
+      );
+    } catch (error) {
+      if (error instanceof UnregisteredRelationshipTypeError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          relationship_type: error.relationshipType,
+          hint: error.hint,
+        });
+      }
+      throw error;
+    }
 
     if (!result.success) {
+      if (result.not_found) {
+        // Restore only revives a relationship the caller already holds. A
+        // missing relationship and another user's get the same response.
+        throw new McpError(ErrorCode.InvalidParams, result.error ?? "Relationship not found", {
+          code: "RESOURCE_NOT_FOUND",
+        });
+      }
       throw new McpError(ErrorCode.InternalError, result.error ?? "Restore relationship failed");
     }
 
@@ -8303,6 +8423,8 @@ export class NeotomaServer {
     entity_type?: string;
     user_id?: string;
   }): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const { queryEntities } = await import("./services/entity_queries.js");
 
@@ -8310,7 +8432,6 @@ export class NeotomaServer {
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const entityTypeFilter = queryParams?.entity_type;
-      const userId = queryParams?.user_id;
 
       // Get entities with filters
       const entities = await queryEntities({
@@ -8399,13 +8520,14 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const { queryEntities } = await import("./services/entity_queries.js");
 
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
-      const userId = queryParams?.user_id;
 
       const entities = await queryEntities({
         userId,
@@ -8618,6 +8740,8 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const startDate = `${year}-01-01T00:00:00Z`;
       const endDate = `${parseInt(year) + 1}-01-01T00:00:00Z`;
@@ -8629,6 +8753,7 @@ export class NeotomaServer {
       let query = db
         .from("timeline_events")
         .select("*")
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate)
         .order("event_timestamp", { ascending: false });
@@ -8649,6 +8774,7 @@ export class NeotomaServer {
       const { count, error: countError } = await db
         .from("timeline_events")
         .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate);
 
@@ -8696,6 +8822,8 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const startDate = `${year}-${month}-01T00:00:00Z`;
       const nextMonth =
@@ -8706,41 +8834,13 @@ export class NeotomaServer {
       // Apply query parameters
       const limit = queryParams?.limit || 1000;
       const offset = queryParams?.offset || 0;
-      const userId = queryParams?.user_id;
-
-      // If user_id is provided, get source IDs for that user first
-      let userSourceIds: string[] | undefined;
-      if (userId) {
-        const { data: userSources } = await db.from("sources").select("id").eq("user_id", userId);
-
-        if (userSources && userSources.length > 0) {
-          userSourceIds = userSources.map((s: any) => s.id);
-        } else {
-          // No sources for this user, return empty result
-          return {
-            type: "timeline",
-            category: "timeline",
-            year,
-            month,
-            events: [],
-            total: 0,
-            returned: 0,
-            has_more: false,
-            uri: `neotoma://timeline/${year}-${month}`,
-          };
-        }
-      }
 
       let query = db
         .from("timeline_events")
         .select("*")
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate);
-
-      // Filter by user_id through sources
-      if (userSourceIds && userSourceIds.length > 0) {
-        query = query.in("source_id", userSourceIds);
-      }
 
       query = query.order("event_timestamp", { ascending: false });
 
@@ -8757,17 +8857,12 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = db
+      const { count, error: countError } = await db
         .from("timeline_events")
         .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate);
-
-      if (userSourceIds && userSourceIds.length > 0) {
-        countQuery = countQuery.in("source_id", userSourceIds);
-      }
-
-      const { count, error: countError } = await countQuery;
 
       if (countError) {
         logger.warn("Failed to count timeline events:", countError);
@@ -8810,13 +8905,17 @@ export class NeotomaServer {
    * Resource handler: Get source
    */
   private async handleSource(sourceId: string): Promise<any> {
-    const { data: source, error } = await db
-      .from("sources")
-      .select("*")
-      .eq("id", sourceId)
-      .single();
+    const userId = this.getAuthenticatedUserId();
+    const { getOwnedSource } = await import("./services/scoped_reads.js");
 
-    if (error || !source) {
+    let source: Record<string, any> | null = null;
+    try {
+      source = await getOwnedSource(sourceId, userId);
+    } catch {
+      source = null;
+    }
+
+    if (!source) {
       throw new McpError(ErrorCode.InvalidRequest, `Source not found: ${sourceId}`);
     }
 
@@ -8825,6 +8924,7 @@ export class NeotomaServer {
       .from("observations")
       .select("id, entity_id, entity_type")
       .eq("source_id", sourceId)
+      .eq("user_id", userId)
       .limit(100);
 
     if (obsError) {
@@ -8857,22 +8957,20 @@ export class NeotomaServer {
     order?: "asc" | "desc";
     user_id?: string;
   }): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const sortField = queryParams?.sort || "created_at";
       const sortOrder = queryParams?.order === "asc";
-      const userId = queryParams?.user_id;
 
       let query = db
         .from("sources")
         .select("id, mime_type, file_size, content_hash, created_at, user_id")
+        .eq("user_id", userId)
         .order(sortField, { ascending: sortOrder });
-
-      if (userId) {
-        query = query.eq("user_id", userId);
-      }
 
       if (offset > 0) {
         query = query.range(offset, offset + limit - 1);
@@ -8887,13 +8985,10 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = db.from("sources").select("*", { count: "exact", head: true });
-
-      if (userId) {
-        countQuery = countQuery.eq("user_id", userId);
-      }
-
-      const { count, error: countError } = await countQuery;
+      const { count, error: countError } = await db
+        .from("sources")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId);
 
       if (countError) {
         logger.warn("Failed to count sources:", countError);
@@ -8936,6 +9031,8 @@ export class NeotomaServer {
     relationship_type?: string;
     user_id?: string;
   }): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
@@ -8943,48 +9040,16 @@ export class NeotomaServer {
       const sortField = queryParams?.sort || "last_observation_at";
       const sortOrder = queryParams?.order === "asc";
       const relationshipTypeFilter = queryParams?.relationship_type;
-      const userId = queryParams?.user_id;
-
-      // If user_id is provided, get entity IDs for that user first
-      let userEntityIds: string[] | undefined;
-      if (userId) {
-        const { data: userEntities } = await db
-          .from("entities")
-          .select("id")
-          .eq("user_id", userId)
-          .is("merged_to_entity_id", null);
-
-        if (userEntities && userEntities.length > 0) {
-          userEntityIds = userEntities.map((e: any) => e.id);
-        } else {
-          // No entities for this user, return empty result
-          return {
-            type: "relationship_collection_all",
-            category: "relationships",
-            relationships: [],
-            total: 0,
-            returned: 0,
-            has_more: false,
-            uri: "neotoma://relationships",
-          };
-        }
-      }
 
       let query = db
         .from("relationship_snapshots")
         .select(
           "relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at"
-        );
+        )
+        .eq("user_id", userId);
 
       if (relationshipTypeFilter) {
         query = query.eq("relationship_type", relationshipTypeFilter);
-      }
-
-      // Filter by user_id through entities
-      if (userEntityIds && userEntityIds.length > 0) {
-        query = query.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
       }
 
       query = query.order(sortField, { ascending: sortOrder });
@@ -9004,16 +9069,11 @@ export class NeotomaServer {
       // Get total count
       let countQuery = db
         .from("relationship_snapshots")
-        .select("*", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId);
 
       if (relationshipTypeFilter) {
         countQuery = countQuery.eq("relationship_type", relationshipTypeFilter);
-      }
-
-      if (userEntityIds && userEntityIds.length > 0) {
-        countQuery = countQuery.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
       }
 
       const { count, error: countError } = await countQuery;
@@ -9063,53 +9123,22 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const sortField = queryParams?.sort || "last_observation_at";
       const sortOrder = queryParams?.order === "asc";
-      const userId = queryParams?.user_id;
-
-      // If user_id is provided, get entity IDs for that user first
-      let userEntityIds: string[] | undefined;
-      if (userId) {
-        const { data: userEntities } = await db
-          .from("entities")
-          .select("id")
-          .eq("user_id", userId)
-          .is("merged_to_entity_id", null);
-
-        if (userEntities && userEntities.length > 0) {
-          userEntityIds = userEntities.map((e: any) => e.id);
-        } else {
-          // No entities for this user, return empty result
-          return {
-            type: "relationship_collection",
-            category: "relationships",
-            relationship_type: relationshipType,
-            relationships: [],
-            total: 0,
-            returned: 0,
-            has_more: false,
-            uri: `neotoma://relationships/${relationshipType}`,
-          };
-        }
-      }
 
       let query = db
         .from("relationship_snapshots")
         .select(
           "relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at"
         )
+        .eq("user_id", userId)
         .eq("relationship_type", relationshipType);
-
-      // Filter by user_id through entities
-      if (userEntityIds && userEntityIds.length > 0) {
-        query = query.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
-      }
 
       query = query.order(sortField, { ascending: sortOrder });
 
@@ -9126,16 +9155,11 @@ export class NeotomaServer {
       }
 
       // Get total count for this type
-      let countQuery = db
+      const countQuery = db
         .from("relationship_snapshots")
         .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
         .eq("relationship_type", relationshipType);
-
-      if (userEntityIds && userEntityIds.length > 0) {
-        countQuery = countQuery.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
-      }
 
       const { count, error: countError } = await countQuery;
 
@@ -9180,10 +9204,11 @@ export class NeotomaServer {
    * Resource handler: Get all entity types (schema-level discovery resource)
    */
   private async handleEntityTypes(): Promise<any> {
+    const userId = this.getAuthenticatedUserId();
     try {
       const { SchemaRegistryService } = await import("./services/schema_registry.js");
       const schemaRegistry = new SchemaRegistryService();
-      const entityTypes = await schemaRegistry.listEntityTypes();
+      const entityTypes = await schemaRegistry.listEntityTypes(undefined, userId);
 
       // Return simplified entity type information for discovery
       return {
