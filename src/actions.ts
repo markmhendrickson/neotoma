@@ -94,9 +94,20 @@ import {
   unknownSessionJsonRpcBody,
   type McpHttpSessionMaps,
 } from "./mcp_http_session.js";
+import {
+  describeMcpStandardHeadersForLog,
+  headerRejectionJsonRpcBody,
+  jsonRpcIdOf,
+  readClientInfoFromMeta,
+  readRequestMeta,
+  screenMcpStandardHeaders,
+  selectMcpHttpEra,
+  validateModernMcpRequest,
+} from "./mcp_http_stateless.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
+import { connectionIdForLog } from "./utils/connection_id_log.js";
 import {
   emitEntitySnapshotChange,
   emitObservationCreated,
@@ -1962,6 +1973,28 @@ app.all("/mcp", async (req, res) => {
     const base = host ? `${proto}://${host}` : config.apiBase;
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
+    // Dual-era dispatch (#2070), decided from request SHAPE before any
+    // credential is read so credential material is never threaded into both
+    // branches: a request carrying Mcp-Session-Id, or an `initialize` body,
+    // takes the legacy session path; a session-less POST whose `_meta`
+    // declares a protocol version takes the 2026-07-28 stateless path.
+    const mcpEra = selectMcpHttpEra(req);
+
+    // Mcp-Method / Mcp-Name are gateway-visible. A value shaped like a
+    // credential or personal data is rejected on either era, before auth, and
+    // is never echoed or logged: only header presence and length are logged.
+    if (req.method === "POST") {
+      const headerRejection = screenMcpStandardHeaders(req);
+      if (headerRejection) {
+        logger.warn(
+          `[MCP HTTP] Rejected ${headerRejection.header} header (reason=${headerRejection.reason}, length=${headerRejection.length}); ${describeMcpStandardHeadersForLog(req)}`
+        );
+        return res
+          .status(400)
+          .json(headerRejectionJsonRpcBody(headerRejection, jsonRpcIdOf(req.body)));
+      }
+    }
+
     // Check for authentication BEFORE processing MCP requests
     // When encryption off: no auth by default; optional NEOTOMA_BEARER_TOKEN (or OAuth)
     // When encryption on: require Bearer token derived from private key (same key as data encryption)
@@ -2123,7 +2156,7 @@ app.all("/mcp", async (req, res) => {
         await getAccessTokenForConnection(connectionIdHeader as string);
       } catch {
         logger.info(
-          `[MCP HTTP] Invalid or expired X-Connection-Id: ${connectionIdHeader}. Returning 401 to show Connect button.`
+          `[MCP HTTP] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionIdHeader)}). Returning 401 to show Connect button.`
         );
         // RFC 6750: error=invalid_token signals client to clear credentials and re-authenticate.
         // Use consistent error format so Cursor may show Connect prompt.
@@ -2148,6 +2181,55 @@ app.all("/mcp", async (req, res) => {
       }
     }
 
+    // 2026-07-28 stateless path (#2070). Identity is resolved from this
+    // request's own credentials (validated above) on a FRESH NeotomaServer that
+    // is discarded when the request ends. Nothing is read from or written to
+    // the session maps, so any API instance can serve any request behind a
+    // plain round-robin load balancer, and concurrent requests never share an
+    // instance.
+    if (mcpEra === "modern") {
+      const modernRejection = validateModernMcpRequest(req);
+      if (modernRejection) {
+        logger.info(
+          `[MCP HTTP] Rejected 2026-07-28 request (${modernRejection.logReason}); ${describeMcpStandardHeadersForLog(req)}`
+        );
+        return res.status(modernRejection.httpStatus).json(modernRejection.body);
+      }
+      const body = req.body as Record<string, unknown>;
+      const statelessServer = new NeotomaServer();
+      statelessServer.primeStatelessRequest({
+        // The gate's resolved connection id, never the request header.
+        connectionId: connectionIdHeader,
+        aauthContext: getAAuthContextFromRequest(req),
+        clientInfo: readClientInfoFromMeta(readRequestMeta(body)),
+        appOrigin: resolvePublicAppOriginFromRequest(req),
+      });
+      const shaped = await runWithRequestContext(
+        {
+          agentIdentity: statelessServer.getAgentIdentity(),
+          attributionDecision: getAttributionDecisionFromRequest(req),
+          aauthAdmission: aauthAdmissionForRequest,
+          mcpConnectionId: connectionIdHeader ?? null,
+        },
+        () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
+      );
+      if (!shaped) {
+        return res.status(202).end();
+      }
+      if (shaped.authFailure) {
+        // Same challenge the credential gate above sends, so a client shows
+        // its Connect / re-authenticate flow.
+        res.setHeader(
+          "WWW-Authenticate",
+          shaped.authFailure === "invalid_connection"
+            ? `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token"`
+            : `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`
+        );
+      }
+      return res.status(shaped.status).json(shaped.body);
+    }
+
+    // Legacy session path (2025-11-25 and earlier). Unchanged by #2070.
     // Get or create transport
     let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
     let serverInstance: NeotomaServer | undefined = sessionId
@@ -2234,7 +2316,7 @@ app.all("/mcp", async (req, res) => {
         error: {
           code: -32000,
           message:
-            "Bad Request: No MCP session on this request. Send an initialize JSON-RPC message first, then include the mcp-session-id response header on every subsequent POST.",
+            "Bad Request: No MCP session on this request. Send an initialize JSON-RPC message first, then include the mcp-session-id response header on every subsequent POST. (MCP 2026-07-28 clients: send no session and carry io.modelcontextprotocol/protocolVersion and clientCapabilities in params._meta instead.)",
         },
         id: rpcIdForUnknownSession,
       });
@@ -2357,6 +2439,10 @@ function redactHeaders(headers: Record<string, unknown>): Record<string, unknown
   const clone = { ...headers } as Record<string, unknown>;
   if (clone.authorization) clone.authorization = "[REDACTED]";
   if (clone.Authorization) clone.Authorization = "[REDACTED]";
+  // A connection id authenticates on its own at /mcp, so it is a credential.
+  for (const key of Object.keys(clone)) {
+    if (key.toLowerCase() === "x-connection-id") clone[key] = connectionIdForLog(clone[key]);
+  }
   return clone;
 }
 
@@ -3254,13 +3340,13 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       try {
         const parsed = new URL(authRequest.authUrl);
         logger.info("[MCP OAuth] Authorize accepted (local backend)", {
-          connection_id: connectionId,
+          connection_id: connectionIdForLog(connectionId),
           redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
         });
         return res.redirect(`${parsed.pathname}${parsed.search}`);
       } catch {
         logger.info("[MCP OAuth] Authorize accepted (local backend fallback URL)", {
-          connection_id: connectionId,
+          connection_id: connectionIdForLog(connectionId),
           redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
         });
         return res.redirect(authRequest.authUrl);
@@ -3285,7 +3371,7 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       serverPkce
     );
     logger.info("[MCP OAuth] Authorize accepted (remote backend)", {
-      connection_id: connectionId,
+      connection_id: connectionIdForLog(connectionId),
       redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
     });
 

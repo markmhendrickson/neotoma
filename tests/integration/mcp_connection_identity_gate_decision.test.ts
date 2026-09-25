@@ -14,12 +14,16 @@
  *   2. The initialize, tools/list and resources/list handlers, driven with an
  *      HTTP-shaped `requestInfo` whose headers carry a development connection
  *      id that the gate did not resolve.
+ *   3. The 2026-07-28 stateless path on the real `/mcp` route: the same
+ *      refusals and the same grant-owner resolution as the session path.
  */
 import { createServer } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { modernPost, toolResultJson } from "../helpers/mcp_http_modern.js";
 
 const GRANT_OWNER = "22222222-2222-2222-2222-222222222222";
 const DEV_USER = "00000000-0000-0000-0000-000000000000";
@@ -90,13 +94,13 @@ const FORWARDED_PUBLIC_CLIENT = "198.51.100.7";
 
 type Harness = { baseUrl: string; close: () => Promise<void> };
 
-async function startApp(): Promise<Harness> {
+async function startApp(options: { env?: "development" | "production" } = {}): Promise<Harness> {
   const tmpRoot = mkdtempSync(path.join(tmpdir(), "neotoma-mcp-gate-decision-"));
   process.env.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD = "false";
   process.env.NEOTOMA_BEARER_TOKEN = "gate-decision-shared-token";
   process.env.NEOTOMA_DATA_DIR = path.join(tmpRoot, "data");
   process.env.NEOTOMA_ENCRYPTION_ENABLED = "false";
-  process.env.NEOTOMA_ENV = "development";
+  process.env.NEOTOMA_ENV = options.env ?? "development";
   process.env.NEOTOMA_HOST_URL = "http://127.0.0.1";
   process.env.NEOTOMA_HTTP_PORT = "0";
   delete process.env.NEOTOMA_KEY_FILE_PATH;
@@ -294,4 +298,87 @@ describe("MCP handlers ignore a request X-Connection-Id the gate did not resolve
       expect(authenticatedUserIdOf(server)).toBeNull();
     });
   }
+});
+
+const WHOAMI = {
+  method: "tools/call",
+  params: { name: "get_authenticated_user", arguments: {} },
+} as const;
+
+describe("/mcp 2026-07-28 stateless path: development connection identity", () => {
+  let harness: Harness | undefined;
+
+  afterEach(async () => {
+    if (harness) await harness.close();
+    harness = undefined;
+    vi.resetModules();
+    restoreEnv();
+  });
+
+  for (const devId of ["dev-local", "dev-local-http"]) {
+    it(`refuses ${devId} from a proxied non-local caller with 401`, async () => {
+      harness = await startApp();
+      const reply = await modernPost(
+        harness.baseUrl,
+        { id: 1, ...WHOAMI },
+        { connectionId: devId, headers: { "X-Forwarded-For": FORWARDED_PUBLIC_CLIENT } }
+      );
+      expect(reply.status, reply.text).toBe(401);
+      expect(reply.text).not.toContain(DEV_USER);
+    });
+  }
+
+  it("refuses test-connection-bypass from a proxied non-local caller that also sends an unrecognised Bearer", async () => {
+    harness = await startApp();
+    const reply = await modernPost(
+      harness.baseUrl,
+      { id: 2, ...WHOAMI },
+      {
+        connectionId: "test-connection-bypass",
+        headers: {
+          Authorization: "Bearer not-a-provisioned-token",
+          "X-Forwarded-For": FORWARDED_PUBLIC_CLIENT,
+        },
+      }
+    );
+    expect(reply.status, reply.text).toBe(401);
+    expect(reply.text).not.toContain(DEV_USER);
+  });
+
+  it("in production, refuses a loopback socket whose X-Forwarded-For is loopback-only (401)", async () => {
+    harness = await startApp({ env: "production" });
+    const reply = await modernPost(
+      harness.baseUrl,
+      { id: 3, ...WHOAMI },
+      { connectionId: "dev-local", headers: { "X-Forwarded-For": "127.0.0.1" } }
+    );
+    expect(reply.status, reply.text).toBe(401);
+  });
+
+  it("resolves a non-local AAuth-admitted caller that also sends dev-local to its grant owner", async () => {
+    harness = await startApp();
+    for (const devId of ["dev-local", "dev-local-http"]) {
+      const reply = await modernPost(
+        harness.baseUrl,
+        { id: 4, ...WHOAMI },
+        {
+          connectionId: devId,
+          headers: { [ADMIT_HEADER]: "1", "X-Forwarded-For": FORWARDED_PUBLIC_CLIENT },
+        }
+      );
+      expect(reply.status, reply.text).toBe(200);
+      expect(toolResultJson(reply.body).user_id).toBe(GRANT_OWNER);
+    }
+  });
+
+  it("still authenticates a loopback development caller that sends dev-local (control)", async () => {
+    harness = await startApp();
+    const reply = await modernPost(
+      harness.baseUrl,
+      { id: 5, ...WHOAMI },
+      { connectionId: "dev-local" }
+    );
+    expect(reply.status, reply.text).toBe(200);
+    expect(toolResultJson(reply.body).user_id).toBe(DEV_USER);
+  });
 });
