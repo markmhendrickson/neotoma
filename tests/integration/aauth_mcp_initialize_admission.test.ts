@@ -33,6 +33,14 @@
  *   - NOT admitted (no admission in context) → session stays unauthenticated
  *     (`authenticatedUserId` null), proving OAuth/Bearer remain required for
  *     non-AAuth callers.
+ *
+ * neotoma#2070 (dual-era transport): the same admission branch now also
+ * authenticates 2026-07-28 stateless requests, which have no `initialize`.
+ * The stateless path resolves identity per request on a fresh
+ * `NeotomaServer` via `handleStatelessRequest`, inside the same request-scoped
+ * context the `/mcp` handler sets. The last test pins the old-client
+ * regression: a legacy initialize-based session and a stateless request, side
+ * by side, both authenticate as the grant owner.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -43,6 +51,40 @@ import { config } from "../../src/config.js";
 import { NeotomaServer } from "../../src/server.js";
 import type { AAuthAdmissionContext } from "../../src/services/protected_entity_types.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
+
+const MODERN_META = {
+  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+  "io.modelcontextprotocol/clientCapabilities": {},
+};
+
+/**
+ * Serve one 2026-07-28 `get_authenticated_user` call on a fresh server inside a
+ * request context carrying `admission`, the way the `/mcp` stateless branch
+ * does. Returns the resolved user id, or the JSON-RPC error.
+ */
+async function statelessWhoami(
+  admission: AAuthAdmissionContext | null
+): Promise<{ userId?: string; errorCode?: number }> {
+  const server = new NeotomaServer();
+  server.primeStatelessRequest({ connectionId: null, aauthContext: null, clientInfo: null });
+  const shaped = await runWithRequestContext({ agentIdentity: null, aauthAdmission: admission }, () =>
+    server.handleStatelessRequest(
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "get_authenticated_user", arguments: {}, _meta: MODERN_META },
+      },
+      { headers: {} }
+    )
+  );
+  const body = shaped?.body as
+    | { result?: { content?: Array<{ text?: string }> }; error?: { code?: number } }
+    | undefined;
+  if (body?.error) return { errorCode: body.error.code };
+  const text = body?.result?.content?.[0]?.text ?? "{}";
+  return { userId: (JSON.parse(text) as { user_id?: string }).user_id };
+}
 
 const GRANT_OWNER = "22222222-2222-2222-2222-222222222222";
 
@@ -135,5 +177,25 @@ describe("AAuth/MCP initialize authenticates from admission", () => {
     // connection-id or Bearer. It must NOT authenticate.
     client = await connectInMemoryWithAdmission(server, null);
     expect(authenticatedUserIdOf(server)).toBeNull();
+  });
+
+  it("#2070: authenticates a 2026-07-28 stateless request as the grant owner when AAuth-admitted", async () => {
+    expect(await statelessWhoami(admittedAdmission())).toEqual({ userId: GRANT_OWNER });
+  });
+
+  it("#2070: refuses a 2026-07-28 stateless request when NOT admitted", async () => {
+    const outcome = await statelessWhoami(null);
+    expect(outcome.userId).toBeUndefined();
+    expect(outcome.errorCode).toBe(-32600);
+  });
+
+  it("#2070 old-client regression: legacy initialize and a stateless request both resolve the grant owner", async () => {
+    const legacyServer = new NeotomaServer();
+    client = await connectInMemoryWithAdmission(legacyServer, admittedAdmission());
+    expect(authenticatedUserIdOf(legacyServer)).toBe(GRANT_OWNER);
+    expect(await statelessWhoami(admittedAdmission())).toEqual({ userId: GRANT_OWNER });
+    // The stateless request used its own instance: the legacy session's
+    // server is untouched and still authenticated.
+    expect(authenticatedUserIdOf(legacyServer)).toBe(GRANT_OWNER);
   });
 });

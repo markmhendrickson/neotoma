@@ -25,6 +25,16 @@ import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
+  MCP_META_SERVER_INFO,
+  MCP_MODERN_SUPPORTED_VERSIONS,
+  MCP_STATELESS_CACHE_HINT,
+  SingleExchangeTransport,
+  jsonRpcIdOf,
+  shapeModernResponse,
+} from "./mcp_http_stateless.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import type { IncomingHttpHeaders } from "node:http";
+import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
@@ -204,6 +214,19 @@ export const MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST = [
  * must echo the same object: returning bare `tools: {}` drops `listChanged`, which
  * breaks some clients' tool discovery / UI (e.g. Cursor) even when `tools/list` works.
  */
+/**
+ * `server/discover` request (MCP 2026-07-28, SEP-2575). The request carries no
+ * parameters beyond the standard `_meta`. Not in @modelcontextprotocol/sdk 1.x,
+ * so declared here (#2070).
+ */
+const ServerDiscoverRequestSchema = z.object({
+  method: z.literal("server/discover"),
+  params: z
+    .object({ _meta: z.record(z.unknown()).optional() })
+    .passthrough()
+    .optional(),
+});
+
 const NEOTOMA_MCP_DECLARED_CAPABILITIES = {
   tools: { listChanged: true },
   resources: {},
@@ -377,177 +400,335 @@ export class NeotomaServer {
       this.isHTTPTransportSession = isHTTPTransport;
       const updateNotice = await this.getInitializeUpdateNotice(isHTTPTransport);
 
-      // Extract connection_id: prefer HTTP-layer value (set by actions.ts) so auth works when SDK does not pass requestInfo
       const allHeaders = (extra?.requestInfo as any)?.headers || {};
-      const authHeader = allHeaders["authorization"] || allHeaders["Authorization"];
-      let connectionId =
-        this.sessionConnectionId ||
-        (extra?.authInfo as any)?.connectionId ||
-        allHeaders["x-connection-id"] ||
-        allHeaders["X-Connection-Id"] ||
-        (!isHTTPTransport ? process.env.NEOTOMA_CONNECTION_ID : undefined);
-
-      // If no connection ID header, try to get it from Bearer token
-      if (
-        !connectionId &&
-        authHeader &&
-        typeof authHeader === "string" &&
-        authHeader.startsWith("Bearer ")
-      ) {
-        try {
-          const token = authHeader.substring(7);
-          const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
-          const { connectionId: resolvedConnectionId } =
-            await validateTokenAndGetConnectionId(token);
-          connectionId = resolvedConnectionId;
-          logger.info(`[MCP Server] Resolved connection ID from Bearer token: ${connectionId}`);
-        } catch (error: any) {
-          logger.error(
-            `[MCP Server] Failed to resolve connection ID from Bearer token: ${error.message}`
-          );
-        }
-      }
-
-      // Stdio + encryption off: no auth required, same as HTTP (actions.ts sets x-connection-id to dev-local)
-      if (!connectionId && !isHTTPTransport && !config.encryption.enabled) {
-        connectionId = "dev-local";
-      }
-
-      logger.info(
-        `[MCP Server] Initialize: connectionId=${connectionId}, authHeader=${authHeader ? "present" : "missing"}`
+      const connectionId = await this.resolveRequestConnectionId(
+        allHeaders,
+        extra?.authInfo,
+        isHTTPTransport
       );
 
-      if (connectionId) {
-        // In test environment, allow test connection ID to bypass authentication
-        const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-        if (connectionId === "test-connection-bypass" && isTestEnv) {
-          this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
-          this.requestAuth.set(requestId, {
-            userId: this.authenticatedUserId,
-            token: "test-bypass-token",
-          });
-          logger.info(
-            `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
+      const outcome = await this.resolveAuthentication({
+        connectionId,
+        isHTTPTransport,
+        requestId,
+      });
+      if (outcome === "authenticated") {
+        return await this.buildAuthenticatedInitializeResponse(updateNotice);
+      }
+      // No authentication method provided - return with OAuth capabilities
+      // This allows Cursor to show "Connect" button for OAuth
+      return this.getUnauthenticatedResponse(outcome === "invalid_connection");
+    });
+  }
+
+  /**
+   * Resolve the connection id a request authenticates with: the HTTP-layer
+   * value (set by actions.ts) first, then the SDK auth info, then request
+   * headers, then (stdio only) the environment. When none is present but the
+   * request carries a Bearer token, resolve the connection from the token.
+   *
+   * Reads only the inputs passed in plus this instance's HTTP-layer connection
+   * id, so the legacy initialize handler and the 2026-07-28 stateless path
+   * (#2070) resolve identity the same way.
+   */
+  private async resolveRequestConnectionId(
+    allHeaders: Record<string, unknown>,
+    authInfo: unknown,
+    isHTTPTransport: boolean,
+    logLabel: "Initialize" | "Stateless request" = "Initialize"
+  ): Promise<string | undefined> {
+    // Extract connection_id: prefer HTTP-layer value (set by actions.ts) so auth works when SDK does not pass requestInfo
+    const authHeader = allHeaders["authorization"] || allHeaders["Authorization"];
+    let connectionId =
+      this.sessionConnectionId ||
+      (authInfo as any)?.connectionId ||
+      allHeaders["x-connection-id"] ||
+      allHeaders["X-Connection-Id"] ||
+      (!isHTTPTransport ? process.env.NEOTOMA_CONNECTION_ID : undefined);
+
+    // If no connection ID header, try to get it from Bearer token
+    if (
+      !connectionId &&
+      authHeader &&
+      typeof authHeader === "string" &&
+      authHeader.startsWith("Bearer ")
+    ) {
+      try {
+        const token = authHeader.substring(7);
+        const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
+        const { connectionId: resolvedConnectionId } = await validateTokenAndGetConnectionId(token);
+        connectionId = resolvedConnectionId;
+        logger.info(`[MCP Server] Resolved connection ID from Bearer token: ${connectionId}`);
+      } catch (error: any) {
+        logger.error(
+          `[MCP Server] Failed to resolve connection ID from Bearer token: ${error.message}`
+        );
+      }
+    }
+
+    // Stdio + encryption off: no auth required, same as HTTP (actions.ts sets x-connection-id to dev-local)
+    if (!connectionId && !isHTTPTransport && !config.encryption.enabled) {
+      connectionId = "dev-local";
+    }
+
+    logger.info(
+      `[MCP Server] ${logLabel}: connectionId=${connectionId}, authHeader=${authHeader ? "present" : "missing"}`
+    );
+    return typeof connectionId === "string" ? connectionId : undefined;
+  }
+
+  /**
+   * Authenticate this server instance from one request's credentials: an
+   * OAuth / dev-local / test connection id, else a verified AAuth admission
+   * read from the request-scoped AsyncLocalStorage context. Sets
+   * `authenticatedUserId` on success.
+   *
+   * Shared by the legacy `initialize` handler (once per session) and the
+   * 2026-07-28 stateless path (once per request, on a fresh instance that is
+   * discarded afterwards, #2070). Nothing here reads a previous request's
+   * state: every input is the current request's.
+   */
+  private async resolveAuthentication(input: {
+    connectionId: string | undefined;
+    isHTTPTransport: boolean;
+    requestId: string;
+  }): Promise<"authenticated" | "unauthenticated" | "invalid_connection"> {
+    const { connectionId, isHTTPTransport, requestId } = input;
+
+    if (connectionId) {
+      // In test environment, allow test connection ID to bypass authentication
+      const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+      if (connectionId === "test-connection-bypass" && isTestEnv) {
+        this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
+        this.requestAuth.set(requestId, {
+          userId: this.authenticatedUserId,
+          token: "test-bypass-token",
+        });
+        logger.info(
+          `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
+        );
+        return "authenticated";
+      }
+
+      // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
+      if (connectionId === "dev-local-http") {
+        this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
+        this.requestAuth.set(requestId, {
+          userId: this.authenticatedUserId,
+          token: "dev-local-http",
+        });
+        logger.info(
+          `[MCP Server] Using HTTP no-auth (anonymous user: ${this.authenticatedUserId})`
+        );
+        return "authenticated";
+      }
+
+      // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
+      if (connectionId === "dev-local") {
+        const devUser = await ensureLocalDevUser();
+        this.authenticatedUserId = devUser.id;
+        this.requestAuth.set(requestId, {
+          userId: this.authenticatedUserId,
+          token: "dev-local",
+        });
+        logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
+        return "authenticated";
+      }
+
+      // OAuth flow - check if connection ID is valid
+      try {
+        const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+        const { accessToken, userId } = await getAccessTokenForConnection(connectionId);
+
+        // Store auth per request (for HTTP) and at instance level (for stdio)
+        this.requestAuth.set(requestId, { userId, token: accessToken });
+        this.authenticatedUserId = userId;
+        this.sessionToken = accessToken;
+
+        logger.info(
+          `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
+        );
+        return "authenticated";
+      } catch (error: any) {
+        const isConnectionNotFound =
+          error.message?.includes("Connection not found") ||
+          error.message?.includes("connection_id") ||
+          error.code === "OAUTH_CONNECTION_NOT_FOUND";
+
+        if (isConnectionNotFound) {
+          logger.error(
+            `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. Clearing connection ID.`
           );
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
+          this.sessionConnectionId = null;
+        } else {
+          logger.error(`[MCP Server] OAuth initialization failed: ${error.message}`);
         }
 
-        // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
-        if (connectionId === "dev-local-http") {
-          this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
-          this.requestAuth.set(requestId, {
-            userId: this.authenticatedUserId,
-            token: "dev-local-http",
-          });
+        // Stdio + encryption off: fall back to dev-local (default user)
+        if (!isHTTPTransport && !config.encryption.enabled) {
           logger.info(
-            `[MCP Server] Using HTTP no-auth (anonymous user: ${this.authenticatedUserId})`
+            "[MCP Server] Stdio with encryption off: falling back to dev-local (no auth required)."
           );
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
-        }
-
-        // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
-        if (connectionId === "dev-local") {
           const devUser = await ensureLocalDevUser();
           this.authenticatedUserId = devUser.id;
           this.requestAuth.set(requestId, {
             userId: this.authenticatedUserId,
             token: "dev-local",
           });
-          logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
+          return "authenticated";
         }
 
-        // OAuth flow - check if connection ID is valid
-        try {
-          const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-          const { accessToken, userId } = await getAccessTokenForConnection(connectionId);
-
-          // Store auth per request (for HTTP) and at instance level (for stdio)
-          this.requestAuth.set(requestId, { userId, token: accessToken });
-          this.authenticatedUserId = userId;
-          this.sessionToken = accessToken;
-
-          logger.info(
-            `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
-          );
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
-        } catch (error: any) {
-          const isConnectionNotFound =
-            error.message?.includes("Connection not found") ||
-            error.message?.includes("connection_id") ||
-            error.code === "OAUTH_CONNECTION_NOT_FOUND";
-
-          if (isConnectionNotFound) {
-            logger.error(
-              `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. Clearing connection ID.`
-            );
-            this.sessionConnectionId = null;
-          } else {
-            logger.error(`[MCP Server] OAuth initialization failed: ${error.message}`);
-          }
-
-          // Stdio + encryption off: fall back to dev-local (default user)
-          if (!isHTTPTransport && !config.encryption.enabled) {
-            logger.info(
-              "[MCP Server] Stdio with encryption off: falling back to dev-local (no auth required)."
-            );
-            const devUser = await ensureLocalDevUser();
-            this.authenticatedUserId = devUser.id;
-            this.requestAuth.set(requestId, {
-              userId: this.authenticatedUserId,
-              token: "dev-local",
-            });
-            return await this.buildAuthenticatedInitializeResponse(updateNotice);
-          }
-
-          if (isConnectionNotFound) {
-            return this.getUnauthenticatedResponse(true);
-          }
-          return this.getUnauthenticatedResponse();
-        }
+        return isConnectionNotFound ? "invalid_connection" : "unauthenticated";
       }
+    }
 
-      // Stronger AAuth Admission: a verified AAuth identity resolved to an
-      // active `agent_grant` authenticates the MCP session as the grant
-      // owner. Consulted only here — after OAuth connection-id / Bearer have
-      // had their chance above — so those credentials keep precedence and
-      // this is purely the no-OAuth fallback. Brings the MCP transport to
-      // parity with the REST direct-write endpoints, which already honour
-      // `req.aauthAdmission` (see `aauthAdmission()` middleware in actions.ts).
-      //
-      // Fail-safe by construction: `admitFromAAuthContext` only returns
-      // `admitted: true` for a verified signature matched to an `active`
-      // grant, and `user_id` is always the grant owner — never a
-      // request-supplied id — so an AAuth caller cannot pivot owners.
-      // Per-(op, entity_type) capability scope is enforced on each tool call,
-      // identical to the REST path.
-      //
-      // Read from the request-scoped AsyncLocalStorage context (threaded by
-      // actions.ts into the outer runWithRequestContext before transport
-      // handling) rather than a shared session field. The outer context is
-      // per-async-chain (per HTTP request), so concurrent admitted requests
-      // from different grant owners cannot contaminate each other's admission.
-      // The previous `this.sessionAdmission` single-field approach had a
-      // cross-request race: request B's setSessionAdmission() could overwrite
-      // the field in the window before request A read it, causing A to
-      // authenticate as B's user_id (owner pivot).
-      const admission = getCurrentAAuthAdmission();
-      if (admission?.admitted && admission.user_id) {
-        this.authenticatedUserId = admission.user_id;
-        this.requestAuth.set(requestId, {
-          userId: admission.user_id,
-          token: `aauth:${admission.grant_id ?? "admitted"}`,
-        });
-        logger.info(
-          `[MCP Server] Authenticated via AAuth admission (user: ${admission.user_id}, grant: ${admission.grant_id ?? "unknown"})`
-        );
-        return await this.buildAuthenticatedInitializeResponse(updateNotice);
-      }
+    // Stronger AAuth Admission: a verified AAuth identity resolved to an
+    // active `agent_grant` authenticates the MCP session as the grant
+    // owner. Consulted only here — after OAuth connection-id / Bearer have
+    // had their chance above — so those credentials keep precedence and
+    // this is purely the no-OAuth fallback. Brings the MCP transport to
+    // parity with the REST direct-write endpoints, which already honour
+    // `req.aauthAdmission` (see `aauthAdmission()` middleware in actions.ts).
+    //
+    // Fail-safe by construction: `admitFromAAuthContext` only returns
+    // `admitted: true` for a verified signature matched to an `active`
+    // grant, and `user_id` is always the grant owner — never a
+    // request-supplied id — so an AAuth caller cannot pivot owners.
+    // Per-(op, entity_type) capability scope is enforced on each tool call,
+    // identical to the REST path.
+    //
+    // Read from the request-scoped AsyncLocalStorage context (threaded by
+    // actions.ts into the outer runWithRequestContext before transport
+    // handling) rather than a shared session field. The outer context is
+    // per-async-chain (per HTTP request), so concurrent admitted requests
+    // from different grant owners cannot contaminate each other's admission.
+    // The previous `this.sessionAdmission` single-field approach had a
+    // cross-request race: request B's setSessionAdmission() could overwrite
+    // the field in the window before request A read it, causing A to
+    // authenticate as B's user_id (owner pivot).
+    const admission = getCurrentAAuthAdmission();
+    if (admission?.admitted && admission.user_id) {
+      this.authenticatedUserId = admission.user_id;
+      this.requestAuth.set(requestId, {
+        userId: admission.user_id,
+        token: `aauth:${admission.grant_id ?? "admitted"}`,
+      });
+      logger.info(
+        `[MCP Server] Authenticated via AAuth admission (user: ${admission.user_id}, grant: ${admission.grant_id ?? "unknown"})`
+      );
+      return "authenticated";
+    }
 
-      // No authentication method provided - return with OAuth capabilities
-      // This allows Cursor to show "Connect" button for OAuth
-      return this.getUnauthenticatedResponse();
+    return "unauthenticated";
+  }
+
+  // --------------------------------------------------------------------------
+  // MCP 2026-07-28 stateless path (#2070)
+  // --------------------------------------------------------------------------
+
+  /**
+   * `server/discover` (2026-07-28, SEP-2575). Registered only on stateless-path
+   * instances (see {@link handleStatelessRequest}): stdio and legacy HTTP
+   * sessions are initialize-based, and answering a dual-era client's
+   * `server/discover` probe there would tell it to skip `initialize`, which is
+   * where those transports authenticate. Carries protocol versions, this
+   * server's declared capabilities, its identity and its instructions only:
+   * no caller identity, no tenant data (standing rules and instance skills are
+   * per-user graph data and stay off this RPC), no instance topology. The
+   * instructions are the same composition `/mcp-interaction-instructions`
+   * serves publicly: the MCP instruction block plus the instance data policy.
+   */
+  private setupDiscoverHandler(): void {
+    this.mcpServer.server.setRequestHandler(ServerDiscoverRequestSchema, async () =>
+      this.buildDiscoverResult()
+    );
+  }
+
+  async buildDiscoverResult(): Promise<Record<string, unknown>> {
+    let policySection = "";
+    try {
+      const { getInstancePolicy, renderInstancePolicyInstructions } =
+        await import("./services/instance_policy.js");
+      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
+    } catch (err) {
+      logger.warn(
+        `[instance_policy] discover instructions render skipped: ${(err as Error).message}`
+      );
+    }
+    return {
+      resultType: "complete",
+      supportedVersions: [...MCP_MODERN_SUPPORTED_VERSIONS],
+      capabilities: { ...NEOTOMA_MCP_DECLARED_CAPABILITIES },
+      instructions: composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+      ttlMs: MCP_STATELESS_CACHE_HINT.ttlMs,
+      cacheScope: MCP_STATELESS_CACHE_HINT.cacheScope,
+      _meta: { [MCP_META_SERVER_INFO]: this.getServerInfo() },
+    };
+  }
+
+  /** Self-reported server identity (display and logging only). */
+  getServerInfo(): { name: string; version: string } {
+    return { name: "neotoma", version: readPackageVersion(config.projectRoot) };
+  }
+
+  /**
+   * Load one stateless request's attribution inputs onto this instance. The
+   * caller constructs a FRESH instance per request and discards it after
+   * {@link handleStatelessRequest}, so these fields never outlive the request
+   * and are never shared with a concurrent one. Synchronous, so the caller can
+   * read {@link getAgentIdentity} before entering the request context.
+   */
+  primeStatelessRequest(input: {
+    connectionId?: string | null;
+    aauthContext: AAuthRequestContext | null;
+    clientInfo: { name?: string; version?: string } | null;
+    appOrigin?: { origin?: string; source?: SessionOriginInfo["source"] };
+  }): void {
+    this.isHTTPTransportSession = true;
+    this.sessionConnectionId = input.connectionId ?? null;
+    this.sessionAAuth = input.aauthContext;
+    this.sessionClientInfo = input.clientInfo;
+    this.sessionAppOrigin = input.appOrigin?.origin ?? null;
+    this.sessionAppOriginSource = input.appOrigin?.source ?? null;
+  }
+
+  /**
+   * Serve exactly one 2026-07-28 JSON-RPC request: resolve identity from this
+   * request's credentials alone, dispatch through the SDK's own request
+   * handling over a one-request transport, and return the shaped response
+   * (null for a notification). Must run inside the request's
+   * `runWithRequestContext` so an AAuth admission is visible to
+   * {@link resolveAuthentication} and the per-tool capability gate.
+   */
+  async handleStatelessRequest(
+    message: Record<string, unknown>,
+    requestInfo: { headers: IncomingHttpHeaders }
+  ): Promise<{ status: number; body: Record<string, unknown> } | null> {
+    const connectionId = await this.resolveRequestConnectionId(
+      requestInfo.headers as Record<string, unknown>,
+      undefined,
+      true,
+      "Stateless request"
+    );
+    await this.resolveAuthentication({
+      connectionId,
+      isHTTPTransport: true,
+      requestId: randomUUID(),
     });
+
+    this.setupDiscoverHandler();
+    const id = jsonRpcIdOf(message);
+    const transport = new SingleExchangeTransport(id);
+    await this.mcpServer.server.connect(transport);
+    try {
+      transport.deliver(message as unknown as JSONRPCMessage, { requestInfo });
+      const response = await transport.response;
+      if (!response) return null;
+      const method = typeof message.method === "string" ? message.method : "";
+      return shapeModernResponse(method, response, this.getServerInfo());
+    } finally {
+      await this.mcpServer.server.close();
+    }
   }
 
   /**

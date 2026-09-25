@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **627**
-- Backend and repo Vitest files: **591**
+- Total automated test files: **630**
+- Backend and repo Vitest files: **594**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 172 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 183 |
+| Vitest integration tests | 186 |
 | Vitest CLI tests | 79 |
 | Vitest contract tests | 20 |
 | Vitest security tests | 9 |
@@ -414,7 +414,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (183):**
+**Files (186):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -503,6 +503,9 @@ flowchart TD
 - `tests/integration/mcp_get_entity_type_counts.test.ts`
 - `tests/integration/mcp_graph_variations.test.ts`
 - `tests/integration/mcp_handler_cross_user_scoping.test.ts`
+- `tests/integration/mcp_http_method_name_headers.test.ts`
+- `tests/integration/mcp_http_server_discover.test.ts`
+- `tests/integration/mcp_http_stateless_auth_resolution.test.ts`
 - `tests/integration/mcp_invalid_bearer_auth.test.ts`
 - `tests/integration/mcp_list_relationships_entity_filters.test.ts`
 - `tests/integration/mcp_npm_check_update_capability_delta.test.ts`
