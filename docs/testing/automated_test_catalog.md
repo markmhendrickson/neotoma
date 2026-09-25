@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **622**
-- Backend and repo Vitest files: **586**
+- Total automated test files: **627**
+- Backend and repo Vitest files: **591**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,11 +70,11 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 172 |
-| Vitest service tests | 44 |
+| Vitest service tests | 47 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 182 |
-| Vitest CLI tests | 78 |
-| Vitest contract tests | 19 |
+| Vitest CLI tests | 79 |
+| Vitest contract tests | 20 |
 | Vitest security tests | 9 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
@@ -288,12 +288,13 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (46):**
+**Files (47):**
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
+- `tests/services/correction_file_reference.test.ts`
 - `tests/services/deploy_seed_wiring.test.ts`
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
@@ -689,7 +690,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (19):**
+**Files (20):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
