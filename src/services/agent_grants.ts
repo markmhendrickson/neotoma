@@ -638,6 +638,29 @@ async function writeGrantEntity(params: InternalGrantWrite): Promise<AgentGrant>
 }
 
 /**
+ * Advisory warnings for a grant as stored. A grant without
+ * `match_thumbprint` is accepted (for example while the agent's key is
+ * being provisioned) but does not admit signed requests, so callers
+ * that create or edit one are told at write time rather than on the
+ * first refused request.
+ */
+export function grantAdmissionWarnings(
+  grant: Pick<AgentGrant, "match_thumbprint" | "status">
+): string[] {
+  const warnings: string[] = [];
+  if (grant.status !== "revoked" && !trimOrNull(grant.match_thumbprint)) {
+    warnings.push(
+      "This grant pins no match_thumbprint, so it does not admit signed requests, " +
+        "and capability-gated writes signed by an agent whose sub/iss match it are " +
+        "refused until a key is pinned. Set match_thumbprint to the agent's key " +
+        "thumbprint (`neotoma auth session` on the agent's host prints it); see " +
+        "docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant."
+    );
+  }
+  return warnings;
+}
+
+/**
  * Create a new grant for `userId`. Capability shape is validated.
  * Status defaults to `active`. Idempotent on the canonical-name key
  * derived from the identity match.

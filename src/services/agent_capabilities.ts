@@ -26,6 +26,7 @@
 import type { AttributionTier, AgentIdentity } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
 import { getCurrentAAuthAdmission } from "./request_context.js";
+import type { AAuthAdmissionContext } from "./protected_entity_types.js";
 
 /**
  * Canonical operation identifier. Mirrors the top-level MCP/REST entry
@@ -98,13 +99,53 @@ export interface AgentCapabilityAgent {
 }
 
 /**
+ * Capability ceiling for the current request.
+ *
+ * Kept separate from authentication on purpose. `admitted` answers "did
+ * AAuth authenticate this caller?"; the ceiling answers "which
+ * capability-gated operations may this request perform?". A request can
+ * be authenticated by a bearer token or OAuth and still carry an AAuth
+ * signature, and the signature decides the ceiling either way.
+ *
+ * - `grant`: the signature is bound to an active grant
+ *   (`match_thumbprint`); the grant's capabilities are the ceiling.
+ * - `deny`: the signature names a grant (by `sub` / `iss`) that pins no
+ *   key (admission reason `grant_key_unbound`). The grant cannot be
+ *   applied to this key, so capability-gated operations fail closed
+ *   until the grant is pinned. This holds however the request
+ *   authenticated.
+ * - `none`: no grant applies; `NEOTOMA_AGENT_DEFAULT_DENY` decides.
+ */
+export type AgentCapabilityCeiling =
+  | { kind: "grant"; capabilities: AgentCapabilityEntry[] }
+  | { kind: "deny"; reason: "grant_key_unbound" }
+  | { kind: "none" };
+
+/**
+ * Derive the {@link AgentCapabilityCeiling} from an admission record.
+ * Pure; exported for tests and diagnostics.
+ */
+export function capabilityCeilingFromAdmission(
+  admission: AAuthAdmissionContext | null | undefined
+): AgentCapabilityCeiling {
+  if (admission?.admitted) {
+    return { kind: "grant", capabilities: admission.capabilities ?? [] };
+  }
+  if (admission?.reason === "grant_key_unbound") {
+    return { kind: "deny", reason: "grant_key_unbound" };
+  }
+  return { kind: "none" };
+}
+
+/**
  * Acting agent on the current request. Built from the resolved
  * {@link AgentIdentity}, possibly enriched by the admission service.
  *
- * `capabilities` is non-null only when the request was admitted via an
- * `agent_grant` — otherwise the registry has no information about
- * this caller and {@link enforceAgentCapability} relies on
- * `default_deny` to decide.
+ * `admitted` records whether AAuth admission authenticated the caller.
+ * `ceiling` records which capability limits apply (see
+ * {@link AgentCapabilityCeiling}); it is what {@link enforceAgentCapability}
+ * reads. `capabilities` mirrors the grant's capabilities when admitted
+ * and is kept for existing callers.
  */
 export interface AgentCapabilityContext {
   sub?: string;
@@ -114,7 +155,28 @@ export interface AgentCapabilityContext {
   capabilities: AgentCapabilityEntry[] | null;
   agentLabel: string;
   admitted: boolean;
+  /**
+   * Capability ceiling. When absent (contexts built by hand), it is
+   * derived from `admitted` / `capabilities`.
+   */
+  ceiling?: AgentCapabilityCeiling;
 }
+
+/** Resolve the ceiling for a context, deriving it for hand-built contexts. */
+function ceilingOf(ctx: AgentCapabilityContext): AgentCapabilityCeiling {
+  if (ctx.ceiling) return ctx.ceiling;
+  if (ctx.admitted && ctx.capabilities) {
+    return { kind: "grant", capabilities: ctx.capabilities };
+  }
+  return { kind: "none" };
+}
+
+/**
+ * Where operators find how to pin a key to an existing grant. Referenced
+ * from denial hints and the admission log line.
+ */
+export const GRANT_KEY_PIN_DOC =
+  "docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant";
 
 /** Structured denial. HTTP handlers surface this as 403 `capability_denied`. */
 export class AgentCapabilityError extends Error {
@@ -239,7 +301,9 @@ function agentLabelFor(identity: AgentIdentity | null | undefined, admittedLabel
  * Admission context is read from {@link getCurrentAAuthAdmission}
  * (lazy-imported to break a module cycle): when an `admitted` grant is
  * resolved, its capabilities and label are surfaced; otherwise the
- * caller is treated as an unrecognised agent.
+ * caller is treated as an unrecognised agent. The capability ceiling is
+ * derived from the same record by {@link capabilityCeilingFromAdmission},
+ * independent of how the request authenticated.
  */
 export function contextFromAgentIdentity(
   identity: AgentIdentity | null | undefined
@@ -260,6 +324,7 @@ export function contextFromAgentIdentity(
     capabilities: admission?.admitted ? (admission.capabilities ?? []) : null,
     agentLabel: agentLabelFor(identity, admission?.agent_label),
     admitted: Boolean(admission?.admitted),
+    ceiling: capabilityCeilingFromAdmission(admission),
   };
 }
 
@@ -288,15 +353,19 @@ function entryCovers(
 }
 
 /**
- * Enforce capability-based authorization. Behaviour:
+ * Enforce capability-based authorization. Behaviour, keyed on the
+ * request's {@link AgentCapabilityCeiling}:
  *
  *   1. `entityTypes` empty → no-op.
- *   2. Admitted agent → every `(op, entity_type)` pair must be covered
+ *   2. `grant` ceiling → every `(op, entity_type)` pair must be covered
  *      by the grant's capabilities. Mismatch → throw.
- *   3. Unadmitted but signature-verified agent (`tier in {hardware,
+ *   3. `deny` ceiling (the signature names a grant that pins no key) →
+ *      throw, whatever authenticated the request and regardless of
+ *      `NEOTOMA_AGENT_DEFAULT_DENY`.
+ *   4. `none` ceiling, signature-verified agent (`tier in {hardware,
  *      software, operator_attested}`) AND
  *      {@link isAgentDefaultDenyEnabled} → throw.
- *   4. Otherwise → allow (preserves legacy behaviour for unknown
+ *   5. Otherwise → allow (preserves legacy behaviour for unknown
  *      agents during rollout).
  *
  * Throws {@link AgentCapabilityError} on denial.
@@ -310,10 +379,12 @@ export function enforceAgentCapability(
   const distinctTypes = Array.from(new Set(entityTypes.filter(Boolean)));
   if (distinctTypes.length === 0) return;
 
-  if (ctx.admitted && ctx.capabilities) {
+  const ceiling = ceilingOf(ctx);
+
+  if (ceiling.kind === "grant") {
     const denied: string[] = [];
     for (const entityType of distinctTypes) {
-      if (!entryCovers(ctx.capabilities, op, entityType)) {
+      if (!entryCovers(ceiling.capabilities, op, entityType)) {
         denied.push(entityType);
       }
     }
@@ -342,7 +413,32 @@ export function enforceAgentCapability(
     throw err;
   }
 
-  // Unadmitted: optionally apply default-deny for verified-signature tiers.
+  if (ceiling.kind === "deny") {
+    const err = new AgentCapabilityError({
+      op,
+      entityType: distinctTypes[0],
+      agentLabel: ctx.agentLabel,
+      hint:
+        "This request is signed by a key that is not pinned on the agent_grant " +
+        "matching its sub/iss, so the grant's capabilities cannot be applied " +
+        "and capability-gated writes are refused. Set the grant's " +
+        "match_thumbprint to this agent's key thumbprint (see " +
+        `${GRANT_KEY_PIN_DOC}).`,
+    });
+    logger.warn(
+      JSON.stringify({
+        event: "agent_capability_denied",
+        reason: "grant_key_unbound",
+        op,
+        entity_types: distinctTypes,
+        agent_label: ctx.agentLabel,
+        admitted: ctx.admitted,
+      })
+    );
+    throw err;
+  }
+
+  // No grant applies: optionally apply default-deny for verified-signature tiers.
   const enforcedTier =
     ctx.tier === "hardware" || ctx.tier === "software" || ctx.tier === "operator_attested";
   if (!enforcedTier) return;
@@ -411,8 +507,9 @@ export function enforceRelationshipTypeCapability(
 ): void {
   const op: AgentCapabilityOp = "register_relationship_type";
 
-  if (ctx?.admitted && ctx.capabilities) {
-    const matching = ctx.capabilities.filter((cap) => grantOpMatchesRequested(cap.op, op));
+  const ceiling = ctx ? ceilingOf(ctx) : ({ kind: "none" } as const);
+  if (ctx && ceiling.kind === "grant") {
+    const matching = ceiling.capabilities.filter((cap) => grantOpMatchesRequested(cap.op, op));
     const types = matching.flatMap((cap) => cap.relationship_types ?? []);
     const coversType = types.includes("*") || types.includes(relationshipType);
     const coversGlobal = types.includes("global");

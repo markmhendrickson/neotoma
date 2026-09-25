@@ -20,8 +20,10 @@ import {
   AgentCapabilityError,
   LegacyAgentCapabilityEnvError,
   assertNoLegacyCapabilityEnv,
+  capabilityCeilingFromAdmission,
   contextFromAgentIdentity,
   enforceAgentCapability,
+  enforceRelationshipTypeCapability,
   isAgentDefaultDenyEnabled,
   getAgentCapabilitiesSource,
   type AgentCapabilityContext,
@@ -306,6 +308,89 @@ describe("agent_capabilities", () => {
       const ctx = unadmittedCtx({ tier: "anonymous" });
       expect(() =>
         enforceAgentCapability("store_structured", ["task"], ctx),
+      ).not.toThrow();
+    });
+  });
+
+  describe("capability ceiling (separate from authentication)", () => {
+    const unboundAdmission = { admitted: false, reason: "grant_key_unbound" as const };
+
+    it("maps admission records to ceilings", () => {
+      expect(
+        capabilityCeilingFromAdmission({
+          admitted: true,
+          reason: "admitted",
+          capabilities: [{ op: "store_structured", entity_types: ["a"] }],
+        }),
+      ).toEqual({
+        kind: "grant",
+        capabilities: [{ op: "store_structured", entity_types: ["a"] }],
+      });
+      expect(capabilityCeilingFromAdmission(unboundAdmission)).toEqual({
+        kind: "deny",
+        reason: "grant_key_unbound",
+      });
+      expect(capabilityCeilingFromAdmission({ admitted: false, reason: "no_match" })).toEqual({
+        kind: "none",
+      });
+      expect(capabilityCeilingFromAdmission({ admitted: false, reason: "not_signed" })).toEqual({
+        kind: "none",
+      });
+      expect(capabilityCeilingFromAdmission(null)).toEqual({ kind: "none" });
+    });
+
+    it("grant_key_unbound denies capability-gated writes with default_deny unset", async () => {
+      expect(process.env.NEOTOMA_AGENT_DEFAULT_DENY).toBeUndefined();
+      const identity: AgentIdentity = {
+        sub: "worker@swarm.example",
+        iss: "https://issuer.example",
+        thumbprint: "tp-unpinned",
+        tier: "software",
+      } as AgentIdentity;
+      await runWithRequestContext(
+        { agentIdentity: identity, aauthAdmission: unboundAdmission },
+        async () => {
+          const ctx = contextFromAgentIdentity(identity)!;
+          expect(ctx.admitted).toBe(false);
+          expect(ctx.ceiling).toEqual({ kind: "deny", reason: "grant_key_unbound" });
+          for (const op of ["store_structured", "correct", "create_relationship"] as const) {
+            let caught: unknown;
+            try {
+              enforceAgentCapability(op, ["task"], ctx);
+            } catch (err) {
+              caught = err;
+            }
+            expect(caught).toBeInstanceOf(AgentCapabilityError);
+            expect((caught as AgentCapabilityError).hint).toContain(
+              "pin-a-key-to-an-existing-grant",
+            );
+          }
+          expect(() => enforceRelationshipTypeCapability("LEASE", "user", ctx)).toThrow(
+            AgentCapabilityError,
+          );
+        },
+      );
+    });
+
+    it("grant_key_unbound denies whatever the signature's tier", () => {
+      const ctx = unadmittedCtx({
+        tier: "anonymous",
+        ceiling: { kind: "deny", reason: "grant_key_unbound" },
+      });
+      expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).toThrow(
+        AgentCapabilityError,
+      );
+    });
+
+    it("hand-built contexts without a ceiling keep their previous behaviour", () => {
+      expect(() =>
+        enforceAgentCapability("store_structured", ["neotoma_feedback"], admittedCtx()),
+      ).not.toThrow();
+      expect(() => enforceAgentCapability("store_structured", ["task"], admittedCtx())).toThrow(
+        AgentCapabilityError,
+      );
+      expect(() =>
+        enforceAgentCapability("store_structured", ["task"], unadmittedCtx()),
       ).not.toThrow();
     });
   });

@@ -6545,9 +6545,11 @@ export class NeotomaServer {
       // (op, entity_type) pairs declared on its grant. Mirrors the HTTP
       // `/store` gate in actions.ts (`enforceAgentCapability("store", …)`)
       // so an AAuth-authenticated MCP session gets exactly the REST scope —
-      // never broader. No-op for non-admitted callers (`enforceAgentCapability`
-      // only enforces when `ctx.admitted`), so plain OAuth/Bearer users and
-      // anonymous callers are unaffected.
+      // never broader. The limits follow the request's capability ceiling,
+      // not how it authenticated: a signature that names a grant pinning no
+      // key fails closed even under OAuth/Bearer. Callers with no AAuth
+      // signature (plain OAuth/Bearer users, anonymous callers) are
+      // unaffected.
       {
         const { enforceAgentCapability, contextFromAgentIdentity } =
           await import("./services/agent_capabilities.js");

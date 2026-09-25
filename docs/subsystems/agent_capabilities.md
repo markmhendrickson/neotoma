@@ -31,6 +31,7 @@ Implementation:
 | User-authenticated callers (Bearer / OAuth / local Inspector session) | No — full access to their own user_id's data, modulo attribution policy. |
 | AAuth-verified agent matched to an `active` grant                    | Yes — restricted to declared `(op, entity_type)` pairs on the grant. |
 | AAuth-verified agent with no matching grant                          | Falls through to attribution-only behaviour (no admission, must use Bearer/OAuth). |
+| AAuth-verified agent whose `sub` / `iss` names a grant that pins no key | Not admitted, and capability-gated writes are refused (`capability_denied`) even when Bearer/OAuth authenticates the request, until the grant is pinned. See [Identity rule](#identity-rule). |
 | Anonymous / unverified-client tier                                   | No admission; subject to attribution policy. |
 
 The canonical use is pinning the Netlify forwarder
@@ -97,16 +98,81 @@ without `match_thumbprint` does not admit signed requests. A request
 whose `sub` / `iss` match such a grant gets admission reason
 `grant_key_unbound` (visible in `/session` under
 `aauth.admission_reason`), and the server logs an
-`aauth_admission_key_unbound` warning telling the operator to pin the
-thumbprint.
+`aauth_admission_key_unbound` warning that points to
+[Pin a key to an existing grant](#pin-a-key-to-an-existing-grant).
+
+Authentication and capability limits are separate decisions. A request
+can be authenticated by Bearer or OAuth and also carry an AAuth
+signature; the signature still decides which capability limits apply:
+
+- Signature bound to a grant (`match_thumbprint` matches): the grant's
+  capabilities are the ceiling, whatever authenticated the request.
+- Signature whose `sub` / `iss` names a grant that pins no key
+  (`grant_key_unbound`): capability-gated writes (`store`, `correct`,
+  `create_relationship`, relationship-type registration, protected
+  types) are refused with `capability_denied` until the grant is
+  pinned. This does not depend on `NEOTOMA_AGENT_DEFAULT_DENY`, and a
+  Bearer/OAuth credential on the same request does not lift it.
+- No grant involved: `NEOTOMA_AGENT_DEFAULT_DENY` decides, as before.
 
 Take the thumbprint from the agent's own key material (for example
-`neotoma auth session`, which prints the configured signer's
-thumbprint), not from observed request traffic.
+`neotoma auth session` on the agent's host, which prints the configured
+signer's thumbprint), not from observed request traffic.
 
 A grant may still be created with only `match_sub` (for example while
 the agent's key is being provisioned); it stays inert until
-`match_thumbprint` is set.
+`match_thumbprint` is set. `POST /agents/grants` and
+`PATCH /agents/grants/{id}` return a `warnings` entry for such a grant,
+and `neotoma agents grants import` prints one per grant.
+
+#### Pin a key to an existing grant
+
+There is no dedicated CLI edit subcommand; use any of the paths below.
+Writes to `agent_grant` are protected, so make them from a
+user-authenticated session (Bearer / OAuth / Inspector) or from an agent
+whose own grant carries the bootstrap capability.
+
+1. **Get the thumbprint** from the agent's own key material: run
+   `neotoma auth session` on the agent's host and copy `thumbprint`.
+2. **Apply it to the grant** (`<grant_id>` is the grant's entity id,
+   shown in Inspector and in `GET /agents/grants`):
+   - **Inspector:** Agents → Agent grants → open the grant
+     (`/agents/grants/<grant_id>`) → set **match_thumbprint** → Save.
+   - **REST (grant route):**
+     `PATCH /agents/grants/<grant_id>` with body
+     `{ "match_thumbprint": "<thumbprint>" }`. This also clears the
+     admission cache, so the pin applies to the next request.
+   - **MCP `correct`:**
+     ```json
+     {
+       "entity_id": "<grant_id>",
+       "entity_type": "agent_grant",
+       "field": "match_thumbprint",
+       "value": "<thumbprint>",
+       "idempotency_key": "pin-<grant_id>-<thumbprint>"
+     }
+     ```
+   - **REST `correct`:** `POST /correct` with the same JSON body.
+   - **CLI (generic correction):**
+     `neotoma corrections create <grant_id> --entity-type agent_grant --field-name match_thumbprint --corrected-value <thumbprint>`
+
+   A pin written through `correct` is picked up after the admission
+   cache TTL (a few seconds).
+3. **Verify** from the agent's host: `neotoma auth session` should
+   report `aauth.admitted: true` with `aauth.admission_reason: "admitted"`.
+   Check the pinned value against the agent's key material itself; a
+   grant's admission status before the pin is applied does not confirm
+   the value.
+
+#### Agents that cannot be pinned
+
+Agents that use the `jkt_jwt` Signature-Key scheme sign with a
+short-lived key, so the thumbprint changes whenever the key does and
+cannot be pinned on a grant. Grant admission does not admit such
+agents. They need issuer-verified identity (the agent token verified
+against its issuer's keys), which grant admission does not provide
+today. Give an agent that needs a grant a long-lived signing key
+(`hwk`, `jwt` with a stable `cnf.jwk`, or `jwks_uri`).
 
 ### Capability ops
 

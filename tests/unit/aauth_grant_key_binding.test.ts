@@ -59,10 +59,19 @@ vi.mock("../../src/services/correction.js", () => ({
 }));
 
 import { aauthVerify, getAAuthContextFromRequest } from "../../src/middleware/aauth_verify.js";
+import { attributionContext } from "../../src/middleware/attribution_context.js";
+import { aauthAdmission } from "../../src/middleware/aauth_admission.js";
 import { admitFromAAuthContext } from "../../src/services/aauth_admission.js";
+import {
+  AgentCapabilityError,
+  contextFromAgentIdentity,
+  enforceAgentCapability,
+} from "../../src/services/agent_capabilities.js";
+import { getCurrentAgentIdentity } from "../../src/services/request_context.js";
 import {
   clearGrantCacheForTests,
   clearMatchDebounceForTests,
+  grantAdmissionWarnings,
 } from "../../src/services/agent_grants.js";
 
 const AUTHORITY = "neotoma.test";
@@ -247,5 +256,157 @@ describe("grant admission requires a key binding", () => {
 
     expect(admission.admitted).toBe(true);
     expect(admission.grant_id).toBe("ent_grant_tp_only");
+  });
+});
+
+/**
+ * Capability limits for signed requests that also carry a bearer token.
+ *
+ * Authentication and the capability ceiling are separate decisions: the
+ * bearer token decides who the caller is, and the grant the signature
+ * names decides what a capability-gated write may touch. These cases run
+ * the real middleware chain (`aauthVerify` -> `attributionContext` ->
+ * `aauthAdmission`) and the real capability gate.
+ */
+describe("capability limits for signed requests", () => {
+  const WRITE_TYPE_IN_GRANT = "neotoma_feedback";
+  const WRITE_TYPE_OUTSIDE_GRANT = "task";
+  const GRANT_CAPS = [{ op: "store_structured", entity_types: [WRITE_TYPE_IN_GRANT] }];
+
+  let savedDefaultDeny: string | undefined;
+  beforeEach(() => {
+    savedDefaultDeny = process.env.NEOTOMA_AGENT_DEFAULT_DENY;
+    // The default configuration: no default-deny.
+    delete process.env.NEOTOMA_AGENT_DEFAULT_DENY;
+  });
+  afterEach(() => {
+    if (savedDefaultDeny === undefined) delete process.env.NEOTOMA_AGENT_DEFAULT_DENY;
+    else process.env.NEOTOMA_AGENT_DEFAULT_DENY = savedDefaultDeny;
+  });
+
+  type WriteOutcome = { allowed: true } | { allowed: false; error: unknown };
+
+  /**
+   * Drive `req` through the request middleware and attempt a
+   * capability-gated `store_structured` write of `entityType`.
+   */
+  async function attemptWrite(req: any, entityType: string): Promise<WriteOutcome> {
+    const res: any = { status: vi.fn(() => res), json: vi.fn(() => res) };
+    return new Promise<WriteOutcome>((resolve, reject) => {
+      const verify = aauthVerify({ authority: AUTHORITY, strict: true });
+      void verify(req, res, () => {
+        attributionContext()(req, res, () => {
+          aauthAdmission()(req, res, () => {
+            try {
+              const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
+              if (ctx) enforceAgentCapability("store_structured", [entityType], ctx);
+              resolve({ allowed: true });
+            } catch (error) {
+              resolve({ allowed: false, error });
+            }
+          });
+        });
+      }).catch(reject);
+    });
+  }
+
+  function withBearer(req: any) {
+    req.headers = { ...req.headers, authorization: "Bearer test-operator-token" };
+    return req;
+  }
+
+  it("unpinned grant + bearer + signature: a write outside the grant is denied", async () => {
+    putGrant("ent_grant_unpinned", { match_sub: SUB, match_iss: ISS, capabilities: GRANT_CAPS });
+    const agent = await freshKey();
+
+    const outcome = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+      WRITE_TYPE_OUTSIDE_GRANT
+    );
+
+    expect(outcome.allowed).toBe(false);
+    const error = (outcome as { error: unknown }).error;
+    expect(error).toBeInstanceOf(AgentCapabilityError);
+    expect((error as AgentCapabilityError).code).toBe("capability_denied");
+    expect((error as AgentCapabilityError).hint).toContain("match_thumbprint");
+  });
+
+  it("unpinned grant + bearer + signature: capability-gated writes fail closed", async () => {
+    putGrant("ent_grant_unpinned", { match_sub: SUB, match_iss: ISS, capabilities: GRANT_CAPS });
+    const agent = await freshKey();
+
+    const outcome = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+      WRITE_TYPE_IN_GRANT
+    );
+
+    expect(outcome.allowed).toBe(false);
+    expect((outcome as { error: unknown }).error).toBeInstanceOf(AgentCapabilityError);
+  });
+
+  it("pinned grant: the grant's limits apply as before", async () => {
+    const agent = await freshKey();
+    putGrant("ent_grant_pinned", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: agent.thumbprint,
+      capabilities: GRANT_CAPS,
+    });
+
+    const inside = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+      WRITE_TYPE_IN_GRANT
+    );
+    expect(inside.allowed).toBe(true);
+
+    const outside = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+      WRITE_TYPE_OUTSIDE_GRANT
+    );
+    expect(outside.allowed).toBe(false);
+    expect((outside as { error: unknown }).error).toBeInstanceOf(AgentCapabilityError);
+  });
+
+  it("bearer only (no signature): the capability gate is unchanged", async () => {
+    putGrant("ent_grant_unpinned", { match_sub: SUB, match_iss: ISS, capabilities: GRANT_CAPS });
+    const req: any = withBearer({
+      method: "GET",
+      protocol: "https",
+      hostname: AUTHORITY,
+      originalUrl: "/entities",
+      path: "/entities",
+      headers: { "x-client-name": "some-client" },
+      rawBody: undefined,
+    });
+
+    const outcome = await attemptWrite(req, WRITE_TYPE_OUTSIDE_GRANT);
+
+    expect(outcome.allowed).toBe(true);
+  });
+
+  it("signed request with no grant naming it: unchanged (default-deny decides)", async () => {
+    const agent = await freshKey();
+
+    const outcome = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: "unrelated@example", iss: ISS })),
+      WRITE_TYPE_OUTSIDE_GRANT
+    );
+
+    expect(outcome.allowed).toBe(true);
+  });
+});
+
+describe("grant write warnings", () => {
+  it("warns when a grant pins no key", () => {
+    const warnings = grantAdmissionWarnings({ match_thumbprint: null, status: "active" });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("match_thumbprint");
+    expect(warnings[0]).toContain("pin-a-key-to-an-existing-grant");
+  });
+
+  it("does not warn for a pinned grant or a revoked one", () => {
+    expect(grantAdmissionWarnings({ match_thumbprint: "tp-abc", status: "active" })).toEqual([]);
+    expect(grantAdmissionWarnings({ match_thumbprint: "  ", status: "suspended" })).toHaveLength(1);
+    expect(grantAdmissionWarnings({ match_thumbprint: null, status: "revoked" })).toEqual([]);
   });
 });

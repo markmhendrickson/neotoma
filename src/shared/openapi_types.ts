@@ -830,9 +830,11 @@ export interface paths {
     /**
      * Create an agent grant
      * @description Creates a new `agent_grant` for the authenticated user. At least
-     *     one of `match_sub` or `match_thumbprint` must be supplied. The
-     *     grant's `capabilities` follow the same shape used by the
-     *     admitted-request authorization check.
+     *     one of `match_sub` or `match_thumbprint` must be supplied. Only
+     *     `match_thumbprint` admits signed requests; a grant created without
+     *     it is accepted but inert, and the response carries a `warnings`
+     *     entry saying so. The grant's `capabilities` follow the same shape
+     *     used by the admitted-request authorization check.
      */
     post: operations["createAgentGrant"];
     delete?: never;
@@ -859,7 +861,10 @@ export interface paths {
      * Update editable fields on an agent grant
      * @description Patches `label`, `capabilities`, `notes`, or any of the
      *     `match_*` identity fields. Status transitions go through the
-     *     dedicated `suspend`, `revoke`, and `restore` endpoints.
+     *     dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+     *     `match_thumbprint` is how a key is pinned to an existing grant;
+     *     the admission cache is cleared so the pin applies to the next
+     *     request.
      */
     patch: operations["updateAgentGrant"];
     trace?: never;
@@ -3143,8 +3148,11 @@ export interface components {
        *     attribution-only and `admitted` is `false`. Admission is
        *     key-bound: a grant admits only when its `match_thumbprint`
        *     equals the signing key's thumbprint. `grant_key_unbound`
-       *     means a grant matched sub/iss but pins no key;
-       *     pin `match_thumbprint` to admit the agent.
+       *     means a grant matched sub/iss but pins no key; capability-gated
+       *     writes carrying that signature are refused until the grant is
+       *     pinned, whatever authenticated the request. Pin
+       *     `match_thumbprint` to admit the agent (see
+       *     docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
        */
       aauth: {
         verified: boolean;
@@ -6039,6 +6047,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -6114,6 +6128,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };

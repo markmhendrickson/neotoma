@@ -14,7 +14,10 @@
  * Admission is key-bound: only a grant whose `match_thumbprint` equals
  * the signing key's thumbprint admits. A grant that matches `sub` /
  * `iss` but pins no key refuses with `grant_key_unbound`, and the
- * operator is told to pin the thumbprint.
+ * operator is told to pin the thumbprint. The capability layer treats
+ * that reason as fail-closed for capability-gated writes, independent
+ * of how the request authenticated (see `capabilityCeilingFromAdmission`
+ * in `agent_capabilities.ts`).
  *
  * Unknown identities stay attribution-only — the caller's request is
  * NOT rejected by this service; it just doesn't gain user resolution.
@@ -29,6 +32,7 @@
 import type { AAuthRequestContext } from "../crypto/agent_identity.js";
 import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
 import { lookupGrantForIdentity, recordMatch, type AgentGrant } from "./agent_grants.js";
+import { GRANT_KEY_PIN_DOC } from "./agent_capabilities.js";
 import { logger } from "../utils/logger.js";
 
 export type { AAuthAdmissionContext, AAuthAdmissionReason };
@@ -97,9 +101,14 @@ export async function admitFromAAuthContext(
           thumbprint_prefix: ctx.thumbprint?.slice(0, 12) ?? null,
           message:
             "An active agent_grant matches this agent's sub/iss but pins no " +
-            "match_thumbprint. Signed admission requires a key binding: set the " +
-            "grant's match_thumbprint to the RFC 7638 thumbprint of the agent's " +
-            "public key, taken from the agent's own key material.",
+            "match_thumbprint. Signed admission requires a key binding, and " +
+            "capability-gated writes carrying this signature are refused until " +
+            "the grant is pinned. Set the grant's match_thumbprint to the RFC 7638 " +
+            "thumbprint of the agent's public key, taken from the agent's own key " +
+            "material (`neotoma auth session` on the agent's host). How to apply " +
+            "it to an existing grant (Inspector, PATCH /agents/grants/{id}, or " +
+            `correct): ${GRANT_KEY_PIN_DOC}`,
+          docs: GRANT_KEY_PIN_DOC,
         })
       );
       return { admitted: false, reason: "grant_key_unbound" };
