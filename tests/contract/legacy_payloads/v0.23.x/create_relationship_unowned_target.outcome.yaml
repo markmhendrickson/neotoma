@@ -1,0 +1,25 @@
+endpoint: "POST /create_relationship"
+outcome: rejected
+error_code: RESOURCE_NOT_FOUND
+notes: |
+  Pre-v0.23.x, relationshipsService.createRelationship had no ownership check
+  on source_entity_id / target_entity_id: only the relationship type's
+  registration and acyclic constraint were enforced. A caller could link to
+  any entity id, including one that does not exist or belongs to another
+  user.
+
+  This fixture uses two well-formed but nonexistent entity ids (the corpus
+  cannot seed a real foreign-owned row, but the handler refuses a missing
+  entity and another user's entity identically — see
+  docs/subsystems/relationships.md § 6.1). Both endpoints must now be
+  entities the caller owns; the call is refused with
+  `404 RESOURCE_NOT_FOUND` rather than creating a dangling relationship.
+
+  The relationship leg of `store` and `create_interpretation` apply the same
+  ownership rule but do not fail the call: a refused relationship is reported
+  in the response's `relationships_refused` array while the rest of the
+  request proceeds (see StoreStructuredResponse / CreateInterpretationResponse
+  in openapi.yaml). That partial-success shape returns 2xx, so it is not
+  representable by this corpus's valid/deprecated/rejected vocabulary; MCP
+  and HTTP coverage for it lives in
+  tests/security/scoped_source_and_relationship_reads.test.ts instead.

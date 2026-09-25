@@ -3521,6 +3521,44 @@ export interface components {
       target_entity_type?: string | null;
       target_entity_type_label?: string | null;
     };
+    /**
+     * @description A relationship from a request's `relationships` array that was
+     *     written. Shared by `StoreStructuredResponse.relationships_created`
+     *     and `CreateInterpretationResponse.relationships_created`. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipCreated: {
+      relationship_type: string;
+      source_entity_id: string;
+      target_entity_id: string;
+    };
+    /**
+     * @description A relationship from a request's `relationships` array that was not
+     *     written. The entities in the call are still stored. Shared by
+     *     `StoreStructuredResponse.relationships_refused` and
+     *     `CreateInterpretationResponse.relationships_refused`. An endpoint
+     *     that does not exist and one owned by another user are both reported
+     *     as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipRefusal: {
+      /** @description Position of the relationship in the request's `relationships` array. */
+      relationship_index: number;
+      relationship_type: string;
+      source_entity_id?: string;
+      target_entity_id?: string;
+      source_index?: number;
+      target_index?: number;
+      /**
+       * @description One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+       *     `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+       *     `RELATIONSHIP_INVALID_ENTITY_ID`,
+       *     `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+       */
+      code: string;
+      reason: string;
+      hint?: string;
+    };
     TimelineEvent: {
       id?: string;
       event_type?: string;
@@ -3660,9 +3698,18 @@ export interface components {
        *     data.
        */
       hint?: string;
-      relationships_created?: {
-        [key: string]: unknown;
-      }[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. See
+       *     docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
     };
     /** @description Aggregate usage statistics computed from local data only. */
     UsageStats: {
@@ -4026,11 +4073,7 @@ export interface components {
        * @description Relationships from the request's `relationships` array that were
        *     written. See docs/subsystems/relationships.md § 6.1.
        */
-      relationships_created?: {
-        relationship_type: string;
-        source_entity_id: string;
-        target_entity_id: string;
-      }[];
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
       /**
        * @description Relationships from the request's `relationships` array that were
        *     not written. The entities in the call are still stored. Present
@@ -4038,24 +4081,7 @@ export interface components {
        *     does not exist and one owned by another user are both reported as
        *     `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
        */
-      relationships_refused?: {
-        /** @description Position of the relationship in the request's `relationships` array. */
-        relationship_index: number;
-        relationship_type: string;
-        source_entity_id?: string;
-        target_entity_id?: string;
-        source_index?: number;
-        target_index?: number;
-        /**
-         * @description One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
-         *     `RELATIONSHIP_REFERENCE_UNRESOLVED`,
-         *     `RELATIONSHIP_INVALID_ENTITY_ID`,
-         *     `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
-         */
-        code: string;
-        reason: string;
-        hint?: string;
-      }[];
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
       /**
        * @description Schema-driven non-fatal warnings emitted when a stored observation
        *     omits all fields listed by a schema's `store_warnings` rule. Used

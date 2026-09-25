@@ -25,6 +25,7 @@ import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { relationshipsService } from "../../src/services/relationships.js";
+import { schemaRegistry } from "../../src/services/schema_registry.js";
 import {
   isEntityDeleted,
   restoreRelationship,
@@ -748,6 +749,37 @@ describe("scoped source, file-URL and relationship reads", () => {
         .eq("user_id", bob.userId);
       expect((written ?? []).map((r: any) => r.target_entity_id)).toEqual([bobEnt]);
     });
+
+    it("MCP create_interpretation reports created and refused relationships the same way as store", async () => {
+      actAs(bob.userId);
+      const response = parse(
+        await (server as any).createInterpretation({
+          source_id: bob.sourceId,
+          entities: [{ entity_type: noteType, title: `mcp create_interpretation ${randomUUID()}` }],
+          relationships: [
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: bobEnt },
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: aliceEnt },
+          ],
+        })
+      );
+      expect(response.interpretation_id).toBeTruthy();
+      expect(response.entities).toHaveLength(1);
+      const noteId = response.entities[0].entity_id;
+
+      expect(response.relationships_created).toEqual([
+        {
+          relationship_type: "REFERS_TO",
+          source_entity_id: noteId,
+          target_entity_id: bobEnt,
+        },
+      ]);
+      expect(response.relationships_refused).toHaveLength(1);
+      expect(response.relationships_refused[0]).toMatchObject({
+        relationship_index: 1,
+        code: "RELATIONSHIP_ENDPOINT_NOT_FOUND",
+      });
+      expect(JSON.stringify(response)).not.toContain("alice-only-value");
+    });
   });
 
   describe("MCP retrieve_file_url signs the matched source", () => {
@@ -845,6 +877,142 @@ describe("scoped source, file-URL and relationship reads", () => {
         expect(normalize(JSON.stringify(withoutTimestamp(foreign.json)), alice.entityId)).toBe(
           normalize(JSON.stringify(withoutTimestamp(missing.json)), missingId)
         );
+      });
+    });
+
+    describe("/store and /interpretations/create relationship reporting", () => {
+      const noteType = `${PREFIX}_http_note`;
+      const entId = () => `ent_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+      const httpDevEnt = entId();
+      const httpAliceEnt = entId();
+      const createdNoteIds: string[] = [];
+
+      beforeAll(async () => {
+        await db.from("entities").insert([
+          {
+            id: httpDevEnt,
+            user_id: LOCAL_DEV_USER_ID,
+            entity_type: "test",
+            canonical_name: "dev http ent",
+          },
+          {
+            id: httpAliceEnt,
+            user_id: alice.userId,
+            entity_type: "test",
+            canonical_name: "alice http ent",
+          },
+        ]);
+        // /interpretations/create goes through runInterpretation, which (unlike
+        // store's structured path) requires an active schema to create an
+        // entity; register one explicitly rather than relying on extracted-field
+        // auto-creation, which is a separate, best-effort mechanism.
+        await schemaRegistry.register({
+          entity_type: noteType,
+          schema_version: "1.0",
+          schema_definition: {
+            fields: {
+              title: { type: "string", required: false },
+              body: { type: "string", required: false },
+            },
+            canonical_name_fields: ["title"],
+          },
+          reducer_config: {
+            merge_policies: {
+              title: { strategy: "last_write" },
+              body: { strategy: "last_write" },
+            },
+          },
+          user_id: LOCAL_DEV_USER_ID,
+          user_specific: true,
+          activate: true,
+          force: true,
+        });
+      });
+
+      afterAll(async () => {
+        await db
+          .from("relationship_observations")
+          .delete()
+          .in("target_entity_id", [httpDevEnt, httpAliceEnt]);
+        await db
+          .from("relationship_snapshots")
+          .delete()
+          .in("target_entity_id", [httpDevEnt, httpAliceEnt]);
+        await db.from("entities").delete().in("id", [httpDevEnt, httpAliceEnt]);
+        if (createdNoteIds.length > 0) {
+          await db
+            .from("relationship_observations")
+            .delete()
+            .in("source_entity_id", createdNoteIds);
+          await db.from("relationship_snapshots").delete().in("source_entity_id", createdNoteIds);
+          await db.from("observations").delete().in("entity_id", createdNoteIds);
+          await db.from("entity_snapshots").delete().in("entity_id", createdNoteIds);
+          await db.from("entities").delete().in("id", createdNoteIds);
+        }
+      });
+
+      it("POST /store reports created and refused relationships, same shape as MCP", async () => {
+        const missingId = entId();
+        const { status, json } = await post("/store", {
+          idempotency_key: `${PREFIX}_http_store_${randomUUID()}`,
+          entities: [{ entity_type: noteType, title: `http store ${randomUUID()}` }],
+          relationships: [
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: httpDevEnt },
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: httpAliceEnt },
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: missingId },
+          ],
+        });
+        expect(status).toBe(200);
+        const noteId = json.entities[0].entity_id;
+        createdNoteIds.push(noteId);
+
+        expect(json.relationships_created).toEqual([
+          {
+            relationship_type: "REFERS_TO",
+            source_entity_id: noteId,
+            target_entity_id: httpDevEnt,
+          },
+        ]);
+        const refused = json.relationships_refused;
+        expect(refused.map((r: any) => r.relationship_index)).toEqual([1, 2]);
+        expect(refused[0].code).toBe("RELATIONSHIP_ENDPOINT_NOT_FOUND");
+        expect(refused[1].code).toBe("RELATIONSHIP_ENDPOINT_NOT_FOUND");
+        expect(JSON.stringify(json)).not.toContain("alice-only-value");
+      });
+
+      it("POST /interpretations/create reports created and refused relationships, same shape as store", async () => {
+        // runInterpretation only auto-registers a schema for a never-before-seen
+        // entity_type when the extracted payload carries at least two fields
+        // (schema_registry.ensureSchemaForExtractedEntity skips single-field
+        // payloads as not worth registering); a single-field payload would
+        // fall through to raw_fragments and never create an entity.
+        const { status, json } = await post("/interpretations/create", {
+          source_id: devUser.sourceId,
+          entities: [
+            { entity_type: noteType, title: `http interp ${randomUUID()}`, body: "interp body" },
+          ],
+          relationships: [
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: httpAliceEnt },
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: httpDevEnt },
+          ],
+        });
+        expect(status).toBe(200);
+        expect(json.interpretation_id).toBeTruthy();
+        const noteId = json.entities[0].entity_id;
+        createdNoteIds.push(noteId);
+
+        expect(json.relationships_created).toEqual([
+          {
+            relationship_type: "REFERS_TO",
+            source_entity_id: noteId,
+            target_entity_id: httpDevEnt,
+          },
+        ]);
+        expect(json.relationships_refused).toHaveLength(1);
+        expect(json.relationships_refused[0]).toMatchObject({
+          relationship_index: 0,
+          code: "RELATIONSHIP_ENDPOINT_NOT_FOUND",
+        });
       });
     });
 
