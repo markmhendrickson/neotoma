@@ -612,11 +612,17 @@ export class RelationshipTypeRegistryService {
     scope?: RelationshipTypeScope;
     include_deactivated?: boolean;
   }): Promise<{ empty_reason: "registry_unseeded" | "filtered_to_empty"; hint: string } | null> {
+    // NOTE: `unfiltered` is user-then-global, matching `resolveAll` — it is
+    // NOT global-only, so this only distinguishes "the combined effective set
+    // this caller sees is empty" from "keyword filtered a non-empty set to
+    // nothing". Only called from `list()` when its own (equally user+global)
+    // result was already empty, so that is the exact same set, and no caller
+    // reaches this expecting a global-only census.
     const unfiltered = await this.resolveAllWithRepair(params.user_id);
-    const globalCount = unfiltered.filter(
+    const effectiveCount = unfiltered.filter(
       (r) => r.state === "active" || params.include_deactivated
     ).length;
-    if (globalCount === 0) {
+    if (effectiveCount === 0) {
       return {
         empty_reason: "registry_unseeded",
         hint:
