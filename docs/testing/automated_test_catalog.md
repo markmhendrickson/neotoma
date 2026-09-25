@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **629**
-- Backend and repo Vitest files: **593**
+- Total automated test files: **630**
+- Backend and repo Vitest files: **594**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 172 |
+| Vitest unit tests | 173 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 183 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (172):**
+**Files (173):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -118,6 +118,7 @@ flowchart TD
 - `tests/unit/aauth_attestation_verifier.test.ts`
 - `tests/unit/aauth_attestation_webauthn_packed.test.ts`
 - `tests/unit/aauth_authority_normalization.test.ts`
+- `tests/unit/aauth_grant_key_binding.test.ts`
 - `tests/unit/aauth_operator_allowlist.test.ts`
 - `tests/unit/aauth_sdk_and_capability_flags.test.ts`
 - `tests/unit/aauth_signer_jwk_override.test.ts`
