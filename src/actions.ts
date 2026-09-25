@@ -53,6 +53,7 @@ import {
 } from "./services/access_policy.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
+import { externalActorFromCallerInput } from "./services/issues/external_actor_builder.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
@@ -8908,7 +8909,11 @@ async function handleStorePost(
           strict: (parsed.data as { strict?: boolean }).strict,
         });
 
-      const bodyActor = parsed.data.external_actor as ExternalActor | undefined;
+      // A request body can only claim an external actor; verified tiers are
+      // assigned by server-side verification paths, never taken from input.
+      const bodyActor: ExternalActor | undefined = parsed.data.external_actor
+        ? externalActorFromCallerInput(parsed.data.external_actor)
+        : undefined;
       const existingActor = getCurrentExternalActor();
       if (bodyActor && !existingActor) {
         structuredResult = (await runWithExternalActor(bodyActor, doStore)) as Record<
@@ -9614,18 +9619,18 @@ app.post("/get_entity_snapshot", async (req, res) => {
 
   const { entity_id, at, at_ingested } = parsed.data;
 
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req);
+  } catch (err) {
+    return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
+
   // When at/at_ingested cutoffs are requested, use the shared observation-replay
   // helper so the offline path honours them with the same semantics as the MCP
   // path in server.ts. Without cutoffs, fall through to the fast materialized
-  // entity_snapshots table read (unchanged behaviour).
+  // entity_snapshots table read.
   if (at || at_ingested) {
-    let userId: string;
-    try {
-      userId = await getAuthenticatedUserId(req);
-    } catch (err) {
-      return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
-    }
-
     try {
       const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested);
       if (result === null) {
@@ -9639,11 +9644,13 @@ app.post("/get_entity_snapshot", async (req, res) => {
     }
   }
 
-  // Fast path: no cutoffs — read the materialized snapshot directly.
+  // Fast path: no cutoffs — read the materialized snapshot directly, scoped to
+  // the authenticated user.
   const { data, error } = await db
     .from("entity_snapshots")
     .select("*")
     .eq("entity_id", entity_id)
+    .eq("user_id", userId)
     .single();
 
   if (error) {
@@ -9670,7 +9677,14 @@ app.post("/list_observations", async (req, res) => {
 
   const { entity_id, limit = 100, offset = 0, updated_since, created_since } = parsed.data;
 
-  let query = db.from("observations").select("*").eq("entity_id", entity_id);
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req);
+  } catch (err) {
+    return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
+
+  let query = db.from("observations").select("*").eq("entity_id", entity_id).eq("user_id", userId);
 
   if (updated_since) {
     query = query.gte("observed_at", updated_since);
@@ -9707,11 +9721,21 @@ app.post("/get_field_provenance", async (req, res) => {
 
   const { entity_id, field } = parsed.data;
 
-  // Get snapshot to find observation ID for this field
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req);
+  } catch (err) {
+    return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
+
+  // Get snapshot to find observation ID for this field. Every read below is
+  // scoped to the authenticated user; an entity outside that scope resolves
+  // exactly like one that does not exist.
   const { data: snapshot } = await db
     .from("entity_snapshots")
     .select("provenance")
     .eq("entity_id", entity_id)
+    .eq("user_id", userId)
     .single();
 
   if (!snapshot || !snapshot.provenance) {
@@ -9731,7 +9755,8 @@ app.post("/get_field_provenance", async (req, res) => {
   const { data: observations, error: obsError } = await db
     .from("observations")
     .select("*, source_id")
-    .in("id", observationIds);
+    .in("id", observationIds)
+    .eq("user_id", userId);
 
   if (obsError) {
     logError("DbError:get_field_provenance", req, obsError);
@@ -9745,8 +9770,9 @@ app.post("/get_field_provenance", async (req, res) => {
 
   const { data: sources, error: sourceError } = await db
     .from("sources")
-    .select("id, content_hash, mime_type, storage_url, file_name, created_at")
-    .in("id", sourceIds);
+    .select("id, content_hash, mime_type, storage_url, original_filename, created_at")
+    .in("id", sourceIds)
+    .eq("user_id", userId);
 
   if (sourceError) {
     logError("DbError:get_field_provenance:sources", req, sourceError);
