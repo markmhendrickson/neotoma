@@ -1410,9 +1410,14 @@ function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean 
  * connects to Node over loopback even for public internet callers. In
  * production, loopback alone is therefore not enough to grant local-dev auth.
  *
+ * X-Forwarded-For can only disqualify a caller, never qualify one: a loopback
+ * socket with an all-loopback forwarded chain is treated like a loopback
+ * socket with no forwarded header, so in production it is not local.
+ *
  * NEOTOMA_TRUSTED_PROXY_IPS: comma-separated list of IPs or IPv4 CIDRs whose
  * XFF entries are trusted and do not disqualify a loopback-socket request from
- * being considered local. Use this for tunnel setups where cloudflared (or
+ * being considered local. In production, a forwarded chain whose nearest hop
+ * is one of these addresses is treated as local. Use this for tunnel setups where cloudflared (or
  * similar) injects a non-loopback XFF entry that represents a controlled
  * internal hop, not a public internet caller.
  *
@@ -1435,19 +1440,28 @@ export function isLocalRequest(req: express.Request): boolean {
   if (forwardedFor.length > 0) {
     // A forwarded-for entry disqualifies the request as local unless every
     // entry is either a loopback address or an explicitly trusted proxy IP.
-    if (forwardedFor.every((ip) => isLoopbackAddress(ip) || isTrustedProxyIP(ip))) {
-      return true;
-    }
     const untrusted = forwardedFor.filter((ip) => !isLoopbackAddress(ip) && !isTrustedProxyIP(ip));
-    const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
-    const displayed = debugTunnel ? untrusted.join(", ") : untrusted.map(redactIpForLog).join(", ");
-    process.stderr.write(
-      `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
-        `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
-        (debugTunnel ? "" : " (set NEOTOMA_DEBUG_TUNNEL=1 to see full IPs)") +
-        `.\n`
-    );
-    return false;
+    if (untrusted.length > 0) {
+      const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
+      const displayed = debugTunnel
+        ? untrusted.join(", ")
+        : untrusted.map(redactIpForLog).join(", ");
+      process.stderr.write(
+        `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
+          `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
+          (debugTunnel ? "" : " (set NEOTOMA_DEBUG_TUNNEL=1 to see full IPs)") +
+          `.\n`
+      );
+      return false;
+    }
+    // A chain that passes that check is only "not disqualified"; forwarded
+    // headers never qualify a caller on their own. In production the chain
+    // counts as local only when its nearest hop is a configured trusted proxy
+    // (NEOTOMA_TRUSTED_PROXY_IPS); otherwise the environment rule below
+    // applies, exactly as when no X-Forwarded-For is present. Development is
+    // unchanged: a loopback socket is local there either way.
+    const nearestHop = forwardedFor[forwardedFor.length - 1]!;
+    if (isProductionEnvironment() && isTrustedProxyIP(nearestHop)) return true;
   }
 
   if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
@@ -1488,6 +1502,27 @@ export function isDevelopmentConnectionId(value: unknown): boolean {
 export function developmentConnectionIdAllowed(req: express.Request): boolean {
   if (config.encryption.enabled) return false;
   return isLocalRequest(req);
+}
+
+/**
+ * Set (or, with `undefined`, remove) the request's X-Connection-Id to the
+ * value the /mcp gate resolved. Both `req.headers` and `req.rawHeaders` are
+ * rewritten, because the MCP transport builds its request from `rawHeaders`.
+ * The MCP server does not read this header for identity (it reads the gate's
+ * decision from the request context); keeping both copies in step means no
+ * downstream reader sees a value the gate did not resolve.
+ */
+function setGateConnectionIdHeader(req: express.Request, value: string | undefined): void {
+  if (value === undefined) delete req.headers["x-connection-id"];
+  else req.headers["x-connection-id"] = value;
+  const raw = req.rawHeaders;
+  if (!Array.isArray(raw)) return;
+  const kept: string[] = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    if (String(raw[i]).toLowerCase() !== "x-connection-id") kept.push(raw[i]!, raw[i + 1]!);
+  }
+  if (value !== undefined) kept.push("X-Connection-Id", value);
+  raw.splice(0, raw.length, ...kept);
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
@@ -1941,10 +1976,11 @@ app.all("/mcp", async (req, res) => {
     // client. A client-sent value is honoured only where the gate would assign
     // the same identity itself: a local caller in development mode. Anywhere
     // else it is dropped, so the request is authenticated exactly as if the
-    // header had been omitted. Downstream MCP handlers read the same header, so
-    // it is removed from the request rather than only from this local.
+    // header had been omitted. The MCP server takes its connection id from the
+    // gate's resolved value (request context and session mint below), not from
+    // the header; the header is removed from both header views as well.
     if (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req)) {
-      delete req.headers["x-connection-id"];
+      setGateConnectionIdHeader(req, undefined);
       connectionIdHeader = undefined;
     }
 
@@ -1955,7 +1991,7 @@ app.all("/mcp", async (req, res) => {
     if (authHeader?.startsWith("Bearer ") && mcpExpectedToken) {
       const token = authHeader.slice(7).trim();
       if (safeCompareTokens(token, mcpExpectedToken)) {
-        req.headers["x-connection-id"] = "dev-local";
+        setGateConnectionIdHeader(req, "dev-local");
         connectionIdHeader = "dev-local";
         bearerValidated = true;
       }
@@ -1969,10 +2005,10 @@ app.all("/mcp", async (req, res) => {
         if (isLocalRequest(req)) {
           const isInsecure = req.protocol === "http" || !(req as any).secure;
           if (isInsecure) {
-            req.headers["x-connection-id"] = "dev-local-http";
+            setGateConnectionIdHeader(req, "dev-local-http");
             connectionIdHeader = "dev-local-http";
           } else {
-            req.headers["x-connection-id"] = "dev-local";
+            setGateConnectionIdHeader(req, "dev-local");
             connectionIdHeader = "dev-local";
           }
         }
@@ -1980,7 +2016,7 @@ app.all("/mcp", async (req, res) => {
       if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
         const token = authHeader.slice(7).trim();
         if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
-          req.headers["x-connection-id"] = "dev-local";
+          setGateConnectionIdHeader(req, "dev-local");
           connectionIdHeader = "dev-local";
           bearerValidated = true;
         }
@@ -1990,7 +2026,7 @@ app.all("/mcp", async (req, res) => {
           const token = authHeader.slice(7).trim();
           const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
           const { connectionId } = await validateTokenAndGetConnectionId(token);
-          req.headers["x-connection-id"] = connectionId;
+          setGateConnectionIdHeader(req, connectionId);
           connectionIdHeader = connectionId;
           bearerValidated = true;
         } catch {
@@ -2137,7 +2173,8 @@ app.all("/mcp", async (req, res) => {
       const minted = await mintMcpHttpSession(
         req,
         mcpSessionMaps,
-        resolvePublicAppOriginFromRequest
+        resolvePublicAppOriginFromRequest,
+        connectionIdHeader
       );
       transport = minted.transport;
       serverInstance = minted.serverInstance;
@@ -2158,7 +2195,8 @@ app.all("/mcp", async (req, res) => {
         const minted = await mintMcpHttpSession(
           req,
           mcpSessionMaps,
-          resolvePublicAppOriginFromRequest
+          resolvePublicAppOriginFromRequest,
+          connectionIdHeader
         );
         const handshakeOk = await completeSyntheticMcpHandshake(minted.transport);
         const recoveredSessionId = minted.transport.sessionId;
@@ -2270,6 +2308,9 @@ app.all("/mcp", async (req, res) => {
         agentIdentity: fallbackIdentity,
         attributionDecision,
         aauthAdmission: aauthAdmissionForRequest,
+        // The gate's resolved connection id: the MCP server reads this, never
+        // the request's X-Connection-Id header.
+        mcpConnectionId: connectionIdHeader ?? null,
       },
       () => transport!.handleRequest(req, res, req.body)
     );

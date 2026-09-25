@@ -243,6 +243,19 @@ describe("/mcp development connection identity is honoured only for local develo
     expect(res.status).toBe(401);
   });
 
+  it("in production, a loopback-only X-Forwarded-For over a loopback socket is not local (401)", async () => {
+    harness = await startApp({ env: "production" });
+    const withDevId = await postInitialize(harness.baseUrl, {
+      "X-Connection-Id": "dev-local",
+      "X-Forwarded-For": "127.0.0.1",
+    });
+    expect(withDevId.status).toBe(401);
+    const withoutDevId = await postInitialize(harness.baseUrl, {
+      "X-Forwarded-For": "127.0.0.1",
+    });
+    expect(withoutDevId.status).toBe(401);
+  });
+
   it("with encryption enabled, refuses X-Connection-Id dev-local from a proxied non-local caller", async () => {
     harness = await startApp({ encryptionEnabled: true });
     const res = await postInitialize(harness.baseUrl, {

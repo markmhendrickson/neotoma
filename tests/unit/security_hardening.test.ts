@@ -49,6 +49,61 @@ describe("S-1: isLocalRequest socket-based check", () => {
     } as unknown as import("express").Request;
     expect(isLocalRequest(proxied)).toBe(false);
   });
+
+  it("in production, a loopback-only X-Forwarded-For does not make a loopback socket local", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    for (const forwardedFor of ["127.0.0.1", "::1", "127.0.0.1, 127.0.0.2"]) {
+      const req = {
+        headers: { "x-forwarded-for": forwardedFor },
+        socket: { remoteAddress: "127.0.0.1" },
+      } as unknown as import("express").Request;
+      expect(isLocalRequest(req)).toBe(false);
+    }
+  });
+
+  it("in production, a loopback-only X-Forwarded-For is local only with the explicit loopback opt-in", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "1");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(true);
+  });
+
+  it("in production, a forwarded chain whose nearest hop is a configured trusted proxy stays local", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "100.64.0.0/10");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const trusted = {
+      headers: { "x-forwarded-for": "100.64.1.2" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(trusted)).toBe(true);
+    // The nearest hop is loopback, not the configured proxy: not local.
+    const loopbackNearest = {
+      headers: { "x-forwarded-for": "100.64.1.2, 127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(loopbackNearest)).toBe(false);
+  });
+
+  it("in development, a loopback-only X-Forwarded-For over a loopback socket is still local", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "development");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(true);
+  });
 });
 
 describe("S-2: LocalStorageBucket path containment", () => {
