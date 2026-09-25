@@ -98,6 +98,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+     * @description Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+     *     protocol eras on the same route (#2070):
+     *
+     *     - **Modern (2026-07-28, stateless).** Selected when the request carries no
+     *       `Mcp-Session-Id`, is not an `initialize` request, and its
+     *       `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+     *       request is resolved on its own: protocol version and client capabilities
+     *       come from `_meta`, and the caller's identity comes only from the
+     *       credentials on that request. No session is minted and no server state is
+     *       retained, so any API instance can serve any request behind a plain
+     *       round-robin load balancer. `server/discover` is served on this path.
+     *       `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+     *       `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+     *       the body.
+     *     - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+     *       request carrying `Mcp-Session-Id`, is served by the session transport
+     *       exactly as before (session mint on initialize, recover-in-place for a
+     *       stale session id, `404` for an unknown session on GET/DELETE).
+     *
+     *     `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+     *     tool/resource/prompt name. A value shaped like a credential or personal
+     *     data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+     *     `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+     *     and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+     *     sessions; those are not modelled here.
+     */
+    post: operations["mcpStreamableHttpPost"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp/oauth/initiate": {
     parameters: {
       query?: never;
@@ -2342,6 +2386,85 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * @description Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+     *     (#2070). Operational metadata only: never persisted, never logged in full.
+     */
+    McpRequestMeta: {
+      /**
+       * @description Protocol version for this request. Required on the modern path.
+       * @example 2026-07-28
+       */
+      "io.modelcontextprotocol/protocolVersion"?: string;
+      /** @description Client capabilities relevant to this request. Required on the modern path. */
+      "io.modelcontextprotocol/clientCapabilities"?: {
+        [key: string]: unknown;
+      };
+      /** @description Self-reported client name and version (unverified; attribution fallback only). */
+      "io.modelcontextprotocol/clientInfo"?: {
+        name?: string;
+        version?: string;
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcRequest: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number;
+      /** @description JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy). */
+      method: string;
+      params?: {
+        _meta?: components["schemas"]["McpRequestMeta"];
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcResponse: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number | null;
+      result?: {
+        [key: string]: unknown;
+      };
+      error?: {
+        code: number;
+        message: string;
+        data?: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+     *     protocol versions, this server's declared capabilities, its identity and its
+     *     instructions: no tenant data, no caller identity, no instance topology.
+     */
+    McpServerDiscoverResult: {
+      /** @enum {string} */
+      resultType: "complete";
+      supportedVersions: string[];
+      capabilities: {
+        [key: string]: unknown;
+      };
+      /** @description Agent-facing MCP instructions plus this instance's declared data policy. */
+      instructions?: string;
+      ttlMs?: number;
+      /** @enum {string} */
+      cacheScope?: "public" | "private";
+      _meta?: {
+        "io.modelcontextprotocol/serverInfo"?: {
+          name?: string;
+          version?: string;
+        };
+      } & {
+        [key: string]: unknown;
+      };
+    };
     /** @description Result of the /ready database probe. */
     ReadinessResult: {
       /** @description True only when the database completed the probe read. */
@@ -4435,6 +4558,94 @@ export interface operations {
           } & {
             [key: string]: unknown;
           };
+        };
+      };
+    };
+  };
+  mcpStreamableHttpPost: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`. */
+        "MCP-Protocol-Version"?: string;
+        /** @description Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data. */
+        "Mcp-Method"?: string;
+        /**
+         * @description Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+         *     `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+         *     sentinel. Never a credential or personal data.
+         */
+        "Mcp-Name"?: string;
+        /** @description Legacy-era session id. Its presence selects the legacy session path. */
+        "Mcp-Session-Id"?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["McpJsonRpcRequest"];
+      };
+    };
+    responses: {
+      /**
+       * @description JSON-RPC response. On the modern path every result carries
+       *     `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+       *     a `server/discover` result has the `McpServerDiscoverResult` shape.
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+          "text/event-stream": string;
+        };
+      };
+      /** @description JSON-RPC notification accepted (no body). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
+       * @description `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+       *     `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+       *     `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Authentication required or credential invalid (`-32001`). On the
+       *     2026-07-28 path this includes a credential that passed the gate but
+       *     resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+       *     or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+       */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+       *     (`-32001`, re-initialize).
+       */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
         };
       };
     };
