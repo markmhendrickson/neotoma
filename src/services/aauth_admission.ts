@@ -8,8 +8,13 @@
  * High-level flow:
  *
  *   verified AAuth identity (sub / iss / thumbprint)
- *     → agent_grants.findActiveGrantByIdentity
+ *     → agent_grants.lookupGrantForIdentity
  *     → admitted: true + { user_id, grant_id, capabilities }
+ *
+ * Admission is key-bound: only a grant whose `match_thumbprint` equals
+ * the signing key's thumbprint admits. A grant that matches `sub` /
+ * `iss` but pins no key refuses with `grant_key_unbound`, and the
+ * operator is told to pin the thumbprint.
  *
  * Unknown identities stay attribution-only — the caller's request is
  * NOT rejected by this service; it just doesn't gain user resolution.
@@ -23,7 +28,7 @@
 
 import type { AAuthRequestContext } from "../crypto/agent_identity.js";
 import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
-import { findActiveGrantByIdentity, recordMatch, type AgentGrant } from "./agent_grants.js";
+import { lookupGrantForIdentity, recordMatch, type AgentGrant } from "./agent_grants.js";
 import { logger } from "../utils/logger.js";
 
 export type { AAuthAdmissionContext, AAuthAdmissionReason };
@@ -43,6 +48,8 @@ export interface AdmissionResult extends AAuthAdmissionContext {
  * - `null` / not-verified input → `{ admitted: false, reason: "not_signed" }`.
  * - Identity present but no matching active grant →
  *   `{ admitted: false, reason: "no_match" | "grant_revoked" | ... }`.
+ * - Only a grant without a key pin matched sub/iss →
+ *   `{ admitted: false, reason: "grant_key_unbound" }`.
  * - Match found → `{ admitted: true, user_id, grant_id, capabilities, ... }`
  *   and a debounced `last_used_at` observation is fired off.
  *
@@ -62,12 +69,15 @@ export async function admitFromAAuthContext(
   }
 
   let grant: AgentGrant | null;
+  let unboundClaimMatch = false;
   try {
-    grant = await findActiveGrantByIdentity({
+    const lookup = await lookupGrantForIdentity({
       sub: ctx.sub,
       iss: ctx.iss,
       thumbprint: ctx.thumbprint,
     });
+    grant = lookup.grant;
+    unboundClaimMatch = lookup.unbound_claim_match;
   } catch (err) {
     logger.warn("aauth_admission lookup failed", {
       err: err instanceof Error ? err.message : String(err),
@@ -78,6 +88,22 @@ export async function admitFromAAuthContext(
   }
 
   if (!grant) {
+    if (unboundClaimMatch) {
+      logger.warn(
+        JSON.stringify({
+          event: "aauth_admission_key_unbound",
+          sub: ctx.sub ?? null,
+          iss: ctx.iss ?? null,
+          thumbprint_prefix: ctx.thumbprint?.slice(0, 12) ?? null,
+          message:
+            "An active agent_grant matches this agent's sub/iss but pins no " +
+            "match_thumbprint. Signed admission requires a key binding: set the " +
+            "grant's match_thumbprint to the RFC 7638 thumbprint of the agent's " +
+            "public key, taken from the agent's own key material.",
+        })
+      );
+      return { admitted: false, reason: "grant_key_unbound" };
+    }
     return { admitted: false, reason: reasonForUnmatched(ctx) };
   }
 

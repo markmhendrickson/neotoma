@@ -18,10 +18,15 @@
  *   - Writes flow through `storeStructuredForApi` / `createCorrection`
  *     so observation history doubles as the audit log. We never insert
  *     observations directly here.
- *   - Cache is keyed by `(thumbprint | sub:iss | sub)` and invalidated
- *     after a small TTL plus on every grant write made through this
- *     service. Revocation made via Inspector / direct entity-store
- *     calls is picked up after at most one TTL cycle.
+ *   - Admission is key-bound: a grant admits a signed request only
+ *     when its `match_thumbprint` equals the signing key's thumbprint.
+ *     `match_sub` / `match_iss` are descriptive and never admit on their
+ *     own (see {@link lookupGrantForIdentity}).
+ *   - Cache is keyed by the full presented identity (thumbprint plus
+ *     sub/iss), cleared after a small TTL and on every grant
+ *     write made through this service. Revocation made via Inspector /
+ *     direct entity-store calls is picked up after at most one TTL
+ *     cycle.
  *   - Cross-user identity matches: a grant is owned by exactly one
  *     `user_id` (entities row). When the same identity has grants
  *     under multiple users we pick the most recently observed active
@@ -312,43 +317,34 @@ function validateLabel(raw: unknown): string {
 
 /** ---------- Identity → grant cache ---------- */
 
+/**
+ * Cached result of one identity lookup, keyed by the full presented
+ * identity (key thumbprint plus `sub` / `iss`), so an entry is only
+ * served back to a request presenting the same key.
+ */
 interface CacheEntry {
-  grant: AgentGrant | null;
+  lookup: GrantIdentityLookup;
   expiresAt: number;
 }
 
 const CACHE_TTL_MS = 5_000;
 const identityCache = new Map<string, CacheEntry>();
 
-function cacheKeysForIdentity(input: {
-  sub?: string | null;
-  iss?: string | null;
-  thumbprint?: string | null;
-}): string[] {
-  const keys: string[] = [];
-  if (input.thumbprint) keys.push(`tp:${input.thumbprint}`);
-  if (input.sub && input.iss) keys.push(`si:${input.sub}|${input.iss}`);
-  if (input.sub) keys.push(`s:${input.sub}`);
-  return keys;
+function cacheKeyForIdentity(input: {
+  sub: string | null;
+  iss: string | null;
+  thumbprint: string;
+}): string {
+  return JSON.stringify([input.thumbprint, input.sub ?? "", input.iss ?? ""]);
 }
 
-function cacheKeysForGrant(grant: AgentGrant): string[] {
-  return cacheKeysForIdentity({
-    sub: grant.match_sub ?? undefined,
-    iss: grant.match_iss ?? undefined,
-    thumbprint: grant.match_thumbprint ?? undefined,
-  });
-}
-
-/** Drop every cache entry that touches the given grant's identity. */
-export function invalidateGrantCache(grant?: AgentGrant): void {
-  if (!grant) {
-    identityCache.clear();
-    return;
-  }
-  for (const key of cacheKeysForGrant(grant)) {
-    identityCache.delete(key);
-  }
+/**
+ * Drop cached lookups after a grant write. Entries are keyed by the
+ * presented identity, not the grant, so a write clears the whole cache;
+ * the TTL is a few seconds and grant writes are rare.
+ */
+export function invalidateGrantCache(_grant?: AgentGrant): void {
+  identityCache.clear();
 }
 
 /** Test-only escape hatch. */
@@ -457,41 +453,82 @@ export async function getGrant(userId: string, grantId: string): Promise<AgentGr
 }
 
 /**
- * Find the most recently-observed active grant matching the supplied
- * AAuth identity. Thumbprint match wins over `(sub, iss)` — see plan.
- * Returns `null` when nothing matches.
+ * Result of resolving a verified AAuth identity against the grant set.
+ */
+export interface GrantIdentityLookup {
+  /**
+   * Active grant bound to the presented key (`match_thumbprint` equals
+   * the request's JWK thumbprint), or `null`.
+   */
+  grant: AgentGrant | null;
+  /**
+   * True when no key-bound grant matched but an active grant matched the
+   * request's `sub` (and `iss`, when the grant pins one) without pinning
+   * a `match_thumbprint`. Diagnostic only; such a grant does not admit.
+   */
+  unbound_claim_match: boolean;
+}
+
+/**
+ * Resolve a verified AAuth identity to an active grant.
+ *
+ * Admission requires a key binding: a grant matches only when its
+ * `match_thumbprint` equals the RFC 7638 thumbprint of the key that
+ * signed the request. Grants without a thumbprint pin do not admit
+ * signed requests.
+ *
+ * When several key-bound grants match, the most recently observed wins.
+ */
+export async function lookupGrantForIdentity(input: {
+  sub?: string | null;
+  iss?: string | null;
+  thumbprint?: string | null;
+}): Promise<GrantIdentityLookup> {
+  const sub = trimOrNull(input.sub);
+  const iss = trimOrNull(input.iss);
+  const thumbprint = trimOrNull(input.thumbprint);
+  if (!thumbprint) return { grant: null, unbound_claim_match: false };
+
+  const key = cacheKeyForIdentity({ sub, iss, thumbprint });
+  const now = Date.now();
+  const hit = identityCache.get(key);
+  if (hit && hit.expiresAt > now) {
+    return hit.lookup;
+  }
+
+  const lookup = await scanForGrant({ sub, iss, thumbprint });
+  identityCache.set(key, { lookup, expiresAt: now + CACHE_TTL_MS });
+  return lookup;
+}
+
+/**
+ * Find the active grant bound to the supplied identity's key. Returns
+ * `null` when no grant pins the presented key's thumbprint. See
+ * {@link lookupGrantForIdentity}.
  */
 export async function findActiveGrantByIdentity(input: {
   sub?: string | null;
   iss?: string | null;
   thumbprint?: string | null;
 }): Promise<AgentGrant | null> {
-  const sub = trimOrNull(input.sub);
-  const iss = trimOrNull(input.iss);
-  const thumbprint = trimOrNull(input.thumbprint);
-  if (!sub && !thumbprint) return null;
+  return (await lookupGrantForIdentity(input)).grant;
+}
 
-  const keys = cacheKeysForIdentity({ sub, iss, thumbprint });
-  const now = Date.now();
-  for (const key of keys) {
-    const hit = identityCache.get(key);
-    if (hit && hit.expiresAt > now) {
-      return hit.grant;
-    }
-  }
-
-  const grant = await scanForGrant({ sub, iss, thumbprint });
-  for (const key of keys) {
-    identityCache.set(key, { grant, expiresAt: now + CACHE_TTL_MS });
-  }
-  return grant;
+function claimsMatchGrant(
+  input: { sub: string | null; iss: string | null },
+  snapSub: string | null,
+  snapIss: string | null
+): boolean {
+  if (!input.sub || !snapSub || input.sub !== snapSub) return false;
+  if (!snapIss) return true;
+  return !!input.iss && input.iss === snapIss;
 }
 
 async function scanForGrant(input: {
   sub: string | null;
   iss: string | null;
-  thumbprint: string | null;
-}): Promise<AgentGrant | null> {
+  thumbprint: string;
+}): Promise<GrantIdentityLookup> {
   const rows = await queryEntities({
     entityType: GRANT_ENTITY_TYPE,
     includeMerged: false,
@@ -500,7 +537,7 @@ async function scanForGrant(input: {
     sortBy: "last_observation_at",
     sortOrder: "desc",
   });
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return { grant: null, unbound_claim_match: false };
 
   // queryEntities does not include user_id on the returned shape, so we
   // batch-fetch owners for the matched entities below.
@@ -509,58 +546,53 @@ async function scanForGrant(input: {
     snapshot: Record<string, unknown>;
     last_observation_at: string;
     created_at?: string;
-    score: number;
   }> = [];
+  let unboundClaimMatch = false;
 
   for (const row of rows) {
     const snap = row.snapshot ?? {};
     if (snap.status !== "active") continue;
-    const snapSub = trimOrNull(snap.match_sub);
-    const snapIss = trimOrNull(snap.match_iss);
     const snapTp = trimOrNull(snap.match_thumbprint);
-
-    let score = 0;
-    if (input.thumbprint && snapTp && input.thumbprint === snapTp) {
-      score = 3; // strongest signal
-    } else if (input.sub && snapSub && input.sub === snapSub) {
-      if (snapIss) {
-        if (input.iss && input.iss === snapIss) {
-          score = 2; // sub + iss match
-        }
-      } else {
-        score = 1; // sub-only match (grant did not pin iss)
-      }
+    if (snapTp) {
+      // Key-bound grant: the presented key must be the pinned key.
+      if (snapTp !== input.thumbprint) continue;
+      candidates.push({
+        entity_id: row.entity_id,
+        snapshot: snap,
+        last_observation_at: row.last_observation_at,
+        created_at: row.created_at,
+      });
+      continue;
     }
-    if (score === 0) continue;
-    candidates.push({
-      entity_id: row.entity_id,
-      snapshot: snap,
-      last_observation_at: row.last_observation_at,
-      created_at: row.created_at,
-      score,
-    });
+    // Grant pins no key: it does not admit. Record the match so
+    // admission can report why.
+    if (claimsMatchGrant(input, trimOrNull(snap.match_sub), trimOrNull(snap.match_iss))) {
+      unboundClaimMatch = true;
+    }
   }
 
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return { grant: null, unbound_claim_match: unboundClaimMatch };
 
-  candidates.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return (b.last_observation_at ?? "").localeCompare(a.last_observation_at ?? "");
-  });
+  candidates.sort((a, b) =>
+    (b.last_observation_at ?? "").localeCompare(a.last_observation_at ?? "")
+  );
 
   for (const cand of candidates) {
     const owner = await getGrantOwner(cand.entity_id);
     if (!owner) continue;
     try {
-      return snapshotToGrant(cand.entity_id, owner, cand.snapshot, {
-        created_at: cand.created_at,
-        last_observation_at: cand.last_observation_at,
-      });
+      return {
+        grant: snapshotToGrant(cand.entity_id, owner, cand.snapshot, {
+          created_at: cand.created_at,
+          last_observation_at: cand.last_observation_at,
+        }),
+        unbound_claim_match: false,
+      };
     } catch {
       continue;
     }
   }
-  return null;
+  return { grant: null, unbound_claim_match: unboundClaimMatch };
 }
 
 /** ---------- Write helpers ---------- */

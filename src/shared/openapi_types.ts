@@ -3017,7 +3017,11 @@ export interface components {
        *     that signature to one of this user's `agent_grant` entities
        *     and is treating the caller as authenticated. The two are
        *     independent: a verified-but-unmatched signature stays
-       *     attribution-only and `admitted` is `false`.
+       *     attribution-only and `admitted` is `false`. Admission is
+       *     key-bound: a grant admits only when its `match_thumbprint`
+       *     equals the signing key's thumbprint. `grant_key_unbound`
+       *     means a grant matched sub/iss but pins no key;
+       *     pin `match_thumbprint` to admit the agent.
        */
       aauth: {
         verified: boolean;
@@ -3028,6 +3032,7 @@ export interface components {
           | "admitted"
           | "no_grants_for_user"
           | "no_match"
+          | "grant_key_unbound"
           | "grant_revoked"
           | "grant_suspended"
           | "strict_rejected"

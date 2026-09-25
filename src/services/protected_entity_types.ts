@@ -68,6 +68,7 @@ export type AAuthAdmissionReason =
   | "admitted"
   | "no_grants_for_user"
   | "no_match"
+  | "grant_key_unbound"
   | "grant_revoked"
   | "grant_suspended"
   | "strict_rejected"

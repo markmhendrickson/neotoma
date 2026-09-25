@@ -70,9 +70,9 @@ the source of truth):
   "entity_type": "agent_grant",
   "owner_user_id": "usr_…",
   "label": "Cursor on macbook-pro",
-  "match_sub": "agent-cursor@example.com",   // AAuth sub claim
-  "match_iss": "https://agent.example.com",  // optional; both must match when set
-  "match_thumbprint": "abcd…",               // optional RFC 7638 JWK thumbprint
+  "match_thumbprint": "abcd…",               // RFC 7638 JWK thumbprint; required to admit
+  "match_sub": "agent-cursor@example.com",   // AAuth sub claim (descriptive)
+  "match_iss": "https://agent.example.com",  // optional; descriptive
   "capabilities": [
     { "op": "store",               "entity_types": ["neotoma_feedback"] },
     { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
@@ -87,9 +87,26 @@ the source of truth):
 
 ### Identity rule
 
-At least one of `match_sub` or `match_thumbprint` MUST be set;
-`match_iss` is optional but, when set, BOTH `match_sub` and `match_iss`
-MUST match the verified identity for the grant to admit.
+Admission to a grant requires a key binding. A grant admits a signed
+request only when its `match_thumbprint` equals the RFC 7638 thumbprint
+of the key that signed the request.
+
+`match_sub` / `match_iss` are descriptive: they are recorded on the
+grant and shown in Inspector, but do not admit on their own. A grant
+without `match_thumbprint` does not admit signed requests. A request
+whose `sub` / `iss` match such a grant gets admission reason
+`grant_key_unbound` (visible in `/session` under
+`aauth.admission_reason`), and the server logs an
+`aauth_admission_key_unbound` warning telling the operator to pin the
+thumbprint.
+
+Take the thumbprint from the agent's own key material (for example
+`neotoma auth session`, which prints the configured signer's
+thumbprint), not from observed request traffic.
+
+A grant may still be created with only `match_sub` (for example while
+the agent's key is being provisioned); it stays inert until
+`match_thumbprint` is set.
 
 ### Capability ops
 
@@ -107,12 +124,11 @@ Use `["*"]` to widen to every type — only do this for trusted grants.
 
 Admission resolves the verified identity to at most one grant:
 
-1. If the request carries a JWK thumbprint AND any of the user's grants
-   has a matching `match_thumbprint`, that grant wins.
-2. Otherwise, the first `active` grant whose `match_sub` equals the
-   request's `sub` and (when set on the grant) whose `match_iss` equals
-   the request's `iss`.
-3. Otherwise, no admission — the request stays attribution-only.
+1. The most recently observed `active` grant whose `match_thumbprint`
+   equals the signing key's thumbprint wins.
+2. Otherwise, no admission — the request stays attribution-only. The
+   reason is `grant_key_unbound` when a grant without a thumbprint pin
+   matched `sub` / `iss`, and `no_match` otherwise.
 
 ## Status lifecycle
 
@@ -218,8 +234,8 @@ neotoma agents grants import --owner-user-id <usr_…> \
 ### Grant a new scope
 
 1. In Inspector, go to **Agents → Agent grants → New grant**.
-2. Paste the agent's AAuth `sub` (and `iss`, or thumbprint) and a
-   readable label.
+2. Paste the agent's key thumbprint (required for admission), its AAuth
+   `sub` / `iss`, and a readable label.
 3. Select capabilities by `(op, entity_type)`.
 4. Save. Admission picks up the new grant within the cache TTL.
 
