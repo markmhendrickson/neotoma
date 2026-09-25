@@ -87,6 +87,8 @@ If you want loopback-trust (rather than bearer auth) for these callers, set `NEO
 ```
 **The fix:** set `NEOTOMA_TRUSTED_PROXY_IPS` to the actual nearest-hop address your sidecar injects (not an assumed loopback value), or set `NEOTOMA_TRUST_PROD_LOOPBACK=1` for a genuinely single-host deployment with no untrusted network path.
 
+**"Production" for all of the above is also `NODE_ENV=production`, not only `NEOTOMA_ENV`.** A plain `NODE_ENV=production` — the shape a bare `Dockerfile` sets with `ENV NODE_ENV=production` and no `NEOTOMA_ENV` — is now treated as production by this gate, the same as `NEOTOMA_ENV=production`. An explicit `NEOTOMA_ENV` (e.g. `NEOTOMA_ENV=development`) still wins over `NODE_ENV`. See `docs/operations/configuration.md` "Production detection also honours NODE_ENV" for the full migration note.
+
 **Local OAuth over a public tunnel:** With encryption off, OAuth still uses a built-in dev account **after** key-auth preflight succeeds. When the server is reached **via a tunnel** (non-local Host), it requires **explicit approval** (an "Approve this connection" page) before completing OAuth, and it only accepts **allowlisted redirect URIs** (e.g. `cursor://`, `http://localhost`, `http://127.0.0.1`) so the authorization code cannot be sent to an arbitrary third-party site. If users cannot complete key-authenticated OAuth, use bearer token access:
 
 - **`NEOTOMA_BEARER_TOKEN`** in `.env` and send it as `Authorization: Bearer <token>` from the client (no OAuth; good for scripts or single-user).

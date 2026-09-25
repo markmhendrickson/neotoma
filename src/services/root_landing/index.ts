@@ -41,6 +41,7 @@ import {
   resolveExtraKnownFooterSlugs,
 } from "../docs/bundled_nav.js";
 import { getBundledDocsIndex } from "../docs/index.js";
+import { isProductionEnvironment } from "../../shared/environment.js";
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -120,10 +121,10 @@ function forwardedForValues(req: express.Request): string[] {
     .filter(Boolean);
 }
 
-function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
-  return value === "production" || value === "prod";
-}
+// isProductionEnvironment is imported from ../../shared/environment.js. Both
+// this module and src/actions.ts::isLocalRequest now share that single
+// detector, so this file no longer keeps its own copy of the NEOTOMA_ENV/
+// NODE_ENV resolution — only the request-shape logic below stays local.
 
 /**
  * True when the request is genuinely local to this process. Mirrors

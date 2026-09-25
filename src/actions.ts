@@ -259,6 +259,7 @@ import { getTimelineEventForUser, listTimelineEventsForUser } from "./services/t
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import { isProductionEnvironment } from "./shared/environment.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -1415,10 +1416,9 @@ function forwardedForValues(req: express.Request): string[] {
     .filter(Boolean);
 }
 
-function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
-  return value === "production" || value === "prod";
-}
+// isProductionEnvironment is imported from ./shared/environment.js — see that
+// module's docstring for why NODE_ENV=production is honoured only when
+// NEOTOMA_ENV is not itself set to something else.
 
 // Rate-limits the "loopback/trusted chain, but nearest hop isn't itself a
 // trusted proxy" diagnostic below so a hot path (a same-host sidecar that
@@ -13007,9 +13007,7 @@ export async function startHTTPServer() {
     const hostEnv = (process.env.NEOTOMA_HTTP_HOST || "").trim().toLowerCase();
     const loopbackBindOnly =
       hostEnv === "127.0.0.1" || hostEnv === "localhost" || hostEnv === "::1";
-    const productionEnv =
-      (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
-      (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod";
+    const productionEnv = isProductionEnvironment();
     const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
     const refusePolicy = resolveRefusePolicy();
     const forceMode = resolveForceMode();

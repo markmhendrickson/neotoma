@@ -129,6 +129,8 @@ A same-host proxy that sends such a chain (e.g. one that happens to inject a loo
 ```
 The message never echoes header values or client IPs — only the setting names an operator needs to act on.
 
+**"Production" is determined by `NEOTOMA_ENV`, and also by `NODE_ENV=production` when `NEOTOMA_ENV` is unset.** Every check above (`isLocalRequest`, the root-landing mode resolver, webhook URL scheme enforcement) reads production status through one shared detector (`src/shared/environment.ts`). A deploy that sets only `NODE_ENV=production` — the shape a bare `Dockerfile` produces — is now treated as production, closing a gap where such a deploy was read as development and a loopback caller on it received local-development trust. An explicit `NEOTOMA_ENV` always wins over `NODE_ENV`, so `NEOTOMA_ENV=development` still keeps a process in development regardless of a host's `NODE_ENV` — this matters when Neotoma runs embedded inside another Node workspace's process. See `docs/operations/configuration.md` for the operator-facing migration note.
+
 ### OAuth Bearer enforcement on `/mcp` (v0.12+)
 
 Pre-v0.12, an unrecognized OAuth `Bearer` token on `/mcp` could fall through to anonymous attribution if the token was syntactically a UUID. v0.12 closes that gap:

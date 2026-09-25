@@ -227,6 +227,58 @@ describe("S-3: .or() identifier allowlist blocks SQL identifier injection", () =
   });
 });
 
+describe("S-14: NODE_ENV=production is honoured by the local-caller check (ateles ent_1cc5662e217133323890a90f)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("treats a loopback-only forwarded chain as non-local in production when only NODE_ENV=production is set (no NEOTOMA_ENV)", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const proxied = {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(proxied)).toBe(false);
+  });
+
+  it("a bare loopback socket (no NEOTOMA_ENV, NODE_ENV=production) is not local, matching the NEOTOMA_ENV=production case", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "");
+    vi.stubEnv("NODE_ENV", "production");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(false);
+  });
+
+  it("developmentConnectionIdAllowed refuses a client-sent dev connection id when only NODE_ENV=production is set", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "");
+    vi.stubEnv("NODE_ENV", "production");
+    const { developmentConnectionIdAllowed } = await import("../../src/actions.ts");
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(developmentConnectionIdAllowed(req)).toBe(false);
+  });
+
+  it("an explicit NEOTOMA_ENV=development still wins over a host NODE_ENV=production (embedded/MCP isolation)", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "development");
+    vi.stubEnv("NODE_ENV", "production");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(true);
+  });
+});
+
 describe("S-13: timing-safe token comparison", () => {
   it("rejects tokens of different lengths without throwing", async () => {
     const { timingSafeEqual } = await import("node:crypto");

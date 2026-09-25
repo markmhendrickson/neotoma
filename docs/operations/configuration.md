@@ -32,6 +32,12 @@ Nothing changes for normal operation: the interactive CLI, the server, and every
 
 `NEOTOMA_ENV` selects the profile: `development` (default) or `production`. The profiles use separate database files, source directories, and logs so a dev stack never touches prod data. Production also changes default ports and tightens auth expectations.
 
+### Production detection also honours `NODE_ENV`
+
+Every production-gated security check (the `/mcp` and REST local-caller gate, webhook URL scheme enforcement, the root-landing mode resolver) now treats the process as production when **either** `NEOTOMA_ENV` resolves to `production`/`prod`, **or** `NEOTOMA_ENV` is unset and `NODE_ENV=production`. An explicit `NEOTOMA_ENV` always wins — setting `NEOTOMA_ENV=development` keeps a process in development even if `NODE_ENV=production` is also set, which matters when Neotoma runs embedded inside a host process (e.g. as an MCP server loaded into another Node workspace) whose own `NODE_ENV` should not dictate Neotoma's profile.
+
+**Migration note:** before this change, a deploy that set only `NODE_ENV=production` — the shape a bare `Dockerfile` produces with `ENV NODE_ENV=production` and no `NEOTOMA_ENV` — was treated as development by these checks, so a loopback caller on that deploy was granted local-development trust it should not have had. If your deployment relies on `NODE_ENV=production` alone to select Neotoma's production profile for the checks above, no action is needed — it is now honoured. If instead you run a **production-built bundle locally** for development (`NODE_ENV=production` set by your build tooling, with no `NEOTOMA_ENV`), that process is now treated as production by these checks; set `NEOTOMA_ENV=development` explicitly to keep the previous local-development behaviour. This does not change `NEOTOMA_ENV`'s own resolution (data directory, database file, default ports) — those still read `NEOTOMA_ENV` only, as documented above.
+
 ## Core variables
 
 | Variable                                       | Purpose                                                                                                                                                                                                                                                                                                                    | Default                      |
