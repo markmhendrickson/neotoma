@@ -3900,6 +3900,40 @@ export interface components {
         entity_id?: string;
       })[];
       /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: {
+        relationship_type: string;
+        source_entity_id: string;
+        target_entity_id: string;
+      }[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. An endpoint that
+       *     does not exist and one owned by another user are both reported as
+       *     `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+       */
+      relationships_refused?: {
+        /** @description Position of the relationship in the request's `relationships` array. */
+        relationship_index: number;
+        relationship_type: string;
+        source_entity_id?: string;
+        target_entity_id?: string;
+        source_index?: number;
+        target_index?: number;
+        /**
+         * @description One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+         *     `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+         *     `RELATIONSHIP_INVALID_ENTITY_ID`,
+         *     `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+         */
+        code: string;
+        reason: string;
+        hint?: string;
+      }[];
+      /**
        * @description Schema-driven non-fatal warnings emitted when a stored observation
        *     omits all fields listed by a schema's `store_warnings` rule. Used
        *     by schemas to surface identity-quality issues (e.g. a

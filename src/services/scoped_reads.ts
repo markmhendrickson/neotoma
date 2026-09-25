@@ -52,10 +52,20 @@ export async function getOwnedSource<T = Record<string, unknown>>(
 }
 
 /**
+ * Storage bucket that raw source content is written to (see
+ * `storeRawContent`). A source row's `storage_url` is the object key within it.
+ */
+export const SOURCES_STORAGE_BUCKET = "sources";
+
+/**
  * Return the `sources` row whose `storage_url` matches a caller-supplied
  * storage path, only if `userId` owns it. Accepts the path with or without a
  * leading bucket segment (`sources/<key>` or `<key>`), since callers have
  * historically passed both forms. Returns `null` when no owned row matches.
+ *
+ * Callers must sign or read the returned row's `storage_url` (in
+ * {@link SOURCES_STORAGE_BUCKET}), not the path they were given: the match
+ * ignores the first segment, so the input string is not the checked location.
  */
 export async function getOwnedSourceByStoragePath(
   filePath: string,

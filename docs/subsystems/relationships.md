@@ -321,6 +321,20 @@ await createRelationshipObservations(
 
 **Endpoints must be entities the caller owns.** `create_relationship`, `create_relationships` and the relationship leg of `store` (HTTP, MCP and CLI all reach the same `relationshipsService.createRelationship`) require both `source_entity_id` and `target_entity_id` to be existing entities owned by the authenticated user. An endpoint that does not exist and one owned by another user are refused with the same error (`404 RESOURCE_NOT_FOUND` over HTTP, `Entity not found: <id>` over MCP), so the refusal reveals nothing about other users' data. Store the entity first (or in the same `store` call, referenced by index), then link it.
 
+**How each surface reports a refusal.** The direct calls fail the request: `create_relationship` returns the error above, and `create_relationships` lists each failed item in its `errors` array with its index. The relationship leg of `store` does not fail the call. The entities in the call are written, and each relationship is attempted on its own:
+
+- `relationships_created` lists every relationship that was written (`relationship_type`, `source_entity_id`, `target_entity_id`). It is present on every `store` response over HTTP and MCP, on the structured path and the interpretation path, and on `create_interpretation`.
+- `relationships_refused` is present when at least one relationship was not written. Each entry carries `relationship_index` (its position in the request's `relationships` array), the type, whichever endpoint ids or indexes resolved, a stable `code`, a `reason`, and sometimes a `hint`. Codes:
+  - `RELATIONSHIP_ENDPOINT_NOT_FOUND`: an endpoint is not an entity the caller owns. The reason reads "Endpoint entity not found or not accessible." for a missing entity and for another user's entity alike.
+  - `RELATIONSHIP_REFERENCE_UNRESOLVED`: `source_index`/`target_index` did not point at an entity in the same call.
+  - `RELATIONSHIP_INVALID_ENTITY_ID`: a supplied entity id is not well formed (HTTP).
+  - `unregistered_relationship_type`: the type is not in the registry; the hint names `list_relationship_types` and `register_relationship_type`.
+  - `RELATIONSHIP_NOT_CREATED`: any other failure, such as a cycle in an acyclic type.
+
+A caller that names relationships in `store` should check `relationships_refused` rather than assume every requested edge exists.
+
+**Restore revives only a relationship the caller already holds.** `restore_relationship` (MCP and `POST /restore_relationship`) writes a restoration observation only when the caller already has an observation of that relationship, no other user holds a snapshot under that key, both endpoints are entities the caller owns, and the type is registered. Anything else gets the same not-found response (`404 RESOURCE_NOT_FOUND` over HTTP, `Relationship not found` with `code: RESOURCE_NOT_FOUND` over MCP), whether the relationship is missing or belongs to someone else. Restore never creates a new relationship; use `create_relationship` for that. `restore_entity` applies the same rule to entities: only an entity the caller owns can be restored.
+
 ### 6.2 Querying Relationship Snapshots
 
 **Get Specific Relationship:**
@@ -514,6 +528,7 @@ Load `docs/subsystems/relationships.md` when:
 3. **Cycles MUST be prevented** for hierarchical types
 4. **Metadata MUST be structured** (use JSONB schema)
 5. **Both endpoints MUST be entities the caller owns** (see § 6.1)
+6. **Restore MUST only revive a relationship the caller already holds** (see § 6.1)
 ### Forbidden Patterns
 - ❌ Hard-coded parent-child foreign keys
 - ❌ Untyped relationships (must specify type)

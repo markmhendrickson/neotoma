@@ -7,7 +7,10 @@
  * covers the remaining MCP resource handlers (source by id, and every
  * collection resource), MCP `retrieve_file_url`, the related-entities block
  * of store responses, relationship creation, and the HTTP `/get_file_url`,
- * `/create_relationship` and `/health_check_snapshots` routes.
+ * `/create_relationship` and `/health_check_snapshots` routes. It also covers
+ * the write paths that must respect the same ownership rule: relationship and
+ * entity restore (MCP and HTTP), and how `store` reports a relationship it
+ * could not create.
  *
  * The contract under test: an item owned by another user is indistinguishable
  * from one that does not exist. So each "other user" case is paired with a
@@ -21,6 +24,14 @@ import { randomUUID } from "node:crypto";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { relationshipsService } from "../../src/services/relationships.js";
+import {
+  isEntityDeleted,
+  restoreRelationship,
+  softDeleteEntity,
+  softDeleteRelationship,
+} from "../../src/services/deletion.js";
+import { config } from "../../src/config.js";
 
 const PREFIX = "scoped_src_rel_test";
 const PORT = process.env.NEOTOMA_SESSION_DEV_PORT ?? "18099";
@@ -440,6 +451,323 @@ describe("scoped source, file-URL and relationship reads", () => {
     });
   });
 
+  describe("relationship restore", () => {
+    let aliceKey: string;
+
+    beforeAll(async () => {
+      // alice links two of her own entities, then deletes the link.
+      const created = await relationshipsService.createRelationship({
+        relationship_type: "REFERS_TO",
+        source_entity_id: alice.entityId,
+        target_entity_id: alice.otherEntityId,
+        user_id: alice.userId,
+      });
+      aliceKey = created.relationship_key;
+      extraRelationshipKeys.push(aliceKey);
+      const deleted = await softDeleteRelationship(
+        aliceKey,
+        "REFERS_TO",
+        alice.entityId,
+        alice.otherEntityId,
+        alice.userId
+      );
+      expect(deleted.success).toBe(true);
+    });
+
+    async function bobObservationsFor(key: string) {
+      const { data } = await db
+        .from("relationship_observations")
+        .select("id")
+        .eq("relationship_key", key)
+        .eq("user_id", bob.userId);
+      return data ?? [];
+    }
+
+    it("refuses another user's relationship, and a never-held one, exactly like a missing one", async () => {
+      actAs(bob.userId);
+      const missingId = `${PREFIX}_missing_${randomUUID().slice(0, 8)}`;
+      const attempts = {
+        // bob's own two entities, but no relationship between them was ever held
+        neverHeld: {
+          relationship_type: "PART_OF",
+          source_entity_id: bob.entityId,
+          target_entity_id: bob.otherEntityId,
+        },
+        // an endpoint that does not exist
+        missingEndpoint: {
+          relationship_type: "REFERS_TO",
+          source_entity_id: bob.entityId,
+          target_entity_id: missingId,
+        },
+        // alice's deleted relationship
+        foreignRelationship: {
+          relationship_type: "REFERS_TO",
+          source_entity_id: alice.entityId,
+          target_entity_id: alice.otherEntityId,
+        },
+        // a new edge from bob's entity to alice's entity
+        foreignTarget: {
+          relationship_type: "REFERS_TO",
+          source_entity_id: bob.entityId,
+          target_entity_id: alice.entityId,
+        },
+      };
+
+      const refusals: Record<string, Error> = {};
+      for (const [name, args] of Object.entries(attempts)) {
+        refusals[name] = await rejection((server as any).restoreRelationship(args));
+      }
+      const reference = refusals.neverHeld;
+      for (const name of Object.keys(attempts)) {
+        expect(refusals[name].message, name).toBe(reference.message);
+        expect((refusals[name] as any).code, name).toBe((reference as any).code);
+        expect((refusals[name] as any).data, name).toEqual((reference as any).data);
+      }
+
+      // Nothing was written under bob for any of them.
+      for (const args of Object.values(attempts)) {
+        const key = `${args.relationship_type}:${args.source_entity_id}:${args.target_entity_id}`;
+        expect(await bobObservationsFor(key), key).toEqual([]);
+      }
+      // alice's relationship is still deleted.
+      const { data: aliceSnapshot } = await db
+        .from("relationship_snapshots")
+        .select("user_id, is_live")
+        .eq("relationship_key", aliceKey)
+        .maybeSingle();
+      expect(aliceSnapshot?.user_id).toBe(alice.userId);
+      expect(Number(aliceSnapshot?.is_live)).toBe(0);
+    });
+
+    it("refuses a relationship type that is not registered", async () => {
+      const type = `UNREGISTERED_${randomUUID().slice(0, 8).toUpperCase()}`;
+      await expect(
+        restoreRelationship(
+          `${type}:${bob.entityId}:${bob.otherEntityId}`,
+          type,
+          bob.entityId,
+          bob.otherEntityId,
+          bob.userId
+        )
+      ).rejects.toThrow(/register_relationship_type/);
+      expect(await bobObservationsFor(`${type}:${bob.entityId}:${bob.otherEntityId}`)).toEqual([]);
+    });
+
+    it("the owner restores their own deleted relationship", async () => {
+      actAs(alice.userId);
+      const result = JSON.parse(
+        (
+          await (server as any).restoreRelationship({
+            relationship_type: "REFERS_TO",
+            source_entity_id: alice.entityId,
+            target_entity_id: alice.otherEntityId,
+          })
+        ).content[0].text
+      );
+      expect(result.success).toBe(true);
+      const { data: snapshot } = await db
+        .from("relationship_snapshots")
+        .select("is_live")
+        .eq("relationship_key", aliceKey)
+        .maybeSingle();
+      expect(Number(snapshot?.is_live)).toBe(1);
+    });
+  });
+
+  describe("entity restore", () => {
+    let aliceDeletedEntity: string;
+
+    beforeAll(async () => {
+      aliceDeletedEntity = `${PREFIX}_ent3_alice_${randomUUID().slice(0, 8)}`;
+      await db.from("entities").insert({
+        id: aliceDeletedEntity,
+        user_id: alice.userId,
+        entity_type: "test",
+        canonical_name: "alice restorable",
+      });
+      const deleted = await softDeleteEntity(aliceDeletedEntity, "test", alice.userId);
+      expect(deleted.success).toBe(true);
+    });
+
+    afterAll(async () => {
+      await db.from("observations").delete().eq("entity_id", aliceDeletedEntity);
+      await db.from("entity_snapshots").delete().eq("entity_id", aliceDeletedEntity);
+      await db.from("entities").delete().eq("id", aliceDeletedEntity);
+    });
+
+    it("refuses another user's entity exactly like a missing one", async () => {
+      actAs(bob.userId);
+      const missingId = `${PREFIX}_missing_${randomUUID().slice(0, 8)}`;
+      const missing = await rejection(
+        (server as any).restoreEntity({ entity_id: missingId, entity_type: "test" })
+      );
+      const foreign = await rejection(
+        (server as any).restoreEntity({ entity_id: aliceDeletedEntity, entity_type: "test" })
+      );
+      expect(normalize(foreign.message, aliceDeletedEntity)).toBe(
+        normalize(missing.message, missingId)
+      );
+      expect((foreign as any).code).toBe((missing as any).code);
+
+      const { data: bobRows } = await db
+        .from("observations")
+        .select("id")
+        .eq("entity_id", aliceDeletedEntity)
+        .eq("user_id", bob.userId);
+      expect(bobRows ?? []).toEqual([]);
+      expect(await isEntityDeleted(aliceDeletedEntity, alice.userId)).toBe(true);
+    });
+
+    it("the owner restores their own deleted entity", async () => {
+      actAs(alice.userId);
+      const result = JSON.parse(
+        (
+          await (server as any).restoreEntity({
+            entity_id: aliceDeletedEntity,
+            entity_type: "test",
+          })
+        ).content[0].text
+      );
+      expect(result.success).toBe(true);
+      expect(await isEntityDeleted(aliceDeletedEntity, alice.userId)).toBe(false);
+    });
+  });
+
+  describe("MCP store relationship reporting", () => {
+    const parse = (r: any) => JSON.parse(r.content[0].text);
+    const noteType = `${PREFIX}_note`;
+    // store validates relationship endpoint ids as entity ids (ent_ + 24 hex).
+    const entId = () => `ent_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    const aliceEnt = entId();
+    const bobEnt = entId();
+
+    beforeAll(async () => {
+      await db.from("entities").insert([
+        { id: aliceEnt, user_id: alice.userId, entity_type: "test", canonical_name: "alice ent" },
+        { id: bobEnt, user_id: bob.userId, entity_type: "test", canonical_name: "bob ent" },
+      ]);
+    });
+
+    afterAll(async () => {
+      await db
+        .from("relationship_observations")
+        .delete()
+        .in("target_entity_id", [aliceEnt, bobEnt]);
+      await db.from("relationship_snapshots").delete().in("target_entity_id", [aliceEnt, bobEnt]);
+      await db.from("entities").delete().in("id", [aliceEnt, bobEnt]);
+      const { data: rows } = await db
+        .from("observations")
+        .select("entity_id, interpretation_id")
+        .eq("user_id", bob.userId)
+        .eq("entity_type", noteType);
+      const entityIds = Array.from(new Set((rows ?? []).map((r: any) => r.entity_id)));
+      const interpretationIds = Array.from(
+        new Set((rows ?? []).map((r: any) => r.interpretation_id).filter(Boolean))
+      );
+      if (entityIds.length > 0) {
+        await db.from("relationship_observations").delete().in("source_entity_id", entityIds);
+        await db.from("relationship_snapshots").delete().in("source_entity_id", entityIds);
+        await db.from("timeline_events").delete().in("entity_id", entityIds);
+        await db.from("observations").delete().in("entity_id", entityIds);
+        await db.from("entity_snapshots").delete().in("entity_id", entityIds);
+        await db.from("entities").delete().in("id", entityIds);
+      }
+      if (interpretationIds.length > 0) {
+        await db.from("interpretations").delete().in("id", interpretationIds);
+      }
+    });
+
+    it("reports created and refused relationships, with the same refusal for another user's entity and a missing one", async () => {
+      actAs(bob.userId);
+      const missingId = entId();
+      const response = parse(
+        await (server as any).store({
+          idempotency_key: `${PREFIX}_store_${randomUUID()}`,
+          entities: [{ entity_type: noteType, title: `note ${randomUUID()}` }],
+          relationships: [
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: bobEnt },
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: aliceEnt },
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: missingId },
+          ],
+        })
+      );
+      const noteId = response.entities[0].entity_id;
+
+      expect(response.relationships_created).toEqual([
+        {
+          relationship_type: "REFERS_TO",
+          source_entity_id: noteId,
+          target_entity_id: bobEnt,
+        },
+      ]);
+      const refused = response.relationships_refused;
+      expect(refused.map((r: any) => r.relationship_index)).toEqual([1, 2]);
+      const [foreign, missing] = refused;
+      expect(foreign.code).toBe("RELATIONSHIP_ENDPOINT_NOT_FOUND");
+      expect(foreign.reason).toMatch(/not found or not accessible/);
+      const { relationship_index: _fi, target_entity_id: _ft, ...foreignRest } = foreign;
+      const { relationship_index: _mi, target_entity_id: _mt, ...missingRest } = missing;
+      expect(foreignRest).toEqual(missingRest);
+      expect(JSON.stringify(response)).not.toContain("alice-only-value");
+    });
+
+    it("interpretation store with a refused relationship still stores the entity and the other relationships", async () => {
+      actAs(bob.userId);
+      const response = parse(
+        await (server as any).store({
+          idempotency_key: `${PREFIX}_interp_${randomUUID()}`,
+          entities: [{ entity_type: noteType, title: `interpreted ${randomUUID()}` }],
+          interpretation: { source_id: bob.sourceId },
+          relationships: [
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: aliceEnt },
+            { relationship_type: "REFERS_TO", source_index: 0, target_entity_id: bobEnt },
+          ],
+        })
+      );
+      expect(response.interpretation_id).toBeTruthy();
+      expect(response.entities).toHaveLength(1);
+      const noteId = response.entities[0].entity_id;
+
+      expect(response.relationships_created).toEqual([
+        {
+          relationship_type: "REFERS_TO",
+          source_entity_id: noteId,
+          target_entity_id: bobEnt,
+        },
+      ]);
+      expect(response.relationships_refused).toHaveLength(1);
+      expect(response.relationships_refused[0]).toMatchObject({
+        relationship_index: 0,
+        code: "RELATIONSHIP_ENDPOINT_NOT_FOUND",
+      });
+
+      const { data: written } = await db
+        .from("relationship_observations")
+        .select("target_entity_id")
+        .eq("source_entity_id", noteId)
+        .eq("user_id", bob.userId);
+      expect((written ?? []).map((r: any) => r.target_entity_id)).toEqual([bobEnt]);
+    });
+  });
+
+  describe("MCP retrieve_file_url signs the matched source", () => {
+    it("ignores a caller-chosen first path segment and signs the stored location", async () => {
+      actAs(bob.userId);
+      const result = JSON.parse(
+        (
+          await (server as any).retrieveFileUrl({
+            file_path: `${PREFIX}_other_bucket/${bob.storageUrl}`,
+          })
+        ).content[0].text
+      );
+      const path = await import("node:path");
+      expect(result.signed_url).toBe(
+        `file://${path.resolve(config.rawStorageDir, bob.storageUrl)}`
+      );
+      expect(result.signed_url).not.toContain(`${PREFIX}_other_bucket`);
+    });
+  });
+
   describe("HTTP", () => {
     let devUser: Fixture;
 
@@ -517,6 +845,99 @@ describe("scoped source, file-URL and relationship reads", () => {
         expect(normalize(JSON.stringify(withoutTimestamp(foreign.json)), alice.entityId)).toBe(
           normalize(JSON.stringify(withoutTimestamp(missing.json)), missingId)
         );
+      });
+    });
+
+    describe("/restore_relationship and /restore_entity", () => {
+      it("answers another user's relationship exactly like a missing one", async () => {
+        const deletedKey = `REFERS_TO:${alice.otherEntityId}:${alice.entityId}`;
+        await relationshipsService.createRelationship({
+          relationship_type: "REFERS_TO",
+          source_entity_id: alice.otherEntityId,
+          target_entity_id: alice.entityId,
+          user_id: alice.userId,
+        });
+        extraRelationshipKeys.push(deletedKey);
+        await softDeleteRelationship(
+          deletedKey,
+          "REFERS_TO",
+          alice.otherEntityId,
+          alice.entityId,
+          alice.userId
+        );
+
+        const missing = await post("/restore_relationship", {
+          relationship_type: "PART_OF",
+          source_entity_id: bob.entityId,
+          target_entity_id: bob.otherEntityId,
+          user_id: bob.userId,
+        });
+        const foreign = await post("/restore_relationship", {
+          relationship_type: "REFERS_TO",
+          source_entity_id: alice.otherEntityId,
+          target_entity_id: alice.entityId,
+          user_id: bob.userId,
+        });
+        const foreignTarget = await post("/restore_relationship", {
+          relationship_type: "REFERS_TO",
+          source_entity_id: bob.entityId,
+          target_entity_id: alice.entityId,
+          user_id: bob.userId,
+        });
+        expect(missing.status).toBe(404);
+        for (const other of [foreign, foreignTarget]) {
+          expect(other.status).toBe(missing.status);
+          expect(withoutTimestamp(other.json)).toEqual(withoutTimestamp(missing.json));
+        }
+        const { data: bobRows } = await db
+          .from("relationship_observations")
+          .select("id")
+          .in("relationship_key", [deletedKey, `REFERS_TO:${bob.entityId}:${alice.entityId}`])
+          .eq("user_id", bob.userId);
+        expect(bobRows ?? []).toEqual([]);
+      });
+
+      it("answers another user's entity exactly like a missing one", async () => {
+        const entityId = `${PREFIX}_ent4_alice_${randomUUID().slice(0, 8)}`;
+        await db.from("entities").insert({
+          id: entityId,
+          user_id: alice.userId,
+          entity_type: "test",
+          canonical_name: "alice http restorable",
+        });
+        try {
+          await softDeleteEntity(entityId, "test", alice.userId);
+          const missingId = `${PREFIX}_missing_${randomUUID().slice(0, 8)}`;
+          const missing = await post("/restore_entity", {
+            entity_id: missingId,
+            entity_type: "test",
+            user_id: bob.userId,
+          });
+          const foreign = await post("/restore_entity", {
+            entity_id: entityId,
+            entity_type: "test",
+            user_id: bob.userId,
+          });
+          expect(foreign.status).toBe(404);
+          expect(foreign.status).toBe(missing.status);
+          expect(withoutTimestamp(foreign.json)).toEqual(withoutTimestamp(missing.json));
+          expect(await isEntityDeleted(entityId, alice.userId)).toBe(true);
+        } finally {
+          await db.from("observations").delete().eq("entity_id", entityId);
+          await db.from("entity_snapshots").delete().eq("entity_id", entityId);
+          await db.from("entities").delete().eq("id", entityId);
+        }
+      });
+    });
+
+    describe("/get_file_url signs the matched source", () => {
+      it("ignores a caller-chosen first path segment", async () => {
+        const { status, json } = await get("/get_file_url", {
+          file_path: `${PREFIX}_other_bucket/${devUser.storageUrl}`,
+        });
+        expect(status).toBe(200);
+        expect(json.url).not.toContain(`${PREFIX}_other_bucket`);
+        expect(String(json.url).endsWith(`/${devUser.storageUrl}`)).toBe(true);
       });
     });
 

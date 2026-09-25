@@ -38,7 +38,14 @@ import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
-import { OwnedEntityNotFoundError } from "./services/scoped_reads.js";
+import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
+import {
+  invalidEntityIdRelationshipRefusal,
+  relationshipRefusalFromError,
+  unresolvedRelationshipRefusal,
+  type StoreRelationshipCreated,
+  type StoreRelationshipRefused,
+} from "./services/store_relationships.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyUnavailableError } from "./services/instance_policy.js";
@@ -3976,10 +3983,12 @@ async function resolveGuestScopedEntityAccess(
       }
       if (entity.entity_type === "issue") {
         const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
+        // Only the entity owner's own rows count as submitter evidence.
         const { data: issueObservations } = await db
           .from("observations")
           .select("fields")
-          .eq("entity_id", entityId);
+          .eq("entity_id", entityId)
+          .eq("user_id", entity.user_id);
         for (const observation of issueObservations ?? []) {
           const rawFields = (observation as { fields?: unknown; payload?: unknown }).fields;
           const fields =
@@ -3999,7 +4008,8 @@ async function resolveGuestScopedEntityAccess(
           .from("relationship_snapshots")
           .select("target_entity_id")
           .eq("source_entity_id", entityId)
-          .eq("relationship_type", "REFERS_TO");
+          .eq("relationship_type", "REFERS_TO")
+          .eq("user_id", entity.user_id);
         for (const relationship of issueRelationships ?? []) {
           const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
           if (
@@ -4015,7 +4025,8 @@ async function resolveGuestScopedEntityAccess(
     const { data: observations } = await db
       .from("observations")
       .select("id, agent_thumbprint")
-      .eq("entity_id", entityId);
+      .eq("entity_id", entityId)
+      .eq("user_id", entity.user_id);
     const hasMatch = observations?.some((obs: { agent_thumbprint?: string }) => {
       return Boolean(
         principal.guestId.thumbprint && obs.agent_thumbprint === principal.guestId.thumbprint
@@ -6905,14 +6916,13 @@ app.post("/interpretations/create", async (req, res) => {
       config: normalizeInterpretationConfig(parsed.data.interpretation_config) as any,
     });
 
-    const relationshipsCreated: Array<{
-      relationship_type: string;
-      source_entity_id: string;
-      target_entity_id: string;
-    }> = [];
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (parsed.data.relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
-      for (const rel of parsed.data.relationships as StoreRelationshipRef[]) {
+      for (const [relIndex, rel] of (
+        parsed.data.relationships as StoreRelationshipRef[]
+      ).entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -6925,11 +6935,19 @@ app.post("/interpretations/create", async (req, res) => {
             : typeof rel.target_index === "number"
               ? interpretationResult.entities[rel.target_index]?.entityId
               : undefined;
-        if (!sourceEntityId || !targetEntityId) continue;
+        if (!sourceEntityId || !targetEntityId) {
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
+          continue;
+        }
         if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(sourceEntityId)) {
           logger.warn(
             `[interpretations/create] Skipping relationship: invalid source_entity_id ` +
               `(expected ent_ + 24 hex): ${String(rel.source_entity_id)}`
+          );
+          relationshipsRefused.push(
+            invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
           );
           continue;
         }
@@ -6938,21 +6956,32 @@ app.post("/interpretations/create", async (req, res) => {
             `[interpretations/create] Skipping relationship: invalid target_entity_id ` +
               `(expected ent_ + 24 hex): ${String(rel.target_entity_id)}`
           );
+          relationshipsRefused.push(
+            invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
           continue;
         }
-        await relationshipsService.createRelationship({
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-          relationship_type: rel.relationship_type as never,
-          source_id: parsed.data.source_id,
-          metadata: rel.metadata ?? {},
-          user_id: userId,
-        });
-        relationshipsCreated.push({
-          relationship_type: rel.relationship_type,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-        });
+        // The interpretation's entities are already written, so a relationship
+        // that cannot be created is reported rather than failing the call.
+        try {
+          await relationshipsService.createRelationship({
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+            relationship_type: rel.relationship_type as never,
+            source_id: parsed.data.source_id,
+            metadata: rel.metadata ?? {},
+            user_id: userId,
+          });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
+        } catch (relErr) {
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relErr)
+          );
+        }
       }
     }
 
@@ -6970,6 +6999,7 @@ app.post("/interpretations/create", async (req, res) => {
       unknown_fields: interpretationResult.unknownFieldNames,
       ...(interpretationResult.hint ? { hint: interpretationResult.hint } : {}),
       relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(interpretationResult.noSchemaEntityTypes &&
       interpretationResult.noSchemaEntityTypes.length > 0
         ? { no_schema_entity_types: interpretationResult.noSchemaEntityTypes }
@@ -8180,14 +8210,13 @@ export async function storeStructuredForApi(params: {
 
   // Relationships (parity with MCP store_structured). Indices are resolved
   // against the observation order; commit=false skips creation.
-  const relationshipsCreated: Array<{
-    relationship_type: string;
-    source_entity_id: string;
-    target_entity_id: string;
-  }> = [];
+  // Each relationship is created independently: one that cannot be created
+  // is reported in relationships_refused and the rest proceed.
+  const relationshipsCreated: StoreRelationshipCreated[] = [];
+  const relationshipsRefused: StoreRelationshipRefused[] = [];
   if (commit && relationships && relationships.length > 0) {
     const { relationshipsService } = await import("./services/relationships.js");
-    for (const rel of relationships) {
+    for (const [relIndex, rel] of relationships.entries()) {
       const sourceEntityId =
         typeof rel.source_entity_id === "string"
           ? rel.source_entity_id
@@ -8207,6 +8236,9 @@ export async function storeStructuredForApi(params: {
             `or target reference (target_index=${rel.target_index}, ` +
             `target_entity_id=${rel.target_entity_id}); have ${resolved.length} entities.`
         );
+        relationshipsRefused.push(
+          unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+        );
         continue;
       }
       if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(sourceEntityId)) {
@@ -8214,12 +8246,18 @@ export async function storeStructuredForApi(params: {
           `[STORE] Skipping relationship: source_entity_id is not a valid Neotoma id ` +
             `(expected ent_ + 24 hex): ${String(rel.source_entity_id)}`
         );
+        relationshipsRefused.push(
+          invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+        );
         continue;
       }
       if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(targetEntityId)) {
         logger.warn(
           `[STORE] Skipping relationship: target_entity_id is not a valid Neotoma id ` +
             `(expected ent_ + 24 hex): ${String(rel.target_entity_id)}`
+        );
+        relationshipsRefused.push(
+          invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
         );
         continue;
       }
@@ -8243,6 +8281,9 @@ export async function storeStructuredForApi(params: {
             `${sourceEntityId} -> ${targetEntityId}: ${
               relErr instanceof Error ? relErr.message : String(relErr)
             }`
+        );
+        relationshipsRefused.push(
+          relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relErr)
         );
       }
     }
@@ -8663,6 +8704,7 @@ export async function storeStructuredForApi(params: {
     observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
     relationships_created: relationshipsCreated,
+    ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
     ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     ...(unknownFieldNames.length > 0
@@ -10058,6 +10100,9 @@ app.get("/get_file_url", async (req, res) => {
 
   // Only sign a path that belongs to one of the caller's own sources. A path
   // owned by another user gets the same response as one that does not exist.
+  // What gets signed is the matched row's stored location in the sources
+  // bucket, never the caller's string.
+  let ownedStorageKey: string;
   try {
     const userId = await getAuthenticatedUserId(req, undefined);
     const { getOwnedSourceByStoragePath } = await import("./services/scoped_reads.js");
@@ -10065,6 +10110,7 @@ app.get("/get_file_url", async (req, res) => {
     if (!owned) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "File not found");
     }
+    ownedStorageKey = owned.storage_url;
   } catch (error) {
     return handleApiError(
       req,
@@ -10076,9 +10122,8 @@ app.get("/get_file_url", async (req, res) => {
     );
   }
 
-  const parts = file_path.split("/");
-  const bucket = parts[0];
-  const path = parts.slice(1).join("/");
+  const bucket = SOURCES_STORAGE_BUCKET;
+  const path = ownedStorageKey;
 
   const { data, error } = await db.storage.from(bucket).createSignedUrl(path, expires_in || 3600);
   if (error || !data?.signedUrl) {
@@ -10817,6 +10862,10 @@ app.post("/restore_entity", async (req, res) => {
     const result = await restoreEntity(entity_id, entity_type, userId, reason);
 
     if (!result.success) {
+      if (result.not_found) {
+        // Same response for a missing entity and another user's entity.
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", result.error || "Entity not found");
+      }
       return sendError(res, 500, "RESTORE_FAILED", result.error || "Failed to restore entity");
     }
 
@@ -10945,6 +10994,11 @@ app.post("/restore_relationship", async (req, res) => {
     );
 
     if (!result.success) {
+      if (result.not_found) {
+        // Restore only revives a relationship the caller already holds. A
+        // missing relationship and another user's get the same response.
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", result.error || "Relationship not found");
+      }
       return sendError(
         res,
         500,
@@ -10960,6 +11014,12 @@ app.post("/restore_relationship", async (req, res) => {
     });
     return res.json({ success: true, observation_id: result.observation_id });
   } catch (error) {
+    if (error instanceof UnregisteredRelationshipTypeError) {
+      return sendError(res, error.statusCode, error.code, error.message, {
+        relationship_type: error.relationshipType,
+        hint: error.hint,
+      });
+    }
     return handleApiError(
       req,
       res,

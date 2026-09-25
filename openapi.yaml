@@ -2222,6 +2222,64 @@ components:
                     type: integer
                   entity_id:
                     type: string
+        relationships_created:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
+          items:
+            type: object
+            required:
+              - relationship_type
+              - source_entity_id
+              - target_entity_id
+            properties:
+              relationship_type:
+                type: string
+              source_entity_id:
+                type: string
+              target_entity_id:
+                type: string
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. An endpoint that
+            does not exist and one owned by another user are both reported as
+            `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+          items:
+            type: object
+            required:
+              - relationship_index
+              - relationship_type
+              - code
+              - reason
+            properties:
+              relationship_index:
+                type: integer
+                description: Position of the relationship in the request's `relationships` array.
+              relationship_type:
+                type: string
+              source_entity_id:
+                type: string
+              target_entity_id:
+                type: string
+              source_index:
+                type: integer
+              target_index:
+                type: integer
+              code:
+                type: string
+                description: |
+                  One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+                  `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+                  `RELATIONSHIP_INVALID_ENTITY_ID`,
+                  `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+              reason:
+                type: string
+              hint:
+                type: string
         store_warnings:
           type: array
           description: |

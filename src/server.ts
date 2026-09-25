@@ -61,7 +61,13 @@ import {
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
-import { OwnedEntityNotFoundError } from "./services/scoped_reads.js";
+import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
+import {
+  relationshipRefusalFromError,
+  unresolvedRelationshipRefusal,
+  type StoreRelationshipCreated,
+  type StoreRelationshipRefused,
+} from "./services/store_relationships.js";
 import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
   extractTextFromBuffer,
@@ -2745,7 +2751,8 @@ export class NeotomaServer {
     if (!owned) {
       throw new Error("Could not resolve storage_url for source");
     }
-    return await this.signStoragePath(file_path, expires_in);
+    // Sign the matched row's stored location, never the caller's string.
+    return await this.signStoragePath(`${SOURCES_STORAGE_BUCKET}/${owned.storage_url}`, expires_in);
   }
 
   private async signStoragePath(
@@ -5068,14 +5075,11 @@ export class NeotomaServer {
       },
     });
 
-    const relationshipsCreated: Array<{
-      relationship_type: string;
-      source_entity_id: string;
-      target_entity_id: string;
-    }> = [];
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (parsed.relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
-      for (const rel of parsed.relationships as StoreRelationshipRef[]) {
+      for (const [relIndex, rel] of (parsed.relationships as StoreRelationshipRef[]).entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -5088,20 +5092,31 @@ export class NeotomaServer {
             : typeof rel.target_index === "number"
               ? result.entities[rel.target_index]?.entityId
               : undefined;
-        if (!sourceEntityId || !targetEntityId) continue;
-        await relationshipsService.createRelationship({
-          relationship_type: rel.relationship_type as RelationshipType,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-          source_id: parsed.source_id,
-          metadata: rel.metadata ?? {},
-          user_id: userId,
-        });
-        relationshipsCreated.push({
-          relationship_type: rel.relationship_type,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-        });
+        if (!sourceEntityId || !targetEntityId) {
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
+          continue;
+        }
+        try {
+          await relationshipsService.createRelationship({
+            relationship_type: rel.relationship_type as RelationshipType,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+            source_id: parsed.source_id,
+            metadata: rel.metadata ?? {},
+            user_id: userId,
+          });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
+        } catch (relError) {
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
+          );
+        }
       }
     }
 
@@ -5119,6 +5134,7 @@ export class NeotomaServer {
       unknown_fields: result.unknownFieldNames,
       ...(result.hint ? { hint: result.hint } : {}),
       relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
         ? { no_schema_entity_types: result.noSchemaEntityTypes }
         : {}),
@@ -6062,9 +6078,13 @@ export class NeotomaServer {
         },
       });
 
+      // The entities above are already written, so a relationship that
+      // cannot be created is reported rather than failing the whole call.
+      const interpretationRelationshipsCreated: StoreRelationshipCreated[] = [];
+      const interpretationRelationshipsRefused: StoreRelationshipRefused[] = [];
       if (relationships?.length) {
         const { relationshipsService } = await import("./services/relationships.js");
-        for (const rel of relationships) {
+        for (const [relIndex, rel] of relationships.entries()) {
           const sourceEntityId =
             typeof rel.source_entity_id === "string"
               ? rel.source_entity_id
@@ -6077,15 +6097,35 @@ export class NeotomaServer {
               : typeof rel.target_index === "number"
                 ? result.entities[rel.target_index]?.entityId
                 : undefined;
-          if (!sourceEntityId || !targetEntityId) continue;
-          await relationshipsService.createRelationship({
-            relationship_type: rel.relationship_type as RelationshipType,
-            source_entity_id: sourceEntityId,
-            target_entity_id: targetEntityId,
-            source_id: resolvedInterpretationSourceId,
-            metadata: rel.metadata ?? {},
-            user_id: userId,
-          });
+          if (!sourceEntityId || !targetEntityId) {
+            interpretationRelationshipsRefused.push(
+              unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+            );
+            continue;
+          }
+          try {
+            await relationshipsService.createRelationship({
+              relationship_type: rel.relationship_type as RelationshipType,
+              source_entity_id: sourceEntityId,
+              target_entity_id: targetEntityId,
+              source_id: resolvedInterpretationSourceId,
+              metadata: rel.metadata ?? {},
+              user_id: userId,
+            });
+            interpretationRelationshipsCreated.push({
+              relationship_type: rel.relationship_type,
+              source_entity_id: sourceEntityId,
+              target_entity_id: targetEntityId,
+            });
+          } catch (relError) {
+            logger.warn(
+              `store (interpretation): failed to create relationship ${rel.relationship_type} ${sourceEntityId} -> ${targetEntityId}:`,
+              relError instanceof Error ? relError.message : String(relError)
+            );
+            interpretationRelationshipsRefused.push(
+              relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
+            );
+          }
         }
       }
 
@@ -6105,6 +6145,10 @@ export class NeotomaServer {
           ? { no_schema_entity_types: result.noSchemaEntityTypes }
           : {}),
         ...(result.hint ? { hint: result.hint } : {}),
+        relationships_created: interpretationRelationshipsCreated,
+        ...(interpretationRelationshipsRefused.length > 0
+          ? { relationships_refused: interpretationRelationshipsRefused }
+          : {}),
       });
     }
 
@@ -6867,11 +6911,15 @@ export class NeotomaServer {
       }
     }
 
-    // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation)
+    // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation).
+    // Each relationship is created independently: one that cannot be created
+    // is reported in relationships_refused and the rest proceed.
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
       const entityIds = createdEntities.map((e) => e.entityId);
-      for (const rel of relationships) {
+      for (const [relIndex, rel] of relationships.entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -6891,6 +6939,9 @@ export class NeotomaServer {
               `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
               `entities.length=${entityIds.length}); skipping`
           );
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
           continue;
         }
         try {
@@ -6902,10 +6953,18 @@ export class NeotomaServer {
             metadata: rel.metadata ?? {},
             user_id: userId,
           });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
         } catch (relError) {
           logger.warn(
             `store_structured: failed to create relationship ${rel.relationship_type} ${sourceEntityId} -> ${targetEntityId}:`,
             relError instanceof Error ? relError.message : String(relError)
+          );
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
           );
         }
       }
@@ -7296,6 +7355,8 @@ export class NeotomaServer {
         : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
+      relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     });
   }
@@ -7808,6 +7869,12 @@ export class NeotomaServer {
     );
 
     if (!result.success) {
+      if (result.not_found) {
+        // Same response for a missing entity and another user's entity.
+        throw new McpError(ErrorCode.InvalidParams, result.error ?? "Entity not found", {
+          code: "RESOURCE_NOT_FOUND",
+        });
+      }
       throw new McpError(ErrorCode.InternalError, result.error ?? "Restore entity failed");
     }
 
@@ -7827,16 +7894,35 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
 
-    const result = await restoreRelationshipService(
-      relationshipKey,
-      parsed.relationship_type,
-      parsed.source_entity_id,
-      parsed.target_entity_id,
-      userId,
-      parsed.reason
-    );
+    let result: Awaited<ReturnType<typeof restoreRelationshipService>>;
+    try {
+      result = await restoreRelationshipService(
+        relationshipKey,
+        parsed.relationship_type,
+        parsed.source_entity_id,
+        parsed.target_entity_id,
+        userId,
+        parsed.reason
+      );
+    } catch (error) {
+      if (error instanceof UnregisteredRelationshipTypeError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          relationship_type: error.relationshipType,
+          hint: error.hint,
+        });
+      }
+      throw error;
+    }
 
     if (!result.success) {
+      if (result.not_found) {
+        // Restore only revives a relationship the caller already holds. A
+        // missing relationship and another user's get the same response.
+        throw new McpError(ErrorCode.InvalidParams, result.error ?? "Relationship not found", {
+          code: "RESOURCE_NOT_FOUND",
+        });
+      }
       throw new McpError(ErrorCode.InternalError, result.error ?? "Restore relationship failed");
     }
 
