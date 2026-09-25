@@ -75,6 +75,7 @@ export async function admitFromAAuthContext(
   let grant: AgentGrant | null;
   let unboundClaimMatch = false;
   let inactiveGrant: AgentGrant | null = null;
+  let invalidGrantId: string | null = null;
   try {
     const lookup = await lookupGrantForIdentity({
       sub: ctx.sub,
@@ -84,6 +85,7 @@ export async function admitFromAAuthContext(
     grant = lookup.grant;
     unboundClaimMatch = lookup.unbound_claim_match;
     inactiveGrant = lookup.inactive_grant;
+    invalidGrantId = lookup.invalid_grant_id;
   } catch (err) {
     logger.warn("aauth_admission lookup failed", {
       err: err instanceof Error ? err.message : String(err),
@@ -156,6 +158,19 @@ export async function admitFromAAuthContext(
         })
       );
       return { admitted: false, reason: "grant_key_unbound" };
+    }
+    if (invalidGrantId) {
+      // The presented key IS pinned to a real, active grant — but that
+      // grant's stored shape failed validateCapabilities (or another
+      // snapshotToGrant check), so lookupGrantForIdentity could not build
+      // an AgentGrant from it. Report the specific grant id and fail
+      // closed via grant_invalid rather than falling through to no_match,
+      // which would give a broken, specifically-named credential the same
+      // ceiling as a signature nothing recognizes at all.
+      // warnInvalidGrant (agent_grants.ts) already logged the field-level
+      // reason, rate-limited per grant per day; this line intentionally
+      // does not repeat capability contents or any credential material.
+      return { admitted: false, reason: "grant_invalid", grant_id: invalidGrantId };
     }
     return { admitted: false, reason: reasonForUnmatched(ctx) };
   }

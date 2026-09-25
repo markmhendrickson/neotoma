@@ -110,16 +110,26 @@ export interface AgentCapabilityAgent {
  * - `grant`: the signature is bound to an active grant
  *   (`match_thumbprint`); the grant's capabilities are the ceiling.
  * - `deny`: the signature names a grant this key cannot currently use —
- *   because the grant pins no key (`grant_key_unbound`), or because the
+ *   because the grant pins no key (`grant_key_unbound`), because the
  *   key WAS pinned to a grant the operator has since turned off
- *   (`grant_revoked` / `grant_suspended`). Capability-gated operations
- *   fail closed in all three cases, whatever authenticated the request
- *   and independent of `NEOTOMA_AGENT_DEFAULT_DENY`.
+ *   (`grant_revoked` / `grant_suspended`), or because the pinned grant's
+ *   stored `capabilities` fail shape validation (`grant_invalid` — e.g.
+ *   capabilities persisted as a JSON string instead of an array, or a
+ *   non-harness capability entry with no `entity_types`). Capability-gated
+ *   operations fail closed in all four cases, whatever authenticated the
+ *   request and independent of `NEOTOMA_AGENT_DEFAULT_DENY`. A grant that
+ *   cannot be parsed grants nothing, by the same fail-closed rule as a
+ *   grant that was never found: an invalid grant must never silently fall
+ *   through to `none`, where `NEOTOMA_AGENT_DEFAULT_DENY` could still admit
+ *   the request as an unrecognised (rather than a broken) caller.
  * - `none`: no grant applies; `NEOTOMA_AGENT_DEFAULT_DENY` decides.
  */
 export type AgentCapabilityCeiling =
   | { kind: "grant"; capabilities: AgentCapabilityEntry[] }
-  | { kind: "deny"; reason: "grant_key_unbound" | "grant_revoked" | "grant_suspended" }
+  | {
+      kind: "deny";
+      reason: "grant_key_unbound" | "grant_revoked" | "grant_suspended" | "grant_invalid";
+    }
   | { kind: "none" };
 
 /**
@@ -146,6 +156,14 @@ const CEILING_REASON_MAP: Record<Exclude<AAuthAdmissionReason, "admitted">, "den
   grant_key_unbound: "deny",
   grant_revoked: "deny",
   grant_suspended: "deny",
+  // The presented key IS pinned to a grant, but that grant's stored
+  // `capabilities` fail shape validation (e.g. a JSON string instead of an
+  // array, or a capability entry with no entity_types) and were therefore
+  // never admitted as a capability set. Same fail-closed reasoning as the
+  // three reasons above: the signature names a specific, broken grant, so
+  // this must never fall through to `none` and be judged by
+  // NEOTOMA_AGENT_DEFAULT_DENY as though no grant applied at all.
+  grant_invalid: "deny",
   // No grant asserts anything about this identity at all — the signature
   // is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY governs.
   no_match: "none",

@@ -4838,6 +4838,27 @@ function handleApiError(
       .status(error.status)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelopeDetails()));
   }
+  // A raw store/store_structured/correct targeting entity_type: "agent_grant"
+  // that fails assertAgentGrantFieldValid's pre-persist shape check (invalid
+  // capabilities, status, or label) is a client input error, not a server
+  // fault — surface it as 400 rather than masking it as a 500
+  // DB_QUERY_FAILED, matching the ergonomic /agents/grants routes'
+  // errorEnvelopeFromGrantError. Matched by name (not `instanceof`) to avoid
+  // a static import cycle: agent_grants.ts lazy-imports actions.js for the
+  // same reason (writeGrantEntity's comment).
+  if (error instanceof Error && error.name === "AgentGrantValidationError") {
+    const e = error as Error & { code?: string; statusCode?: number; field?: string };
+    logWarn(logContext || "AgentGrantValidationError", req, {
+      code: e.code,
+      field: e.field,
+      detail: e.message,
+    });
+    return res
+      .status(e.statusCode ?? 400)
+      .json(
+        buildErrorEnvelope(e.code ?? "agent_grant_invalid", e.message, { field: e.field ?? null })
+      );
+  }
   // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): a rejected
   // snapshot field name (sort_by / snapshot_filters) or an unsafe column
   // reference caught by the sqlite adapter is a client input error, not a server
