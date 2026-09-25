@@ -227,6 +227,148 @@ describe("S-3: .or() identifier allowlist blocks SQL identifier injection", () =
   });
 });
 
+describe("S-14: NODE_ENV=production is honoured by the local-caller check (ateles ent_1cc5662e217133323890a90f)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("treats a loopback-only forwarded chain as non-local in production when only NODE_ENV=production is set (no NEOTOMA_ENV)", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+    vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const proxied = {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(proxied)).toBe(false);
+  });
+
+  it("a bare loopback socket (no NEOTOMA_ENV, NODE_ENV=production) is not local, matching the NEOTOMA_ENV=production case", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "");
+    vi.stubEnv("NODE_ENV", "production");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(false);
+  });
+
+  it("developmentConnectionIdAllowed refuses a client-sent dev connection id when only NODE_ENV=production is set", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "");
+    vi.stubEnv("NODE_ENV", "production");
+    const { developmentConnectionIdAllowed } = await import("../../src/actions.ts");
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(developmentConnectionIdAllowed(req)).toBe(false);
+  });
+
+  it("an explicit NEOTOMA_ENV=development no longer overrides a host NODE_ENV=production — either saying production wins (fail-closed reversal)", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "development");
+    vi.stubEnv("NODE_ENV", "production");
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(false);
+  });
+
+  describe("table: NEOTOMA_ENV x NODE_ENV -> isLocalRequest for a bare loopback socket, no forwarded-for", () => {
+    // Restrictive outcome (not local, i.e. false) wherever either variable
+    // says production, or NEOTOMA_ENV is set to an unrecognized value
+    // (e.g. "staging"). NEOTOMA_TRUST_PROD_LOOPBACK is left unset throughout
+    // this table so the table isolates the environment-detection precedence
+    // itself, not the separate loopback opt-in.
+    const CASES: { neotomaEnv?: string; nodeEnv?: string; expectLocal: boolean }[] = [
+      { expectLocal: true },
+      { nodeEnv: "development", expectLocal: true },
+      { nodeEnv: "production", expectLocal: false },
+      { neotomaEnv: "development", expectLocal: true },
+      { neotomaEnv: "production", expectLocal: false },
+      { neotomaEnv: "development", nodeEnv: "production", expectLocal: false },
+      { neotomaEnv: "production", nodeEnv: "development", expectLocal: false },
+      { neotomaEnv: "staging", nodeEnv: "development", expectLocal: false },
+      { neotomaEnv: "staging", expectLocal: false },
+    ];
+
+    for (const { neotomaEnv, nodeEnv, expectLocal } of CASES) {
+      const label = `NEOTOMA_ENV=${neotomaEnv ?? "<unset>"}, NODE_ENV=${nodeEnv ?? "<unset>"} -> ${expectLocal ? "local" : "not local"}`;
+      it(label, async () => {
+        vi.stubEnv("NEOTOMA_ENV", neotomaEnv ?? "");
+        vi.stubEnv("NODE_ENV", nodeEnv ?? "");
+        vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "");
+        vi.stubEnv("NEOTOMA_TRUSTED_PROXY_IPS", "");
+        const { isLocalRequest } = await import("../../src/actions.ts");
+        const req = {
+          headers: {},
+          socket: { remoteAddress: "127.0.0.1" },
+        } as unknown as import("express").Request;
+        expect(isLocalRequest(req)).toBe(expectLocal);
+      });
+    }
+  });
+});
+
+describe("S-15: bare-loopback (no forwarded-for) production refusal logs a rate-limited diagnostic (ateles PR#2510 round-1 ux finding)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("logs when a bare loopback socket is refused in production with no forwarded-for header", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.resetModules();
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const writeSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(false);
+    expect(writeSpy).toHaveBeenCalled();
+    const message = writeSpy.mock.calls.map((call) => String(call[0])).join("");
+    expect(message).toContain("isLocalRequest");
+    // Never echoes header or IP values — only names the settings that
+    // change the outcome.
+    expect(message).not.toContain("127.0.0.1");
+  });
+
+  it("names NODE_ENV as the detection source when NEOTOMA_ENV is unset but NODE_ENV=production caused the refusal", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.resetModules();
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const writeSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(false);
+    expect(writeSpy).toHaveBeenCalled();
+    const message = writeSpy.mock.calls.map((call) => String(call[0])).join("");
+    expect(message).toContain("NODE_ENV");
+  });
+
+  it("does not log when NEOTOMA_TRUST_PROD_LOOPBACK=1 will still admit the request", async () => {
+    vi.stubEnv("NEOTOMA_ENV", "production");
+    vi.stubEnv("NEOTOMA_TRUST_PROD_LOOPBACK", "1");
+    vi.resetModules();
+    const { isLocalRequest } = await import("../../src/actions.ts");
+    const writeSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as import("express").Request;
+    expect(isLocalRequest(req)).toBe(true);
+    expect(writeSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("S-13: timing-safe token comparison", () => {
   it("rejects tokens of different lengths without throwing", async () => {
     const { timingSafeEqual } = await import("node:crypto");
