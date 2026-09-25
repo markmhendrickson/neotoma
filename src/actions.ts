@@ -1045,9 +1045,19 @@ app.get("/mcp-interaction-instructions", async (_req, res) => {
 
   let policySection = "";
   try {
-    const { getInstancePolicy, renderInstancePolicyInstructions } =
-      await import("./services/instance_policy.js");
-    policySection = renderInstancePolicyInstructions(await getInstancePolicy());
+    const {
+      getInstancePolicyResult,
+      renderInstancePolicyInstructions,
+      renderInstancePolicyUnavailableSection,
+    } = await import("./services/instance_policy.js");
+    const policyResult = await getInstancePolicyResult();
+    // A failed lookup is not the same as no policy configured — rendering it
+    // as empty here is the same conflation #2131 fixed for standing rules on
+    // this exact surface (mirrors buildAuthenticatedInitializeResponse in
+    // server.ts, so the MCP handshake and this REST mirror cannot drift).
+    policySection = policyResult.lookup_failed
+      ? renderInstancePolicyUnavailableSection()
+      : renderInstancePolicyInstructions(policyResult.policy);
   } catch {
     // An unreadable policy degrades to the global instructions rather than
     // failing the request.
@@ -5443,7 +5453,20 @@ app.get("/instance-policy", async (req, res) => {
     // be mistakable for "denies everything". entity_id rides alongside so a
     // remote client (CLI `instance-policy set`) can resolve the id needed to
     // `correct` an existing policy without a local database connection.
-    return res.json({ policy: result.policy ?? null, entity_id: result.entity_id ?? null });
+    //
+    // `lookup_failed` (and `error`) are added ONLY on a failed read, never
+    // sent as `lookup_failed: false` on success — a remote client reading only
+    // `policy` must see byte-identical responses to before this field existed
+    // (tests/integration/instance_policy_entity_id_surface_parity.test.ts
+    // pins the exact {policy, entity_id} key set on the success path). Before
+    // this, a failed lookup and a genuinely unconfigured instance both
+    // collapsed to `{ policy: null, entity_id: null }` on the wire — the same
+    // conflation #2131 fixed for standing rules, reappearing on this response.
+    return res.json({
+      policy: result.policy ?? null,
+      entity_id: result.entity_id ?? null,
+      ...(result.lookup_failed ? { lookup_failed: true, error: result.error } : {}),
+    });
   } catch (error) {
     return handleApiError(
       req,

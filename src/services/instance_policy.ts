@@ -747,7 +747,37 @@ export function renderInstancePolicyInstructions(policy: InstancePolicy | null):
         "but you are expected to comply. Do not store out-of-scope data here."
     );
   }
-  lines.push("Call `describe_instance_policy` to read this policy programmatically.");
+  lines.push(
+    "Call `describe_instance_policy` to read this instance's full data policy before your first write."
+  );
 
   return lines.join("\n");
+}
+
+/**
+ * Render the "policy could not be read" section for client instructions.
+ *
+ * Sibling to {@link renderInstancePolicyInstructions}, which only ever sees the
+ * lossy {@link getInstancePolicy} — a `null` there is silent on a failed read,
+ * so a connected agent gets an empty policy section and behaves as if
+ * unrestricted (same conflation #2131 fixed for standing rules; see
+ * {@link InstancePolicyResult}'s docblock).
+ *
+ * Callers must use {@link getInstancePolicyResult} directly and render THIS
+ * section instead of the normal one when `lookup_failed` is true — never both,
+ * and never fall through to `renderInstancePolicyInstructions(null)`, which
+ * would render as "no policy" rather than "policy unknown".
+ *
+ * Kept to one short paragraph: the instructions field is budget-constrained,
+ * and the section only needs to change agent behaviour (treat as UNKNOWN,
+ * act restricted, say so before writing), not restate the mechanism.
+ */
+export function renderInstancePolicyUnavailableSection(): string {
+  return (
+    "## Instance Data Policy\n\n" +
+    "This instance's data policy could not be read for this session. Treat it as " +
+    "UNKNOWN, not absent — do not assume writes are unrestricted. Act as if a " +
+    "restrictive policy applies, and say so before storing anything, until a later " +
+    "connection can read the policy successfully."
+  );
 }

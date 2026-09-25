@@ -7895,14 +7895,41 @@ instancePolicyCommand
         process.exitCode = 1;
         return;
       }
-      const envelope = data as { policy?: unknown; entity_id?: string | null } | undefined;
+      const envelope = data as
+        | { policy?: unknown; entity_id?: string | null; lookup_failed?: boolean; error?: string }
+        | undefined;
       const policy = envelope?.policy ?? null;
       // Mirror HTTP GET /instance-policy / MCP describe_instance_policy —
       // entity_id is the opaque id to pass to correct() when updating remotely.
       // Text-mode output stays policy-only (human-readable, not a machine contract).
       const entity_id = envelope?.entity_id ?? null;
+      const lookupFailed = envelope?.lookup_failed === true;
       if (outputMode === "json") {
-        writeOutput({ policy, entity_id }, outputMode);
+        writeOutput(
+          lookupFailed
+            ? { policy, entity_id, lookup_failed: true, error: envelope?.error }
+            : { policy, entity_id },
+          outputMode
+        );
+        // Non-zero exit on a failed lookup even in --json mode, so a script
+        // checking $? (not just parsing the envelope) also observes that
+        // policy state is unknown rather than successfully "no policy".
+        if (lookupFailed) process.exitCode = 1;
+        return;
+      }
+      // A failed lookup is NOT the same as "no policy configured" — reporting
+      // it as unconfigured here would tell an operator writes are
+      // unrestricted when policy state is actually unknown (#2131's
+      // conflation, on the CLI surface).
+      if (lookupFailed) {
+        process.stderr.write(
+          _errorStyle(
+            "Instance policy could not be read (UNKNOWN, not absent) — this is NOT the same as " +
+              "no policy configured. Do not treat writes as unrestricted. Retry; if this persists, " +
+              `check the instance's database health.${envelope?.error ? ` (${envelope.error})` : ""}`
+          ) + nl()
+        );
+        process.exitCode = 1;
         return;
       }
       if (!policy) {
