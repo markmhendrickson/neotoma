@@ -118,6 +118,7 @@ import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
+  getCurrentMcpConnectionId,
   runWithRequestContext,
 } from "./services/request_context.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
@@ -467,8 +468,8 @@ export class NeotomaServer {
 
   /**
    * Resolve the connection id a request authenticates with: the HTTP-layer
-   * value (set by actions.ts) first, then the SDK auth info, then request
-   * headers, then (stdio only) the environment. When none is present but the
+   * value (set by actions.ts) first, then the SDK auth info, then (HTTP) the
+   * gate-resolved value on the request context or (stdio) the environment. When none is present but the
    * request carries a Bearer token, resolve the connection from the token.
    *
    * Reads only the inputs passed in plus this instance's HTTP-layer connection
@@ -481,14 +482,17 @@ export class NeotomaServer {
     isHTTPTransport: boolean,
     logLabel: "Initialize" | "Stateless request" = "Initialize"
   ): Promise<string | undefined> {
-    // Extract connection_id: prefer HTTP-layer value (set by actions.ts) so auth works when SDK does not pass requestInfo
+    // Extract connection_id. On HTTP it comes only from the /mcp gate's
+    // resolved decision (this instance's value set by the HTTP layer, else the
+    // gate-resolved value on the request context); the request's own
+    // X-Connection-Id header is never read here, so the server cannot resolve
+    // an identity the gate did not.
     const authHeader = allHeaders["authorization"] || allHeaders["Authorization"];
     let connectionId =
       this.sessionConnectionId ||
       (authInfo as any)?.connectionId ||
-      allHeaders["x-connection-id"] ||
-      allHeaders["X-Connection-Id"] ||
-      (!isHTTPTransport ? process.env.NEOTOMA_CONNECTION_ID : undefined);
+      (isHTTPTransport ? getCurrentMcpConnectionId() : process.env.NEOTOMA_CONNECTION_ID) ||
+      undefined;
 
     // If no connection ID header, try to get it from Bearer token
     if (
@@ -838,6 +842,20 @@ export class NeotomaServer {
       },
       instructions,
     };
+  }
+
+  /**
+   * Listing-handler fallback matching initialize's order: when no
+   * connection id resolved a user, a request the /mcp gate admitted via AAuth
+   * authenticates as the grant owner (never a request-supplied id).
+   */
+  private userIdFromCurrentAdmission(): string | null {
+    const admission = getCurrentAAuthAdmission();
+    if (admission?.admitted && admission.user_id) {
+      this.authenticatedUserId = admission.user_id;
+      return admission.user_id;
+    }
+    return null;
   }
 
   /**
@@ -2226,11 +2244,11 @@ export class NeotomaServer {
 
       // If instance-level userId isn't set, try session connection ID (set by HTTP layer) or request context
       if (!userId) {
+        // Gate-resolved connection id only (see initialize); never the
+        // request's own X-Connection-Id header.
         const connectionId =
           this.sessionConnectionId ||
-          (extra?.requestInfo &&
-            ((extra.requestInfo as any)?.headers?.["x-connection-id"] ??
-              (extra.requestInfo as any)?.headers?.["X-Connection-Id"])) ||
+          getCurrentMcpConnectionId() ||
           (extra?.authInfo as any)?.connectionId;
 
         if (connectionId) {
@@ -2265,6 +2283,10 @@ export class NeotomaServer {
             }
           }
         }
+      }
+
+      if (!userId) {
+        userId = this.userIdFromCurrentAdmission();
       }
 
       if (!userId) {
@@ -2636,11 +2658,11 @@ export class NeotomaServer {
 
       // If instance-level userId isn't set, try session connection ID (set by HTTP layer) or request context
       if (!userId) {
+        // Gate-resolved connection id only (see initialize); never the
+        // request's own X-Connection-Id header.
         const connectionId =
           this.sessionConnectionId ||
-          (extra?.requestInfo &&
-            ((extra.requestInfo as any)?.headers?.["x-connection-id"] ??
-              (extra.requestInfo as any)?.headers?.["X-Connection-Id"])) ||
+          getCurrentMcpConnectionId() ||
           (extra?.authInfo as any)?.connectionId;
 
         if (connectionId) {
@@ -2675,6 +2697,10 @@ export class NeotomaServer {
             }
           }
         }
+      }
+
+      if (!userId) {
+        userId = this.userIdFromCurrentAdmission();
       }
 
       if (!userId) {

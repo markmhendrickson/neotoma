@@ -6,6 +6,7 @@ import morgan from "morgan";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { pathToFileURL } from "node:url";
 import { db } from "./db.js";
 import { config } from "./config.js";
@@ -1363,16 +1364,20 @@ export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = process.en
 
   // Strip IPv4-mapped IPv6 prefix for comparison
   const normalized = ip.trim().replace(/^::ffff:/i, "");
+  // A non-IP string (or a non-IPv4 string reaching the CIDR branch below)
+  // must never land inside a configured range by accident: the dotted-part
+  // coercion below is otherwise lenient about what it accepts as a number.
+  if (!isIP(normalized)) return false;
 
   for (const candidate of candidates) {
     if (candidate === normalized || candidate === ip.trim()) return true;
 
     // Simple IPv4 CIDR check (covers the common case: 100.64.0.0/10 for Cloudflare Tunnel egress)
     const slashIdx = candidate.indexOf("/");
-    if (slashIdx !== -1) {
+    if (slashIdx !== -1 && isIP(normalized) === 4) {
       const cidrBase = candidate.slice(0, slashIdx);
       const prefixLen = parseInt(candidate.slice(slashIdx + 1), 10);
-      if (!isNaN(prefixLen) && prefixLen >= 0 && prefixLen <= 32) {
+      if (!isNaN(prefixLen) && prefixLen >= 0 && prefixLen <= 32 && isIP(cidrBase) === 4) {
         const ipParts = normalized.split(".").map(Number);
         const cidrParts = cidrBase.split(".").map(Number);
         if (ipParts.length === 4 && cidrParts.length === 4) {
@@ -1423,6 +1428,26 @@ function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean 
   return value === "production" || value === "prod";
 }
 
+// Rate-limits the "loopback/trusted chain, but nearest hop isn't itself a
+// trusted proxy" diagnostic below so a hot path (a same-host sidecar that
+// always sends this shape) can't flood stderr. One line per interval is
+// enough for an operator to notice and go fix their config; it never
+// includes header values, only the setting names to use.
+const UNTRUSTED_NEAREST_HOP_LOG_INTERVAL_MS = 60_000;
+let lastUntrustedNearestHopLogAt = 0;
+
+function logUntrustedNearestHopOncePerInterval(): void {
+  const now = Date.now();
+  if (now - lastUntrustedNearestHopLogAt < UNTRUSTED_NEAREST_HOP_LOG_INTERVAL_MS) return;
+  lastUntrustedNearestHopLogAt = now;
+  process.stderr.write(
+    "[neotoma] isLocalRequest: production request refused — loopback socket with a forwarded " +
+      "chain of only loopback/trusted hops, but the nearest hop is not itself a configured " +
+      "trusted proxy. Set NEOTOMA_TRUSTED_PROXY_IPS to the nearest hop's address (or its " +
+      "enclosing CIDR), or set NEOTOMA_TRUST_PROD_LOOPBACK=1 for a single-host deployment.\n"
+  );
+}
+
 /**
  * True when the request is genuinely local to this process.
  *
@@ -1430,9 +1455,14 @@ function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean 
  * connects to Node over loopback even for public internet callers. In
  * production, loopback alone is therefore not enough to grant local-dev auth.
  *
+ * X-Forwarded-For can only disqualify a caller, never qualify one: a loopback
+ * socket with an all-loopback forwarded chain is treated like a loopback
+ * socket with no forwarded header, so in production it is not local.
+ *
  * NEOTOMA_TRUSTED_PROXY_IPS: comma-separated list of IPs or IPv4 CIDRs whose
  * XFF entries are trusted and do not disqualify a loopback-socket request from
- * being considered local. Use this for tunnel setups where cloudflared (or
+ * being considered local. In production, a forwarded chain whose nearest hop
+ * is one of these addresses is treated as local. Use this for tunnel setups where cloudflared (or
  * similar) injects a non-loopback XFF entry that represents a controlled
  * internal hop, not a public internet caller.
  *
@@ -1455,19 +1485,41 @@ export function isLocalRequest(req: express.Request): boolean {
   if (forwardedFor.length > 0) {
     // A forwarded-for entry disqualifies the request as local unless every
     // entry is either a loopback address or an explicitly trusted proxy IP.
-    if (forwardedFor.every((ip) => isLoopbackAddress(ip) || isTrustedProxyIP(ip))) {
-      return true;
-    }
     const untrusted = forwardedFor.filter((ip) => !isLoopbackAddress(ip) && !isTrustedProxyIP(ip));
-    const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
-    const displayed = debugTunnel ? untrusted.join(", ") : untrusted.map(redactIpForLog).join(", ");
-    process.stderr.write(
-      `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
-        `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
-        (debugTunnel ? "" : " (set NEOTOMA_DEBUG_TUNNEL=1 to see full IPs)") +
-        `.\n`
-    );
-    return false;
+    if (untrusted.length > 0) {
+      const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
+      const displayed = debugTunnel
+        ? untrusted.join(", ")
+        : untrusted.map(redactIpForLog).join(", ");
+      process.stderr.write(
+        `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
+          `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
+          (debugTunnel ? "" : " (set NEOTOMA_DEBUG_TUNNEL=1 to see full IPs)") +
+          `.\n`
+      );
+      return false;
+    }
+    // A chain that passes that check is only "not disqualified"; forwarded
+    // headers never qualify a caller on their own. In production the chain
+    // counts as local only when its nearest hop is a configured trusted proxy
+    // (NEOTOMA_TRUSTED_PROXY_IPS); otherwise the environment rule below
+    // applies, exactly as when no X-Forwarded-For is present. Development is
+    // unchanged: a loopback socket is local there either way.
+    const nearestHop = forwardedFor[forwardedFor.length - 1]!;
+    if (isProductionEnvironment() && isTrustedProxyIP(nearestHop)) return true;
+
+    // The chain passed the untrusted-entry check above (every hop is
+    // loopback or a trusted proxy), but in production it still didn't
+    // qualify because the nearest hop specifically isn't a trusted proxy
+    // (e.g. it's loopback, or NEOTOMA_TRUSTED_PROXY_IPS is unset). Without
+    // this line that refusal is silent: the branch above only fires when an
+    // untrusted IP is present, and this chain has none. Only log when the
+    // request is actually about to be refused — not when
+    // NEOTOMA_TRUST_PROD_LOOPBACK=1 will still admit it below. Never echo
+    // header values here — only the setting names an operator needs.
+    if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK !== "1") {
+      logUntrustedNearestHopOncePerInterval();
+    }
   }
 
   if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
@@ -1475,6 +1527,60 @@ export function isLocalRequest(req: express.Request): boolean {
   }
 
   return !isProductionEnvironment();
+}
+
+/**
+ * Connection ids that name a development identity rather than a stored OAuth
+ * connection: `dev-local` / `dev-local-http` (assigned by the /mcp gate to a
+ * local caller in development mode) and `test-connection-bypass` (honoured by
+ * the MCP server only under the test runner).
+ */
+const DEVELOPMENT_CONNECTION_IDS: ReadonlySet<string> = new Set([
+  "dev-local",
+  "dev-local-http",
+  "test-connection-bypass",
+]);
+
+export function isDevelopmentConnectionId(value: unknown): boolean {
+  return typeof value === "string" && DEVELOPMENT_CONNECTION_IDS.has(value);
+}
+
+/**
+ * Whether a client-sent development connection id may be honoured for this
+ * request. Mirrors the conditions under which the /mcp gate assigns one
+ * itself, so sending the header never grants more than omitting it:
+ *
+ *   - development mode: encryption disabled, and `isLocalRequest`'s own
+ *     environment rule (non-production `NEOTOMA_ENV`, or the explicit
+ *     `NEOTOMA_TRUST_PROD_LOOPBACK=1` opt-in);
+ *   - a local caller by `isLocalRequest`: loopback socket address, and every
+ *     X-Forwarded-For hop loopback or a configured trusted proxy. Forwarded
+ *     headers can only disqualify a caller, never qualify one.
+ */
+export function developmentConnectionIdAllowed(req: express.Request): boolean {
+  if (config.encryption.enabled) return false;
+  return isLocalRequest(req);
+}
+
+/**
+ * Set (or, with `undefined`, remove) the request's X-Connection-Id to the
+ * value the /mcp gate resolved. Both `req.headers` and `req.rawHeaders` are
+ * rewritten, because the MCP transport builds its request from `rawHeaders`.
+ * The MCP server does not read this header for identity (it reads the gate's
+ * decision from the request context); keeping both copies in step means no
+ * downstream reader sees a value the gate did not resolve.
+ */
+function setGateConnectionIdHeader(req: express.Request, value: string | undefined): void {
+  if (value === undefined) delete req.headers["x-connection-id"];
+  else req.headers["x-connection-id"] = value;
+  const raw = req.rawHeaders;
+  if (!Array.isArray(raw)) return;
+  const kept: string[] = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    if (String(raw[i]).toLowerCase() !== "x-connection-id") kept.push(raw[i]!, raw[i + 1]!);
+  }
+  if (value !== undefined) kept.push("X-Connection-Id", value);
+  raw.splice(0, raw.length, ...kept);
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
@@ -1946,6 +2052,18 @@ app.all("/mcp", async (req, res) => {
       | undefined;
     let bearerValidated = false;
 
+    // Development connection identities are assigned by this gate, not by the
+    // client. A client-sent value is honoured only where the gate would assign
+    // the same identity itself: a local caller in development mode. Anywhere
+    // else it is dropped, so the request is authenticated exactly as if the
+    // header had been omitted. The MCP server takes its connection id from the
+    // gate's resolved value (request context and session mint below), not from
+    // the header; the header is removed from both header views as well.
+    if (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req)) {
+      setGateConnectionIdHeader(req, undefined);
+      connectionIdHeader = undefined;
+    }
+
     // Key-derived Bearer token is accepted whenever a key source is configured (regardless of
     // NEOTOMA_ENCRYPTION_ENABLED). This lets tunnel setups authenticate via `neotoma auth mcp-token`
     // without enabling full data-at-rest encryption.
@@ -1953,7 +2071,7 @@ app.all("/mcp", async (req, res) => {
     if (authHeader?.startsWith("Bearer ") && mcpExpectedToken) {
       const token = authHeader.slice(7).trim();
       if (safeCompareTokens(token, mcpExpectedToken)) {
-        req.headers["x-connection-id"] = "dev-local";
+        setGateConnectionIdHeader(req, "dev-local");
         connectionIdHeader = "dev-local";
         bearerValidated = true;
       }
@@ -1967,10 +2085,10 @@ app.all("/mcp", async (req, res) => {
         if (isLocalRequest(req)) {
           const isInsecure = req.protocol === "http" || !(req as any).secure;
           if (isInsecure) {
-            req.headers["x-connection-id"] = "dev-local-http";
+            setGateConnectionIdHeader(req, "dev-local-http");
             connectionIdHeader = "dev-local-http";
           } else {
-            req.headers["x-connection-id"] = "dev-local";
+            setGateConnectionIdHeader(req, "dev-local");
             connectionIdHeader = "dev-local";
           }
         }
@@ -1978,7 +2096,7 @@ app.all("/mcp", async (req, res) => {
       if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
         const token = authHeader.slice(7).trim();
         if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
-          req.headers["x-connection-id"] = "dev-local";
+          setGateConnectionIdHeader(req, "dev-local");
           connectionIdHeader = "dev-local";
           bearerValidated = true;
         }
@@ -1988,7 +2106,7 @@ app.all("/mcp", async (req, res) => {
           const token = authHeader.slice(7).trim();
           const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
           const { connectionId } = await validateTokenAndGetConnectionId(token);
-          req.headers["x-connection-id"] = connectionId;
+          setGateConnectionIdHeader(req, connectionId);
           connectionIdHeader = connectionId;
           bearerValidated = true;
         } catch {
@@ -2067,14 +2185,17 @@ app.all("/mcp", async (req, res) => {
       });
     }
 
-    // Validate X-Connection-Id when that is the auth method (no Bearer). Invalid IDs return 401
-    // so Cursor shows Connect button instead of blocking on "Loading tools".
-    // Skip validation for dev-local and dev-local-http (no-auth defaults).
+    // Validate X-Connection-Id when it is the auth method (no Bearer was validated above).
+    // Invalid IDs return 401 so Cursor shows Connect button instead of blocking on
+    // "Loading tools". dev-local and dev-local-http skip lookup: reaching this point they
+    // were either assigned by this gate or passed the local-development check above.
+    // An unvalidated Bearer does not excuse the lookup: the connection id is then the
+    // only credential on the request.
     if (
       connectionIdHeader &&
       connectionIdHeader !== "dev-local" &&
       connectionIdHeader !== "dev-local-http" &&
-      !authHeader?.startsWith("Bearer ")
+      !bearerValidated
     ) {
       try {
         const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
@@ -2121,12 +2242,10 @@ app.all("/mcp", async (req, res) => {
         return res.status(modernRejection.httpStatus).json(modernRejection.body);
       }
       const body = req.body as Record<string, unknown>;
-      const connectionIdForRequest = req.headers["x-connection-id"];
       const statelessServer = new NeotomaServer();
       statelessServer.primeStatelessRequest({
-        connectionId: Array.isArray(connectionIdForRequest)
-          ? connectionIdForRequest[0]
-          : connectionIdForRequest,
+        // The gate's resolved connection id, never the request header.
+        connectionId: connectionIdHeader,
         aauthContext: getAAuthContextFromRequest(req),
         clientInfo: readClientInfoFromMeta(readRequestMeta(body)),
         appOrigin: resolvePublicAppOriginFromRequest(req),
@@ -2136,6 +2255,7 @@ app.all("/mcp", async (req, res) => {
           agentIdentity: statelessServer.getAgentIdentity(),
           attributionDecision: getAttributionDecisionFromRequest(req),
           aauthAdmission: aauthAdmissionForRequest,
+          mcpConnectionId: connectionIdHeader ?? null,
         },
         () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
       );
@@ -2182,7 +2302,8 @@ app.all("/mcp", async (req, res) => {
       const minted = await mintMcpHttpSession(
         req,
         mcpSessionMaps,
-        resolvePublicAppOriginFromRequest
+        resolvePublicAppOriginFromRequest,
+        connectionIdHeader
       );
       transport = minted.transport;
       serverInstance = minted.serverInstance;
@@ -2203,7 +2324,8 @@ app.all("/mcp", async (req, res) => {
         const minted = await mintMcpHttpSession(
           req,
           mcpSessionMaps,
-          resolvePublicAppOriginFromRequest
+          resolvePublicAppOriginFromRequest,
+          connectionIdHeader
         );
         const handshakeOk = await completeSyntheticMcpHandshake(minted.transport);
         const recoveredSessionId = minted.transport.sessionId;
@@ -2315,6 +2437,9 @@ app.all("/mcp", async (req, res) => {
         agentIdentity: fallbackIdentity,
         attributionDecision,
         aauthAdmission: aauthAdmissionForRequest,
+        // The gate's resolved connection id: the MCP server reads this, never
+        // the request's X-Connection-Id header.
+        mcpConnectionId: connectionIdHeader ?? null,
       },
       () => transport!.handleRequest(req, res, req.body)
     );

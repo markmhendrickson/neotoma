@@ -134,7 +134,9 @@ function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean 
 function isLoopbackRequest(req: express.Request, env: NodeJS.ProcessEnv = process.env): boolean {
   if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
   const forwardedFor = forwardedForValues(req);
-  if (forwardedFor.length > 0) return forwardedFor.every(isLoopbackAddress);
+  // Forwarded hops can only disqualify a caller: an all-loopback chain falls
+  // through to the same environment rule as a request with no forwarded header.
+  if (forwardedFor.length > 0 && !forwardedFor.every(isLoopbackAddress)) return false;
   if (isProductionEnvironment(env) && env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") return true;
   return !isProductionEnvironment(env);
 }

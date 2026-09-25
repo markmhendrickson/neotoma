@@ -47,11 +47,25 @@ const CONNECTIONS: Record<string, string> = {
   "conn-2070-b": USER_B,
 };
 
+/**
+ * Connection ids with this prefix are valid for exactly one lookup and then
+ * behave as revoked: the /mcp gate's lookup succeeds, the server's own
+ * resolution of the same request then finds no connection. This models a
+ * connection revoked between the gate check and identity resolution.
+ */
+const REVOKED_AFTER_GATE_PREFIX = "conn-2070-revoked-after-gate-";
+const lookupsByConnection = new Map<string, number>();
+
 vi.mock("../../src/services/mcp_oauth.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/services/mcp_oauth.js")>();
   return {
     ...actual,
     getAccessTokenForConnection: vi.fn(async (connectionId: string) => {
+      const lookups = (lookupsByConnection.get(connectionId) ?? 0) + 1;
+      lookupsByConnection.set(connectionId, lookups);
+      if (connectionId.startsWith(REVOKED_AFTER_GATE_PREFIX) && lookups === 1) {
+        return { accessToken: `test-access-${connectionId}`, userId: USER_A };
+      }
       const userId = CONNECTIONS[connectionId];
       if (!userId) {
         const error = new Error("Connection not found") as Error & { code?: string };
@@ -240,20 +254,21 @@ describe("POST /mcp 2026-07-28 stateless auth resolution (#2070)", () => {
   it("a credential that resolves to no user is refused at request time with a typed 401, not a tool error", async () => {
     const replica = await bootMcpApp();
     apps.push(replica);
-    // The /mcp gate skips connection-id validation when a Bearer is also
-    // present, so an unknown connection id reaches the stateless path, where
-    // resolution fails. That must surface as an authentication error for this
-    // request, before any method runs.
+    // The connection id passes the /mcp gate's lookup and is then revoked
+    // before the stateless path resolves identity (see
+    // REVOKED_AFTER_GATE_PREFIX), so resolution fails after the gate. That must
+    // surface as an authentication error for this request, before any method
+    // runs.
     const cases = [
       { id: 300, method: "tools/call", params: { name: "get_authenticated_user", arguments: {} } },
       { id: 301, method: "tools/list" },
       { id: 302, method: "server/discover" },
     ];
     for (const request of cases) {
-      const reply = await modernPost(replica.baseUrl, request, {
-        connectionId: "conn-2070-unknown",
-        headers: { Authorization: "Bearer not-a-real-2070-token" },
-      });
+      const connectionId = `${REVOKED_AFTER_GATE_PREFIX}${request.id}`;
+      const reply = await modernPost(replica.baseUrl, request, { connectionId });
+      // The gate accepted the credential; the refusal came from resolution.
+      expect(lookupsByConnection.get(connectionId)).toBe(2);
       expect(reply.status, `${request.method}: ${reply.text}`).toBe(401);
       expect(reply.body?.id).toBe(request.id);
       expect(reply.body?.result).toBeUndefined();
@@ -262,7 +277,8 @@ describe("POST /mcp 2026-07-28 stateless auth resolution (#2070)", () => {
       expect(reply.body?.error?.data?.hint).toBeTruthy();
       expect(reply.headers.get("www-authenticate")).toContain('error="invalid_token"');
       expect(reply.headers.get("mcp-session-id")).toBeNull();
-      expect(reply.text).not.toContain("conn-2070-unknown");
+      expect(reply.text).not.toContain(connectionId);
+      expect(reply.text).not.toContain(USER_A);
     }
   });
 });
