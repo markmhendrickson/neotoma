@@ -267,6 +267,7 @@ import { getTimelineEventForUser, listTimelineEventsForUser } from "./services/t
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import { isProductionEnvironment } from "./shared/environment.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -1423,9 +1424,30 @@ function forwardedForValues(req: express.Request): string[] {
     .filter(Boolean);
 }
 
-function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
-  return value === "production" || value === "prod";
+// isProductionEnvironment is imported from ./shared/environment.js — see that
+// module's docstring for the EITHER-variable-says-production precedence.
+
+/**
+ * Names which signal caused `isProductionEnvironment()` to resolve true, for
+ * diagnostic text only — never used for the determination itself. An
+ * operator seeing a refusal they didn't expect needs to know whether it's
+ * their own `NEOTOMA_ENV`, an inherited `NODE_ENV`, or a NEOTOMA_ENV typo,
+ * without having to already know this precedence rule exists.
+ */
+function describeProductionSource(env: NodeJS.ProcessEnv = process.env): string {
+  const neotomaEnvRaw = (env.NEOTOMA_ENV ?? "").trim();
+  const neotomaEnv = neotomaEnvRaw.toLowerCase();
+  const nodeEnv = (env.NODE_ENV ?? "").trim().toLowerCase();
+  if (neotomaEnv === "production" || neotomaEnv === "prod") {
+    return `NEOTOMA_ENV=${neotomaEnvRaw} is set`;
+  }
+  if (neotomaEnvRaw.length > 0 && !["development", "dev", "test"].includes(neotomaEnv)) {
+    return `NEOTOMA_ENV=${JSON.stringify(neotomaEnvRaw)} is not a recognized value (development, dev, test, production, prod)`;
+  }
+  if (nodeEnv === "production") {
+    return `NODE_ENV=production is set${neotomaEnvRaw.length === 0 ? " (NEOTOMA_ENV is unset)" : ""}`;
+  }
+  return "the process environment resolves to production";
 }
 
 // Rate-limits the "loopback/trusted chain, but nearest hop isn't itself a
@@ -1441,10 +1463,34 @@ function logUntrustedNearestHopOncePerInterval(): void {
   if (now - lastUntrustedNearestHopLogAt < UNTRUSTED_NEAREST_HOP_LOG_INTERVAL_MS) return;
   lastUntrustedNearestHopLogAt = now;
   process.stderr.write(
-    "[neotoma] isLocalRequest: production request refused — loopback socket with a forwarded " +
-      "chain of only loopback/trusted hops, but the nearest hop is not itself a configured " +
-      "trusted proxy. Set NEOTOMA_TRUSTED_PROXY_IPS to the nearest hop's address (or its " +
-      "enclosing CIDR), or set NEOTOMA_TRUST_PROD_LOOPBACK=1 for a single-host deployment.\n"
+    `[neotoma] isLocalRequest: production request refused (${describeProductionSource()}) — ` +
+      "loopback socket with a forwarded chain of only loopback/trusted hops, but the nearest " +
+      "hop is not itself a configured trusted proxy. Set NEOTOMA_TRUSTED_PROXY_IPS to the " +
+      "nearest hop's address (or its enclosing CIDR), or set NEOTOMA_TRUST_PROD_LOOPBACK=1 for " +
+      "a single-host deployment.\n"
+  );
+}
+
+// Rate-limits the bare-loopback (no forwarded-for header at all) production
+// refusal below. Before this, the most common self-hosted shape — no
+// reverse proxy, so `forwardedFor.length === 0` — refused silently: nothing
+// distinguished this refusal from any other auth failure. Mirrors
+// logUntrustedNearestHopOncePerInterval's style: one line per interval,
+// names the settings that change the outcome, never echoes header/IP
+// values (there are none on this path to echo).
+const BARE_LOOPBACK_REFUSAL_LOG_INTERVAL_MS = 60_000;
+let lastBareLoopbackRefusalLogAt = 0;
+
+function logBareLoopbackRefusalOncePerInterval(): void {
+  const now = Date.now();
+  if (now - lastBareLoopbackRefusalLogAt < BARE_LOOPBACK_REFUSAL_LOG_INTERVAL_MS) return;
+  lastBareLoopbackRefusalLogAt = now;
+  process.stderr.write(
+    `[neotoma] isLocalRequest: production request refused (${describeProductionSource()}) — ` +
+      "loopback socket with no forwarded-for header is not local-trusted in production. Set " +
+      "NEOTOMA_TRUST_PROD_LOOPBACK=1 for a genuinely single-host deployment, or set " +
+      "NEOTOMA_ENV=development if this process is not actually production. See " +
+      'docs/operations/configuration.md "Environments" for the full precedence rule.\n'
   );
 }
 
@@ -1526,7 +1572,19 @@ export function isLocalRequest(req: express.Request): boolean {
     return true;
   }
 
-  return !isProductionEnvironment();
+  if (isProductionEnvironment()) {
+    // A bare loopback socket with NO forwarded-for header at all (the most
+    // common self-hosted, no-reverse-proxy shape) is refused here. When
+    // forwardedFor.length > 0, any refusal was already logged above by
+    // logUntrustedNearestHopOncePerInterval (or the untrusted-XFF branch);
+    // only log here for the genuinely silent case, to avoid double-logging.
+    if (forwardedFor.length === 0) {
+      logBareLoopbackRefusalOncePerInterval();
+    }
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -13094,9 +13152,7 @@ export async function startHTTPServer() {
     const hostEnv = (process.env.NEOTOMA_HTTP_HOST || "").trim().toLowerCase();
     const loopbackBindOnly =
       hostEnv === "127.0.0.1" || hostEnv === "localhost" || hostEnv === "::1";
-    const productionEnv =
-      (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
-      (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod";
+    const productionEnv = isProductionEnvironment();
     const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
     const refusePolicy = resolveRefusePolicy();
     const forceMode = resolveForceMode();
