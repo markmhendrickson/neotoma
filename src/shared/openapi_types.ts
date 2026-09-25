@@ -130,8 +130,9 @@ export interface paths {
      *
      *     `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
      *     tool/resource/prompt name. A value shaped like a credential or personal
-     *     data is rejected with `400` on either era, and the rejected value is never
-     *     echoed or logged. The route also accepts GET and DELETE for legacy
+     *     data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+     *     `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+     *     and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
      *     sessions; those are not modelled here.
      */
     post: operations["mcpStreamableHttpPost"];
@@ -4579,7 +4580,12 @@ export interface operations {
           "application/json": components["schemas"]["McpJsonRpcResponse"];
         };
       };
-      /** @description Authentication required or credential invalid. */
+      /**
+       * @description Authentication required or credential invalid (`-32001`). On the
+       *     2026-07-28 path this includes a credential that passed the gate but
+       *     resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+       *     or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+       */
       401: {
         headers: {
           [name: string]: unknown;

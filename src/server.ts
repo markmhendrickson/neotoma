@@ -13,6 +13,7 @@ import {
 import { db } from "./db.js";
 import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
+import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -31,6 +32,8 @@ import {
   SingleExchangeTransport,
   jsonRpcIdOf,
   shapeModernResponse,
+  statelessAuthFailureJsonRpcBody,
+  type McpStatelessAuthFailure,
 } from "./mcp_http_stateless.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { IncomingHttpHeaders } from "node:http";
@@ -232,6 +235,40 @@ const NEOTOMA_MCP_DECLARED_CAPABILITIES = {
   resources: {},
 } as const;
 
+/** Set once the stdio entrypoint's process-level signal handlers are installed. */
+let stdioSignalHandlersInstalled = false;
+
+/**
+ * Install the stdio entrypoint's process-level signal handlers, once per
+ * process. Returns true when this call installed them.
+ *
+ * - SIGINT closes the stdio server, then exits.
+ * - SIGPIPE exits cleanly when the stdio pipe breaks (e.g. machine sleep/wake,
+ *   or the client closes the pipe), so the client shows a clean disconnect and
+ *   restarts the server.
+ *
+ * Only the stdio entrypoint calls this. HTTP servers own their own signal
+ * handling (see the entrypoint block at the end of actions.ts), and a
+ * per-instance registration would retain every instance it closed over.
+ *
+ * Skipped under NODE_ENV=test: registering process.on('SIGINT') makes vitest
+ * report "Worker exited unexpectedly" when it terminates workers after a run.
+ */
+export function installStdioSignalHandlers(close: () => Promise<void>): boolean {
+  if (stdioSignalHandlersInstalled) return false;
+  if (process.env.NODE_ENV === "test") return false;
+  stdioSignalHandlersInstalled = true;
+
+  process.on("SIGINT", async () => {
+    await close();
+    process.exit(0);
+  });
+  process.on("SIGPIPE", () => {
+    process.exit(0);
+  });
+  return true;
+}
+
 export class NeotomaServer {
   private readonly mcpServer: McpServer;
   private autoEnhancementCleanup?: () => void;
@@ -390,10 +427,10 @@ export class NeotomaServer {
       // This is NOT verified — it is whatever the MCP client put on the wire.
       const rawName = request.params?.clientInfo?.name;
       const rawVersion = request.params?.clientInfo?.version;
-      this.sessionClientInfo = {
+      this.setSessionClientInfo({
         name: typeof rawName === "string" ? rawName : undefined,
         version: typeof rawVersion === "string" ? rawVersion : undefined,
-      };
+      });
 
       // Detect transport type: HTTP has requestInfo, stdio does not
       const isHTTPTransport = !!extra?.requestInfo;
@@ -458,7 +495,9 @@ export class NeotomaServer {
         const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
         const { connectionId: resolvedConnectionId } = await validateTokenAndGetConnectionId(token);
         connectionId = resolvedConnectionId;
-        logger.info(`[MCP Server] Resolved connection ID from Bearer token: ${connectionId}`);
+        logger.info(
+          `[MCP Server] Resolved connection ID from Bearer token (${connectionIdForLog(connectionId)})`
+        );
       } catch (error: any) {
         logger.error(
           `[MCP Server] Failed to resolve connection ID from Bearer token: ${error.message}`
@@ -472,7 +511,7 @@ export class NeotomaServer {
     }
 
     logger.info(
-      `[MCP Server] ${logLabel}: connectionId=${connectionId}, authHeader=${authHeader ? "present" : "missing"}`
+      `[MCP Server] ${logLabel}: connectionId=${connectionIdForLog(connectionId)}, authHeader=${authHeader ? "present" : "missing"}`
     );
     return typeof connectionId === "string" ? connectionId : undefined;
   }
@@ -546,7 +585,7 @@ export class NeotomaServer {
         this.sessionToken = accessToken;
 
         logger.info(
-          `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
+          `[MCP Server] Initialized with OAuth connection (${connectionIdForLog(connectionId)}, user: ${userId})`
         );
         return "authenticated";
       } catch (error: any) {
@@ -557,7 +596,7 @@ export class NeotomaServer {
 
         if (isConnectionNotFound) {
           logger.error(
-            `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. Clearing connection ID.`
+            `[MCP Server] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionId)}). Clearing connection ID.`
           );
           this.sessionConnectionId = null;
         } else {
@@ -685,11 +724,12 @@ export class NeotomaServer {
     appOrigin?: { origin?: string; source?: SessionOriginInfo["source"] };
   }): void {
     this.isHTTPTransportSession = true;
-    this.sessionConnectionId = input.connectionId ?? null;
-    this.sessionAAuth = input.aauthContext;
-    this.sessionClientInfo = input.clientInfo;
-    this.sessionAppOrigin = input.appOrigin?.origin ?? null;
-    this.sessionAppOriginSource = input.appOrigin?.source ?? null;
+    // Identity fields go through the same setters the legacy session path
+    // uses, so a change to how a field is stored stays in one place.
+    this.setSessionConnectionId(input.connectionId ?? null);
+    this.setSessionAgentIdentity(input.aauthContext);
+    this.setSessionClientInfo(input.clientInfo);
+    this.setSessionAppOrigin(input.appOrigin?.origin ?? null, input.appOrigin?.source ?? null);
   }
 
   /**
@@ -703,18 +743,33 @@ export class NeotomaServer {
   async handleStatelessRequest(
     message: Record<string, unknown>,
     requestInfo: { headers: IncomingHttpHeaders }
-  ): Promise<{ status: number; body: Record<string, unknown> } | null> {
+  ): Promise<{
+    status: number;
+    body: Record<string, unknown>;
+    authFailure?: McpStatelessAuthFailure;
+  } | null> {
     const connectionId = await this.resolveRequestConnectionId(
       requestInfo.headers as Record<string, unknown>,
       undefined,
       true,
       "Stateless request"
     );
-    await this.resolveAuthentication({
+    const outcome = await this.resolveAuthentication({
       connectionId,
       isHTTPTransport: true,
       requestId: randomUUID(),
     });
+    // A credential that passed the HTTP gate but resolved to no user is an
+    // authentication failure of THIS request: answer 401 now, before any
+    // method runs, instead of letting it surface later as a tool error.
+    if (outcome !== "authenticated") {
+      logger.info(`[MCP Server] Stateless request not authenticated (${outcome})`);
+      return {
+        status: 401,
+        body: statelessAuthFailureJsonRpcBody(outcome, jsonRpcIdOf(message)),
+        authFailure: outcome,
+      };
+    }
 
     this.setupDiscoverHandler();
     const id = jsonRpcIdOf(message);
@@ -782,8 +837,17 @@ export class NeotomaServer {
    * Set connection ID for this session from the HTTP layer.
    * Ensures listTools/listResources get auth when the SDK does not pass requestInfo to handlers.
    */
-  setSessionConnectionId(connectionId: string): void {
+  setSessionConnectionId(connectionId: string | null): void {
     this.sessionConnectionId = connectionId;
+  }
+
+  /**
+   * Record the client's self-reported `clientInfo` (fallback attribution only;
+   * unverified). Legacy sessions take it from `initialize`, 2026-07-28 requests
+   * from `params._meta`.
+   */
+  setSessionClientInfo(clientInfo: { name?: string; version?: string } | null): void {
+    this.sessionClientInfo = clientInfo;
   }
 
   /**
@@ -2182,7 +2246,7 @@ export class NeotomaServer {
 
             if (isInvalidConnection) {
               logger.error(
-                `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. User needs to remove header and reconnect.`
+                `[MCP Server] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionId)}). User needs to remove header and reconnect.`
               );
               // Don't throw - throwing causes "Error - Show Output" instead of triggering reconnection
               // The invalid connection was already handled in initialize by throwing an error there
@@ -2592,7 +2656,7 @@ export class NeotomaServer {
 
             if (isInvalidConnection) {
               logger.error(
-                `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. User needs to remove header and reconnect.`
+                `[MCP Server] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionId)}). User needs to remove header and reconnect.`
               );
               // Don't throw - throwing causes "Error - Show Output" instead of triggering reconnection
               // The invalid connection was already handled in initialize by throwing an error there
@@ -9114,33 +9178,24 @@ export class NeotomaServer {
     }
   }
 
+  /**
+   * Per-instance error wiring only. Process-level signal handlers are NOT
+   * registered here: `NeotomaServer` is constructed per request on the
+   * 2026-07-28 stateless path and per call on several HTTP routes, and a
+   * `process.on` closure over `this` would keep every such instance (and the
+   * credentials it resolved) reachable for the life of the process. The stdio
+   * entrypoint installs its handlers once per process in {@link run}.
+   */
   private setupErrorHandler(): void {
     this.mcpServer.server.onerror = (error) => {
       logger.error("[MCP Error]", error);
     };
-
-    // Skip signal handlers in test environments: registering process.on('SIGINT')
-    // causes vitest to report "Worker exited unexpectedly" when it terminates workers
-    // after a test run, even when all tests pass.
-    if (process.env.NODE_ENV === "test") {
-      return;
-    }
-
-    process.on("SIGINT", async () => {
-      await this.mcpServer.server.close();
-      process.exit(0);
-    });
-
-    // Exit cleanly when stdio pipe breaks (e.g. machine sleep/wake; Cursor closes the pipe).
-    // Allows Cursor to show a clean disconnect and restart the server.
-    process.on("SIGPIPE", () => {
-      process.exit(0);
-    });
   }
 
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.mcpServer.server.connect(transport);
+    installStdioSignalHandlers(() => this.mcpServer.server.close());
     logger.info("[Neotoma MCP] Server running on stdio");
 
     await this.startAutoEnhancement();

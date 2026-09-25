@@ -13,8 +13,9 @@
  *   material is never threaded into both branches.
  * - {@link screenMcpStandardHeaders}: the `Mcp-Method` / `Mcp-Name` audit. Those
  *   headers are visible to every gateway and load balancer on the path, so a
- *   value shaped like a credential or personal data is rejected (400) on both
- *   eras, never forwarded, never echoed back and never logged.
+ *   value shaped like a credential or personal data, or not shaped like a
+ *   method / tool name / resource URI at all, is rejected (400) on both eras,
+ *   never forwarded, never echoed back and never logged.
  * - {@link validateModernMcpRequest}: the 2026-07-28 request-metadata rules
  *   (`MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` must be present and
  *   match the body; `_meta` must carry the required fields).
@@ -241,6 +242,76 @@ function classifyHeaderValue(value: string): McpHeaderRejectionReason | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Positive grammar (allowlist)
+// ---------------------------------------------------------------------------
+//
+// The denylist above names the common credential and personal-data shapes so a
+// rejection can say which kind it saw. It cannot be complete: any encoding it
+// does not know (percent-encoding, a nested sentinel, a dotted token format)
+// gets past it. The grammar below closes that: a value must also have the
+// SHAPE of what the header is defined to carry, or it is rejected as
+// malformed. Neither check ever echoes or logs the value.
+
+/**
+ * A JSON-RPC method: `/`-separated identifier segments, e.g. `tools/call`,
+ * `notifications/initialized`, `logging/setLevel`, `server/discover`.
+ */
+const MCP_METHOD_GRAMMAR = /^[A-Za-z][A-Za-z0-9_]*(?:\/[A-Za-z][A-Za-z0-9_]*)*$/;
+
+/**
+ * A tool or prompt name. The MCP tool-name rule allows ASCII letters, digits,
+ * `_`, `-` and `.`, up to 128 characters; this additionally requires a letter
+ * or `_` first, so an all-digit value (a phone number or account number) is
+ * not a name.
+ */
+const MCP_TOOL_OR_PROMPT_NAME_GRAMMAR = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
+
+/**
+ * A resource URI in a scheme this server serves (`neotoma://`, and `ui://` for
+ * the ext-apps widgets), made of RFC 3986 URI characters. Query strings are
+ * allowed: collection resources take `?limit=&offset=&sort=` and similar.
+ */
+const MCP_RESOURCE_URI_GRAMMAR = /^(?:neotoma|ui):\/\/[A-Za-z0-9._~\-/%:@+=,;!$&'()*?]*$/;
+
+/**
+ * Positive check that a decoded header value has the shape its header is
+ * defined to carry. Returns a rejection reason, or null when it conforms.
+ * Called only after the denylist, so a recognised credential still reports
+ * as `credential_shaped`.
+ */
+function checkHeaderGrammar(
+  header: McpStandardHeaderName,
+  value: string
+): McpHeaderRejectionReason | null {
+  if (header === "Mcp-Method") {
+    return MCP_METHOD_GRAMMAR.test(value) ? null : "malformed";
+  }
+  if (MCP_TOOL_OR_PROMPT_NAME_GRAMMAR.test(value)) {
+    // A name is dotted segments at most. A long opaque segment inside one
+    // (e.g. `v2.local.<token>`) is a token format, not a name.
+    for (const segment of value.split(".")) {
+      if (isOpaqueTokenShaped(segment)) return "credential_shaped";
+    }
+    return null;
+  }
+  if (MCP_RESOURCE_URI_GRAMMAR.test(value)) {
+    // Percent-decoding must not reveal a shape the raw form hid.
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(value);
+    } catch {
+      return "malformed";
+    }
+    if (decoded !== value) {
+      const hidden = classifyHeaderValue(decoded);
+      if (hidden) return hidden;
+    }
+    return null;
+  }
+  return "malformed";
+}
+
 /** True when the value holds a control character other than horizontal tab. */
 function hasControlCharacter(value: string): boolean {
   for (let i = 0; i < value.length; i += 1) {
@@ -271,7 +342,10 @@ export function screenMcpStandardHeaders(req: Request): McpHeaderRejection | nul
       return { header, reason: "malformed", length };
     }
     const reason =
-      classifyHeaderValue(decoded) ?? (decoded === raw ? null : classifyHeaderValue(raw));
+      classifyHeaderValue(decoded) ??
+      (decoded === raw ? null : classifyHeaderValue(raw)) ??
+      // An empty value is left to request validation (missing header).
+      (decoded.length === 0 ? null : checkHeaderGrammar(header, decoded));
     if (reason) return { header, reason, length };
   }
   return null;
@@ -322,6 +396,48 @@ export function headerRejectionJsonRpcBody(
 }
 
 // ---------------------------------------------------------------------------
+// Request-time authentication failure
+// ---------------------------------------------------------------------------
+
+/** Outcome of resolving one stateless request's credentials that did not authenticate. */
+export type McpStatelessAuthFailure = "invalid_connection" | "unauthenticated";
+
+/** JSON-RPC code the `/mcp` credential gate already uses for 401s. */
+export const MCP_ERROR_AUTHENTICATION_REQUIRED = -32001;
+
+/**
+ * 401 body for a 2026-07-28 request whose credential passed the HTTP gate but
+ * did not resolve to a user (an unknown or revoked connection, or an OAuth
+ * lookup failure). Returned before any method runs, so the failure surfaces as
+ * an authentication error at request time rather than later as a tool error.
+ * Never names or echoes the credential.
+ */
+export function statelessAuthFailureJsonRpcBody(
+  outcome: McpStatelessAuthFailure,
+  id: JsonRpcId
+): JsonRpcErrorBody {
+  const invalid = outcome === "invalid_connection";
+  const message = invalid
+    ? "Authentication failed: the connection is invalid, expired or revoked."
+    : "Authentication failed: the request's credentials could not be resolved to a user.";
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code: MCP_ERROR_AUTHENTICATION_REQUIRED,
+      message,
+      data: {
+        error_code: invalid ? "MCP_AUTH_CONNECTION_INVALID" : "MCP_AUTH_UNRESOLVED",
+        message,
+        hint: invalid
+          ? "Remove X-Connection-Id from the client configuration and connect again to obtain a new credential."
+          : "Retry the request; if it keeps failing, connect again to obtain a new credential.",
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Modern request validation
 // ---------------------------------------------------------------------------
 
@@ -332,19 +448,51 @@ export type McpModernValidationFailure = {
   logReason: string;
 };
 
+/** `error.data.error_code` values for 2026-07-28 request-validation failures. */
+export const MCP_VALIDATION_ERROR_CODES = {
+  metaInvalid: "MCP_REQUEST_META_INVALID",
+  headerMismatch: "MCP_HEADER_MISMATCH",
+  unsupportedProtocolVersion: "MCP_UNSUPPORTED_PROTOCOL_VERSION",
+} as const;
+
+type McpValidationErrorCode =
+  (typeof MCP_VALIDATION_ERROR_CODES)[keyof typeof MCP_VALIDATION_ERROR_CODES];
+
+/**
+ * Build a 400 validation failure. Every failure carries the same `data` shape
+ * as the header-value rejection: a stable `error_code`, the message, and a
+ * `hint` naming the repair (see docs/subsystems/errors.md).
+ */
 function failure(
   id: JsonRpcId,
   code: number,
   message: string,
   logReason: string,
-  data?: Record<string, unknown>
+  errorCode: McpValidationErrorCode,
+  hint: string,
+  details?: Record<string, unknown>
 ): McpModernValidationFailure {
   return {
     httpStatus: 400,
-    body: { jsonrpc: "2.0", id, error: { code, message, ...(data ? { data } : {}) } },
+    body: {
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code,
+        message,
+        data: { error_code: errorCode, message, hint, ...(details ?? {}) },
+      },
+    },
     logReason,
   };
 }
+
+const HINT_META =
+  "Send params._meta with the protocol version and client capabilities on every request (2026-07-28 has no initialize), or send initialize to use protocol 2025-11-25.";
+const HINT_HEADERS =
+  "Mirror the request into headers: MCP-Protocol-Version equal to the _meta protocol version, Mcp-Method equal to the JSON-RPC method, and Mcp-Name equal to the tool or prompt name (or resource URI) for tools/call, prompts/get and resources/read.";
+const HINT_VERSION =
+  "Retry with a version listed in data.supported, or send initialize to use protocol 2025-11-25.";
 
 /**
  * Apply the 2026-07-28 per-request rules to a request {@link selectMcpHttpEra}
@@ -364,7 +512,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
       id,
       JSONRPC_INVALID_PARAMS,
       `Invalid params: _meta["${MCP_META_PROTOCOL_VERSION}"] must be a non-empty string.`,
-      "missing_meta_protocol_version"
+      "missing_meta_protocol_version",
+      MCP_VALIDATION_ERROR_CODES.metaInvalid,
+      HINT_META
     );
   }
 
@@ -374,7 +524,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
       id,
       MCP_ERROR_HEADER_MISMATCH,
       "Header mismatch: the MCP-Protocol-Version header is required and must equal _meta protocolVersion.",
-      "missing_protocol_version_header"
+      "missing_protocol_version_header",
+      MCP_VALIDATION_ERROR_CODES.headerMismatch,
+      HINT_HEADERS
     );
   }
   if (headerVersion !== version) {
@@ -382,7 +534,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
       id,
       MCP_ERROR_HEADER_MISMATCH,
       "Header mismatch: the MCP-Protocol-Version header does not match _meta protocolVersion.",
-      "protocol_version_header_mismatch"
+      "protocol_version_header_mismatch",
+      MCP_VALIDATION_ERROR_CODES.headerMismatch,
+      HINT_HEADERS
     );
   }
 
@@ -394,6 +548,8 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
       MCP_ERROR_UNSUPPORTED_PROTOCOL_VERSION,
       "Unsupported protocol version",
       "unsupported_protocol_version",
+      MCP_VALIDATION_ERROR_CODES.unsupportedProtocolVersion,
+      HINT_VERSION,
       {
         supported: [...MCP_MODERN_SUPPORTED_VERSIONS],
         ...(requested ? { requested } : {}),
@@ -406,7 +562,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
       id,
       JSONRPC_INVALID_PARAMS,
       `Invalid params: _meta["${MCP_META_CLIENT_CAPABILITIES}"] is required and must be an object.`,
-      "missing_meta_client_capabilities"
+      "missing_meta_client_capabilities",
+      MCP_VALIDATION_ERROR_CODES.metaInvalid,
+      HINT_META
     );
   }
 
@@ -420,7 +578,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
       id,
       MCP_ERROR_HEADER_MISMATCH,
       "Header mismatch: the Mcp-Method header is required and must equal the JSON-RPC method.",
-      "missing_mcp_method_header"
+      "missing_mcp_method_header",
+      MCP_VALIDATION_ERROR_CODES.headerMismatch,
+      HINT_HEADERS
     );
   }
   if (methodHeader !== method) {
@@ -428,7 +588,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
       id,
       MCP_ERROR_HEADER_MISMATCH,
       "Header mismatch: the Mcp-Method header does not match the JSON-RPC method.",
-      "mcp_method_header_mismatch"
+      "mcp_method_header_mismatch",
+      MCP_VALIDATION_ERROR_CODES.headerMismatch,
+      HINT_HEADERS
     );
   }
 
@@ -442,7 +604,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
         id,
         MCP_ERROR_HEADER_MISMATCH,
         `Header mismatch: the Mcp-Name header is required for ${method} and must equal params.${nameField}.`,
-        "missing_mcp_name_header"
+        "missing_mcp_name_header",
+        MCP_VALIDATION_ERROR_CODES.headerMismatch,
+        HINT_HEADERS
       );
     }
     const decoded = decodeMcpHeaderValue(nameHeader);
@@ -451,7 +615,9 @@ export function validateModernMcpRequest(req: Request): McpModernValidationFailu
         id,
         MCP_ERROR_HEADER_MISMATCH,
         `Header mismatch: the Mcp-Name header does not match params.${nameField}.`,
-        "mcp_name_header_mismatch"
+        "mcp_name_header_mismatch",
+        MCP_VALIDATION_ERROR_CODES.headerMismatch,
+        HINT_HEADERS
       );
     }
   }

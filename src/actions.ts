@@ -106,6 +106,7 @@ import {
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
+import { connectionIdForLog } from "./utils/connection_id_log.js";
 import {
   emitEntitySnapshotChange,
   emitObservationCreated,
@@ -2071,7 +2072,7 @@ app.all("/mcp", async (req, res) => {
         await getAccessTokenForConnection(connectionIdHeader as string);
       } catch {
         logger.info(
-          `[MCP HTTP] Invalid or expired X-Connection-Id: ${connectionIdHeader}. Returning 401 to show Connect button.`
+          `[MCP HTTP] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionIdHeader)}). Returning 401 to show Connect button.`
         );
         // RFC 6750: error=invalid_token signals client to clear credentials and re-authenticate.
         // Use consistent error format so Cursor may show Connect prompt.
@@ -2131,6 +2132,16 @@ app.all("/mcp", async (req, res) => {
       );
       if (!shaped) {
         return res.status(202).end();
+      }
+      if (shaped.authFailure) {
+        // Same challenge the credential gate above sends, so a client shows
+        // its Connect / re-authenticate flow.
+        res.setHeader(
+          "WWW-Authenticate",
+          shaped.authFailure === "invalid_connection"
+            ? `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token"`
+            : `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`
+        );
       }
       return res.status(shaped.status).json(shaped.body);
     }
@@ -2340,6 +2351,10 @@ function redactHeaders(headers: Record<string, unknown>): Record<string, unknown
   const clone = { ...headers } as Record<string, unknown>;
   if (clone.authorization) clone.authorization = "[REDACTED]";
   if (clone.Authorization) clone.Authorization = "[REDACTED]";
+  // A connection id authenticates on its own at /mcp, so it is a credential.
+  for (const key of Object.keys(clone)) {
+    if (key.toLowerCase() === "x-connection-id") clone[key] = connectionIdForLog(clone[key]);
+  }
   return clone;
 }
 
@@ -3237,13 +3252,13 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       try {
         const parsed = new URL(authRequest.authUrl);
         logger.info("[MCP OAuth] Authorize accepted (local backend)", {
-          connection_id: connectionId,
+          connection_id: connectionIdForLog(connectionId),
           redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
         });
         return res.redirect(`${parsed.pathname}${parsed.search}`);
       } catch {
         logger.info("[MCP OAuth] Authorize accepted (local backend fallback URL)", {
-          connection_id: connectionId,
+          connection_id: connectionIdForLog(connectionId),
           redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
         });
         return res.redirect(authRequest.authUrl);
@@ -3268,7 +3283,7 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       serverPkce
     );
     logger.info("[MCP OAuth] Authorize accepted (remote backend)", {
-      connection_id: connectionId,
+      connection_id: connectionIdForLog(connectionId),
       redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
     });
 

@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **630**
-- Backend and repo Vitest files: **594**
+- Total automated test files: **634**
+- Backend and repo Vitest files: **598**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 172 |
+| Vitest unit tests | 173 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 186 |
+| Vitest integration tests | 189 |
 | Vitest CLI tests | 79 |
 | Vitest contract tests | 20 |
 | Vitest security tests | 9 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (172):**
+**Files (173):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -203,6 +203,7 @@ flowchart TD
 - `tests/unit/manage_bundles_tool.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
+- `tests/unit/mcp_header_screen_names.test.ts`
 - `tests/unit/mcp_initialize_skills.test.ts`
 - `tests/unit/mcp_initialize_version.test.ts`
 - `tests/unit/mcp_instance_skill_hints.test.ts`
@@ -414,7 +415,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (186):**
+**Files (189):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -503,6 +504,7 @@ flowchart TD
 - `tests/integration/mcp_get_entity_type_counts.test.ts`
 - `tests/integration/mcp_graph_variations.test.ts`
 - `tests/integration/mcp_handler_cross_user_scoping.test.ts`
+- `tests/integration/mcp_http_connection_id_logging.test.ts`
 - `tests/integration/mcp_http_method_name_headers.test.ts`
 - `tests/integration/mcp_http_server_discover.test.ts`
 - `tests/integration/mcp_http_stateless_auth_resolution.test.ts`
@@ -519,9 +521,11 @@ flowchart TD
 - `tests/integration/mcp_retrieval_reliability.test.ts`
 - `tests/integration/mcp_schema_actions.test.ts`
 - `tests/integration/mcp_schema_variations.test.ts`
+- `tests/integration/mcp_server_process_listeners.test.ts`
 - `tests/integration/mcp_session_404_reconnect.test.ts`
 - `tests/integration/mcp_session_recover_in_place.test.ts`
 - `tests/integration/mcp_stdio_attribution.test.ts`
+- `tests/integration/mcp_stdio_server_discover.test.ts`
 - `tests/integration/mcp_store_attribution_policy.test.ts`
 - `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
 - `tests/integration/mcp_store_intra_batch_relationships.test.ts`

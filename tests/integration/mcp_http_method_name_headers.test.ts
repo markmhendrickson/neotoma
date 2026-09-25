@@ -32,8 +32,7 @@ import {
 
 // Synthetic credential- and PII-shaped values. None is a real secret.
 const FAKE_BEARER = "Bearer nt2070FakeTokenValue0123456789abcdefXYZ";
-const FAKE_JWT =
-  "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LTIwNzAifQ.c2lnbmF0dXJlLTIwNzAtZmFrZQ";
+const FAKE_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LTIwNzAifQ.c2lnbmF0dXJlLTIwNzAtZmFrZQ";
 const FAKE_API_KEY = "sk-nt2070fakekeyvalue0123456789";
 const FAKE_OPAQUE = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
 const FAKE_EMAIL = "someone.2070@example.com";
@@ -108,7 +107,10 @@ describe("POST /mcp Mcp-Method / Mcp-Name headers (#2070)", () => {
       { label: "empty Mcp-Name", headers: { "Mcp-Name": "" } },
       { label: "mismatched Mcp-Name", headers: { "Mcp-Name": "retrieve_entities" } },
       { label: "missing MCP-Protocol-Version", headers: { "MCP-Protocol-Version": null } },
-      { label: "mismatched MCP-Protocol-Version", headers: { "MCP-Protocol-Version": "2025-11-25" } },
+      {
+        label: "mismatched MCP-Protocol-Version",
+        headers: { "MCP-Protocol-Version": "2025-11-25" },
+      },
     ];
     for (const [i, testCase] of cases.entries()) {
       const reply = await modernPost(
@@ -127,6 +129,64 @@ describe("POST /mcp Mcp-Method / Mcp-Name headers (#2070)", () => {
       if (testCase.headers["Mcp-Name"]) {
         expect(reply.text, testCase.label).not.toContain(testCase.headers["Mcp-Name"]);
       }
+    }
+  });
+
+  it("every request-validation failure carries a catalogued error_code and a repair hint", async () => {
+    const call = {
+      method: "tools/call",
+      params: { name: "get_authenticated_user", arguments: {} },
+    };
+    const cases: Array<{
+      label: string;
+      options: Parameters<typeof modernPost>[2];
+      code: number;
+      errorCode: string;
+    }> = [
+      {
+        label: "missing Mcp-Method",
+        options: { headers: { "Mcp-Method": null } },
+        code: -32020,
+        errorCode: "MCP_HEADER_MISMATCH",
+      },
+      {
+        label: "mismatched Mcp-Name",
+        options: { headers: { "Mcp-Name": "retrieve_entities" } },
+        code: -32020,
+        errorCode: "MCP_HEADER_MISMATCH",
+      },
+      {
+        label: "missing MCP-Protocol-Version",
+        options: { headers: { "MCP-Protocol-Version": null } },
+        code: -32020,
+        errorCode: "MCP_HEADER_MISMATCH",
+      },
+      {
+        label: "missing clientCapabilities",
+        options: { meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } },
+        code: -32602,
+        errorCode: "MCP_REQUEST_META_INVALID",
+      },
+      {
+        label: "unsupported version",
+        options: {
+          meta: {
+            "io.modelcontextprotocol/protocolVersion": "1900-01-01",
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+          headers: { "MCP-Protocol-Version": "1900-01-01" },
+        },
+        code: -32022,
+        errorCode: "MCP_UNSUPPORTED_PROTOCOL_VERSION",
+      },
+    ];
+    for (const [i, testCase] of cases.entries()) {
+      const reply = await modernPost(app.baseUrl, { id: 60 + i, ...call }, testCase.options);
+      expect(reply.status, testCase.label).toBe(400);
+      expect(reply.body?.error?.code, testCase.label).toBe(testCase.code);
+      expect(reply.body?.error?.data?.error_code, testCase.label).toBe(testCase.errorCode);
+      expect(reply.body?.error?.data?.message, testCase.label).toBe(reply.body?.error?.message);
+      expect(typeof reply.body?.error?.data?.hint, testCase.label).toBe("string");
     }
   });
 
@@ -174,7 +234,9 @@ describe("POST /mcp Mcp-Method / Mcp-Name headers (#2070)", () => {
     }
 
     const logs = loggedText();
-    expect(logs).toContain(`Rejected Mcp-Name header (reason=credential_shaped, length=${FAKE_BEARER.length})`);
+    expect(logs).toContain(
+      `Rejected Mcp-Name header (reason=credential_shaped, length=${FAKE_BEARER.length})`
+    );
     expect(logs).toContain("present(len=");
     for (const testCase of cases) {
       expect(logs).not.toContain(testCase.value);

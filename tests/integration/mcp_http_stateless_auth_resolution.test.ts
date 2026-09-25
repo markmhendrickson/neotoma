@@ -208,8 +208,12 @@ describe("POST /mcp 2026-07-28 stateless auth resolution (#2070)", () => {
 
     // Fire A and B requests concurrently so they are in flight together on the
     // same process and interleave across every await.
-    const plan = Array.from({ length: 16 }, (_, i) => (i % 2 === 0 ? "conn-2070-a" : "conn-2070-b"));
-    const whoamis = await Promise.all(plan.map((conn, i) => whoami(replica.baseUrl, conn, 100 + i)));
+    const plan = Array.from({ length: 16 }, (_, i) =>
+      i % 2 === 0 ? "conn-2070-a" : "conn-2070-b"
+    );
+    const whoamis = await Promise.all(
+      plan.map((conn, i) => whoami(replica.baseUrl, conn, 100 + i))
+    );
     plan.forEach((conn, i) => {
       expect(whoamis[i], `request ${i} (${conn})`).toBe(CONNECTIONS[conn]);
     });
@@ -231,5 +235,34 @@ describe("POST /mcp 2026-07-28 stateless auth resolution (#2070)", () => {
     expect(retrieveB.status, retrieveB.text).toBe(200);
     expect(entityNamesOf(toolResultJson(retrieveA.body))).toContain(privateName);
     expect(entityNamesOf(toolResultJson(retrieveB.body))).not.toContain(privateName);
+  });
+
+  it("a credential that resolves to no user is refused at request time with a typed 401, not a tool error", async () => {
+    const replica = await bootMcpApp();
+    apps.push(replica);
+    // The /mcp gate skips connection-id validation when a Bearer is also
+    // present, so an unknown connection id reaches the stateless path, where
+    // resolution fails. That must surface as an authentication error for this
+    // request, before any method runs.
+    const cases = [
+      { id: 300, method: "tools/call", params: { name: "get_authenticated_user", arguments: {} } },
+      { id: 301, method: "tools/list" },
+      { id: 302, method: "server/discover" },
+    ];
+    for (const request of cases) {
+      const reply = await modernPost(replica.baseUrl, request, {
+        connectionId: "conn-2070-unknown",
+        headers: { Authorization: "Bearer not-a-real-2070-token" },
+      });
+      expect(reply.status, `${request.method}: ${reply.text}`).toBe(401);
+      expect(reply.body?.id).toBe(request.id);
+      expect(reply.body?.result).toBeUndefined();
+      expect(reply.body?.error?.code).toBe(-32001);
+      expect(reply.body?.error?.data?.error_code).toBe("MCP_AUTH_CONNECTION_INVALID");
+      expect(reply.body?.error?.data?.hint).toBeTruthy();
+      expect(reply.headers.get("www-authenticate")).toContain('error="invalid_token"');
+      expect(reply.headers.get("mcp-session-id")).toBeNull();
+      expect(reply.text).not.toContain("conn-2070-unknown");
+    }
   });
 });

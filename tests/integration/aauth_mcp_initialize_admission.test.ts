@@ -64,24 +64,26 @@ const MODERN_META = {
  */
 async function statelessWhoami(
   admission: AAuthAdmissionContext | null
-): Promise<{ userId?: string; errorCode?: number }> {
+): Promise<{ userId?: string; errorCode?: number; status?: number }> {
   const server = new NeotomaServer();
   server.primeStatelessRequest({ connectionId: null, aauthContext: null, clientInfo: null });
-  const shaped = await runWithRequestContext({ agentIdentity: null, aauthAdmission: admission }, () =>
-    server.handleStatelessRequest(
-      {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name: "get_authenticated_user", arguments: {}, _meta: MODERN_META },
-      },
-      { headers: {} }
-    )
+  const shaped = await runWithRequestContext(
+    { agentIdentity: null, aauthAdmission: admission },
+    () =>
+      server.handleStatelessRequest(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_authenticated_user", arguments: {}, _meta: MODERN_META },
+        },
+        { headers: {} }
+      )
   );
   const body = shaped?.body as
     | { result?: { content?: Array<{ text?: string }> }; error?: { code?: number } }
     | undefined;
-  if (body?.error) return { errorCode: body.error.code };
+  if (body?.error) return { errorCode: body.error.code, status: shaped?.status };
   const text = body?.result?.content?.[0]?.text ?? "{}";
   return { userId: (JSON.parse(text) as { user_id?: string }).user_id };
 }
@@ -186,7 +188,10 @@ describe("AAuth/MCP initialize authenticates from admission", () => {
   it("#2070: refuses a 2026-07-28 stateless request when NOT admitted", async () => {
     const outcome = await statelessWhoami(null);
     expect(outcome.userId).toBeUndefined();
-    expect(outcome.errorCode).toBe(-32600);
+    // Refused at request time as an authentication failure (401, the /mcp
+    // gate's -32001), not later as a tool error.
+    expect(outcome.status).toBe(401);
+    expect(outcome.errorCode).toBe(-32001);
   });
 
   it("#2070 old-client regression: legacy initialize and a stateless request both resolve the grant owner", async () => {
