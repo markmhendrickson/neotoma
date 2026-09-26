@@ -7,9 +7,26 @@ import {
   generateGuestAccessToken,
   hashGuestAccessToken,
 } from "../../src/services/guest_access_token.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 const tracker = new TestIdTracker();
+
+/** A guest token must name the entity_ids it covers (subscription routes now
+ * enforce this scope) — seed a real owned entity for the token to name. */
+async function seedOwnedEntity(userId: string, idSuffix: string): Promise<string> {
+  const entityId = `ent_list_${idSuffix}_${Date.now().toString(16)}`;
+  const now = new Date().toISOString();
+  await db.from("entities").insert({
+    id: entityId,
+    entity_type: "task",
+    canonical_name: `list-test-${idSuffix}-${Date.now()}`,
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+  });
+  return entityId;
+}
 
 interface SubscribeResponse {
   subscription_id: string;
@@ -47,8 +64,8 @@ async function withHttpServer<T>(callback: (baseUrl: string) => Promise<T>): Pro
   }
 }
 
-async function guestTokenFor(userId: string): Promise<string> {
-  const token = await generateGuestAccessToken({ entityIds: [], userId });
+async function guestTokenFor(userId: string, entityIds: string[]): Promise<string> {
+  const token = await generateGuestAccessToken({ entityIds, userId });
   tracker.trackEntity(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
   return token;
 }
@@ -94,9 +111,12 @@ describe("POST /list_subscriptions", () => {
 
   it("lists subscriptions for the requesting user", async () => {
     await withHttpServer(async (baseUrl) => {
-      const token = await guestTokenFor("sp009-list-owner");
+      const userId = "sp009-list-owner";
+      const entityId = await seedOwnedEntity(userId, "owner");
+      tracker.trackEntity(entityId);
+      const token = await guestTokenFor(userId, [entityId]);
       const created = await subscribe(baseUrl, token, {
-        entity_types: ["task"],
+        entity_ids: [entityId],
         delivery_method: "sse",
       });
 
@@ -105,7 +125,7 @@ describe("POST /list_subscriptions", () => {
 
       expect(row).toMatchObject({
         subscription_id: created.subscription_id,
-        user_id: "sp009-list-owner",
+        user_id: userId,
         delivery_method: "sse",
         active: true,
       });
@@ -114,14 +134,18 @@ describe("POST /list_subscriptions", () => {
 
   it("isolates subscription lists across users", async () => {
     await withHttpServer(async (baseUrl) => {
-      const ownerToken = await guestTokenFor("sp009-list-owner");
-      const otherToken = await guestTokenFor("sp009-list-other");
+      const ownerEntityId = await seedOwnedEntity("sp009-list-owner", "owner2");
+      const otherEntityId = await seedOwnedEntity("sp009-list-other", "other2");
+      tracker.trackEntity(ownerEntityId);
+      tracker.trackEntity(otherEntityId);
+      const ownerToken = await guestTokenFor("sp009-list-owner", [ownerEntityId]);
+      const otherToken = await guestTokenFor("sp009-list-other", [otherEntityId]);
       const ownerSub = await subscribe(baseUrl, ownerToken, {
-        entity_types: ["note"],
+        entity_ids: [ownerEntityId],
         delivery_method: "sse",
       });
       const otherSub = await subscribe(baseUrl, otherToken, {
-        event_types: ["entity.created"],
+        entity_ids: [otherEntityId],
         delivery_method: "sse",
       });
 
@@ -137,9 +161,12 @@ describe("POST /list_subscriptions", () => {
 
   it("redacts webhook secrets from client-facing rows", async () => {
     await withHttpServer(async (baseUrl) => {
-      const token = await guestTokenFor("sp009-list-redact");
+      const userId = "sp009-list-redact";
+      const entityId = await seedOwnedEntity(userId, "redact");
+      tracker.trackEntity(entityId);
+      const token = await guestTokenFor(userId, [entityId]);
       const created = await subscribe(baseUrl, token, {
-        entity_types: ["contact"],
+        entity_ids: [entityId],
         delivery_method: "webhook",
         webhook_url: "http://127.0.0.1:9/subscription-list-test",
         webhook_secret: "super-secret-test-value",
