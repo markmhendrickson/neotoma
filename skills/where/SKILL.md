@@ -1,6 +1,6 @@
 ---
 name: where
-description: Present-tense orientation — where everything stands right now, answered from what is already in context plus one scoped read of this session's Neotoma tasks, so work that aged out of the window is still reported. What is running, what just landed, what is waiting on the operator and why it is theirs, and one recommended next step per workstream with an explicit stop-or-continue call. Verifies nothing and writes nothing; stored task state is reported as stored, and every perishable claim is marked as-of and unverified. The cheap sibling of /status, for the "where are we" asked several times an hour. User-level (~/.claude/skills/where/), available in every repo.
+description: Present-tense orientation — where everything stands right now, answered from what is already in context plus one scoped read of this session's Neotoma tasks, so work that aged out of the window is still reported. What is running, what just landed, what is waiting on the operator and why it is theirs, and one recommended next step per workstream with an explicit stop-or-continue call. Verifies nothing and writes nothing; stored task state is reported as stored, and every perishable claim is marked as-of and unverified. The cheap sibling of /digest, for the "where are we" asked several times an hour. User-level (~/.claude/skills/where/), available in every repo.
 triggers:
   - /where
   - where are we
@@ -24,7 +24,7 @@ reconstruction, no verification pass, no writes. That is the entire point: the o
 question several times an hour, and a reconstruction that reads twenty thousand transcript lines
 cannot be the answer to a question asked that often. One entity query can.
 
-**Brevity is the feature, not a side effect.** A `/where` that runs as long as a `/status` has
+**Brevity is the feature, not a side effect.** A `/where` that runs as long as a `/digest` has
 failed even if every line in it is true.
 
 ## The trio, by cost — not by lifecycle position
@@ -35,27 +35,27 @@ to prevent. They are ordered by **cost and confidence**, not by where they sit i
 | Skill | Coverage | Verification | Writes | When |
 |---|---|---|---|---|
 | **`/where`** | in-context, plus one scoped `task` read | **none** — everything unverified; stored task state is read, not checked | **none** | orientation, any time, often |
-| **`/status`** | whole lineage, reconstructed from transcripts | every factual claim checked against its system of record | one `session_digest` | when the read-out must be trustworthy |
+| **`/digest`** | whole lineage, reconstructed from transcripts | every factual claim checked against its system of record | one `session_digest` | when the read-out must be trustworthy |
 | **`/end`** | whole session | audits storage and modeling | files tasks, persists entities, refreshes hubs | the actual close-out |
 
-**`/status` does NOT close a session.** It is read-only for domain data and is designed to run
+**`/digest` does NOT close a session.** It is read-only for domain data and is designed to run
 at any point mid-session; its single permitted write is bookkeeping about itself. `/end` is the
-closing skill — it files, persists, and audits. Do not describe `/status` as a close-out, in this
+closing skill — it files, persists, and audits. Do not describe `/digest` as a close-out, in this
 skill or in a report; a session that believes it is will reach for the wrong tool at the wrong
 moment.
 
-**Both `/where` and `/status` orient the operator, at very different cost. Neither closes anything.**
+**Both `/where` and `/digest` orient the operator, at very different cost. Neither closes anything.**
 
 Natural-language orientation prompts belong to `/where`: "where are we" and "where do things
-stand" should route here. Retrospective session-summary prompts belong to `/status`: "status
+stand" should route here. Retrospective session-summary prompts belong to `/digest`: "status
 report" and "what's done so far" should route there.
 
-`/end` does not depend on `/where` or `/status` having run — it does its own whole-session
+`/end` does not depend on `/where` or `/digest` having run — it does its own whole-session
 reconstruction in its Phase 0. So skipping straight from a string of `/where` calls to `/end`
-loses nothing structural. What it loses is verification: `/status` is the only one of the three
+loses nothing structural. What it loses is verification: `/digest` is the only one of the three
 that checks claims against systems of record while the tool results are still in context.
 
-**Escalate from `/where` to `/status` when the read-out is about to be trusted rather than
+**Escalate from `/where` to `/digest` when the read-out is about to be trusted rather than
 merely read** — a handoff to another session or person, a decision with a cost, anything that
 will be repeated as fact, or when a perishable claim below has aged past the point where you
 would bet on it.
@@ -80,7 +80,7 @@ State claims as beliefs with an age, not as findings:
   minutes later. A snapshot read as a standing state is a real, repeated failure mode here — it
   has reported swarm work as stalled while the swarm was actively working it.
 - **Head the report with its own limits, in one line**, so nobody has to infer them:
-  *"Unverified — from context plus stored task state as written, not checked against GitHub/Gmail. Run `/status` for a verified read-out."*
+  *"Unverified — from context plus stored task state as written, not checked against GitHub/Gmail. Run `/digest` for a verified read-out."*
   Naming the task read in the header is required: it tells the operator which claims come from a
   record rather than the window, without implying anything was checked against a system of record.
 - **Never claim coverage.** `/where` sees the context window plus the scoped task read. If the
@@ -91,7 +91,7 @@ State claims as beliefs with an age, not as findings:
 If a specific claim genuinely matters right now and is cheap to check — one `gh pr view`, one
 entity read — check that one thing and mark it verified while leaving the rest as-is. Do not let
 this grow into a verification pass; the moment you are batching checks by system, you are running
-`/status` and should say so.
+`/digest` and should say so.
 
 ## The one query — this session's tasks
 
@@ -100,9 +100,9 @@ this session is associated with. Context decays; the tasks the session filed do 
 compacted session that gap is this skill's worst blind spot — the durable record of the work sits
 in Neotoma while the report is composed from a decaying window.
 
-This is a read, not a verification pass, and one entity query is not what makes `/status` expensive
+This is a read, not a verification pass, and one entity query is not what makes `/digest` expensive
 — whole-lineage transcript reconstruction is. Adding this query does not turn `/where` into
-`/status`. It stays one query: if you are batching reads by system, you have left `/where`.
+`/digest`. It stays one query: if you are batching reads by system, you have left `/where`.
 
 ### Scope: the ids this session touched, then one bounded sweep
 
@@ -127,7 +127,7 @@ the half that recovers what compaction dropped. It is a sweep, so treat everythi
 The last row is the important one: `task.conversation_id` **exists on the schema and is
 universally unpopulated**, so a conversation join looks principled and silently returns nothing.
 Do not build on it. `session_digest.tasks_claimed` is the real session→work link, but it is
-`/status`'s write and only exists once `/status` has run — `/where` must work before that and
+`/digest`'s write and only exists once `/digest` has run — `/where` must work before that and
 **must not write one**.
 
 ### Volume: summarize by state, name only what is blocked or the operator's
@@ -168,7 +168,7 @@ Order is deliberate: the present, then the recent past, then the operator's queu
 who owns it. Include when it was dispatched or last reported. If nothing is running, say so in
 one line rather than dropping the section.
 
-**2. JUST LANDED** — what completed since the last `/where` or `/status` in this session. Bound
+**2. JUST LANDED** — what completed since the last `/where` or `/digest` in this session. Bound
 it: this is a delta, not a session history. If nothing has landed since the last one, say that —
 it is real information.
 
@@ -248,10 +248,10 @@ step, and the **unverified header**. Those three are why the report exists. If t
 too long after cutting everything above, there are genuinely too many open workstreams — say that
 in one line, which is itself the most useful thing in the report.
 
-## What was deliberately dropped from `/status` — do not re-add these
+## What was deliberately dropped from `/digest` — do not re-add these
 
-Each of these is what makes `/status` expensive. They are absent on purpose, and re-adding any
-one of them turns `/where` into a slower `/status` with none of its guarantees.
+Each of these is what makes `/digest` expensive. They are absent on purpose, and re-adding any
+one of them turns `/where` into a slower `/digest` with none of its guarantees.
 
 - **Whole-lineage transcript reconstruction** (globbing `.jsonl` files, building a skeleton across
   forks, stating coverage). This is the single largest cost — thousands of lines read per run. Dropped:
@@ -265,17 +265,17 @@ one of them turns `/where` into a slower `/status` with none of its guarantees.
   marked as-of instead.
 - **The `session_digest` write.** Dropped, and this one is a hard constraint rather than a
   preference: the digest's idempotency key is stable per session lineage, so a second skill writing
-  it would fight `/status` over the same key. `/where` writes nothing at all.
+  it would fight `/digest` over the same key. `/where` writes nothing at all.
 - **Cross-session checks** (`list_sessions`, `search_session_transcripts` for every remaining item).
   Dropped: too slow for a question asked hourly. **Consequence:** `/where` may name a next step
   another session already owns. When a next step is about to be *started* rather than merely named,
-  check first — or run `/status`.
+  check first — or run `/digest`.
 - **Spin-out task chips** (`spawn_task`, KEEP-HERE/SPIN-OUT classification). Dropped: scoping a
   session's attention is a session-boundary decision, not an hourly one.
 - **The numbered "reply all or pick" closing list.** Dropped in favour of the per-workstream
   stop-or-continue call, which carries the same authorization question at a quarter of the length.
 - **`verbose` / `project` modes.** Dropped: a mode that makes `/where` longer defeats it. If the
-  plan's state is wanted, that is `/status project`.
+  plan's state is wanted, that is `/digest project`.
 
 ## Constraints
 
@@ -293,7 +293,7 @@ one of them turns `/where` into a slower `/status` with none of its guarantees.
 - MUST NOT write anything — no `session_digest`, no domain entities, no task filing, no plan
   corrections, no memory writes, and no correction to a task it read. `/where` is write-free,
   without exception; reading a task never licenses updating it, however stale the row looks.
-- MUST head the report with a one-line unverified disclosure naming `/status` as the verified
+- MUST head the report with a one-line unverified disclosure naming `/digest` as the verified
   alternative.
 - MUST mark every perishable claim as-of with when it was last observed, and MUST NOT restate a
   snapshot as a standing state. MUST NOT present any unverified claim as fact.
@@ -307,7 +307,7 @@ one of them turns `/where` into a slower `/status` with none of its guarantees.
 - MUST give the TITLE of every PR and issue mentioned, linked, never a bare number.
 - MUST stay well under a minute to read, cutting in the documented order. MUST NOT cut the
   operator-waiting section, the stop-or-continue calls, or the unverified header at any length.
-- MUST NOT describe `/status` as closing a session — `/end` is the closing skill; `/status` and
+- MUST NOT describe `/digest` as closing a session — `/end` is the closing skill; `/digest` and
   `/where` both orient, at different cost.
 - MUST NOT act on a next step in the same turn. `/where` reports and stops.
 - If a filed `task` is created in the same turn by *other* work (never by `/where` itself), that
