@@ -293,6 +293,50 @@ describe("CLI MCP and instruction commands", () => {
         })
       ).toBe(false);
     });
+
+    // Regression coverage for neotoma#2516 round-2 review (security lens): the
+    // first cut of this classifier only inspected `command`/`args`/`env` and
+    // unconditionally returned false for any entry with no `command` — so a
+    // hosted URL-transport entry (a `url` or `serverUrl` key, with or without
+    // auth `headers`) was still silently clobbered. Same incident as the
+    // command-transport case, different transport shape.
+
+    it("flags a url-transport entry pointing at a non-Neotoma host", () => {
+      expect(isDeliberateNonDevMcpEntry({ url: "https://hosted.example.com/mcp" })).toBe(true);
+    });
+
+    it("flags a serverUrl-transport entry pointing at a non-Neotoma host", () => {
+      expect(isDeliberateNonDevMcpEntry({ serverUrl: "https://hosted.example.com/mcp" })).toBe(
+        true
+      );
+    });
+
+    it("flags a url entry carrying its own auth headers even if the URL looks local", () => {
+      expect(
+        isDeliberateNonDevMcpEntry({
+          url: "http://127.0.0.1:3180/mcp",
+          headers: { Authorization: "Bearer super-secret-token" },
+        })
+      ).toBe(true);
+    });
+
+    it("flags a headers-only signal regardless of which URL field carries it", () => {
+      expect(
+        isDeliberateNonDevMcpEntry({
+          serverUrl: "https://neotoma.fly.dev/mcp",
+          headers: { "X-Api-Key": "k" },
+        })
+      ).toBe(true);
+    });
+
+    it("does not flag a plain local loopback dev URL (mirrors detectNeotomaServers)", () => {
+      expect(isDeliberateNonDevMcpEntry({ url: "http://127.0.0.1:3080/mcp" })).toBe(false);
+      expect(isDeliberateNonDevMcpEntry({ url: "http://localhost:3180/mcp" })).toBe(false);
+    });
+
+    it("does not flag the hosted Fly production URL with no headers (mirrors detectNeotomaServers)", () => {
+      expect(isDeliberateNonDevMcpEntry({ url: "https://neotoma.fly.dev/mcp" })).toBe(false);
+    });
   });
 
   describe("offerInstall refuses to silently clobber a deliberate non-dev entry", () => {
@@ -505,6 +549,104 @@ describe("CLI MCP and instruction commands", () => {
         expect(parsed.mcpServers?.neotoma).toEqual(deliberateEntry);
         // ...but the missing dev slot was still filled in.
         expect(parsed.mcpServers?.["neotoma-dev"]).toBeDefined();
+      } finally {
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+        await fs.rm(tmpHome, { recursive: true, force: true });
+      }
+    });
+
+    // Regression coverage for neotoma#2516 round-2 review: the same clobber,
+    // reproduced end-to-end through offerInstall for a URL-transport entry
+    // instead of a command-transport one. Before the fix, isDeliberateNonDevMcpEntry
+    // returned false for any entry with no `command` field, so this entry was
+    // reported as "missing" (detectNeotomaServers only recognizes loopback/Fly
+    // URLs as configured) and offerInstall replaced it unconditionally.
+
+    async function writeDeliberateUrlConfig(configPath: string): Promise<{
+      url: string;
+      headers: Record<string, string>;
+    }> {
+      const deliberateEntry = {
+        url: "https://hosted.example.com/mcp",
+        headers: { Authorization: "Bearer fake-hosted-token" },
+      };
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({ mcpServers: { neotoma: deliberateEntry } }, null, 2)
+      );
+      return deliberateEntry;
+    }
+
+    it("does not overwrite a deliberate url-transport entry when assumeYes is set (non-interactive)", async () => {
+      const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-url-guard-"));
+      const cursorConfigPath = path.join(tmpHome, ".cursor", "mcp.json");
+      const originalHome = process.env.HOME;
+      try {
+        process.env.HOME = tmpHome;
+        const deliberateEntry = await writeDeliberateUrlConfig(cursorConfigPath);
+
+        await offerInstall(
+          [{ path: cursorConfigPath, hasDev: false, hasProd: false }],
+          process.cwd(),
+          {
+            silent: false,
+            assumeYes: true,
+            autoInstallScope: "user",
+            autoInstallEnv: "prod",
+            skipProjectSync: true,
+          }
+        );
+
+        const parsed = JSON.parse(await fs.readFile(cursorConfigPath, "utf-8")) as {
+          mcpServers?: Record<string, unknown>;
+        };
+        expect(parsed.mcpServers?.neotoma).toEqual(deliberateEntry);
+      } finally {
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+        await fs.rm(tmpHome, { recursive: true, force: true });
+      }
+    });
+
+    it("does not overwrite a deliberate serverUrl-only entry (no headers) when assumeYes is set", async () => {
+      // Covers the url field variant with no headers at all — the URL alone,
+      // pointing at a non-Neotoma host, must be enough to qualify as deliberate.
+      const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-serverurl-guard-"));
+      const cursorConfigPath = path.join(tmpHome, ".cursor", "mcp.json");
+      const originalHome = process.env.HOME;
+      try {
+        process.env.HOME = tmpHome;
+        const deliberateEntry = { serverUrl: "https://hosted.example.com/mcp" };
+        await fs.mkdir(path.dirname(cursorConfigPath), { recursive: true });
+        await fs.writeFile(
+          cursorConfigPath,
+          JSON.stringify({ mcpServers: { neotoma: deliberateEntry } }, null, 2)
+        );
+
+        await offerInstall(
+          [{ path: cursorConfigPath, hasDev: false, hasProd: false }],
+          process.cwd(),
+          {
+            silent: false,
+            assumeYes: true,
+            autoInstallScope: "user",
+            autoInstallEnv: "prod",
+            skipProjectSync: true,
+          }
+        );
+
+        const parsed = JSON.parse(await fs.readFile(cursorConfigPath, "utf-8")) as {
+          mcpServers?: Record<string, unknown>;
+        };
+        expect(parsed.mcpServers?.neotoma).toEqual(deliberateEntry);
       } finally {
         if (originalHome === undefined) {
           delete process.env.HOME;
