@@ -206,4 +206,76 @@ describe("OpenAPI tool schemas", () => {
       }
     });
   });
+
+  describe("relationships_created / relationships_refused declared on every schema that returns them", () => {
+    // HTTP POST /interpretations/create and MCP create_interpretation return
+    // relationships_refused (src/actions.ts, src/server.ts createInterpretation)
+    // whenever a relationship in the request could not be created, and
+    // relationships_created always. Both response paths (store's structured
+    // response and create_interpretation's) share one implementation
+    // (src/services/store_relationships.ts), so the contract must declare the
+    // same typed shape on both response schemas rather than leaving one as an
+    // untyped additionalProperties bag. Reads openapi.yaml directly, not the
+    // generated types, for the same reason as the policy-unavailable block
+    // above: the generator could silently drop this, so asserting against its
+    // output would only prove the generator agrees with itself.
+    const rawSpec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      components?: {
+        schemas?: Record<
+          string,
+          {
+            properties?: Record<string, { items?: Record<string, unknown> }>;
+          }
+        >;
+      };
+    };
+    const schemas = rawSpec.components?.schemas ?? {};
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s declares relationships_created and relationships_refused",
+      (schemaName) => {
+        const props = schemas[schemaName]?.properties ?? {};
+        expect(props.relationships_created, `${schemaName}.relationships_created`).toBeTruthy();
+        expect(props.relationships_refused, `${schemaName}.relationships_refused`).toBeTruthy();
+      }
+    );
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s.relationships_created items are the shared typed RelationshipCreated component, not an untyped bag",
+      (schemaName) => {
+        const items = schemas[schemaName]?.properties?.relationships_created?.items as
+          | { $ref?: string; additionalProperties?: boolean }
+          | undefined;
+        expect(items, `${schemaName}.relationships_created.items`).toBeTruthy();
+        expect(
+          items?.additionalProperties,
+          `${schemaName}.relationships_created.items must not be an untyped additionalProperties bag`
+        ).not.toBe(true);
+        expect(
+          items?.$ref,
+          `${schemaName}.relationships_created.items must $ref a shared component`
+        ).toBe("#/components/schemas/RelationshipCreated");
+      }
+    );
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s.relationships_refused items are the shared typed RelationshipRefusal component",
+      (schemaName) => {
+        const items = schemas[schemaName]?.properties?.relationships_refused?.items as
+          | { $ref?: string; additionalProperties?: boolean }
+          | undefined;
+        expect(items, `${schemaName}.relationships_refused.items`).toBeTruthy();
+        expect(
+          items?.$ref,
+          `${schemaName}.relationships_refused.items must $ref a shared component`
+        ).toBe("#/components/schemas/RelationshipRefusal");
+      }
+    );
+
+    it("keeps the shared RelationshipCreated and RelationshipRefusal components defined", () => {
+      // A $ref to a deleted schema is a spec that parses and lies.
+      expect(schemas.RelationshipCreated).toBeTruthy();
+      expect(schemas.RelationshipRefusal).toBeTruthy();
+    });
+  });
 });

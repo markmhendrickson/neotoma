@@ -15,6 +15,20 @@ async function deleteExistingSourcesByContentHash(contentHash: string): Promise<
     .eq("content_hash", contentHash);
   const sourceIds = (existingSources ?? []).map((s) => s.id).filter(Boolean) as string[];
   if (sourceIds.length === 0) return;
+  // Asset entity ids are derived from content, so a prior run (possibly under
+  // another user) may have left the same entity row behind. Store responses
+  // only include entities the caller owns, so clear it for a clean baseline.
+  const { data: priorObservations } = await db
+    .from("observations")
+    .select("entity_id")
+    .in("source_id", sourceIds);
+  const entityIds = Array.from(
+    new Set((priorObservations ?? []).map((o) => o.entity_id).filter(Boolean) as string[])
+  );
+  if (entityIds.length > 0) {
+    await db.from("entity_snapshots").delete().in("entity_id", entityIds);
+    await db.from("entities").delete().in("id", entityIds);
+  }
   await db.from("observations").delete().in("source_id", sourceIds);
   await db.from("raw_fragments").delete().in("source_id", sourceIds);
   await db.from("sources").delete().in("id", sourceIds);

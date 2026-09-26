@@ -1,6 +1,6 @@
 import { NeotomaServer } from "../../src/server.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterAll, afterEach, beforeEach, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { RelationshipsService } from "../../src/services/relationships.js";
 import {
@@ -9,14 +9,43 @@ import {
   getActiveRelationshipTypeNames,
   invalidateRelationshipTypeCache,
 } from "../../src/services/relationship_types/registry.js";
-import { enforceRelationshipTypeCapability } from "../../src/services/agent_capabilities.js";
+import {
+  enforceRelationshipTypeCapability,
+  enforceRelationshipTypeCapabilityWithHint,
+} from "../../src/services/agent_capabilities.js";
 
 const user = "00000000-0000-0000-0000-0000000a2502";
 const service = new RelationshipsService();
+// Relationship endpoints must be entities the caller owns; seed the ids the
+// cases below link.
+const ENDPOINT_IDS = [
+  "ent_g25_cycle_a",
+  "ent_g25_cycle_b",
+  "ent_g25_depth_source",
+  "ent_g25_depth_0",
+  "ent_g25_read_a",
+  "ent_g25_read_b",
+  "ent_g25_stale_source",
+  "ent_g25_stale_target",
+  "ent_g25_corrupt_a",
+  "ent_g25_corrupt_b",
+];
 beforeEach(async () => {
   await db.from("relationship_type_registry").delete().eq("user_id", user);
   await db.from("relationship_snapshots").delete().eq("user_id", user);
   await db.from("relationship_observations").delete().eq("user_id", user);
+  await db.from("entities").delete().in("id", ENDPOINT_IDS);
+  await db.from("entities").insert(
+    ENDPOINT_IDS.map((id) => ({
+      id,
+      user_id: user,
+      entity_type: "g25_test_node",
+      canonical_name: id,
+    }))
+  );
+});
+afterAll(async () => {
+  await db.from("entities").delete().in("id", ENDPOINT_IDS);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -215,5 +244,89 @@ describe("relationship registry security regression", () => {
         user_id: user,
       })
     ).rejects.toThrow(/cycle/i);
+  });
+
+  // #2482 ux round-2 (PR #2511): the register-denial hint must not conflate
+  // an ordinary grant-scope refusal with a registry-health problem for every
+  // built-in name. Both branches below use the SAME ungranted context
+  // (matching the existing "refuses registration without an explicit grant"
+  // case above) so the only variable is registry health for the requested
+  // built-in type.
+  describe("enforceRelationshipTypeCapabilityWithHint: built-in repair hint is conditional on registry health (#2482)", () => {
+    const ungranted = null;
+
+    it("does NOT append the repair hint for an ordinary grant-scope denial on a HEALTHY built-in type", async () => {
+      // PART_OF is seeded globally at boot in every test run (see
+      // relationship_type_registration.test.ts's use of the same built-in);
+      // confirm it is actually present before asserting on the denial text,
+      // so this test cannot pass by accident if the fixture ever changes.
+      expect(await relationshipTypeRegistry.get("PART_OF")).not.toBeNull();
+
+      await expect(
+        enforceRelationshipTypeCapabilityWithHint("PART_OF", "user", ungranted)
+      ).rejects.toMatchObject({
+        code: "capability_denied",
+        hint: expect.stringMatching(/active agent_grant/i),
+      });
+      // The defect this fixes: the first cut appended repair language to
+      // EVERY built-in denial regardless of health. Assert it is absent here.
+      await expect(
+        enforceRelationshipTypeCapabilityWithHint("PART_OF", "user", ungranted)
+      ).rejects.not.toMatchObject({
+        hint: expect.stringMatching(/registry_unseeded|seed\/registry failure|Separately:/i),
+      });
+    });
+
+    it("DOES append the repair hint for a grant-scope denial on an UNHEALTHY (missing) built-in type", async () => {
+      // Remove every effective global registration for PART_OF (not the
+      // whole table — this test only needs PART_OF unhealthy) and disable
+      // the lazy repair so `get()` genuinely observes an absent type, the
+      // same "registry unhealthy for this type" state the hint is meant to
+      // detect. resetRelationshipTypeLazyRepairForTests is intentionally NOT
+      // called here: this test asserts what the DENIAL hint says given the
+      // type is currently missing, independent of whether some other call
+      // would eventually self-heal it.
+      await db
+        .from(RELATIONSHIP_TYPE_REGISTRY_TABLE)
+        .delete()
+        .eq("relationship_type", "PART_OF")
+        .eq("scope", "global");
+      invalidateRelationshipTypeCache();
+      expect(await relationshipTypeRegistry.get("PART_OF")).toBeNull();
+
+      await expect(
+        enforceRelationshipTypeCapabilityWithHint("PART_OF", "user", ungranted)
+      ).rejects.toMatchObject({
+        code: "capability_denied",
+        hint: expect.stringMatching(/active agent_grant/i),
+      });
+      await expect(
+        enforceRelationshipTypeCapabilityWithHint("PART_OF", "user", ungranted)
+      ).rejects.toMatchObject({
+        hint: expect.stringMatching(/registry_unseeded|currently missing from this instance/i),
+      });
+
+      // Restore PART_OF so this test does not leak a missing built-in into
+      // other suites sharing the same database.
+      const { seedBuiltInRelationshipTypes } = await import(
+        "../../src/services/relationship_types/seed_registry.js"
+      );
+      await seedBuiltInRelationshipTypes();
+      invalidateRelationshipTypeCache();
+    });
+
+    it("still says nothing extra for a genuinely unregistered CUSTOM (non-built-in) type", async () => {
+      await expect(
+        enforceRelationshipTypeCapabilityWithHint("g25_not_a_builtin_type", "user", ungranted)
+      ).rejects.toMatchObject({
+        code: "capability_denied",
+        hint: expect.stringMatching(/active agent_grant/i),
+      });
+      await expect(
+        enforceRelationshipTypeCapabilityWithHint("g25_not_a_builtin_type", "user", ungranted)
+      ).rejects.not.toMatchObject({
+        hint: expect.stringMatching(/registry_unseeded|Separately:/i),
+      });
+    });
   });
 });

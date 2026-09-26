@@ -49,6 +49,18 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
+  // Pre-persist shape guard for agent_grant fields (no-op for every other
+  // entity_type). Throws before any row is written. `correct()` is the raw
+  // entity-store surface that bypasses agent_grants.ts's own
+  // createGrant/updateGrantFields validation entirely — it is how the
+  // JSON-string-capabilities and empty-entity_types grants now live in
+  // prod got there. Lazy import to avoid a cycle: agent_grants.ts already
+  // lazy-imports this module for the same reason (writeGrantEntity /
+  // updateGrantFields / setStatus / recordMatch each call createCorrection).
+  {
+    const { assertAgentGrantFieldValid } = await import("./agent_grants.js");
+    assertAgentGrantFieldValid(params.entity_type, params.field, params.value);
+  }
   await enforceOverridePolicy({
     entityType: params.entity_type,
     entityId: params.entity_id,
