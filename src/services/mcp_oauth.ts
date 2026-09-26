@@ -269,10 +269,11 @@ async function deleteLocalOAuthCode(code: string, conn?: DbConnection): Promise<
 }
 
 /**
- * Redeem a single-use authorization code: verify it exists, is unexpired,
- * and that SHA-256(codeVerifier) base64url-matches the code_challenge it was
- * minted with, then delete it so a second redemption of the same code — with
- * either verifier — fails. Returns the connection_id the code was bound to.
+ * Redeem a single-use authorization code: atomically acquire and consume it,
+ * then verify that it is unexpired and SHA-256(codeVerifier)
+ * base64url-matches the code_challenge it was minted with. A second
+ * redemption of the same code — with either verifier — fails. Returns the
+ * connection_id the code was bound to.
  *
  * This is the fix for the code=connection_id defect: previously any caller
  * who knew or guessed a connection_id could redeem it for a token directly,
@@ -280,13 +281,15 @@ async function deleteLocalOAuthCode(code: string, conn?: DbConnection): Promise<
  * re-reads the connection row on every call). Now the value a client redeems
  * is this code, never the connection_id, and redemption is destructive.
  *
- * Atomicity: the lookup, validation, and deletion run inside one
- * db.transaction() call. The deletion's affected-row count is the deciding
- * single-use check, so exactly one redemption may complete for a code.
+ * Atomicity: the lookup and deletion run inside one db.transaction() call.
+ * Validation happens only after that transaction commits, so an acquired
+ * code remains consumed even when later validation fails.
+ * The deletion's affected-row count is the deciding single-use check, so
+ * exactly one redemption attempt may acquire a code.
  */
 async function redeemLocalOAuthCode(code: string, codeVerifier: string): Promise<string> {
   const db = await getDb();
-  return db.transaction(async (tx) => {
+  const row = await db.transaction(async (tx) => {
     const row = await getLocalOAuthCode(code, tx);
     if (!row) {
       throw createOAuthError.tokenExchangeFailed("Authorization code is invalid or already used");
@@ -298,19 +301,22 @@ async function redeemLocalOAuthCode(code: string, codeVerifier: string): Promise
     if (deleted !== 1) {
       throw createOAuthError.tokenExchangeFailed("Authorization code is invalid or already used");
     }
-
-    if (new Date(row.expires_at) < new Date()) {
-      throw createOAuthError.tokenExchangeFailed("Authorization code has expired");
-    }
-    if (!codeVerifier || typeof codeVerifier !== "string") {
-      throw createOAuthError.tokenExchangeFailed("code_verifier is required");
-    }
-    const computedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
-    if (computedChallenge !== row.code_challenge) {
-      throw createOAuthError.tokenExchangeFailed("code_verifier does not match code_challenge");
-    }
-    return row.connection_id;
+    return row;
   });
+
+  // This code intentionally runs after the consuming transaction commits.
+  // Throwing here must not roll back the deletion.
+  if (new Date(row.expires_at) < new Date()) {
+    throw createOAuthError.tokenExchangeFailed("Authorization code has expired");
+  }
+  if (!codeVerifier || typeof codeVerifier !== "string") {
+    throw createOAuthError.tokenExchangeFailed("code_verifier is required");
+  }
+  const computedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+  if (computedChallenge !== row.code_challenge) {
+    throw createOAuthError.tokenExchangeFailed("code_verifier does not match code_challenge");
+  }
+  return row.connection_id;
 }
 
 async function getLocalConnectionById(connectionId: string): Promise<LocalConnectionRow | null> {

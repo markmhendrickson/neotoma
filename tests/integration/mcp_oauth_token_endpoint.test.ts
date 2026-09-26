@@ -155,7 +155,7 @@ describe("MCP OAuth token endpoint", () => {
     expect(json.error).toBe("invalid_grant");
   });
 
-  it("rejects redemption with a mismatched PKCE verifier", async () => {
+  it("consumes the authorization code when rejecting a mismatched PKCE verifier", async () => {
     currentTempDir = path.join(
       process.cwd(),
       "tmp",
@@ -166,7 +166,7 @@ describe("MCP OAuth token endpoint", () => {
     const user = await localAuth.getLocalAuthUserByEmail("bad-verifier@example.com");
     if (!user) throw new Error("Local auth user not found in test");
 
-    const { code } = await setUpAuthorizedConnection(app, oauth, user.id);
+    const { code, codeVerifier } = await setUpAuthorizedConnection(app, oauth, user.id);
 
     const { status, json } = await postToken(app, {
       grant_type: "authorization_code",
@@ -176,6 +176,14 @@ describe("MCP OAuth token endpoint", () => {
 
     expect(status).toBe(400);
     expect(json.error).toBe("invalid_grant");
+
+    const retry = await postToken(app, {
+      grant_type: "authorization_code",
+      code,
+      code_verifier: codeVerifier,
+    });
+    expect(retry.status).toBe(400);
+    expect(retry.json.error).toBe("invalid_grant");
   });
 
   it("rejects a second redemption of an already-used authorization code", async () => {
