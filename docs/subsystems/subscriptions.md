@@ -72,7 +72,11 @@ flowchart LR
   Retry -- exceeded max_failures --> Deactivate[active = false via correct]
 ```
 
-The bridge is wired once at server startup by `installSubscriptionBridge`. The in-memory subscription index is rebuilt from SQLite at boot (`rebuildSubscriptionIndex`) and refreshed whenever a `subscription` entity changes.
+The bridge is wired once per process by `installSubscriptionBridge`, called from **both** entrypoints that own a process: the HTTP server startup path in `actions.ts` and the MCP stdio entrypoint `src/index.ts`. The installer is idempotent, so a process running both installs once. `mcp_ws_bridge.ts` and `mcp_dev_shim.ts` spawn `src/index.ts` as a child process rather than hosting the substrate themselves, so they inherit the wiring rather than needing their own call.
+
+Each entrypoint follows the install with `assertSubstrateListenerInstalled()`, which throws when no persisting listener ended up registered. Before #2326 the MCP stdio path had no install call at all: events were emitted into a bus with no persisting listener and silently discarded, and subscription resume had no durable log. The assertion exists because "no listener" and "healthy" were otherwise indistinguishable.
+
+The in-memory subscription index is rebuilt from SQLite at boot (`rebuildSubscriptionIndex`) and refreshed whenever a `subscription` entity changes.
 
 ## Components
 
