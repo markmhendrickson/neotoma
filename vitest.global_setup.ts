@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,49 @@ import {
   announceSkip,
   hasPrerequisite,
 } from "./tests/helpers/test_prerequisites.js";
+
+/**
+ * Isolate every test worker's notion of "home" from the operator's real
+ * home directory, for the whole run.
+ *
+ * Motivation (neotoma issue: CLI/tests rewriting a user-level harness MCP
+ * config): `src/cli/mcp_config_scan.ts` resolves Cursor/Claude/Codex/Windsurf
+ * user-level config paths from `os.homedir()`, which on POSIX reads
+ * `process.env.HOME` on every call (no caching) — so any test that exercises
+ * `offerInstall`/`offerFix`/`scanForMcpConfigs` with `includeUserLevel` or
+ * `userLevelFirst`, directly or via a spawned `node dist/cli/index.js`
+ * subprocess that inherits `process.env`, can read or write the REAL
+ * `~/.cursor/mcp.json` (and siblings) unless that specific test remembers to
+ * override HOME itself. Several test files already do this per-test
+ * (`tests/cli/cli_init_commands.test.ts`, `tests/integration/cli_init_bootstrap.test.ts`),
+ * but that is opt-in and easy to miss — `tests/cli/cli_mcp_commands.test.ts`
+ * has at least one case that reads `process.env.HOME` unguarded. A single,
+ * unconditional override here removes the opt-in: no test file can reach a
+ * real user config path by omission.
+ *
+ * Vitest's default pool ("forks") forks worker processes from this main
+ * process AFTER globalSetup resolves, inheriting `process.env` at fork
+ * time — so setting HOME/USERPROFILE here, before any worker or test file
+ * loads, binds every worker without per-file setup.
+ *
+ * A test that deliberately needs its OWN isolated home (e.g. to assert
+ * against a specific fixture layout) may still override HOME locally; this
+ * only removes the REAL home as a possible default.
+ */
+function isolateHomeDirectoryForTests(projectRoot: string): string {
+  // Capture the REAL home before overriding HOME/USERPROFILE below — os.homedir()
+  // reads process.env.HOME on every call, so this must happen first.
+  const realHome = os.homedir();
+  const isolatedHome = path.join(projectRoot, ".vitest", "home");
+  mkdirSync(isolatedHome, { recursive: true });
+  process.env.HOME = isolatedHome;
+  process.env.USERPROFILE = isolatedHome;
+  // Recorded so the write-guard in vitest.setup.ts (per worker) can assert no
+  // code path under test touched the real home instead of this stand-in.
+  process.env.NEOTOMA_TEST_REAL_HOME = realHome;
+  process.env.NEOTOMA_TEST_ISOLATED_HOME = isolatedHome;
+  return isolatedHome;
+}
 
 /**
  * Fail fast, and legibly, when the compiled server is absent (issue #2090).
@@ -57,6 +101,7 @@ export default async function globalSetup() {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
   requireBuiltServer(projectRoot);
   announceMissingPrerequisites();
+  isolateHomeDirectoryForTests(projectRoot);
   const vitestDir = path.join(projectRoot, ".vitest");
   mkdirSync(path.join(vitestDir, "sources"), { recursive: true });
 
@@ -97,4 +142,3 @@ export default async function globalSetup() {
     });
   };
 }
-
