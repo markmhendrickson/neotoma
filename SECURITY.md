@@ -4,8 +4,8 @@
 
 | Version  | Supported |
 |----------|-----------|
-| `0.23.x` | Yes       |
-| `< 0.23` | No (patch only on critical advisories — see [advisories index](docs/security/advisories/README.md)) |
+| `0.24.x` | Yes       |
+| `< 0.24` | No (patch only on critical advisories — see [advisories index](docs/security/advisories/README.md)) |
 
 The most recent published Neotoma version is the only one that receives proactive support. Critical advisories may produce a one-off patch on the previous minor when the affected range is large; see the per-advisory file under [`docs/security/advisories/`](docs/security/advisories/README.md) for the exact range.
 

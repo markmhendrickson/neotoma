@@ -3739,6 +3739,9 @@ export class NeotomaServer {
         throw new McpError(ErrorCode.InvalidParams, error.message, {
           code: error.code,
           entity_id: error.entityId,
+          hint:
+            "Both endpoints must be entities you own. Store the entity first, or in the " +
+            "same store call referenced by index, then link it.",
         });
       }
       // Check for specific error types

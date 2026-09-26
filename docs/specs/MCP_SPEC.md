@@ -2155,6 +2155,8 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `get_peer_status` | No | `peer_id`. |
 | `sync_peer` | Yes | Bounded fan-out; requires peer + public base URL configuration. |
 | `resolve_sync_conflict` | Yes | Strategy enum + entity/observation selectors per OpenAPI. |
+| `register_relationship_type` | Yes | Runtime relationship-type registry. `relationship_type`, optional `description`, `scope` (`user` default, `global` requires an explicit grant), `acyclic`, `inverse`, `symmetric`, `source_entity_types`, `target_entity_types`. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md). |
+| `list_relationship_types` | No | Optional `keyword`, `scope`, `include_edge_counts`. Empty result carries `empty_reason` (`registry_unseeded` or `filtered_to_empty`) rather than being ambiguous with "no vocabulary exists." |
 
 When adding or renaming an MCP tool, update **this catalog**, **`NEOTOMA_TOOL_NAMES`**, and the change-guardrails checklist in [`docs/architecture/change_guardrails_rules.mdc`](../architecture/change_guardrails_rules.mdc).
 
