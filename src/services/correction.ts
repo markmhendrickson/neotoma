@@ -17,6 +17,7 @@ import {
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
 import { enforceOverridePolicy } from "./override_validation.js";
+import { assertNoOwnerConflict } from "./entity_resolution.js";
 import {
   emitEntitySnapshotChange,
   emitObservationCreated,
@@ -70,6 +71,34 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     userId: params.user_id,
     db,
   });
+
+  // Fail-closed ownership guard. `correct()` is the raw entity-store surface
+  // (see the assertAgentGrantFieldValid comment above) — a caller can name
+  // any entity_id directly with no resolution step in between, so this is
+  // the ONLY chance to refuse a correction that would land on an entity
+  // owned by a different user. This is precisely the vector that stayed open
+  // for agent_grant records created via match_sub+match_iss (no
+  // match_thumbprint to pin): PR #2513 (below) refuses a thumbprint
+  // collision at write time, but a `correct` targeting the entity_id of an
+  // existing match_sub+match_iss grant under a different owner was not
+  // checked anywhere until this guard. Runs BEFORE the pin-uniqueness check:
+  // ownership answers "is this the writer's entity at all", which must hold
+  // before asking whether the write's pin is still unique on it.
+  {
+    const { data: targetEntity } = await db
+      .from("entities")
+      .select("user_id")
+      .eq("id", params.entity_id)
+      .maybeSingle();
+    if (targetEntity) {
+      assertNoOwnerConflict({
+        entityId: params.entity_id,
+        entityType: params.entity_type,
+        existingOwnerUserId: (targetEntity as { user_id: string | null }).user_id,
+        writerUserId: params.user_id,
+      });
+    }
+  }
 
   // A key thumbprint may be pinned by agent_grants under one owner only.
   // Both correct transports converge here, so this covers REST and MCP:

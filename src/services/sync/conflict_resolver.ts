@@ -22,10 +22,19 @@ export async function resolveSyncConflict(params: {
   guest_access_token?: string;
 }): Promise<{ ok: boolean; message: string }> {
   if (params.strategy === "manual") {
+    // Ownership precheck (neotoma#2229): a by-id write must confirm the
+    // caller owns entity_id BEFORE writing under the caller's own user_id —
+    // scoping the lookup by id AND user_id, mirroring GET /entities/:id and
+    // MCP correct(). Without the user_id filter here, any authenticated
+    // caller could flip `sync_conflict: true` on another user's entity by
+    // guessing/observing its id. A miss (missing OR owned by someone else)
+    // returns the same "not found" message either way, so the response
+    // itself cannot be used to probe for another user's entity ids.
     const { data: entity, error } = await db
       .from("entities")
       .select("entity_type")
       .eq("id", params.entity_id)
+      .eq("user_id", params.userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     const entityType = (entity as { entity_type?: string } | null)?.entity_type;
