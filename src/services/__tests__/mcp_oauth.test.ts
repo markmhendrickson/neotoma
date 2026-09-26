@@ -519,6 +519,51 @@ describe("MCP OAuth Service", () => {
       rmSync(tempDir, { recursive: true, force: true });
     });
 
+    it("concurrent redemption of the same authorization code: exactly one succeeds", async () => {
+      // Modeled on "concurrent refresh calls both succeed" below, but the
+      // opposite assertion: refresh tokens are reusable by design (that test
+      // asserts both concurrent refreshes succeed), while an authorization
+      // code is single-use, so of two concurrent redemptions with the SAME
+      // code and the SAME correct verifier, exactly one must succeed and the
+      // other must be refused as already-used/invalid — never both.
+      const tempDir = path.join(
+        process.cwd(),
+        "tmp",
+        `neotoma-oauth-code-redemption-race-${Date.now()}`
+      );
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      await localAuth.createLocalAuthUser("race@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("race@example.com");
+      if (!user) throw new Error("Local auth user not found in test");
+
+      const connectionId = "cursor-local-race";
+      const { codeVerifier, codeChallenge } = generatePKCE();
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge,
+      });
+      const callback = await oauth.completeLocalAuthorization(request.state, user.id);
+
+      const results = await Promise.allSettled([
+        oauth.getTokenResponseForConnection(callback.code, codeVerifier),
+        oauth.getTokenResponseForConnection(callback.code, codeVerifier),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      expect(fulfilled.length).toBe(1);
+      expect(rejected.length).toBe(1);
+      expect(
+        (fulfilled[0] as PromiseFulfilledResult<{ access_token: string }>).value.access_token
+      ).toMatch(/^local_access_/);
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
     it("renews an expired access token when resolving a connection id", async () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-renew-${Date.now()}`);
       const oauth = await loadLocalOAuthModule(tempDir);

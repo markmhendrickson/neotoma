@@ -12,6 +12,7 @@ import { config } from "../config.js";
 import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
 import { clearDbCache, getDb } from "../repositories/db/connection.js";
 import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
+import type { DbConnection } from "../repositories/db/driver.js";
 
 // Cached service role client instance
 let cachedServiceRoleClient: LocalDbClient | null = null;
@@ -248,8 +249,11 @@ async function insertLocalOAuthCode(payload: {
   return code;
 }
 
-async function getLocalOAuthCode(code: string): Promise<LocalOAuthCodeRow | null> {
-  const db = await getDb();
+async function getLocalOAuthCode(
+  code: string,
+  conn?: DbConnection
+): Promise<LocalOAuthCodeRow | null> {
+  const db = conn ?? (await getDb());
   const row = await db
     .prepare(
       "SELECT id, code, code_challenge, connection_id, client_id, created_at, expires_at FROM mcp_oauth_codes WHERE code = ?"
@@ -258,9 +262,10 @@ async function getLocalOAuthCode(code: string): Promise<LocalOAuthCodeRow | null
   return row ? (row as LocalOAuthCodeRow) : null;
 }
 
-async function deleteLocalOAuthCode(code: string): Promise<void> {
-  const db = await getDb();
-  await db.prepare("DELETE FROM mcp_oauth_codes WHERE code = ?").run(code);
+async function deleteLocalOAuthCode(code: string, conn?: DbConnection): Promise<number> {
+  const db = conn ?? (await getDb());
+  const result = await db.prepare("DELETE FROM mcp_oauth_codes WHERE code = ?").run(code);
+  return result.changes;
 }
 
 /**
@@ -274,28 +279,38 @@ async function deleteLocalOAuthCode(code: string): Promise<void> {
  * with no verifier check and no consumption (getAccessTokenForConnection just
  * re-reads the connection row on every call). Now the value a client redeems
  * is this code, never the connection_id, and redemption is destructive.
+ *
+ * Atomicity: the lookup, validation, and deletion run inside one
+ * db.transaction() call. The deletion's affected-row count is the deciding
+ * single-use check, so exactly one redemption may complete for a code.
  */
 async function redeemLocalOAuthCode(code: string, codeVerifier: string): Promise<string> {
-  const row = await getLocalOAuthCode(code);
-  if (!row) {
-    throw createOAuthError.tokenExchangeFailed("Authorization code is invalid or already used");
-  }
-  // Delete before validating the verifier: a code must not be redeemable a
-  // second time even by a caller who learns the correct verifier after an
-  // earlier failed attempt (e.g. two racing requests, or a guess-then-retry).
-  await deleteLocalOAuthCode(code);
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    const row = await getLocalOAuthCode(code, tx);
+    if (!row) {
+      throw createOAuthError.tokenExchangeFailed("Authorization code is invalid or already used");
+    }
 
-  if (new Date(row.expires_at) < new Date()) {
-    throw createOAuthError.tokenExchangeFailed("Authorization code has expired");
-  }
-  if (!codeVerifier || typeof codeVerifier !== "string") {
-    throw createOAuthError.tokenExchangeFailed("code_verifier is required");
-  }
-  const computedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
-  if (computedChallenge !== row.code_challenge) {
-    throw createOAuthError.tokenExchangeFailed("code_verifier does not match code_challenge");
-  }
-  return row.connection_id;
+    // Consume before validating so a failed attempt cannot leave the code
+    // reusable. The affected-row count is the single-use decision point.
+    const deleted = await deleteLocalOAuthCode(code, tx);
+    if (deleted !== 1) {
+      throw createOAuthError.tokenExchangeFailed("Authorization code is invalid or already used");
+    }
+
+    if (new Date(row.expires_at) < new Date()) {
+      throw createOAuthError.tokenExchangeFailed("Authorization code has expired");
+    }
+    if (!codeVerifier || typeof codeVerifier !== "string") {
+      throw createOAuthError.tokenExchangeFailed("code_verifier is required");
+    }
+    const computedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+    if (computedChallenge !== row.code_challenge) {
+      throw createOAuthError.tokenExchangeFailed("code_verifier does not match code_challenge");
+    }
+    return row.connection_id;
+  });
 }
 
 async function getLocalConnectionById(connectionId: string): Promise<LocalConnectionRow | null> {
