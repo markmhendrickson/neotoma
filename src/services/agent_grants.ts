@@ -27,12 +27,15 @@
  *     write made through this service. Revocation made via Inspector /
  *     direct entity-store calls is picked up after at most one TTL
  *     cycle.
- *   - Cross-user identity matches: a grant is owned by exactly one
- *     `user_id` (entities row). When the same identity has grants
- *     under multiple users we pick the most recently observed active
- *     grant; admission then resolves to that grant's owner. The
- *     protected-entity-types guard plus per-grant capability rules
- *     keep an admitted agent locked to its owner.
+ *   - One owner per key: a grant is owned by exactly one `user_id`
+ *     (entities row), and a key thumbprint may be pinned by grants
+ *     under one owner only. A write that would pin a thumbprint already
+ *     pinned by any grant under another owner is refused
+ *     ({@link AgentGrantPinConflictError}); admission refuses a key
+ *     pinned by active grants under more than one owner
+ *     (`pin_conflict`), so a pre-existing duplicate fails closed.
+ *     Several grants under the same owner may pin one key; the most
+ *     recently observed wins.
  */
 
 import { db } from "../db.js";
@@ -144,6 +147,29 @@ export class AgentGrantNotFoundError extends Error {
     super(`Agent grant ${grantId} not found.`);
     this.name = "AgentGrantNotFoundError";
     this.grantId = grantId;
+  }
+}
+
+/**
+ * Refusal to pin a key thumbprint that a grant under another owner
+ * already pins. A key admits as exactly one owner, so its pin is unique
+ * across owners.
+ */
+export class AgentGrantPinConflictError extends Error {
+  readonly code = "agent_grant_pin_conflict" as const;
+  readonly statusCode = 409;
+  readonly field = "match_thumbprint" as const;
+
+  constructor() {
+    super(
+      "This key thumbprint is already pinned by an agent_grant under another owner. " +
+        "A key can be pinned by grants under one owner only."
+    );
+    this.name = "AgentGrantPinConflictError";
+  }
+
+  toErrorEnvelope(): { code: string; field: string; message: string } {
+    return { code: this.code, field: this.field, message: this.message };
   }
 }
 
@@ -412,7 +438,27 @@ interface CacheEntry {
 }
 
 const CACHE_TTL_MS = 5_000;
+/**
+ * Upper bound on cached lookups. Keys are derived from presented
+ * identities, so the map is capped; the oldest entry is evicted first.
+ */
+const CACHE_MAX_ENTRIES = 5_000;
 const identityCache = new Map<string, CacheEntry>();
+
+function cacheLookup(key: string, lookup: GrantIdentityLookup, now: number): void {
+  if (identityCache.has(key)) identityCache.delete(key);
+  while (identityCache.size >= CACHE_MAX_ENTRIES) {
+    const oldest = identityCache.keys().next();
+    if (oldest.done) break;
+    identityCache.delete(oldest.value);
+  }
+  identityCache.set(key, { lookup, expiresAt: now + CACHE_TTL_MS });
+}
+
+/** Test-only: number of cached identity lookups. */
+export function grantCacheSizeForTests(): number {
+  return identityCache.size;
+}
 
 function cacheKeyForIdentity(input: {
   sub: string | null;
@@ -578,7 +624,22 @@ export interface GrantIdentityLookup {
    * rejected by validation, not merely absent).
    */
   invalid_grant_id: string | null;
+  /**
+   * True when active grants under more than one owner pin the presented
+   * key. Admission is refused (`grant_pin_conflict`) and `grant` is
+   * `null`: the key does not resolve to any owner until the duplicate
+   * pin is removed.
+   */
+  pin_conflict: boolean;
 }
+
+const EMPTY_LOOKUP: GrantIdentityLookup = Object.freeze({
+  grant: null,
+  unbound_claim_match: false,
+  inactive_grant: null,
+  invalid_grant_id: null,
+  pin_conflict: false,
+}) as GrantIdentityLookup;
 
 /**
  * Resolve a verified AAuth identity to an active grant.
@@ -588,7 +649,9 @@ export interface GrantIdentityLookup {
  * signed the request. Grants without a thumbprint pin do not admit
  * signed requests.
  *
- * When several key-bound grants match, the most recently observed wins.
+ * When several key-bound active grants under one owner match, the most
+ * recently observed wins. When they span more than one owner the lookup
+ * reports `pin_conflict` and returns no grant.
  */
 export async function lookupGrantForIdentity(input: {
   sub?: string | null;
@@ -598,14 +661,7 @@ export async function lookupGrantForIdentity(input: {
   const sub = trimOrNull(input.sub);
   const iss = trimOrNull(input.iss);
   const thumbprint = trimOrNull(input.thumbprint);
-  if (!thumbprint) {
-    return {
-      grant: null,
-      unbound_claim_match: false,
-      inactive_grant: null,
-      invalid_grant_id: null,
-    };
-  }
+  if (!thumbprint) return { ...EMPTY_LOOKUP };
 
   const key = cacheKeyForIdentity({ sub, iss, thumbprint });
   const now = Date.now();
@@ -615,7 +671,7 @@ export async function lookupGrantForIdentity(input: {
   }
 
   const lookup = await scanForGrant({ sub, iss, thumbprint });
-  identityCache.set(key, { lookup, expiresAt: now + CACHE_TTL_MS });
+  cacheLookup(key, lookup, now);
   return lookup;
 }
 
@@ -656,12 +712,7 @@ async function scanForGrant(input: {
     sortOrder: "desc",
   });
   if (rows.length === 0) {
-    return {
-      grant: null,
-      unbound_claim_match: false,
-      inactive_grant: null,
-      invalid_grant_id: null,
-    };
+    return { ...EMPTY_LOOKUP };
   }
 
   // queryEntities does not include user_id on the returned shape, so we
@@ -718,9 +769,26 @@ async function scanForGrant(input: {
   // reported only when the scan ultimately finds no admitting grant.
   let invalidGrantId: string | null = null;
 
+  // A key admits as exactly one owner. Resolve the owner of every active
+  // grant pinning this key; if they span more than one owner, refuse
+  // rather than pick one.
+  const ownedActive: Array<{ cand: Candidate; owner: string }> = [];
   for (const cand of activeCandidates) {
     const owner = await getGrantOwner(cand.entity_id);
     if (!owner) continue;
+    ownedActive.push({ cand, owner });
+  }
+  if (new Set(ownedActive.map((o) => o.owner)).size > 1) {
+    return {
+      grant: null,
+      unbound_claim_match: false,
+      inactive_grant: null,
+      invalid_grant_id: null,
+      pin_conflict: true,
+    };
+  }
+
+  for (const { cand, owner } of ownedActive) {
     try {
       return {
         grant: snapshotToGrant(cand.entity_id, owner, cand.snapshot, {
@@ -730,6 +798,7 @@ async function scanForGrant(input: {
         unbound_claim_match: false,
         inactive_grant: null,
         invalid_grant_id: null,
+        pin_conflict: false,
       };
     } catch (err) {
       // THE FIX: previously this candidate was dropped exactly like "did
@@ -768,6 +837,7 @@ async function scanForGrant(input: {
           last_observation_at: cand.last_observation_at,
         }),
         invalid_grant_id: invalidGrantId,
+        pin_conflict: false,
       };
     } catch {
       continue;
@@ -779,6 +849,7 @@ async function scanForGrant(input: {
     unbound_claim_match: unboundClaimMatch,
     inactive_grant: null,
     invalid_grant_id: invalidGrantId,
+    pin_conflict: false,
   };
 }
 
@@ -814,6 +885,79 @@ function warnInvalidGrant(grantId: string, err: unknown): void {
 /** Test-only — clears the invalid-grant warning debounce map. */
 export function clearInvalidGrantWarnDebounceForTests(): void {
   invalidGrantWarnDebounce.clear();
+}
+
+/** ---------- Pin uniqueness across owners ---------- */
+
+/**
+ * True when a grant owned by someone other than `userId` pins
+ * `thumbprint`, whatever its status. Suspended and revoked grants keep
+ * their pin: either can be restored to active, and a grant's thumbprint
+ * is part of its identity, so a second owner's grant for the same key
+ * would not be a separate grant.
+ */
+async function pinHeldByAnotherOwner(userId: string, thumbprint: string): Promise<boolean> {
+  const rows = await queryEntities({
+    entityType: GRANT_ENTITY_TYPE,
+    includeMerged: false,
+    includeDeleted: false,
+    limit: 1000,
+  });
+  for (const row of rows) {
+    const snap = row.snapshot ?? {};
+    if (trimOrNull(snap.match_thumbprint) !== thumbprint) continue;
+    const owner = await getGrantOwner(row.entity_id);
+    if (owner && owner !== userId) return true;
+  }
+  return false;
+}
+
+/**
+ * Throw {@link AgentGrantPinConflictError} when `thumbprint` is pinned
+ * by a grant under an owner other than `userId`. No-op for an empty
+ * thumbprint.
+ */
+export async function assertThumbprintPinAvailable(
+  userId: string,
+  thumbprint: string | null | undefined
+): Promise<void> {
+  const tp = trimOrNull(thumbprint);
+  if (!tp) return;
+  if (await pinHeldByAnotherOwner(userId, tp)) {
+    throw new AgentGrantPinConflictError();
+  }
+}
+
+/**
+ * Write-path check shared by every entrance that can write an
+ * `agent_grant` observation (grants service, `store` and `correct` on
+ * both transports, import, file interpretation). Refuses a write that
+ * would leave a key thumbprint pinned by grants under two owners:
+ *
+ *   - the write sets `match_thumbprint`, or
+ *   - the write returns an existing grant (`entityId`) to `active` or
+ *     `suspended` while another owner's grant pins the same key (only
+ *     reachable when a duplicate pin predates this check).
+ *
+ * No-op for other entity types.
+ */
+export async function assertGrantWriteKeepsPinUnique(params: {
+  userId: string;
+  entityType: string;
+  fields: Record<string, unknown> | null | undefined;
+  entityId?: string | null;
+}): Promise<void> {
+  if (params.entityType !== GRANT_ENTITY_TYPE) return;
+  const fields = params.fields ?? {};
+  const status = typeof fields.status === "string" ? fields.status : undefined;
+  let thumbprint = trimOrNull(fields.match_thumbprint);
+  if (!thumbprint && params.entityId && (status === "active" || status === "suspended")) {
+    const ent = await getEntityWithProvenance(params.entityId);
+    if (ent && ent.entity_type === GRANT_ENTITY_TYPE) {
+      thumbprint = trimOrNull((ent.snapshot ?? {}).match_thumbprint);
+    }
+  }
+  await assertThumbprintPinAvailable(params.userId, thumbprint);
 }
 
 /** ---------- Write helpers ---------- */
@@ -939,6 +1083,7 @@ export async function createGrant(userId: string, draft: AgentGrantDraft): Promi
   const label = validateLabel(draft.label);
   const capabilities = validateCapabilities(draft.capabilities ?? []);
   const status: AgentGrantStatus = draft.status ? validateStatus(draft.status) : "active";
+  await assertThumbprintPinAvailable(userId, match.match_thumbprint);
   const fields: Record<string, unknown> = {
     label,
     capabilities,
@@ -988,6 +1133,11 @@ export async function updateGrantFields(
   }
   if (changes.label !== undefined) {
     validateLabel(changes.label);
+  }
+  // Refuse before any field is written, so a rejected pin leaves the
+  // grant unchanged rather than partially updated.
+  if (changes.match_thumbprint !== undefined) {
+    await assertThumbprintPinAvailable(userId, changes.match_thumbprint);
   }
 
   const { createCorrection } = await import("./correction.js");
@@ -1040,6 +1190,9 @@ export async function setStatus(
   const allowed = ALLOWED_TRANSITIONS[existing.status] ?? [];
   if (!allowed.includes(next)) {
     throw new AgentGrantStatusTransitionError(existing.status, next);
+  }
+  if (next !== "revoked") {
+    await assertThumbprintPinAvailable(userId, existing.match_thumbprint);
   }
   const { createCorrection } = await import("./correction.js");
   await createCorrection({

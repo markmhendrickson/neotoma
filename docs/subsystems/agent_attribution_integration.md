@@ -69,7 +69,7 @@ the cascade is attestation-aware (see §2a):
 | Tier                 | When                                                                                          |
 | -------------------- | --------------------------------------------------------------------------------------------- |
 | `hardware`           | AAuth verified AND the JWT carries a `cnf.attestation` envelope that the verifier accepts AND, in v0.12.0+, the bound key has not been revoked. |
-| `operator_attested`  | AAuth verified AND `iss` (or `iss:sub`) is in `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`. |
+| `operator_attested`  | AAuth verified AND the signing key's thumbprint is in `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`, or the key is pinned by an active grant whose `match_iss` (or `match_iss:match_sub`) is in `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`. |
 | `software`           | AAuth verified but no attestation envelope (or attestation failed and operator allowlist did not match), regardless of algorithm. |
 | `unverified_client`  | No AAuth, but clientInfo.name survived normalisation.                                         |
 | `anonymous`          | Nothing else. `client_info` may have been too generic.                                        |
@@ -259,6 +259,7 @@ never broader.
 | `grant_key_unbound`    | Identity's `sub` / `iss` match a grant that pins no `match_thumbprint`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is pinned, even when Bearer/OAuth authenticates the request. See [Pin a key to an existing grant](./agent_capabilities.md#pin-a-key-to-an-existing-grant). |
 | `grant_revoked`        | The signing key is pinned (`match_thumbprint`) to a grant whose status is `revoked`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is restored to `active`, even when Bearer/OAuth authenticates the request. |
 | `grant_suspended`      | The signing key is pinned (`match_thumbprint`) to a grant whose status is `suspended`. Same refusal as `grant_revoked`, until the grant is restored to `active`. |
+| `grant_pin_conflict`   | Active grants under more than one owner pin the signing key, so it resolves to no owner. The key does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until only one owner pins it. |
 | `strict_rejected`      | Strict-AAuth gating rejected the signature before admission ran.           |
 | `aauth_disabled`       | This deployment has AAuth disabled; admission did not run.                 |
 | `not_signed`           | No AAuth signature was presented; only attribution-only paths are open.    |
@@ -336,7 +337,9 @@ the full grant lifecycle (create / suspend / revoke / restore) and the
 matching order admission uses.
 
 `NEOTOMA_STRICT_AAUTH_SUBS` (comma-separated `sub`s that MUST present a
-valid AAuth signature when claimed via `X-Agent-Label`) is unchanged.
+valid AAuth signature when claimed via `X-Agent-Label`) requires the
+signing key to be pinned by an active grant whose `match_sub` is the
+label; see [Strict-require AAuth for claimed subjects](./agent_capabilities.md#strict-require-aauth-for-claimed-subjects).
 
 Per-path overrides accept any of the canonical write paths:
 `observations`, `relationships`, `sources`, `interpretations`,

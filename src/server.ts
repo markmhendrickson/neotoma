@@ -2408,6 +2408,17 @@ export class NeotomaServer {
           // field (see src/services/override_validation.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
+        if (
+          error instanceof Error &&
+          (error as { code?: unknown }).code === "agent_grant_pin_conflict"
+        ) {
+          // A refused agent_grant key pin: a client error, not a server
+          // fault. Same `code` as the REST 409 envelope.
+          throw new McpError(ErrorCode.InvalidRequest, error.message, {
+            code: "agent_grant_pin_conflict",
+            field: "match_thumbprint",
+          });
+        }
         if (error instanceof StorePolicyDeniedError) {
           // Instance store-policy denials (#1975) get the same treatment. Without
           // this branch the error falls through to the generic InternalError path
@@ -6049,6 +6060,26 @@ export class NeotomaServer {
       const { enforceAttributionPolicy } = await import("./services/attribution_policy.js");
       const { getCurrentAgentIdentity } = await import("./services/request_context.js");
       enforceAttributionPolicy("observations", getCurrentAgentIdentity());
+    }
+
+    // A key thumbprint may be pinned by agent_grants under one owner only.
+    // This core inserts observations directly (not via `createObservation`),
+    // so the check is explicit here, before anything is persisted.
+    {
+      const grantEntities = entities.filter((entityData) => {
+        const raw = (entityData ?? {}) as Record<string, unknown>;
+        return (raw.entity_type ?? raw.type) === "agent_grant";
+      });
+      if (grantEntities.length > 0) {
+        const { assertGrantWriteKeepsPinUnique } = await import("./services/agent_grants.js");
+        for (const entityData of grantEntities) {
+          await assertGrantWriteKeepsPinUnique({
+            userId,
+            entityType: "agent_grant",
+            fields: entityData as Record<string, unknown>,
+          });
+        }
+      }
     }
 
     // Plan mode: resolve deterministically, report planned actions per entity,
