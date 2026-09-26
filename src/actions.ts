@@ -11700,6 +11700,18 @@ app.post("/list_relationship_types", async (req, res) => {
       }
     }
 
+    // #2482: mirror the MCP handler — never a bare `{ relationship_types: [],
+    // total: 0 }`. See `RelationshipTypeRegistryService.describeEmpty`.
+    const emptyReason =
+      registrations.length === 0
+        ? await relationshipTypeRegistry.describeEmpty({
+            user_id: userId,
+            keyword: parsed.data.keyword,
+            scope: parsed.data.scope,
+            include_deactivated: parsed.data.include_deactivated,
+          })
+        : null;
+
     return res.json({
       relationship_types: registrations.map((r) => ({
         ...r,
@@ -11708,6 +11720,7 @@ app.post("/list_relationship_types", async (req, res) => {
           : {}),
       })),
       total: registrations.length,
+      ...(emptyReason ? { empty_reason: emptyReason.empty_reason, hint: emptyReason.hint } : {}),
     });
   } catch (err) {
     return handleApiError(
@@ -11753,10 +11766,14 @@ app.post("/register_relationship_type", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, requestedUserId);
 
     {
-      const { enforceRelationshipTypeCapability, contextFromAgentIdentity } =
+      const { enforceRelationshipTypeCapabilityWithHint, contextFromAgentIdentity } =
         await import("./services/agent_capabilities.js");
       const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
-      enforceRelationshipTypeCapability(registration.relationship_type, registration.scope, ctx);
+      await enforceRelationshipTypeCapabilityWithHint(
+        registration.relationship_type,
+        registration.scope,
+        ctx
+      );
     }
 
     const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =

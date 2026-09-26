@@ -577,6 +577,57 @@ export function getAgentCapabilitiesSource(): string {
  * with its own back-compat analysis. Gating only the NEW surface means it is
  * safe from day one with no migration, which is the right asymmetry.
  */
+/**
+ * #2482 (ux round-2 finding, PR #2511): when the refused name is one of the
+ * BUILT-INs (`PART_OF`, `REFERS_TO`, ...) AND the registry is actually
+ * unhealthy for that type, telling the caller to get a grant and
+ * self-register is the wrong remedy — built-ins are meant to be seeded, not
+ * registered by an ungranted caller, and `list_relationship_types` already
+ * lazy-repairs an empty registry on read (`registry.ts`'s
+ * `resolveAllWithRepair`). If a built-in still reads as missing after that,
+ * the fix is an operator seed/repair, not a grant edit.
+ *
+ * The UX finding this fixes: the first cut of this function checked ONLY
+ * built-in-name membership, so the repair-hint text was appended to EVERY
+ * denial for a built-in name regardless of registry health — including the
+ * ordinary, ungranted-agent, perfectly-healthy-registry case, which is the
+ * single most common trigger of this denial. That sent a well-behaved agent
+ * chasing a nonexistent registry investigation instead of accepting a plain
+ * capability boundary. Fixed by actually checking registry health for this
+ * type (`relationshipTypeRegistry.get`, which returns null only when no
+ * EFFECTIVE registration exists) rather than inferring health from the name
+ * alone. `get()` routes through `resolveAll` (not the repair path) — this
+ * function is called AFTER `enforceRelationshipTypeCapability` has already
+ * denied, at which point `list_relationship_types`/`assertRegisteredType`
+ * upstream of registration would already have attempted the lazy repair for
+ * this process if the registry were ever empty, so a null `get()` result here
+ * reflects genuine current unavailability, not an unattempted repair.
+ *
+ * Computed lazily (dynamic import) to avoid a module cycle between
+ * `agent_capabilities.ts` and `relationship_types/`.
+ */
+async function builtInRepairHint(relationshipType: string): Promise<string | null> {
+  const { BUILT_IN_RELATIONSHIP_TYPES } = await import("./relationship_types/seed_registry.js");
+  if (!BUILT_IN_RELATIONSHIP_TYPES.some((t) => t.relationship_type === relationshipType)) {
+    return null;
+  }
+  const { relationshipTypeRegistry } = await import("./relationship_types/registry.js");
+  const effective = await relationshipTypeRegistry.get(relationshipType);
+  if (effective) {
+    // Registry is healthy for this type: an ordinary grant-scope denial, not
+    // a registry problem. Say nothing extra — the existing capability-denial
+    // message already tells the caller the accurate, actionable next step.
+    return null;
+  }
+  return (
+    `Separately: "${relationshipType}" is a built-in relationship type that is currently missing ` +
+    `from this instance's registry — call list_relationship_types to check for an ` +
+    `empty_reason: "registry_unseeded" diagnostic; if present, that is a seed/registry failure ` +
+    `that self-repairs on a subsequent read, and registering it here would only mask the ` +
+    `underlying gap, not fix it. This is unrelated to whether your own grant covers it.`
+  );
+}
+
 export function enforceRelationshipTypeCapability(
   relationshipType: string,
   scope: "user" | "global",
@@ -630,4 +681,40 @@ export function enforceRelationshipTypeCapability(
       "Relationship type registration requires an active agent_grant with the " +
       "register_relationship_type capability. Global scope additionally requires global permission.",
   });
+}
+
+/**
+ * Async wrapper around `enforceRelationshipTypeCapability` that appends the
+ * built-in-aware repair hint to a thrown `AgentCapabilityError`'s message
+ * ONLY when the refused name is a built-in AND the registry is currently
+ * unhealthy for it (#2482; corrected per ux round-2 review on PR #2511 —
+ * see `builtInRepairHint`'s doc for what the first cut got wrong). An
+ * ordinary grant-scope denial on a perfectly healthy built-in type is left
+ * exactly as `enforceRelationshipTypeCapability` produced it, with nothing
+ * appended. Callers on a path that can await (MCP/REST
+ * `register_relationship_type` handlers) should prefer this;
+ * `enforceRelationshipTypeCapability` itself stays synchronous for callers
+ * that cannot.
+ */
+export async function enforceRelationshipTypeCapabilityWithHint(
+  relationshipType: string,
+  scope: "user" | "global",
+  ctx: AgentCapabilityContext | null
+): Promise<void> {
+  try {
+    enforceRelationshipTypeCapability(relationshipType, scope, ctx);
+  } catch (err) {
+    if (err instanceof AgentCapabilityError) {
+      const repairHint = await builtInRepairHint(relationshipType);
+      if (repairHint) {
+        throw new AgentCapabilityError({
+          op: err.op,
+          entityType: err.entityType,
+          agentLabel: err.agentLabel,
+          hint: `${err.hint} ${repairHint}`,
+        });
+      }
+    }
+    throw err;
+  }
 }
