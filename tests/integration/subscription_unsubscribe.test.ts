@@ -7,9 +7,26 @@ import {
   generateGuestAccessToken,
   hashGuestAccessToken,
 } from "../../src/services/guest_access_token.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 const tracker = new TestIdTracker();
+
+/** A guest token must name the entity_ids it covers (subscription routes now
+ * enforce this scope) — seed a real owned entity for the token to name. */
+async function seedOwnedEntity(userId: string, idSuffix: string): Promise<string> {
+  const entityId = `ent_unsub_${idSuffix}_${Date.now().toString(16)}`;
+  const now = new Date().toISOString();
+  await db.from("entities").insert({
+    id: entityId,
+    entity_type: "note",
+    canonical_name: `unsub-test-${idSuffix}-${Date.now()}`,
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+  });
+  return entityId;
+}
 
 interface SubscribeResponse {
   subscription_id: string;
@@ -40,8 +57,8 @@ async function withHttpServer<T>(callback: (baseUrl: string) => Promise<T>): Pro
   }
 }
 
-async function guestTokenFor(userId: string): Promise<string> {
-  const token = await generateGuestAccessToken({ entityIds: [], userId });
+async function guestTokenFor(userId: string, entityIds: string[]): Promise<string> {
+  const token = await generateGuestAccessToken({ entityIds, userId });
   tracker.trackEntity(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
   return token;
 }
@@ -63,9 +80,9 @@ async function postJson<T>(
   return { response, body: (await response.json()) as T };
 }
 
-async function subscribe(baseUrl: string, token: string): Promise<SubscribeResponse> {
+async function subscribe(baseUrl: string, token: string, entityId: string): Promise<SubscribeResponse> {
   const result = await postJson<SubscribeResponse>(baseUrl, "/subscribe", token, {
-    entity_types: ["note"],
+    entity_ids: [entityId],
     delivery_method: "sse",
   });
   expect(result.response.status).toBe(200);
@@ -95,8 +112,11 @@ describe("POST /unsubscribe", () => {
 
   it("deactivates an active subscription for its owner", async () => {
     await withHttpServer(async (baseUrl) => {
-      const ownerToken = await guestTokenFor("sp009-unsubscribe-owner");
-      const created = await subscribe(baseUrl, ownerToken);
+      const userId = "sp009-unsubscribe-owner";
+      const entityId = await seedOwnedEntity(userId, "owner");
+      tracker.trackEntity(entityId);
+      const ownerToken = await guestTokenFor(userId, [entityId]);
+      const created = await subscribe(baseUrl, ownerToken, entityId);
 
       const result = await postJson<{ success: boolean }>(baseUrl, "/unsubscribe", ownerToken, {
         subscription_id: created.subscription_id,
@@ -112,9 +132,13 @@ describe("POST /unsubscribe", () => {
 
   it("denies unsubscribe attempts from a different user", async () => {
     await withHttpServer(async (baseUrl) => {
-      const ownerToken = await guestTokenFor("sp009-unsubscribe-owner");
-      const otherToken = await guestTokenFor("sp009-unsubscribe-other");
-      const created = await subscribe(baseUrl, ownerToken);
+      const ownerEntityId = await seedOwnedEntity("sp009-unsubscribe-owner", "owner2");
+      const otherEntityId = await seedOwnedEntity("sp009-unsubscribe-other", "other2");
+      tracker.trackEntity(ownerEntityId);
+      tracker.trackEntity(otherEntityId);
+      const ownerToken = await guestTokenFor("sp009-unsubscribe-owner", [ownerEntityId]);
+      const otherToken = await guestTokenFor("sp009-unsubscribe-other", [otherEntityId]);
+      const created = await subscribe(baseUrl, ownerToken, ownerEntityId);
 
       const result = await postJson<Record<string, unknown>>(baseUrl, "/unsubscribe", otherToken, {
         subscription_id: created.subscription_id,
@@ -129,8 +153,11 @@ describe("POST /unsubscribe", () => {
 
   it("keeps already-deactivated subscriptions inactive on repeated unsubscribe", async () => {
     await withHttpServer(async (baseUrl) => {
-      const ownerToken = await guestTokenFor("sp009-unsubscribe-repeat");
-      const created = await subscribe(baseUrl, ownerToken);
+      const userId = "sp009-unsubscribe-repeat";
+      const entityId = await seedOwnedEntity(userId, "repeat");
+      tracker.trackEntity(entityId);
+      const ownerToken = await guestTokenFor(userId, [entityId]);
+      const created = await subscribe(baseUrl, ownerToken, entityId);
 
       const first = await postJson<{ success: boolean }>(baseUrl, "/unsubscribe", ownerToken, {
         subscription_id: created.subscription_id,

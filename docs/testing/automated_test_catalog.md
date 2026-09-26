@@ -61,21 +61,21 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **647**
-- Backend and repo Vitest files: **611**
+- Total automated test files: **650**
+- Backend and repo Vitest files: **614**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 179 |
+| Vitest unit tests | 180 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 193 |
+| Vitest integration tests | 194 |
 | Vitest CLI tests | 79 |
 | Vitest contract tests | 20 |
-| Vitest security tests | 12 |
+| Vitest security tests | 13 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (179):**
+**Files (180):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -193,6 +193,7 @@ flowchart TD
 - `tests/unit/github_webhook.test.ts`
 - `tests/unit/google_oidc_identity_resolution.test.ts`
 - `tests/unit/google_oidc.test.ts`
+- `tests/unit/harness_force_mode.test.ts`
 - `tests/unit/hook_feedback_accumulator.test.ts`
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
@@ -421,7 +422,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (193):**
+**Files (194):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -479,6 +480,7 @@ flowchart TD
 - `tests/integration/graph_neighborhood_pagination.test.ts`
 - `tests/integration/graph_neighborhood_source_branch.test.ts`
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
+- `tests/integration/guest_subscription_owner_scope.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
@@ -734,10 +736,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (12):**
+**Files (13):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
+- `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/provenance_read_scoping.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
