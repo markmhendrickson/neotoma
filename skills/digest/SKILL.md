@@ -41,6 +41,30 @@ Derive the active harness from the current host context or its native session/th
 
 Select the current transcript by the exact host-provided session id or path first. Use matching project/cwd only as supporting evidence; never choose a transcript merely because it is newest. Walk to the root through explicit fork/parent/compaction references and the `lineage_files` on an existing `session_digest`. If lineage cannot be resolved, do not invent ancestry: report the known files and an explicit tail-only or incomplete-lineage caveat.
 
+## Planning spine summary (required)
+
+Build a planning spine summary from the tasks represented by this session. The real-time source of truth for where work belongs is each task's upward `PART_OF` ascent, not a session label, a plan's stored progress fields, or the latest `/reconcile-planning` run.
+
+For every actionable task recovered from the whole-session skeleton:
+
+- Follow exactly one outbound `PART_OF` edge and walk the registered planning levels through plan, project, strategy, and any higher declared level.
+- With zero outbound edges, label the task **missing ascent** or explicitly unplanned where that is valid; never invent a parent.
+- With more than one outbound edge, label it **duplicate ascent**, name every target, and treat repair as remaining work rather than selecting one.
+- Where the walk ends early, show what resolved and which expected level is absent.
+
+Include a compact table before Recommendations:
+
+| Workstream / task | State | Executor | Plan | Project | Strategy | Next action |
+|---|---|---|---|---|---|---|
+
+Group large sets, but never collapse away a missing ascent, duplicate ascent, operator gate, or active executor. This is the overview of the planning records being resumed or continued. The session workboard groups the same set as active, queued, blocked, done, and operator-needed.
+
+The one `session_digest` bookkeeping write should refer to the conversation, every task it reports, and the resolved planning records, using relationships in the same store operation when the harness supports them. Do not copy planning state into the digest as a second authority; record locators and derive the hierarchy again on the next run.
+
+Before beginning any newly introduced workstream, ensure the existing work is **captured, workboarded, and dispatched**: all actionable work is a task, each task's ascent has been checked, the workboard is current, and every agent-movable item has been dispatched. Keep the new stream queued until that checkpoint passes, then admit queued streams sequentially. In `--report-only` mode, report the held admission without dispatching.
+
+This section adds task-ascent reporting and admission discipline without retiring the legacy plan-maintenance policy. Preserve that compatibility policy until the planning workflow and PM-10 cutover dependencies are live.
+
 ## Whole-session coverage (read the transcript when context is partial)
 
 `/digest` must report on the WHOLE session, not just the portion currently in context. Long sessions get compacted: the active context window may hold only a recent slice (e.g. a pre-compaction summary plus the last few turns), so reporting from context alone silently under-represents earlier work.
