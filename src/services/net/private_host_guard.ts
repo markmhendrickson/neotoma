@@ -35,8 +35,21 @@ export function isPrivateOrLoopbackHostname(hostname: string): boolean {
   // IPv4-mapped / IPv4-compatible IPv6 (`::ffff:127.0.0.1`, `::127.0.0.1`) carry
   // an IPv4 address inside an IPv6 literal. Unwrap to the embedded IPv4 before
   // the checks below, or a loopback/private target slips through as "public".
-  const mapped = normalized.match(/^::(?:ffff:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  const candidate = mapped ? mapped[1] : normalized;
+  const mappedDotted = normalized.match(/^::(?:ffff:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  // Node's WHATWG URL parser normalizes an IPv4-mapped IPv6 literal to its
+  // canonical hex-group form (`::ffff:127.0.0.1` -> `::ffff:7f00:1`), so a URL
+  // reaching this function via `isPublicFetchUrlAllowed` never carries the
+  // dotted-quad form above. Unwrap the two trailing 16-bit hex groups back to
+  // the embedded IPv4 octets, or the mapped form bypasses every check below.
+  const mappedHex = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  let candidate = normalized;
+  if (mappedDotted) {
+    candidate = mappedDotted[1];
+  } else if (mappedHex) {
+    const hi = Number.parseInt(mappedHex[1], 16);
+    const lo = Number.parseInt(mappedHex[2], 16);
+    candidate = [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff].join(".");
+  }
 
   const ipv4 = candidate.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4) {

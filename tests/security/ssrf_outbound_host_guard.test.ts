@@ -19,7 +19,10 @@ import {
   isPrivateOrLoopbackHostname,
   isPublicFetchUrlAllowed,
 } from "../../src/services/net/private_host_guard.js";
-import { isWebhookUrlAllowed } from "../../src/services/subscriptions/webhook_delivery.js";
+import {
+  checkWebhookUrlAllowed,
+  isWebhookUrlAllowed,
+} from "../../src/services/subscriptions/webhook_delivery.js";
 
 const HOSTED = "NEOTOMA_HOSTED_MODE";
 
@@ -155,5 +158,45 @@ describe("isWebhookUrlAllowed routes through the shared guard", () => {
 
   it("still allows a public https webhook", () => {
     expect(isWebhookUrlAllowed("https://hooks.example.com/neotoma")).toBe(true);
+  });
+});
+
+describe("checkWebhookUrlAllowed distinguishes rejection reasons", () => {
+  beforeEach(() => {
+    process.env[HOSTED] = "1";
+  });
+  afterEach(() => {
+    delete process.env[HOSTED];
+  });
+
+  it("reports private_host for a cloud-metadata target, not a protocol error", () => {
+    // Regression: subscription_actions.ts previously threw the HTTPS/localhost
+    // message for a hosted-mode SSRF-guard rejection too, misdiagnosing the
+    // failure for callers. Caught by UX review on PR #2163.
+    const result = checkWebhookUrlAllowed("https://169.254.169.254/latest/meta-data/");
+    expect(result).toEqual({ allowed: false, reason: "private_host" });
+  });
+
+  it("reports protocol for a bare http URL in production, not private_host", () => {
+    const prevEnv = process.env.NEOTOMA_ENV;
+    process.env.NEOTOMA_ENV = "production";
+    try {
+      const result = checkWebhookUrlAllowed("http://hooks.example.com/neotoma");
+      expect(result).toEqual({ allowed: false, reason: "protocol" });
+    } finally {
+      if (prevEnv === undefined) delete process.env.NEOTOMA_ENV;
+      else process.env.NEOTOMA_ENV = prevEnv;
+    }
+  });
+
+  it("reports invalid_url for an unparseable URL", () => {
+    const result = checkWebhookUrlAllowed("not a url");
+    expect(result).toEqual({ allowed: false, reason: "invalid_url" });
+  });
+
+  it("allows a public https webhook", () => {
+    expect(checkWebhookUrlAllowed("https://hooks.example.com/neotoma")).toEqual({
+      allowed: true,
+    });
   });
 });
