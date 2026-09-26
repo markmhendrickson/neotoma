@@ -293,7 +293,7 @@ export async function restoreEntity(
   // not-found result.
   const { data: existing, error: fetchError } = await db
     .from("entities")
-    .select("id")
+    .select("id, entity_type")
     .eq("id", entityId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -312,6 +312,15 @@ export async function restoreEntity(
       error: ENTITY_NOT_FOUND_MESSAGE,
       not_found: true,
     };
+  }
+
+  // A key thumbprint may be pinned by agent_grants under one owner only.
+  // Restoring a grant brings its pin back, so refuse when a grant under
+  // another owner pins the same key. Keyed on the stored entity_type, not
+  // the caller-supplied one. Throws before anything is written.
+  if ((existing as { entity_type?: string }).entity_type === "agent_grant") {
+    const { assertGrantEntityPinsUnique } = await import("./agent_grants.js");
+    await assertGrantEntityPinsUnique(userId, entityId);
   }
 
   const restoredAt = timestamp || new Date().toISOString();

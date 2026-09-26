@@ -98,6 +98,14 @@ export interface AgentCapabilityAgent {
   capabilities: AgentCapabilityEntry[];
 }
 
+/** Admission reasons that produce the `deny` ceiling. */
+export type AgentCapabilityDenyReason =
+  | "grant_key_unbound"
+  | "grant_revoked"
+  | "grant_suspended"
+  | "grant_invalid"
+  | "grant_pin_conflict";
+
 /**
  * Capability ceiling for the current request.
  *
@@ -115,21 +123,20 @@ export interface AgentCapabilityAgent {
  *   (`grant_revoked` / `grant_suspended`), or because the pinned grant's
  *   stored `capabilities` fail shape validation (`grant_invalid` — e.g.
  *   capabilities persisted as a JSON string instead of an array, or a
- *   non-harness capability entry with no `entity_types`). Capability-gated
- *   operations fail closed in all four cases, whatever authenticated the
- *   request and independent of `NEOTOMA_AGENT_DEFAULT_DENY`. A grant that
- *   cannot be parsed grants nothing, by the same fail-closed rule as a
- *   grant that was never found: an invalid grant must never silently fall
- *   through to `none`, where `NEOTOMA_AGENT_DEFAULT_DENY` could still admit
- *   the request as an unrecognised (rather than a broken) caller.
+ *   non-harness capability entry with no `entity_types`), or because active
+ *   grants under more than one owner pin the key (`grant_pin_conflict`).
+ *   Capability-gated operations fail closed in all five cases, whatever
+ *   authenticated the request and independent of
+ *   `NEOTOMA_AGENT_DEFAULT_DENY`. A grant that cannot be parsed grants
+ *   nothing, by the same fail-closed rule as a grant that was never found:
+ *   an invalid grant must never silently fall through to `none`, where
+ *   `NEOTOMA_AGENT_DEFAULT_DENY` could still admit the request as an
+ *   unrecognised (rather than a broken) caller.
  * - `none`: no grant applies; `NEOTOMA_AGENT_DEFAULT_DENY` decides.
  */
 export type AgentCapabilityCeiling =
   | { kind: "grant"; capabilities: AgentCapabilityEntry[] }
-  | {
-      kind: "deny";
-      reason: "grant_key_unbound" | "grant_revoked" | "grant_suspended" | "grant_invalid";
-    }
+  | { kind: "deny"; reason: AgentCapabilityDenyReason }
   | { kind: "none" };
 
 /**
@@ -164,6 +171,9 @@ const CEILING_REASON_MAP: Record<Exclude<AAuthAdmissionReason, "admitted">, "den
   // this must never fall through to `none` and be judged by
   // NEOTOMA_AGENT_DEFAULT_DENY as though no grant applied at all.
   grant_invalid: "deny",
+  // The signing key is pinned by active grants under more than one
+  // owner, so it resolves to no single owner. Fail closed.
+  grant_pin_conflict: "deny",
   // No grant asserts anything about this identity at all — the signature
   // is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY governs.
   no_match: "none",
@@ -196,7 +206,7 @@ export function capabilityCeilingFromAdmission(
     // Narrowed by the Record's key type to the three deny-mapped reasons.
     return {
       kind: "deny",
-      reason: reason as "grant_key_unbound" | "grant_revoked" | "grant_suspended",
+      reason: reason as AgentCapabilityDenyReason,
     };
   }
   return { kind: "none" };
@@ -491,11 +501,16 @@ export function enforceAgentCapability(
             "that is currently suspended, so capability-gated writes are refused. " +
             "Restore the grant to active in Inspector → Agents → Grants before " +
             "this agent can write again."
-          : "This request is signed by a key that is not pinned on the agent_grant " +
-            "matching its sub/iss, so the grant's capabilities cannot be applied " +
-            "and capability-gated writes are refused. Set the grant's " +
-            "match_thumbprint to this agent's key thumbprint (see " +
-            `${GRANT_KEY_PIN_DOC}).`;
+          : ceiling.reason === "grant_pin_conflict"
+            ? "This request is signed by a key that active agent_grants under more " +
+              "than one owner pin, so it resolves to no single owner and " +
+              "capability-gated writes are refused. A key can be pinned by grants " +
+              "under one owner only; the operator must remove the duplicate pin."
+            : "This request is signed by a key that is not pinned on the agent_grant " +
+              "matching its sub/iss, so the grant's capabilities cannot be applied " +
+              "and capability-gated writes are refused. Set the grant's " +
+              "match_thumbprint to this agent's key thumbprint (see " +
+              `${GRANT_KEY_PIN_DOC}).`;
     const err = new AgentCapabilityError({
       op,
       entityType: distinctTypes[0],

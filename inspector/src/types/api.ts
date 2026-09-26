@@ -102,11 +102,11 @@ export interface AgentAttribution {
    */
   attestation?: AgentAttestationOutcome | null;
   /**
-   * Source of an `operator_attested` tier promotion: whether the
-   * issuer alone was on the operator allowlist or whether the
-   * `iss:sub` composite was. Mirrors `decision.operator_allowlist_source`.
+   * Source of an `operator_attested` tier promotion: the signing key's
+   * thumbprint, or the issuer / `iss:sub` composite recorded on the
+   * grant that pins the key. Mirrors `decision.operator_allowlist_source`.
    */
-  operator_allowlist_source?: "issuer" | "issuer_subject" | null;
+  operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject" | null;
 }
 
 export interface Entity {
@@ -405,7 +405,7 @@ export interface AgentDirectoryEntry {
    * v0.9.0+ may stamp it once per-row attestation enrichment ships.
    */
   attestation?: AgentAttestationOutcome | null;
-  operator_allowlist_source?: "issuer" | "issuer_subject" | null;
+  operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject" | null;
 }
 
 export interface AgentsListResponse {

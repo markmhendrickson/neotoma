@@ -211,13 +211,16 @@ export interface AttributionDecisionDiagnostics {
       };
   /**
    * Set when the operator allowlist promoted this request to
-   * `operator_attested`. `"issuer"` means the `iss` matched
-   * `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means the
-   * `iss:sub` composite matched `NEOTOMA_OPERATOR_ATTESTED_SUBS`. Absent
-   * when the resolved tier is anything else (including `hardware` — the
-   * cascade short-circuits at the first verified hit).
+   * `operator_attested`. `"thumbprint"` means the verified key's
+   * thumbprint matched `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`;
+   * `"issuer"` means the `match_iss` of the active grant pinning the key
+   * matched `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
+   * that grant's `match_iss:match_sub` composite matched
+   * `NEOTOMA_OPERATOR_ATTESTED_SUBS`. Absent when the resolved tier is
+   * anything else (including `hardware` — the cascade short-circuits at
+   * the first verified hit).
    */
-  operator_allowlist_source?: "issuer" | "issuer_subject";
+  operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject";
 }
 
 /**

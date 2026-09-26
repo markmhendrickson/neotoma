@@ -106,6 +106,16 @@ export async function createObservation(
     userId: params.user_id,
     db,
   });
+  if (params.entity_type === "agent_grant") {
+    // A key thumbprint may be pinned by agent_grants under one owner only.
+    const { assertGrantWriteKeepsPinUnique } = await import("./agent_grants.js");
+    await assertGrantWriteKeepsPinUnique({
+      userId: params.user_id,
+      entityType: params.entity_type,
+      fields: params.fields,
+      entityId: params.entity_id,
+    });
+  }
   const observationId = generateObservationId(
     params.source_id,
     params.interpretation_id,

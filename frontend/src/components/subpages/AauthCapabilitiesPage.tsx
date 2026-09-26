@@ -287,7 +287,9 @@ export function AauthCapabilitiesPage() {
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <code>X-Agent-Label: agent-site@neotoma.io</code> + signature
-          verified, but the <code>sub</code> claim is something else → 401.
+          verified, but the signing key is not pinned by an active grant
+          whose <code>match_sub</code> is that label → 401. The{" "}
+          <code>sub</code> inside the agent token is not consulted.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           Any label NOT listed in <code>NEOTOMA_STRICT_AAUTH_SUBS</code>{" "}

@@ -71,6 +71,20 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     db,
   });
 
+  // A key thumbprint may be pinned by agent_grants under one owner only.
+  // Both correct transports converge here, so this covers REST and MCP:
+  // refuse a correction that pins another owner's key, or that returns a
+  // grant to active/suspended while another owner holds its pin.
+  if (params.entity_type === "agent_grant") {
+    const { assertGrantWriteKeepsPinUnique } = await import("./agent_grants.js");
+    await assertGrantWriteKeepsPinUnique({
+      userId: params.user_id,
+      entityType: params.entity_type,
+      fields: { [params.field]: params.value },
+      entityId: params.entity_id,
+    });
+  }
+
   // Instance store-policy enforcement (#1975).
   //
   // Both transports converge here (unlike `store`, whose two cores each need

@@ -520,6 +520,8 @@ describe("agent_capabilities", () => {
       "grant_key_unbound",
       "grant_revoked",
       "grant_suspended",
+      "grant_invalid",
+      "grant_pin_conflict",
       "strict_rejected",
       "aauth_disabled",
       "not_signed",
@@ -552,7 +554,8 @@ describe("agent_capabilities", () => {
         } else if (PERMISSIVE_REASONS.has(reason)) {
           expect(ceiling.kind).toBe("none");
         } else {
-          // grant_key_unbound, grant_revoked, grant_suspended — the
+          // grant_key_unbound, grant_revoked, grant_suspended,
+          // grant_invalid, grant_pin_conflict — the
           // fail-closed set. A reason added here in the future without a
           // matching CEILING_REASON_MAP entry fails tsc, not this test;
           // this test guards against a reason being wired to the WRONG

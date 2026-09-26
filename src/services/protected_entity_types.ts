@@ -72,6 +72,7 @@ export type AAuthAdmissionReason =
   | "grant_revoked"
   | "grant_suspended"
   | "grant_invalid"
+  | "grant_pin_conflict"
   | "strict_rejected"
   | "aauth_disabled"
   | "not_signed";

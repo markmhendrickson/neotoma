@@ -4753,6 +4753,19 @@ export async function getAuthenticatedUserId(
 /**
  * Helper to handle errors in API endpoints, including authentication errors
  */
+/**
+ * `AgentGrantPinConflictError` from `services/agent_grants.ts`, matched by
+ * its stable code so this module need not import the grants service
+ * eagerly.
+ */
+function isGrantPinConflict(
+  error: unknown
+): error is Error & { code: "agent_grant_pin_conflict"; field: string } {
+  return (
+    error instanceof Error && (error as { code?: unknown }).code === "agent_grant_pin_conflict"
+  );
+}
+
 function handleApiError(
   req: express.Request,
   res: express.Response,
@@ -4786,6 +4799,14 @@ function handleApiError(
     return res
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (isGrantPinConflict(error)) {
+    logWarn(logContext || "AgentGrantPinConflict", req, { code: error.code });
+    return res
+      .status(409)
+      .json(
+        buildErrorEnvelope(error.code, error.message, { code: error.code, field: error.field })
+      );
   }
   if (error instanceof AccessPolicyError) {
     logWarn(logContext || "AccessPolicyRejection", req, error.toErrorEnvelope());
@@ -7710,6 +7731,21 @@ export async function storeStructuredForApi(params: {
     });
   }
 
+  // A key thumbprint may be pinned by agent_grants under one owner only.
+  // Checked before any write so a refused pin persists nothing; the same
+  // check runs again at the observation insert.
+  if (entities.some((entity) => entity?.entity_type === "agent_grant")) {
+    const { assertGrantWriteKeepsPinUnique } = await import("./services/agent_grants.js");
+    for (const entity of entities) {
+      if (entity?.entity_type !== "agent_grant") continue;
+      await assertGrantWriteKeepsPinUnique({
+        userId,
+        entityType: "agent_grant",
+        fields: entity,
+      });
+    }
+  }
+
   const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
     await import("./services/entity_resolution.js");
   const { detectFlatPackedRows, FlatPackedRowsError } =
@@ -9293,6 +9329,10 @@ async function handleStorePost(
     }
     const errCode =
       error && typeof error === "object" ? (error as { code?: string }).code : undefined;
+    if (isGrantPinConflict(error)) {
+      logWarn("AgentGrantPinConflict:store", req, { code: error.code });
+      return sendError(res, 409, error.code, error.message, { field: error.field });
+    }
     if (errCode === "ERR_FORBIDDEN_ENTITY_TYPE" || errCode === "ERR_PLURAL_ENTITY_TYPE") {
       const message = error instanceof Error ? error.message : String(error);
       logWarn("EntityTypeGuardError:store", req, { code: errCode, message });

@@ -3113,12 +3113,16 @@ export interface components {
       } | null;
       /**
        * @description Set when the operator allowlist promoted the request to
-       *     `operator_attested`. `"issuer"` means a hit on
+       *     `operator_attested`. The tier is bound to the verified signing
+       *     key. `"thumbprint"` means the key's thumbprint is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`; `"issuer"` means the
+       *     `match_iss` of the active grant pinning the key is listed in
        *     `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
-       *     a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+       *     that grant's `match_iss:match_sub` is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
        * @enum {string}
        */
-      operator_allowlist_source?: "issuer" | "issuer_subject";
+      operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject";
     };
     /**
      * @description Resolved attribution and policy for the current session. Returned
@@ -3166,6 +3170,7 @@ export interface components {
           | "grant_key_unbound"
           | "grant_revoked"
           | "grant_suspended"
+          | "grant_pin_conflict"
           | "strict_rejected"
           | "aauth_disabled"
           | "not_signed"

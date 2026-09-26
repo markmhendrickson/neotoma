@@ -9,8 +9,12 @@
  *
  * Cascade under test (per docs/subsystems/aauth_attestation.md):
  *   verified attestation → hardware
- *   operator allowlist hit → operator_attested
+ *   operator allowlist hit → operator_attested (the verified key's
+ *     thumbprint, or the identity recorded on the grant pinning it)
  *   plain verified signature → software
+ *
+ * The grant lookup is stubbed with a thumbprint → grant map so the
+ * allowlist cases can pin a key without a database.
  *
  * The "verified attestation" path uses a runtime-generated EC P-256 root
  * + leaf chain so we never need real Apple attestation fixtures.
@@ -42,6 +46,30 @@ import {
   it,
   vi,
 } from "vitest";
+
+const pinnedGrants = vi.hoisted(() => new Map<string, Record<string, unknown>>());
+
+vi.mock("../../src/services/agent_grants.js", () => ({
+  lookupGrantForIdentity: vi.fn(async (input: { thumbprint?: string | null }) => ({
+    grant: (input.thumbprint && pinnedGrants.get(input.thumbprint)) || null,
+    unbound_claim_match: false,
+    inactive_grant: null,
+    pin_conflict: false,
+  })),
+}));
+
+function pinGrant(thumbprint: string, match: { match_iss?: string; match_sub?: string }): void {
+  pinnedGrants.set(thumbprint, {
+    grant_id: `ent_grant_${thumbprint}`,
+    user_id: "user-owner",
+    label: `grant ${thumbprint}`,
+    capabilities: [],
+    status: "active",
+    match_thumbprint: thumbprint,
+    match_iss: match.match_iss ?? null,
+    match_sub: match.match_sub ?? null,
+  });
+}
 
 vi.mock("@hellocoop/httpsig", () => ({
   expressVerify: vi.fn(),
@@ -127,6 +155,7 @@ const ENV_KEYS = [
   "NEOTOMA_AAUTH_ATTESTATION_CA_PATH",
   "NEOTOMA_OPERATOR_ATTESTED_ISSUERS",
   "NEOTOMA_OPERATOR_ATTESTED_SUBS",
+  "NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS",
 ] as const;
 
 function withEnv(
@@ -187,6 +216,7 @@ describe("AAuth tier resolution cascade", () => {
 
   beforeEach(() => {
     verifyMock.mockReset();
+    pinnedGrants.clear();
     for (const key of ENV_KEYS) originalEnv[key] = process.env[key];
     resetAttestationTrustConfigCacheForTests();
     resetOperatorAllowlistCacheForTests();
@@ -242,10 +272,11 @@ describe("AAuth tier resolution cascade", () => {
     expect(decision?.operator_allowlist_source).toBeUndefined();
   });
 
-  it("operator allowlist hit by issuer -> operator_attested", async () => {
+  it("operator allowlist hit by the pinned grant's issuer -> operator_attested", async () => {
     withEnv({
       NEOTOMA_OPERATOR_ATTESTED_ISSUERS: "https://allow.example",
     });
+    pinGrant("tp-allow", { match_iss: "https://allow.example", match_sub: "agent:any" });
     const iat = Math.floor(Date.now() / 1000);
     const jwtRaw = buildJwtRaw({
       sub: "agent:any",
@@ -274,12 +305,76 @@ describe("AAuth tier resolution cascade", () => {
     expect(decision?.operator_allowlist_source).toBe("issuer");
   });
 
+  it("allow-listed issuer claimed by a key no grant pins stays software", async () => {
+    withEnv({
+      NEOTOMA_OPERATOR_ATTESTED_ISSUERS: "https://allow.example",
+    });
+    const iat = Math.floor(Date.now() / 1000);
+    const jwtRaw = buildJwtRaw({
+      sub: "agent:any",
+      iss: "https://allow.example",
+      iat,
+      exp: iat + 3600,
+    });
+    verifyMock.mockResolvedValue({
+      verified: true,
+      label: "sig",
+      keyType: "jwt",
+      publicKey: { kty: "EC", crv: "P-256", alg: "ES256" },
+      thumbprint: "tp-unpinned",
+      created: iat,
+      jwt: { header: {}, payload: {}, raw: jwtRaw },
+    } as any);
+
+    const middleware = aauthVerify({ authority: "neotoma.io" });
+    const req = buildReq();
+    const next = vi.fn();
+    await middleware(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const decision = getAttributionDecisionFromRequest(req);
+    expect(decision?.resolved_tier).toBe("software");
+    expect(decision?.operator_allowlist_source).toBeUndefined();
+  });
+
+  it("operator allowlist by key thumbprint -> operator_attested", async () => {
+    withEnv({
+      NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS: "tp-listed",
+    });
+    const iat = Math.floor(Date.now() / 1000);
+    const jwtRaw = buildJwtRaw({
+      sub: "agent:any",
+      iss: "https://issuer.example",
+      iat,
+      exp: iat + 3600,
+    });
+    verifyMock.mockResolvedValue({
+      verified: true,
+      label: "sig",
+      keyType: "jwt",
+      publicKey: { kty: "EC", crv: "P-256", alg: "ES256" },
+      thumbprint: "tp-listed",
+      created: iat,
+      jwt: { header: {}, payload: {}, raw: jwtRaw },
+    } as any);
+
+    const middleware = aauthVerify({ authority: "neotoma.io" });
+    const req = buildReq();
+    const next = vi.fn();
+    await middleware(req, {} as any, next);
+
+    const decision = getAttributionDecisionFromRequest(req);
+    expect(decision?.resolved_tier).toBe("operator_attested");
+    expect(decision?.operator_allowlist_source).toBe("thumbprint");
+  });
+
   it("operator allowlist by issuer:subject prefers issuer_subject source", async () => {
     withEnv({
       NEOTOMA_OPERATOR_ATTESTED_ISSUERS: "https://allow.example",
       NEOTOMA_OPERATOR_ATTESTED_SUBS:
         "https://allow.example:agent:special",
     });
+    pinGrant("tp-pair", { match_iss: "https://allow.example", match_sub: "agent:special" });
     const iat = Math.floor(Date.now() / 1000);
     const jwtRaw = buildJwtRaw({
       sub: "agent:special",
