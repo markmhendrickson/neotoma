@@ -133,6 +133,8 @@ import {
 } from "./services/local_auth.js";
 import {
   buildSandboxBootBannerLines,
+  decidePostureReconciliation,
+  extractBoundHost,
   isSandboxMode,
   resolveForceMode,
   resolveRefusePolicy,
@@ -12994,13 +12996,68 @@ function assertRouteTableIsReachable(): void {
   assertNoShadowedRoutes(app);
 }
 
-/** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
-function tryListen(
-  port: number
+/**
+ * Resolve the host the HTTP listener should bind to.
+ *
+ * Defaults to loopback-only (`127.0.0.1`) so a self-hosted instance is never
+ * reachable from the LAN unless the operator explicitly opts in. Set
+ * `NEOTOMA_HTTP_HOST` (e.g. `0.0.0.0` for a Fly/Docker deployment fronted by
+ * its own auth, or a tunnel client) to bind elsewhere. This is the single
+ * source of truth for the bind host — `tryListen` passes this value straight
+ * to `app.listen`, and the boot-time sandbox-mode resolver below derives its
+ * `loopbackBindOnly` signal from the same value, so the two can no longer
+ * diverge the way they did prior to #<security-fix> (posture reported
+ * loopback while the socket was actually open on all interfaces).
+ */
+export function resolveHttpBindHost(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = (env.NEOTOMA_HTTP_HOST || "").trim();
+  return raw.length > 0 ? raw : "127.0.0.1";
+}
+
+/** True when the given bind host resolves to a loopback-only address. */
+export function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+}
+
+/**
+ * Try to bind on a port/host; resolves with server and port, or rejects on
+ * error (e.g. EADDRINUSE).
+ *
+ * This is the actual sink that opens the listening socket, and it is an
+ * exported entry point in its own right (not merely an internal helper of
+ * `startHTTPServer` below) — so the loopback-only default must live HERE,
+ * not only in the sibling caller. Before this fix, `startHTTPServer` was the
+ * only thing applying `resolveHttpBindHost()`'s safe default; a caller that
+ * invoked `tryListen` directly with a missing/empty host (or `undefined`
+ * coming through a loosely-typed call site) fell straight through to
+ * `app.listen`, which binds all interfaces when `host` is falsy. That
+ * reopened the exact all-interfaces exposure the loopback default exists to
+ * close, just via a different entry point. See #<security-fix>.
+ */
+export function tryListen(
+  port: number,
+  host?: string | null
 ): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
   return new Promise((resolve, reject) => {
+    const trimmedHost = typeof host === "string" ? host.trim() : "";
+    const effectiveHost = trimmedHost.length > 0 ? trimmedHost : resolveHttpBindHost();
+    if (effectiveHost.length === 0) {
+      // resolveHttpBindHost() itself defaults to "127.0.0.1" and can only
+      // return "" if that invariant is broken elsewhere — refuse rather than
+      // handing `app.listen` an empty host, which Node treats as "all
+      // interfaces" (the same failure mode this whole fix closes).
+      reject(
+        new Error(
+          "tryListen: refusing to bind with an unresolved host (resolveHttpBindHost() " +
+            "returned an empty string). Refusing rather than falling through to an " +
+            "all-interfaces bind."
+        )
+      );
+      return;
+    }
     assertRouteTableIsReachable();
-    const server = app.listen(port, () => {
+    const server = app.listen(port, effectiveHost, () => {
       // When `port === 0` the OS assigns an ephemeral port. We must report
       // the actually-bound port back to callers (the eval harness's
       // isolated server fixture writes it to NEOTOMA_SESSION_PORT_FILE so
@@ -13223,16 +13280,20 @@ export async function startHTTPServer() {
   // (NEOTOMA_REQUIRE_AUTH=1). Future operator-config integration can
   // extend this without changing the resolver shape.
   //
-  // The bind topology is interpreted from the host the listener will use.
-  // express's app.listen(port) with no host binds to 0.0.0.0/::, which is
-  // explicitly non-loopback — that's the v0.11.1 advisory shape when no
-  // auth is configured. Operators on loopback-only deployments should set
-  // NEOTOMA_HTTP_HOST=127.0.0.1.
+  // The bind topology is interpreted from the host the listener will actually
+  // use. `resolveHttpBindHost()` defaults to `127.0.0.1` and is the SAME
+  // function `tryListen` below passes to `app.listen` — so this posture
+  // check can no longer drift from the real socket the way it did when this
+  // env var was read here but never forwarded to `listen()`. Operators who
+  // need LAN/tunnel reachability set NEOTOMA_HTTP_HOST=0.0.0.0 (or another
+  // explicit non-loopback host) as a deliberate opt-in; the actual bound
+  // address is re-verified against this value right after bind (see the
+  // `tryListen` call site below) and a mismatch is logged loudly rather than
+  // trusted silently.
   // ----------------------------------------------------------------------
   try {
-    const hostEnv = (process.env.NEOTOMA_HTTP_HOST || "").trim().toLowerCase();
-    const loopbackBindOnly =
-      hostEnv === "127.0.0.1" || hostEnv === "localhost" || hostEnv === "::1";
+    const intendedHost = resolveHttpBindHost();
+    const loopbackBindOnly = isLoopbackHost(intendedHost);
     const productionEnv = isProductionEnvironment();
     const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
     const refusePolicy = resolveRefusePolicy();
@@ -13293,8 +13354,28 @@ export async function startHTTPServer() {
       }
     }
   } catch (err) {
-    // Banner emission must never block boot in warn mode.
-    logger.warn(`[sandbox_mode] banner emission failed: ${(err as Error).message}`);
+    // This catch spans the WHOLE pre-bind sandbox-mode resolution, not just
+    // banner emission (the comment used to say only "banner emission" — the
+    // try-block above actually resolves the posture, decides shouldRefuseBoot,
+    // and can process.exit(1)). If resolution itself throws, the posture was
+    // NEVER determined at all: `_resolvedServerMode` is still whatever it was
+    // before this boot (typically `null`), so proceeding here means starting
+    // a listener with an unknown safety posture. Fail closed on that under
+    // `enforce`, since "we could not tell" carries the same risk as "refuse".
+    // Under `warn` (default), stay loud but non-fatal like every other
+    // refuse+warn path in this file — untested self-host configs must not be
+    // locked out by an unrelated resolution error.
+    logger.warn(
+      `[sandbox_mode] pre-bind posture resolution failed (mode is UNRESOLVED, not assumed safe): ${(err as Error).message}`
+    );
+    if (resolveRefusePolicy() === "enforce") {
+      process.stderr.write(
+        `\n[neotoma] FATAL: sandbox-mode posture could not be resolved before bind ` +
+          `(${(err as Error).message}) and NEOTOMA_REFUSE_MODE=enforce. Refusing to start ` +
+          `with an unknown safety posture. Exit code 1.\n\n`
+      );
+      process.exit(1);
+    }
   }
 
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
@@ -13306,10 +13387,80 @@ export async function startHTTPServer() {
   // ephemeral ports to avoid colliding with the operator's dev server.
   const triesLimit = basePort === 0 ? 1 : maxTries;
 
+  const bindHost = resolveHttpBindHost();
+
   for (let offset = 0; offset < triesLimit; offset++) {
     const port = basePort + offset;
     try {
-      const { server, port: boundPort } = await tryListen(port);
+      const { server, port: boundPort } = await tryListen(port, bindHost);
+
+      // Re-derive the sandbox-mode posture from the ACTUAL bound address
+      // rather than trusting the pre-bind intent above. `server.address()`
+      // is only available after `listen` resolves, which is why the earlier
+      // banner emission (needed pre-bind so `refuse`+`enforce` can abort
+      // before the socket opens) uses `resolveHttpBindHost()` intent instead.
+      // Both now read the same source of truth, so they should always agree;
+      // this check exists to catch the rare case where Node's own address
+      // normalization (e.g. IPv6 mapping) makes the bound address disagree
+      // with the requested host, so the reported posture never silently
+      // outlives the reality it describes.
+      //
+      // Unlike the pre-bind check, the socket is ALREADY OPEN here. A
+      // `refuse`+`enforce` verdict discovered at this point must still stop
+      // the process from serving — the fix is not "log it", it is "close the
+      // socket, then exit" so nothing else in this function can proceed to
+      // register the port file / log "listening" / accept a connection.
+      let refuseAfterBind: { reason: string } | null = null;
+      try {
+        const boundHost = extractBoundHost(server.address());
+        const decision = decidePostureReconciliation({
+          boundHost,
+          intendedHost: bindHost,
+          refusePolicy: resolveRefusePolicy(),
+          isLoopbackHost,
+          resolve: (loopbackBindOnly) =>
+            resolveSandboxMode({
+              authConfigured: (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1",
+              loopbackBindOnly,
+              productionEnv:
+                (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
+                (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod",
+              hostedSandboxEnabled: isSandboxMode(),
+              refusePolicy: resolveRefusePolicy(),
+              forceMode: resolveForceMode(),
+            }),
+        });
+        if (decision.verdict) {
+          _resolvedServerMode = decision.verdict.mode;
+        }
+        if (decision.shouldRefuseAndClose) {
+          logger.error(`[sandbox_mode] ${decision.reason}`);
+          refuseAfterBind = { reason: decision.reason };
+        } else if (decision.reason !== "bound host matches intended posture") {
+          logger.warn(`[sandbox_mode] ${decision.reason}`);
+        }
+      } catch (err) {
+        // The posture could not be re-derived AT ALL after bind — this is
+        // "unknown", not "safe". Under `enforce`, unknown must not be
+        // allowed to keep serving on an already-open socket; under `warn`,
+        // stay loud but non-fatal like the resolver's own refuse+warn path.
+        const message = `post-bind posture reconciliation failed (posture is UNKNOWN, not assumed safe): ${(err as Error).message}`;
+        logger.error(`[sandbox_mode] ${message}`);
+        if (resolveRefusePolicy() === "enforce") {
+          refuseAfterBind = { reason: message };
+        }
+      }
+
+      if (refuseAfterBind) {
+        process.stderr.write(
+          `\n[neotoma] FATAL: ${refuseAfterBind.reason}\n` +
+            `[neotoma] NEOTOMA_REFUSE_MODE=enforce — closing the listening socket and exiting. ` +
+            `Exit code 1.\n\n`
+        );
+        await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+        process.exit(1);
+      }
+
       if (portFile) {
         fs.writeFileSync(portFile, String(boundPort), "utf-8");
       }
