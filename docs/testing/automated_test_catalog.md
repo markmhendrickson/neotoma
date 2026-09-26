@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **652**
-- Backend and repo Vitest files: **616**
+- Total automated test files: **655**
+- Backend and repo Vitest files: **619**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,10 +72,10 @@ flowchart TD
 | Vitest unit tests | 180 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 194 |
+| Vitest integration tests | 195 |
 | Vitest CLI tests | 79 |
-| Vitest contract tests | 21 |
-| Vitest security tests | 14 |
+| Vitest contract tests | 20 |
+| Vitest security tests | 17 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -422,7 +422,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (194):**
+**Files (195):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -583,6 +583,7 @@ flowchart TD
 - `tests/integration/shared_graph_identity.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
+- `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
@@ -709,7 +710,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (21):**
+**Files (20):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -728,7 +729,6 @@ flowchart TD
 - `tests/contract/relationship_type_enum_parity.test.ts`
 - `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
-- `tests/contract/security_gates_ci_wiring.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
 
@@ -737,7 +737,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (14):**
+**Files (17):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
@@ -750,6 +750,9 @@ flowchart TD
 - `tests/security/schemas_per_type_scope_guard.test.ts`
 - `tests/security/scoped_source_and_relationship_reads.test.ts`
 - `tests/security/sort_by_sql_injection.test.ts`
+- `tests/security/ssrf_guarded_fetch_redirects.test.ts`
+- `tests/security/ssrf_outbound_host_guard.test.ts`
+- `tests/security/ssrf_sink_wiring.test.ts`
 - `tests/security/store_external_actor_claim.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
 

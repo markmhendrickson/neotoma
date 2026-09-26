@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 
 import { logger } from "../../utils/logger.js";
+import { guardedFetch, isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import type { SubstrateEvent } from "../../events/types.js";
 import { createCorrection } from "../correction.js";
 import type { SubscriptionRecord } from "./subscription_types.js";
@@ -12,16 +13,46 @@ const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000];
 const DELIVERY_TIMESTAMPS = new Map<string, number[]>();
 
 export function isWebhookUrlAllowed(urlStr: string): boolean {
+  return checkWebhookUrlAllowed(urlStr).allowed;
+}
+
+/**
+ * Same check as {@link isWebhookUrlAllowed}, but distinguishes *why* a URL
+ * was rejected so callers can surface an accurate error instead of always
+ * quoting the HTTPS/localhost protocol rule — a hosted-mode SSRF-guard
+ * rejection (private/loopback/link-local/platform-internal host) is a
+ * different failure than a bare `http://` URL in production.
+ */
+export function checkWebhookUrlAllowed(
+  urlStr: string
+): { allowed: true } | { allowed: false; reason: "private_host" | "protocol" | "invalid_url" } {
+  // SSRF: reject private/loopback/link-local/platform-internal targets under
+  // hosted mode before any protocol allowance below.
+  if (!isPublicFetchUrlAllowed(urlStr)) {
+    // isPublicFetchUrlAllowed also returns false for an unparseable URL or a
+    // non-http(s) scheme; only report "private_host" when the URL is
+    // otherwise well-formed http(s), so a malformed URL still gets the
+    // generic message.
+    try {
+      const u = new URL(urlStr);
+      if (u.protocol === "https:" || u.protocol === "http:") {
+        return { allowed: false, reason: "private_host" };
+      }
+    } catch {
+      // fall through to invalid_url below
+    }
+    return { allowed: false, reason: "invalid_url" };
+  }
   try {
     const u = new URL(urlStr);
-    if (u.protocol === "https:") return true;
-    if (!isProductionEnvironment() && u.protocol === "http:") return true;
+    if (u.protocol === "https:") return { allowed: true };
+    if (!isProductionEnvironment() && u.protocol === "http:") return { allowed: true };
     if (u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1")) {
-      return true;
+      return { allowed: true };
     }
-    return false;
+    return { allowed: false, reason: "protocol" };
   } catch {
-    return false;
+    return { allowed: false, reason: "invalid_url" };
   }
 }
 
@@ -74,7 +105,11 @@ async function postWebhookOnce(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    // guardedFetch: url already passed isWebhookUrlAllowed at subscribe time,
+    // but that only checked the URL the caller supplied — an otherwise-public
+    // endpoint could redirect a delivery to an internal target. Re-check
+    // every hop.
+    const res = await guardedFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

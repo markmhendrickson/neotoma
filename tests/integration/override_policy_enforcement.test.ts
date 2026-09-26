@@ -13,8 +13,9 @@
  *  - service identity (software tier)         → denied field throws
  *    OverridePolicyViolationError with code/statusCode/envelope
  *  - unlisted field                           → allowed for any role
- *  - cross-tenant: a policy row owned by ANOTHER user must NOT be consulted
- *    for this user's write (tenant-scoped snapshot lookup)
+ *  - cross-tenant: a write to an entity_id owned by ANOTHER user is refused
+ *    by the entity-resolution ownership guard before override_policy's own
+ *    (already correctly tenant-scoped) snapshot lookup is ever reached
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -155,16 +156,31 @@ describe("override_policy end-to-end enforcement (agent_definition)", () => {
     expect(record.entity_id).toBe(ENTITY_ID);
   });
 
-  it("does not consult another tenant's policy row (user-scoped lookup)", async () => {
-    // USER_A writes to the entity id whose ONLY policy row belongs to USER_B.
-    // The lookup is scoped to USER_A → no snapshot → fail-open → allowed.
-    const record = await runWithRequestContext({ agentIdentity: SERVICE_IDENTITY }, () =>
-      createObservation({
-        ...observationParams(USER_A, { agent_grant: "cross-tenant-probe" }),
-        entity_id: CROSS_TENANT_ENTITY_ID,
-      })
-    );
-    expect(record.entity_id).toBe(CROSS_TENANT_ENTITY_ID);
+  it("refuses USER_A's write to an entity_id owned by USER_B, before override_policy is ever consulted", async () => {
+    // Originally: "USER_A writes to the entity id whose ONLY policy row
+    // belongs to USER_B. The lookup is scoped to USER_A -> no snapshot ->
+    // fail-open -> allowed." That proved override_policy's OWN tenant
+    // scoping in isolation, but the write itself reaching the entity in the
+    // first place is exactly the cross-owner write the entity-resolution
+    // security fix (EntityOwnerConflictError, src/services/entity_resolution.ts)
+    // now refuses — CROSS_TENANT_ENTITY_ID's backing `entities` row is
+    // (via the local-adapter ensureEntityRowForSnapshot backfill) owned by
+    // USER_B, since seedSnapshot(CROSS_TENANT_ENTITY_ID, USER_B, ...) in
+    // beforeAll created it first. createObservation's ownership guard now
+    // refuses USER_A's write before override_policy's own snapshot lookup
+    // ever runs, which is a strictly stronger guarantee than "fails open
+    // safely" — the write cannot reach the entity at all. See the
+    // EntityOwnerConflictError tests in
+    // tests/services/entity_resolution_cross_owner_conflict.test.ts for the
+    // dedicated coverage.
+    await expect(
+      runWithRequestContext({ agentIdentity: SERVICE_IDENTITY }, () =>
+        createObservation({
+          ...observationParams(USER_A, { agent_grant: "cross-tenant-probe" }),
+          entity_id: CROSS_TENANT_ENTITY_ID,
+        })
+      )
+    ).rejects.toMatchObject({ code: "entity_owner_conflict" });
   });
 
   it("ignores entity types other than agent_definition", async () => {

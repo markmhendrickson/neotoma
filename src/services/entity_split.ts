@@ -19,7 +19,11 @@
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { deleteSnapshot, recomputeSnapshot } from "./snapshot_computation.js";
-import { entityIdTenantSalt, generateEntityId } from "./entity_resolution.js";
+import {
+  assertNoOwnerConflict,
+  entityIdTenantSalt,
+  generateEntityId,
+} from "./entity_resolution.js";
 import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 /**
@@ -244,6 +248,28 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
     throw new Error(
       "split_entity: new_entity_id is identical to source_entity_id; split would be a no-op."
     );
+  }
+
+  // Fail-closed ownership guard (neotoma security fix, entity_resolution.ts):
+  // a caller-supplied target_entity_id must not let this write re-point
+  // observations onto an entity owned by a DIFFERENT user. Without this, the
+  // insert-and-tolerate-"already exists" pattern below silently proceeded to
+  // rewrite observations.entity_id onto any existing id the caller named,
+  // regardless of who owned it — this entrance was flagged as unreproduced
+  // during the entity-resolution security review and closed here with the
+  // same guard used at every other write entrance.
+  const { data: targetEntityRow } = await db
+    .from("entities")
+    .select("user_id")
+    .eq("id", newEntityId)
+    .maybeSingle();
+  if (targetEntityRow) {
+    assertNoOwnerConflict({
+      entityId: newEntityId,
+      entityType: newEntity.entity_type,
+      existingOwnerUserId: (targetEntityRow as { user_id: string | null }).user_id,
+      writerUserId: userId,
+    });
   }
 
   // Select candidate observations and filter by predicate in-process. Doing
