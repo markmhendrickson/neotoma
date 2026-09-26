@@ -367,6 +367,93 @@ describe("grant admission distinguishes revoked/suspended from no_match", () => 
 });
 
 /**
+ * A caller whose key IS pinned to a real, active grant, but whose stored
+ * `capabilities` fail shape validation, must be distinguishable from a
+ * caller who never matched any grant. Same defect class as the
+ * revoked/suspended masking above, one step further: before this fix,
+ * `scanForGrant` caught `snapshotToGrant`'s validation error on a
+ * key-bound active candidate and silently `continue`d past it — dropping
+ * it exactly like "did not match at all" — so a signature that DID name a
+ * real grant, correctly signed with the correctly pinned key, was still
+ * reported as `no_match`. This is the live failure mode found on
+ * ateles' own `ateles@ateles-swarm` grant (capabilities entry with an op
+ * missing from ALLOWED_OPS) and on the `apis@ateles-swarm` /
+ * `aquila@ateles-swarm` grants (capabilities persisted as a JSON string).
+ */
+describe("grant admission distinguishes grant_invalid from no_match", () => {
+  it("key pinned to an active grant with invalid capabilities: reason is grant_invalid, not no_match", async () => {
+    const agent = await freshKey();
+    putGrant("ent_grant_bad_caps", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: agent.thumbprint,
+      // Same shape as the apis/aquila grants found live in prod: capabilities
+      // persisted as a JSON string instead of a parsed array.
+      capabilities: JSON.stringify([{ op: "retrieve", entity_types: ["task"] }]),
+    });
+
+    const { admission } = await verifyAndAdmit(await signedRequest(agent, { sub: SUB, iss: ISS }));
+
+    expect(admission.admitted).toBe(false);
+    expect(admission.reason).toBe("grant_invalid");
+    expect(admission.grant_id).toBe("ent_grant_bad_caps");
+  });
+
+  it("key pinned to an active grant with an empty entity_types entry: reason is grant_invalid, not no_match", async () => {
+    const agent = await freshKey();
+    putGrant("ent_grant_empty_types", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: agent.thumbprint,
+      capabilities: [{ op: "store_structured", entity_types: [] }],
+    });
+
+    const { admission } = await verifyAndAdmit(await signedRequest(agent, { sub: SUB, iss: ISS }));
+
+    expect(admission.admitted).toBe(false);
+    expect(admission.reason).toBe("grant_invalid");
+    expect(admission.grant_id).toBe("ent_grant_empty_types");
+  });
+
+  it("a valid active grant for the same identity still wins over an unrelated invalid one", async () => {
+    const agent = await freshKey();
+    grantRows.push({
+      entity_id: "ent_grant_invalid_older",
+      user_id: OWNER,
+      snapshot: {
+        label: "older invalid",
+        status: "active",
+        capabilities: "not-an-array",
+        match_sub: SUB,
+        match_iss: ISS,
+        match_thumbprint: agent.thumbprint,
+      },
+      last_observation_at: "2026-01-01T00:00:00.000Z",
+      created_at: "2026-01-01T00:00:00.000Z",
+    });
+    grantRows.push({
+      entity_id: "ent_grant_valid_newer",
+      user_id: OWNER,
+      snapshot: {
+        label: "newer valid",
+        status: "active",
+        capabilities: [{ op: "retrieve", entity_types: ["task"] }],
+        match_sub: SUB,
+        match_iss: ISS,
+        match_thumbprint: agent.thumbprint,
+      },
+      last_observation_at: "2026-06-01T00:00:00.000Z",
+      created_at: "2026-06-01T00:00:00.000Z",
+    });
+
+    const { admission } = await verifyAndAdmit(await signedRequest(agent, { sub: SUB, iss: ISS }));
+
+    expect(admission.admitted).toBe(true);
+    expect(admission.grant_id).toBe("ent_grant_valid_newer");
+  });
+});
+
+/**
  * Capability limits for signed requests that also carry a bearer token.
  *
  * Authentication and the capability ceiling are separate decisions: the
@@ -587,6 +674,33 @@ describe("capability limits for signed requests", () => {
       WRITE_TYPE_IN_GRANT
     );
     expect(allowed.allowed).toBe(true);
+  });
+
+  it("key pinned to a grant with invalid capabilities fails closed even with NEOTOMA_AGENT_DEFAULT_DENY unset", async () => {
+    // NEOTOMA_AGENT_DEFAULT_DENY is NOT set in this describe block's
+    // beforeEach — a `none` ceiling (e.g. no_match) would ALLOW an
+    // unrecognised-but-signed caller here. grant_invalid must map to
+    // `deny` in CEILING_REASON_MAP regardless of that flag, exactly like
+    // grant_key_unbound / grant_revoked / grant_suspended, because the
+    // signature names a SPECIFIC broken grant rather than asserting
+    // nothing about any grant at all.
+    const agent = await freshKey();
+    putGrant("ent_grant_bad_caps", {
+      match_sub: SUB,
+      match_iss: ISS,
+      match_thumbprint: agent.thumbprint,
+      capabilities: "not-an-array",
+    });
+
+    const outcome = await attemptWrite(
+      withBearer(await signedRequest(agent, { sub: SUB, iss: ISS })),
+      WRITE_TYPE_IN_GRANT
+    );
+
+    expect(outcome.allowed).toBe(false);
+    const error = (outcome as { error: unknown }).error;
+    expect(error).toBeInstanceOf(AgentCapabilityError);
+    expect((error as AgentCapabilityError).code).toBe("capability_denied");
   });
 });
 

@@ -16,6 +16,7 @@ import {
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
 import { enforceOverridePolicy } from "./override_validation.js";
+import { assertAgentGrantFieldValid } from "./agent_grants.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
 
 /**
@@ -89,6 +90,13 @@ export async function createObservation(
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
+  // Pre-persist shape guard for agent_grant fields (no-op for every other
+  // entity_type). Throws before any row is written — see
+  // assertAgentGrantFieldValid's doc comment for why this must sit at this
+  // specific choke point rather than only in the grants CRUD helpers.
+  for (const [field, value] of Object.entries(params.fields)) {
+    assertAgentGrantFieldValid(params.entity_type, field, value);
+  }
   await enforceOverridePolicy({
     entityType: params.entity_type,
     entityId: params.entity_id,

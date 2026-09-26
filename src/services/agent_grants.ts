@@ -37,6 +37,7 @@
 
 import { db } from "../db.js";
 import { queryEntities, getEntityWithProvenance } from "./entity_queries.js";
+import { logger } from "../utils/logger.js";
 import {
   AgentCapabilityError,
   type AgentCapabilityEntry,
@@ -53,6 +54,16 @@ const ALLOWED_OPS: ReadonlySet<AgentCapabilityOp> = new Set([
   "create_relationship",
   "correct",
   "retrieve",
+  // THE FIX: register_relationship_type has been a valid AgentCapabilityOp
+  // (agent_capabilities.ts's type union) and has been enforced by
+  // enforceRelationshipTypeCapability since #1972 / G25, but was never
+  // added to THIS set — the op-allowlist validateCapabilities actually
+  // checks against. Every grant carrying a register_relationship_type
+  // capability has therefore failed shape validation at
+  // `capabilities[i].op must be one of: ...` on every write and every
+  // read since the op was introduced, independent of the entity_types /
+  // relationship_types fix above.
+  "register_relationship_type",
   "github_harness:read",
   "github_harness:write",
   "github_harness:*",
@@ -188,6 +199,18 @@ function isHarnessOp(op: string): boolean {
   return op === "github_harness:read" || op === "github_harness:write" || op === "github_harness:*";
 }
 
+/**
+ * True for `register_relationship_type`, which is scoped by
+ * `relationship_types`, NOT `entity_types` (see the field doc on
+ * {@link AgentCapabilityEntry.relationship_types} in agent_capabilities.ts,
+ * and ateles#925: the operator's ruling widens the grant tuple with a
+ * PARALLEL `relationship_types[]` field rather than overloading
+ * `entity_types` to mean two vocabularies).
+ */
+function isRelationshipTypeOp(op: string): boolean {
+  return op === "register_relationship_type";
+}
+
 export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
@@ -213,11 +236,17 @@ export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
     }
 
     const harness = isHarnessOp(op);
+    const relationshipTypeOp = isRelationshipTypeOp(op);
 
     // For github_harness ops, `repos` is required and `entity_types` defaults to [].
-    // For Neotoma-native ops, `entity_types` is required.
+    // For `register_relationship_type`, `entity_types` is OPTIONAL — the op is
+    // keyed on `relationship_types`, validated below, and a capability that
+    // grants only relationship-type registration legitimately carries no
+    // entity_types at all.
+    // For every other Neotoma-native op, `entity_types` is required.
     let normalisedTypes: string[] = [];
     let normalisedRepos: string[] | undefined;
+    let normalisedRelationshipTypes: string[] | undefined;
 
     if (harness) {
       const repos = entry.repos;
@@ -245,6 +274,50 @@ export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
           .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
           .map((t) => t.trim());
       }
+    } else if (relationshipTypeOp) {
+      // entity_types accepted but not required — see comment above.
+      const types = entry.entity_types;
+      if (types !== undefined) {
+        if (!Array.isArray(types)) {
+          throw new AgentGrantValidationError(
+            `capabilities[${i}].entity_types must be an array of strings when present`,
+            `capabilities[${i}].entity_types`
+          );
+        }
+        for (const [j, t] of types.entries()) {
+          if (typeof t !== "string" || t.trim().length === 0) {
+            throw new AgentGrantValidationError(
+              `capabilities[${i}].entity_types[${j}] must be a non-empty string`,
+              `capabilities[${i}].entity_types[${j}]`
+            );
+          }
+          normalisedTypes.push(t.trim());
+        }
+        normalisedTypes = Array.from(new Set(normalisedTypes));
+      }
+      // relationship_types is the real scope for this op. Required and
+      // non-empty: a register_relationship_type capability with neither
+      // entity_types nor relationship_types grants nothing and is almost
+      // certainly a caller mistake, so it is rejected rather than silently
+      // accepted as a no-op capability.
+      const relTypes = entry.relationship_types;
+      if (!Array.isArray(relTypes) || relTypes.length === 0) {
+        throw new AgentGrantValidationError(
+          `capabilities[${i}].relationship_types must be a non-empty array of strings for register_relationship_type`,
+          `capabilities[${i}].relationship_types`
+        );
+      }
+      const relList: string[] = [];
+      for (const [j, t] of relTypes.entries()) {
+        if (typeof t !== "string" || t.trim().length === 0) {
+          throw new AgentGrantValidationError(
+            `capabilities[${i}].relationship_types[${j}] must be a non-empty string`,
+            `capabilities[${i}].relationship_types[${j}]`
+          );
+        }
+        relList.push(t.trim());
+      }
+      normalisedRelationshipTypes = Array.from(new Set(relList));
     } else {
       const types = entry.entity_types;
       if (!Array.isArray(types) || types.length === 0) {
@@ -270,6 +343,17 @@ export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
       entity_types: normalisedTypes,
     };
     if (normalisedRepos !== undefined) validated.repos = normalisedRepos;
+    // THE FIX: relationship_types must survive the rebuild. It was
+    // previously dropped here unconditionally — every write through
+    // validateCapabilities (createGrant, updateGrantFields, and every
+    // snapshotToGrant read) silently stripped it, so no grant could ever
+    // exercise register_relationship_type once it round-tripped through
+    // this function, even though enforceRelationshipTypeCapability (in
+    // agent_capabilities.ts) reads relationship_types off exactly these
+    // objects.
+    if (normalisedRelationshipTypes !== undefined) {
+      validated.relationship_types = normalisedRelationshipTypes;
+    }
     out.push(validated);
   }
   return out;
@@ -478,6 +562,22 @@ export interface GrantIdentityLookup {
    * key-bound grant matched at all, active or not.
    */
   inactive_grant: AgentGrant | null;
+  /**
+   * Entity id of a key-bound, active grant whose stored `capabilities`
+   * failed {@link validateCapabilities} (or whose `status`/`label` failed
+   * shape validation) — e.g. capabilities persisted as a JSON string, or a
+   * non-harness capability entry with empty `entity_types`. Before this
+   * field existed, `scanForGrant` caught the validation error and silently
+   * skipped the candidate exactly like "no grant matched at all", so a
+   * signature that DID name a real, key-bound, active grant was reported
+   * as `no_match` — indistinguishable from an unrecognised caller. Reported
+   * here so admission can classify it as `grant_invalid` instead: a
+   * distinct, fail-closed reason naming the specific broken grant. `null`
+   * when every key-bound active candidate either admitted or was never
+   * tried (i.e. this is populated only when a candidate was found and
+   * rejected by validation, not merely absent).
+   */
+  invalid_grant_id: string | null;
 }
 
 /**
@@ -498,7 +598,14 @@ export async function lookupGrantForIdentity(input: {
   const sub = trimOrNull(input.sub);
   const iss = trimOrNull(input.iss);
   const thumbprint = trimOrNull(input.thumbprint);
-  if (!thumbprint) return { grant: null, unbound_claim_match: false, inactive_grant: null };
+  if (!thumbprint) {
+    return {
+      grant: null,
+      unbound_claim_match: false,
+      inactive_grant: null,
+      invalid_grant_id: null,
+    };
+  }
 
   const key = cacheKeyForIdentity({ sub, iss, thumbprint });
   const now = Date.now();
@@ -549,7 +656,12 @@ async function scanForGrant(input: {
     sortOrder: "desc",
   });
   if (rows.length === 0) {
-    return { grant: null, unbound_claim_match: false, inactive_grant: null };
+    return {
+      grant: null,
+      unbound_claim_match: false,
+      inactive_grant: null,
+      invalid_grant_id: null,
+    };
   }
 
   // queryEntities does not include user_id on the returned shape, so we
@@ -600,6 +712,12 @@ async function scanForGrant(input: {
     (b.last_observation_at ?? "").localeCompare(a.last_observation_at ?? "")
   );
 
+  // Set the moment a key-bound active candidate fails validation, so a
+  // later successful candidate (if the scan finds one) does not mask the
+  // fact that an earlier, more-recently-observed candidate was broken —
+  // reported only when the scan ultimately finds no admitting grant.
+  let invalidGrantId: string | null = null;
+
   for (const cand of activeCandidates) {
     const owner = await getGrantOwner(cand.entity_id);
     if (!owner) continue;
@@ -611,13 +729,28 @@ async function scanForGrant(input: {
         }),
         unbound_claim_match: false,
         inactive_grant: null,
+        invalid_grant_id: null,
       };
-    } catch {
+    } catch (err) {
+      // THE FIX: previously this candidate was dropped exactly like "did
+      // not match at all" — the request's key WAS pinned to this grant,
+      // but its stored shape (e.g. capabilities as a JSON string, or a
+      // capability entry with empty entity_types) failed validation, so
+      // admission reported no_match, indistinguishable from an
+      // unrecognised caller. Record it instead, and keep scanning in case
+      // a different, valid, key-bound grant also matches (identity
+      // collisions are possible even though thumbprints are meant to be
+      // unique) — but only the first one found is reported, since that is
+      // the one the request's key most specifically names.
+      if (invalidGrantId === null) {
+        invalidGrantId = cand.entity_id;
+        warnInvalidGrant(cand.entity_id, err);
+      }
       continue;
     }
   }
 
-  // No active key-bound grant. Report the most-recently-observed
+  // No active key-bound grant admitted. Report the most-recently-observed
   // key-bound inactive grant, if any, so admission can distinguish
   // grant_revoked/grant_suspended from no_match.
   inactiveCandidates.sort((a, b) =>
@@ -634,13 +767,53 @@ async function scanForGrant(input: {
           created_at: cand.created_at,
           last_observation_at: cand.last_observation_at,
         }),
+        invalid_grant_id: invalidGrantId,
       };
     } catch {
       continue;
     }
   }
 
-  return { grant: null, unbound_claim_match: unboundClaimMatch, inactive_grant: null };
+  return {
+    grant: null,
+    unbound_claim_match: unboundClaimMatch,
+    inactive_grant: null,
+    invalid_grant_id: invalidGrantId,
+  };
+}
+
+/**
+ * Rate-limited warning for a key-bound grant that failed shape validation
+ * during admission. Debounced per grant id (same window as
+ * {@link recordMatch}'s daily debounce) so a repeatedly-signed broken
+ * credential does not spam the log on every request. Never logs secret
+ * values — the grant id and the validator's field path only. The
+ * validator's message names the field (e.g.
+ * `capabilities[4].relationship_types`) but never echoes capability
+ * contents, match_thumbprint, or any other credential material.
+ */
+const invalidGrantWarnDebounce = new Map<string, string>();
+
+function warnInvalidGrant(grantId: string, err: unknown): void {
+  const today = todayUtc();
+  if (invalidGrantWarnDebounce.get(grantId) === today) return;
+  invalidGrantWarnDebounce.set(grantId, today);
+  const field = err instanceof AgentGrantValidationError ? (err.field ?? null) : null;
+  const message = err instanceof Error ? err.message : String(err);
+  logger.warn(
+    JSON.stringify({
+      event: "agent_grant_invalid",
+      reason: "grant_invalid",
+      grant_id: grantId,
+      field,
+      message,
+    })
+  );
+}
+
+/** Test-only — clears the invalid-grant warning debounce map. */
+export function clearInvalidGrantWarnDebounceForTests(): void {
+  invalidGrantWarnDebounce.clear();
 }
 
 /** ---------- Write helpers ---------- */
@@ -683,6 +856,54 @@ async function writeGrantEntity(params: InternalGrantWrite): Promise<AgentGrant>
   }
   invalidateGrantCache(grant);
   return grant;
+}
+
+/**
+ * Pre-persist guard for a raw write to `agent_grant` fields, called from
+ * the two choke points every transport converges on before an
+ * `agent_grant` observation or correction is ever inserted:
+ * {@link ../services/observation_storage.ts#createObservation} (the
+ * `store` / `store_structured` path, both HTTP and MCP) and
+ * {@link ../services/correction.ts#createCorrection} (the `correct` path,
+ * both HTTP and MCP).
+ *
+ * `createGrant` / `updateGrantFields` in this module already call
+ * {@link validateCapabilities} directly before they persist, so grants
+ * written through those ergonomic helpers were always pre-validated. The
+ * gap this closes is the RAW entity-store surface: `correct()` (MCP tool
+ * or `POST /entities/{id}/corrections`) and a raw `store`/`store_structured`
+ * targeting `entity_type: "agent_grant"` write straight through
+ * `createObservation` / `createCorrection` without ever calling into this
+ * module's CRUD helpers — which is exactly how the JSON-string-capabilities
+ * and empty-entity_types grants now live in prod got there in the first
+ * place (both landed via `correct`, not via `PATCH /agents/grants/{id}`).
+ *
+ * Scoped strictly to `entity_type === "agent_grant"` and the `capabilities`
+ * field — every other entity_type and every other agent_grant field is a
+ * no-op here, mirroring the `usage_digest` redaction guard's shape in
+ * `actions.ts`. Throws {@link AgentGrantValidationError} (mapped to a 400
+ * by the same envelope `createGrant`/`updateGrantFields` already produce)
+ * before any row is written, so an invalid capability can never be stored
+ * by ANY write surface — not only the two ergonomic helpers.
+ */
+export function assertAgentGrantFieldValid(
+  entityType: string,
+  field: string,
+  value: unknown
+): void {
+  if (entityType !== GRANT_ENTITY_TYPE) return;
+  if (field === "capabilities") {
+    validateCapabilities(value);
+    return;
+  }
+  if (field === "status") {
+    validateStatus(value);
+    return;
+  }
+  if (field === "label") {
+    validateLabel(value);
+    return;
+  }
 }
 
 /**
