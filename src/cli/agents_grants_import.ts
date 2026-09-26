@@ -29,6 +29,7 @@ import {
 } from "../services/agent_capabilities.js";
 import {
   createGrant,
+  grantAdmissionWarnings,
   listGrantsForUser,
   updateGrantFields,
   type AgentGrant,
@@ -325,10 +326,16 @@ export function formatImportResult(result: ImportResult): string {
   for (const outcome of result.outcomes) {
     if (outcome.kind === "created") {
       lines.push(`  + created  ${outcome.label}  → ${outcome.grant.grant_id}`);
+      for (const warning of grantAdmissionWarnings(outcome.grant)) {
+        lines.push(`    ! ${warning}`);
+      }
     } else if (outcome.kind === "updated") {
       lines.push(
         `  ~ updated  ${outcome.label}  (${outcome.changed.join(", ")})  → ${outcome.grant.grant_id}`
       );
+      for (const warning of grantAdmissionWarnings(outcome.grant)) {
+        lines.push(`    ! ${warning}`);
+      }
     } else {
       lines.push(`  - skipped  ${outcome.label}  (${outcome.reason})`);
     }

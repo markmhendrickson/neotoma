@@ -23,6 +23,96 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    McpRequestMeta:
+      type: object
+      description: |
+        Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+        (#2070). Operational metadata only: never persisted, never logged in full.
+      additionalProperties: true
+      properties:
+        io.modelcontextprotocol/protocolVersion:
+          type: string
+          description: Protocol version for this request. Required on the modern path.
+          example: "2026-07-28"
+        io.modelcontextprotocol/clientCapabilities:
+          type: object
+          additionalProperties: true
+          description: Client capabilities relevant to this request. Required on the modern path.
+        io.modelcontextprotocol/clientInfo:
+          type: object
+          additionalProperties: true
+          description: Self-reported client name and version (unverified; attribution fallback only).
+          properties:
+            name: { type: string }
+            version: { type: string }
+    McpJsonRpcRequest:
+      type: object
+      required: [jsonrpc, method]
+      additionalProperties: true
+      properties:
+        jsonrpc: { type: string, enum: ["2.0"] }
+        id:
+          oneOf:
+            - { type: string }
+            - { type: integer }
+        method:
+          type: string
+          description: JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy).
+        params:
+          type: object
+          additionalProperties: true
+          properties:
+            _meta: { $ref: "#/components/schemas/McpRequestMeta" }
+    McpJsonRpcResponse:
+      type: object
+      required: [jsonrpc]
+      additionalProperties: true
+      properties:
+        jsonrpc: { type: string, enum: ["2.0"] }
+        id:
+          oneOf:
+            - { type: string }
+            - { type: integer }
+            - { type: "null" }
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: integer }
+            message: { type: string }
+            data: {}
+    McpServerDiscoverResult:
+      type: object
+      description: |
+        Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+        protocol versions, this server's declared capabilities, its identity and its
+        instructions: no tenant data, no caller identity, no instance topology.
+      required: [resultType, supportedVersions, capabilities]
+      properties:
+        resultType: { type: string, enum: [complete] }
+        supportedVersions:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: object
+          additionalProperties: true
+        instructions:
+          type: string
+          description: Agent-facing MCP instructions plus this instance's declared data policy.
+        ttlMs: { type: integer }
+        cacheScope: { type: string, enum: [public, private] }
+        _meta:
+          type: object
+          additionalProperties: true
+          properties:
+            io.modelcontextprotocol/serverInfo:
+              type: object
+              properties:
+                name: { type: string }
+                version: { type: string }
     ReadinessResult:
       type: object
       description: Result of the /ready database probe.
@@ -937,7 +1027,14 @@ components:
             that signature to one of this user's `agent_grant` entities
             and is treating the caller as authenticated. The two are
             independent: a verified-but-unmatched signature stays
-            attribution-only and `admitted` is `false`.
+            attribution-only and `admitted` is `false`. Admission is
+            key-bound: a grant admits only when its `match_thumbprint`
+            equals the signing key's thumbprint. `grant_key_unbound`
+            means a grant matched sub/iss but pins no key; capability-gated
+            writes carrying that signature are refused until the grant is
+            pinned, whatever authenticated the request. Pin
+            `match_thumbprint` to admit the agent (see
+            docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
           required:
             - verified
             - admitted
@@ -958,6 +1055,7 @@ components:
                 - admitted
                 - no_grants_for_user
                 - no_match
+                - grant_key_unbound
                 - grant_revoked
                 - grant_suspended
                 - strict_rejected
@@ -1522,6 +1620,64 @@ components:
         target_entity_type_label:
           type: string
           nullable: true
+    RelationshipCreated:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was
+        written. Shared by `StoreStructuredResponse.relationships_created`
+        and `CreateInterpretationResponse.relationships_created`. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_type
+        - source_entity_id
+        - target_entity_id
+      properties:
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+    RelationshipRefusal:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was not
+        written. The entities in the call are still stored. Shared by
+        `StoreStructuredResponse.relationships_refused` and
+        `CreateInterpretationResponse.relationships_refused`. An endpoint
+        that does not exist and one owned by another user are both reported
+        as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_index
+        - relationship_type
+        - code
+        - reason
+      properties:
+        relationship_index:
+          type: integer
+          description: Position of the relationship in the request's `relationships` array.
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+        source_index:
+          type: integer
+        target_index:
+          type: integer
+        code:
+          type: string
+          description: |
+            One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+            `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+            `RELATIONSHIP_INVALID_ENTITY_ID`,
+            `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+        reason:
+          type: string
+        hint:
+          type: string
     TimelineEvent:
       type: object
       properties:
@@ -1722,9 +1878,20 @@ components:
             data.
         relationships_created:
           type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
           items:
-            type: object
-            additionalProperties: true
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. See
+            docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
     UsageStats:
       type: object
       description: Aggregate usage statistics computed from local data only.
@@ -1922,8 +2089,16 @@ components:
           type: string
           enum: [claim, linked_attestation, oauth_link, webhook_signature]
           default: claim
+          description: |
+            Accepted for compatibility, but a request body can only assert an
+            external actor: the stored value is always `claim`. The stronger
+            tiers are assigned by server-side verification paths (the signed
+            GitHub webhook route, AAuth token claims, grant linkage).
         delivery_id:
           type: string
+          description: |
+            Not carried over from a request body; set only by the signed
+            GitHub webhook route.
         event_type:
           type: string
         repository:
@@ -2214,6 +2389,23 @@ components:
                     type: integer
                   entity_id:
                     type: string
+        relationships_created:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. An endpoint that
+            does not exist and one owned by another user are both reported as
+            `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
         store_warnings:
           type: array
           description: |
@@ -2817,6 +3009,103 @@ paths:
                   neotoma_env:
                     type: string
                     description: Resolved NEOTOMA_ENV for this process (development or production).
+
+  /mcp:
+    post:
+      summary: MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+      description: |
+        Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+        protocol eras on the same route (#2070):
+
+        - **Modern (2026-07-28, stateless).** Selected when the request carries no
+          `Mcp-Session-Id`, is not an `initialize` request, and its
+          `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+          request is resolved on its own: protocol version and client capabilities
+          come from `_meta`, and the caller's identity comes only from the
+          credentials on that request. No session is minted and no server state is
+          retained, so any API instance can serve any request behind a plain
+          round-robin load balancer. `server/discover` is served on this path.
+          `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+          `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+          the body.
+        - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+          request carrying `Mcp-Session-Id`, is served by the session transport
+          exactly as before (session mint on initialize, recover-in-place for a
+          stale session id, `404` for an unknown session on GET/DELETE).
+
+        `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+        tool/resource/prompt name. A value shaped like a credential or personal
+        data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+        `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+        and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+        sessions; those are not modelled here.
+      operationId: mcpStreamableHttpPost
+      parameters:
+        - in: header
+          name: MCP-Protocol-Version
+          required: false
+          description: Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`.
+          schema: { type: string, example: "2026-07-28" }
+        - in: header
+          name: Mcp-Method
+          required: false
+          description: Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data.
+          schema: { type: string, maxLength: 256 }
+        - in: header
+          name: Mcp-Name
+          required: false
+          description: |
+            Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+            `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+            sentinel. Never a credential or personal data.
+          schema: { type: string, maxLength: 2048 }
+        - in: header
+          name: Mcp-Session-Id
+          required: false
+          description: Legacy-era session id. Its presence selects the legacy session path.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/McpJsonRpcRequest" }
+      responses:
+        "200":
+          description: |
+            JSON-RPC response. On the modern path every result carries
+            `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+            a `server/discover` result has the `McpServerDiscoverResult` shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+            text/event-stream:
+              schema: { type: string }
+        "202":
+          description: JSON-RPC notification accepted (no body).
+        "400":
+          description: |
+            `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+            `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+            `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+        "401":
+          description: |
+            Authentication required or credential invalid (`-32001`). On the
+            2026-07-28 path this includes a credential that passed the gate but
+            resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+            or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+        "404":
+          description: |
+            Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+            (`-32001`, re-initialize).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
 
   /mcp/oauth/initiate:
     post:
@@ -4439,9 +4728,11 @@ paths:
       summary: Create an agent grant
       description: |
         Creates a new `agent_grant` for the authenticated user. At least
-        one of `match_sub` or `match_thumbprint` must be supplied. The
-        grant's `capabilities` follow the same shape used by the
-        admitted-request authorization check.
+        one of `match_sub` or `match_thumbprint` must be supplied. Only
+        `match_thumbprint` admits signed requests; a grant created without
+        it is accepted but inert, and the response carries a `warnings`
+        entry saying so. The grant's `capabilities` follow the same shape
+        used by the admitted-request authorization check.
       operationId: createAgentGrant
       requestBody:
         required: true
@@ -4459,6 +4750,14 @@ paths:
                 properties:
                   grant:
                     $ref: "#/components/schemas/AgentGrant"
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      Advisory messages about the stored grant. Present when
+                      the grant pins no `match_thumbprint` and therefore does
+                      not admit signed requests.
         "400":
           description: Validation error (e.g. `agent_grant_invalid`)
         "409":
@@ -4496,7 +4795,10 @@ paths:
       description: |
         Patches `label`, `capabilities`, `notes`, or any of the
         `match_*` identity fields. Status transitions go through the
-        dedicated `suspend`, `revoke`, and `restore` endpoints.
+        dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+        `match_thumbprint` is how a key is pinned to an existing grant;
+        the admission cache is cleared so the pin applies to the next
+        request.
       operationId: updateAgentGrant
       parameters:
         - in: path
@@ -4520,6 +4822,14 @@ paths:
                 properties:
                   grant:
                     $ref: "#/components/schemas/AgentGrant"
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      Advisory messages about the stored grant. Present when
+                      the grant pins no `match_thumbprint` and therefore does
+                      not admit signed requests.
         "400":
           description: Validation error
         "404":
@@ -7213,6 +7523,28 @@ paths:
                           type: integer
                   total:
                     type: integer
+                  empty_reason:
+                    type: string
+                    enum: [registry_unseeded, filtered_to_empty]
+                    description: >-
+                      Present only when relationship_types is empty. Never
+                      infer "no vocabulary exists" from an empty array alone.
+                      registry_unseeded means the instance's relationship-type
+                      registry (including the built-in vocabulary) failed to
+                      seed and is a registry/seed failure that self-repairs on
+                      a subsequent read, not a permanent state; call
+                      list_relationship_types again rather than concluding no
+                      types are available. filtered_to_empty means a supplied
+                      keyword matched nothing against an otherwise-populated
+                      registry; retry without keyword to see the full
+                      vocabulary. Absent when relationship_types is non-empty.
+                  hint:
+                    type: string
+                    description: >-
+                      Present only alongside empty_reason. Human/agent-readable
+                      elaboration of empty_reason and the recommended next
+                      call; never present when relationship_types is
+                      non-empty.
 
   /register_schema:
     post:

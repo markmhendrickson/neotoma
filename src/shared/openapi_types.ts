@@ -98,6 +98,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+     * @description Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+     *     protocol eras on the same route (#2070):
+     *
+     *     - **Modern (2026-07-28, stateless).** Selected when the request carries no
+     *       `Mcp-Session-Id`, is not an `initialize` request, and its
+     *       `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+     *       request is resolved on its own: protocol version and client capabilities
+     *       come from `_meta`, and the caller's identity comes only from the
+     *       credentials on that request. No session is minted and no server state is
+     *       retained, so any API instance can serve any request behind a plain
+     *       round-robin load balancer. `server/discover` is served on this path.
+     *       `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+     *       `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+     *       the body.
+     *     - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+     *       request carrying `Mcp-Session-Id`, is served by the session transport
+     *       exactly as before (session mint on initialize, recover-in-place for a
+     *       stale session id, `404` for an unknown session on GET/DELETE).
+     *
+     *     `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+     *     tool/resource/prompt name. A value shaped like a credential or personal
+     *     data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+     *     `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+     *     and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+     *     sessions; those are not modelled here.
+     */
+    post: operations["mcpStreamableHttpPost"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp/oauth/initiate": {
     parameters: {
       query?: never;
@@ -786,9 +830,11 @@ export interface paths {
     /**
      * Create an agent grant
      * @description Creates a new `agent_grant` for the authenticated user. At least
-     *     one of `match_sub` or `match_thumbprint` must be supplied. The
-     *     grant's `capabilities` follow the same shape used by the
-     *     admitted-request authorization check.
+     *     one of `match_sub` or `match_thumbprint` must be supplied. Only
+     *     `match_thumbprint` admits signed requests; a grant created without
+     *     it is accepted but inert, and the response carries a `warnings`
+     *     entry saying so. The grant's `capabilities` follow the same shape
+     *     used by the admitted-request authorization check.
      */
     post: operations["createAgentGrant"];
     delete?: never;
@@ -815,7 +861,10 @@ export interface paths {
      * Update editable fields on an agent grant
      * @description Patches `label`, `capabilities`, `notes`, or any of the
      *     `match_*` identity fields. Status transitions go through the
-     *     dedicated `suspend`, `revoke`, and `restore` endpoints.
+     *     dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+     *     `match_thumbprint` is how a key is pinned to an existing grant;
+     *     the admission cache is cleared so the pin applies to the next
+     *     request.
      */
     patch: operations["updateAgentGrant"];
     trace?: never;
@@ -2342,6 +2391,85 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * @description Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+     *     (#2070). Operational metadata only: never persisted, never logged in full.
+     */
+    McpRequestMeta: {
+      /**
+       * @description Protocol version for this request. Required on the modern path.
+       * @example 2026-07-28
+       */
+      "io.modelcontextprotocol/protocolVersion"?: string;
+      /** @description Client capabilities relevant to this request. Required on the modern path. */
+      "io.modelcontextprotocol/clientCapabilities"?: {
+        [key: string]: unknown;
+      };
+      /** @description Self-reported client name and version (unverified; attribution fallback only). */
+      "io.modelcontextprotocol/clientInfo"?: {
+        name?: string;
+        version?: string;
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcRequest: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number;
+      /** @description JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy). */
+      method: string;
+      params?: {
+        _meta?: components["schemas"]["McpRequestMeta"];
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcResponse: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number | null;
+      result?: {
+        [key: string]: unknown;
+      };
+      error?: {
+        code: number;
+        message: string;
+        data?: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+     *     protocol versions, this server's declared capabilities, its identity and its
+     *     instructions: no tenant data, no caller identity, no instance topology.
+     */
+    McpServerDiscoverResult: {
+      /** @enum {string} */
+      resultType: "complete";
+      supportedVersions: string[];
+      capabilities: {
+        [key: string]: unknown;
+      };
+      /** @description Agent-facing MCP instructions plus this instance's declared data policy. */
+      instructions?: string;
+      ttlMs?: number;
+      /** @enum {string} */
+      cacheScope?: "public" | "private";
+      _meta?: {
+        "io.modelcontextprotocol/serverInfo"?: {
+          name?: string;
+          version?: string;
+        };
+      } & {
+        [key: string]: unknown;
+      };
+    };
     /** @description Result of the /ready database probe. */
     ReadinessResult: {
       /** @description True only when the database completed the probe read. */
@@ -3017,7 +3145,14 @@ export interface components {
        *     that signature to one of this user's `agent_grant` entities
        *     and is treating the caller as authenticated. The two are
        *     independent: a verified-but-unmatched signature stays
-       *     attribution-only and `admitted` is `false`.
+       *     attribution-only and `admitted` is `false`. Admission is
+       *     key-bound: a grant admits only when its `match_thumbprint`
+       *     equals the signing key's thumbprint. `grant_key_unbound`
+       *     means a grant matched sub/iss but pins no key; capability-gated
+       *     writes carrying that signature are refused until the grant is
+       *     pinned, whatever authenticated the request. Pin
+       *     `match_thumbprint` to admit the agent (see
+       *     docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
        */
       aauth: {
         verified: boolean;
@@ -3028,6 +3163,7 @@ export interface components {
           | "admitted"
           | "no_grants_for_user"
           | "no_match"
+          | "grant_key_unbound"
           | "grant_revoked"
           | "grant_suspended"
           | "strict_rejected"
@@ -3398,6 +3534,44 @@ export interface components {
       target_entity_type?: string | null;
       target_entity_type_label?: string | null;
     };
+    /**
+     * @description A relationship from a request's `relationships` array that was
+     *     written. Shared by `StoreStructuredResponse.relationships_created`
+     *     and `CreateInterpretationResponse.relationships_created`. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipCreated: {
+      relationship_type: string;
+      source_entity_id: string;
+      target_entity_id: string;
+    };
+    /**
+     * @description A relationship from a request's `relationships` array that was not
+     *     written. The entities in the call are still stored. Shared by
+     *     `StoreStructuredResponse.relationships_refused` and
+     *     `CreateInterpretationResponse.relationships_refused`. An endpoint
+     *     that does not exist and one owned by another user are both reported
+     *     as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipRefusal: {
+      /** @description Position of the relationship in the request's `relationships` array. */
+      relationship_index: number;
+      relationship_type: string;
+      source_entity_id?: string;
+      target_entity_id?: string;
+      source_index?: number;
+      target_index?: number;
+      /**
+       * @description One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+       *     `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+       *     `RELATIONSHIP_INVALID_ENTITY_ID`,
+       *     `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+       */
+      code: string;
+      reason: string;
+      hint?: string;
+    };
     TimelineEvent: {
       id?: string;
       event_type?: string;
@@ -3537,9 +3711,18 @@ export interface components {
        *     data.
        */
       hint?: string;
-      relationships_created?: {
-        [key: string]: unknown;
-      }[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. See
+       *     docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
     };
     /** @description Aggregate usage statistics computed from local data only. */
     UsageStats: {
@@ -3662,10 +3845,18 @@ export interface components {
        */
       type?: "User" | "Bot" | "Organization";
       /**
+       * @description Accepted for compatibility, but a request body can only assert an
+       *     external actor: the stored value is always `claim`. The stronger
+       *     tiers are assigned by server-side verification paths (the signed
+       *     GitHub webhook route, AAuth token claims, grant linkage).
        * @default claim
        * @enum {string}
        */
       verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
+      /**
+       * @description Not carried over from a request body; set only by the signed
+       *     GitHub webhook route.
+       */
       delivery_id?: string;
       event_type?: string;
       repository?: string;
@@ -3891,6 +4082,19 @@ export interface components {
         observation_index?: number;
         entity_id?: string;
       })[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. An endpoint that
+       *     does not exist and one owned by another user are both reported as
+       *     `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
       /**
        * @description Schema-driven non-fatal warnings emitted when a stored observation
        *     omits all fields listed by a schema's `store_warnings` rule. Used
@@ -4393,6 +4597,94 @@ export interface operations {
           } & {
             [key: string]: unknown;
           };
+        };
+      };
+    };
+  };
+  mcpStreamableHttpPost: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`. */
+        "MCP-Protocol-Version"?: string;
+        /** @description Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data. */
+        "Mcp-Method"?: string;
+        /**
+         * @description Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+         *     `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+         *     sentinel. Never a credential or personal data.
+         */
+        "Mcp-Name"?: string;
+        /** @description Legacy-era session id. Its presence selects the legacy session path. */
+        "Mcp-Session-Id"?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["McpJsonRpcRequest"];
+      };
+    };
+    responses: {
+      /**
+       * @description JSON-RPC response. On the modern path every result carries
+       *     `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+       *     a `server/discover` result has the `McpServerDiscoverResult` shape.
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+          "text/event-stream": string;
+        };
+      };
+      /** @description JSON-RPC notification accepted (no body). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
+       * @description `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+       *     `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+       *     `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Authentication required or credential invalid (`-32001`). On the
+       *     2026-07-28 path this includes a credential that passed the gate but
+       *     resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+       *     or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+       */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+       *     (`-32001`, re-initialize).
+       */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
         };
       };
     };
@@ -5815,6 +6107,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -5890,6 +6188,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -7956,6 +8260,13 @@ export interface operations {
               edge_count?: number;
             }[];
             total: number;
+            /**
+             * @description Present only when relationship_types is empty. Never infer "no vocabulary exists" from an empty array alone. registry_unseeded means the instance's relationship-type registry (including the built-in vocabulary) failed to seed and is a registry/seed failure that self-repairs on a subsequent read, not a permanent state; call list_relationship_types again rather than concluding no types are available. filtered_to_empty means a supplied keyword matched nothing against an otherwise-populated registry; retry without keyword to see the full vocabulary. Absent when relationship_types is non-empty.
+             * @enum {string}
+             */
+            empty_reason?: "registry_unseeded" | "filtered_to_empty";
+            /** @description Present only alongside empty_reason. Human/agent-readable elaboration of empty_reason and the recommended next call; never present when relationship_types is non-empty. */
+            hint?: string;
           };
         };
       };

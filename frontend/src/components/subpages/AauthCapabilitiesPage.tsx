@@ -49,6 +49,15 @@ export function AauthCapabilitiesPage() {
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground">
+            AAuth-verified agent whose <code>sub</code> / <code>iss</code>{" "}
+            names a grant that pins no key
+          </strong>{" "}
+         , not admitted, and capability-gated writes are refused (
+          <code>capability_denied</code>) even when Bearer/OAuth
+          authenticates the request, until the grant is pinned.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">
             Anonymous / unverified-client tier
           </strong>{" "}
          , no admission; subject to attribution policy.
@@ -73,9 +82,9 @@ export function AauthCapabilitiesPage() {
   "entity_type": "agent_grant",
   "owner_user_id": "usr_…",
   "label": "Cursor on macbook-pro",
-  "match_sub": "agent-cursor@example.com",   // AAuth sub claim
-  "match_iss": "https://agent.example.com",  // optional; both must match when set
-  "match_thumbprint": "abcd…",               // optional RFC 7638 JWK thumbprint
+  "match_thumbprint": "abcd…",               // RFC 7638 JWK thumbprint; required to admit
+  "match_sub": "agent-cursor@example.com",   // AAuth sub claim (descriptive)
+  "match_iss": "https://agent.example.com",  // optional; descriptive
   "capabilities": [
     { "op": "store",               "entity_types": ["neotoma_feedback"] },
     { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
@@ -90,12 +99,77 @@ export function AauthCapabilitiesPage() {
       <h3 className="text-[15px] font-medium tracking-[-0.01em] mt-4 mb-2">
         Identity rule
       </h3>
+      <p className="text-[15px] leading-7 mb-4">
+        Admission to a grant requires a key binding. A grant admits a
+        signed request only when its <code>match_thumbprint</code> equals
+        the RFC 7638 thumbprint of the key that signed the request.{" "}
+        <code>match_sub</code> / <code>match_iss</code> are descriptive:
+        they are recorded on the grant and shown in Inspector, but do not
+        admit on their own.
+      </p>
+      <p className="text-[15px] leading-7 mb-4">
+        A grant without <code>match_thumbprint</code> does not admit signed
+        requests. A request whose <code>sub</code> / <code>iss</code> match
+        such a grant gets admission reason <code>grant_key_unbound</code>,
+        and its capability-gated writes are refused with{" "}
+        <code>capability_denied</code> until the grant is pinned, even when
+        Bearer/OAuth authenticates the request. Authentication and
+        capability limits are separate decisions: the signature decides
+        which limits apply, whatever authenticated the request.
+      </p>
       <p className="text-[15px] leading-7 mb-6">
-        At least one of <code>match_sub</code> or{" "}
-        <code>match_thumbprint</code> MUST be set; <code>match_iss</code>{" "}
-        is optional but, when set, BOTH <code>match_sub</code> AND{" "}
-        <code>match_iss</code> MUST match the verified identity for the
-        grant to admit.
+        Take the thumbprint from the agent's own key material (for example{" "}
+        <code>neotoma auth session</code> on the agent's host), not from
+        observed request traffic. A grant may be created with only{" "}
+        <code>match_sub</code> while a key is provisioned; it stays inert
+        until <code>match_thumbprint</code> is set, and the create response
+        carries a <code>warnings</code> entry saying so.
+      </p>
+
+      <h3 className="text-[15px] font-medium tracking-[-0.01em] mt-4 mb-2">
+        Pin a key to an existing grant
+      </h3>
+      <p className="text-[15px] leading-7 mb-3">
+        There is no dedicated CLI edit subcommand. Use any of these from a
+        user-authenticated session (or an agent holding the bootstrap
+        capability), with the thumbprint that{" "}
+        <code>neotoma auth session</code> prints on the agent's host:
+      </p>
+      <ul className="list-none pl-0 space-y-2 mb-4">
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Inspector</strong>: Agents →
+          Agent grants → open the grant → set{" "}
+          <code>match_thumbprint</code> → Save.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">REST</strong>:{" "}
+          <code>PATCH /agents/grants/&lt;grant_id&gt;</code> with{" "}
+          <code>{`{ "match_thumbprint": "<thumbprint>" }`}</code>.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">MCP / REST correct</strong>:{" "}
+          <code>correct</code> (or <code>POST /correct</code>) with{" "}
+          <code>
+            {`{ "entity_id": "<grant_id>", "entity_type": "agent_grant", "field": "match_thumbprint", "value": "<thumbprint>", "idempotency_key": "pin-<grant_id>-<thumbprint>" }`}
+          </code>
+          .
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">CLI</strong>:{" "}
+          <code>
+            neotoma corrections create &lt;grant_id&gt; --entity-type
+            agent_grant --field-name match_thumbprint --corrected-value
+            &lt;thumbprint&gt;
+          </code>
+          .
+        </li>
+      </ul>
+      <p className="text-[15px] leading-7 mb-6">
+        Then run <code>neotoma auth session</code> on the agent's host and
+        check <code>admission_reason</code> is <code>admitted</code>.
+        Agents using the <code>jkt_jwt</code> Signature-Key scheme sign
+        with a short-lived key and cannot be pinned; give an agent that
+        needs a grant a long-lived signing key.
       </p>
 
       <h3 className="text-[15px] font-medium tracking-[-0.01em] mt-4 mb-2">
@@ -132,18 +206,15 @@ export function AauthCapabilitiesPage() {
       </p>
       <ol className="list-decimal pl-6 space-y-2 mb-6">
         <li className="text-[15px] leading-7 text-muted-foreground">
-          If the request carries a JWK thumbprint AND any of the user's
-          grants has a matching <code>match_thumbprint</code>, that grant
-          wins.
+          The most recently observed <code>active</code> grant whose{" "}
+          <code>match_thumbprint</code> equals the signing key's
+          thumbprint wins.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          Otherwise, the first <code>active</code> grant whose{" "}
-          <code>match_sub</code> equals the request's <code>sub</code> and
-          (when set on the grant) whose <code>match_iss</code> equals the
-          request's <code>iss</code>.
-        </li>
-        <li className="text-[15px] leading-7 text-muted-foreground">
-          Otherwise, no admission, the request stays attribution-only.
+          Otherwise, no admission, the request stays attribution-only. The
+          reason is <code>grant_key_unbound</code> when a grant without a
+          thumbprint pin matched <code>sub</code> / <code>iss</code>, and{" "}
+          <code>no_match</code> otherwise.
         </li>
       </ol>
 
@@ -293,8 +364,8 @@ export function AauthCapabilitiesPage() {
           .
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          Paste the agent's AAuth <code>sub</code> (and <code>iss</code>,
-          or thumbprint) and a readable label.
+          Paste the agent's key thumbprint (required for admission), its
+          AAuth <code>sub</code> / <code>iss</code>, and a readable label.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           Select capabilities by <code>(op, entity_type)</code>.

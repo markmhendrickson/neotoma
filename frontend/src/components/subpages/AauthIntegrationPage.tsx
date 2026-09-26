@@ -216,6 +216,14 @@ OAuth connection id                →  connection_id
           user's grants.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
+          <code>grant_key_unbound</code>, the identity's <code>sub</code> /{" "}
+          <code>iss</code> match a grant that pins no{" "}
+          <code>match_thumbprint</code>. The grant does not admit, and
+          capability-gated writes carrying this signature are refused until
+          the grant is pinned (see{" "}
+          <Link to="/aauth/capabilities">capability scoping</Link>).
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
           <code>grant_revoked</code> / <code>grant_suspended</code>,
           identity matched a grant whose status is <code>revoked</code> or{" "}
           <code>suspended</code>.

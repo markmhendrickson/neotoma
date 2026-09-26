@@ -232,6 +232,50 @@ function isDuplicateRegistryRowError(error: unknown): boolean {
 }
 
 /**
+ * One-shot-per-process guard for the empty-global-registry lazy repair
+ * (#2482, `resolveAllWithRepair`). Module state, not the 5s membership cache
+ * below: a repair that keeps failing (e.g. the registry table itself is
+ * unavailable) must not turn every subsequent read into a retried write.
+ * Exported for tests only, to reset between cases that each need their own
+ * first-read repair attempt.
+ */
+let lazyRepairAttempted = false;
+
+/**
+ * The single-flight in-progress repair, or null when no repair is running.
+ * Every concurrent caller of `resolveAllWithRepair` awaits the SAME promise
+ * rather than each independently checking-then-setting `lazyRepairAttempted`,
+ * which is racy across an `await` boundary (see `resolveAllWithRepair`'s
+ * doc). Declared alongside `lazyRepairAttempted` since the two together are
+ * one guard, not two independent ones.
+ */
+let inFlightRepair: Promise<void> | null = null;
+
+/**
+ * Test-only: allow a fresh lazy-repair attempt on the next read.
+ *
+ * IMPORTANT SCOPE LIMIT, found while adding REST/CLI surface tests for
+ * #2482 (PR #2511 pm round-2): this resets state only in the CALLING
+ * module's realm. `vitest.global_setup.ts` loads `src/actions.ts` (and
+ * transitively this module) via a SEPARATE `import()` in Vitest's isolated
+ * globalSetup context to boot the shared in-process HTTP test server —
+ * that is a genuinely different module instance from the one a test file's
+ * own top-level `import` resolves, with its own disjoint
+ * `lazyRepairAttempted`/`inFlightRepair` bindings. Calling this from a test
+ * file has NO effect on the live HTTP server's repair state; it only resets
+ * the test file's own (unused-by-the-server) copy. Tests that exercise the
+ * REST/CLI surfaces (which route through the server realm) cannot use this
+ * to force a second repair — the server-realm repair is genuinely one-shot
+ * for the life of the test run, matching the documented per-process
+ * contract. Only MCP-surface tests that instantiate `NeotomaServer()`
+ * directly in the TEST file's own realm see this reset take effect.
+ */
+export function resetRelationshipTypeLazyRepairForTests(): void {
+  lazyRepairAttempted = false;
+  inFlightRepair = null;
+}
+
+/**
  * Reduce an append-only row set to the effective registration per
  * `(relationship_type, scope, user_id)`: the LATEST row by `created_at`, then
  * by `registry_version` as a deterministic tiebreak when two rows share a
@@ -434,6 +478,12 @@ export class RelationshipTypeRegistryService {
    * Scope predicate mirrors `SchemaRegistryService.listActiveSchemas`: global
    * rows always, plus this user's own rows. A type registered by user A is not
    * resolvable by user B; a global type is resolvable by both.
+   *
+   * `repair` controls whether an empty GLOBAL result triggers the one-shot
+   * lazy built-in reseed below (`resolveAllWithRepair`). `resolveAll` itself
+   * stays a plain read so `register()`'s internal calls (case-collision guard,
+   * acyclic-protection check) never trigger a write as a side effect of a
+   * read — see `resolveAllWithRepair` for why the repair lives one layer up.
    */
   private async resolveAll(userId?: string): Promise<RelationshipTypeRegistration[]> {
     const columns =
@@ -478,6 +528,97 @@ export class RelationshipTypeRegistryService {
   }
 
   /**
+   * `resolveAll`, plus a one-shot lazy repair when the GLOBAL registry
+   * resolves to zero rows (#2482).
+   *
+   * #1972/#2357 seed `BUILT_IN_RELATIONSHIP_TYPES` at boot, best-effort inside
+   * a try/catch so a briefly-unavailable DB never blocks startup
+   * (`src/actions.ts`). That means a boot-seed failure — or any path that
+   * skips the boot hook, e.g. a test DB, a fresh SQLite file created between
+   * requests — leaves the table present (`CREATE TABLE IF NOT EXISTS`) but
+   * empty, and every caller, including a fully authenticated global-scope
+   * read, sees `{ relationship_types: [], total: 0 }` with PART_OF and
+   * REFERS_TO unusable. That is a registry/seed failure, not "no types exist
+   * for this caller" — an empty GLOBAL result is never a legitimate steady
+   * state, since the built-in seed is additive and idempotent (a type that IS
+   * deliberately deregistered still leaves an effective row with
+   * `state: "deactivated"`, which is not what an empty resolve reports).
+   *
+   * Deliberately narrow: only the GLOBAL half of the resolve is the repair
+   * trigger. A user's own empty set of USER-scoped registrations is ordinary
+   * and must not trigger a write. Deliberately one-shot per process (module
+   * state, not the 5s membership cache): a persistently broken registry table
+   * must not turn every read into a retried write.
+   *
+   * This is the only place a read triggers a registry write, and the write is
+   * `ensureBuiltInRelationshipTypesSeeded` — the same additive, non-overwriting
+   * seeder boot already calls — never a broadened grant or a parallel
+   * hardcoded vocabulary (arch: extend #2357, do not fork it).
+   */
+  private async resolveAllWithRepair(userId?: string): Promise<RelationshipTypeRegistration[]> {
+    const all = await this.resolveAll(userId);
+    if (all.some((r) => r.scope === "global")) {
+      return all;
+    }
+    if (lazyRepairAttempted) {
+      return all;
+    }
+    // Single-flight: the empty-registry check above and the flag check/set
+    // below straddle an `await` (`resolveAll`), so two calls arriving close
+    // together can both observe `lazyRepairAttempted === false` before either
+    // sets it — synchronous code between an `await` and the next one does NOT
+    // preempt, but two DIFFERENT async call stacks each resuming past their
+    // own `await this.resolveAll(userId)` can interleave here. Route every
+    // concurrent caller through the SAME in-flight promise instead of letting
+    // a second caller start (and its own late `lazyRepairAttempted = true`
+    // clobber a legitimate reset, e.g. between test cases) a redundant
+    // attempt. The promise itself, not a boolean set post-hoc, is the
+    // single-flight guard.
+    if (!inFlightRepair) {
+      inFlightRepair = this.attemptRepairOnce();
+    }
+    await inFlightRepair;
+    return this.resolveAll(userId);
+  }
+
+  /**
+   * The actual one-shot repair attempt, run at most once concurrently via
+   * `resolveAllWithRepair`'s `inFlightRepair` guard. Always resolves (never
+   * rejects) — a repair failure is logged and reported via `describeEmpty`,
+   * never thrown from a read.
+   */
+  private async attemptRepairOnce(): Promise<void> {
+    lazyRepairAttempted = true;
+    try {
+      const { ensureBuiltInRelationshipTypesSeeded } = await import("./seed_registry.js");
+      const summary = await ensureBuiltInRelationshipTypesSeeded();
+      if (summary.registered.length > 0) {
+        logger.warn(
+          `[RelationshipTypeRegistry] global registry resolved empty; lazy-repaired ` +
+            `${summary.registered.length} built-in type(s) on first read: ` +
+            `${summary.registered.join(", ")}`
+        );
+        invalidateRelationshipTypeCache();
+      } else if (summary.failed.length > 0) {
+        logger.error(
+          `[RelationshipTypeRegistry] global registry resolved empty and lazy repair failed ` +
+            `for ${summary.failed.length} type(s): ` +
+            summary.failed.map((f) => `${f.relationship_type} (${f.error})`).join("; ")
+        );
+      }
+    } catch (err) {
+      // Never let a repair attempt turn a read into a thrown error — the
+      // caller still gets the (possibly still-empty) resolve, and `list()`
+      // reports why via `empty_reason`.
+      logger.error(
+        `[RelationshipTypeRegistry] lazy repair threw: ${(err as Error).message ?? String(err)}`
+      );
+    } finally {
+      inFlightRepair = null;
+    }
+  }
+
+  /**
    * The registry CENSUS — types that are PERMITTED, not types that have edges.
    *
    * That distinction is the whole point of the read-back, and the pre-existing
@@ -493,7 +634,7 @@ export class RelationshipTypeRegistryService {
     scope?: RelationshipTypeScope;
     include_deactivated?: boolean;
   }): Promise<RelationshipTypeRegistration[]> {
-    let all = await this.resolveAll(params?.user_id);
+    let all = await this.resolveAllWithRepair(params?.user_id);
     if (!params?.include_deactivated) {
       all = all.filter((r) => r.state === "active");
     }
@@ -509,6 +650,50 @@ export class RelationshipTypeRegistryService {
       );
     }
     return all.sort((a, b) => a.relationship_type.localeCompare(b.relationship_type));
+  }
+
+  /**
+   * Diagnostic companion to `list()` (#2482): explains an empty result rather
+   * than letting a caller read `total: 0` as "no types exist". Never a bare
+   * empty list — `empty_reason` distinguishes a genuinely filtered-empty
+   * result (`filtered_to_empty`, e.g. a `keyword` that matches nothing) from
+   * an unseeded/repair-failed registry (`registry_unseeded`) from a working,
+   * non-empty registry (`undefined` — the ordinary case).
+   */
+  async describeEmpty(params: {
+    user_id?: string;
+    keyword?: string;
+    scope?: RelationshipTypeScope;
+    include_deactivated?: boolean;
+  }): Promise<{ empty_reason: "registry_unseeded" | "filtered_to_empty"; hint: string } | null> {
+    // NOTE: `unfiltered` is user-then-global, matching `resolveAll` — it is
+    // NOT global-only, so this only distinguishes "the combined effective set
+    // this caller sees is empty" from "keyword filtered a non-empty set to
+    // nothing". Only called from `list()` when its own (equally user+global)
+    // result was already empty, so that is the exact same set, and no caller
+    // reaches this expecting a global-only census.
+    const unfiltered = await this.resolveAllWithRepair(params.user_id);
+    const effectiveCount = unfiltered.filter(
+      (r) => r.state === "active" || params.include_deactivated
+    ).length;
+    if (effectiveCount === 0) {
+      return {
+        empty_reason: "registry_unseeded",
+        hint:
+          "The relationship-type registry has no effective global registrations, including the " +
+          "built-in vocabulary (PART_OF, REFERS_TO, ...). This is a seed/registry failure, not an " +
+          "empty-by-design vocabulary — an operator should verify the deployed registry table and " +
+          "boot logs for '[RelationshipTypes]' seed failures. register_relationship_type registers " +
+          "a NEW custom type and will not restore missing built-ins.",
+      };
+    }
+    if (params.keyword) {
+      return {
+        empty_reason: "filtered_to_empty",
+        hint: `No registered relationship type matches keyword "${params.keyword}". Call list_relationship_types with no keyword to see the full vocabulary.`,
+      };
+    }
+    return null;
   }
 
   /** The set of type names a write by `userId` may currently use. */

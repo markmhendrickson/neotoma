@@ -31,6 +31,8 @@ Implementation:
 | User-authenticated callers (Bearer / OAuth / local Inspector session) | No — full access to their own user_id's data, modulo attribution policy. |
 | AAuth-verified agent matched to an `active` grant                    | Yes — restricted to declared `(op, entity_type)` pairs on the grant. |
 | AAuth-verified agent with no matching grant                          | Falls through to attribution-only behaviour (no admission, must use Bearer/OAuth). |
+| AAuth-verified agent whose `sub` / `iss` names a grant that pins no key | Not admitted, and capability-gated writes are refused (`capability_denied`) even when Bearer/OAuth authenticates the request, until the grant is pinned. See [Identity rule](#identity-rule). |
+| AAuth-verified agent whose key is pinned to a grant that is `suspended` or `revoked` | Not admitted, and capability-gated writes are refused (`capability_denied`) even when Bearer/OAuth authenticates the request, until the grant is restored to `active`. See [Identity rule](#identity-rule). |
 | Anonymous / unverified-client tier                                   | No admission; subject to attribution policy. |
 
 The canonical use is pinning the Netlify forwarder
@@ -70,9 +72,9 @@ the source of truth):
   "entity_type": "agent_grant",
   "owner_user_id": "usr_…",
   "label": "Cursor on macbook-pro",
-  "match_sub": "agent-cursor@example.com",   // AAuth sub claim
-  "match_iss": "https://agent.example.com",  // optional; both must match when set
-  "match_thumbprint": "abcd…",               // optional RFC 7638 JWK thumbprint
+  "match_thumbprint": "abcd…",               // RFC 7638 JWK thumbprint; required to admit
+  "match_sub": "agent-cursor@example.com",   // AAuth sub claim (descriptive)
+  "match_iss": "https://agent.example.com",  // optional; descriptive
   "capabilities": [
     { "op": "store",               "entity_types": ["neotoma_feedback"] },
     { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
@@ -87,9 +89,103 @@ the source of truth):
 
 ### Identity rule
 
-At least one of `match_sub` or `match_thumbprint` MUST be set;
-`match_iss` is optional but, when set, BOTH `match_sub` and `match_iss`
-MUST match the verified identity for the grant to admit.
+Admission to a grant requires a key binding. A grant admits a signed
+request only when its `match_thumbprint` equals the RFC 7638 thumbprint
+of the key that signed the request.
+
+`match_sub` / `match_iss` are descriptive: they are recorded on the
+grant and shown in Inspector, but do not admit on their own. A grant
+without `match_thumbprint` does not admit signed requests. A request
+whose `sub` / `iss` match such a grant gets admission reason
+`grant_key_unbound` (visible in `/session` under
+`aauth.admission_reason`), and the server logs an
+`aauth_admission_key_unbound` warning that points to
+[Pin a key to an existing grant](#pin-a-key-to-an-existing-grant).
+
+A grant's `status` is likewise part of the key binding: a key pinned to
+a grant that is later set to `suspended` or `revoked` stops admitting
+that key's signed requests — the pin does not carry over to "no grant
+at all". Admission reports `grant_revoked` or `grant_suspended`
+accordingly, and the server logs an `aauth_admission_inactive_grant`
+warning naming the grant and its current status. Restoring the grant to
+`active` (Inspector, `PATCH /agents/grants/{id}`, or `correct`) is what
+re-admits it; the key binding itself does not need to be re-pinned.
+
+Authentication and capability limits are separate decisions. A request
+can be authenticated by Bearer or OAuth and also carry an AAuth
+signature; the signature still decides which capability limits apply:
+
+- Signature bound to an `active` grant (`match_thumbprint` matches):
+  the grant's capabilities are the ceiling, whatever authenticated the
+  request.
+- Signature whose `sub` / `iss` names a grant that pins no key
+  (`grant_key_unbound`), or whose key is pinned to a grant that is now
+  `suspended` or `revoked` (`grant_suspended` / `grant_revoked`):
+  capability-gated writes (`store`, `correct`, `create_relationship`,
+  relationship-type registration, protected types) are refused with
+  `capability_denied`. This does not depend on
+  `NEOTOMA_AGENT_DEFAULT_DENY`, and a Bearer/OAuth credential on the
+  same request does not lift it.
+- No grant involved: `NEOTOMA_AGENT_DEFAULT_DENY` decides, as before.
+
+Take the thumbprint from the agent's own key material (for example
+`neotoma auth session` on the agent's host, which prints the configured
+signer's thumbprint), not from observed request traffic.
+
+A grant may still be created with only `match_sub` (for example while
+the agent's key is being provisioned); it stays inert until
+`match_thumbprint` is set. `POST /agents/grants` and
+`PATCH /agents/grants/{id}` return a `warnings` entry for such a grant,
+and `neotoma agents grants import` prints one per grant.
+
+#### Pin a key to an existing grant
+
+There is no dedicated CLI edit subcommand; use any of the paths below.
+Writes to `agent_grant` are protected, so make them from a
+user-authenticated session (Bearer / OAuth / Inspector) or from an agent
+whose own grant carries the bootstrap capability.
+
+1. **Get the thumbprint** from the agent's own key material: run
+   `neotoma auth session` on the agent's host and copy `thumbprint`.
+2. **Apply it to the grant** (`<grant_id>` is the grant's entity id,
+   shown in Inspector and in `GET /agents/grants`):
+   - **Inspector:** Agents → Agent grants → open the grant
+     (`/agents/grants/<grant_id>`) → set **match_thumbprint** → Save.
+   - **REST (grant route):**
+     `PATCH /agents/grants/<grant_id>` with body
+     `{ "match_thumbprint": "<thumbprint>" }`. This also clears the
+     admission cache, so the pin applies to the next request.
+   - **MCP `correct`:**
+     ```json
+     {
+       "entity_id": "<grant_id>",
+       "entity_type": "agent_grant",
+       "field": "match_thumbprint",
+       "value": "<thumbprint>",
+       "idempotency_key": "pin-<grant_id>-<thumbprint>"
+     }
+     ```
+   - **REST `correct`:** `POST /correct` with the same JSON body.
+   - **CLI (generic correction):**
+     `neotoma corrections create <grant_id> --entity-type agent_grant --field-name match_thumbprint --corrected-value <thumbprint>`
+
+   A pin written through `correct` is picked up after the admission
+   cache TTL (a few seconds).
+3. **Verify** from the agent's host: `neotoma auth session` should
+   report `aauth.admitted: true` with `aauth.admission_reason: "admitted"`.
+   Check the pinned value against the agent's key material itself; a
+   grant's admission status before the pin is applied does not confirm
+   the value.
+
+#### Agents that cannot be pinned
+
+Agents that use the `jkt_jwt` Signature-Key scheme sign with a
+short-lived key, so the thumbprint changes whenever the key does and
+cannot be pinned on a grant. Grant admission does not admit such
+agents. They need issuer-verified identity (the agent token verified
+against its issuer's keys), which grant admission does not provide
+today. Give an agent that needs a grant a long-lived signing key
+(`hwk`, `jwt` with a stable `cnf.jwk`, or `jwks_uri`).
 
 ### Capability ops
 
@@ -107,12 +203,17 @@ Use `["*"]` to widen to every type — only do this for trusted grants.
 
 Admission resolves the verified identity to at most one grant:
 
-1. If the request carries a JWK thumbprint AND any of the user's grants
-   has a matching `match_thumbprint`, that grant wins.
-2. Otherwise, the first `active` grant whose `match_sub` equals the
-   request's `sub` and (when set on the grant) whose `match_iss` equals
-   the request's `iss`.
-3. Otherwise, no admission — the request stays attribution-only.
+1. The most recently observed `active` grant whose `match_thumbprint`
+   equals the signing key's thumbprint wins.
+2. Otherwise, no admission — the request stays attribution-only, and
+   capability-gated writes fail closed rather than falling back to an
+   unrecognized-agent ceiling. The reason is:
+   - `grant_revoked` / `grant_suspended` when the signing key is pinned
+     to a `revoked` / `suspended` grant (a key binding survives a
+     status change — it is not silently treated as unmatched),
+   - `grant_key_unbound` when a grant without a thumbprint pin matched
+     `sub` / `iss`,
+   - `no_match` otherwise.
 
 ## Status lifecycle
 
@@ -218,8 +319,8 @@ neotoma agents grants import --owner-user-id <usr_…> \
 ### Grant a new scope
 
 1. In Inspector, go to **Agents → Agent grants → New grant**.
-2. Paste the agent's AAuth `sub` (and `iss`, or thumbprint) and a
-   readable label.
+2. Paste the agent's key thumbprint (required for admission), its AAuth
+   `sub` / `iss`, and a readable label.
 3. Select capabilities by `(op, entity_type)`.
 4. Save. Admission picks up the new grant within the cache TTL.
 

@@ -5,20 +5,17 @@ import type { SubstrateEvent } from "../../events/types.js";
 import { createCorrection } from "../correction.js";
 import type { SubscriptionRecord } from "./subscription_types.js";
 import { SUBSCRIPTION_ENTITY_TYPE } from "./seed_schema.js";
+import { isProductionEnvironment } from "../../shared/environment.js";
 
 const WEBHOOK_TIMEOUT_MS = 10_000;
 const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000];
 const DELIVERY_TIMESTAMPS = new Map<string, number[]>();
 
-function isProductionEnv(): boolean {
-  return process.env.NEOTOMA_ENV === "production" || process.env.NODE_ENV === "production";
-}
-
 export function isWebhookUrlAllowed(urlStr: string): boolean {
   try {
     const u = new URL(urlStr);
     if (u.protocol === "https:") return true;
-    if (!isProductionEnv() && u.protocol === "http:") return true;
+    if (!isProductionEnvironment() && u.protocol === "http:") return true;
     if (u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1")) {
       return true;
     }

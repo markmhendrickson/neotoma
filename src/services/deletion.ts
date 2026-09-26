@@ -50,7 +50,17 @@ export interface DeletionResult {
   observation_id?: string;
   entity_id: string;
   error?: string;
+  /**
+   * True when the target does not resolve to something the caller owns.
+   * Set identically for a missing target and for one owned by another user,
+   * so handlers can map it to one not-found response for both.
+   */
+  not_found?: boolean;
 }
+
+/** Error text for a restore target the caller does not own (or that does not exist). */
+export const ENTITY_NOT_FOUND_MESSAGE = "Entity not found";
+export const RELATIONSHIP_NOT_FOUND_MESSAGE = "Relationship not found";
 
 /**
  * Soft delete an entity by creating a deletion observation
@@ -278,6 +288,32 @@ export async function restoreEntity(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
+  // Same ownership check as softDeleteEntity: only an entity the caller owns
+  // can be restored. A missing entity and another user's entity get the same
+  // not-found result.
+  const { data: existing, error: fetchError } = await db
+    .from("entities")
+    .select("id")
+    .eq("id", entityId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return {
+      success: false,
+      entity_id: entityId,
+      error: `Failed to verify entity: ${fetchError.message}`,
+    };
+  }
+  if (!existing) {
+    return {
+      success: false,
+      entity_id: entityId,
+      error: ENTITY_NOT_FOUND_MESSAGE,
+      not_found: true,
+    };
+  }
+
   const restoredAt = timestamp || new Date().toISOString();
 
   // Create deterministic observation ID
@@ -340,7 +376,71 @@ export async function restoreEntity(
 }
 
 /**
- * Restore a deleted relationship by creating a restoration observation
+ * Decide whether `userId` may restore the relationship `relationshipKey`.
+ *
+ * Restore revives a relationship the caller already holds; it never creates
+ * one. So the caller must:
+ *   - name a key that matches the (type, source, target) triple,
+ *   - already have at least one observation of that relationship,
+ *   - not be addressing a relationship snapshot owned by another user, and
+ *   - own both endpoints (the same rule `createRelationship` applies).
+ *
+ * Every refusal returns the same result, so a caller cannot tell a missing
+ * relationship from one belonging to someone else.
+ */
+async function callerMayRestoreRelationship(
+  relationshipKey: string,
+  relationshipType: string,
+  sourceEntityId: string,
+  targetEntityId: string,
+  userId: string
+): Promise<{ ok: true } | { ok: false; error?: string }> {
+  if (relationshipKey !== `${relationshipType}:${sourceEntityId}:${targetEntityId}`) {
+    return { ok: false };
+  }
+
+  const { data: priorObservations, error: priorError } = await db
+    .from("relationship_observations")
+    .select("id")
+    .eq("relationship_key", relationshipKey)
+    .eq("user_id", userId)
+    .limit(1);
+  if (priorError) {
+    return { ok: false, error: `Failed to verify relationship: ${priorError.message}` };
+  }
+  if (!priorObservations || priorObservations.length === 0) {
+    return { ok: false };
+  }
+
+  const { data: snapshots, error: snapshotError } = await db
+    .from("relationship_snapshots")
+    .select("user_id")
+    .eq("relationship_key", relationshipKey);
+  if (snapshotError) {
+    return { ok: false, error: `Failed to verify relationship: ${snapshotError.message}` };
+  }
+  if ((snapshots ?? []).some((row: { user_id?: string | null }) => row.user_id !== userId)) {
+    return { ok: false };
+  }
+
+  const { filterOwnedEntityIds } = await import("./scoped_reads.js");
+  const owned = await filterOwnedEntityIds([sourceEntityId, targetEntityId], userId);
+  if (!owned.has(sourceEntityId) || !owned.has(targetEntityId)) {
+    return { ok: false };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Restore a deleted relationship by creating a restoration observation.
+ *
+ * Only a relationship the caller already holds can be restored (see
+ * {@link callerMayRestoreRelationship}); anything else returns
+ * `not_found: true` with the same message whether the relationship is
+ * missing or owned by another user. The relationship type must be
+ * registered, as for creation: an unregistered type throws
+ * `UnregisteredRelationshipTypeError`.
  *
  * @param relationshipKey - Relationship key (format: type:source:target)
  * @param relationshipType - Relationship type
@@ -360,6 +460,28 @@ export async function restoreRelationship(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
+  const { relationshipsService } = await import("./relationships.js");
+  await relationshipsService.assertRegisteredType(relationshipType, userId);
+
+  const permitted = await callerMayRestoreRelationship(
+    relationshipKey,
+    relationshipType,
+    sourceEntityId,
+    targetEntityId,
+    userId
+  );
+  if (!permitted.ok) {
+    if (permitted.error) {
+      return { success: false, entity_id: relationshipKey, error: permitted.error };
+    }
+    return {
+      success: false,
+      entity_id: relationshipKey,
+      error: RELATIONSHIP_NOT_FOUND_MESSAGE,
+      not_found: true,
+    };
+  }
+
   const restoredAt = timestamp || new Date().toISOString();
 
   // Create deterministic observation ID

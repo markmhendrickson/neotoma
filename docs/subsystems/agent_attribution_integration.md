@@ -256,8 +256,9 @@ never broader.
 | `admitted`             | Active grant matched. AAuth alone is sufficient on this request.           |
 | `no_grants_for_user`   | The owner user has no grants at all yet (Inspector → Agent grants → New).  |
 | `no_match`             | This identity does not match any of the user's grants.                     |
-| `grant_revoked`        | Identity matched a grant whose status is `revoked`.                        |
-| `grant_suspended`      | Identity matched a grant whose status is `suspended`.                      |
+| `grant_key_unbound`    | Identity's `sub` / `iss` match a grant that pins no `match_thumbprint`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is pinned, even when Bearer/OAuth authenticates the request. See [Pin a key to an existing grant](./agent_capabilities.md#pin-a-key-to-an-existing-grant). |
+| `grant_revoked`        | The signing key is pinned (`match_thumbprint`) to a grant whose status is `revoked`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is restored to `active`, even when Bearer/OAuth authenticates the request. |
+| `grant_suspended`      | The signing key is pinned (`match_thumbprint`) to a grant whose status is `suspended`. Same refusal as `grant_revoked`, until the grant is restored to `active`. |
 | `strict_rejected`      | Strict-AAuth gating rejected the signature before admission ran.           |
 | `aauth_disabled`       | This deployment has AAuth disabled; admission did not run.                 |
 | `not_signed`           | No AAuth signature was presented; only attribution-only paths are open.    |
