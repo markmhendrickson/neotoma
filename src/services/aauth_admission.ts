@@ -54,6 +54,8 @@ export interface AdmissionResult extends AAuthAdmissionContext {
  *   `{ admitted: false, reason: "no_match" | "grant_revoked" | ... }`.
  * - Only a grant without a key pin matched sub/iss →
  *   `{ admitted: false, reason: "grant_key_unbound" }`.
+ * - Active grants under more than one owner pin the key →
+ *   `{ admitted: false, reason: "grant_pin_conflict" }` (no owner).
  * - Match found → `{ admitted: true, user_id, grant_id, capabilities, ... }`
  *   and a debounced `last_used_at` observation is fired off.
  *
@@ -76,6 +78,7 @@ export async function admitFromAAuthContext(
   let unboundClaimMatch = false;
   let inactiveGrant: AgentGrant | null = null;
   let invalidGrantId: string | null = null;
+  let pinConflict = false;
   try {
     const lookup = await lookupGrantForIdentity({
       sub: ctx.sub,
@@ -86,6 +89,7 @@ export async function admitFromAAuthContext(
     unboundClaimMatch = lookup.unbound_claim_match;
     inactiveGrant = lookup.inactive_grant;
     invalidGrantId = lookup.invalid_grant_id;
+    pinConflict = lookup.pin_conflict;
   } catch (err) {
     logger.warn("aauth_admission lookup failed", {
       err: err instanceof Error ? err.message : String(err),
@@ -93,6 +97,23 @@ export async function admitFromAAuthContext(
       thumbprint_prefix: ctx.thumbprint?.slice(0, 12),
     });
     return { admitted: false, reason: "no_match" };
+  }
+
+  if (pinConflict) {
+    // A key admits as exactly one owner. When active grants under more
+    // than one owner pin it, no owner is chosen: admission is refused
+    // and the capability layer fails closed on this reason.
+    logger.warn(
+      JSON.stringify({
+        event: "aauth_admission_pin_conflict",
+        thumbprint_prefix: ctx.thumbprint?.slice(0, 12) ?? null,
+        message:
+          "The presented key is pinned by active agent_grants under more than " +
+          "one owner. Admission is refused and capability-gated writes carrying " +
+          "this signature are denied until only one owner pins the key.",
+      })
+    );
+    return { admitted: false, reason: "grant_pin_conflict" };
   }
 
   if (!grant) {

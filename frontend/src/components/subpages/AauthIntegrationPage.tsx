@@ -87,8 +87,11 @@ OAuth connection id                →  connection_id
           <strong className="text-foreground">
             <code>operator_attested</code>
           </strong>{" "}
-         , AAuth verified AND <code>iss</code> (or <code>iss:sub</code>)
-          is in <code>NEOTOMA_OPERATOR_ATTESTED_ISSUERS</code> /{" "}
+         , AAuth verified AND the signing key is listed in{" "}
+          <code>NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS</code>, or is pinned
+          by an active grant whose <code>match_iss</code> (or{" "}
+          <code>match_iss:match_sub</code>) is in{" "}
+          <code>NEOTOMA_OPERATOR_ATTESTED_ISSUERS</code> /{" "}
           <code>NEOTOMA_OPERATOR_ATTESTED_SUBS</code>.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
@@ -227,6 +230,12 @@ OAuth connection id                →  connection_id
           <code>grant_revoked</code> / <code>grant_suspended</code>,
           identity matched a grant whose status is <code>revoked</code> or{" "}
           <code>suspended</code>.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <code>grant_pin_conflict</code>, active grants under more than
+          one owner pin the signing key, so it resolves to no owner. The
+          key does not admit, and capability-gated writes carrying this
+          signature are refused.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <code>strict_rejected</code>, strict-AAuth gating rejected the

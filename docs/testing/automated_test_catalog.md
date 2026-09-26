@@ -1,48 +1,38 @@
 # Automated test catalog
-
 ## Scope
-
 This document summarizes repo-wide automated test coverage and inventories every automated test file in the repository. It does not define test-writing standards, fixture rules, or route coverage policy.
 
 ## Purpose
-
 Provide one canonical markdown source for what automated tests exist, how the major suites are run, and which validation commands keep the catalog current.
 
 ## Scope
-
 This document covers:
-
 - Repo-wide automated test inventory
 - High-level suite and runner breakdowns
 - Primary local and CI validation commands
 - Catalog maintenance workflow
 
 This document does not cover:
-
 - Test quality policy
 - Fixture design standards
 - Feature-specific testing strategy
 - Historical audit narratives
 
 ## Invariants
-
 1. Every automated test file in the repo must appear in this catalog.
 2. This catalog is generated from the repository tree, not maintained by hand.
 3. When test files, suite directories, or validation lanes change, the catalog must be regenerated in the same change.
 4. Policy changes belong in `docs/testing/testing_standard.md`; inventory changes belong here.
 
 ## Definitions
-
 - **Automated test file**: A repo test source matched by this catalog's scanner (`tests/**`, `src/**`, `frontend/src/**`, `playwright/tests/**`).
 - **Catalog generator**: `scripts/generate-automated-test-catalog.ts`, the only source allowed to rewrite this file.
 - **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. It is the local, pre-PR advisory gate. CI does not use it: the baseline lane runs `npm run generate:test-catalog`, which renders this file rather than failing on drift, so a stale copy never blocks a pull request.
 
 ## Data models or schemas
-
 None.
 
 ## Flows or sequences
-
 1. Change or add tests.
 2. Run `npm run generate:test-catalog`.
 3. Review the generated markdown diff.
@@ -56,54 +46,48 @@ flowchart TD
 ```
 
 ## Examples
-
 - Add `tests/integration/new_feature.test.ts` -> regenerate the catalog so the new file appears under the integration suite.
 - Rename `tests/cli/old_name.test.ts` -> regenerate the catalog so the old path disappears and the new path appears.
 - Add a new CI lane for tests -> update this document's command summary and run the validator.
 
 ## Testing requirements
-
 - `npm run generate:test-catalog` must be run when automated test inventory changes.
 - `npm run validate:test-catalog` should pass before merge, but does not block it.
 - CI runs `npm run generate:test-catalog` in the baseline lane, which renders this file rather than failing on drift.
 
 ## Maintenance
-
 - Canonical policy doc: `docs/testing/testing_standard.md`.
 - Historical audit doc: `docs/testing/test_coverage_audit_summary.md`.
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-
-- Total automated test files: **645**
-- Backend and repo Vitest files: **609**
+- Total automated test files: **650**
+- Backend and repo Vitest files: **614**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
-
-| Suite                           | Files |
-| ------------------------------- | ----: |
-| Vitest unit tests               |   177 |
-| Vitest service tests            |    46 |
-| Source-adjacent tests           |    66 |
-| Vitest integration tests        |   192 |
-| Vitest CLI tests                |    79 |
-| Vitest contract tests           |    20 |
-| Vitest security tests           |    13 |
-| Vitest subscription tests       |     6 |
-| Vitest agent tests              |     1 |
-| Vitest fixture tests            |     1 |
-| Vitest helper tests             |     1 |
-| Vitest shared-environment tests |     1 |
-| Frontend Vitest tests           |    10 |
-| Playwright E2E tests            |    22 |
-| Playwright Inspector E2E tests  |     4 |
-| Tests Performance               |     2 |
-| Tests Scripts                   |     4 |
+| Suite | Files |
+|---|---:|
+| Vitest unit tests | 180 |
+| Vitest service tests | 46 |
+| Source-adjacent tests | 66 |
+| Vitest integration tests | 193 |
+| Vitest CLI tests | 79 |
+| Vitest contract tests | 20 |
+| Vitest security tests | 14 |
+| Vitest subscription tests | 6 |
+| Vitest agent tests | 1 |
+| Vitest fixture tests | 1 |
+| Vitest helper tests | 1 |
+| Vitest shared-environment tests | 1 |
+| Frontend Vitest tests | 10 |
+| Playwright E2E tests | 22 |
+| Playwright Inspector E2E tests | 4 |
+| Tests Performance | 2 |
+| Tests Scripts | 4 |
 
 ## Primary validation commands
-
 - `npm test`
 - `npm run test:frontend`
 - `npm run test:remote:critical`
@@ -113,7 +97,6 @@ flowchart TD
 - `npm run validate:doc-deps`
 
 ## CI lanes
-
 - Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
@@ -121,15 +104,12 @@ flowchart TD
 - Remote integration nightly runs `npm run test:remote:critical` when enabled.
 
 ## Automated test suites
-
 ### Vitest unit tests
-
 **Directory:** `tests/unit/`
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (177):**
-
+**Files (180):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -139,6 +119,7 @@ flowchart TD
 - `tests/unit/aauth_attestation_webauthn_packed.test.ts`
 - `tests/unit/aauth_authority_normalization.test.ts`
 - `tests/unit/aauth_grant_key_binding.test.ts`
+- `tests/unit/aauth_key_bound_identity.test.ts`
 - `tests/unit/aauth_operator_allowlist.test.ts`
 - `tests/unit/aauth_sdk_and_capability_flags.test.ts`
 - `tests/unit/aauth_signer_jwk_override.test.ts`
@@ -147,6 +128,7 @@ flowchart TD
 - `tests/unit/action_schemas_observation_source.test.ts`
 - `tests/unit/action_schemas_validation.test.ts`
 - `tests/unit/agent_capabilities.test.ts`
+- `tests/unit/agent_grant_pin_checks.test.ts`
 - `tests/unit/agent_grants_service.test.ts`
 - `tests/unit/agent_identity.test.ts`
 - `tests/unit/agent_memory.test.ts`
@@ -211,6 +193,7 @@ flowchart TD
 - `tests/unit/github_webhook.test.ts`
 - `tests/unit/google_oidc_identity_resolution.test.ts`
 - `tests/unit/google_oidc.test.ts`
+- `tests/unit/harness_force_mode.test.ts`
 - `tests/unit/hook_feedback_accumulator.test.ts`
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
@@ -309,13 +292,11 @@ flowchart TD
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
-
 **Directory:** `tests/services/`
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
 **Files (46):**
-
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
 - `tests/services/capability_registry.test.ts`
@@ -364,13 +345,11 @@ flowchart TD
 - `tests/services/sync_webhook_outbound.test.ts`
 
 ### Source-adjacent tests
-
 **Directory:** `src/**/__tests__/` and `src/**/*.test.ts(x)`
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
 **Files (66):**
-
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -439,13 +418,11 @@ flowchart TD
 - `src/version_check.test.ts`
 
 ### Vitest integration tests
-
 **Directory:** `tests/integration/`
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (192):**
-
+**Files (193):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -458,6 +435,7 @@ flowchart TD
 - `tests/integration/aauth_tpm2_e2e.test.ts`
 - `tests/integration/aauth_webauthn_packed_e2e.test.ts`
 - `tests/integration/agent_capabilities_store.test.ts`
+- `tests/integration/agent_grant_thumbprint_pin_uniqueness.test.ts`
 - `tests/integration/agent_memory_turn_lifecycle.test.ts`
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`
@@ -640,13 +618,11 @@ flowchart TD
 - `tests/integration/wellknown_discovery_unauthenticated.test.ts`
 
 ### Vitest CLI tests
-
 **Directory:** `tests/cli/`
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
 **Files (79):**
-
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -728,13 +704,11 @@ flowchart TD
 - `tests/cli/transcript_parser.test.ts`
 
 ### Vitest contract tests
-
 **Directory:** `tests/contract/`
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
 **Files (20):**
-
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -757,16 +731,15 @@ flowchart TD
 - `tests/contract/vite_config.test.ts`
 
 ### Vitest security tests
-
 **Directory:** `tests/security/`
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (13):**
-
+**Files (14):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
+- `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/provenance_read_scoping.test.ts`
 - `tests/security/proxy_bind_host.test.ts`
@@ -779,13 +752,11 @@ flowchart TD
 - `tests/security/tenant_isolation_matrix.test.ts`
 
 ### Vitest subscription tests
-
 **Directory:** `tests/subscriptions/`
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
 **Files (6):**
-
 - `tests/subscriptions/durable_event_log.test.ts`
 - `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
 - `tests/subscriptions/sse_hub_dead_client_eviction.test.ts`
@@ -794,53 +765,43 @@ flowchart TD
 - `tests/subscriptions/subscription_loop_prevention.test.ts`
 
 ### Vitest agent tests
-
 **Directory:** `tests/agent/`
 **Runner:** `vitest`
 **Command:** `npm run test:agent-mcp`
 **Requirements:** Agent/provider-specific environment may be required for non-skipped cases.
 **Files (1):**
-
 - `tests/agent/mcp_instruction_behavior.test.ts`
 
 ### Vitest fixture tests
-
 **Directory:** `tests/fixtures/`
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/fixtures`
 **Requirements:** Fixture files present in the repo checkout.
 **Files (1):**
-
 - `tests/fixtures/replay_graph.test.ts`
 
 ### Vitest helper tests
-
 **Directory:** `tests/helpers/`
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/helpers`
 **Requirements:** Helper-specific fixtures present in the repo checkout.
 **Files (1):**
-
 - `tests/helpers/redact_for_test_report.test.ts`
 
 ### Vitest shared-environment tests
-
 **Directory:** `tests/shared/`
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/shared`
 **Requirements:** Basic `.env`.
 **Files (1):**
-
 - `tests/shared/local_transport_env.test.ts`
 
 ### Frontend Vitest tests
-
 **Directory:** `frontend/src/`
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
 **Files (10):**
-
 - `frontend/src/bridge/websocket.test.ts`
 - `frontend/src/components/subpages/EvaluatePage.icp_fit.test.tsx`
 - `frontend/src/lib/idempotency.test.ts`
@@ -853,13 +814,11 @@ flowchart TD
 - `frontend/src/utils/vite_chunk_recovery.test.ts`
 
 ### Playwright E2E tests
-
 **Directory:** `playwright/tests/`
 **Runner:** `playwright`
 **Command:** `npm run test:e2e`
 **Requirements:** Playwright browsers installed; mock or real API configured per suite.
 **Files (22):**
-
 - `playwright/tests/auto-enhancement.spec.ts`
 - `playwright/tests/design-system.spec.ts`
 - `playwright/tests/entity-detail.spec.ts`
@@ -884,71 +843,58 @@ flowchart TD
 - `playwright/tests/upload-flow.spec.ts`
 
 ### Playwright Inspector E2E tests
-
 **Directory:** `playwright/tests/inspector/`
 **Runner:** `playwright`
 **Command:** `npm run test:e2e:inspector`
 **Requirements:** Inspector bundle built before execution.
 **Files (4):**
-
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-graph-render.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
 - `playwright/tests/inspector/inspector-sandbox-pack-picker.spec.ts`
 
 ### Tests Performance
-
 **Directory:** `tests/performance/`
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/performance`
 **Requirements:** Basic `.env` if required by the module under test.
 **Files (2):**
-
 - `tests/performance/entity_query_count.bench.test.ts`
 - `tests/performance/graph_traversal.bench.test.ts`
 
 ### Tests Scripts
-
 **Directory:** `tests/scripts/`
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/scripts`
 **Requirements:** Basic `.env` if required by the module under test.
 **Files (4):**
-
 - `tests/scripts/bundles_scaffold.test.ts`
 - `tests/scripts/generate_automated_test_catalog.test.ts`
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
 - `tests/scripts/validate_libsql_migration.test.ts`
 
 ### Python unit tests
-
 **Directory:** `packages/client-python/tests/`
 **Runner:** `pytest`
 **Command:** `pytest packages/client-python/tests/ -v`
 **Requirements:** `pip install -e packages/client-python[dev]`
 **Files (1):**
-
 - `packages/client-python/tests/test_memory.py` — NeotomaMemory open/close turn lifecycle, with_memory wrapper, store_chat_turn and retrieve_or_store helpers, idempotency key contract, REFERS_TO deduplication, async acall with asyncio.to_thread
 
 ## Agent instructions
-
 ### When to load this document
-
 Load this document when adding, removing, moving, or renaming automated tests, or when changing test commands or CI lanes.
 
 ### Required co-loaded documents
-
 - `docs/testing/testing_standard.md`
 - `docs/conventions/documentation_standards.md`
 
 ### Constraints agents must enforce
-
 1. Regenerate this document when automated test inventory changes.
 2. Validate this document before completing test-related changes.
 3. Keep policy changes in `testing_standard.md`, not in the generated inventory sections here.
 
 ### Validation checklist
-
 - [ ] Test inventory regenerated after test-file changes
 - [ ] `npm run validate:test-catalog` passed
 - [ ] Related policy docs updated if commands or CI lanes changed
