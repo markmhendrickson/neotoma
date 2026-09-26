@@ -3549,6 +3549,30 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
   }
 
   try {
+    // Defense in depth, independent of config.requireKeyForOauth: on a
+    // non-loopback request, the dev-user fallback below must never complete
+    // without EITHER a verified identity (Google sign-in) OR a valid key
+    // session. The requireKeyForOauth check above already refuses this when
+    // that config is true (the default) — but it is a config default, not a
+    // hard requirement, and this instance's own security_finding
+    // (neotoma-2229-oauth-key-gate-posture-hosted) records that an explicit
+    // `NEOTOMA_REQUIRE_KEY_FOR_OAUTH=false` on such a deployment would remove
+    // the only other gate in front of dev-user completion. This check does
+    // not depend on that variable's value at all, so it holds even if the
+    // config regresses. isLocalRequest / hasValidOAuthKeySession are the same
+    // primitives the requireKeyForOauth branch above already uses.
+    const googleIdentityForGate = getGoogleVerifiedIdentity(req);
+    if (!isLocalRequest(req) && !googleIdentityForGate && !hasValidOAuthKeySession(req)) {
+      logger.warn(
+        "[MCP OAuth] local-login refused: non-loopback request with no verified session",
+        {
+          host: req.header("host") ?? null,
+        }
+      );
+      const nextPath = normalizeOauthNextPath(req.originalUrl);
+      return res.redirect(`/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`);
+    }
+
     // If this browser session was admitted via Google sign-in (see
     // /mcp/oauth/google/callback), complete authorization as THAT verified
     // user's own user_id instead of the shared dev user. Every other path
@@ -3560,7 +3584,7 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     // what every read and write continues to use. The identity rides alongside
     // it onto the row so `/me` can report who is signed in without changing
     // whose graph is operated on.
-    const googleIdentity = getGoogleVerifiedIdentity(req);
+    const googleIdentity = googleIdentityForGate;
     const resolvedUserId = googleIdentity?.graphUserId ?? (await ensureLocalDevUser()).id;
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
     const { connectionId, code, redirectUri, clientState } = await completeLocalAuthorization(

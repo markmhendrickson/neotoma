@@ -6,15 +6,25 @@
  * `/mcp/oauth/key-auth` rather than reach `ensureLocalDevUser()` and complete
  * the connection.
  *
- * This is not a code-defect fix — reading src/actions.ts shows the gate
+ * Reading src/actions.ts shows the config-driven gate
  * (`config.requireKeyForOauth && !hasValidOAuthKeySession(req)`) is present
  * and correctly placed ahead of the dev-user completion at both call sites.
- * The invariant instead depends entirely on the *value* of
- * NEOTOMA_REQUIRE_KEY_FOR_OAUTH on a given deployment (default: enabled).
- * These tests exercise both settings of that config value against the real
- * HTTP routes so a future change that weakens the gate in code — moving the
- * check after completion, or dropping it from one of the two routes — fails
- * a test rather than only an operator's manual read of a Fly secret.
+ * That invariant depends entirely on the *value* of
+ * NEOTOMA_REQUIRE_KEY_FOR_OAUTH on a given deployment (default: enabled) —
+ * this file's first three tests exercise both settings of that config value
+ * against the real HTTP routes so a future change that weakens the gate in
+ * code — moving the check after completion, or dropping it from one of the
+ * two routes — fails a test rather than only an operator's manual read of a
+ * Fly secret.
+ *
+ * The fourth test covers a second, independent gate in /mcp/oauth/local-login
+ * that does NOT read NEOTOMA_REQUIRE_KEY_FOR_OAUTH at all: a non-loopback
+ * request with no verified identity and no key session is refused even when
+ * that config is explicitly false. This is the defense-in-depth fix for the
+ * residual risk security_finding neotoma-2229-oauth-key-gate-posture-hosted
+ * records — the config-driven gate is fail-safe by default, but a default is
+ * not a hard requirement, and an operator who explicitly disables it on a
+ * non-loopback deployment should not thereby reopen dev-user completion.
  */
 
 import { rmSync } from "node:fs";
@@ -164,5 +174,32 @@ describe("OAuth credential preflight gates dev-user completion", () => {
     expect(status).toBe(302);
     expect(location).not.toMatch(/^\/mcp\/oauth\/key-auth/);
     expect(location).toMatch(/^\/mcp\/oauth\/local-login\?/);
+  });
+
+  it("/mcp/oauth/local-login still refuses a non-loopback, unauthenticated request when the preflight is explicitly disabled", async () => {
+    currentTempDir = path.join(
+      process.cwd(),
+      "tmp",
+      `neotoma-preflight-locallogin-defense-in-depth-${Date.now()}`
+    );
+    const { app } = await loadApp(currentTempDir, false);
+
+    // No key session cookie, no Google-identity cookie, and a non-loopback
+    // client IP (via x-forwarded-for) — the exact shape of an outside
+    // request that would otherwise complete as the shared dev user with
+    // NEOTOMA_REQUIRE_KEY_FOR_OAUTH=false. `approve=1` is what a real caller
+    // sends after clicking through the "Approve connection" page (itself not
+    // a security boundary — no credential is checked there), so this reaches
+    // the code path that would otherwise call ensureLocalDevUser(). It must
+    // still redirect to key-auth: the independent, config-blind check in
+    // /mcp/oauth/local-login is what should catch it now, not the (disabled)
+    // config gate.
+    const { status, location } = await get(
+      app,
+      `/mcp/oauth/local-login?${new URLSearchParams({ state: "unknown-state", approve: "1" }).toString()}`
+    );
+
+    expect(status).toBe(302);
+    expect(location).toMatch(/^\/mcp\/oauth\/key-auth\?/);
   });
 });
