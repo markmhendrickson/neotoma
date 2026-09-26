@@ -39,9 +39,14 @@ export function isPrivateOrLoopbackHostname(hostname: string): boolean {
   // Node's WHATWG URL parser normalizes an IPv4-mapped IPv6 literal to its
   // canonical hex-group form (`::ffff:127.0.0.1` -> `::ffff:7f00:1`), so a URL
   // reaching this function via `isPublicFetchUrlAllowed` never carries the
-  // dotted-quad form above. Unwrap the two trailing 16-bit hex groups back to
-  // the embedded IPv4 octets, or the mapped form bypasses every check below.
-  const mappedHex = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  // dotted-quad form above. The `ffff:` segment is OPTIONAL here too: the
+  // deprecated IPv4-COMPATIBLE form (no `ffff:`) normalizes to the identical
+  // two-hex-group shape one segment narrower (`::169.254.169.254` ->
+  // `::a9fe:a9fe`) and bypassed every branch below when this regex required
+  // the literal `ffff:` — reproduced end-to-end via probePeerRemoteHealth().
+  // Unwrap the two trailing 16-bit hex groups back to the embedded IPv4
+  // octets, or either mapped/compatible form bypasses every check below.
+  const mappedHex = normalized.match(/^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
   let candidate = normalized;
   if (mappedDotted) {
     candidate = mappedDotted[1];
@@ -104,4 +109,62 @@ export function isPublicFetchUrlAllowed(urlStr: string): boolean {
   // check sees the same shape it does elsewhere.
   const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
   return !isPrivateOrLoopbackHostname(hostname);
+}
+
+const MAX_GUARDED_REDIRECTS = 5;
+
+/**
+ * `fetch()`, but for every guarded outbound sink: refuses to follow a
+ * redirect without re-checking the `Location` it points at against
+ * {@link isPublicFetchUrlAllowed}.
+ *
+ * SECURITY: `isPublicFetchUrlAllowed` only ever checked the URL the caller
+ * supplied — the pre-redirect URL. None of the five guarded sinks passed
+ * `redirect: "manual"` to `fetch`, so a validated public host that responds
+ * with a 3xx to a private/loopback/link-local/metadata target was followed
+ * straight through by the platform's default automatic-redirect behavior,
+ * with the guard never seeing the real destination. This wraps `fetch` so
+ * that gap is closed once, for every sink, rather than per call site:
+ * every hop — including the first request — is checked before it is
+ * reachable, and a redirect to a disallowed target is refused rather than
+ * followed.
+ *
+ * Under self-hosted (non-hosted) mode this behaves exactly like a plain
+ * `fetch` with automatic redirects: `isPublicFetchUrlAllowed` always returns
+ * true there, so every hop passes and is fetched, matching prior behavior
+ * for the single-user case this guard was never meant to restrict.
+ *
+ * `init.redirect` is intentionally not accepted — manual redirect handling
+ * is the entire point of this wrapper, so silently accepting and overriding
+ * a caller-supplied value would hide a footgun rather than remove it.
+ */
+export async function guardedFetch(
+  urlStr: string,
+  init?: Omit<RequestInit, "redirect">
+): Promise<Response> {
+  let currentUrl = urlStr;
+  for (let hop = 0; hop <= MAX_GUARDED_REDIRECTS; hop++) {
+    if (!isPublicFetchUrlAllowed(currentUrl)) {
+      throw new Error(
+        `guardedFetch: refusing to fetch a private/loopback/link-local/platform-internal host` +
+          `${hop > 0 ? " reached via redirect" : ""}: ${currentUrl}`
+      );
+    }
+    const res = await fetch(currentUrl, { ...init, redirect: "manual" });
+    // `type: "opaqueredirect"` never happens here (we never pass
+    // redirect:"follow"/"error" upstream), but a 3xx status with a Location
+    // header is exactly what redirect:"manual" surfaces for us to check.
+    if (res.status < 300 || res.status >= 400) {
+      return res;
+    }
+    const location = res.headers.get("location");
+    if (!location) {
+      // A 3xx with no Location is not a redirect we can follow; hand the
+      // response back as-is rather than guessing.
+      return res;
+    }
+    // Location may be relative; resolve it against the URL that produced it.
+    currentUrl = new URL(location, currentUrl).toString();
+  }
+  throw new Error(`guardedFetch: exceeded ${MAX_GUARDED_REDIRECTS} redirects fetching ${urlStr}`);
 }

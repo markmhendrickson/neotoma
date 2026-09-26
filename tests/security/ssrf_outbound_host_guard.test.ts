@@ -130,6 +130,33 @@ describe("isPublicFetchUrlAllowed (hosted mode)", () => {
       expect(isPublicFetchUrlAllowed(u), u).toBe(false);
     }
   });
+
+  it("rejects IPv4-COMPATIBLE (no ffff:) IPv6 after WHATWG URL hostname normalization", () => {
+    // Same class as the mapped-form regression above, one segment narrower:
+    // the deprecated IPv4-compatible form (`::x.x.x.x`, no `ffff:`) normalizes
+    // to the identical two-hex-group shape MINUS the `ffff:` literal
+    // (`[::169.254.169.254]` -> `[::a9fe:a9fe]`). The hex-unwrap regex in
+    // `isPrivateOrLoopbackHostname` required that literal `ffff:` segment, so
+    // this form matched neither the mapped-hex branch nor any IPv4 branch and
+    // fell through to "not a recognized private IPv6 shape" -> public.
+    // Reproduced directly: probePeerRemoteHealth() reached the real fetch()
+    // call under NEOTOMA_HOSTED_MODE=1 with this form as the peer base URL.
+    for (const u of [
+      "https://[::127.0.0.1]/latest/meta-data/",
+      "http://[::7f00:1]/",
+      "http://[::a00:1]/",
+      "http://[::a9fe:a9fe]/latest/meta-data/",
+      "http://[::c0a8:101]/",
+    ]) {
+      expect(isPublicFetchUrlAllowed(u), u).toBe(false);
+    }
+  });
+
+  it("still treats an IPv4-COMPATIBLE-shaped PUBLIC address as public", () => {
+    // Mirrors the mapped-form "don't over-reject" test: a public IPv4 address
+    // in the same two-hex-group shape must stay public.
+    expect(isPublicFetchUrlAllowed("http://[::808:808]/")).toBe(true); // 8.8.8.8
+  });
 });
 
 describe("isPublicFetchUrlAllowed (self-hosted)", () => {

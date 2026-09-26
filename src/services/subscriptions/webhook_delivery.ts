@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 
 import { logger } from "../../utils/logger.js";
-import { isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
+import { guardedFetch, isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import type { SubstrateEvent } from "../../events/types.js";
 import { createCorrection } from "../correction.js";
 import type { SubscriptionRecord } from "./subscription_types.js";
@@ -105,7 +105,11 @@ async function postWebhookOnce(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    // guardedFetch: url already passed isWebhookUrlAllowed at subscribe time,
+    // but that only checked the URL the caller supplied — an otherwise-public
+    // endpoint could redirect a delivery to an internal target. Re-check
+    // every hop.
+    const res = await guardedFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

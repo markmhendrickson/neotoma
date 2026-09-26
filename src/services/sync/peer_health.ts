@@ -1,4 +1,4 @@
-import { isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
+import { guardedFetch, isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -31,7 +31,9 @@ export async function probePeerRemoteHealth(peerUrlBase: string): Promise<PeerHe
     return { reachable: false, version: "unknown", error: "peer_url_not_public" };
   }
   try {
-    const resp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
+    // guardedFetch: a 3xx from this otherwise-public peer could redirect to
+    // an internal target; re-check every hop, not just the base URL above.
+    const resp = await guardedFetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
     if (!resp.ok) {
       return {
         reachable: true,

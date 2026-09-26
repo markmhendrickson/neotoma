@@ -1,5 +1,5 @@
 import { logger } from "../../../utils/logger.js";
-import { isPublicFetchUrlAllowed } from "../../net/private_host_guard.js";
+import { guardedFetch, isPublicFetchUrlAllowed } from "../../net/private_host_guard.js";
 
 /**
  * POST JSON snapshot to a configured webhook URL (custom_webhook mirror).
@@ -24,7 +24,11 @@ export async function postEntityToWebhookMirror(params: {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
-    const res = await fetch(params.url, {
+    // guardedFetch: params.url passed isPublicFetchUrlAllowed above, but that
+    // only checked the URL the caller supplied — an otherwise-public mirror
+    // could redirect to an internal target. Re-check every hop; a refusal
+    // throws and lands in the catch below, same as any other fetch failure.
+    const res = await guardedFetch(params.url, {
       method: "POST",
       headers,
       body: JSON.stringify(params.payload),

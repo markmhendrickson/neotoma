@@ -3,7 +3,7 @@
  * prefer_local is a no-op with guidance to use correct for field-level overrides.
  */
 
-import { isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
+import { guardedFetch, isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import { createHash } from "node:crypto";
 import { db } from "../../db.js";
 import { createCorrection } from "../correction.js";
@@ -90,11 +90,25 @@ export async function resolveSyncConflict(params: {
     };
   }
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
-  });
+  // guardedFetch: url already passed isPublicFetchUrlAllowed above, but that
+  // only checked the URL the caller supplied — an otherwise-public peer
+  // could redirect this fetch to an internal target, which would then be
+  // ingested into the caller's entities. Re-check every hop; a refusal
+  // throws, so catch it into the same {ok:false, message} shape this
+  // function already uses for the pre-fetch guard rejection above.
+  let res: Response;
+  try {
+    res = await guardedFetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      message: `prefer_remote: ${err instanceof Error ? err.message : "remote fetch failed"}`,
+    };
+  }
   if (!res.ok) {
     return {
       ok: false,
