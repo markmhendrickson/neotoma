@@ -8,6 +8,10 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 - `v0.23.x/create_relationship_unowned_target` seeded as `rejected`. `POST /create_relationship` (and MCP `create_relationship`, and the relationship leg of `store` / `create_interpretation`, all via `relationshipsService.createRelationship`) requires both `source_entity_id` and `target_entity_id` to be entities the caller owns; an unowned or nonexistent endpoint is refused with `404 RESOURCE_NOT_FOUND`. `store` and `create_interpretation` report a refused relationship in `relationships_refused` rather than failing the call — see docs/subsystems/relationships.md § 6.1.
 
+## v0.24.0
+
+- `v0.23.x/create_relationship_unowned_target` gains a `hint_match: "/must be entities you own/i"` assertion. `POST /create_relationship`'s direct-call rejection (REST and MCP) previously omitted a structured `hint` on this error, unlike the identical refusal surfaced through `store`/`create_interpretation`'s `relationships_refused` array. Both direct-call paths now carry the same hint text ("Both endpoints must be entities you own. Store the entity first, or in the same store call referenced by index, then link it."). No outcome flip; only the hint assertion is new.
+
 ## v0.19.0
 
 - `v0.19.x/store_no_instance_policy_configured` seeded as `valid` (no flip). Instance store-policy enforcement (#1974/#1975) adds a new error code `ERR_STORE_POLICY_DENIED`, but it is **not** a breaking change: an instance with no `instance_policy` entity denies nothing, and a configured policy defaults to `enforcement: "advisory"` (declared to agents, violating writes still accepted). Rejection is operator-activated via `enforcement: "enforced"`, not release-activated. The fixture pins that guarantee by storing a `payment_profile` — the issue's canonical "should be denied on a shared instance" example — and asserting it still succeeds on a policy-free instance. A future release that flips the default to `enforced` would be breaking and must flip this fixture to `rejected`.

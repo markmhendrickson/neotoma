@@ -203,46 +203,12 @@ Load when configuring or documenting agent behavior, or when choosing between MC
 
 ## Relationship type discovery and registration
 
-The vocabulary is instance data. Call `list_relationship_types` (CLI:
-`neotoma relationship-types list`) before using an unfamiliar edge type. If the
-meaning is absent, an authorized principal calls `register_relationship_type`
-(CLI: `neotoma relationship-types register --relationship-type knows --description
-"Explicit acquaintance"`). Registration defaults to user scope; global scope needs
-an explicit global permission in the registration grant. An absent grant is refused,
-including clients with no agent identity. Obtain a grant through the operator's
-normal grant-administration process; do not retry with wider scope.
-
-Refresh cached tool definitions after registration, verify the census includes the
-type, create the edge, and read it back with its type filter. Endpoint type hints,
-inverse and symmetry are advisory. Acyclic declarations are enforced on every edge
-creation surface and cannot be removed by re-registering metadata.
-
-An empty `list_relationship_types` result never means no vocabulary exists — the
-built-in types (`PART_OF`, `REFERS_TO`, and 26 others) are always expected to be
-present. When `relationship_types` is empty, the response carries `empty_reason`
-and `hint`: `registry_unseeded` means the instance's registry (including the
-built-ins) failed to seed and self-repairs on the very next read — call
-`list_relationship_types` again rather than concluding the vocabulary is
-unavailable; `filtered_to_empty` means a supplied `keyword` matched nothing —
-retry without `keyword`. Do not call `register_relationship_type` to work around
-either case: it registers a new custom type and cannot restore a missing built-in.
-
-If a write refuses a **built-in** type name (`PART_OF`, `REFERS_TO`, etc.) as
-unregistered, the error's `hint` says so explicitly and the remedy is the same as
-above — call `list_relationship_types` and retry, not `register_relationship_type`.
-If `register_relationship_type` itself refuses a built-in name for capability
-reasons (no grant covering it), the denial may ALSO mention a possible seed/registry
-cause — but only when the registry is genuinely unhealthy for that type; an ordinary
-grant-scope refusal (the far more common case: your grant simply does not cover this
-type) reads as a plain capability denial. Either way, request the grant through the
-operator's normal grant-administration process; do not retry with wider scope, and
-do not read a capability denial as evidence of a registry problem unless the denial
-says so.
-
-To re-type the historical `related_to` + `metadata.relation="knows"` convention,
-register `knows`, list the old edges, and select only those with that exact metadata
-value. For each selected edge, create `knows` with the same endpoints and provenance
-metadata, read it back, then soft-delete the old edge. Do not delete the original
-before verification. Repeating the same endpoints/type is idempotent; unrelated
-`related_to` edges remain unchanged. This is an explicit consumer migration, never
-automatic registry side effect.
+The vocabulary is instance data, not a fixed enum. CLI equivalents: `neotoma
+relationship-types list` (discover) and `neotoma relationship-types register
+--relationship-type <type> --description <text>` (register; defaults to user
+scope, global scope needs an explicit grant). An empty `list` result does not
+mean no vocabulary exists — check `empty_reason` before concluding the
+registry is unavailable. Canonical behavioral rule (built-in-type handling,
+capability-denial vs registry-unhealthy disambiguation, and the `related_to`
+re-typing migration recipe): `neotoma instructions print` (search
+"Relationship type discovery and registration").
