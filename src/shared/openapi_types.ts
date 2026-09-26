@@ -4805,6 +4805,9 @@ export interface operations {
         "application/x-www-form-urlencoded": {
           grant_type?: string;
           code?: string;
+          /** @description PKCE verifier (RFC 7636). Required with grant_type= authorization_code; the server rejects a code redemption whose SHA-256/base64url digest does not match the code_challenge presented at /mcp/oauth/authorize. */
+          code_verifier?: string;
+          refresh_token?: string;
         };
       };
     };

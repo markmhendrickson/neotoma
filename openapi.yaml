@@ -3211,6 +3211,15 @@ paths:
                   type: string
                 code:
                   type: string
+                code_verifier:
+                  type: string
+                  description: >-
+                    PKCE verifier (RFC 7636). Required with grant_type=
+                    authorization_code; the server rejects a code redemption
+                    whose SHA-256/base64url digest does not match the
+                    code_challenge presented at /mcp/oauth/authorize.
+                refresh_token:
+                  type: string
       responses:
         "200":
           description: OAuth token response

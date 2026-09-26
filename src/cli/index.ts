@@ -1577,15 +1577,18 @@ async function startOAuthCallbackServer(): Promise<{
 
 async function exchangeToken(
   baseUrl: string,
-  code: string
+  code: string,
+  codeVerifier: string
 ): Promise<{
   access_token: string;
   token_type?: string;
   expires_in?: number;
+  connection_id?: string;
 }> {
   const body = new URLSearchParams();
   body.set("grant_type", "authorization_code");
   body.set("code", code);
+  body.set("code_verifier", codeVerifier);
 
   const response = await fetch(`${baseUrl}/mcp/oauth/token`, {
     method: "POST",
@@ -1602,6 +1605,7 @@ async function exchangeToken(
     access_token: string;
     token_type?: string;
     expires_in?: number;
+    connection_id?: string;
   };
 }
 
@@ -1631,16 +1635,25 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
   if (returnedState !== state) {
     throw new Error("OAuth state mismatch");
   }
-  const token = await exchangeToken(baseUrl, code);
+  const token = await exchangeToken(baseUrl, code, verifier);
   const expiresAt = token.expires_in
     ? new Date(Date.now() + token.expires_in * 1000).toISOString()
     : undefined;
+  if (!token.connection_id) {
+    // Every server new enough to check code_verifier also returns
+    // connection_id in the token response (see getTokenResponseForConnection).
+    // `code` itself is now a single-use secret, never the connection_id — do
+    // not fall back to it for X-Connection-Id.
+    throw new Error(
+      "Token response did not include connection_id; server may be running an outdated OAuth token endpoint."
+    );
+  }
   await writeConfig({
     base_url: baseUrl,
     access_token: token.access_token,
     token_type: token.token_type,
     expires_at: expiresAt,
-    connection_id: code,
+    connection_id: token.connection_id,
   });
   let me: { user_id?: string; email?: string } | null = null;
   try {

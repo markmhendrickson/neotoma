@@ -11,6 +11,7 @@ import { URL } from 'url';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { resolveProxyBindHost } from './lib/proxy_bind_host.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,11 @@ const projectRoot = path.resolve(__dirname, '..');
 
 const PROXY_HTTP_PORT = parseInt(process.env.PROXY_HTTP_PORT || process.env.PROXY_PORT || '80', 10);
 const PROXY_HTTPS_PORT = parseInt(process.env.PROXY_HTTPS_PORT || '443', 10);
+// Bind host resolution (see scripts/lib/proxy_bind_host.js for rationale):
+// loopback by default, with PROXY_HOST as an explicit opt-in for anyone who
+// genuinely needs LAN/remote access (e.g. testing from a phone on the same
+// network).
+const PROXY_HOST = resolveProxyBindHost();
 const CERT_DIR = path.join(projectRoot, '.dev-certs');
 const CERT_PATH = path.join(CERT_DIR, 'dev.crt');
 const KEY_PATH = path.join(CERT_DIR, 'dev.key');
@@ -331,14 +337,11 @@ const branchList = Array.from(branchPorts.keys())
   .join(', ') || 'none';
 
 // Start HTTP server
-const httpListenOptions = { port: PROXY_HTTP_PORT };
-if (PROXY_HTTP_PORT === 80) {
-  httpListenOptions.host = '0.0.0.0';
-}
+const httpListenOptions = { port: PROXY_HTTP_PORT, host: PROXY_HOST };
 
 httpServer.listen(httpListenOptions, () => {
   const portSuffix = PROXY_HTTP_PORT === 80 ? '' : `:${PROXY_HTTP_PORT}`;
-  console.log(`[dev-proxy] HTTP reverse proxy listening on port ${PROXY_HTTP_PORT}`);
+  console.log(`[dev-proxy] HTTP reverse proxy listening on ${PROXY_HOST}:${PROXY_HTTP_PORT}`);
   console.log(`[dev-proxy] Available branches: ${branchList}`);
   console.log(`[dev-proxy] HTTP access: http://[BRANCH_NAME].dev${portSuffix}`);
 });
@@ -360,14 +363,11 @@ httpServer.on('error', (err) => {
 
 // Start HTTPS server if certificates are available
 if (httpsServer) {
-  const httpsListenOptions = { port: PROXY_HTTPS_PORT };
-  if (PROXY_HTTPS_PORT === 443) {
-    httpsListenOptions.host = '0.0.0.0';
-  }
+  const httpsListenOptions = { port: PROXY_HTTPS_PORT, host: PROXY_HOST };
 
   httpsServer.listen(httpsListenOptions, () => {
     const portSuffix = PROXY_HTTPS_PORT === 443 ? '' : `:${PROXY_HTTPS_PORT}`;
-    console.log(`[dev-proxy] HTTPS reverse proxy listening on port ${PROXY_HTTPS_PORT}`);
+    console.log(`[dev-proxy] HTTPS reverse proxy listening on ${PROXY_HOST}:${PROXY_HTTPS_PORT}`);
     console.log(`[dev-proxy] HTTPS access: https://[BRANCH_NAME].dev${portSuffix}`);
   });
 

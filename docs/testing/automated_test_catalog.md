@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **654**
-- Backend and repo Vitest files: **618**
+- Total automated test files: **656**
+- Backend and repo Vitest files: **620**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,10 +72,10 @@ flowchart TD
 | Vitest unit tests | 180 |
 | Vitest service tests | 51 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 193 |
+| Vitest integration tests | 194 |
 | Vitest CLI tests | 79 |
 | Vitest contract tests | 20 |
-| Vitest security tests | 13 |
+| Vitest security tests | 14 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -427,7 +427,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (193):**
+**Files (194):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -528,6 +528,7 @@ flowchart TD
 - `tests/integration/mcp_list_relationships_entity_filters.test.ts`
 - `tests/integration/mcp_npm_check_update_capability_delta.test.ts`
 - `tests/integration/mcp_npm_check_update.test.ts`
+- `tests/integration/mcp_oauth_local_login_preflight_gate.test.ts`
 - `tests/integration/mcp_oauth_token_endpoint.test.ts`
 - `tests/integration/mcp_oauth_trusted_callback.test.ts`
 - `tests/integration/mcp_query_variations.test.ts`
@@ -740,13 +741,14 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (13):**
+**Files (14):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
 - `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/provenance_read_scoping.test.ts`
+- `tests/security/proxy_bind_host.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`
 - `tests/security/schemas_per_type_scope_guard.test.ts`
