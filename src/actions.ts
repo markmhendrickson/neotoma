@@ -3563,7 +3563,7 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     const googleIdentity = getGoogleVerifiedIdentity(req);
     const resolvedUserId = googleIdentity?.graphUserId ?? (await ensureLocalDevUser()).id;
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
-    const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
+    const { connectionId, code, redirectUri, clientState } = await completeLocalAuthorization(
       state,
       resolvedUserId,
       undefined,
@@ -3577,11 +3577,16 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     const frontendOauth = `${frontendBase}/oauth`;
     if (redirectUri) {
       if (!clientState && redirectUri.startsWith(frontendOauth)) {
+        // The bundled web frontend's own success page — not an OAuth `code`
+        // redemption target, so the stable connection_id (for display) is
+        // fine here and intentionally different from the `code` param below.
         const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
         return res.redirect(successUrl);
       }
+      // `code` is the single-use authorization code (see completeLocalAuthorization);
+      // it must never be connectionId, which is a stable, reusable handle.
       const params = new URLSearchParams({
-        code: connectionId,
+        code,
         state: clientState ?? "",
       });
       return res.redirect(`${redirectUri}?${params.toString()}`);
@@ -3615,11 +3620,13 @@ app.post(
     try {
       const grant_type = req.body?.grant_type;
       const code = req.body?.code;
+      const code_verifier = req.body?.code_verifier;
       const refresh_token = req.body?.refresh_token;
       logger.info("[MCP OAuth] Token request received", {
         grant_type: grant_type ?? null,
         has_code: typeof code === "string" && code.length > 0,
         code_hint: typeof code === "string" ? code.slice(0, 8) : null,
+        has_code_verifier: typeof code_verifier === "string" && code_verifier.length > 0,
         has_refresh_token: typeof refresh_token === "string" && refresh_token.length > 0,
         host: req.header("host") ?? null,
       });
@@ -3656,9 +3663,15 @@ app.post(
           .status(400)
           .json({ error: "invalid_request", error_description: "code is required" });
       }
+      if (!code_verifier || typeof code_verifier !== "string") {
+        logger.warn("[MCP OAuth] Token rejected: missing code_verifier");
+        return res
+          .status(400)
+          .json({ error: "invalid_request", error_description: "code_verifier is required" });
+      }
 
       const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
-      const token = await getTokenResponseForConnection(code);
+      const token = await getTokenResponseForConnection(code, code_verifier);
       logger.info("[MCP OAuth] Token issued", {
         code_hint: code.slice(0, 8),
         has_refresh_token: Boolean((token as { refresh_token?: string }).refresh_token),

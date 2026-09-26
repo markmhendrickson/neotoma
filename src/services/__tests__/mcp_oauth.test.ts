@@ -494,23 +494,27 @@ describe("MCP OAuth Service", () => {
       }
 
       const connectionId = "cursor-local-123";
+      const { codeVerifier, codeChallenge } = generatePKCE();
       const request = await oauth.createLocalAuthorizationRequest({
         connectionId,
         redirectUri: "cursor://oauth",
         clientState: "client-state",
-        codeChallenge: "test-challenge",
+        codeChallenge,
       });
 
       expect(request.state).toBeTruthy();
 
       const callback = await oauth.completeLocalAuthorization(request.state, user.id);
       expect(callback.connectionId).toBe(connectionId);
+      expect(callback.code).toBeTruthy();
+      expect(callback.code).not.toBe(connectionId);
 
       const status = await oauth.getConnectionStatus(connectionId);
       expect(status).toBe("active");
 
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseForConnection(callback.code, codeVerifier);
       expect(tokenResponse.access_token).toMatch(/^local_access_/);
+      expect(tokenResponse.connection_id).toBe(connectionId);
 
       rmSync(tempDir, { recursive: true, force: true });
     });
@@ -534,7 +538,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       await (await getDb())
         .prepare(
@@ -543,7 +547,7 @@ describe("MCP OAuth Service", () => {
         .run(new Date(Date.now() - 60_000).toISOString(), connectionId);
 
       const renewed = await oauth.getAccessTokenForConnection(connectionId);
-      const secondToken = await oauth.getTokenResponseForConnection(connectionId);
+      const secondToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       expect(renewed.userId).toBe(user.id);
       expect(renewed.accessToken).toMatch(/^local_access_/);
@@ -574,7 +578,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseByConnectionId(connectionId);
       await (await getDb())
         .prepare(
           "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
@@ -653,7 +657,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseByConnectionId(connectionId);
 
       const validated = await mcpAuth.validateSessionToken(tokenResponse.access_token);
       expect(validated.userId).toBe(user.id);
@@ -680,7 +684,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) {
         throw new Error("Expected local OAuth flow to return a refresh token");
       }
@@ -711,7 +715,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) throw new Error("Expected refresh token");
 
       const [r1, r2] = await Promise.all([
@@ -722,7 +726,7 @@ describe("MCP OAuth Service", () => {
       expect(r1.access_token).toMatch(/^local_access_/);
       expect(r2.access_token).toMatch(/^local_access_/);
 
-      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      const finalToken = await oauth.getTokenResponseByConnectionId(connectionId);
       expect(finalToken.access_token).toMatch(/^local_access_/);
       expect(finalToken.expires_in).toBeGreaterThan(3_000);
 
@@ -749,7 +753,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) throw new Error("Expected refresh token");
 
       await (await getDb())
@@ -780,7 +784,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       await (await getDb())
         .prepare(
@@ -799,7 +803,7 @@ describe("MCP OAuth Service", () => {
       const finalStatus = await oauth.getConnectionStatus(connectionId);
       expect(finalStatus).toBe("active");
 
-      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      const finalToken = await oauth.getTokenResponseByConnectionId(connectionId);
       expect(finalToken.expires_in).toBeGreaterThan(3_000);
 
       rmSync(tempDir, { recursive: true, force: true });

@@ -264,6 +264,22 @@ const SCHEMA_STATEMENTS = [
     scope TEXT,
     final_redirect_uri TEXT
   )`,
+  // Single-use authorization code minted at authorization completion (local
+  // and remote backends alike) and redeemed exactly once at /mcp/oauth/token.
+  // Deliberately distinct from `connection_id`: the code is a bearer secret
+  // that must not be guessable or reusable, while `connection_id` is a stable
+  // handle a client may hold indefinitely and expose in logs/URLs. Redemption
+  // deletes the row (single-use) and checks the caller-supplied code_verifier
+  // against `code_challenge` (PKCE, RFC 7636) before issuing a token.
+  `CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    connection_id TEXT NOT NULL,
+    client_id TEXT,
+    created_at TEXT,
+    expires_at TEXT
+  )`,
   // `user_id` is the GRAPH SCOPE principal — the user_id every read and write
   // is scoped to. Under NEOTOMA_SHARED_GRAPH_USER_ID it is the shared graph
   // owner, not the person who signed in. `authenticated_user_id` /
@@ -497,6 +513,13 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     // Existing rows get NULLs and keep resolving identity from user_id.
     await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_user_id", "TEXT");
     await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_email", "TEXT");
+    // Redemption lookup for the single-use authorization code (mcp_oauth_codes).
+    // `code` is looked up on every /mcp/oauth/token call with grant_type=
+    // authorization_code, so this index keeps redemption an indexed point
+    // lookup rather than a table scan as codes accumulate pre-expiry-cleanup.
+    await db
+      .prepare("CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_code ON mcp_oauth_codes(code)")
+      .run();
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"

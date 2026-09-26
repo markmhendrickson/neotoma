@@ -41,7 +41,7 @@ import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
 import { createLocalAuthUser } from "../../src/services/local_auth.js";
-import { createLocalAuthorizationRequest } from "../../src/services/mcp_oauth.js";
+import { createLocalAuthorizationRequest, generatePKCE } from "../../src/services/mcp_oauth.js";
 
 const API_PORT = 18477;
 const API_BASE = `http://127.0.0.1:${API_PORT}`;
@@ -146,13 +146,17 @@ async function signInViaGoogle(email: string): Promise<{
 }> {
   installGoogleFetchStub(() => email);
 
-  // A pending authorization for local-login to complete.
+  // A pending authorization for local-login to complete. Real PKCE pair: the
+  // token endpoint now checks SHA-256(codeVerifier) against codeChallenge
+  // (see security_finding neotoma-2229-oauth-code-is-connection-id), so a
+  // matching placeholder string for both no longer round-trips.
   const connectionId = `conn_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const { codeVerifier, codeChallenge } = generatePKCE();
   const { state } = await createLocalAuthorizationRequest({
     connectionId,
     redirectUri: `${API_BASE}/oauth`,
-    codeChallenge: "shared-graph-test-challenge",
-    codeVerifier: "shared-graph-test-challenge",
+    codeChallenge,
+    codeVerifier,
   });
 
   // Step 1: the Google callback. `state` here is the sign-in nonce, which the
@@ -193,11 +197,23 @@ async function signInViaGoogle(email: string): Promise<{
       .catch(() => "")}`
   ).toBe(302);
 
+  // The redirect carries the single-use authorization code as `code` — never
+  // connectionId, which local-login's caller must not be able to redeem
+  // directly (that was the code=connection_id defect).
+  const redirectLocation = loginRes.headers.get("location") ?? "";
+  const code = new URL(redirectLocation, API_BASE).searchParams.get("code");
+  expect(code, `local-login redirect should carry a code: ${redirectLocation}`).toBeTruthy();
+  expect(code).not.toBe(connectionId);
+
   // Step 3: exchange the authorization code for an access token.
   const tokenRes = await fetch(`${API_BASE}/mcp/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "authorization_code", code: connectionId }).toString(),
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code: code!,
+      code_verifier: codeVerifier,
+    }).toString(),
   });
   expect(tokenRes.status, `token exchange should succeed: ${await tokenRes.clone().text()}`).toBe(
     200
