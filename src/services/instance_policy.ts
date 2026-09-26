@@ -17,6 +17,30 @@
  * Neither layer is sufficient alone. Declaration improves the happy path;
  * enforcement is the guarantee.
  *
+ * ## Known scope boundary: raw/unstructured file storage is NOT covered
+ *
+ * `assertStorePolicyAllows` (the enforcement entry point) is wired into the
+ * three ENTITY write paths: `storeStructuredForApi` (src/actions.ts),
+ * `storeStructuredInternal` (src/server.ts), and `createCorrection`
+ * (src/services/correction.ts) — see
+ * `tests/unit/instance_policy_write_path_coverage.test.ts` for the structural
+ * guard pinning those three.
+ *
+ * It is deliberately NOT wired into `storeUnstructuredForApi`
+ * (src/actions.ts), the raw-file / reference-file `/store` path
+ * (`storeRawContent` / `storeRawReference`). That path persists a `sources`
+ * row directly from uploaded bytes and never constructs a typed entity with
+ * an `entity_type`, so the policy's `out_of_scope_entity_types` and
+ * `max_sensitivity_class` gates — both keyed on entity type / schema-declared
+ * sensitivity — have no evaluable target at that call site as designed today.
+ * An instance with `enforcement: "enforced"` still accepts arbitrary raw file
+ * content through this path with zero policy evaluation. This is a real gap
+ * for any operator who assumes "enforced" covers uploads, not just structured
+ * `store` calls with an `entities` array — closing it needs either a
+ * content-type/size-based raw-storage policy dimension or blocking raw
+ * storage outright under `enforcement: "enforced"`, both out of scope for
+ * this feature's v1. Tracked as a known follow-up, not silently omitted.
+ *
  * ## Scope: instance-wide, not per-user
  *
  * A single policy row governs every write on the instance regardless of which
@@ -270,6 +294,14 @@ export interface InstancePolicyResult {
   lookup_failed: boolean;
   /** Driver message for the failed lookup, for logs and operator-facing notes. */
   error?: string;
+  /**
+   * Entity id of the resolved policy, or `null` when none exists (or the
+   * lookup failed). Exposed over HTTP via `GET /instance-policy` so a remote
+   * client can resolve the id needed to `correct` an existing policy without
+   * a local database connection — see {@link getInstancePolicyEntityId} for
+   * why this is needed.
+   */
+  entity_id: string | null;
 }
 
 /**
@@ -300,9 +332,9 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
         `[instance_policy] LOOKUP FAILED — policy state is unknown for this request ` +
           `(this is NOT the same as having no policy configured): ${error.message}`
       );
-      return { policy: null, lookup_failed: true, error: error.message };
+      return { policy: null, lookup_failed: true, error: error.message, entity_id: null };
     }
-    if (!data || data.length === 0) return { policy: null, lookup_failed: false };
+    if (!data || data.length === 0) return { policy: null, lookup_failed: false, entity_id: null };
 
     const rows = data as Array<{
       entity_id: string;
@@ -321,7 +353,7 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
       logger.error(
         `[instance_policy] merge-filter lookup failed; policy state is unknown: ${mergedErr.message}`
       );
-      return { policy: null, lookup_failed: true, error: mergedErr.message };
+      return { policy: null, lookup_failed: true, error: mergedErr.message, entity_id: null };
     }
 
     const mergedAway = new Set(
@@ -331,7 +363,7 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
     );
 
     const live = rows.filter((r) => !mergedAway.has(r.entity_id));
-    if (live.length === 0) return { policy: null, lookup_failed: false };
+    if (live.length === 0) return { policy: null, lookup_failed: false, entity_id: null };
 
     // Deterministic pick: an instance should hold exactly one policy, but if a
     // second is somehow present we must not let row order decide which one
@@ -355,23 +387,24 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
         // A stored policy we cannot parse is unreadable, not absent.
         const msg = (parseErr as Error).message;
         logger.error(`[instance_policy] stored policy snapshot is unparseable: ${msg}`);
-        return { policy: null, lookup_failed: true, error: msg };
+        return { policy: null, lookup_failed: true, error: msg, entity_id: chosen.entity_id };
       }
     }
     if (!snapshotRaw || typeof snapshotRaw !== "object") {
-      return { policy: null, lookup_failed: false };
+      return { policy: null, lookup_failed: false, entity_id: chosen.entity_id };
     }
 
     return {
       policy: normalizeInstancePolicy(snapshotRaw as Record<string, unknown>),
       lookup_failed: false,
+      entity_id: chosen.entity_id,
     };
   } catch (err) {
     const msg = (err as Error).message;
     logger.error(`[instance_policy] LOOKUP FAILED (thrown) — policy state is unknown: ${msg}`);
     // A thrown driver error is a failed lookup, not an empty one — the same
     // ambiguity as the `{ error }` shape above, reached a different way.
-    return { policy: null, lookup_failed: true, error: msg };
+    return { policy: null, lookup_failed: true, error: msg, entity_id: null };
   }
 }
 
@@ -402,38 +435,19 @@ export async function getInstancePolicy(): Promise<InstancePolicy | null> {
  *
  * Without this, an operator's only recourse was to guess the id or discover
  * the collision by hitting it (the #2011 ux finding).
+ *
+ * Thin wrapper over {@link getInstancePolicyResult} for same-process callers
+ * with a direct database connection. The CLI's `instance-policy set` command
+ * does NOT call this — it runs against a `--base-url`-resolved remote
+ * instance over HTTP, so it reads `entity_id` off the `GET /instance-policy`
+ * response instead (that response field is populated from this same
+ * `getInstancePolicyResult` lookup, server-side). A prior version of this
+ * command called this local function directly, which silently read the
+ * machine running the CLI instead of the target instance whenever
+ * `--base-url` pointed elsewhere.
  */
 export async function getInstancePolicyEntityId(): Promise<string | null> {
-  try {
-    const { data, error } = await db
-      .from("entity_snapshots")
-      .select("entity_id")
-      .eq("entity_type", "instance_policy");
-
-    if (error || !data || data.length === 0) return null;
-
-    const { data: mergedRows } = await db
-      .from("entities")
-      .select("id, merged_to_entity_id")
-      .eq("entity_type", "instance_policy");
-
-    const mergedAway = new Set(
-      ((mergedRows as Array<{ id: string; merged_to_entity_id: string | null }> | null) ?? [])
-        .filter((r) => r.merged_to_entity_id != null)
-        .map((r) => r.id)
-    );
-
-    const live = (data as Array<{ entity_id: string }>)
-      .map((r) => r.entity_id)
-      .filter((id) => !mergedAway.has(id))
-      .sort();
-
-    // Same deterministic pick as getInstancePolicyResult, so the id returned
-    // here always addresses the policy that actually enforces.
-    return live[0] ?? null;
-  } catch {
-    return null;
-  }
+  return (await getInstancePolicyResult()).entity_id;
 }
 
 /** Coerce a stored snapshot into the typed policy shape, dropping unknown values. */

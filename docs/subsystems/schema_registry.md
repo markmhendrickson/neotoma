@@ -62,6 +62,7 @@ interface FieldDefinition {
   required?: boolean;
   validator?: string; // Validator function name
   preserveCase?: boolean; // Preserve case for this field during canonicalization
+  preserveWhitespace?: boolean; // Preserve exact whitespace, including line endings
   description?: string; // Field description
   converters?: ConverterDefinition[]; // Field type converters
 }
@@ -632,3 +633,13 @@ Load `docs/subsystems/schema_registry.md` when:
 - [ ] Reducer uses schema-projection filtering (only schema-defined fields appear in snapshots)
 - [ ] Tests verify schema versioning, migration, and field removal
 - [ ] Documentation updated for new schema versions
+
+## Audio transcription contract
+
+The built-in `transcription` 2.0.0 declaration retains historical field names and optionality, corrects `file_size_bytes` to a number, and declares capture and transcription provenance. `audio_content_sha256` identifies the input bytes; it is not the transcription entity identity. A recording can have multiple derivations. Source storage remains authoritative for bytes and content hash; observation `source_id` links derived fields to that source. Do not add an ingestion-success field to the transcription.
+
+New ingestion clients must verify `audio_content_sha256`, `original_source_file`, `capture_method`, `transcription_engine`, `consent_basis`, `transcription_text`, and `file_size_bytes` after storage, plus the requested source linkage. `consent_basis: "unknown"` records absent attestation and grants no capture authorization. Historical records may omit these fields.
+
+String fields can declare `preserveCase: true` and `preserveWhitespace: true` to retain exact transcript text and source names. Without `preserveWhitespace`, existing normalization remains unchanged. This metadata governs new observations only; activating a schema never rewrites historical observations. Lost historical text cannot be recovered from a normalized snapshot alone.
+
+The declaration is available from `ENTITY_SCHEMAS.transcription` in `src/services/schema_definitions.ts`. Existing installations must inspect the effective global and user-specific registrations before registering a new version through the existing registry API. Preserve custom fields, reducers and identity declarations when merging an instance's schema. Code deployment alone does not establish that an active custom schema is compatible. Production registration, activation and any historical recovery are separate reviewed operations; this change performs none.

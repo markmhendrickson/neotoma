@@ -79,6 +79,39 @@ describe("routeAcceptsGuestPrincipal — subscription parity with issues", () =>
     });
   });
 
+  describe("reserved /entities/* segments are routes, not entity ids (issue #2208)", () => {
+    // `/entities/duplicates` matched the `:id`-shaped guest regex, so a guest
+    // principal could be stamped onto a route whose handler calls
+    // `getAuthenticatedUserId()` — turning the route-order 404 into a 500 once
+    // the ordering half of the bug was fixed. These must fail closed.
+    it.each([
+      { method: "GET", path: "/entities/duplicates", reason: "duplicate-candidate listing" },
+      { method: "GET", path: "/entities/query", reason: "query endpoint" },
+      { method: "GET", path: "/entities/merge", reason: "merge endpoint" },
+      { method: "GET", path: "/entities/split", reason: "split endpoint" },
+    ] as const)("rejects guest for $method $path ($reason)", ({ method, path }) => {
+      expect(routeAcceptsGuestPrincipal(guestRouteReq(method, path))).toBe(false);
+    });
+
+    it("still accepts guest reads of a genuine entity id", () => {
+      // The fix must not narrow legitimate guest access to rendered pages etc.
+      expect(
+        routeAcceptsGuestPrincipal(guestRouteReq("GET", "/entities/ent_0123456789abcdef01234567")),
+      ).toBe(true);
+      expect(
+        routeAcceptsGuestPrincipal(
+          guestRouteReq("GET", "/entities/ent_0123456789abcdef01234567/html"),
+        ),
+      ).toBe(true);
+    });
+
+    it("does not reject an entity id that merely contains a reserved word", () => {
+      expect(
+        routeAcceptsGuestPrincipal(guestRouteReq("GET", "/entities/ent_duplicates_abc123")),
+      ).toBe(true);
+    });
+  });
+
   it("subscription guest-capable set is stable (update intentionally when API changes)", () => {
     expect(SUBSCRIPTION_GUEST_CAPABLE).toHaveLength(5);
     const keys = SUBSCRIPTION_GUEST_CAPABLE.map((r) => `${r.method} ${r.path}`).sort();

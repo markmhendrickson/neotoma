@@ -298,11 +298,10 @@ export function sandboxPrincipalIdFromFingerprint(fingerprint: string): string {
 /**
  * Routes that permanently or aggressively remove data. These are blocked on
  * the public sandbox host so abusive callers cannot nuke the demo dataset
- * between scheduled resets.
+ * between operator resets. Per-session expiry sweep handles normal visitor data.
  *
  * Soft deletes (`/delete_entity`, `/delete_relationship`) are allowed because
- * they are reversible via `/restore_entity` and `/restore_relationship` and
- * the weekly reset will replace the dataset anyway.
+ * they are reversible via `/restore_entity` and `/restore_relationship`.
  */
 const DESTRUCTIVE_ROUTES: ReadonlySet<string> = new Set([
   // Admin endpoints that could wipe or mutate the whole corpus.
@@ -351,7 +350,7 @@ export function sandboxDestructiveGuard(
     message: `Route ${req.path} is disabled on the public sandbox. Install Neotoma locally to run destructive operations.`,
     details: {
       docs: "https://github.com/markmhendrickson/neotoma#installation",
-      weekly_reset: "Sunday 00:00 UTC",
+      session_ttl_cap: "Sunday 00:00 UTC (max session lifetime)",
     },
     timestamp: new Date().toISOString(),
   });

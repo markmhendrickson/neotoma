@@ -182,9 +182,10 @@ describe("harness_snippets: agent prompts", () => {
     const out = buildHarnessSnippet("cursor", ctx);
     expect(out.agentPrompt).toContain("https://neotoma.example.com/mcp");
   });
-  it("mentions sandbox reset schedule in sandbox mode", () => {
+  it("sandbox agentPrompt describes per-session ephemerality", () => {
     const out = buildHarnessSnippet("cursor", ctxFor("sandbox"));
-    expect(out.agentPrompt).toMatch(/weekly/i);
+    expect(out.agentPrompt).toMatch(/ephemeral|per-session/i);
+    expect(out.agentPrompt).not.toMatch(/weekly wipe/i);
   });
   it("local mode agent prompt does not send the agent to an HTTP URL", () => {
     const ctx = ctxFor("local", "http://localhost:3080");

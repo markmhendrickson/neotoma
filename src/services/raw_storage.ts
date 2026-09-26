@@ -131,10 +131,24 @@ export async function storeRawContent(options: RawStorageOptions): Promise<RawSt
   const storagePath = `${userId}/${contentHash}`;
   const bucketName = "sources";
 
-  // Check if we're in test environment
+  // Whether to actually put the bytes in the bucket.
+  //
+  // Tests skip the upload by default and write only the `sources` row: the
+  // suite has no bucket to talk to, and most tests care about the row, not the
+  // bytes. The cost is that a byte round-trip test written naively passes
+  // vacuously — the upload it means to verify never ran, so it cannot fail on
+  // the thing it watches (#2325).
+  //
+  // So the skip is now opt-out rather than automatic. A test that asserts on
+  // stored bytes sets NEOTOMA_TEST_REAL_STORAGE=1 and gets the real path,
+  // bucket and all. Non-test processes are unaffected: they always upload.
   const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  const forceRealStorage = /^(1|true|yes|on)$/i.test(
+    (process.env.NEOTOMA_TEST_REAL_STORAGE ?? "").trim()
+  );
+  const shouldUpload = !isTestEnv || forceRealStorage;
 
-  if (!isTestEnv) {
+  if (shouldUpload) {
     const { error: uploadError } = await db.storage
       .from(bucketName)
       .upload(storagePath, fileBuffer, {

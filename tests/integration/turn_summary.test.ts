@@ -176,6 +176,12 @@ describe("POST /turn_summary", () => {
           {
             entity_type: "issue",
             title: issueTitle,
+            // #1778 made `title` deliberately non-identifying for issues: a
+            // write carrying neither the (github_number, repo) composite nor
+            // local_issue_id now fails loudly instead of minting a title-keyed
+            // duplicate. This test is about the issues suffix on the status
+            // line, not issue identity, so give the fixture a local identity.
+            local_issue_id: `tsummary-${Date.now()}`,
             body: "an issue body",
             visibility: "private",
           },

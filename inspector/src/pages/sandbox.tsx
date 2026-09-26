@@ -263,7 +263,7 @@ function TermsCard() {
         {termsQuery.data ? (
           <p className="text-xs text-muted-foreground">
             Version {termsQuery.data.version} — effective{" "}
-            {new Date(termsQuery.data.effective_date).toLocaleDateString()}. Weekly reset:{" "}
+            {new Date(termsQuery.data.effective_date).toLocaleDateString()}. Session TTL cap:{" "}
             {termsQuery.data.weekly_reset_utc}.
           </p>
         ) : null}

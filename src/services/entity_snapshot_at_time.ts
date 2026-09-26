@@ -21,6 +21,8 @@
  */
 
 import { db } from "../db.js";
+import { logger } from "../utils/logger.js";
+import { resolveAttachmentTarget } from "./attachment_resolution.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import type { Observation } from "../reducers/observation_reducer.js";
 
@@ -98,9 +100,29 @@ export async function computeEntitySnapshotAtTime(
     return null;
   }
 
-  // Redirect through merge chains (one level; recursive merges are unusual
-  // but follow the server.ts pattern of delegating to getEntityWithProvenance).
-  const resolvedEntityId = entityRow.merged_to_entity_id ?? entityId;
+  // #2343: redirect through merge chains using the declared resolution layer
+  // rather than the single hop this used to do. The old comment conceded the
+  // defect ("one level"); a chain A→B→C left an as-of read on A pointed at B,
+  // which holds no observations after the second merge. `resolveAttachmentTarget`
+  // follows to a fixed point under a visited-set cycle guard and a depth bound.
+  //
+  // Deliberately `resolveAttachmentTarget`, NOT `resolveOwnedObservations`:
+  // this function READS, it never upserts, so the ownership question that
+  // stops a persisting caller from writing under a tombstone does not apply.
+  // An as-of read of a merged-away id should answer with the surviving
+  // entity's history, not refuse. And it takes only the resolved TARGET, not
+  // the resolved observation set, because the seam's set is unfiltered by
+  // time — this function's whole job is the `at` / `at_ingested` cutoffs, so
+  // it keeps its own time-bounded query over the resolved id.
+  const attachmentTarget = await resolveAttachmentTarget(entityId, userId);
+  const resolvedEntityId = attachmentTarget.resolvedEntityId;
+  if (attachmentTarget.truncated) {
+    logger.warn(
+      `[SNAPSHOT_AT_TIME] Attachment resolution for ${entityId} was truncated ` +
+        `(${attachmentTarget.truncationReason}); the point-in-time snapshot is ` +
+        `computed from a partially resolved id (${resolvedEntityId}).`
+    );
+  }
   const entityType: string = entityRow.entity_type as string;
 
   // ------------------------------------------------------------------

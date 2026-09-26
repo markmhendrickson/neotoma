@@ -111,12 +111,15 @@ handlers can pattern-match the code uniformly.
 | Code                                 | HTTP | Retry? | Description                                                               |
 | ------------------------------------ | ---- | ------ | ------------------------------------------------------------------------- |
 | `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`      | 200  | No     | No registered or code-defined schema exists for the given `entity_type`   |
+| `ERR_SCHEMA_SCOPE_MISMATCH`          | 200  | No     | Active schema exists, but in a different scope than the call checked      |
 | `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 200  | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out` |
 
 **`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`** — raised by `update_schema_incremental` when
 the target `entity_type` has no schema registered in `schema_registry` and no
-code-defined fallback in `schema_definitions.ts`. Incremental update needs a
-baseline to extend, so the call cannot proceed.
+code-defined fallback in `schema_definitions.ts` **in any scope the caller can
+see**. Incremental update needs a baseline to extend, so the call cannot proceed.
+Do **not** use this code when a schema exists in another scope — that is
+`ERR_SCHEMA_SCOPE_MISMATCH` (#2454).
 
 Response shape (canonical envelope):
 
@@ -138,6 +141,35 @@ Remediation: call `analyze_schema_candidates` for field suggestions, then
 `register_schema` with a complete `schema_definition` including either
 `canonical_name_fields` or `identity_opt_out`. Retry
 `update_schema_incremental` once the baseline schema is registered.
+
+**`ERR_SCHEMA_SCOPE_MISMATCH`** — raised by `update_schema_incremental` when the
+existence guard's scope-limited lookup (`user_specific ? user : global`) finds
+no schema, but an active schema for the same `entity_type` exists in a
+**different** scope (typically: `describe_entity_type` resolved a user-scoped
+schema because it always passes `userId`, while the incremental call omitted
+`user_specific` and checked global only). Distinct from a genuine cold start.
+
+Response shape (canonical envelope):
+
+```json
+{
+  "error": {
+    "error_code": "ERR_SCHEMA_SCOPE_MISMATCH",
+    "message": "An active schema for entity_type \"<type>\" exists in \"user\" scope, but this call resolved schemas in \"global\" scope and found none there.",
+    "hint": "…retry update_schema_incremental with user_specific: true…",
+    "details": {
+      "entity_type": "<type>",
+      "guard_scope": "global",
+      "found_scope": "user"
+    }
+  }
+}
+```
+
+Remediation: retry with the `user_specific` value that matches `details.found_scope`
+(`true` for user, `false`/omit for global). The hint MUST NOT recommend
+`register_schema` — registering a second schema for a type that already has an
+active row is how the dual-active-row condition in #2374/#2378 arises.
 
 **`ERR_SCHEMA_MISSING_IDENTITY_CONFIG`** — raised when the existing schema for
 the target `entity_type` lacks both `canonical_name_fields` and
@@ -265,6 +297,7 @@ caller repairs in-turn via `correct` rather than re-submitting the same payload.
 | `SOURCE_PRIORITY_IGNORED`     | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot.                                                          |
 | `AUTO_LINK_EDGE_RETRACTED`    | 200  | No     | A schema-declared reference field's resolved target changed, so a stale auto-linked edge (e.g. a prior `works_at`) was retracted in the same reduction that created the new one (#1963). Positive signal; no action needed.                                    |
 | `AUTO_LINK_RETRACTION_FAILED` | 200  | No     | A stale auto-linked edge should have been retracted but the soft-delete failed. The superseded edge may still be live despite the store succeeding. The message lists the stale `target_entity_id`s; clean up via `delete_relationship` (or re-run the store). |
+| `STORE_WARNING_RULE_NOT_EVALUATED` | 200 | No | A schema-declared `store_warnings` rule could not be evaluated (its `fields` list or `condition` is malformed, uses an unsupported `condition` key, or declares neither spelling). The write is NOT blocked by this; it is a fail-open diagnostic naming the inert rule and the specific path that could not be read (#2165, #2170). |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -362,6 +395,32 @@ knowing its own schema, or re-run the store. Example:
 
 This code exists so the retraction failure is never silent — a silently-surviving edge is
 the exact bug #1963 was filed to fix.
+
+**`STORE_WARNING_RULE_NOT_EVALUATED`** — fired when a schema-declared `store_warnings`
+rule cannot be evaluated. A rule's condition may be spelled as a flat `fields: string[]`
+list (fire when none of the named fields carry a value) or declaratively as
+`condition: { missing_all_of: [...] }`; both spellings evaluate identically. This code
+fires instead of either spelling's own warning when the rule's `fields` or
+`condition.missing_all_of` list is malformed (not a non-empty array of non-empty
+strings), when `condition` declares an unsupported key, or when the rule declares
+neither spelling at all. Before this code existed, an unevaluable rule threw a
+`TypeError` that escaped as `DB_QUERY_FAILED`, making every write of that entity type
+fail — including `commit: false` dry runs, since evaluation happens before the commit
+decision (#2165, #2170). This warning is a fail-open diagnostic: it never blocks the
+write, and it does not claim the entity was persisted — persistence is the response's
+own `success` field and read-back to report. The `message` names the declared rule's own
+`code` and the exact path (`fields` or `condition.missing_all_of`) that could not be
+read, so a schema author can correct or remove the rule. Example:
+
+```json
+{
+  "code": "STORE_WARNING_RULE_NOT_EVALUATED",
+  "entity_type": "skill",
+  "entity_id": "ent_abc…",
+  "observation_index": 0,
+  "message": "Store-warning rule \"MISSING_CONTENT_FIELD\" declared on this entity type could not be evaluated: `condition` declares no recognised condition key. Supported condition keys: [\"missing_all_of\"]. Correct or remove the rule in the schema; the entity itself does not need to be re-sent for this warning alone. This advisory did NOT block the operation."
+}
+```
 
 ## ERR_CONSTRAINT_VIOLATION
 

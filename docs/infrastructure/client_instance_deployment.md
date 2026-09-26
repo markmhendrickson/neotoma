@@ -27,14 +27,53 @@ Fly config from the repo; do not reintroduce it.
 git worktree add ~/repos/neotoma-deploy origin/main
 cd ~/repos/neotoma-deploy
 
+# ALWAYS check drift first. This is not optional — see rule 0 below.
+scripts/check_fly_config_drift.sh --app "$CLIENT_FLY_APP" -c fly.operator.toml
+
 flyctl deploy \
   --app "$CLIENT_FLY_APP" \
+  -c fly.operator.toml \
   --build-arg VITE_NEOTOMA_SANDBOX_UI="" \
   --build-arg VITE_PUBLIC_BASE_PATH="/" \
   --no-cache
 ```
 
 Everything below explains why each of those pieces is load-bearing.
+
+### 0. Check for config drift before every deploy
+
+`flyctl deploy` reapplies the committed `[[vm]]` and `[http_service]` blocks
+over the running machine. It does **not** merge, and it prints **no warning
+when it shrinks one**. Whatever the config in your checkout says is what the
+machine becomes.
+
+On 2026-09-01 a deploy run from a checkout **139 commits behind main**
+reapplied that checkout's `1gb` / `shared-cpu-1x` guest over an instance
+running `performance` / 2 CPU / 8GB, and dropped its health check. The instance
+went from slow to unreachable for roughly 30 minutes. Throughout, `flyctl
+status` reported `started`, `flyctl machine restart` printed "No health checks
+found", and the `CHECKS` column was empty — nothing anywhere reported a
+problem. It was noticed only because an agent failed to write.
+
+Two lessons, both mechanical rather than a matter of care:
+
+```bash
+# 1. Deploy from a checkout that is actually current.
+git -C ~/repos/neotoma-deploy fetch origin && \
+  git -C ~/repos/neotoma-deploy status -sb   # must show no "behind"
+
+# 2. Compare the config against the live machine before applying it.
+scripts/check_fly_config_drift.sh --app "$CLIENT_FLY_APP" -c fly.operator.toml
+```
+
+Exit 0 means the deploy will not resize the machine or drop its checks. Exit 1
+means it would — resolve that before deploying. Exit 2 means the check could
+not run (no `flyctl`, no `jq`, app unreachable); treat that as unknown, never
+as "fine".
+
+**A machine scaled up by hand will be reverted by the next deploy.** If an
+instance was resized to address load, that new size has to be written into the
+config it deploys from, or it lasts exactly until the next release.
 
 ## The five load-bearing rules
 
@@ -48,10 +87,19 @@ a repeated source of breakage. Deploy from a clean `origin/main` checkout.
 
 ### 2. Pass `--app <name>` explicitly — do NOT rely on `-c fly.toml`
 
-The repo's `fly.toml` declares `app = 'neotoma-sandbox'`. A bare `flyctl deploy`
-in the repo therefore targets the **sandbox app**, not the client instance.
+`fly.toml` deliberately declares **no** `app` key (#2013), so a bare `flyctl
+deploy` fails with "the config for your app is missing an app name" rather than
+succeeding against whichever app the file happens to name. It previously said
+`app = 'neotoma-sandbox'`, and a deploy meant for a client instance would
+silently retarget the sandbox and report success.
+
 Always pass `--app "$CLIENT_FLY_APP"` explicitly. Read the app name from the
 operator binding (below), never hardcode it here.
+
+Note what `--app` does and does not override: it changes the deploy **target**
+only. The `[[vm]]` and `[http_service]` blocks in whichever config is loaded
+still apply to that target — which is why rule 0's drift check matters even
+when the app name is correct.
 
 ### 3. Never use `fly.sandbox.toml` for a client instance
 

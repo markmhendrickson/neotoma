@@ -24,7 +24,7 @@ When a Neotoma CLI session starts (dev or prod), applied rule files (e.g. `.curs
 
 Skill auto-loading at session start: on every MCP `initialize`, the harness detects and registers available workspace skills (`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`); this is idempotent and applies every session. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md`); this is a transport-layer pointer only.
 
-Instance data policy: an instance may declare what it is for and what it will hold. Read it with `neotoma instance-policy show` (or the `describe_instance_policy` MCP tool); it is also appended to `neotoma instructions print` as a `## Instance Data Policy` section. A store or correct refused by that policy returns `ERR_STORE_POLICY_DENIED` — the whole request is rejected, nothing is persisted, and the payload must be fixed rather than retried unmodified. A store or correct that could not be CHECKED against the policy returns `ERR_STORE_POLICY_UNAVAILABLE` (HTTP 503, `retryable: true`) — an infrastructure fault, not a policy decision: retry the same payload rather than rewriting it. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md` → `[INSTANCE DATA POLICY]`); this is a transport-layer pointer only.
+Instance data policy: an instance may declare what it is for and what it will hold. Read it with `neotoma instance-policy show` (or the `describe_instance_policy` MCP tool); it is also appended to `neotoma instructions print` as a `## Instance Data Policy` section. Machine-readable show (`--json`) and MCP both return `{"policy": <object|null>, "entity_id": <string|null>}` — `entity_id` is opaque; pass it to `correct()` (or use `neotoma instance-policy set`) when updating the policy remotely rather than re-deriving or guessing it. A store or correct refused by that policy returns `ERR_STORE_POLICY_DENIED` — the whole request is rejected, nothing is persisted, and the payload must be fixed rather than retried unmodified. A store or correct that could not be CHECKED against the policy returns `ERR_STORE_POLICY_UNAVAILABLE` (HTTP 503, `retryable: true`) — an infrastructure fault, not a policy decision: retry the same payload rather than rewriting it. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md` → `[INSTANCE DATA POLICY]`); this is a transport-layer pointer only.
 
 Index and dual-host notes: `docs/developer/agent_instructions.md`.
 
@@ -37,6 +37,7 @@ Instance skills / scripts (CLI-only, no MCP tool — materialization writes to t
 - **When MCP is available (installed and running):** Prefer **MCP** for Neotoma operations (**`store`**, `create_relationship`, retrieval tools, etc.) per the MCP instruction block. Deprecated aliases `store_structured` / `store_unstructured` still work but map to the same **`store`** handler.
 - **When both neotoma-dev and neotoma MCP servers are configured:** Default to **neotoma** (production) for retrieval/store/instruction precedence. Use **neotoma-dev** only when the user explicitly requests development behavior or the task is clearly dev-only.
 - **When MCP is not available:** Use the **Neotoma CLI** as backup. Data commands are offline-first with in-process local transport by default. Use `--api-only` to require remote API; `--offline` forces local transport. For server commands (`api start`, `api stop`, `api logs`, `watch`), always pass `--env dev` or `--env prod`.
+- **MCP 2026-07-28 clients over HTTP** (#2070): `POST /mcp` is dual-era. A request with no `Mcp-Session-Id` whose `params._meta` carries `io.modelcontextprotocol/protocolVersion` (plus `clientCapabilities`, and `clientInfo` for attribution) is served statelessly: no `initialize`, no session, identity from that request's own credentials. Call `server/discover` for instructions, capabilities and supported versions; it carries no per-user data (standing rules, instance skills), so read those with `retrieve_entities` (`entity_type: "standing_rule"` / `"skill"`). `Mcp-Method` / `Mcp-Name` carry only the method and the tool/resource/prompt name; a 400 naming either header means the value looked like a credential or personal data, so resend without it (credentials go only in `Authorization`). Legacy `initialize` + session clients are unchanged. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md` → `[INITIALIZATION]`); this is a transport-layer pointer only.
 
 ## CLI startup protocol (use-existing)
 
@@ -78,6 +79,8 @@ neotoma relationships create --source-entity-id <container_id> --target-entity-i
 
 Entity IDs are returned in the `store` response (`entities[].entity_id`). If `relationships create` fails or is unavailable, check `neotoma relationships --help` for current syntax.
 
+Both `--source-entity-id` and `--target-entity-id` must be existing entities owned by the authenticated user; an endpoint that does not exist and one owned by another user are refused identically. Store the entity first, then link it. After a `store` call that named relationships, check the response's `relationships_refused` array rather than assuming every requested edge exists — see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION] and `docs/subsystems/relationships.md` § 6.1.
+
 ## Relationship creation guidance (canonical)
 
 For when and how to link a newly stored entity to existing entities (pre-store candidate discovery, `retrieve_related_entities`, canonical relationship examples, direction convention), see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].
@@ -103,6 +106,8 @@ neotoma schemas audit-fragments contact         # one entity type
 ```
 
 It is read-only (declares nothing) and reports, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag. Use it before drafting `neotoma schemas update` (`update_schema_incremental`) / `register_schema` work to pick the high-occurrence fields to promote first.
+
+**Scope mismatch (`ERR_SCHEMA_SCOPE_MISMATCH`):** when `neotoma schemas update` reports this error and `found_scope` is `user`, retry with `neotoma schemas update --user-specific`. Do not run `neotoma schemas register` for that error. Canonical behavioral rule: `neotoma instructions print` (search "Schema scope mismatch").
 
 ## Retrieval command quick reference (CLI backup)
 
@@ -195,3 +200,49 @@ Load when configuring or documenting agent behavior, or when choosing between MC
 - `docs/foundation/what_to_store.md` — Canonical rubric for what facts are worth storing
 - `docs/developer/agent_cli_configuration.md` — Agent CLI configuration and MCP/CLI strategy
 - `docs/developer/cli_reference.md` — CLI command reference
+
+## Relationship type discovery and registration
+
+The vocabulary is instance data. Call `list_relationship_types` (CLI:
+`neotoma relationship-types list`) before using an unfamiliar edge type. If the
+meaning is absent, an authorized principal calls `register_relationship_type`
+(CLI: `neotoma relationship-types register --relationship-type knows --description
+"Explicit acquaintance"`). Registration defaults to user scope; global scope needs
+an explicit global permission in the registration grant. An absent grant is refused,
+including clients with no agent identity. Obtain a grant through the operator's
+normal grant-administration process; do not retry with wider scope.
+
+Refresh cached tool definitions after registration, verify the census includes the
+type, create the edge, and read it back with its type filter. Endpoint type hints,
+inverse and symmetry are advisory. Acyclic declarations are enforced on every edge
+creation surface and cannot be removed by re-registering metadata.
+
+An empty `list_relationship_types` result never means no vocabulary exists — the
+built-in types (`PART_OF`, `REFERS_TO`, and 26 others) are always expected to be
+present. When `relationship_types` is empty, the response carries `empty_reason`
+and `hint`: `registry_unseeded` means the instance's registry (including the
+built-ins) failed to seed and self-repairs on the very next read — call
+`list_relationship_types` again rather than concluding the vocabulary is
+unavailable; `filtered_to_empty` means a supplied `keyword` matched nothing —
+retry without `keyword`. Do not call `register_relationship_type` to work around
+either case: it registers a new custom type and cannot restore a missing built-in.
+
+If a write refuses a **built-in** type name (`PART_OF`, `REFERS_TO`, etc.) as
+unregistered, the error's `hint` says so explicitly and the remedy is the same as
+above — call `list_relationship_types` and retry, not `register_relationship_type`.
+If `register_relationship_type` itself refuses a built-in name for capability
+reasons (no grant covering it), the denial may ALSO mention a possible seed/registry
+cause — but only when the registry is genuinely unhealthy for that type; an ordinary
+grant-scope refusal (the far more common case: your grant simply does not cover this
+type) reads as a plain capability denial. Either way, request the grant through the
+operator's normal grant-administration process; do not retry with wider scope, and
+do not read a capability denial as evidence of a registry problem unless the denial
+says so.
+
+To re-type the historical `related_to` + `metadata.relation="knows"` convention,
+register `knows`, list the old edges, and select only those with that exact metadata
+value. For each selected edge, create `knows` with the same endpoints and provenance
+metadata, read it back, then soft-delete the old edge. Do not delete the original
+before verification. Repeating the same endpoints/type is idempotent; unrelated
+`related_to` edges remain unchanged. This is an explicit consumer migration, never
+automatic registry side effect.

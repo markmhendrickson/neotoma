@@ -87,11 +87,15 @@ describe("SchemaRegistryService - Incremental Updates", () => {
   };
 
   // Helper to mock activate() calls (3 database calls: select, update deactivate, update activate)
+  //
+  // #2356: activate() no longer calls .single() on (entity_type, schema_version).
+  // A global row and a user-scoped row can share a version string, and .single()
+  // throws on that pair. It now awaits the query for ALL candidate rows and picks
+  // by scope precedence, so this mock resolves to an array rather than one object.
   const mockActivateCalls = () => {
     const mockSelect = createChainableQuery({
-      single: vi.fn().mockResolvedValue({
-        data: { scope: "global", user_id: null },
-      }),
+      then: (resolve: any) =>
+        Promise.resolve({ data: [{ scope: "global", user_id: null }], error: null }).then(resolve),
     });
 
     // For deactivate: create chainable query where update() returns the query itself
@@ -111,11 +115,15 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     const mockUpdateActivate: any = {
       update: vi.fn(),
       eq: vi.fn(),
+      // #2356: the activate UPDATE is now scope-partitioned like the
+      // deactivation beside it, so it chains .is("user_id", null) for global.
+      is: vi.fn(),
       then: vi.fn((resolve: any) => Promise.resolve({ error: null }).then(resolve)),
       catch: vi.fn(),
     };
     mockUpdateActivate.update.mockReturnValue(mockUpdateActivate);
     mockUpdateActivate.eq.mockReturnValue(mockUpdateActivate);
+    mockUpdateActivate.is.mockReturnValue(mockUpdateActivate);
 
     return { mockSelect, mockUpdateDeactivate, mockUpdateActivate };
   };

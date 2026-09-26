@@ -63,6 +63,24 @@ function rankForObservationSource(
   return r === undefined ? Number.MAX_SAFE_INTEGER : r;
 }
 
+function timestampMs(value: string | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+}
+
+function compareObservationRecencyThenId(a: Observation, b: Observation): number {
+  const observedA = timestampMs(a.observed_at);
+  const observedB = timestampMs(b.observed_at);
+  if (observedA !== observedB) return observedB > observedA ? 1 : -1;
+
+  const createdA = timestampMs(a.created_at);
+  const createdB = timestampMs(b.created_at);
+  if (createdA !== createdB) return createdB > createdA ? 1 : -1;
+
+  return a.id.localeCompare(b.id);
+}
+
 export interface EntitySnapshot {
   entity_id: string;
   entity_type: string;
@@ -348,12 +366,13 @@ export class ObservationReducer {
       const rankA = rankForObservationSource(a, observationSourceRank);
       const rankB = rankForObservationSource(b, observationSourceRank);
       if (rankA !== rankB) return rankA - rankB;
-      // Tie breaker
-      if (tieBreaker === "observed_at") {
-        return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-      }
-      // source_priority is already the primary sort, so just use id
-      return a.id.localeCompare(b.id);
+      // Same numeric priority and source-kind tier: fall through to recency.
+      // `tie_breaker: "source_priority"` is retained for compatibility with
+      // existing schemas where source_priority is the declared trust axis; once
+      // the primary priority comparison ties, repeated ordinary corrections at
+      // that same tier still express replacement intent, so the newer write
+      // must win before the final stable id fallback.
+      return compareObservationRecencyThenId(a, b);
     });
 
     return {

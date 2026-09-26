@@ -54,5 +54,7 @@ export function areDestructiveActionsHidden(): boolean {
   return isSandboxUiEnabled();
 }
 
-export const SANDBOX_WEEKLY_RESET_LABEL = "Sunday 00:00 UTC";
+export const SANDBOX_SESSION_TTL_CAP_LABEL = "Sunday 00:00 UTC";
+/** @deprecated Use SANDBOX_SESSION_TTL_CAP_LABEL */
+export const SANDBOX_WEEKLY_RESET_LABEL = SANDBOX_SESSION_TTL_CAP_LABEL;
 export const SANDBOX_HOST_LABEL = "sandbox.neotoma.io";

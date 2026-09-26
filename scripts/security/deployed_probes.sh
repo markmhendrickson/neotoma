@@ -31,7 +31,7 @@
 # Wired into:
 #   - npm run security:probes
 #   - .cursor/skills/release/SKILL.md Step 5 (Deployed probes gate)
-#   - .github/workflows/sandbox-weekly-reset.yml (weekly check on live sandbox)
+#   - .github/workflows/sandbox-weekly-security-probes.yml (weekly check on live sandbox)
 
 set -euo pipefail
 

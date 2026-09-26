@@ -225,6 +225,149 @@ describe("Neotoma Issue Client", () => {
       expect(post.mock.calls).toHaveLength(1);
       expect(post.mock.calls[0][0]).toBe("/issues/submit");
     });
+
+    // Regression for #2014: submit_issue silently dropped reporter provenance
+    // fields on the remote leg, so the remote's ERR_REPORTER_ENVIRONMENT_REQUIRED
+    // check rejected calls that had actually supplied the fields. Assert on the
+    // constructed outbound request body — local storage already worked and would
+    // mask this regression again.
+    it("forwards reporter_git_sha and reporter_app_version into the outbound guestBody (issue #2014 repro)", async () => {
+      await submitIssueToRemote({
+        title: "Issue",
+        body: "Body",
+        visibility: "public",
+        reporterGitSha: "fdbd27f",
+        reporterAppVersion: "0.18.8",
+      });
+
+      const mockClient = vi.mocked(createApiClient).mock.results[0]
+        ?.value as unknown as MockIssueApiClient;
+      const [, request] = mockClient.POST.mock.calls[0];
+      expect(request.body.reporter_git_sha).toBe("fdbd27f");
+      expect(request.body.reporter_app_version).toBe("0.18.8");
+    });
+
+    it.each([
+      ["reporterGitSha", "reporter_git_sha", "abc123"],
+      ["reporterAppVersion", "reporter_app_version", "1.2.3"],
+      ["reporterGitRef", "reporter_git_ref", "refs/heads/main"],
+      ["reporterChannel", "reporter_channel", "stable"],
+      ["reporterCiRunId", "reporter_ci_run_id", "run-42"],
+    ] as const)(
+      "forwards %s alone as %s and no other reporter field",
+      async (paramKey, bodyKey, value) => {
+        await submitIssueToRemote({
+          title: "Issue",
+          body: "Body",
+          visibility: "public",
+          [paramKey]: value,
+        });
+
+        const mockClient = vi.mocked(createApiClient).mock.results[0]
+          ?.value as unknown as MockIssueApiClient;
+        const [, request] = mockClient.POST.mock.calls[0];
+        const reporterKeys = [
+          "reporter_git_sha",
+          "reporter_app_version",
+          "reporter_git_ref",
+          "reporter_channel",
+          "reporter_ci_run_id",
+        ] as const;
+        for (const key of reporterKeys) {
+          if (key === bodyKey) {
+            expect(request.body[key]).toBe(value);
+          } else {
+            expect(request.body[key]).toBeUndefined();
+          }
+        }
+      }
+    );
+
+    it("does not forward a whitespace-only reporter_git_sha", async () => {
+      await submitIssueToRemote({
+        title: "Issue",
+        body: "Body",
+        visibility: "public",
+        reporterGitSha: "   ",
+      });
+
+      const mockClient = vi.mocked(createApiClient).mock.results[0]
+        ?.value as unknown as MockIssueApiClient;
+      const [, request] = mockClient.POST.mock.calls[0];
+      expect(request.body.reporter_git_sha).toBeUndefined();
+    });
+
+    it("sends no reporter_* keys when none are supplied", async () => {
+      await submitIssueToRemote({
+        title: "Issue",
+        body: "Body",
+        visibility: "public",
+      });
+
+      const mockClient = vi.mocked(createApiClient).mock.results[0]
+        ?.value as unknown as MockIssueApiClient;
+      const [, request] = mockClient.POST.mock.calls[0];
+      for (const key of [
+        "reporter_git_sha",
+        "reporter_app_version",
+        "reporter_git_ref",
+        "reporter_channel",
+        "reporter_ci_run_id",
+      ]) {
+        expect(request.body[key]).toBeUndefined();
+      }
+    });
+
+    it("forwards reporter_git_ref alone (mixed-partial case) without requiring reporter_git_sha", async () => {
+      await submitIssueToRemote({
+        title: "Issue",
+        body: "Body",
+        visibility: "public",
+        reporterGitRef: "refs/heads/feature-x",
+      });
+
+      const mockClient = vi.mocked(createApiClient).mock.results[0]
+        ?.value as unknown as MockIssueApiClient;
+      const [, request] = mockClient.POST.mock.calls[0];
+      expect(request.body.reporter_git_ref).toBe("refs/heads/feature-x");
+      expect(request.body.reporter_git_sha).toBeUndefined();
+      expect(request.body.reporter_app_version).toBeUndefined();
+    });
+
+    it("preserves reporter fields through the unsigned-guest AUTH_REQUIRED retry path", async () => {
+      const signedPost = vi.fn().mockResolvedValueOnce({
+        error: { error_code: "AUTH_REQUIRED", message: "agent grant missing" },
+      });
+      const unsignedPost = vi.fn().mockResolvedValueOnce({
+        data: {
+          entity_ids: ["issue-entity-3", "conversation-entity-3"],
+          issue_entity_id: "issue-entity-3",
+          conversation_id: "conversation-entity-3",
+          guest_access_token: "guest-token-after-retry",
+        },
+      });
+      vi.mocked(createApiClient)
+        .mockReturnValueOnce({
+          POST: signedPost,
+          GET: vi.fn(),
+        } as unknown as ReturnType<typeof createApiClient>)
+        .mockReturnValueOnce({
+          POST: unsignedPost,
+          GET: vi.fn(),
+        } as unknown as ReturnType<typeof createApiClient>);
+
+      await submitIssueToRemote({
+        title: "Issue",
+        body: "Body",
+        visibility: "public",
+        reporterGitSha: "retrysha123",
+      });
+
+      expect(signedPost).toHaveBeenCalledTimes(1);
+      expect(unsignedPost).toHaveBeenCalledTimes(1);
+      expect(signedPost.mock.calls[0][1].body.reporter_git_sha).toBe("retrysha123");
+      expect(unsignedPost.mock.calls[0][1].body.reporter_git_sha).toBe("retrysha123");
+    });
   });
 
   describe("addMessageToRemote", () => {

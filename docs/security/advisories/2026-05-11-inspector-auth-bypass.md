@@ -121,7 +121,7 @@ If your deployment runs Neotoma behind a single-host reverse proxy and the beare
 | G2 — `scripts/security/semgrep_auth_rules.yml` rules `loopback-trust-in-production` + `forwarded-for-trust` | Refuses bare `req.socket.remoteAddress` and direct `X-Forwarded-For` / `Host` reads outside the canonical helpers. |
 | G3 — `tests/security/auth_topology_matrix.test.ts` + `protected_routes_manifest.json` | Asserts every transport × env × XFF × socket combination yields the expected `isLocalRequest` verdict and the expected `401` / `403` for every protected route in the manifest. |
 | G4 — `scripts/security/ai_review.js` (`docs/releases/in_progress/<TAG>/security_review.md`) | Forces a written reviewer answer to "can an unauthenticated external caller reach a privileged path through an alternate channel?" before `/release` Step 4. |
-| G5 — `scripts/security/deployed_probes.sh` | Re-runs the protected-route negative checks from an external host post-deploy and weekly against the live sandbox via `.github/workflows/sandbox-weekly-reset.yml`. |
+| G5 — `scripts/security/deployed_probes.sh` | Re-runs the protected-route negative checks from an external host post-deploy and weekly against the live sandbox via `.github/workflows/sandbox-weekly-security-probes.yml`. |
 
 ## Self-test evidence (gates against the v0.11.1 pre-fix shape)
 

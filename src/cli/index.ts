@@ -1405,6 +1405,61 @@ export function hintOf(error: unknown): string | undefined {
   return undefined;
 }
 
+/** Preserve a REST ErrorEnvelope when a CLI command crosses the API boundary. */
+function cliApiError(error: unknown): Error {
+  const detail = formatApiError(error);
+  const serverCode = errorCodeOf(error);
+  if (!serverCode) return new Error(detail);
+  return new CliHintError(detail, {
+    code: serverCode,
+    message: detail,
+    ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+  });
+}
+
+/**
+ * #2228: the `/me` payload separates "who you are" (`email`) from "whose
+ * graph you operate on" (`user_id`). Under shared-graph mode those describe
+ * different people, so the CLI must not let a bare `user_id` read as the
+ * signer's own identity. Pure formatting logic pulled out of the `auth login`
+ * already-signed-in branch so it is covered without driving the network/
+ * filesystem side effects the rest of that command performs.
+ */
+export function formatAlreadySignedIn(
+  me: {
+    user_id?: string;
+    email?: string;
+    authenticated_user_id?: string;
+    shared_graph?: boolean;
+  },
+  outputMode: "json" | "text"
+): { json: Record<string, unknown> } | { text: string } {
+  if (outputMode === "json") {
+    return {
+      json: {
+        message: "Already signed in",
+        user_id: me.user_id,
+        email: me.email,
+        ...(me.shared_graph
+          ? {
+              shared_graph: true,
+              ...(me.authenticated_user_id
+                ? { authenticated_user_id: me.authenticated_user_id }
+                : {}),
+            }
+          : {}),
+      },
+    };
+  }
+  let text = "Already signed in";
+  if (me.user_id ?? me.email) {
+    const scope = me.shared_graph ? `shared graph ${me.user_id}` : me.user_id;
+    text += ` (${[me.email, scope].filter(Boolean).join(", ")})`;
+  }
+  text += ".\n";
+  return { text };
+}
+
 function formatApiError(error: unknown): string {
   if (error && typeof error === "object") {
     const o = error as Record<string, unknown>;
@@ -3174,7 +3229,20 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     await db.prepare("DELETE FROM entity_snapshots").run();
     await db.prepare("DELETE FROM relationship_snapshots").run();
 
+    // #2343: the merge-import rebuild runs against an ARBITRARY target
+    // database opened by path, so it cannot use the service-layer seam (which
+    // resolves against the process's configured db). It shares the RULES via
+    // attachment_resolution_sqlite.ts instead — same merge-alias follow, same
+    // cycle guard, same depth bound.
+    const { resolveAttachmentTargetSqlite } =
+      await import("../services/attachment_resolution_sqlite.js");
+
     for (const entityId of entityIds) {
+      // A redirected id owns no snapshot of its own: skip it rather than
+      // writing the survivor's snapshot under a merge tombstone.
+      const target = await resolveAttachmentTargetSqlite(db, entityId);
+      if (target.resolvedEntityId !== entityId) continue;
+
       const observations = (
         await db
           .prepare(
@@ -7383,23 +7451,21 @@ const authLoginCommand = authCommand
       try {
         const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
         if (res.ok) {
-          const me = (await res.json()) as { user_id?: string; email?: string };
-          if (outputMode === "json") {
-            writeOutput(
-              {
-                message: "Already signed in",
-                base_url: baseUrl,
-                user_id: me.user_id,
-                email: me.email,
-              },
-              outputMode
-            );
+          // #2228: `email` is who is signed in; `user_id` is the graph being
+          // operated on. Under shared-graph mode they describe different
+          // people, so print the scope rather than letting the id read as the
+          // signer's own.
+          const me = (await res.json()) as {
+            user_id?: string;
+            email?: string;
+            authenticated_user_id?: string;
+            shared_graph?: boolean;
+          };
+          const formatted = formatAlreadySignedIn(me, outputMode === "json" ? "json" : "text");
+          if ("json" in formatted) {
+            writeOutput({ ...formatted.json, base_url: baseUrl }, outputMode);
           } else {
-            process.stdout.write("Already signed in");
-            if (me.user_id ?? me.email) {
-              process.stdout.write(` (${[me.email, me.user_id].filter(Boolean).join(", ")})`);
-            }
-            process.stdout.write(".\n");
+            process.stdout.write(formatted.text);
           }
           return;
         }
@@ -7829,9 +7895,14 @@ instancePolicyCommand
         process.exitCode = 1;
         return;
       }
-      const policy = (data as { policy?: unknown } | undefined)?.policy ?? null;
+      const envelope = data as { policy?: unknown; entity_id?: string | null } | undefined;
+      const policy = envelope?.policy ?? null;
+      // Mirror HTTP GET /instance-policy / MCP describe_instance_policy —
+      // entity_id is the opaque id to pass to correct() when updating remotely.
+      // Text-mode output stays policy-only (human-readable, not a machine contract).
+      const entity_id = envelope?.entity_id ?? null;
       if (outputMode === "json") {
-        writeOutput({ policy }, outputMode);
+        writeOutput({ policy, entity_id }, outputMode);
         return;
       }
       if (!policy) {
@@ -7881,8 +7952,23 @@ instancePolicyCommand
         // re-storing over an existing policy fails by design — the update route
         // is a correction against the existing entity. Discovering that by
         // hitting the collision is the trial-and-error this command removes.
-        const { getInstancePolicyEntityId } = await import("../services/instance_policy.js");
-        const existingId = await getInstancePolicyEntityId();
+        //
+        // Mirrors `instance-policy show`: read entity_id off the
+        // `--base-url`-resolved remote instance over HTTP, not off a local
+        // database connection. This command runs against whatever instance
+        // `--base-url` points to, which is not necessarily the machine
+        // running the CLI — `getInstancePolicyEntityId()` reads the local
+        // process's own DB connection and would silently target the wrong
+        // instance whenever `--base-url` points elsewhere.
+        const { data: policyReadData, error: policyReadError } = await api.GET(
+          "/instance-policy",
+          {}
+        );
+        if (policyReadError) {
+          throw new Error(`Failed to read instance policy: ${JSON.stringify(policyReadError)}`);
+        }
+        const policyReadEnvelope = policyReadData as { entity_id?: string | null } | undefined;
+        const existingId = policyReadEnvelope?.entity_id ?? null;
 
         const fields: Record<string, unknown> = { ...parsed };
         if (enforcement) fields.enforcement = enforcement;
@@ -9669,10 +9755,35 @@ issuesCommand
   .action(async (opts) => {
     const { issuesSync } = await import("./issues.js");
     const config = await readConfig();
-    const token = await getCliToken();
+    // Prefer per-agent AAuth signing when a CLI AAuth key is configured via env
+    // (NEOTOMA_AAUTH_PRIVATE_JWK_PATH). This lets the issues-sync LaunchAgent /
+    // neotoma-agent daemon authenticate with a signed request instead of a
+    // bearer token (bearer-token retirement). Drop the bearer so the signature
+    // is the sole credential, and force the HTTP transport — the in-process
+    // local transport bypasses signing (and also avoids the dev/prod local
+    // transport env-mismatch). Falls back to bearer when AAuth is not configured.
+    // When the env gate is set, fail loud if the key is missing/unusable —
+    // silent unsigned fallback would leave the unattended daemon syncing as
+    // anonymous (REQUEST_CHANGES on #1764 / phoenicurus).
+    const useAAuth = Boolean(process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH);
+    if (useAAuth) {
+      const { loadCliSignerConfig } = await import("./aauth_signer.js");
+      const signerConfig = await loadCliSignerConfig();
+      if (!signerConfig) {
+        throw new Error(
+          `NEOTOMA_AAUTH_PRIVATE_JWK_PATH is set (${process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH}) ` +
+            "but no usable AAuth CLI keypair was found there. Fix the path or run `neotoma auth keygen`. " +
+            "Unattended issues sync must not fall back to an unsigned request."
+        );
+      }
+    }
+    const token = useAAuth ? undefined : await getCliToken();
     const api = createApiClient({
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
+      ...(useAAuth
+        ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
+        : {}),
     });
     await issuesSync({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
   });
@@ -12491,6 +12602,62 @@ devCommand
 const entitiesCommand = program.command("entities").description("Entity commands");
 const sourcesCommand = program.command("sources").description("Source commands");
 const observationsCommand = program.command("observations").description("Observation commands");
+const relationshipTypesCommand = program
+  .command("relationship-types")
+  .description("Discover and register relationship types");
+relationshipTypesCommand
+  .command("list")
+  .option("--keyword <text>", "Filter names and descriptions")
+  .option("--scope <scope>", "Filter user or global scope")
+  .option("--include-edge-count", "Include counts of written edge rows")
+  .action(async (opts) => {
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/list_relationship_types", {
+      body: {
+        keyword: opts.keyword,
+        scope: opts.scope,
+        include_edge_counts: opts.includeEdgeCount,
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
+relationshipTypesCommand
+  .command("register")
+  .requiredOption("--relationship-type <type>", "Type to register")
+  .option("--description <text>", "Meaning of the edge")
+  .option("--scope <scope>", "user or global (global requires explicit permission)", "user")
+  .option("--acyclic", "Refuse cycles for this type")
+  .option("--inverse <type>", "Advisory inverse type")
+  .option("--symmetric", "Advisory symmetry")
+  .option("--source-entity-types <types>", "Comma-separated advisory source types")
+  .option("--target-entity-types <types>", "Comma-separated advisory target types")
+  .action(async (opts) => {
+    if (!["user", "global"].includes(opts.scope)) throw new Error("--scope must be user or global");
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/register_relationship_type", {
+      body: {
+        relationship_type: opts.relationshipType,
+        description: opts.description,
+        scope: opts.scope,
+        acyclic: opts.acyclic,
+        inverse: opts.inverse,
+        symmetric: opts.symmetric,
+        source_entity_types: opts.sourceEntityTypes?.split(","),
+        target_entity_types: opts.targetEntityTypes?.split(","),
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
 const relationshipsCommand = program.command("relationships").description("Relationship commands");
 const timelineCommand = program.command("timeline").description("Timeline commands");
 const schemasCommand = program.command("schemas").description("Schema commands");
@@ -13695,15 +13862,7 @@ relationshipsCommand
       const effectiveUserId = resolveEffectiveUserId(opts.userId);
       const { data, error } = await api.POST("/relationships/snapshot", {
         body: {
-          relationship_type: relationshipType as
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS",
+          relationship_type: relationshipType,
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
@@ -15283,7 +15442,7 @@ program
     ];
 
     const relationships: Array<{
-      relationship_type: "PART_OF" | "REFERS_TO";
+      relationship_type: string;
       source_index: number;
       target_index: number;
     }> = [
@@ -16438,13 +16597,25 @@ program
     // --aauth: drop the bearer so the AAuth request signature is the sole
     // credential. A bearer Authorization header otherwise takes precedence and
     // the request lands under the bearer's identity rather than the agent's.
+    if (opts.aauth) {
+      const { loadCliSignerConfig } = await import("./aauth_signer.js");
+      const signerConfig = await loadCliSignerConfig();
+      if (!signerConfig) {
+        throw new Error(
+          "No AAuth CLI keypair found (~/.neotoma/aauth/private.jwk or NEOTOMA_AAUTH_PRIVATE_JWK_PATH). " +
+            "Run `neotoma auth keygen` once, then retry. `--aauth` must not fall back to an unsigned request."
+        );
+      }
+    }
     const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
     const api = createApiClient({
       baseUrl,
       token,
       // AAuth signing rides the HTTP transport, so force it over the in-process
       // local transport (which would bypass the signature).
-      ...(opts.aauth ? { signWithCliAAuth: true, forceHttpTransport: true } : {}),
+      ...(opts.aauth
+        ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
+        : {}),
     });
 
     const params = parseOptionalJson(opts.params);

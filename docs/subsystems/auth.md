@@ -27,6 +27,56 @@ Resolution order:
 - New read endpoints that accept a `user_id` query parameter must declare it in `openapi.yaml` (see `docs/architecture/openapi_contract_flow.md`).
 - The `LOCAL_DEV_USER_ID` override is a deliberate dev-flow affordance; widening it to other users requires an explicit security review.
 
+## Shared-graph identity vs graph scope (`GET /me`)
+
+When `NEOTOMA_SHARED_GRAPH_USER_ID` is set, two concepts travel on the same session and must not be collapsed (#2228):
+
+| Field | Meaning |
+| --- | --- |
+| `user_id` | **Graph scope** — the shared owner id all reads/writes are scoped to |
+| `email` | **Signed-in identity** — the verified Google email of the teammate who signed in |
+| `authenticated_user_id` | Per-email local-auth id of that teammate (only when distinct from `user_id`) |
+| `shared_graph` | `true` when this session operates on the shared graph |
+
+Data scoping (`getAuthenticatedUserId`, store/retrieve) continues to use `user_id` alone. Inspector and CLI consumers treat `email` as who is signed in and `user_id` as whose graph.
+
+### Annotated responses
+
+**Fully remapped shared-graph session** (teammate has signed in after identity columns exist):
+
+```json
+{
+  "user_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "email": "teammate@example.com",
+  "shared_graph": true,
+  "authenticated_user_id": "11111111-2222-3333-4444-555555555555"
+}
+```
+
+- `email` / `authenticated_user_id` = identity (who signed in)
+- `user_id` = scope (shared graph); never label it as the viewer's own account id
+- `shared_graph` = true
+
+**Non-shared-graph session** (env unset): additive fields are omitted so existing consumers keep the prior shape:
+
+```json
+{
+  "user_id": "11111111-2222-3333-4444-555555555555",
+  "email": "solo@example.com"
+}
+```
+
+**Pre-migration residual** (shared-graph env on; connection row has `user_id` = shared owner and NULL `authenticated_*`): identity is **unknown** until the teammate signs in again. `email` is omitted — never fabricated from the graph owner's local-auth row — and `shared_graph` is still `true` without `authenticated_user_id`:
+
+```json
+{
+  "user_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "shared_graph": true
+}
+```
+
+Integrators and UI must treat missing `email` under `shared_graph: true` as “unknown — re-authenticate,” not as “the graph owner.”
+
 ## Authorization
 
 **Per-user isolation is enforced today, in application code, on every user-scoped read.** This is not a future RLS aspiration — it ships and is regression-tested.

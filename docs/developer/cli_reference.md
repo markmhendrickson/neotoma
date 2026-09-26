@@ -255,6 +255,15 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 - `neotoma access enable-issues`: Set `issue`, `conversation`, and `conversation_message` to `submitter_scoped`.
 - `neotoma access disable-issues`: Reset `issue`, `conversation`, and `conversation_message` to effective `closed` policy, subject to any env override.
 
+### Instance Policy
+
+Inspect and configure this instance's data policy (#1974/#1975) — what the instance is *for*, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
+
+- `neotoma instance-policy show`: Show the instance data policy, or report that none is configured (`{"policy": null}` — unrestricted, not deny-all).
+- `neotoma instance-policy set --file <path> [--enforce | --advisory] [--dry-run]`: Create or update the instance policy from a JSON file (fields: `purpose`, `out_of_scope_entity_types`, `require_lawful_basis`, `require_provenance`, `max_sensitivity_class`). `--enforce` sets `enforcement: "enforced"` (reject violating writes); `--advisory` sets `enforcement: "advisory"` (declare only, do not reject — the default when unset on a new policy). `--enforce` and `--advisory` are mutually exclusive. `--dry-run` prints what would be written without persisting it.
+
+`enforcement: "enforced"` covers structured `store`/`correct` calls (an `entities` array) on all three write paths — REST, CLI, and MCP. It does **not** cover raw/reference file uploads (`neotoma store --file <path>` with no `entities` array) — see `docs/releases/in_progress/v0.22.0/security_review.md` for the known scope boundary.
+
 ### Runtime overrides (precedence: flag > env > default)
 
 CLI behavior can be pinned per invocation via flags or across invocations via environment variables. Every runtime override follows the same precedence: explicit flag > environment variable > default.
@@ -665,7 +674,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--file <path>`: create a batch from a JSON array, or an object with `relationships: [...]`. Each entry uses `relationship_type`, `source_entity_id`, `target_entity_id`, and optional `metadata`.
 - `neotoma relationships list <entityId>`:
   - `--direction <direction>`: inbound, outbound, or both
-- `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is one of: PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS.
+- `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is any type registered on the instance — the vocabulary is a runtime registry — call `list_relationship_types` to read what an instance accepts, and `register_relationship_type` to add to it.
 - `neotoma relationships restore <relationshipType> <sourceEntityId> <targetEntityId>`: Restore a deleted relationship (creates restoration observation). Optional: `--reason <reason>`.
 
 ### Timeline

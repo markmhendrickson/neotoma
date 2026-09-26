@@ -1412,7 +1412,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.12 `correct`
 
-**Purpose:** Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation) to override AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. Corrections always win in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation (priority 1000).
+**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
 
 **Request Schema:**
 
@@ -1525,14 +1525,14 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ```typescript
 {
-  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES' | 'EMBEDS'; // Required
+  relationship_type: string; // Required. Any type registered on the instance; read via list_relationship_types.
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
   metadata?: Record<string, any>; // Optional: Relationship-specific metadata (e.g. caption, order for EMBEDS)
 }
 ```
 
-**Relationship types:** `PART_OF` (source is part of target), `CORRECTS`, `REFERS_TO`, `SETTLES`, `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS` (source container embeds target asset; use for post embeds image, document embeds attachment). See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).
+**Relationship types:** the vocabulary is a runtime registry — call `list_relationship_types` to read what an instance accepts, and `register_relationship_type` to add to it. `PART_OF` (source is part of target) and `EMBEDS` (source container embeds target asset; use for post embeds image, document embeds attachment) are two of the built-ins. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).
 
 **Response Schema:**
 
@@ -1615,14 +1615,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ```typescript
 {
-  relationship_type: "PART_OF" |
-    "CORRECTS" |
-    "REFERS_TO" |
-    "SETTLES" |
-    "DUPLICATE_OF" |
-    "DEPENDS_ON" |
-    "SUPERSEDES" |
-    "EMBEDS"; // Required
+  relationship_type: string; // Required. Any type registered on the instance; read via list_relationship_types.
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
 }

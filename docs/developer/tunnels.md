@@ -79,6 +79,21 @@ To verify which XFF IP your tunnel topology actually injects, start the server a
 ```
 If you want loopback-trust (rather than bearer auth) for these callers, set `NEOTOMA_TRUSTED_PROXY_IPS` to that IP or CIDR. `NEOTOMA_TRUST_PROD_LOOPBACK=1` and `NEOTOMA_TRUSTED_PROXY_IPS` are independent and can coexist.
 
+**Same-host sidecar in production: a loopback-only forwarded chain does not qualify a caller on its own.** When a same-host proxy (a sidecar or local reverse proxy) forwards to Neotoma over loopback and injects `x-forwarded-for` entries that are themselves loopback addresses (or already-trusted proxy IPs), that chain no longer counts as local by itself in production. `x-forwarded-for` can only disqualify a request as local, never qualify one: to be treated as local in production, the request must additionally satisfy the production rule — either its nearest forwarded hop is listed in `NEOTOMA_TRUSTED_PROXY_IPS`, or the deployment has set `NEOTOMA_TRUST_PROD_LOOPBACK=1`.
+
+**Symptom:** a same-host proxy sending a loopback/trusted-only chain gets a bare `401` in production with no matching stderr line from the "XFF contains untrusted IP(s)" diagnostic above — that diagnostic only fires when a genuinely untrusted (non-loopback, non-trusted) IP is present, and this chain has none. Instead, Neotoma logs a separate, rate-limited line for this case:
+```
+[neotoma] isLocalRequest: production request refused (NEOTOMA_ENV=production is set) — loopback socket with a forwarded chain of only loopback/trusted hops, but the nearest hop is not itself a configured trusted proxy. Set NEOTOMA_TRUSTED_PROXY_IPS to the nearest hop's address (or its enclosing CIDR), or set NEOTOMA_TRUST_PROD_LOOPBACK=1 for a single-host deployment.
+```
+**The fix:** set `NEOTOMA_TRUSTED_PROXY_IPS` to the actual nearest-hop address your sidecar injects (not an assumed loopback value), or set `NEOTOMA_TRUST_PROD_LOOPBACK=1` for a genuinely single-host deployment with no untrusted network path.
+
+A bare loopback socket with **no** forwarded-for header at all — the common no-reverse-proxy shape — is refused the same way and logs the same style of rate-limited diagnostic, naming which signal caused the refusal:
+```
+[neotoma] isLocalRequest: production request refused (NODE_ENV=production is set (NEOTOMA_ENV is unset)) — loopback socket with no forwarded-for header is not local-trusted in production. Set NEOTOMA_TRUST_PROD_LOOPBACK=1 for a genuinely single-host deployment, or set NEOTOMA_ENV=development if this process is not actually production. See docs/operations/configuration.md "Environments" for the full precedence rule.
+```
+
+**"Production" for all of the above is also `NODE_ENV=production`, not only `NEOTOMA_ENV` — and either variable saying production is sufficient.** A plain `NODE_ENV=production` — the shape a bare `Dockerfile` sets with `ENV NODE_ENV=production` and no `NEOTOMA_ENV` — is treated as production by this gate, the same as `NEOTOMA_ENV=production`. Unlike an earlier revision of this detector, an explicit `NEOTOMA_ENV=development` does **not** override a `NODE_ENV=production` set elsewhere — either variable saying production wins, and a `NEOTOMA_ENV` set to an unrecognized value (e.g. `staging`) is also treated as production. See `docs/operations/configuration.md` "Production detection: one rule for every caller" for the full rule and its escape hatches.
+
 **Local OAuth over a public tunnel:** With encryption off, OAuth still uses a built-in dev account **after** key-auth preflight succeeds. When the server is reached **via a tunnel** (non-local Host), it requires **explicit approval** (an "Approve this connection" page) before completing OAuth, and it only accepts **allowlisted redirect URIs** (e.g. `cursor://`, `http://localhost`, `http://127.0.0.1`) so the authorization code cannot be sent to an arbitrary third-party site. If users cannot complete key-authenticated OAuth, use bearer token access:
 
 - **`NEOTOMA_BEARER_TOKEN`** in `.env` and send it as `Authorization: Bearer <token>` from the client (no OAuth; good for scripts or single-user).

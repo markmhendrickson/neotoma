@@ -10,16 +10,33 @@ export interface ToolDefinition {
   _meta?: Record<string, unknown>;
 }
 
-const RELATIONSHIP_TYPE_ENUM = [
-  "PART_OF",
-  "CORRECTS",
-  "REFERS_TO",
-  "SETTLES",
-  "DUPLICATE_OF",
-  "DEPENDS_ON",
-  "SUPERSEDES",
-  "EMBEDS",
-];
+/**
+ * Relationship types are NOT enumerated in any tool schema (#1972 / G25).
+ *
+ * History, kept because it records why the drift happened twice. Until #1972
+ * these three hand-built schemas (`delete_relationship`,
+ * `restore_relationship`, `get_relationship_snapshot`) carried a local
+ * 8-member literal while `create_relationship` — whose schema comes from
+ * OpenAPI — advertised 28. An edge written with any of the other 20 types was
+ * therefore advertised to MCP clients as UNDELETABLE: a schema-validating
+ * client refused the call before it reached a server that would have accepted
+ * it. The first fix derived all four from `RelationshipTypeSchema.options`,
+ * which made those four agree — but left fifteen further copies of the same
+ * literal elsewhere in the tree, any of which could be wrong with no test
+ * failing. One of them, `docs/developer/mcp/tool_descriptions.yaml`, WAS wrong
+ * in the field: loaded into the live tool descriptions at server boot, it told
+ * every LLM client the vocabulary was 8 types while the schema beside it said
+ * 28.
+ *
+ * The vocabulary is now a runtime registry. These schemas advertise
+ * `type: string` and point at `list_relationship_types`, so there is nothing
+ * left here to drift. `tests/contract/relationship_type_single_source.test.ts`
+ * fails if a literal enumeration comes back anywhere outside the seed file.
+ */
+const RELATIONSHIP_TYPE_DESCRIPTION =
+  "Relationship type. The vocabulary is a runtime registry, not a closed enum: " +
+  "call list_relationship_types to read what this instance accepts, and " +
+  "register_relationship_type to add to it.";
 
 /**
  * Build the complete list of Neotoma MCP tool definitions.
@@ -113,8 +130,7 @@ export function buildToolDefinitions(
         properties: {
           relationship_type: {
             type: "string",
-            enum: RELATIONSHIP_TYPE_ENUM,
-            description: "Type of relationship",
+            description: RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -462,7 +478,7 @@ export function buildToolDefinitions(
           file_path: {
             type: "string",
             description:
-              "Local file path (alternative to file_content). If provided, file will be read from filesystem. MIME type will be auto-detected from extension if not provided. Works in local environments (Cursor, Claude Code) where MCP server has filesystem access. Does NOT work in web-based environments (claude.ai, chatgpt.com) - use file_content for those.",
+              "A path on the SERVER's filesystem, not yours. The file is read by the Neotoma instance, so this only works when your client runs on the same machine as the instance — the axis is co-located vs remote, not desktop vs web. Against a hosted or otherwise remote instance it cannot see your disk and is rejected with ERR_FILE_PATH_IS_SERVER_LOCAL. To send a file from a remote client: upload the bytes (POST /sources/upload, multipart/form-data) and pass the returned source_id, or inline small files with file_content (base64) + mime_type. MIME type is auto-detected from the content or extension when not provided.",
           },
           mime_type: {
             type: "string",
@@ -515,7 +531,7 @@ export function buildToolDefinitions(
     {
       name: "correct",
       description:
-        "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation.",
+        "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect.",
       inputSchema: {
         type: "object",
         properties: {
@@ -636,8 +652,10 @@ export function buildToolDefinitions(
         properties: {
           relationship_type: {
             type: "string",
-            description: "Relationship type (e.g. PART_OF, REFERS_TO, EMBEDS)",
-            enum: RELATIONSHIP_TYPE_ENUM,
+            description:
+              "Exact relationship type of the existing edge — the same vocabulary " +
+              "create_relationship writes. " +
+              RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -699,8 +717,10 @@ export function buildToolDefinitions(
         properties: {
           relationship_type: {
             type: "string",
-            description: "Relationship type (e.g. PART_OF, REFERS_TO, EMBEDS)",
-            enum: RELATIONSHIP_TYPE_ENUM,
+            description:
+              "Exact relationship type of the existing edge — the same vocabulary " +
+              "create_relationship writes. " +
+              RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -740,10 +760,38 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "list_relationship_types",
+      description: desc(
+        "list_relationship_types",
+        "List the relationship types this instance PERMITS. This is the registry census, " +
+          "not a survey of what has been written: a type registered a moment ago with zero " +
+          "edges appears here, which is what you need when discovering what you may write " +
+          "BEFORE writing it. Call this instead of assuming a fixed vocabulary. " +
+          "source_entity_types, target_entity_types, inverse and symmetric are advisory " +
+          "metadata and are NOT enforced at write time; acyclic IS enforced. edge_count, " +
+          "when requested, means rows written and is never evidence of registration."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("list_relationship_types"),
+    },
+    {
+      name: "register_relationship_type",
+      description: desc(
+        "register_relationship_type",
+        "Add a relationship type to this instance's vocabulary, so an edge you need can be " +
+          "named rather than bent onto an existing type or simulated as a field on an entity. " +
+          "Registration is append-only: re-registering supersedes with a newer row, " +
+          "deregistering appends a deactivated one, and nothing is updated in place. " +
+          'scope defaults to "user"; registering at "global" scope changes the vocabulary ' +
+          "for every tenant and requires an explicit register_relationship_type capability. " +
+          "Read the result back with list_relationship_types."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("register_relationship_type"),
+    },
+    {
       name: "list_entity_types",
       description: desc(
         "list_entity_types",
-        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type."
+        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type. Each version shown is the one YOUR writes resolve against: a schema scoped to you wins over the instance-wide one. describe_entity_type resolves the same way, so the two agree."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
@@ -751,7 +799,7 @@ export function buildToolDefinitions(
       name: "describe_entity_type",
       description: desc(
         "describe_entity_type",
-        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. Read-only."
+        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. The schema returned is the one YOUR writes resolve against: if this instance holds a schema scoped to you for this type, that is what you get, otherwise the instance-wide one. list_entity_types resolves the same way, so the two agree. Read-only."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("describe_entity_type"),
     },
@@ -759,7 +807,7 @@ export function buildToolDefinitions(
       name: "describe_instance_policy",
       description: desc(
         "describe_instance_policy",
-        'Return this instance\'s data policy: what it is for, which entity types are in or out of scope, and which person-data gates it enforces. Call this on a new session against an unfamiliar instance, before storing, so your first write complies instead of being rejected. Returns {"policy": null} when the instance has no policy configured. Read-only.'
+        'Return this instance\'s data policy: what it is for, which entity types are in or out of scope, and which person-data gates it enforces. Call this on a new session against an unfamiliar instance, before storing, so your first write complies instead of being rejected. Returns {"policy": null, "entity_id": null} when the instance has no policy configured. entity_id is opaque — pass it to correct() when updating the policy remotely. Read-only.'
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("describe_instance_policy"),
     },
@@ -1558,6 +1606,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "restore_relationship",
   "get_entity_type_counts",
   "list_entity_types",
+  "list_relationship_types",
+  "register_relationship_type",
   "describe_entity_type",
   "describe_instance_policy",
   "analyze_schema_candidates",

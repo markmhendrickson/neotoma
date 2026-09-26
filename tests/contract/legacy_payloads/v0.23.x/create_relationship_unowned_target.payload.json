@@ -1,0 +1,6 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "relationship_type": "REFERS_TO",
+  "source_entity_id": "ent_000000000000000000000001",
+  "target_entity_id": "ent_000000000000000000000002"
+}

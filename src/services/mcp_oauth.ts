@@ -7,6 +7,7 @@
 import { randomBytes, createHash, createCipheriv, createDecipheriv, randomUUID } from "node:crypto";
 import { getServiceRoleClient, db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import { connectionIdForLog } from "../utils/connection_id_log.js";
 import { config } from "../config.js";
 import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
 import { clearDbCache, getDb } from "../repositories/db/connection.js";
@@ -94,6 +95,7 @@ interface LocalOAuthStateRow {
 
 interface LocalConnectionRow {
   id: string;
+  /** Graph scope: the user_id all data access on this connection is scoped to. */
   user_id: string;
   connection_id: string;
   refresh_token: string;
@@ -103,7 +105,16 @@ interface LocalConnectionRow {
   last_used_at: string | null;
   created_at: string;
   revoked_at: string | null;
+  /** Signed-in identity (#2228). NULL outside shared-graph mode and on rows
+   *  written before the migration, where identity comes from `user_id`. */
+  authenticated_user_id?: string | null;
+  authenticated_email?: string | null;
 }
+
+/** Columns every LocalConnectionRow SELECT reads. Kept in one place so adding a
+ *  column cannot silently miss one of the three lookup helpers. */
+const LOCAL_CONNECTION_COLUMNS =
+  "id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at, authenticated_user_id, authenticated_email";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -187,7 +198,7 @@ async function getLocalConnectionById(connectionId: string): Promise<LocalConnec
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL`
     )
     .get(connectionId);
   return row ? (row as LocalConnectionRow) : null;
@@ -199,7 +210,7 @@ async function getLocalConnectionByAccessToken(
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL`
     )
     .get(accessToken);
   return row ? (row as LocalConnectionRow) : null;
@@ -211,7 +222,7 @@ async function getLocalConnectionByRefreshToken(
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL`
     )
     .get(refreshToken);
   return row ? (row as LocalConnectionRow) : null;
@@ -224,13 +235,29 @@ async function upsertLocalConnection(payload: {
   accessToken: string;
   accessTokenExpiresAt: string;
   clientName?: string | null;
+  /** Signed-in identity to persist alongside the graph scope (#2228). Omitted
+   *  by callers with no separate identity (token refresh, non-Google paths),
+   *  where the row's existing identity is preserved rather than cleared. */
+  authenticatedUserId?: string | null;
+  authenticatedEmail?: string | null;
 }): Promise<void> {
   const db = await getDb();
   const existing = await getLocalConnectionById(payload.connectionId);
   if (existing) {
+    // A refresh (which carries no identity) must not erase the identity a
+    // sign-in already recorded, or `/me` would silently revert to reporting the
+    // graph owner's email after the first token refresh.
+    const authenticatedUserId =
+      payload.authenticatedUserId !== undefined
+        ? payload.authenticatedUserId
+        : (existing.authenticated_user_id ?? null);
+    const authenticatedEmail =
+      payload.authenticatedEmail !== undefined
+        ? payload.authenticatedEmail
+        : (existing.authenticated_email ?? null);
     await db
       .prepare(
-        "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL WHERE connection_id = ?"
+        "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL, authenticated_user_id = ?, authenticated_email = ? WHERE connection_id = ?"
       )
       .run(
         payload.userId,
@@ -239,13 +266,15 @@ async function upsertLocalConnection(payload: {
         payload.accessTokenExpiresAt,
         payload.clientName ?? null,
         nowIso(),
+        authenticatedUserId,
+        authenticatedEmail,
         payload.connectionId
       );
     return;
   }
   await db
     .prepare(
-      "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at, authenticated_user_id, authenticated_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       randomUUID(),
@@ -257,7 +286,9 @@ async function upsertLocalConnection(payload: {
       payload.clientName ?? null,
       nowIso(),
       nowIso(),
-      null
+      null,
+      payload.authenticatedUserId ?? null,
+      payload.authenticatedEmail ?? null
     );
 }
 
@@ -314,10 +345,86 @@ function validateRedirectUri(redirectUri: string): void {
   }
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * Canonical form of a callback URL for exact comparison, or null if the URL is
+ * unparseable or not one we will ever honour.
+ *
+ * Normalisation is delegated to the WHATWG URL parser wherever the parser and a
+ * browser agree, because the browser is what will actually perform the redirect:
+ *   - backslashes are resolved as slashes, the way a browser resolves them;
+ *   - dot segments are resolved (`/auth/callback/../admin` becomes `/auth/admin`,
+ *     which then simply fails to match the configured `/auth/callback`);
+ *   - the host is lowercased; a default port (443/80) is dropped.
+ * On top of that we:
+ *   - compare protocol + host + port + pathname only, so a query string or
+ *     fragment on the request cannot smuggle a mismatch past the comparison and
+ *     equally cannot cause a legitimate callback carrying `?state=` to be refused;
+ *   - preserve pathname case, which is correctly case-SENSITIVE (unlike the host);
+ *   - treat a trailing slash as insignificant, since `/cb` and `/cb/` reach the
+ *     same handler in every server we care about and an operator should not be
+ *     punished for the difference;
+ *   - refuse any URL carrying userinfo. `https://evil.com@app.example.com/cb` is
+ *     harmless to the URL parser but is a well-worn way to make a URL read as one
+ *     host to a human reviewing config and resolve as another;
+ *   - refuse plaintext http: to anything but a loopback host, so an operator who
+ *     misconfigures `http://evil.com/cb` fails closed rather than silently
+ *     shipping authorization codes over the wire in cleartext.
+ */
+function canonicalCallbackUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const protocol = url.protocol.toLowerCase();
+  if (protocol !== "https:" && protocol !== "http:") return null;
+  // Credentials in a callback URL are never load-bearing and are a spoofing vector.
+  if (url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (!host) return null;
+  // Plaintext only to loopback, where there is no wire to sniff.
+  if (protocol === "http:" && !LOOPBACK_HOSTS.has(host)) return null;
+  const port = url.port ? `:${url.port}` : "";
+  // Trailing slash is insignificant; everything else about the path is significant.
+  const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
+  return `${protocol}//${host}${port}${path}`;
+}
+
+/**
+ * Exact-match check against the operator-configured trusted callback URLs
+ * (NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS). Empty by default.
+ *
+ * Deliberately matches a FULL callback URL rather than an origin: a configured
+ * `https://app.example.com/auth/callback` authorises that one path and NOT
+ * `https://app.example.com/anything-else`. Trusting a whole third-party origin is
+ * the defect reported in #2215; this does not add a second instance of it.
+ */
+export function isRedirectUriInConfiguredAllowlist(redirectUri: string): boolean {
+  if (config.oauthTrustedCallbackUrls.length === 0) return false;
+  const candidate = canonicalCallbackUrl(redirectUri);
+  if (!candidate) return false;
+  for (const configured of config.oauthTrustedCallbackUrls) {
+    const allowed = canonicalCallbackUrl(configured);
+    // `allowed` is non-null for every entry that survives config parsing:
+    // `parseTrustedCallbackUrls` in src/config.ts rejects the whole list at load
+    // if any entry is malformed, so a bad entry can never reach here to be
+    // silently skipped. The null-guard remains as a defence-in-depth belt on a
+    // helper that is exported and could be called with an unvalidated list.
+    if (allowed && allowed === candidate) return true;
+  }
+  return false;
+}
+
 /**
  * Redirect URIs allowed when the authorization request is from a tunnel (non-local Host).
  * Prevents sending the authorization code to a third-party site. Allows localhost, loopback,
- * known app schemes, and trusted hosted OAuth callbacks (OpenAI/Claude).
+ * known app schemes, trusted hosted OAuth callbacks (OpenAI/Claude), and any exact
+ * callback URLs the operator configured via NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS
+ * (empty by default, so this function's behaviour is unchanged unless an operator
+ * opts in).
  */
 export function isRedirectUriAllowedForTunnel(redirectUri: string, selfHost?: string): boolean {
   if (!redirectUri || typeof redirectUri !== "string") return false;
@@ -339,6 +446,9 @@ export function isRedirectUriAllowedForTunnel(redirectUri: string, selfHost?: st
       if (host === self) return true;
     }
     if (host === "chatgpt.com" || host === "chat.openai.com") return true;
+    // Operator-configured exact callback URLs. Additive: empty by default, and
+    // checked only after every pre-existing rule has already declined.
+    if (isRedirectUriInConfiguredAllowlist(redirectUri)) return true;
     if (
       (host === "claude.ai" || host === "www.claude.ai") &&
       (url.pathname === "/api/mcp/auth_callback" ||
@@ -825,10 +935,13 @@ function auditLog(
     [key: string]: any;
   }
 ): void {
+  // A connection id is a credential: audit lines carry its fingerprint only.
+  const { connectionId, ...rest } = context;
   const auditEntry = {
     event,
     timestamp: new Date().toISOString(),
-    ...context,
+    ...rest,
+    ...(connectionId !== undefined ? { connectionId: connectionIdForLog(connectionId) } : {}),
   };
 
   if (context.success) {
@@ -952,7 +1065,9 @@ export async function initiateOAuthFlow(
       expiresAt: expiresAt.toISOString(),
     });
     const authUrl = await createAuthUrl(state, codeChallenge, finalRedirectUri);
-    logger.info(`[MCP OAuth] Initiated local OAuth flow for connection: ${connectionId}`);
+    logger.info(
+      `[MCP OAuth] Initiated local OAuth flow for connection (${connectionIdForLog(connectionId)})`
+    );
     auditLog("oauth_flow_initiated", {
       connectionId,
       clientName,
@@ -1005,7 +1120,9 @@ export async function initiateOAuthFlow(
 
   const authUrl = await createAuthUrl(state, codeChallenge, oauthRedirectUri);
 
-  logger.info(`[MCP OAuth] Initiated OAuth flow for connection: ${connectionId}`);
+  logger.info(
+    `[MCP OAuth] Initiated OAuth flow for connection (${connectionIdForLog(connectionId)})`
+  );
 
   // Audit log
   auditLog("oauth_flow_initiated", {
@@ -1064,8 +1181,13 @@ export async function createLocalAuthorizationRequest(params: {
 
 export async function completeLocalAuthorization(
   state: string,
+  /** Graph scope — the user_id this connection's reads and writes are scoped to. */
   userId: string,
-  clientName?: string | null
+  clientName?: string | null,
+  /** Verified identity of the signer, when shared-graph mode made it distinct
+   *  from the graph scope (#2228). Recorded on the connection row so `/me` can
+   *  report who signed in; it never affects which graph is accessed. */
+  identity?: { authenticatedUserId?: string; authenticatedEmail?: string }
 ): Promise<{ connectionId: string; redirectUri?: string; clientState?: string }> {
   if (!isLocalBackend) {
     throw createOAuthError.stateInvalid("Local authorization completion requires local backend");
@@ -1101,6 +1223,8 @@ export async function completeLocalAuthorization(
     accessToken: tokens.accessToken,
     accessTokenExpiresAt: expiresAt.toISOString(),
     clientName: clientName ?? null,
+    authenticatedUserId: identity?.authenticatedUserId ?? null,
+    authenticatedEmail: identity?.authenticatedEmail ?? null,
   });
 
   auditLog("oauth_callback_success", {
@@ -1370,7 +1494,9 @@ export async function handleOAuthCallback(
     throw createOAuthError.stateInvalid(`Failed to store connection: ${insertError.message}`);
   }
 
-  logger.info(`[MCP OAuth] Connection created: ${stateData.connection_id} for user: ${userId}`);
+  logger.info(
+    `[MCP OAuth] Connection created (${connectionIdForLog(stateData.connection_id)}) for user: ${userId}`
+  );
 
   // Audit log
   auditLog("oauth_callback_success", {
@@ -1410,7 +1536,7 @@ export async function getAccessTokenForConnection(
     const connection = await getLocalConnectionById(connectionId);
     if (!connection) {
       logger.error(
-        `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+        `[MCP OAuth] Connection not found (${connectionIdForLog(connectionId)}) (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
       );
       throw createOAuthError.connectionNotFound(connectionId);
     }
@@ -1427,7 +1553,9 @@ export async function getAccessTokenForConnection(
       };
     }
 
-    logger.info(`[MCP OAuth] Refreshing local access token for connection: ${connectionId}`);
+    logger.info(
+      `[MCP OAuth] Refreshing local access token for connection (${connectionIdForLog(connectionId)})`
+    );
     auditLog("token_refresh_initiated", {
       connectionId,
       userId: connection.user_id,
@@ -1461,7 +1589,7 @@ export async function getAccessTokenForConnection(
 
   if (error || !connection) {
     logger.error(
-      `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+      `[MCP OAuth] Connection not found (${connectionIdForLog(connectionId)}) (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
     );
     throw createOAuthError.connectionNotFound(connectionId);
   }
@@ -1484,7 +1612,9 @@ export async function getAccessTokenForConnection(
     };
   }
 
-  logger.info(`[MCP OAuth] Refreshing access token for connection: ${connectionId}`);
+  logger.info(
+    `[MCP OAuth] Refreshing access token for connection (${connectionIdForLog(connectionId)})`
+  );
   auditLog("token_refresh_initiated", {
     connectionId,
     userId: connection.user_id,
@@ -1534,7 +1664,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
     }
 
     logger.info(
-      `[MCP OAuth] Refreshing local access token for connection: ${connection.connection_id}`
+      `[MCP OAuth] Refreshing local access token for connection (${connectionIdForLog(connection.connection_id)})`
     );
     auditLog("token_refresh_initiated", {
       connectionId: connection.connection_id,
@@ -1574,7 +1704,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
   }
 
   logger.info(
-    `[MCP OAuth] Refreshing access token via refresh_token for connection: ${connection.connection_id}`
+    `[MCP OAuth] Refreshing access token via refresh_token for connection (${connectionIdForLog(connection.connection_id)})`
   );
   auditLog("token_refresh_initiated", {
     connectionId: connection.connection_id,
@@ -1886,7 +2016,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
 
   if (isLocalBackend) {
     await revokeLocalConnection(connectionId, userId);
-    logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
+    logger.info(`[MCP OAuth] Connection revoked (${connectionIdForLog(connectionId)})`);
     auditLog("connection_revoked", {
       connectionId,
       userId,
@@ -1906,7 +2036,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
     throw createOAuthError.connectionNotFound(`Failed to revoke connection: ${error.message}`);
   }
 
-  logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
+  logger.info(`[MCP OAuth] Connection revoked (${connectionIdForLog(connectionId)})`);
 
   // Audit log
   auditLog("connection_revoked", {

@@ -289,7 +289,7 @@ function generateCatalog(): string {
     "## Definitions",
     "- **Automated test file**: A repo test source matched by this catalog's scanner (`tests/**`, `src/**`, `frontend/src/**`, `playwright/tests/**`).",
     "- **Catalog generator**: `scripts/generate-automated-test-catalog.ts`, the only source allowed to rewrite this file.",
-    "- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree.",
+    "- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. It is the local, pre-PR advisory gate. CI does not use it: the baseline lane runs `npm run generate:test-catalog`, which renders this file rather than failing on drift, so a stale copy never blocks a pull request.",
     "",
     "## Data models or schemas",
     "None.",
@@ -314,8 +314,8 @@ function generateCatalog(): string {
     "",
     "## Testing requirements",
     "- `npm run generate:test-catalog` must be run when automated test inventory changes.",
-    "- `npm run validate:test-catalog` must pass before merge.",
-    "- CI runs `npm run validate:test-catalog` in the baseline lane.",
+    "- `npm run validate:test-catalog` should pass before merge, but does not block it.",
+    "- CI runs `npm run generate:test-catalog` in the baseline lane, which renders this file rather than failing on drift.",
     "",
     "## Maintenance",
     "- Canonical policy doc: `docs/testing/testing_standard.md`.",
@@ -343,7 +343,7 @@ function generateCatalog(): string {
     "- `npm run validate:doc-deps`",
     "",
     "## CI lanes",
-    "- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `validate:test-catalog`, and `validate:doc-deps`.",
+    "- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.",
     "- Frontend CI runs `npm run test:frontend`.",
     "- Site/export CI runs route, locale, and export validation tasks.",
     "- Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.",
@@ -380,9 +380,50 @@ function generateCatalog(): string {
   ].join("\n");
 }
 
+/** Loud invalid-output gate: empty or mistitled catalogs must not be committed or accepted by CI. */
+function assertUsableCatalog(content: string): void {
+  if (content.length === 0 || !content.startsWith("# Automated test catalog")) {
+    console.error(
+      "❌ Generated automated test catalog is empty or missing the expected `# Automated test catalog` heading.",
+    );
+    process.exit(1);
+  }
+}
+
+function readCurrentCatalog(): string {
+  try {
+    if (!fs.existsSync(outputPath) || !fs.statSync(outputPath).isFile()) {
+      return "";
+    }
+    return fs.readFileSync(outputPath, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Failed to read automated test catalog at ${path.relative(repoRoot, outputPath)}: ${message}`);
+    process.exit(1);
+  }
+}
+
 function main(): void {
   const next = generateCatalog();
-  const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
+  assertUsableCatalog(next);
+  const current = readCurrentCatalog();
+  const relativeOutput = path.relative(repoRoot, outputPath);
+  // `--check` is the local/pre-PR advisory gate: it reports drift and fails,
+  // without touching the file. The default (no flag) is the write path, and it
+  // is what CI runs.
+  //
+  // CI renders rather than validates because this catalog is a pure derivative
+  // of the test filenames in the tree (`git ls-files` + an extension filter) —
+  // there is no authored prose in the inventory sections, so a stale copy
+  // carries no information that regenerating it could destroy.
+  //
+  // Enforcing it in CI with `--check` turned one merge that forgot to
+  // regenerate into a red required lane on EVERY open PR, and because every PR
+  // adding a test edits the same sorted list and the same `**Files (N):**`
+  // counters, PRs also conflicted with each other in a file neither of them
+  // meaningfully authored. Approvals then aged out while the conflict was
+  // resolved by hand — a staleness ratchet that regrew the review backlog
+  // faster than it could be cleared.
   const checkOnly = process.argv.includes("--check");
 
   if (checkOnly) {
@@ -394,8 +435,14 @@ function main(): void {
     process.exit(1);
   }
 
-  fs.writeFileSync(outputPath, next);
-  console.log(`✅ Wrote automated test catalog to ${path.relative(repoRoot, outputPath)}`);
+  try {
+    fs.writeFileSync(outputPath, next);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Failed to write automated test catalog to ${relativeOutput}: ${message}`);
+    process.exit(1);
+  }
+  console.log(`✅ Wrote automated test catalog to ${relativeOutput}`);
 }
 
 main();

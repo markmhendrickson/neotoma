@@ -14,6 +14,12 @@ Release-scoped targeting, activation risks, and status tracking for the develope
 **Parent doc:** [`primary_icp.md`](./primary_icp.md) (durable ICP definition)
 **Exit criteria:** [`general_release_criteria.md`](./general_release_criteria.md) (readiness gates for transitioning to general release)
 
+> **O1 decision, 2026-09-15 — this document's buyer became the durable ICP.** The "First Five Adopters" description below was written as a narrower wedge inside `primary_icp.md`'s broader archetype. The operator has ruled the opposite way: **this buyer is the durable ICP**, and the infrastructure-oriented archetype `primary_icp.md` previously described is an early-adopter cohort, not the target.
+>
+> **The parent/child relation is unchanged in direction but changed in substance, and only one document is durable.** `primary_icp.md` remains the parent and remains the single durable ICP definition — the operator's ruling moved the *content* of this section up into it, not the authority. This document did not become durable; it stayed temporal and stopped describing a different person. What it now holds is the **release-scoped** view of that one buyer: who the first five are, what blocks them, and the status of each mitigation. Nothing here defines the ICP. Where this document and `primary_icp.md` describe the buyer, `primary_icp.md` governs.
+>
+> The characteristics below are preserved rather than rewritten, because they are the source the durable definition was derived from. Read them as evidence for `primary_icp.md`, not as a competing definition.
+
 ---
 
 ## First Five Adopters
@@ -36,6 +42,8 @@ The immediate developer release target is a subsegment of the primary ICP archet
 
 Would they describe "setting up Neotoma" as a worthwhile Saturday project, but "building their own state layer" as a distraction from real work?
 
+This filter is now the durable ICP's own test, quoted in [`primary_icp.md`](./primary_icp.md). It was the reasoning the operator accepted in ruling O1: it admits the buyer described here and excludes the infrastructure builder, which is the whole of the distinction.
+
 ### Activation moments (in order of motivational force)
 
 1. **Corrupted state (strongest):** Agent made a bad decision based on wrong, stale, or hallucinated state, and the user didn't catch it until real damage occurred. Fear of silent failure is a much stronger motivator than convenience for adopting infrastructure with integrity guarantees.
@@ -50,18 +58,26 @@ The first five may not be the most frustrated people — they may be the ones wh
 
 A first-five activation must clear all of the following, in order:
 
-1. **Install completed on evaluator's actual machine** — respects their version manager, no global-NPM permission failures, MCP server location is discoverable, no enterprise-egress block. <!-- Backed by ent_727fee4a94cfaea86880a0f1, ent_81f79780f1fbe679af99da90, ent_4f0db2d7f2c349900e4dac2c. -->
+1. **Install completed on the evaluator's actual machine, unaided, by the intended path.** The milestone is that the evaluator ends with a working, discoverable Neotoma on their own hardware — not that they successfully operated a package manager. The operator has prioritized a **guided installation with branded UI** as that intended path, which changes what this milestone measures.
+
+   - **Intended path (guided install — not shipped as of 2026-09-15).** The evaluator completes installation through a guided flow that makes the decisions it can and surfaces the ones it cannot, and ends knowing where their data lives and which tools can reach it. Success is measured end-to-end, not at the package-manager step, because under the guided path there is no package-manager step the evaluator sees.
+   - **Current path (npm and CLI — what is true today).** The prior criteria still apply and still gate today's evaluations: respects their version manager, no global-NPM permission failures, MCP server location is discoverable. <!-- Backed by ent_727fee4a94cfaea86880a0f1, ent_81f79780f1fbe679af99da90, ent_4f0db2d7f2c349900e4dac2c. -->
+   - **Both paths.** No enterprise-egress block. Guided install does not remove that constraint, and it is not a Neotoma defect.
+
+   **Guided is not zero-install.** The evaluator still installs software on their own machine and still decides where their data lives; local-first is the architecture, not a delivery detail. Do not describe either path as zero-install.
+
+   A failure at this milestone is a defect in Neotoma's delivery, not a disqualification of the evaluator — see the D4 note in [`primary_icp.md`](./primary_icp.md). The 0/3 round-2 fresh-install result recorded in [`general_release_criteria.md`](./general_release_criteria.md) is the clearest evidence for the guided-install decision, and is why this milestone was rewritten rather than re-measured.
 2. **First sustained-write session within 7 days post-install** — agent or user produces a coherent observation batch, not just a smoke-test write.
 3. **First unassisted retrieval observation** — the harness surfaces what observations the agent just read, without the evaluator having to inspect storage directly. Read-side opacity is a distinct failure mode from cognitive cold-start and from write-side friction. <!-- Backed by ent_727fee4a94cfaea86880a0f1 (installed-and-bounced on read-side opacity). -->
 4. **No synchronous help between install and first sustained write.**
 
 ### Who they are NOT
 
-- **Not capable DIY builders:** Power users who build their own MCP + Postgres stack. These are later adopters — once Neotoma is proven enough that DIY feels like wasted effort. (See D12 in primary ICP disqualification criteria.)
+- **Not capable DIY builders:** People who build their own MCP + Postgres stack. Under the O1 decision these are an **early-adopter cohort** — some arrive early because today's install path rewards their skills — but they are not the target, and their adoption is not ICP validation. (See D12 and "Capable DIY builders" in [`primary_icp.md`](./primary_icp.md).)
 - **Not autonomous-loop builders on raw provider SDKs:** Builders running fully custom agentic harnesses on raw OpenAI / Anthropic SDKs with self-managed in-loop dedup agents. They engineer around state drift by construction — structured data, in-loop quality control, raw markdown + structured logs — and refuse external substrates on supply-chain grounds. Anti-adopters, not slow adopters. <!-- Backed by ent_75b7d691cd12fb1524ef8b63 (Emil Erkkola). -->
 - **Not adjacent platform builders (partnership, not conversion):** Identity vendors, agent-framework maintainers, and auth-protocol authors treat durable user state as part of their own primitive. They are partnership and integration targets — Neotoma should compose under their primitives, not compete with their roadmaps. (Extension of D3.) <!-- Backed by ent_3f183584ebe4b89081cf9f75 (Dick Hardt / Hellō). -->
 - **Not "normals":** Not casual ChatGPT users who'd be fine with native memory.
-- **Not enterprise buyers:** They find Neotoma, try it on a weekend, and either adopt it or don't.
+- **Not enterprise buyers:** They find Neotoma, try it on a weekend, and either adopt it or don't. **(Clarified 2026-09-16, O2.)** This is an *acquisition* exclusion and it stands: Neotoma is not sold into enterprises, and there is no procurement-led or buying-committee entry path. It does **not** contradict the team plans that carry the M12 revenue model — those arrive by **pull-through**, when an individual adopter brings Neotoma into work and becomes the internal champion. The individual is the adoption motion; the team plan is the revenue realization. That is stated explicitly as a bet, with its failure signal, in [`primary_icp.md`](./primary_icp.md#o2-this-is-a-bet-on-pull-through-and-it-is-named-as-one).
 
 ### How they describe the problem
 
@@ -168,8 +184,9 @@ Users who tried fuzzy or native memory and got burned by corrupted state. Their 
 
 ### Constraints
 
-1. All developer release decisions must serve the first-five adopter subsegment
-2. First-five targeting distinguishes capable DIY builders (later adopters) from off-the-shelf adopters (immediate target)
-3. Activation materials must address all four risk classes, with priority on cognitive cold-start and prior bad experience
-4. Messaging connects chronic tax (convenience) to acute crisis (corrupted state)
-5. Non-goals are respected — do not expand targeting beyond the developer release scope
+1. All developer release decisions must serve the first-five adopters, who are the durable ICP scoped to this release — not a subsegment of a different, broader archetype
+2. First-five targeting distinguishes capable DIY builders (an early-adopter cohort, not the target) from off-the-shelf adopters (the buyer)
+3. This document does not define the ICP. Where it and `primary_icp.md` both describe the buyer, `primary_icp.md` governs
+4. Activation materials must address all four risk classes, with priority on cognitive cold-start and prior bad experience
+5. Messaging connects chronic tax (convenience) to acute crisis (corrupted state)
+6. Non-goals are respected — do not expand targeting beyond the developer release scope

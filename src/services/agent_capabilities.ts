@@ -26,6 +26,7 @@
 import type { AttributionTier, AgentIdentity } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
 import { getCurrentAAuthAdmission } from "./request_context.js";
+import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
 
 /**
  * Canonical operation identifier. Mirrors the top-level MCP/REST entry
@@ -44,6 +45,14 @@ export type AgentCapabilityOp =
   | "create_relationship"
   | "correct"
   | "retrieve"
+  /**
+   * Registering a relationship type is a GOVERNANCE act, not a data write:
+   * it changes what edges the instance will accept. Gated at the service
+   * layer so MCP, HTTP and CLI inherit one check (#1972 / G25).
+   *
+   * Scoped by `relationship_types`, not `entity_types` — see the field below.
+   */
+  | "register_relationship_type"
   | "github_harness:read"
   | "github_harness:write"
   | "github_harness:*";
@@ -52,6 +61,19 @@ export interface AgentCapabilityEntry {
   op: AgentCapabilityOp;
   /** Allowed entity types for this op. `"*"` widens to any entity_type. */
   entity_types: string[];
+  /**
+   * Allowed relationship types for `register_relationship_type`. `"*"` widens.
+   *
+   * A PARALLEL field rather than an overload of `entity_types`, deliberately:
+   * `entity_types` already means one vocabulary, and making it mean two
+   * depending on the op is precisely the ambiguity #1972 is about. Additive —
+   * grants written before this field simply carry no relationship capability,
+   * which is the correct default for a governance op.
+   *
+   * The special value `"global"` is required IN ADDITION to a type match to
+   * register at instance-wide scope.
+   */
+  relationship_types?: string[];
   /**
    * Repo-scope for `github_harness:*` ops — list of "owner/repo" strings.
    * `"*"` wildcards any repo. Only meaningful for github_harness ops;
@@ -77,13 +99,118 @@ export interface AgentCapabilityAgent {
 }
 
 /**
+ * Capability ceiling for the current request.
+ *
+ * Kept separate from authentication on purpose. `admitted` answers "did
+ * AAuth authenticate this caller?"; the ceiling answers "which
+ * capability-gated operations may this request perform?". A request can
+ * be authenticated by a bearer token or OAuth and still carry an AAuth
+ * signature, and the signature decides the ceiling either way.
+ *
+ * - `grant`: the signature is bound to an active grant
+ *   (`match_thumbprint`); the grant's capabilities are the ceiling.
+ * - `deny`: the signature names a grant this key cannot currently use —
+ *   because the grant pins no key (`grant_key_unbound`), because the
+ *   key WAS pinned to a grant the operator has since turned off
+ *   (`grant_revoked` / `grant_suspended`), or because the pinned grant's
+ *   stored `capabilities` fail shape validation (`grant_invalid` — e.g.
+ *   capabilities persisted as a JSON string instead of an array, or a
+ *   non-harness capability entry with no `entity_types`). Capability-gated
+ *   operations fail closed in all four cases, whatever authenticated the
+ *   request and independent of `NEOTOMA_AGENT_DEFAULT_DENY`. A grant that
+ *   cannot be parsed grants nothing, by the same fail-closed rule as a
+ *   grant that was never found: an invalid grant must never silently fall
+ *   through to `none`, where `NEOTOMA_AGENT_DEFAULT_DENY` could still admit
+ *   the request as an unrecognised (rather than a broken) caller.
+ * - `none`: no grant applies; `NEOTOMA_AGENT_DEFAULT_DENY` decides.
+ */
+export type AgentCapabilityCeiling =
+  | { kind: "grant"; capabilities: AgentCapabilityEntry[] }
+  | {
+      kind: "deny";
+      reason: "grant_key_unbound" | "grant_revoked" | "grant_suspended" | "grant_invalid";
+    }
+  | { kind: "none" };
+
+/**
+ * Exhaustive map from every {@link AAuthAdmissionReason} OTHER THAN
+ * `"admitted"` (handled separately, via `admission.admitted`) to the
+ * ceiling it produces.
+ *
+ * This is the fail-closed safety vocabulary itself: every reason the
+ * admission layer can report must have an explicit entry here, and the
+ * TypeScript `Record<...>` type below makes the compiler refuse a build
+ * that adds a new {@link AAuthAdmissionReason} without also classifying
+ * it here. New reasons default to nothing being added silently — a
+ * missing key is a compile error, not a runtime fall-through — and any
+ * reason whose classification is not obviously safe-to-allow must map to
+ * `"deny"`, never `"none"`, per the repo's fail-closed-on-the-safety-field
+ * rule: `none` is a real permissive state (`NEOTOMA_AGENT_DEFAULT_DENY`
+ * decides), so only reasons that genuinely mean "this signature carries
+ * no assertion about any grant" belong there.
+ */
+const CEILING_REASON_MAP: Record<Exclude<AAuthAdmissionReason, "admitted">, "deny" | "none"> = {
+  // The signature names a grant this key cannot currently use — the
+  // grant pins no key, or the key was pinned to a grant since turned
+  // off. Fail closed independent of NEOTOMA_AGENT_DEFAULT_DENY.
+  grant_key_unbound: "deny",
+  grant_revoked: "deny",
+  grant_suspended: "deny",
+  // The presented key IS pinned to a grant, but that grant's stored
+  // `capabilities` fail shape validation (e.g. a JSON string instead of an
+  // array, or a capability entry with no entity_types) and were therefore
+  // never admitted as a capability set. Same fail-closed reasoning as the
+  // three reasons above: the signature names a specific, broken grant, so
+  // this must never fall through to `none` and be judged by
+  // NEOTOMA_AGENT_DEFAULT_DENY as though no grant applied at all.
+  grant_invalid: "deny",
+  // No grant asserts anything about this identity at all — the signature
+  // is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY governs.
+  no_match: "none",
+  no_grants_for_user: "none",
+  strict_rejected: "none",
+  aauth_disabled: "none",
+  not_signed: "none",
+};
+
+/**
+ * Derive the {@link AgentCapabilityCeiling} from an admission record.
+ * Pure; exported for tests and diagnostics.
+ *
+ * The `deny` reasons carry the specific {@link AAuthAdmissionReason} they
+ * were classified from (not a generic flag) so denial hints and log
+ * lines can name what actually happened. Any reason not present in
+ * {@link CEILING_REASON_MAP} — which TypeScript will not allow, since the
+ * map type is exhaustive over `AAuthAdmissionReason` — would be a
+ * compile error before it could ever reach here.
+ */
+export function capabilityCeilingFromAdmission(
+  admission: AAuthAdmissionContext | null | undefined
+): AgentCapabilityCeiling {
+  if (admission?.admitted) {
+    return { kind: "grant", capabilities: admission.capabilities ?? [] };
+  }
+  const reason = admission?.reason;
+  if (!reason || reason === "admitted") return { kind: "none" };
+  if (CEILING_REASON_MAP[reason] === "deny") {
+    // Narrowed by the Record's key type to the three deny-mapped reasons.
+    return {
+      kind: "deny",
+      reason: reason as "grant_key_unbound" | "grant_revoked" | "grant_suspended",
+    };
+  }
+  return { kind: "none" };
+}
+
+/**
  * Acting agent on the current request. Built from the resolved
  * {@link AgentIdentity}, possibly enriched by the admission service.
  *
- * `capabilities` is non-null only when the request was admitted via an
- * `agent_grant` — otherwise the registry has no information about
- * this caller and {@link enforceAgentCapability} relies on
- * `default_deny` to decide.
+ * `admitted` records whether AAuth admission authenticated the caller.
+ * `ceiling` records which capability limits apply (see
+ * {@link AgentCapabilityCeiling}); it is what {@link enforceAgentCapability}
+ * reads. `capabilities` mirrors the grant's capabilities when admitted
+ * and is kept for existing callers.
  */
 export interface AgentCapabilityContext {
   sub?: string;
@@ -93,7 +220,28 @@ export interface AgentCapabilityContext {
   capabilities: AgentCapabilityEntry[] | null;
   agentLabel: string;
   admitted: boolean;
+  /**
+   * Capability ceiling. When absent (contexts built by hand), it is
+   * derived from `admitted` / `capabilities`.
+   */
+  ceiling?: AgentCapabilityCeiling;
 }
+
+/** Resolve the ceiling for a context, deriving it for hand-built contexts. */
+function ceilingOf(ctx: AgentCapabilityContext): AgentCapabilityCeiling {
+  if (ctx.ceiling) return ctx.ceiling;
+  if (ctx.admitted && ctx.capabilities) {
+    return { kind: "grant", capabilities: ctx.capabilities };
+  }
+  return { kind: "none" };
+}
+
+/**
+ * Where operators find how to pin a key to an existing grant. Referenced
+ * from denial hints and the admission log line.
+ */
+export const GRANT_KEY_PIN_DOC =
+  "docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant";
 
 /** Structured denial. HTTP handlers surface this as 403 `capability_denied`. */
 export class AgentCapabilityError extends Error {
@@ -218,7 +366,9 @@ function agentLabelFor(identity: AgentIdentity | null | undefined, admittedLabel
  * Admission context is read from {@link getCurrentAAuthAdmission}
  * (lazy-imported to break a module cycle): when an `admitted` grant is
  * resolved, its capabilities and label are surfaced; otherwise the
- * caller is treated as an unrecognised agent.
+ * caller is treated as an unrecognised agent. The capability ceiling is
+ * derived from the same record by {@link capabilityCeilingFromAdmission},
+ * independent of how the request authenticated.
  */
 export function contextFromAgentIdentity(
   identity: AgentIdentity | null | undefined
@@ -239,6 +389,7 @@ export function contextFromAgentIdentity(
     capabilities: admission?.admitted ? (admission.capabilities ?? []) : null,
     agentLabel: agentLabelFor(identity, admission?.agent_label),
     admitted: Boolean(admission?.admitted),
+    ceiling: capabilityCeilingFromAdmission(admission),
   };
 }
 
@@ -267,15 +418,20 @@ function entryCovers(
 }
 
 /**
- * Enforce capability-based authorization. Behaviour:
+ * Enforce capability-based authorization. Behaviour, keyed on the
+ * request's {@link AgentCapabilityCeiling}:
  *
  *   1. `entityTypes` empty → no-op.
- *   2. Admitted agent → every `(op, entity_type)` pair must be covered
+ *   2. `grant` ceiling → every `(op, entity_type)` pair must be covered
  *      by the grant's capabilities. Mismatch → throw.
- *   3. Unadmitted but signature-verified agent (`tier in {hardware,
+ *   3. `deny` ceiling (the signature names a grant that pins no key, or
+ *      that WAS pinned to a grant since revoked/suspended) → throw,
+ *      whatever authenticated the request and regardless of
+ *      `NEOTOMA_AGENT_DEFAULT_DENY`.
+ *   4. `none` ceiling, signature-verified agent (`tier in {hardware,
  *      software, operator_attested}`) AND
  *      {@link isAgentDefaultDenyEnabled} → throw.
- *   4. Otherwise → allow (preserves legacy behaviour for unknown
+ *   5. Otherwise → allow (preserves legacy behaviour for unknown
  *      agents during rollout).
  *
  * Throws {@link AgentCapabilityError} on denial.
@@ -289,10 +445,12 @@ export function enforceAgentCapability(
   const distinctTypes = Array.from(new Set(entityTypes.filter(Boolean)));
   if (distinctTypes.length === 0) return;
 
-  if (ctx.admitted && ctx.capabilities) {
+  const ceiling = ceilingOf(ctx);
+
+  if (ceiling.kind === "grant") {
     const denied: string[] = [];
     for (const entityType of distinctTypes) {
-      if (!entryCovers(ctx.capabilities, op, entityType)) {
+      if (!entryCovers(ceiling.capabilities, op, entityType)) {
         denied.push(entityType);
       }
     }
@@ -321,7 +479,43 @@ export function enforceAgentCapability(
     throw err;
   }
 
-  // Unadmitted: optionally apply default-deny for verified-signature tiers.
+  if (ceiling.kind === "deny") {
+    const hint =
+      ceiling.reason === "grant_revoked"
+        ? "This request is signed by a key that was pinned to an agent_grant " +
+          "that has since been revoked, so capability-gated writes are refused. " +
+          "Restore the grant to active in Inspector → Agents → Grants (or create " +
+          "a new grant and pin it) before this agent can write again."
+        : ceiling.reason === "grant_suspended"
+          ? "This request is signed by a key that was pinned to an agent_grant " +
+            "that is currently suspended, so capability-gated writes are refused. " +
+            "Restore the grant to active in Inspector → Agents → Grants before " +
+            "this agent can write again."
+          : "This request is signed by a key that is not pinned on the agent_grant " +
+            "matching its sub/iss, so the grant's capabilities cannot be applied " +
+            "and capability-gated writes are refused. Set the grant's " +
+            "match_thumbprint to this agent's key thumbprint (see " +
+            `${GRANT_KEY_PIN_DOC}).`;
+    const err = new AgentCapabilityError({
+      op,
+      entityType: distinctTypes[0],
+      agentLabel: ctx.agentLabel,
+      hint,
+    });
+    logger.warn(
+      JSON.stringify({
+        event: "agent_capability_denied",
+        reason: ceiling.reason,
+        op,
+        entity_types: distinctTypes,
+        agent_label: ctx.agentLabel,
+        admitted: ctx.admitted,
+      })
+    );
+    throw err;
+  }
+
+  // No grant applies: optionally apply default-deny for verified-signature tiers.
   const enforcedTier =
     ctx.tier === "hardware" || ctx.tier === "software" || ctx.tier === "operator_attested";
   if (!enforcedTier) return;
@@ -353,4 +547,174 @@ export function enforceAgentCapability(
 
 export function getAgentCapabilitiesSource(): string {
   return "agent_grant_entities";
+}
+
+/**
+ * Enforce the `register_relationship_type` capability (#1972 / G25).
+ *
+ * Registering a relationship type is a governance act: it changes the set of
+ * edges the instance will accept. It is therefore gated here, in the service
+ * layer BEFORE any state mutation, so the MCP, HTTP and CLI surfaces inherit
+ * one check rather than three — the shape
+ * `services/bundles/activation.ts`'s `assertAdminGateHook` note asks for.
+ *
+ * Two properties, both deliberate:
+ *
+ *   - The relationship type is matched against `relationship_types`, a
+ *     PARALLEL field, not against `entity_types`. Overloading one field to
+ *     mean two vocabularies depending on the op is the ambiguity #1972 is
+ *     about.
+ *   - GLOBAL scope needs `"global"` in that list IN ADDITION to a type match.
+ *     A grant that lets an agent register `LEASE` for itself does not let it
+ *     change the vocabulary for every tenant on the instance.
+ *
+ * NOTE ON WHAT THIS DOES NOT DO: `register_schema` — the same defect one
+ * vocabulary over — has NO authorization check at all beyond authentication,
+ * and its scope is caller-chosen with `global` as the DEFAULT and the
+ * unattributed branch. That is deliberately left alone here. Adding a
+ * capability requirement to a tool that has never had one breaks every
+ * existing caller whose grant does not name it, and deserves its own issue
+ * with its own back-compat analysis. Gating only the NEW surface means it is
+ * safe from day one with no migration, which is the right asymmetry.
+ */
+/**
+ * #2482 (ux round-2 finding, PR #2511): when the refused name is one of the
+ * BUILT-INs (`PART_OF`, `REFERS_TO`, ...) AND the registry is actually
+ * unhealthy for that type, telling the caller to get a grant and
+ * self-register is the wrong remedy — built-ins are meant to be seeded, not
+ * registered by an ungranted caller, and `list_relationship_types` already
+ * lazy-repairs an empty registry on read (`registry.ts`'s
+ * `resolveAllWithRepair`). If a built-in still reads as missing after that,
+ * the fix is an operator seed/repair, not a grant edit.
+ *
+ * The UX finding this fixes: the first cut of this function checked ONLY
+ * built-in-name membership, so the repair-hint text was appended to EVERY
+ * denial for a built-in name regardless of registry health — including the
+ * ordinary, ungranted-agent, perfectly-healthy-registry case, which is the
+ * single most common trigger of this denial. That sent a well-behaved agent
+ * chasing a nonexistent registry investigation instead of accepting a plain
+ * capability boundary. Fixed by actually checking registry health for this
+ * type (`relationshipTypeRegistry.get`, which returns null only when no
+ * EFFECTIVE registration exists) rather than inferring health from the name
+ * alone. `get()` routes through `resolveAll` (not the repair path) — this
+ * function is called AFTER `enforceRelationshipTypeCapability` has already
+ * denied, at which point `list_relationship_types`/`assertRegisteredType`
+ * upstream of registration would already have attempted the lazy repair for
+ * this process if the registry were ever empty, so a null `get()` result here
+ * reflects genuine current unavailability, not an unattempted repair.
+ *
+ * Computed lazily (dynamic import) to avoid a module cycle between
+ * `agent_capabilities.ts` and `relationship_types/`.
+ */
+async function builtInRepairHint(relationshipType: string): Promise<string | null> {
+  const { BUILT_IN_RELATIONSHIP_TYPES } = await import("./relationship_types/seed_registry.js");
+  if (!BUILT_IN_RELATIONSHIP_TYPES.some((t) => t.relationship_type === relationshipType)) {
+    return null;
+  }
+  const { relationshipTypeRegistry } = await import("./relationship_types/registry.js");
+  const effective = await relationshipTypeRegistry.get(relationshipType);
+  if (effective) {
+    // Registry is healthy for this type: an ordinary grant-scope denial, not
+    // a registry problem. Say nothing extra — the existing capability-denial
+    // message already tells the caller the accurate, actionable next step.
+    return null;
+  }
+  return (
+    `Separately: "${relationshipType}" is a built-in relationship type that is currently missing ` +
+    `from this instance's registry — call list_relationship_types to check for an ` +
+    `empty_reason: "registry_unseeded" diagnostic; if present, that is a seed/registry failure ` +
+    `that self-repairs on a subsequent read, and registering it here would only mask the ` +
+    `underlying gap, not fix it. This is unrelated to whether your own grant covers it.`
+  );
+}
+
+export function enforceRelationshipTypeCapability(
+  relationshipType: string,
+  scope: "user" | "global",
+  ctx: AgentCapabilityContext | null
+): void {
+  const op: AgentCapabilityOp = "register_relationship_type";
+
+  const ceiling = ctx ? ceilingOf(ctx) : ({ kind: "none" } as const);
+  if (ctx && ceiling.kind === "grant") {
+    const matching = ceiling.capabilities.filter((cap) => grantOpMatchesRequested(cap.op, op));
+    const types = matching.flatMap((cap) => cap.relationship_types ?? []);
+    const coversType = types.includes("*") || types.includes(relationshipType);
+    const coversGlobal = types.includes("global");
+
+    if (!coversType || (scope === "global" && !coversGlobal)) {
+      const missing = !coversType
+        ? `relationship_types: ["${relationshipType}"]`
+        : `relationship_types: ["${relationshipType}", "global"]`;
+      const err = new AgentCapabilityError({
+        op,
+        entityType: relationshipType,
+        agentLabel: ctx.agentLabel,
+        hint:
+          `Admitted agent "${ctx.agentLabel}" may not register relationship type ` +
+          `"${relationshipType}"${scope === "global" ? " at global scope" : ""}. ` +
+          `Edit the grant in Inspector → Agents → Grants and add ` +
+          `{ op: "${op}", entity_types: [], ${missing} }.`,
+      });
+      logger.warn(
+        JSON.stringify({
+          event: "agent_capability_denied",
+          reason: coversType ? "global_scope_not_granted" : "relationship_type_out_of_scope",
+          op,
+          relationship_type: relationshipType,
+          scope,
+          agent_label: ctx.agentLabel,
+          admitted: true,
+        })
+      );
+      throw err;
+    }
+    return;
+  }
+
+  // Governance registration is always grant-gated, independent of rollout flags.
+  throw new AgentCapabilityError({
+    op,
+    entityType: relationshipType,
+    agentLabel: ctx?.agentLabel ?? "unattributed",
+    hint:
+      "Relationship type registration requires an active agent_grant with the " +
+      "register_relationship_type capability. Global scope additionally requires global permission.",
+  });
+}
+
+/**
+ * Async wrapper around `enforceRelationshipTypeCapability` that appends the
+ * built-in-aware repair hint to a thrown `AgentCapabilityError`'s message
+ * ONLY when the refused name is a built-in AND the registry is currently
+ * unhealthy for it (#2482; corrected per ux round-2 review on PR #2511 —
+ * see `builtInRepairHint`'s doc for what the first cut got wrong). An
+ * ordinary grant-scope denial on a perfectly healthy built-in type is left
+ * exactly as `enforceRelationshipTypeCapability` produced it, with nothing
+ * appended. Callers on a path that can await (MCP/REST
+ * `register_relationship_type` handlers) should prefer this;
+ * `enforceRelationshipTypeCapability` itself stays synchronous for callers
+ * that cannot.
+ */
+export async function enforceRelationshipTypeCapabilityWithHint(
+  relationshipType: string,
+  scope: "user" | "global",
+  ctx: AgentCapabilityContext | null
+): Promise<void> {
+  try {
+    enforceRelationshipTypeCapability(relationshipType, scope, ctx);
+  } catch (err) {
+    if (err instanceof AgentCapabilityError) {
+      const repairHint = await builtInRepairHint(relationshipType);
+      if (repairHint) {
+        throw new AgentCapabilityError({
+          op: err.op,
+          entityType: err.entityType,
+          agentLabel: err.agentLabel,
+          hint: `${err.hint} ${repairHint}`,
+        });
+      }
+    }
+    throw err;
+  }
 }

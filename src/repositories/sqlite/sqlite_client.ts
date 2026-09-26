@@ -14,13 +14,48 @@ export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
   Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
 );
 
+function isSqliteBusyError(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "SQLITE_BUSY" || code === "SQLITE_BUSY_SNAPSHOT";
+}
+
+/**
+ * Retry `fn` while it keeps throwing SQLITE_BUSY/SQLITE_BUSY_SNAPSHOT, up to
+ * `SQLITE_BUSY_TIMEOUT_MS`. Any other error rethrows immediately and is never
+ * retried, so a real problem (corruption, permissions) surfaces as-is instead
+ * of being masked as transient lock contention.
+ *
+ * Needed specifically for `PRAGMA journal_mode = WAL` on a brand-new DB file:
+ * switching journal mode rewrites the file header and briefly needs the
+ * write lock, so two processes racing to first-touch-open the same fresh
+ * file can have one throw SQLITE_BUSY on this very first statement — before
+ * `busy_timeout` (set moments later on that same connection) has had any
+ * chance to cover it, since the failing call happens ahead of that pragma.
+ * See #1927.
+ */
+async function retryOnBusy<T>(fn: () => Promise<T>): Promise<T> {
+  const deadline = Date.now() + SQLITE_BUSY_TIMEOUT_MS;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isSqliteBusyError(error) || Date.now() >= deadline) {
+        throw error;
+      }
+    }
+  }
+}
+
 /**
  * Apply the connection PRAGMAs every Neotoma SQLite handle needs: WAL for
  * concurrent readers alongside a single writer, foreign-key enforcement, and a
  * busy_timeout so lock contention waits rather than throwing immediately.
+ * journal_mode is retried on SQLITE_BUSY in its own right (see retryOnBusy)
+ * since on a brand-new file it can throw before busy_timeout — set after it,
+ * same as before this fix — has taken effect on this connection.
  */
 export async function applyConnectionPragmas(db: DbDatabase): Promise<void> {
-  await db.pragma("journal_mode = WAL");
+  await retryOnBusy(() => db.pragma("journal_mode = WAL"));
   await db.pragma("foreign_keys = ON");
   await db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
 }
@@ -191,6 +226,30 @@ const SCHEMA_STATEMENTS = [
     scope TEXT,
     metadata TEXT
   )`,
+  // Relationship-type registry (#1972 / G25). APPEND-ONLY: every registration,
+  // re-registration and deregistration is an INSERT and `state` is a value on
+  // the row, never a column updated in place — unlike `schema_registry` above,
+  // whose `active INTEGER` is flipped by an UPDATE. Resolution reads the latest
+  // row per (relationship_type, scope, user_id). See
+  // src/services/relationship_types/registry.ts for the full rationale.
+  //
+  // `relationship_type` carries no CHECK: the naming rule lives in the service
+  // where it can produce a structured error, exactly as entity-type naming does
+  // in entity_type_guard.ts. `relationship_snapshots.relationship_type` is
+  // likewise unconstrained TEXT, so widening the vocabulary needs no data
+  // migration — existing edges are untouched.
+  `CREATE TABLE IF NOT EXISTS relationship_type_registry (
+    id TEXT PRIMARY KEY,
+    relationship_type TEXT NOT NULL,
+    registry_version TEXT NOT NULL,
+    definition TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT,
+    created_by TEXT,
+    user_id TEXT,
+    scope TEXT,
+    metadata TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_state (
     id TEXT PRIMARY KEY,
     state TEXT NOT NULL,
@@ -205,6 +264,12 @@ const SCHEMA_STATEMENTS = [
     scope TEXT,
     final_redirect_uri TEXT
   )`,
+  // `user_id` is the GRAPH SCOPE principal — the user_id every read and write
+  // is scoped to. Under NEOTOMA_SHARED_GRAPH_USER_ID it is the shared graph
+  // owner, not the person who signed in. `authenticated_user_id` /
+  // `authenticated_email` carry WHO SIGNED IN alongside that scope (#2228);
+  // they are NULL on non-shared-graph and pre-migration rows, where identity
+  // is resolved from `user_id` exactly as before.
   `CREATE TABLE IF NOT EXISTS mcp_oauth_connections (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -215,7 +280,9 @@ const SCHEMA_STATEMENTS = [
     client_name TEXT,
     last_used_at TEXT,
     created_at TEXT,
-    revoked_at TEXT
+    revoked_at TEXT,
+    authenticated_user_id TEXT,
+    authenticated_email TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_client_state (
     id TEXT PRIMARY KEY,
@@ -367,6 +434,17 @@ async function addColumnIfMissing(
   await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
 }
 
+/**
+ * Runs all DDL/backfill inside one `database.transaction()`. Relies on the
+ * transaction backend taking the write lock up front (`BEGIN IMMEDIATE`, or
+ * the libsql driver's `"write"` mode) rather than deferring it to the first
+ * write: a deferred transaction lets two processes opening a fresh DB file
+ * concurrently both start as readers on the same WAL snapshot, and whichever
+ * tries to upgrade to a writer second hits SQLITE_BUSY_SNAPSHOT — a snapshot
+ * conflict busy_timeout cannot retry. See #1927; the write-lock-first
+ * behavior itself lives in each backend's transaction() implementation
+ * (sqlite_driver.ts, libsql_driver.ts).
+ */
 export async function ensureSchema(database: DbDatabase): Promise<void> {
   await database.transaction(async (db) => {
     await db.exec("PRAGMA foreign_keys = OFF");
@@ -415,6 +493,10 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     // support fast collapse_by grouping on retrieve_entities.
     await addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
     await addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+    // #2228: signed-in identity carried alongside the graph-scope user_id.
+    // Existing rows get NULLs and keep resolving identity from user_id.
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_user_id", "TEXT");
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_email", "TEXT");
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
@@ -533,9 +615,46 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
       )
       .run();
+
+    // ateles#576: the visible-entity count is a COUNT(*) over entity_snapshots
+    // filtered by (user_id, entity_type). Without this index that count was a
+    // full table SCAN of every snapshot row on every /entities/query request —
+    // the residual per-request cost after the count stopped re-reading the
+    // observation log. `entity_id` is appended so the index covers the
+    // deleted-entity lookups in services/entity_queries.ts too, letting SQLite
+    // answer both from the index without touching the table.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entity_snapshots_user_type ON entity_snapshots(user_id, entity_type, entity_id)"
+      )
+      .run();
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
+      )
+      .run();
+
+    // Relationship-type registry (#1972 / G25). Two indexes, and neither is
+    // optional: `schema_registry` has NO index at all, so every registry read
+    // there is a full table scan — and this registry is read on the
+    // relationship WRITE path, not just at boot.
+    //
+    // The UNIQUE index is the one `schema_registry` lacks. Without it nothing
+    // prevents two rows for the same key, which is why
+    // schema_registry_bootstrap.ts's `isDuplicateRegistrationError` (matching
+    // "duplicate key" / "unique constraint" / "already exists") is dead code on
+    // SQLite: the concurrent-boot race it claims to absorb is real and
+    // unhandled there. Here a racing double-seed hits a real constraint.
+    await db
+      .prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_type_registry_unique " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, registry_version)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_type_registry_resolve " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, created_at)"
       )
       .run();
 

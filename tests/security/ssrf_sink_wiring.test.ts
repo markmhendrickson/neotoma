@@ -46,9 +46,8 @@ describe("SSRF sink wiring (hosted mode, stubbed fetch)", () => {
   });
 
   it("sync_webhook_outbound.postOutboundSyncWebhook refuses before fetching", async () => {
-    const { postOutboundSyncWebhook } = await import(
-      "../../src/services/sync/sync_webhook_outbound.js"
-    );
+    const { postOutboundSyncWebhook } =
+      await import("../../src/services/sync/sync_webhook_outbound.js");
     const result = await postOutboundSyncWebhook({
       peerUrlBase: `http://${CLOUD_METADATA}`,
       sharedSecret: "shh",
@@ -60,9 +59,8 @@ describe("SSRF sink wiring (hosted mode, stubbed fetch)", () => {
   });
 
   it("sync_webhook_outbound.postOutboundSyncEntitiesRequest refuses before fetching", async () => {
-    const { postOutboundSyncEntitiesRequest } = await import(
-      "../../src/services/sync/sync_webhook_outbound.js"
-    );
+    const { postOutboundSyncEntitiesRequest } =
+      await import("../../src/services/sync/sync_webhook_outbound.js");
     const result = await postOutboundSyncEntitiesRequest({
       peerUrlBase: `http://${CLOUD_METADATA}`,
       sharedSecret: "shh",
@@ -74,9 +72,8 @@ describe("SSRF sink wiring (hosted mode, stubbed fetch)", () => {
   });
 
   it("webhook_mirror.postEntityToWebhookMirror refuses before fetching", async () => {
-    const { postEntityToWebhookMirror } = await import(
-      "../../src/services/entity_submission/mirrors/webhook_mirror.js"
-    );
+    const { postEntityToWebhookMirror } =
+      await import("../../src/services/entity_submission/mirrors/webhook_mirror.js");
     // The sink swallows the rejection (logs + returns) rather than throwing,
     // so the assertion is on the stub never being reached.
     await postEntityToWebhookMirror({

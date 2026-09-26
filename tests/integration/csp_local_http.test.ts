@@ -8,8 +8,18 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
+import {
+  BUILT_INSPECTOR_ASSETS,
+  skipWithoutPrerequisite,
+} from "../helpers/test_prerequisites.js";
 
-describe("CSP on loopback HTTP", () => {
+// Serving the Inspector HTML shell is the whole point of this assertion, so a
+// checkout without `dist/inspector/index.html` cannot exercise it. Skip with a
+// named reason rather than fail (issue #2090) — a bare `npm ci` does not build
+// the Inspector, and a failure there is indistinguishable from a real break.
+const SKIP = skipWithoutPrerequisite(BUILT_INSPECTOR_ASSETS, "CSP on loopback HTTP");
+
+describe.skipIf(SKIP)("CSP on loopback HTTP", () => {
   let httpServer: ReturnType<typeof createServer>;
   let base = "";
 

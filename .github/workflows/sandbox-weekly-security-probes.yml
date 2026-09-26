@@ -1,0 +1,53 @@
+name: Sandbox weekly security probes
+
+# Weekly protected-route drift check + live auth-negative probes against
+# sandbox (and optionally prod via NEOTOMA_PROBE_HOSTS). Does not require
+# Fly SSH or a running sandbox VM — only HTTP reachability for probes.
+
+on:
+  schedule:
+    # Sunday 00:05 UTC (same window as the retired scheduled global reset)
+    - cron: "5 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sandbox-weekly-security-probes
+  cancel-in-progress: true
+
+jobs:
+  probes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync protected routes manifest (drift check)
+        run: npm run security:manifest:check
+
+      - name: Run deployed protected-route probes (sandbox + prod)
+        env:
+          NEOTOMA_PROBE_HOSTS: ${{ secrets.NEOTOMA_PROBE_HOSTS || 'https://sandbox.neotoma.io' }}
+        run: |
+          mkdir -p docs/security/probes
+          bash scripts/security/deployed_probes.sh \
+            --tag "weekly-$(date -u +%Y-%m-%d)" \
+            --out "docs/security/probes/weekly-$(date -u +%Y-%m-%d).md"
+
+      - name: Upload probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-security-probes
+          path: docs/security/probes/weekly-*.md

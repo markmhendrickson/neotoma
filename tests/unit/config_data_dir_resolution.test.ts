@@ -16,6 +16,9 @@ describe("runtime config data dir resolution", () => {
   });
 
   it("loads NEOTOMA_DATA_DIR from ~/.config/neotoma/.env when process env is unset", async () => {
+    // This case exercises the user-level fallback on purpose, which a test-shaped
+    // process now refuses by default (issue #2387), so it opts in explicitly.
+    vi.stubEnv("NEOTOMA_ALLOW_USER_ENV_IN_TEST", "1");
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-config-user-env-"));
     const homeDir = path.join(root, "home");
     const projectRoot = path.join(root, "project");

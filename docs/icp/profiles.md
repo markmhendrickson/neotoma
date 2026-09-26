@@ -10,6 +10,21 @@ visibility: internal
 # Neotoma ICP Profiles
 *(Detailed Profiles for All Target User Segments)*
 
+> **Staleness notice, 2026-09-16 — this document predates the durable-ICP decision.**
+>
+> The profiles below were written against the prior archetype: the infrastructure-oriented builder who installs via npm and the CLI and is comfortable assembling their own setup. The durable ICP decision (2026-09-15) replaced that archetype with the technically fluent operator who feels the pain of ad-hoc agent state but does **not** want to own the infrastructure that solves it. [`primary_icp.md`](./primary_icp.md) holds the durable definition and **governs wherever this document disagrees with it.**
+>
+> **What is therefore stale here, and should not be quoted as current:**
+>
+> - **The persona narratives.** Who the person is, what their day looks like, what they try first, and what they find acceptable were all written around someone who would work through an involved install. That is no longer the target.
+> - **The pricing tiers.** Tier construction and price points were derived from those personas' stated willingness to pay. Pricing itself is unchanged by the decision, but the reasoning that produced these tiers rests on personas that have moved.
+> - **The buyer nominations.** Where this document nominates a specific mode or segment as *the* buyer, that nomination reflects the prior archetype and is superseded by `primary_icp.md`.
+>
+> **What is not stale:** the market sizing method, the topology framework it draws on, the observable-signal criteria, the acquisition-channel inventory, and the barrier/solution pairs. Those describe the market rather than the target within it.
+>
+> **The rewrite is deliberately deferred.** Rewriting persona narratives and re-nominating a buyer is market-research judgement, not mechanical propagation of a ruling — and it waits on the onboarding scope settling, because the install path changes what these personas do on day one. A persona whose first hour is a guided installer behaves differently from one whose first hour is a terminal, and re-writing them before that is decided would produce narratives that need rewriting again. Until then, read this document as evidence about the market and `primary_icp.md` as the statement of who the product is for.
+
+
 ## Scope
 
 This document covers:
