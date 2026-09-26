@@ -891,25 +891,79 @@ export function clearInvalidGrantWarnDebounceForTests(): void {
 
 /**
  * True when a grant owned by someone other than `userId` pins
- * `thumbprint`, whatever its status. Suspended and revoked grants keep
- * their pin: either can be restored to active, and a grant's thumbprint
- * is part of its identity, so a second owner's grant for the same key
- * would not be a separate grant.
+ * `thumbprint`, whatever its status and whether or not it is
+ * soft-deleted. Suspended, revoked and deleted grants keep their pin:
+ * each can be brought back, and a grant's thumbprint is part of its
+ * identity, so a second owner's grant for the same key would not be a
+ * separate grant.
  */
 async function pinHeldByAnotherOwner(userId: string, thumbprint: string): Promise<boolean> {
+  // Soft-deleted grants keep their pin too: a deleted grant can be
+  // restored (restore_entity), so its thumbprint stays reserved to its
+  // owner until the grant is merged away.
   const rows = await queryEntities({
     entityType: GRANT_ENTITY_TYPE,
     includeMerged: false,
-    includeDeleted: false,
+    includeDeleted: true,
     limit: 1000,
   });
   for (const row of rows) {
-    const snap = row.snapshot ?? {};
-    if (trimOrNull(snap.match_thumbprint) !== thumbprint) continue;
+    const snap = (row.snapshot ?? {}) as Record<string, unknown>;
+    let pinned = trimOrNull(snap.match_thumbprint);
+    if (!pinned && !hasSnapshotContent(snap)) {
+      // A soft-deleted entity has no snapshot row; read its pin from the
+      // observations it still holds.
+      pinned = await latestRecordedThumbprint(row.entity_id);
+    }
+    if (pinned !== thumbprint) continue;
     const owner = await getGrantOwner(row.entity_id);
     if (owner && owner !== userId) return true;
   }
   return false;
+}
+
+function hasSnapshotContent(snap: Record<string, unknown>): boolean {
+  return Object.keys(snap).length > 0;
+}
+
+function parseObservationFields(raw: unknown): Record<string, unknown> | null {
+  let fields = raw;
+  if (typeof fields === "string") {
+    try {
+      fields = JSON.parse(fields);
+    } catch {
+      return null;
+    }
+  }
+  return isPlainObject(fields) ? fields : null;
+}
+
+/**
+ * `match_thumbprint` from the most recent observation on `entityId` that
+ * records one (highest `source_priority`, then latest `observed_at`), or
+ * `null`. Used where no snapshot exists, e.g. a soft-deleted grant.
+ */
+async function latestRecordedThumbprint(entityId: string): Promise<string | null> {
+  const { data } = await db
+    .from("observations")
+    .select("fields, source_priority, observed_at")
+    .eq("entity_id", entityId);
+  let best: { tp: string; priority: number; at: string } | null = null;
+  for (const row of (data ?? []) as Array<{
+    fields?: unknown;
+    source_priority?: number | null;
+    observed_at?: string | null;
+  }>) {
+    const fields = parseObservationFields(row.fields);
+    if (!fields || !("match_thumbprint" in fields)) continue;
+    const tp = trimOrNull(fields.match_thumbprint);
+    const priority = row.source_priority ?? 0;
+    const at = row.observed_at ?? "";
+    if (!best || priority > best.priority || (priority === best.priority && at > best.at)) {
+      best = { tp: tp ?? "", priority, at };
+    }
+  }
+  return best && best.tp ? best.tp : null;
 }
 
 /**
@@ -950,14 +1004,57 @@ export async function assertGrantWriteKeepsPinUnique(params: {
   if (params.entityType !== GRANT_ENTITY_TYPE) return;
   const fields = params.fields ?? {};
   const status = typeof fields.status === "string" ? fields.status : undefined;
+  // `_deleted: false` brings a soft-deleted grant back, like a restore.
+  const returnsToService =
+    status === "active" || status === "suspended" || fields._deleted === false;
   let thumbprint = trimOrNull(fields.match_thumbprint);
-  if (!thumbprint && params.entityId && (status === "active" || status === "suspended")) {
-    const ent = await getEntityWithProvenance(params.entityId);
+  if (!thumbprint && params.entityId && returnsToService) {
+    const ent = await getEntityWithProvenance(params.entityId, true);
     if (ent && ent.entity_type === GRANT_ENTITY_TYPE) {
       thumbprint = trimOrNull((ent.snapshot ?? {}).match_thumbprint);
     }
+    if (!thumbprint && (!ent || ent.entity_type === GRANT_ENTITY_TYPE)) {
+      thumbprint = await latestRecordedThumbprint(params.entityId);
+    }
   }
   await assertThumbprintPinAvailable(params.userId, thumbprint);
+}
+
+/**
+ * Check every key thumbprint an existing grant entity carries — its
+ * current snapshot value and any `match_thumbprint` recorded by one of
+ * its observations (including when it is soft-deleted) — against grants
+ * under other owners. Used by operations that bring a grant back or move
+ * its observations onto another entity: `restore_entity`,
+ * `merge_entities` and `split_entity`. No-op for an entity that is not
+ * an `agent_grant` owned by `userId`.
+ */
+export async function assertGrantEntityPinsUnique(userId: string, entityId: string): Promise<void> {
+  const { data: entity } = await db
+    .from("entities")
+    .select("entity_type")
+    .eq("id", entityId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!entity || entity.entity_type !== GRANT_ENTITY_TYPE) return;
+  const thumbprints = new Set<string>();
+  const ent = await getEntityWithProvenance(entityId, true, userId);
+  const snapTp = trimOrNull((ent?.snapshot ?? {}).match_thumbprint);
+  if (snapTp) thumbprints.add(snapTp);
+  const { data: observations } = await db
+    .from("observations")
+    .select("fields")
+    .eq("entity_id", entityId)
+    .eq("user_id", userId);
+  for (const row of (observations ?? []) as Array<{ fields?: unknown }>) {
+    const fields = parseObservationFields(row.fields);
+    if (!fields) continue;
+    const tp = trimOrNull(fields.match_thumbprint);
+    if (tp) thumbprints.add(tp);
+  }
+  for (const tp of thumbprints) {
+    await assertThumbprintPinAvailable(userId, tp);
+  }
 }
 
 /** ---------- Write helpers ---------- */

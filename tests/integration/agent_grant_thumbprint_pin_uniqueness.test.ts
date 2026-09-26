@@ -10,6 +10,7 @@
  *   - REST `/store` and `/correct`
  *   - MCP `store` and `correct`
  *   - `neotoma agents grants import`
+ *   - `restore_entity` (REST and MCP), `merge_entities`, `split_entity`
  *
  * Runs against the real SQLite store (NEOTOMA_DATA_DIR). Restoring a
  * grant whose key another owner pins is covered in
@@ -33,6 +34,11 @@ import {
   updateGrantFields,
 } from "../../src/services/agent_grants.js";
 import { runAgentsGrantsImport } from "../../src/cli/agents_grants_import.js";
+import { db } from "../../src/db.js";
+import { isEntityDeleted, softDeleteEntity } from "../../src/services/deletion.js";
+import { mergeEntities } from "../../src/services/entity_merge.js";
+import { splitEntity } from "../../src/services/entity_split.js";
+import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
 import { cleanupTestEntities } from "../helpers/cleanup_helpers.js";
 
 // The HTTP local path resolves the nil-UUID; the MCP server is pinned to the
@@ -46,7 +52,46 @@ function thumbprint(): string {
   return randomBytes(32).toString("base64url");
 }
 
-function callTool(server: NeotomaServer, name: "store" | "correct", params: Record<string, unknown>) {
+/**
+ * Give `grantId` (owned by `owner`) a `match_thumbprint` by inserting an
+ * observation directly, bypassing the write checks. Models a duplicate pin
+ * that predates them, which no public entrance can now create.
+ */
+async function seedPinDirectly(owner: string, grantId: string, tp: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await db.from("observations").insert({
+    id: randomUUID(),
+    entity_id: grantId,
+    entity_type: "agent_grant",
+    schema_version: "1.0.0",
+    source_id: null,
+    interpretation_id: null,
+    observed_at: now,
+    specificity_score: 1,
+    source_priority: 1000,
+    fields: { match_thumbprint: tp },
+    user_id: owner,
+    created_at: now,
+  });
+  if (error) throw new Error(`seed failed: ${error.message}`);
+  await recomputeSnapshot(grantId, owner);
+}
+
+function callTool(
+  server: NeotomaServer,
+  name: "store" | "correct" | "restore_entity",
+  params: Record<string, unknown>
+) {
+  if (name === "restore_entity") {
+    return (
+      server as unknown as {
+        executeTool: (
+          n: string,
+          p: Record<string, unknown>
+        ) => Promise<{ content: Array<{ text: string }> }>;
+      }
+    ).executeTool(name, params);
+  }
   return (
     server as unknown as Record<
       string,
@@ -319,5 +364,101 @@ describe("agent_grant thumbprint pins are unique across owners", () => {
     expect(outcome.kind).toBe("skipped");
     expect(outcome.reason).toMatch(/already pinned/);
     expect(await pinnedBy(OWNER_B, tp)).toHaveLength(0);
+  });
+
+  it("a soft-deleted grant still holds its pin", async () => {
+    const tp = thumbprint();
+    const theirs = await grantFor(OWNER_A, tp);
+    await softDeleteEntity(theirs.grant_id, "agent_grant", OWNER_A, "pin test");
+
+    await expect(grantFor(OWNER_B, tp)).rejects.toBeInstanceOf(AgentGrantPinConflictError);
+    expect(await pinnedBy(OWNER_B, tp)).toHaveLength(0);
+  });
+
+  it("REST /restore_entity: refuses restoring a grant whose key another owner pins", async () => {
+    const tp = thumbprint();
+    const mine = await grantFor(OWNER_B, tp);
+    await softDeleteEntity(mine.grant_id, "agent_grant", OWNER_B, "pin test");
+    const theirs = await grantFor(OWNER_A, thumbprint());
+    await seedPinDirectly(OWNER_A, theirs.grant_id, tp);
+
+    const { status, body } = await postJson("/restore_entity", {
+      entity_id: mine.grant_id,
+      entity_type: "agent_grant",
+    });
+
+    expect(status).toBe(409);
+    expect(JSON.stringify(body)).toContain("agent_grant_pin_conflict");
+    expect(await isEntityDeleted(mine.grant_id, OWNER_B)).toBe(true);
+  });
+
+  it("MCP restore_entity: refuses restoring a grant whose key another owner pins, whatever entity_type is passed", async () => {
+    const tp = thumbprint();
+    const mine = await grantFor(OWNER_B, tp);
+    await softDeleteEntity(mine.grant_id, "agent_grant", OWNER_B, "pin test");
+    const theirs = await grantFor(OWNER_A, thumbprint());
+    await seedPinDirectly(OWNER_A, theirs.grant_id, tp);
+
+    for (const entityType of ["agent_grant", "task"]) {
+      await expect(
+        callTool(server, "restore_entity", {
+          user_id: OWNER_B,
+          entity_id: mine.grant_id,
+          entity_type: entityType,
+        })
+      ).rejects.toThrow(/already pinned/);
+    }
+    expect(await isEntityDeleted(mine.grant_id, OWNER_B)).toBe(true);
+  });
+
+  it("REST /restore_entity: restores a grant whose key no other owner pins", async () => {
+    const mine = await grantFor(OWNER_B, thumbprint());
+    await softDeleteEntity(mine.grant_id, "agent_grant", OWNER_B, "pin test");
+
+    const { status } = await postJson("/restore_entity", {
+      entity_id: mine.grant_id,
+      entity_type: "agent_grant",
+    });
+
+    expect(status).toBe(200);
+    expect(await isEntityDeleted(mine.grant_id, OWNER_B)).toBe(false);
+  });
+
+  it("merge_entities: refuses merging a grant whose key another owner pins", async () => {
+    const tp = thumbprint();
+    const from = await grantFor(OWNER_B, tp);
+    const to = await grantFor(OWNER_B, thumbprint());
+    const theirs = await grantFor(OWNER_A, thumbprint());
+    await seedPinDirectly(OWNER_A, theirs.grant_id, tp);
+
+    await expect(
+      mergeEntities({
+        fromEntityId: from.grant_id,
+        toEntityId: to.grant_id,
+        userId: OWNER_B,
+        mergedBy: "pin-test",
+      })
+    ).rejects.toBeInstanceOf(AgentGrantPinConflictError);
+    expect((await getGrant(OWNER_B, to.grant_id))?.match_thumbprint).toBe(to.match_thumbprint);
+  });
+
+  it("split_entity: refuses re-pointing observations of a grant whose key another owner pins", async () => {
+    const tp = thumbprint();
+    const mine = await grantFor(OWNER_B, tp);
+    await updateGrantFields(OWNER_B, mine.grant_id, { label: "split source relabelled" });
+    const theirs = await grantFor(OWNER_A, thumbprint());
+    await seedPinDirectly(OWNER_A, theirs.grant_id, tp);
+
+    await expect(
+      splitEntity({
+        sourceEntityId: mine.grant_id,
+        userId: OWNER_B,
+        predicate: { observation_field_equals: { field: "match_thumbprint", value: tp } },
+        newEntity: { entity_type: "agent_grant", canonical_name: `split-${randomUUID()}` },
+        idempotencyKey: `pin-split-${randomUUID()}`,
+        splitBy: "pin-test",
+      })
+    ).rejects.toBeInstanceOf(AgentGrantPinConflictError);
+    expect((await getGrant(OWNER_B, mine.grant_id))?.match_thumbprint).toBe(tp);
   });
 });

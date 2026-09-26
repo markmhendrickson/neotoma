@@ -153,6 +153,20 @@ describe("returning a grant to service when another owner pins its key", () => {
     ).rejects.toBeInstanceOf(AgentGrantPinConflictError);
   });
 
+  it("an _deleted: false correction is refused when another owner pins the grant's key", async () => {
+    putGrant("ent_grant_a", OWNER_A, { match_thumbprint: TP, status: "active" });
+    putGrant("ent_grant_b", OWNER_B, { match_thumbprint: TP, status: "active" });
+
+    await expect(
+      assertGrantWriteKeepsPinUnique({
+        userId: OWNER_A,
+        entityType: "agent_grant",
+        fields: { _deleted: false },
+        entityId: "ent_grant_a",
+      })
+    ).rejects.toBeInstanceOf(AgentGrantPinConflictError);
+  });
+
   it("a status correction to revoked is allowed", async () => {
     putGrant("ent_grant_a", OWNER_A, { match_thumbprint: TP, status: "active" });
     putGrant("ent_grant_b", OWNER_B, { match_thumbprint: TP, status: "active" });
