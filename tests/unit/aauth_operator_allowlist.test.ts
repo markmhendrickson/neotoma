@@ -2,8 +2,10 @@
  * Unit tests for `src/services/aauth_operator_allowlist.ts`.
  *
  * Exercises the env-var-driven allowlist: parsing, trimming, empty
- * handling, and the iss vs iss:sub match precedence used by the AAuth
- * middleware to promote signatures to `operator_attested`.
+ * handling, and the thumbprint / iss / iss:sub match precedence used by
+ * the AAuth middleware to promote signatures to `operator_attested`.
+ * `grantIss` / `grantSub` are the identity recorded on the grant that
+ * pins the signing key.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -16,6 +18,7 @@ import {
 const ENV_KEYS = [
   "NEOTOMA_OPERATOR_ATTESTED_ISSUERS",
   "NEOTOMA_OPERATOR_ATTESTED_SUBS",
+  "NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS",
 ] as const;
 
 function withEnv(
@@ -54,11 +57,11 @@ describe("isOperatorAttested", () => {
       NEOTOMA_OPERATOR_ATTESTED_SUBS: "",
     });
     expect(isOperatorAttested({})).toEqual({ matched: false, source: null });
-    expect(isOperatorAttested({ iss: "" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "" })).toEqual({
       matched: false,
       source: null,
     });
-    expect(isOperatorAttested({ iss: "   " })).toEqual({
+    expect(isOperatorAttested({ grantIss: "   " })).toEqual({
       matched: false,
       source: null,
     });
@@ -70,7 +73,7 @@ describe("isOperatorAttested", () => {
       NEOTOMA_OPERATOR_ATTESTED_SUBS: undefined,
     });
     expect(
-      isOperatorAttested({ iss: "https://issuer", sub: "agent:x" }),
+      isOperatorAttested({ grantIss: "https://issuer", grantSub: "agent:x" }),
     ).toEqual({ matched: false, source: null });
   });
 
@@ -78,14 +81,14 @@ describe("isOperatorAttested", () => {
     withEnv({
       NEOTOMA_OPERATOR_ATTESTED_ISSUERS: "https://issuer-a, https://issuer-b",
     });
-    expect(isOperatorAttested({ iss: "https://issuer-a" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "https://issuer-a" })).toEqual({
       matched: true,
       source: "issuer",
     });
     expect(
-      isOperatorAttested({ iss: "https://issuer-b", sub: "agent:y" }),
+      isOperatorAttested({ grantIss: "https://issuer-b", grantSub: "agent:y" }),
     ).toEqual({ matched: true, source: "issuer" });
-    expect(isOperatorAttested({ iss: "https://other" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "https://other" })).toEqual({
       matched: false,
       source: null,
     });
@@ -97,10 +100,10 @@ describe("isOperatorAttested", () => {
       NEOTOMA_OPERATOR_ATTESTED_SUBS: "https://issuer-a:agent:special",
     });
     expect(
-      isOperatorAttested({ iss: "https://issuer-a", sub: "agent:special" }),
+      isOperatorAttested({ grantIss: "https://issuer-a", grantSub: "agent:special" }),
     ).toEqual({ matched: true, source: "issuer_subject" });
     expect(
-      isOperatorAttested({ iss: "https://issuer-a", sub: "agent:other" }),
+      isOperatorAttested({ grantIss: "https://issuer-a", grantSub: "agent:other" }),
     ).toEqual({ matched: true, source: "issuer" });
   });
 
@@ -111,12 +114,12 @@ describe("isOperatorAttested", () => {
         "https://issuer-a:agent:1, https://issuer-b:agent:2",
     });
     expect(
-      isOperatorAttested({ iss: "https://issuer-a", sub: "agent:1" }),
+      isOperatorAttested({ grantIss: "https://issuer-a", grantSub: "agent:1" }),
     ).toEqual({ matched: true, source: "issuer_subject" });
     expect(
-      isOperatorAttested({ iss: "https://issuer-a", sub: "agent:9" }),
+      isOperatorAttested({ grantIss: "https://issuer-a", grantSub: "agent:9" }),
     ).toEqual({ matched: false, source: null });
-    expect(isOperatorAttested({ iss: "https://issuer-a" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "https://issuer-a" })).toEqual({
       matched: false,
       source: null,
     });
@@ -126,11 +129,11 @@ describe("isOperatorAttested", () => {
     withEnv({
       NEOTOMA_OPERATOR_ATTESTED_ISSUERS: " ,, https://issuer-a ,, ,",
     });
-    expect(isOperatorAttested({ iss: "https://issuer-a" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "https://issuer-a" })).toEqual({
       matched: true,
       source: "issuer",
     });
-    expect(isOperatorAttested({ iss: "" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "" })).toEqual({
       matched: false,
       source: null,
     });
@@ -140,11 +143,11 @@ describe("isOperatorAttested", () => {
     withEnv({
       NEOTOMA_OPERATOR_ATTESTED_ISSUERS: "https://Issuer-A",
     });
-    expect(isOperatorAttested({ iss: "https://Issuer-A" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "https://Issuer-A" })).toEqual({
       matched: true,
       source: "issuer",
     });
-    expect(isOperatorAttested({ iss: "https://issuer-a" })).toEqual({
+    expect(isOperatorAttested({ grantIss: "https://issuer-a" })).toEqual({
       matched: false,
       source: null,
     });
@@ -154,14 +157,32 @@ describe("isOperatorAttested", () => {
     withEnv({
       NEOTOMA_OPERATOR_ATTESTED_ISSUERS: "https://issuer-a",
     });
-    expect(isOperatorAttested({ iss: "https://issuer-a" }).matched).toBe(true);
+    expect(isOperatorAttested({ grantIss: "https://issuer-a" }).matched).toBe(true);
 
     process.env.NEOTOMA_OPERATOR_ATTESTED_ISSUERS = "https://issuer-b";
-    expect(isOperatorAttested({ iss: "https://issuer-a" }).matched).toBe(true);
-    expect(isOperatorAttested({ iss: "https://issuer-b" }).matched).toBe(false);
+    expect(isOperatorAttested({ grantIss: "https://issuer-a" }).matched).toBe(true);
+    expect(isOperatorAttested({ grantIss: "https://issuer-b" }).matched).toBe(false);
 
     resetOperatorAllowlistCacheForTests();
-    expect(isOperatorAttested({ iss: "https://issuer-a" }).matched).toBe(false);
-    expect(isOperatorAttested({ iss: "https://issuer-b" }).matched).toBe(true);
+    expect(isOperatorAttested({ grantIss: "https://issuer-a" }).matched).toBe(false);
+    expect(isOperatorAttested({ grantIss: "https://issuer-b" }).matched).toBe(true);
+  });
+  it("matches the verified key thumbprint list before grant identity", () => {
+    withEnv({
+      NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS: "tp-a, tp-b",
+      NEOTOMA_OPERATOR_ATTESTED_ISSUERS: "https://issuer-a",
+    });
+    expect(isOperatorAttested({ thumbprint: "tp-b" })).toEqual({
+      matched: true,
+      source: "thumbprint",
+    });
+    expect(isOperatorAttested({ thumbprint: "tp-b", grantIss: "https://issuer-a" })).toEqual({
+      matched: true,
+      source: "thumbprint",
+    });
+    expect(isOperatorAttested({ thumbprint: "tp-c" })).toEqual({
+      matched: false,
+      source: null,
+    });
   });
 });

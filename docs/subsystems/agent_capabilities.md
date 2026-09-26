@@ -204,16 +204,32 @@ Use `["*"]` to widen to every type — only do this for trusted grants.
 Admission resolves the verified identity to at most one grant:
 
 1. The most recently observed `active` grant whose `match_thumbprint`
-   equals the signing key's thumbprint wins.
+   equals the signing key's thumbprint wins, provided every such grant
+   belongs to the same owner.
 2. Otherwise, no admission — the request stays attribution-only, and
    capability-gated writes fail closed rather than falling back to an
    unrecognized-agent ceiling. The reason is:
    - `grant_revoked` / `grant_suspended` when the signing key is pinned
      to a `revoked` / `suspended` grant (a key binding survives a
      status change — it is not silently treated as unmatched),
+   - `grant_pin_conflict` when active grants under more than one owner
+     pin the signing key (the key resolves to no owner),
    - `grant_key_unbound` when a grant without a thumbprint pin matched
      `sub` / `iss`,
    - `no_match` otherwise.
+
+### One owner per key
+
+A key thumbprint can be pinned by grants under one owner only. Every
+write that sets `match_thumbprint` on an `agent_grant` — the
+`/agents/grants` routes and Inspector, `store` and `correct` on REST
+and MCP, `neotoma agents grants import`, and file interpretation — is
+refused with `409 agent_grant_pin_conflict` (MCP `InvalidRequest` with
+`data.code: "agent_grant_pin_conflict"`) when a grant under another
+owner already pins that thumbprint, whatever that grant's status.
+Restoring a grant to `active` or `suspended` is refused the same way if
+another owner pins its key. Several grants under the same owner may pin
+one key.
 
 ## Status lifecycle
 
@@ -264,7 +280,14 @@ line of defence against a compromised tunnel / edge:
 
 - `X-Agent-Label: agent-site@neotoma.io` + missing signature → 401.
 - `X-Agent-Label: agent-site@neotoma.io` + signature verified, but the
-  `sub` claim is something else → 401.
+  signing key is not pinned (`match_thumbprint`) by an active grant
+  whose `match_sub` is that label → 401 (`key_not_bound` when no grant
+  pins the key, `sub_mismatch` when the grant records another sub). The
+  `sub` inside the agent token is not consulted.
+
+Before listing a subject here, pin its key: create (or update) a grant
+with `match_sub` set to the label and `match_thumbprint` set to the
+agent's key thumbprint.
 - Any label NOT listed in `NEOTOMA_STRICT_AAUTH_SUBS` behaves as before
   (best-effort attribution hint).
 

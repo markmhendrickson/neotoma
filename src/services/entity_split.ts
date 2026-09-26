@@ -275,6 +275,18 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
     );
   }
 
+  // A key thumbprint may be pinned by agent_grants under one owner only.
+  // A split re-points observations (and any match_thumbprint they carry)
+  // onto another entity, so the source grant's pins must be ones no other
+  // owner holds. Checked before anything is written.
+  if (
+    (sourceEntity as { entity_type?: string }).entity_type === "agent_grant" ||
+    newEntity.entity_type === "agent_grant"
+  ) {
+    const { assertGrantEntityPinsUnique } = await import("./agent_grants.js");
+    await assertGrantEntityPinsUnique(userId, sourceEntityId);
+  }
+
   // Ensure the new entity row exists before re-pointing FKs. Use insert with
   // ignore-on-conflict when target_entity_id already exists (splitting into an
   // existing entity). Existing merge flow does not explicitly insert entities

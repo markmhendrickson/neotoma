@@ -61,21 +61,21 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **646**
-- Backend and repo Vitest files: **610**
+- Total automated test files: **653**
+- Backend and repo Vitest files: **617**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 177 |
+| Vitest unit tests | 180 |
 | Vitest service tests | 46 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 192 |
+| Vitest integration tests | 194 |
 | Vitest CLI tests | 79 |
 | Vitest contract tests | 20 |
-| Vitest security tests | 14 |
+| Vitest security tests | 16 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (177):**
+**Files (180):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -119,6 +119,7 @@ flowchart TD
 - `tests/unit/aauth_attestation_webauthn_packed.test.ts`
 - `tests/unit/aauth_authority_normalization.test.ts`
 - `tests/unit/aauth_grant_key_binding.test.ts`
+- `tests/unit/aauth_key_bound_identity.test.ts`
 - `tests/unit/aauth_operator_allowlist.test.ts`
 - `tests/unit/aauth_sdk_and_capability_flags.test.ts`
 - `tests/unit/aauth_signer_jwk_override.test.ts`
@@ -127,6 +128,7 @@ flowchart TD
 - `tests/unit/action_schemas_observation_source.test.ts`
 - `tests/unit/action_schemas_validation.test.ts`
 - `tests/unit/agent_capabilities.test.ts`
+- `tests/unit/agent_grant_pin_checks.test.ts`
 - `tests/unit/agent_grants_service.test.ts`
 - `tests/unit/agent_identity.test.ts`
 - `tests/unit/agent_memory.test.ts`
@@ -191,6 +193,7 @@ flowchart TD
 - `tests/unit/github_webhook.test.ts`
 - `tests/unit/google_oidc_identity_resolution.test.ts`
 - `tests/unit/google_oidc.test.ts`
+- `tests/unit/harness_force_mode.test.ts`
 - `tests/unit/hook_feedback_accumulator.test.ts`
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
@@ -419,7 +422,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (192):**
+**Files (194):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -432,6 +435,7 @@ flowchart TD
 - `tests/integration/aauth_tpm2_e2e.test.ts`
 - `tests/integration/aauth_webauthn_packed_e2e.test.ts`
 - `tests/integration/agent_capabilities_store.test.ts`
+- `tests/integration/agent_grant_thumbprint_pin_uniqueness.test.ts`
 - `tests/integration/agent_memory_turn_lifecycle.test.ts`
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`
@@ -578,6 +582,7 @@ flowchart TD
 - `tests/integration/shared_graph_identity.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
+- `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
@@ -731,10 +736,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (14):**
+**Files (16):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
+- `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
 - `tests/security/provenance_read_scoping.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
@@ -742,6 +748,7 @@ flowchart TD
 - `tests/security/schemas_per_type_scope_guard.test.ts`
 - `tests/security/scoped_source_and_relationship_reads.test.ts`
 - `tests/security/sort_by_sql_injection.test.ts`
+- `tests/security/ssrf_guarded_fetch_redirects.test.ts`
 - `tests/security/ssrf_outbound_host_guard.test.ts`
 - `tests/security/ssrf_sink_wiring.test.ts`
 - `tests/security/store_external_actor_claim.test.ts`
