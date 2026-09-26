@@ -89,6 +89,7 @@ Before flipping the variable on an existing database, run `npx tsx scripts/valid
 | ------------------------------------ | -------------------------- | ----------------------- |
 | `NEOTOMA_HTTP_PORT` (or `HTTP_PORT`) | HTTP API and HTTP MCP port | `3080` dev, `3180` prod |
 | `WS_PORT`                            | WebSocket MCP bridge port  | `8280`                  |
+| `NEOTOMA_MCP_INSTANCE_SKILL_HINTS`   | Append an `[INSTANCE SKILLS]` section to the MCP instructions listing the instance's enabled graph-stored `skill` rows, so MCP-only clients can discover them. Set `0` or `false` to omit the section entirely. | on (`0` / `false` disables) |
 
 See [Running the Server](running_the_server.md) for transports and processes.
 
