@@ -22,6 +22,35 @@ describe("published digest skill identity", () => {
     expect(digest).toMatch(/^# digest$/m);
   });
 
+  it("makes report-only strictly write-free, including session bookkeeping", () => {
+    const digest = readFileSync(digestPath, "utf8");
+
+    expect(digest).toContain("that mode MUST NOT write or update a `session_digest`");
+    expect(digest).toMatch(/^## Session digest \(default mode only\)$/m);
+    expect(digest).toContain("no action and no writes of any kind");
+    expect(digest).not.toContain(
+      "After composing the prose report, store or update exactly ONE `session_digest`"
+    );
+  });
+
+  it("binds transcript discovery and session identity to the active harness", () => {
+    const digest = readFileSync(digestPath, "utf8");
+
+    for (const harness of ["claude-code", "cursor", "codex"]) {
+      expect(digest).toMatch(new RegExp(`^\\s+- ${harness.replace("-", "\\-")}$`, "m"));
+    }
+    expect(digest).toContain("~/.claude/projects/*/<session-id>.jsonl");
+    expect(digest).toContain(
+      "~/.cursor/projects/*/agent-transcripts/<session-id>/<session-id>.jsonl"
+    );
+    expect(digest).toContain("${CODEX_HOME:-~/.codex}/sessions/**/rollout-*.jsonl");
+    expect(digest).toContain("session_meta.payload.id");
+    expect(digest).toContain('`"<harness>:<root-session-id>"`');
+    expect(digest).toContain("session-digest-<harness>-<root-session-id>");
+    expect(digest).not.toContain('`harness`: `"claude-code"`');
+    expect(digest).not.toContain("glob `~/.claude/projects/*/*.jsonl`");
+  });
+
   it("contains the proactive dispatch contract and forbids durable task chips", () => {
     const digest = readFileSync(digestPath, "utf8");
 
