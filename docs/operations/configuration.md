@@ -61,10 +61,13 @@ Before flipping the variable on an existing database, run `npx tsx scripts/valid
 
 ## Server and ports
 
-| Variable                             | Purpose                    | Default                 |
-| ------------------------------------ | -------------------------- | ----------------------- |
-| `NEOTOMA_HTTP_PORT` (or `HTTP_PORT`) | HTTP API and HTTP MCP port | `3080` dev, `3180` prod |
-| `WS_PORT`                            | WebSocket MCP bridge port  | `8280`                  |
+| Variable                             | Purpose                                    | Default                 |
+| ------------------------------------ | ------------------------------------------- | ----------------------- |
+| `NEOTOMA_HTTP_PORT` (or `HTTP_PORT`) | HTTP API and HTTP MCP port                 | `3080` dev, `3180` prod |
+| `NEOTOMA_HTTP_HOST`                  | HTTP listener bind address (explicit opt-in for non-loopback) | `127.0.0.1` |
+| `WS_PORT`                            | WebSocket MCP bridge port                  | `8280`                  |
+
+The server binds loopback-only by default so a self-hosted install is never reachable from the LAN unless you opt in. Set `NEOTOMA_HTTP_HOST=0.0.0.0` for a Fly/Docker deployment fronted by its own network boundary or auth, or for a tunnel client — see [Deployment Modes](deployment.md).
 
 See [Running the Server](running_the_server.md) for transports and processes.
 
