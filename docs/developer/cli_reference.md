@@ -667,9 +667,26 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--limit <n>`
   - `--offset <n>`
 
+### Relationship Types
+
+The relationship-type vocabulary is a runtime registry, not a fixed enum. Discover what an instance accepts before using an unfamiliar edge type, and register new types through this command family rather than assuming a type exists.
+
+- `neotoma relationship-types list`:
+  - `--keyword <text>`: filter names and descriptions.
+  - `--scope <scope>`: filter to `user` or `global` scope.
+  - `--include-edge-count`: include counts of written edge rows per type.
+  - An empty result does not mean no vocabulary exists — the response's `empty_reason` distinguishes `registry_unseeded` (the built-in types failed to seed for this process and self-repair on the next read; retry) from `filtered_to_empty` (your `--keyword` matched nothing; retry without it).
+- `neotoma relationship-types register --relationship-type <type>`:
+  - `--description <text>`: meaning of the edge.
+  - `--scope <scope>`: `user` (default) or `global` — `global` requires an explicit global permission in the caller's registration grant; an absent grant is refused.
+  - `--acyclic`: refuse writes that would create a cycle among edges of this type, scoped to the registering tenant and depth-bounded (see [`docs/subsystems/relationships.md`](../subsystems/relationships.md) § 8 Cycle Detection).
+  - `--inverse <type>`: advisory inverse type name (not enforced).
+  - `--symmetric`: advisory symmetry flag (not enforced).
+  - `--source-entity-types <types>` / `--target-entity-types <types>`: comma-separated advisory entity-type hints for each endpoint (not enforced).
+
 ### Relationships
 
-- `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship.
+- `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship. Both `--source-entity-id` and `--target-entity-id` must be entities you own; an endpoint that does not exist and one owned by another user are refused identically.
   - `--metadata <json>`: attach relationship metadata.
   - `--file <path>`: create a batch from a JSON array, or an object with `relationships: [...]`. Each entry uses `relationship_type`, `source_entity_id`, `target_entity_id`, and optional `metadata`.
 - `neotoma relationships list <entityId>`:

@@ -10165,6 +10165,9 @@ app.post("/create_relationship", async (req, res) => {
     if (error instanceof OwnedEntityNotFoundError) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message, {
         entity_id: error.entityId,
+        hint:
+          "Both endpoints must be entities you own. Store the entity first, or in the " +
+          "same store call referenced by index, then link it.",
       });
     }
     logError("RelationshipCreationError:create_relationship", req, error);

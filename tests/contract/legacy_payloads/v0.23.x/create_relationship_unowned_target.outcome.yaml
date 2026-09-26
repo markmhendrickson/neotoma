@@ -1,6 +1,7 @@
 endpoint: "POST /create_relationship"
 outcome: rejected
 error_code: RESOURCE_NOT_FOUND
+hint_match: "/must be entities you own/i"
 notes: |
   relationshipsService.createRelationship requires both source_entity_id and
   target_entity_id to be entities the caller owns, in addition to the
