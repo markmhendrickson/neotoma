@@ -66,6 +66,85 @@ function jobBlock(source: string, jobName: string): string {
   return rest.slice(0, end === -1 ? undefined : end).join("\n");
 }
 
+/**
+ * Sub-block of `block` (a trigger's or job's own body) starting at the named
+ * key, up to the next line at or below that key's own indent — i.e. "this
+ * key's value, however it's shaped." Used to scope a `pull_request:` or
+ * `push:` trigger's own body so a `paths`/`paths-ignore` filter check can't
+ * cross into a sibling trigger.
+ */
+function subBlockAt(block: string, keyPattern: RegExp): string | null {
+  const lines = block.split("\n");
+  const start = lines.findIndex((l) => keyPattern.test(l));
+  if (start === -1) return null;
+  const startIndent = lines[start]!.match(/^(\s*)/)![1]!.length;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => {
+    if (l.trim() === "") return false;
+    const indent = l.match(/^(\s*)/)![1]!.length;
+    return indent <= startIndent;
+  });
+  return rest.slice(0, end === -1 ? undefined : end).join("\n");
+}
+
+/**
+ * Parses the `security_gates` job's `steps:` into `{ name, run }` pairs,
+ * each step's OWN `run:` value rather than the whole job block's text — so a
+ * check can assert what a specific named step actually executes, not merely
+ * that some substring appears anywhere in the job (which a hollowed-out
+ * step's now-empty `run:` would still pass, as long as an unrelated line —
+ * e.g. this file's own doc comment about that step — happened to contain
+ * the same text).
+ */
+function parseSteps(jobBlockText: string): Array<{ name: string; run: string | null }> {
+  const lines = jobBlockText.split("\n");
+  const stepsStart = lines.findIndex((l) => /^\s*steps:\s*$/.test(l));
+  if (stepsStart === -1) throw new Error("no `steps:` key found in job block");
+  const stepLines = lines.slice(stepsStart + 1);
+
+  const steps: Array<{ name: string; run: string | null }> = [];
+  let current: { name: string; run: string | null } | null = null;
+  let inRunBlock = false;
+  let runIndent = -1;
+
+  for (const line of stepLines) {
+    const nameMatch = line.match(/^\s*- name:\s*(.+)$/);
+    if (nameMatch) {
+      if (current) steps.push(current);
+      current = { name: nameMatch[1]!.trim(), run: null };
+      inRunBlock = false;
+      continue;
+    }
+    if (!current) continue; // before the first step, or malformed
+    const runMatch = line.match(/^(\s*)run:\s*(.*)$/);
+    if (runMatch) {
+      const indent = runMatch[1]!.length;
+      const rest = runMatch[2]!.trim();
+      if (rest === "|" || rest === ">") {
+        // Multi-line block scalar: collect subsequent more-indented lines.
+        inRunBlock = true;
+        runIndent = indent;
+        current.run = "";
+        continue;
+      }
+      // Single-line run: (may be quoted or bare).
+      current.run = rest;
+      inRunBlock = false;
+      continue;
+    }
+    if (inRunBlock) {
+      const lineIndent = line.match(/^(\s*)/)![1]!.length;
+      if (line.trim() === "" || lineIndent > runIndent) {
+        current.run = (current.run ?? "") + "\n" + line;
+        continue;
+      }
+      inRunBlock = false;
+    }
+  }
+  if (current) steps.push(current);
+  return steps;
+}
+
 describe("security_gates CI job wiring (contract, not live branch protection)", () => {
   it("the workflow triggers on pull_request and on push to main", () => {
     const source = readWorkflow();
@@ -92,6 +171,27 @@ describe("security_gates CI job wiring (contract, not live branch protection)", 
     ).toMatch(/^\s*-\s*main\s*$/m);
   });
 
+  it("neither pull_request nor push carries a paths/paths-ignore filter", () => {
+    // A path filter is a narrowing, not a removal — GitHub still reports
+    // this job "required" on any excluded PR/push, it just never runs, so
+    // GitHub blocks the merge on a check that will NEVER report. This is
+    // the same silent-narrowing shape as the trigger-removal case above,
+    // one layer more granular: reverting the fix locally for this exact
+    // shape (adding `paths-ignore: ["**"]` under pull_request) left the
+    // OTHER assertions in this file green, because none of them looked
+    // inside the trigger body for a paths key.
+    const onBlock = onTriggerBlock(readWorkflow());
+    for (const trigger of [/^\s*pull_request:\s*$/m, /^\s*push:\s*$/m]) {
+      const body = subBlockAt(onBlock, trigger);
+      expect(body, `${trigger} trigger block not found in workflow \`on:\``).not.toBeNull();
+      expect(
+        body,
+        `${trigger} carries a paths/paths-ignore filter — security_gates would silently ` +
+          `stop running on excluded paths while GitHub still reports the check as required`
+      ).not.toMatch(/^\s*paths(-ignore)?:\s*$/m);
+    }
+  });
+
   it("the security_gates job has no job-level `if` that could skip it", () => {
     const block = jobBlock(readWorkflow(), "security_gates");
     // A job-level `if:` sits at 4-space indent, directly under the job key
@@ -113,17 +213,47 @@ describe("security_gates CI job wiring (contract, not live branch protection)", 
 
   it("the security_gates job still has its known gating steps with real commands", () => {
     const block = jobBlock(readWorkflow(), "security_gates");
-    // Each of these names a step that runs an actual security check (G1–G3 +
-    // manifest sync, per the job's own header comment). If a future edit
-    // renames or removes one, this should fail loudly rather than the job
-    // quietly doing less than its name promises.
+    const steps = parseSteps(block);
+    // Each of these names a step whose OWN run: field must invoke the real
+    // security check (G1-G3 + manifest sync, per the job's own header
+    // comment) — checked against parseSteps' per-step run field, not a
+    // substring match over the whole job block's text. A substring match
+    // over the whole block would still pass if a step's run: were hollowed
+    // to a no-op while its name: comment (which mentions the check by name,
+    // e.g. "G2 — security:lint") stayed put right next to it; reverting the
+    // fix locally for exactly that shape confirmed the substring-match
+    // version stayed green while this per-step version goes red.
     for (const runScript of [
       "security:classify-diff",
       "security:lint",
       "security:manifest:check",
       "test:security:auth-matrix",
     ]) {
-      expect(block, `security_gates no longer runs \`npm run ${runScript}\``).toContain(runScript);
+      const step = steps.find((s) => (s.run ?? "").includes(runScript));
+      expect(
+        step,
+        `no step's own run: field invokes \`npm run ${runScript}\` — found step names: ` +
+          steps.map((s) => s.name).join(", ")
+      ).toBeDefined();
+      expect(step!.run, `step "${step!.name}"'s run: field is empty`).not.toBe("");
+    }
+  });
+
+  it("every run:-based step's own run: is non-empty (none hollowed to a no-op)", () => {
+    const block = jobBlock(readWorkflow(), "security_gates");
+    const steps = parseSteps(block);
+    expect(steps.length, "security_gates has no steps at all").toBeGreaterThan(0);
+    // Steps that use an action (`uses:`, e.g. actions/checkout) legitimately
+    // have no `run:` — this only checks steps parseSteps found a run: KEY
+    // for, asserting that key's VALUE wasn't hollowed to empty.
+    const runSteps = steps.filter((s) => s.run !== null);
+    expect(runSteps.length, "no run:-based steps found — parseSteps may be broken").toBeGreaterThan(
+      0
+    );
+    for (const step of runSteps) {
+      expect((step.run ?? "").trim().length, `step "${step.name}"'s run: is empty`).toBeGreaterThan(
+        0
+      );
     }
   });
 });
