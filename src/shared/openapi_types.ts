@@ -2594,7 +2594,8 @@ export interface components {
         | "ERR_CANONICAL_NAME_UNRESOLVED"
         | "ERR_MERGE_REFUSED"
         | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
-        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT"
+        | "entity_owner_conflict";
       message?: string;
       /**
        * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
@@ -5798,6 +5799,24 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
+      /**
+       * @description `entity_owner_conflict` — `new_entity.target_entity_id` names an
+       *     existing entity owned by a different, non-null user than the
+       *     writer. No observations are re-pointed. The source entity's own
+       *     ownership is already covered by the `404` above (a source owned
+       *     by another user reads as not-found); this refusal is for the
+       *     split's OTHER caller-supplied id, the merge target. The envelope
+       *     details carry `entity_id` and `entity_type`; never the other
+       *     owner's identity or fields.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSources: {
@@ -6779,7 +6798,11 @@ export interface operations {
       };
       /**
        * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-       *     `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+       *     `StoreResolutionErrorEnvelope` shape; one of its per-observation
+       *     `issues[].code` values is `entity_owner_conflict` — resolution
+       *     landed on an existing entity owned by a different, non-null
+       *     user, and the write was refused before anything was persisted
+       *     (see `StoreResolutionIssue.code`). `ERR_CONSTRAINT_VIOLATION` is
        *     returned when one or more observations fail a declarative write-time
        *     value constraint (constraint `policy: "reject"`); its envelope carries
        *     a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
@@ -8428,6 +8451,24 @@ export interface operations {
        *     details carry `field_name`, `agent_role`, and `entity_id`.
        */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `entity_owner_conflict` — `entity_id` resolves to an existing
+       *     entity owned by a different, non-null user than the writer. No
+       *     observation is written. `correct()` is the raw entity-store
+       *     surface: a caller names `entity_id` directly with no resolution
+       *     step in between, so this is the only refusal point for a
+       *     correction that would otherwise land on another user's entity.
+       *     The envelope details carry `entity_id` and `entity_type`; never
+       *     the other owner's identity or fields.
+       */
+      409: {
         headers: {
           [name: string]: unknown;
         };

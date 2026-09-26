@@ -38,6 +38,7 @@ import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { EntityOwnerConflictError } from "./services/entity_resolution.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
 import {
@@ -4856,6 +4857,15 @@ function handleApiError(
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (error instanceof EntityOwnerConflictError) {
+    // Writes resolve only to entities the writer owns (tenant isolation).
+    // Never leaks the other owner's identity or fields — see the error's
+    // own doc comment.
+    logWarn(logContext || "EntityOwnerConflictRejection", req, error.toErrorEnvelope());
+    return res
+      .status(error.statusCode)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
   if (error instanceof CursorError) {
     logWarn(logContext || "CursorRejection", req, error.toErrorEnvelope());
     return res
@@ -8010,7 +8020,8 @@ export async function storeStructuredForApi(params: {
     code:
       | "ERR_CANONICAL_NAME_UNRESOLVED"
       | "ERR_MERGE_REFUSED"
-      | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT";
+      | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
+      | "entity_owner_conflict";
     message: string;
     details: Record<string, unknown>;
     /**
@@ -8208,6 +8219,25 @@ export async function storeStructuredForApi(params: {
             ...(err.policy ? { policy: err.policy } : {}),
           },
           ...(hint ? { hint } : {}),
+        });
+      } else if (err instanceof EntityOwnerConflictError) {
+        // Tenant-isolation refusal: surfaced as a structured per-observation
+        // issue like its siblings above, never silently downgraded to a 500
+        // and never mixed into `resolved` as if the write had happened. This
+        // batch's aggregate wrapper (ERR_STORE_RESOLUTION_FAILED, below)
+        // answers with a flat 400 for every issue code including this one —
+        // consistent with every sibling resolution refusal on this endpoint.
+        // The single-target, non-batch entrance (`/correct`, via
+        // handleApiError) answers this same `entity_owner_conflict` code with
+        // a true top-level 409, matching the ruled REST contract there.
+        issues.push({
+          observation_index,
+          entity_type,
+          code: err.code,
+          message: err.message,
+          details: {
+            entity_id: err.entityId,
+          },
         });
       } else {
         throw err;
@@ -10011,6 +10041,12 @@ app.post("/entities/split", async (req, res) => {
     }
     if (error instanceof IdempotencyMismatchError) {
       return sendError(res, 400, "ERR_IDEMPOTENCY_MISMATCH", error.message);
+    }
+    if (error instanceof EntityOwnerConflictError) {
+      logWarn("EntityOwnerConflictRejection", req, error.toErrorEnvelope());
+      return res
+        .status(error.statusCode)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
     }
     logError("APIError:entities_split", req, error);
     const message = error instanceof Error ? error.message : "Failed to split entity";
