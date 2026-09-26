@@ -92,6 +92,113 @@ describe("MCP OAuth token endpoint", () => {
   // fresh token. These tests exercise the real HTTP route end to end and
   // must fail on origin/main (pre-fix) and pass on this branch.
 
+  it("completes the intentional OpenAI no-PKCE flow without a code_verifier", async () => {
+    currentTempDir = path.join(
+      process.cwd(),
+      "tmp",
+      `neotoma-oauth-token-endpoint-openai-${Date.now()}`
+    );
+    const { app } = await loadLocalModules(currentTempDir);
+    const { config } = await import(new URL("../../src/config.js", import.meta.url).href);
+    const previousRequireKeyForOauth = config.requireKeyForOauth;
+    config.requireKeyForOauth = false;
+
+    const server = app.listen(0);
+    try {
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("Expected HTTP server to bind to an ephemeral port");
+      }
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const redirectUri = "https://chatgpt.com/aip/g-test/oauth/callback";
+      const authorize = await fetch(
+        `${baseUrl}/mcp/oauth/authorize?${new URLSearchParams({
+          redirect_uri: redirectUri,
+          state: "openai-client-state",
+        })}`,
+        { redirect: "manual" }
+      );
+      expect(authorize.status).toBe(302);
+      const loginLocation = authorize.headers.get("location");
+      expect(loginLocation).toMatch(/^\/mcp\/oauth\/local-login\?state=/);
+
+      const login = await fetch(`${baseUrl}${loginLocation}`, { redirect: "manual" });
+      expect(login.status).toBe(302);
+      const callbackLocation = login.headers.get("location");
+      expect(callbackLocation).toBeTruthy();
+      const code = new URL(callbackLocation as string).searchParams.get("code");
+      expect(code).toBeTruthy();
+
+      const token = await fetch(`${baseUrl}/mcp/oauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: code as string,
+        }),
+      });
+      const tokenJson = await token.json();
+      expect(token.status).toBe(200);
+      expect(tokenJson.access_token).toMatch(/^local_access_/);
+
+      const replay = await fetch(`${baseUrl}/mcp/oauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: code as string,
+        }),
+      });
+      const replayJson = await replay.json();
+      expect(replay.status).toBe(400);
+      expect(replayJson.error).toBe("invalid_grant");
+    } finally {
+      config.requireKeyForOauth = previousRequireKeyForOauth;
+      await new Promise<void>((resolve, reject) => {
+        server.close((err?: Error) => (err ? reject(err) : resolve()));
+      });
+    }
+  });
+
+  it("does not grant no-PKCE provenance outside an exact OpenAI Custom GPT callback", async () => {
+    currentTempDir = path.join(
+      process.cwd(),
+      "tmp",
+      `neotoma-oauth-token-endpoint-openai-lookalike-${Date.now()}`
+    );
+    const { app } = await loadLocalModules(currentTempDir);
+    const { config } = await import(new URL("../../src/config.js", import.meta.url).href);
+    const previousRequireKeyForOauth = config.requireKeyForOauth;
+    config.requireKeyForOauth = false;
+
+    const server = app.listen(0);
+    try {
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("Expected HTTP server to bind to an ephemeral port");
+      }
+      for (const redirectUri of [
+        "https://example.com/callback/chatgpt.com",
+        "https://chatgpt.com/not-a-custom-gpt-callback",
+      ]) {
+        const response = await fetch(
+          `http://127.0.0.1:${address.port}/mcp/oauth/authorize?${new URLSearchParams({
+            redirect_uri: redirectUri,
+            state: "lookalike-client-state",
+          })}`,
+          { redirect: "manual" }
+        );
+        expect(response.status).toBe(400);
+        expect(await response.text()).toContain("code_challenge");
+      }
+    } finally {
+      config.requireKeyForOauth = previousRequireKeyForOauth;
+      await new Promise<void>((resolve, reject) => {
+        server.close((err?: Error) => (err ? reject(err) : resolve()));
+      });
+    }
+  });
+
   async function setUpAuthorizedConnection(app: any, oauth: any, userId: string) {
     const connectionId = `cursor-local-security-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const { codeVerifier, codeChallenge } = oauth.generatePKCE();
@@ -229,7 +336,7 @@ describe("MCP OAuth token endpoint", () => {
     const user = await localAuth.getLocalAuthUserByEmail("no-verifier@example.com");
     if (!user) throw new Error("Local auth user not found in test");
 
-    const { code } = await setUpAuthorizedConnection(app, oauth, user.id);
+    const { code, codeVerifier } = await setUpAuthorizedConnection(app, oauth, user.id);
 
     const { status, json } = await postToken(app, {
       grant_type: "authorization_code",
@@ -237,7 +344,15 @@ describe("MCP OAuth token endpoint", () => {
     });
 
     expect(status).toBe(400);
-    expect(json.error).toBe("invalid_request");
+    expect(json.error).toBe("invalid_grant");
+
+    const retry = await postToken(app, {
+      grant_type: "authorization_code",
+      code,
+      code_verifier: codeVerifier,
+    });
+    expect(retry.status).toBe(400);
+    expect(retry.json.error).toBe("invalid_grant");
   });
 
   it("issues a working token for the correct code + verifier pair, once", async () => {

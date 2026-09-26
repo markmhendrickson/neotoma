@@ -87,6 +87,14 @@ const ENCRYPTION_KEY =
   config.mcpTokenEncryptionKey;
 const isLocalBackend = config.storageBackend === "local";
 
+export const OAUTH_CODE_PROVENANCE = {
+  CLIENT_PKCE: "client_pkce",
+  OPENAI_CUSTOM_GPT_NO_PKCE: "openai_custom_gpt_no_pkce",
+} as const;
+
+export type OAuthCodeProvenance =
+  (typeof OAUTH_CODE_PROVENANCE)[keyof typeof OAUTH_CODE_PROVENANCE];
+
 interface LocalOAuthStateRow {
   id: string;
   state: string;
@@ -98,6 +106,7 @@ interface LocalOAuthStateRow {
   created_at: string;
   expires_at: string;
   final_redirect_uri: string | null;
+  authorization_code_provenance: OAuthCodeProvenance;
 }
 
 interface LocalConnectionRow {
@@ -135,7 +144,7 @@ async function getLocalOAuthState(state: string): Promise<LocalOAuthStateRow | n
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE state = ?"
+      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri, authorization_code_provenance FROM mcp_oauth_state WHERE state = ?"
     )
     .get(state);
   return row ? (row as LocalOAuthStateRow) : null;
@@ -147,7 +156,7 @@ async function getLocalOAuthStateForConnection(
   const db = await getDb();
   const row = await db
     .prepare(
-      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE connection_id = ?"
+      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri, authorization_code_provenance FROM mcp_oauth_state WHERE connection_id = ?"
     )
     .get(connectionId);
   return row ? (row as LocalOAuthStateRow) : null;
@@ -180,12 +189,13 @@ async function insertLocalOAuthState(payload: {
   clientState?: string | null;
   finalRedirectUri?: string | null;
   expiresAt: string;
+  authorizationCodeProvenance?: OAuthCodeProvenance;
 }): Promise<void> {
   const db = await getDb();
   const id = randomUUID();
   await db
     .prepare(
-      "INSERT INTO mcp_oauth_state (id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO mcp_oauth_state (id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri, authorization_code_provenance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       id,
@@ -197,7 +207,8 @@ async function insertLocalOAuthState(payload: {
       payload.clientState ?? null,
       nowIso(),
       payload.expiresAt,
-      payload.finalRedirectUri ?? null
+      payload.finalRedirectUri ?? null,
+      payload.authorizationCodeProvenance ?? OAUTH_CODE_PROVENANCE.CLIENT_PKCE
     );
 }
 
@@ -209,6 +220,7 @@ interface LocalOAuthCodeRow {
   client_id: string | null;
   created_at: string;
   expires_at: string;
+  authorization_code_provenance: OAuthCodeProvenance;
 }
 
 /** Authorization codes are short-lived: they exist only for the time between
@@ -228,6 +240,7 @@ async function insertLocalOAuthCode(payload: {
   connectionId: string;
   codeChallenge: string;
   clientId?: string | null;
+  authorizationCodeProvenance: OAuthCodeProvenance;
 }): Promise<string> {
   const db = await getDb();
   const id = randomUUID();
@@ -235,7 +248,7 @@ async function insertLocalOAuthCode(payload: {
   const expiresAt = new Date(Date.now() + CODE_TTL_MS).toISOString();
   await db
     .prepare(
-      "INSERT INTO mcp_oauth_codes (id, code, code_challenge, connection_id, client_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO mcp_oauth_codes (id, code, code_challenge, connection_id, client_id, created_at, expires_at, authorization_code_provenance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       id,
@@ -244,7 +257,8 @@ async function insertLocalOAuthCode(payload: {
       payload.connectionId,
       payload.clientId ?? null,
       nowIso(),
-      expiresAt
+      expiresAt,
+      payload.authorizationCodeProvenance
     );
   return code;
 }
@@ -256,7 +270,7 @@ async function getLocalOAuthCode(
   const db = conn ?? (await getDb());
   const row = await db
     .prepare(
-      "SELECT id, code, code_challenge, connection_id, client_id, created_at, expires_at FROM mcp_oauth_codes WHERE code = ?"
+      "SELECT id, code, code_challenge, connection_id, client_id, created_at, expires_at, authorization_code_provenance FROM mcp_oauth_codes WHERE code = ?"
     )
     .get(code);
   return row ? (row as LocalOAuthCodeRow) : null;
@@ -287,7 +301,7 @@ async function deleteLocalOAuthCode(code: string, conn?: DbConnection): Promise<
  * The deletion's affected-row count is the deciding single-use check, so
  * exactly one redemption attempt may acquire a code.
  */
-async function redeemLocalOAuthCode(code: string, codeVerifier: string): Promise<string> {
+async function redeemLocalOAuthCode(code: string, codeVerifier?: string): Promise<string> {
   const db = await getDb();
   const row = await db.transaction(async (tx) => {
     const row = await getLocalOAuthCode(code, tx);
@@ -309,12 +323,17 @@ async function redeemLocalOAuthCode(code: string, codeVerifier: string): Promise
   if (new Date(row.expires_at) < new Date()) {
     throw createOAuthError.tokenExchangeFailed("Authorization code has expired");
   }
-  if (!codeVerifier || typeof codeVerifier !== "string") {
+  if (
+    !codeVerifier &&
+    row.authorization_code_provenance !== OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE
+  ) {
     throw createOAuthError.tokenExchangeFailed("code_verifier is required");
   }
-  const computedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
-  if (computedChallenge !== row.code_challenge) {
-    throw createOAuthError.tokenExchangeFailed("code_verifier does not match code_challenge");
+  if (codeVerifier) {
+    const computedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+    if (computedChallenge !== row.code_challenge) {
+      throw createOAuthError.tokenExchangeFailed("code_verifier does not match code_challenge");
+    }
   }
   return row.connection_id;
 }
@@ -584,6 +603,22 @@ export function isRedirectUriAllowedForTunnel(redirectUri: string, selfHost?: st
       return true;
     }
     return false;
+  } catch {
+    return false;
+  }
+}
+
+/** True only for the hosted callback origins used by OpenAI Custom GPT actions. */
+export function isOpenAiCustomGptRedirectUri(redirectUri: string): boolean {
+  try {
+    const url = new URL(redirectUri);
+    const host = url.hostname.toLowerCase();
+    return (
+      url.protocol.toLowerCase() === "https:" &&
+      url.port === "" &&
+      (host === "chatgpt.com" || host === "chat.openai.com") &&
+      /^\/aip\/g-[^/]+\/oauth\/callback\/?$/.test(url.pathname)
+    );
   } catch {
     return false;
   }
@@ -1270,6 +1305,7 @@ export async function createLocalAuthorizationRequest(params: {
   codeChallenge: string;
   /** When provided (e.g. Custom GPT flow without client PKCE), use instead of generating. Must match codeChallenge. */
   codeVerifier?: string;
+  authorizationCodeProvenance?: OAuthCodeProvenance;
 }): Promise<{ authUrl: string; connectionId: string; state: string; expiresAt: string }> {
   if (!isLocalBackend) {
     throw createOAuthError.stateInvalid(
@@ -1293,6 +1329,8 @@ export async function createLocalAuthorizationRequest(params: {
     finalRedirectUri: params.redirectUri,
     clientState: params.clientState ?? null,
     expiresAt: expiresAt.toISOString(),
+    authorizationCodeProvenance:
+      params.authorizationCodeProvenance ?? OAUTH_CODE_PROVENANCE.CLIENT_PKCE,
   });
 
   const authUrl = await createAuthUrl(state, params.codeChallenge, params.redirectUri);
@@ -1368,6 +1406,10 @@ export async function completeLocalAuthorization(
   const code = await insertLocalOAuthCode({
     connectionId: stateData.connection_id,
     codeChallenge: stateData.code_challenge,
+    authorizationCodeProvenance:
+      stateData.authorization_code_provenance === OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE
+        ? OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE
+        : OAUTH_CODE_PROVENANCE.CLIENT_PKCE,
   });
 
   auditLog("oauth_callback_success", {
@@ -1897,15 +1939,18 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
  * Used by Cursor and other RFC 8414-compliant OAuth clients calling
  * /mcp/oauth/token with grant_type=authorization_code. `code` is the
  * single-use value minted by completeLocalAuthorization/handleOAuthCallback
- * — never the connection_id — and `codeVerifier` must hash (SHA-256,
- * base64url) to the code_challenge presented at /mcp/oauth/authorize. Both
- * checks and the code's deletion happen in redeemLocalOAuthCode/
+ * — never the connection_id. Except for a code minted through the explicit
+ * OpenAI Custom GPT no-PKCE authorization path, `codeVerifier` must hash
+ * (SHA-256, base64url) to the code_challenge presented at
+ * /mcp/oauth/authorize. Both checks and the code's deletion happen in
+ * redeemLocalOAuthCode/
  * handleOAuthCallback before any token is looked up, so a request that
  * reused a code or presented the wrong verifier never reaches a connection
  * row. Returns standard OAuth 2.0 token response format.
  *
  * @param code - Single-use authorization code from the authorize redirect
- * @param codeVerifier - PKCE verifier matching the code_challenge at /authorize
+ * @param codeVerifier - PKCE verifier matching the code_challenge at /authorize;
+ *   omitted only for a code carrying the OpenAI Custom GPT no-PKCE provenance
  * @returns OAuth token response with access_token, token_type, and expires_in
  * @throws {OAuthError} If the code is invalid, expired, already redeemed, or
  *   the verifier does not match
@@ -1952,7 +1997,7 @@ export async function getTokenResponseByConnectionId(
 
 export async function getTokenResponseForConnection(
   code: string,
-  codeVerifier: string
+  codeVerifier?: string
 ): Promise<OAuthTokenResponse> {
   if (!isLocalBackend) {
     // Dead today (storageBackend is hardcoded "local"), but kept fail-closed

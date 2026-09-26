@@ -3351,9 +3351,8 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       logger.warn("[MCP OAuth] Authorize rejected: missing state");
       return sendAuthorizeRefusal(res, 400, "state is required");
     }
-    const isOpenAiCustomGptRedirect =
-      redirect_uri &&
-      (redirect_uri.includes("chatgpt.com") || redirect_uri.includes("chat.openai.com"));
+    const { isOpenAiCustomGptRedirectUri } = await import("./services/mcp_oauth.js");
+    const isOpenAiCustomGptRedirect = isOpenAiCustomGptRedirectUri(redirect_uri);
     const hasPkce = code_challenge && code_challenge_method === "S256";
 
     if (!hasPkce && !isOpenAiCustomGptRedirect) {
@@ -3365,10 +3364,6 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         400,
         "code_challenge and code_challenge_method=S256 are required"
       );
-    }
-    if (!hasPkce && isOpenAiCustomGptRedirect) {
-      // Allow OAuth without client PKCE for OpenAI Custom GPT only (weaker security; see docs).
-      // Server generates PKCE for state storage; OpenAI does not send code_verifier at token exchange.
     }
     if (config.requireKeyForOauth && !hasValidOAuthKeySession(req)) {
       const nextPath = normalizeOauthNextPath(req.originalUrl);
@@ -3424,8 +3419,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
 
       const { randomUUID } = await import("node:crypto");
       const connectionId = randomUUID();
-      const { createLocalAuthorizationRequest, generatePKCE: generatePKCEFromService } =
-        await import("./services/mcp_oauth.js");
+      const {
+        createLocalAuthorizationRequest,
+        generatePKCE: generatePKCEFromService,
+        OAUTH_CODE_PROVENANCE,
+      } = await import("./services/mcp_oauth.js");
 
       const pkce = hasPkce
         ? undefined
@@ -3440,6 +3438,9 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         clientState: state,
         codeChallenge: pkce ? pkce.codeChallenge : (code_challenge as string),
         codeVerifier: pkce?.codeVerifier,
+        authorizationCodeProvenance: hasPkce
+          ? OAUTH_CODE_PROVENANCE.CLIENT_PKCE
+          : OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE,
       });
       // Keep local OAuth redirects on the current origin (tunnel or localhost) even if
       // authRequest.authUrl was built from a different absolute base URL.
@@ -3687,15 +3688,11 @@ app.post(
           .status(400)
           .json({ error: "invalid_request", error_description: "code is required" });
       }
-      if (!code_verifier || typeof code_verifier !== "string") {
-        logger.warn("[MCP OAuth] Token rejected: missing code_verifier");
-        return res
-          .status(400)
-          .json({ error: "invalid_request", error_description: "code_verifier is required" });
-      }
-
       const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
-      const token = await getTokenResponseForConnection(code, code_verifier);
+      const token = await getTokenResponseForConnection(
+        code,
+        typeof code_verifier === "string" && code_verifier.length > 0 ? code_verifier : undefined
+      );
       logger.info("[MCP OAuth] Token issued", {
         code_hint: code.slice(0, 8),
         has_refresh_token: Boolean((token as { refresh_token?: string }).refresh_token),
