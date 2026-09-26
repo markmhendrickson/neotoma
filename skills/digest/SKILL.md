@@ -1,8 +1,8 @@
 ---
-name: status
-description: "Mid-session status report. Summarizes what's been achieved so far this session and what work remains, then immediately acts: dispatches every remaining item the agent can move (as a Neotoma task an agent can claim, or done directly) and reports what was dispatched. Only a genuine operator decision or an operator-only action is put to the operator — decisions via AskUserQuestion with options and a recommendation, operator-only actions as a runnable command plus a verification check. Never a numbered menu asking \"all or some?\", never a task chip. Use `/status --report-only` for a read-out with no action. Succinct qualitative prose and bullets, light technical detail. Its only bookkeeping write is a session_digest entity recording what the session claims to have done; durable off-thread work is filed as Neotoma tasks, never chips. Invoke any time to take stock and clear movable work without closing the session."
+name: digest
+description: "Mid-session status report. Summarizes what's been achieved so far this session and what work remains, then immediately acts: dispatches every remaining item the agent can move (as a Neotoma task an agent can claim, or done directly) and reports what was dispatched. Only a genuine operator decision or an operator-only action is put to the operator — decisions via AskUserQuestion with options and a recommendation, operator-only actions as a runnable command plus a verification check. Never a numbered menu asking \"all or some?\", never a task chip. Use `/digest --report-only` for a read-out with no action. Succinct qualitative prose and bullets, light technical detail. Its only bookkeeping write is a session_digest entity recording what the session claims to have done; durable off-thread work is filed as Neotoma tasks, never chips. Invoke any time to take stock and clear movable work without closing the session."
 triggers:
-  - /status
+  - /digest
   - session status
   - where are we
   - what's done so far
@@ -11,33 +11,33 @@ user_invocable: true
 supported_harnesses:
   - claude-code
   - cursor
-slug: status
+slug: digest
 ---
 
-# status
+# digest
 
 ## Purpose
 
-Give the user a quick, readable read-out of the session so far: what's been accomplished and what's still outstanding — then take up, immediately, whatever remaining work this session itself can move. A stock-taking-and-dispatch skill, not a closing skill — the lightweight counterpart to `/end`. User-level (`~/.claude/skills/status/`), available in every repo.
+Give the user a quick, readable read-out of the session so far: what's been accomplished and what's still outstanding — then take up, immediately, whatever remaining work this session itself can move. A stock-taking-and-dispatch skill, not a closing skill — the lightweight counterpart to `/end`. User-level (`~/.claude/skills/digest/`), available in every repo.
 
-`/status` is also stage 1 of the session-task pipeline: the `session_digest` it emits (see "Session digest" below) is what `/review-sessions` sweeps and `/verify-work` verifies downstream.
+`/digest` is also stage 1 of the session-task pipeline: the `session_digest` it emits (see "Session digest" below) is what `/review-sessions` sweeps and `/verify-work` verifies downstream.
 
-**Operator ruling, 2026-09-26:** the standing rules that require proactive work ("Proceed with your recommendation — don't ask", "Dispatch, don't work inline", "Classify a blocker before surfacing it") apply to `/status`'s own recommendations exactly as they apply to the rest of a session. A report that lays out what should happen next and then stops to ask permission is the violation those rules name, not an exception to it. This skill's job is now: report accurately, act on everything the agent can move, and put only the genuinely operator-gated remainder to him — with a decision, not a menu.
+**Operator ruling, 2026-09-26:** the standing rules that require proactive work ("Proceed with your recommendation — don't ask", "Dispatch, don't work inline", "Classify a blocker before surfacing it") apply to `/digest`'s own recommendations exactly as they apply to the rest of a session. A report that lays out what should happen next and then stops to ask permission is the violation those rules name, not an exception to it. This skill's job is now: report accurately, act on everything the agent can move, and put only the genuinely operator-gated remainder to him — with a decision, not a menu.
 
 ## How it differs from /end
 
-`/status` is READ-ONLY for the report itself: composing it does NOT store domain entities, write memory, invoke store-neotoma, or render the 🧠 Neotoma turn report. (Read-only retrieval of an existing plan is allowed in project mode, but it never writes the plan.) Its bookkeeping write is the `session_digest` entity described below, which records what the session claims to have done. Beyond the report, `/status` DOES act: every recommendation the agent itself can move gets dispatched — as a Neotoma task an agent can claim, or handled directly in an agent-appropriate way — in the same turn, per "Act on it" below. `/end` remains the closing audit that reconciles and persists at session end; `/status` is for taking stock and clearing the movable backlog at any point mid-session. Use `--report-only` (see "Modes") when a read-out without action is actually what's wanted.
+`/digest` is READ-ONLY for the report itself: composing it does NOT store domain entities, write memory, invoke store-neotoma, or render the 🧠 Neotoma turn report. (Read-only retrieval of an existing plan is allowed in project mode, but it never writes the plan.) Its bookkeeping write is the `session_digest` entity described below, which records what the session claims to have done. Beyond the report, `/digest` DOES act: every recommendation the agent itself can move gets dispatched — as a Neotoma task an agent can claim, or handled directly in an agent-appropriate way — in the same turn, per "Act on it" below. `/end` remains the closing audit that reconciles and persists at session end; `/digest` is for taking stock and clearing the movable backlog at any point mid-session. Use `--report-only` (see "Modes") when a read-out without action is actually what's wanted.
 
 ## Whole-session coverage (read the transcript when context is partial)
 
-`/status` must report on the WHOLE session, not just the portion currently in context. Long sessions get compacted: the active context window may hold only a recent slice (e.g. a pre-compaction summary plus the last few turns), so reporting from context alone silently under-represents earlier work.
+`/digest` must report on the WHOLE session, not just the portion currently in context. Long sessions get compacted: the active context window may hold only a recent slice (e.g. a pre-compaction summary plus the last few turns), so reporting from context alone silently under-represents earlier work.
 
 Before composing the report, decide whether context is whole-session or partial. Treat it as PARTIAL whenever any of these hold: a compaction/summary boundary is present in context (a "This session is being continued…" summary block, or an injected session-summary), the session spans multiple days or many turns, or the user signals the read-out missed earlier work. When partial, reconstruct the full arc from the transcript BEFORE reporting:
 
 1. **Locate EVERY transcript in the lineage — not just the newest file.** A compacted or forked session spans several `.jsonl` files, often across MORE THAN ONE worktree directory, and the current file may hold a small fraction of the arc. Collect them all: start from the compaction summary's named path, add the `lineage_files` already recorded on this lineage's `session_digest` if one exists, and glob `~/.claude/projects/*/*.jsonl` for siblings. **Reading only the most recent file is the failure this step exists to prevent** — in a real run it covered 818 of 6,254 lines (13%) and silently dropped the session's own originating request from the report.
 2. Do NOT read the whole file into context — it can be multiple MB. Instead extract a skeleton with a small script **over every file in the lineage, concatenated**: pull genuine user messages (filter out tool_result payloads, `<system-reminder>`/`<command-*>`/`<local-command-*>` blocks, and "Continue from where you left off."), and optionally the assistant's short summary lines. Dedupe across files — forks repeat their shared prefix.
 3. **State the coverage in the report**: how many files, how many lines, how many distinct requests recovered. A reader cannot tell a whole-lineage read-out from a tail-only one unless you say so, and "I reconstructed the arc" is not checkable. If any lineage file is missing or unreadable, name it.
-4. Compose Achieved/Remaining from that whole-lineage skeleton, not just the in-context tail — and never from a PRIOR `/status`'s summary of the arc. A summary of a summary is how early work silently ages out of the report while looking covered.
+4. Compose Achieved/Remaining from that whole-lineage skeleton, not just the in-context tail — and never from a PRIOR `/digest`'s summary of the arc. A summary of a summary is how early work silently ages out of the report while looking covered.
 
 **Derive Remaining from the same skeleton, not from recent memory.** This is the step most easily skipped: reconstructing the arc for Achieved and then writing Remaining from whatever is still in working context. The result is an Achieved section that spans the session and a Remaining section biased to the last few turns. Walk the skeleton and account for EVERY request in it — each one either completed (→ Achieved), was explicitly dropped (→ one line), or is still outstanding (→ Remaining). An item you cannot confidently place is outstanding; say so rather than omitting it.
 
@@ -47,11 +47,11 @@ If the transcript can't be found or read, say so in one line and report from con
 
 ## Modes (compose)
 
-- `/status` — default: quick read-out (whole-session per above), then act on every movable recommendation per "Act on it" below.
-- `/status --report-only` (also `report-only`) — the report alone, with no dispatch. Use when the operator explicitly wants a read-out without triggering action — e.g. checking in without committing to move anything yet. States which items WOULD have been dispatched and why it held off, so nothing is silently lost by choosing this mode. This is the only mode that stops after reporting.
-- `/status verbose` (also `--full`, `full`, `detailed`) — longer read-out with more context per item. See Verbose variant. Composable with `--report-only`.
-- `/status project` (also `plan`) — fold in the active plan's remaining work (read-only). Also applied automatically when an active plan is obvious from context, unless the user passed `session` / `--session-only`.
-- Modifiers stack: `/status verbose project`, `/status --report-only project`.
+- `/digest` — default: quick read-out (whole-session per above), then act on every movable recommendation per "Act on it" below.
+- `/digest --report-only` (also `report-only`) — the report alone, with no dispatch. Use when the operator explicitly wants a read-out without triggering action — e.g. checking in without committing to move anything yet. States which items WOULD have been dispatched and why it held off, so nothing is silently lost by choosing this mode. This is the only mode that stops after reporting.
+- `/digest verbose` (also `--full`, `full`, `detailed`) — longer read-out with more context per item. See Verbose variant. Composable with `--report-only`.
+- `/digest project` (also `plan`) — fold in the active plan's remaining work (read-only). Also applied automatically when an active plan is obvious from context, unless the user passed `session` / `--session-only`.
+- Modifiers stack: `/digest verbose project`, `/digest --report-only project`.
 
 ## What to report
 
@@ -158,7 +158,7 @@ Never lay out a recommendation and then ask permission to execute it — that is
 
 ## Closing (required)
 
-End every `/status` run with:
+End every `/digest` run with:
 
 1. **What was dispatched or done directly** — one line per item: the task entity id (and which agent/plan it went to) for anything filed, or a one-line note for anything done in-session. This is a statement of fact, not a request for authorization.
 2. **The operator-gated remainder**, if any — posed via `AskUserQuestion` (decisions) or as runnable command blocks with a verification check (operator-only actions), per "Operator-gated items" above. If none, say so in one line.
@@ -171,7 +171,7 @@ Under `--report-only`, stop after the report and the "what would be dispatched" 
 
 ## Session digest (the one bookkeeping write)
 
-After composing the prose report, store or update exactly ONE `session_digest` entity on the personal Neotoma instance via `mcp__mcpsrv_neotoma__store`. This is bookkeeping about the session itself — never domain data — and it is the skill's one dedicated bookkeeping write (dispatched tasks and their `PART_OF` links, filed per "Act on it" above, are the skill's domain-facing writes; both coexist now that `/status` is no longer purely read-only). It derives from the SAME whole-session skeleton the prose report uses, never from the in-context tail alone: a digest built from the tail silently drops early-session claims, which is exactly what the downstream sweep exists to catch.
+After composing the prose report, store or update exactly ONE `session_digest` entity on the personal Neotoma instance via `mcp__mcpsrv_neotoma__store`. This is bookkeeping about the session itself — never domain data — and it is the skill's one dedicated bookkeeping write (dispatched tasks and their `PART_OF` links, filed per "Act on it" above, are the skill's domain-facing writes; both coexist now that `/digest` is no longer purely read-only). It derives from the SAME whole-session skeleton the prose report uses, never from the in-context tail alone: a digest built from the tail silently drops early-session claims, which is exactly what the downstream sweep exists to catch.
 
 Schema v1.1.0 (registered; canonical_name derives from `session_key`):
 
@@ -186,7 +186,7 @@ Schema v1.1.0 (registered; canonical_name derives from `session_key`):
 - `topics`: workstream labels. `summary`: 3–6 factual sentences. Summarize, never transcribe sensitive content — the digest outlives the session.
 - `tasks_claimed`: array of `{claim, status_claimed, evidence_pointers, verification_state, verification_note, verified_at, mutability}`. `status_claimed` is one of `outstanding | complete | blocked | dropped`.
 
-  **`/status` VERIFIES its own factual claims before writing — see "Verify before you write" below.** This reverses the skill's earlier rule that `/status` may only write `intent`. Verifying at session end is strictly better than verifying at sweep time: the tool results are still in context, the session knows which PR it actually opened and which draft it actually sent, and it does not have to reconstruct any of that forensically days later. In one real sweep, forensic reconstruction produced a 51% no-locator rate and misdiagnosed the same file in two separate sessions.
+  **`/digest` VERIFIES its own factual claims before writing — see "Verify before you write" below.** This reverses the skill's earlier rule that `/digest` may only write `intent`. Verifying at session end is strictly better than verifying at sweep time: the tool results are still in context, the session knows which PR it actually opened and which draft it actually sent, and it does not have to reconstruct any of that forensically days later. In one real sweep, forensic reconstruction produced a 51% no-locator rate and misdiagnosed the same file in two separate sessions.
 
   ### Verify before you write
 
@@ -250,7 +250,7 @@ Schema v1.1.0 (registered; canonical_name derives from `session_key`):
 - `tooling_gaps`: array of `{capability, workspace_or_account, what_was_configured, operator_action_required, claims_blocked, checkpoint_id}`. One entry per capability, never per claim. `checkpoint_id` is the Ateles checkpoint if one was raised; omit it when the gap was recorded but judged too thin to escalate. Declared at schema v1.4.0.
 - `decisions`, `open_questions`: arrays.
 
-Idempotency key: `session-digest-<root-session-id>` — STABLE across re-runs, so a second `/status` in the same session lineage updates the digest rather than duplicating it. Never salt it with a timestamp or turn count.
+Idempotency key: `session-digest-<root-session-id>` — STABLE across re-runs, so a second `/digest` in the same session lineage updates the digest rather than duplicating it. Never salt it with a timestamp or turn count.
 
 If the Neotoma MCP is unavailable, say so in one line and still deliver the prose report — the digest write is best-effort bookkeeping, never a blocker.
 
@@ -270,13 +270,13 @@ When the session is tied to a tracked plan, cross-reference it so Remaining refl
 
 ## Verbose variant
 
-`/status verbose` is a fuller read-out, same structure and same outcomes-first discipline (and the same act-then-report behavior unless combined with `--report-only`). Each Achieved bullet may carry a second clause of context (why it mattered / what it unblocks) and an inline anchor; Remaining items may note the dependency or reason they're open; add a brief 'Decisions made this session' sub-section (one line each) when the session settled anything worth recording. Still no raw logs, diffs, or tool-by-tool narration — verbose means more context, not more mechanics. Target a couple-minute read, not an audit.
+`/digest verbose` is a fuller read-out, same structure and same outcomes-first discipline (and the same act-then-report behavior unless combined with `--report-only`). Each Achieved bullet may carry a second clause of context (why it mattered / what it unblocks) and an inline anchor; Remaining items may note the dependency or reason they're open; add a brief 'Decisions made this session' sub-section (one line each) when the session settled anything worth recording. Still no raw logs, diffs, or tool-by-tool narration — verbose means more context, not more mechanics. Target a couple-minute read, not an audit.
 
 ## Constraints
 
-- MUST report on the whole LINEAGE, every run — every `.jsonl` in the chain, across every worktree it touched, not the newest file and not a prior `/status`'s summary of the arc. Reconstruct from the transcripts whenever context is partial (compaction boundary, multi-day or many-turn session, or the user flags missed work), and state the coverage achieved (files, lines, distinct requests) in the report. Never present a tail-only read-out as complete. If a lineage file is unreadable, name it and caveat explicitly.
+- MUST report on the whole LINEAGE, every run — every `.jsonl` in the chain, across every worktree it touched, not the newest file and not a prior `/digest`'s summary of the arc. Reconstruct from the transcripts whenever context is partial (compaction boundary, multi-day or many-turn session, or the user flags missed work), and state the coverage achieved (files, lines, distinct requests) in the report. Never present a tail-only read-out as complete. If a lineage file is unreadable, name it and caveat explicitly.
 - The report itself MUST stay read-only for domain data: no domain-entity stores, no memory writes, no store-neotoma, no 🧠 Neotoma turn report, while composing Achieved/Remaining/Recommendations. Project-aware mode may read a plan but MUST NOT write it (that's /update-plan). Reading the transcript JSONL is a read and is allowed. Read-only calls to third-party systems of record for verification are reads and are allowed.
-- Beyond the report, `/status` MUST act on every agent-movable recommendation in the same turn, per "Act on it": do directly what is on-thread or depends on live session state; file a Neotoma `task` entity `PART_OF` the relevant plan and dispatch it for anything off-thread and self-containable. MUST NOT present an agent-movable item to the operator as something awaiting his authorization.
+- Beyond the report, `/digest` MUST act on every agent-movable recommendation in the same turn, per "Act on it": do directly what is on-thread or depends on live session state; file a Neotoma `task` entity `PART_OF` the relevant plan and dispatch it for anything off-thread and self-containable. MUST NOT present an agent-movable item to the operator as something awaiting his authorization.
 - MUST NOT use `mcp__ccd_session__spawn_task` (a harness task chip) for durable off-thread work. A chip is unclaimable by the swarm and invisible to other sessions. `spawn_task` remains available only for an out-of-scope observation noticed in passing that does not belong to this skill's own remaining-work recommendations.
 - MUST classify every recommendation AGENT-MOVABLE or OPERATOR-GATED. OPERATOR-GATED is limited to: a decision turning on the operator's values/strategy/appetite/product direction, a sign-off a governing rule separately requires, or an operator-only action bound by the consent-gate rules. MUST NOT default an item to operator-gated because it is merely effortful or ambiguous — classify the blocker (verified/specced deliverable → agent-movable; genuine unruled judgement → operator-gated) before surfacing it.
 - MUST pose every genuine decision via `AskUserQuestion` (agent_policy `ent_985436c69e2170aeba3287de`): labeled options, each with what it implies, what is already settled, and a recommendation plus what happens on no reply. MUST NOT render a decision as a numbered list asking "all or some?". If `AskUserQuestion` is unavailable, MUST print `[decisions-unposed]` with full contextual text, not a numbered list.
@@ -287,7 +287,7 @@ When the session is tied to a tracked plan, cross-reference it so Remaining refl
 - MUST close the prose report with the verification scorecard (`N claims · N confirmed · N refuted · N unverifiable (M blocked on tooling)`).
 - MUST keep technical detail light — navigation anchors only, never logs or diffs — in both default and verbose modes.
 - MUST separate genuinely-completed work from outstanding/in-progress work; do not report attempts as achievements.
-- Default /status MUST stay succinct; resist turning into a full audit (that's /end). verbose adds context, never mechanics.
+- Default /digest MUST stay succinct; resist turning into a full audit (that's /end). verbose adds context, never mechanics.
 - Project-aware mode MUST summarize the plan's open items, not dump the full todo array, and MUST NOT write the plan itself.
 - MUST always include a Remaining section when anything is outstanding, and a Recommendations section proposing how to move each movable item. Reporting only wins misrepresents the session.
 - MUST derive Remaining from the same whole-session skeleton used for Achieved, accounting for every request in the arc as completed / dropped / outstanding. Writing Achieved from the transcript and Remaining from working memory produces a recency-biased report and is the failure this rule exists to prevent.

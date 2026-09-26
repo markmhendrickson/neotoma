@@ -37,7 +37,7 @@ Applies once per session, at user request. Does not modify code. Files Neotoma e
 
 ## Phase 0: Whole-session coverage (read the transcript when context is partial)
 
-`/end` must audit the **whole session**, not just the portion currently in context. This matters more here than for `/status`: a partial scan silently *fails to file* trackable work and *misses storage gaps* from the earlier session, defeating the skill's purpose.
+`/end` must audit the **whole session**, not just the portion currently in context. This matters more here than for `/digest`: a partial scan silently *fails to file* trackable work and *misses storage gaps* from the earlier session, defeating the skill's purpose.
 
 Before Phase 1, decide whether context is whole-session or partial. Treat it as **partial** whenever any of these hold:
 
