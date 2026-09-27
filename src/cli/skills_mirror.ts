@@ -12,16 +12,27 @@
  *
  * Reconciliation strategy (per harness target directory):
  *   1. Whole-directory symlink (target `skills/` → source `skills/`) when the
- *      target is absent or already our symlink. New, removed, and renamed
- *      skills propagate instantly with zero per-skill drift.
+ *      target is absent or already our symlink, and the source has no
+ *      deprecated skills to withhold. New, removed, and renamed skills
+ *      propagate instantly with zero per-skill drift.
  *   2. Per-skill symlink fallback when the target directory already exists with
- *      foreign content (e.g. a harness wrote its own skills there). We never
- *      clobber non-Neotoma content — each published skill is linked in
+ *      foreign content (e.g. a harness wrote its own skills there), or when
+ *      the source contains one or more deprecated skills (see below). We
+ *      never clobber non-Neotoma content — each published skill is linked in
  *      individually and foreign entries are left untouched.
  *
  * "New harness gets skills automatically" is keyed on the harness *base*
  * directory (`~/.cursor`, `~/.codex`, …), not the skills subdirectory: if the
  * base exists, we create and populate `skills/` even when it was never set up.
+ *
+ * Deprecated skills: a skill whose `SKILL.md` frontmatter declares
+ * `deprecated: true` is a retired primitive wrapper kept on disk only for
+ * link/URL compatibility (existing symlinks, SkillHub listings, GitHub blob
+ * links). It is excluded from `listSkillNames`'s default (installable) view,
+ * and its presence in the source forces per-skill mode so the exclusion is
+ * enforceable — a whole-dir symlink cannot omit one subdirectory. Fresh
+ * installs and `available_skills` therefore never advertise it, while the
+ * file (and any pre-existing symlink to it) keeps resolving.
  */
 
 import {
@@ -38,6 +49,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { ToolId } from "./doctor.js";
+import { filterInstallableSkillNames, isDeprecatedSkillDir } from "../shared/skill_deprecation.js";
 
 /**
  * Harnesses that own a skills directory, mapped to:
@@ -101,8 +113,10 @@ export function getPublishedSkillsSource(): string {
 }
 
 /**
- * List skill subdirectory names in the source, sorted for deterministic
- * output across filesystems, or [] when unreadable.
+ * List all skill subdirectory names in the source, sorted for deterministic
+ * output across filesystems, or [] when unreadable. Includes deprecated
+ * skills — callers that install or advertise skills should use
+ * `listInstallableSkillNames` instead.
  *
  * Exported so the instance-skills reconciler (#1950) can compute package-name
  * collisions ("package skills win") without re-implementing directory listing.
@@ -116,6 +130,22 @@ export function listSkillNames(sourceDir: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * List skill subdirectory names that should be installed/advertised: every
+ * entry from `listSkillNames` except those whose `SKILL.md` declares
+ * `deprecated: true`. This is the set fresh installs and `available_skills`
+ * should see; `listSkillNames` remains the full-directory view for callers
+ * (collision checks, pruning) that need to know about deprecated entries too.
+ */
+export function listInstallableSkillNames(sourceDir: string): string[] {
+  return filterInstallableSkillNames(sourceDir, listSkillNames(sourceDir));
+}
+
+/** True when any skill in `sourceDir` is deprecated. */
+function hasDeprecatedSkills(sourceDir: string): boolean {
+  return listSkillNames(sourceDir).some((name) => isDeprecatedSkillDir(join(sourceDir, name)));
 }
 
 /** True when `p` is a symlink resolving to `expectedTarget`. */
@@ -328,8 +358,8 @@ export function mirrorToHarness(
     };
   }
 
-  const skillNames = listSkillNames(sourceDir);
-  if (skillNames.length === 0) {
+  const allSkillNames = listSkillNames(sourceDir);
+  if (allSkillNames.length === 0) {
     return {
       tool,
       target: targetDir,
@@ -342,15 +372,23 @@ export function mirrorToHarness(
     };
   }
 
+  // Deprecated skills must never reach a fresh install: a whole-dir symlink
+  // cannot omit one subdirectory, so their presence in the source forces
+  // per-skill mode, where `installableSkillNames` leaves them unlinked.
+  const sourceHasDeprecated = hasDeprecatedSkills(sourceDir);
+  const installableSkillNames = sourceHasDeprecated
+    ? listInstallableSkillNames(sourceDir)
+    : allSkillNames;
+
   // An existing whole-dir symlink to our source is definitively ours — checking
   // its contents through the link would misread the source skills as foreign.
   const alreadyWholeDir = isSymlinkTo(targetDir, sourceDir);
   const foreign =
     !alreadyWholeDir &&
     existsSync(targetDir) &&
-    hasForeignContent(targetDir, sourceDir, new Set(skillNames));
+    hasForeignContent(targetDir, sourceDir, new Set(allSkillNames));
 
-  if (!foreign) {
+  if (!sourceHasDeprecated && !foreign) {
     const whole = mirrorWholeDir(targetDir, sourceDir);
     if (!whole.bailToPerSkill) {
       if (whole.converted) {
@@ -370,7 +408,7 @@ export function mirrorToHarness(
     // Unexpected non-symlink entry encountered: preserve it via per-skill mode.
   }
 
-  const { changed, linked, errors } = mirrorPerSkill(targetDir, sourceDir, skillNames);
+  const { changed, linked, errors } = mirrorPerSkill(targetDir, sourceDir, installableSkillNames);
   return {
     tool,
     target: targetDir,

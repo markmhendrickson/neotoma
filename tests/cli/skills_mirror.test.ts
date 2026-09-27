@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  listInstallableSkillNames,
   mirrorToHarness,
   mirrorSkillsToAllHarnesses,
   SKILL_HARNESSES,
@@ -181,6 +182,55 @@ describe("mirrorSkillsToAllHarnesses", () => {
     });
     expect(logs.some((l) => /Converted .* whole-dir symlink/.test(l))).toBe(true);
     expect(fs.lstatSync(path.join(root, ".claude", "skills")).isSymbolicLink()).toBe(true);
+  });
+});
+
+describe("deprecated skills", () => {
+  function writeDeprecatedSkill(name: string): void {
+    fs.mkdirSync(path.join(sourceDir, name), { recursive: true });
+    fs.writeFileSync(
+      path.join(sourceDir, name, "SKILL.md"),
+      `---\nname: ${name}\ndeprecated: true\n---\n`
+    );
+  }
+
+  it("listInstallableSkillNames excludes deprecated skills but listSkillNames keeps them", () => {
+    writeDeprecatedSkill("retired-skill");
+    expect(listInstallableSkillNames(sourceDir)).not.toContain("retired-skill");
+    expect(listInstallableSkillNames(sourceDir)).toEqual(
+      expect.arrayContaining(["end", "status", "query-memory"])
+    );
+  });
+
+  it("forces per-skill mode (never a whole-dir symlink) when the source has a deprecated skill", () => {
+    writeDeprecatedSkill("retired-skill");
+    fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+    const r = mirrorToHarness("claude-code", { cwd: root, scope: "project", sourceDir });
+    expect(r.mode).toBe("per-skill-symlink");
+    const skillsDir = path.join(root, ".claude", "skills");
+    expect(fs.lstatSync(skillsDir).isSymbolicLink()).toBe(false);
+    // Deprecated skill is not linked into a fresh install...
+    expect(fs.existsSync(path.join(skillsDir, "retired-skill"))).toBe(false);
+    // ...but active skills still are.
+    expect(fs.lstatSync(path.join(skillsDir, "end")).isSymbolicLink()).toBe(true);
+  });
+
+  it("does not unlink a deprecated skill an existing install had already linked", () => {
+    // First sync happens before the skill is marked deprecated.
+    fs.mkdirSync(path.join(root, ".codex"), { recursive: true });
+    makeSource(["to-be-retired"]);
+    mirrorToHarness("codex", { cwd: root, scope: "project", sourceDir });
+    const linkPath = path.join(root, ".codex", "skills", "to-be-retired");
+    expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
+
+    // Now mark it deprecated and re-sync: pruning only removes links whose
+    // source skill was removed entirely, not ones that became deprecated.
+    fs.writeFileSync(
+      path.join(sourceDir, "to-be-retired", "SKILL.md"),
+      "---\nname: to-be-retired\ndeprecated: true\n---\n"
+    );
+    mirrorToHarness("codex", { cwd: root, scope: "project", sourceDir });
+    expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
   });
 });
 

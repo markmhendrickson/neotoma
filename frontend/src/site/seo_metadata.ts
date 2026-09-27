@@ -1793,28 +1793,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Remember Codebase", path: "/skills/remember-codebase" },
     ],
   },
-  "/skills/store-data": {
-    title: "Store Data Skill | Neotoma",
-    description: "Structured store workflow for agent-created data.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Skills", path: "/skills" },
-      { name: "Store Data", path: "/skills/store-data" },
-    ],
-  },
-  "/skills/query-memory": {
-    title: "Query Memory Skill | Neotoma",
-    description: "Retrieval and provenance workflow for Neotoma memory.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Skills", path: "/skills" },
-      { name: "Query Memory", path: "/skills/query-memory" },
-    ],
-  },
   "/use-cases": {
     title: "Use Cases | State Integrity for AI-Driven Workflows | Neotoma",
     description:

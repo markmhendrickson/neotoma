@@ -18,7 +18,7 @@ entity_id: ent_af748d985b7bfa4f636eea70
 
 ## Purpose
 
-Run a session-close audit so nothing intended for follow-up or for Neotoma storage falls through the cracks. Distinct from `store-data` (single per-record persistence) and `store-neotoma` (full chat-transcript persistence): `/end` is the meta-step that decides which of those to invoke, files trackable work as task entities, and verifies storage.
+Run a session-close audit so nothing intended for follow-up or for Neotoma storage falls through the cracks. Distinct from the primitive `store` MCP tool call (single per-record persistence) and `store-neotoma` (full chat-transcript persistence): `/end` is the meta-step that decides which of those to invoke, files trackable work as task entities, and verifies storage.
 
 This skill is **user-level** (`~/.claude/skills/end/`), so it is available in every repo automatically.
 
@@ -115,7 +115,7 @@ Both `/end` and `store-neotoma` MUST emit a **succinct affected-records list** i
 
 ## Relationship to other skills
 
-- **`store-data`** — per-entity/per-file store primitive. `/end` calls the underlying `store` MCP tool for each gap in Phase 2.
+- **`store` (MCP tool)** — per-entity/per-file store primitive. `/end` calls it directly for each gap in Phase 2.
 - **`store-neotoma`** — full chat-transcript persistence. `/end` delegates to it when the conversation is not yet fully persisted, and (per user preference) invokes it **without a confirmation gate**, expecting it to emit the succinct affected-records list above.
 - **`update-tasks`** — field/priority guidance for the task entities `/end` files in Phase 3.1.
 

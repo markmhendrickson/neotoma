@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -46,9 +46,24 @@ describe("MCP initialize — skills discovery", () => {
     const names = readdirSync(skillsDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
-    const required = ["store-data", "query-memory", "ensure-neotoma"];
+    const required = ["ensure-neotoma", "recover-sqlite-database"];
     for (const skill of required) {
       expect(names, `Expected skill "${skill}" to be present`).toContain(skill);
+    }
+  });
+
+  it("retired primitive-wrapper skills stay on disk but are marked deprecated", () => {
+    const root = resolveNeotomaPackageRoot();
+    const skillsDir = join(root, "skills");
+    for (const skill of ["store-data", "query-memory"]) {
+      const skillMdPath = join(skillsDir, skill, "SKILL.md");
+      expect(existsSync(skillMdPath), `Expected retired skill "${skill}" to still be on disk`).toBe(
+        true
+      );
+      const raw = readFileSync(skillMdPath, "utf-8");
+      expect(raw, `Expected "${skill}" SKILL.md to declare deprecated: true`).toMatch(
+        /^deprecated:\s*true\s*$/m
+      );
     }
   });
 });

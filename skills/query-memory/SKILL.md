@@ -1,6 +1,7 @@
 ---
 name: query-memory
 description: Search and retrieve entities, relationships, and timeline events from Neotoma memory.
+deprecated: true
 triggers:
   - what do you know about
   - recall
@@ -10,7 +11,17 @@ triggers:
   - timeline
 ---
 
-# Query Neotoma Memory
+# Query Neotoma Memory (deprecated)
+
+Retired: this skill duplicated primitive Neotoma MCP retrieval behavior and
+had drifted from the live MCP contract (e.g. its own response-format rule
+below overrode the MCP's current display contract). Retrieval guidance for a
+connected MCP session now lives entirely in the live MCP tool instructions
+returned at session start — no skill needs to be loaded for it.
+
+This file is kept on disk only so existing links (symlinks, SkillHub
+listings, GitHub blob links) keep resolving. It is excluded from fresh
+installs and from `available_skills`.
 
 ## When to use
 

@@ -24,6 +24,7 @@ import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
+import { filterInstallableSkillNames } from "./shared/skill_deprecation.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   MCP_META_SERVER_INFO,
@@ -399,6 +400,11 @@ export class NeotomaServer {
    * This is only one of two skill sources. Graph-stored `skill` entities are
    * read separately by `getInstanceSkills()` and unioned with this list in
    * {@link buildAuthenticatedInitializeResponse} (issue #2046).
+   *
+   * Excludes skills whose `SKILL.md` frontmatter declares `deprecated: true`
+   * (retired primitive wrappers kept on disk only for link compatibility —
+   * see `src/shared/skill_deprecation.ts`) so a session is never told to
+   * invoke a skill this instance no longer installs by default.
    */
   private getAvailableSkills(): string[] {
     const roots = [config.projectRoot, resolveNeotomaPackageRoot()];
@@ -411,10 +417,10 @@ export class NeotomaServer {
       if (!existsSync(skillsDir)) continue;
       try {
         const entries = readdirSync(skillsDir, { withFileTypes: true });
-        const names = entries
-          .filter((d) => d.isDirectory())
-          .map((d) => d.name)
-          .sort();
+        const names = filterInstallableSkillNames(
+          skillsDir,
+          entries.filter((d) => d.isDirectory()).map((d) => d.name)
+        ).sort();
         if (names.length > 0) return names;
       } catch {
         // Unreadable; try next root
