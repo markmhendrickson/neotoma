@@ -74,7 +74,7 @@ async function guestTokenFor(userId: string, entityIds: string[]): Promise<strin
 async function subscribe(
   baseUrl: string,
   token: string,
-  subscriptionBody: Record<string, unknown>,
+  subscriptionBody: Record<string, unknown>
 ): Promise<SubscribeResponse> {
   const response = await fetch(`${baseUrl}/subscribe`, {
     method: "POST",
@@ -97,7 +97,7 @@ function streamUrl(baseUrl: string, subscriptionId: string): string {
 async function readSseEvent(
   response: Response,
   predicate: (event: SubstrateEvent) => boolean,
-  timeoutMs = 5_000,
+  timeoutMs = 5_000
 ): Promise<SubstrateEvent> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("SSE response did not expose a readable body");
@@ -110,7 +110,10 @@ async function readSseEvent(
     const read = await Promise.race([
       reader.read(),
       new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) =>
-        setTimeout(() => reject(new Error("SSE read timeout")), Math.min(250, deadline - Date.now())),
+        setTimeout(
+          () => reject(new Error("SSE read timeout")),
+          Math.min(250, deadline - Date.now())
+        )
       ),
     ]).catch(() => null);
     if (!read) continue;
@@ -133,7 +136,7 @@ async function readSseEvent(
 async function expectSseClosedWithoutEvent(
   response: Response,
   eventId: string,
-  timeoutMs = 1_000,
+  timeoutMs = 1_000
 ): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("SSE response did not expose a readable body");
@@ -281,7 +284,7 @@ describe("GET /events/stream", () => {
               (event) =>
                 event.entity_id === issueEntityId &&
                 event.entity_type === "issue" &&
-                event.event_type === "entity.updated",
+                event.event_type === "entity.updated"
             )
           ) {
             await new Promise((resolve) => setTimeout(resolve, 25));
@@ -291,7 +294,7 @@ describe("GET /events/stream", () => {
             (event) =>
               event.entity_id === issueEntityId &&
               event.entity_type === "issue" &&
-              event.event_type === "entity.updated",
+              event.event_type === "entity.updated"
           );
 
           expect(received).toMatchObject({
@@ -346,7 +349,7 @@ describe("GET /events/stream", () => {
       await handleSubstrateEventForSubscriptions(issueEvent);
       const received = await readSseEvent(
         response,
-        (event) => event.event_id === issueEvent.event_id,
+        (event) => event.event_id === issueEvent.event_id
       );
 
       expect(received).toMatchObject({

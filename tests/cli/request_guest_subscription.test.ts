@@ -76,7 +76,7 @@ describe("request --operation guest subscription parity", () => {
             controller.close();
           },
         }),
-        { status: 200, headers: { "content-type": "text/event-stream" } },
+        { status: 200, headers: { "content-type": "text/event-stream" } }
       );
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -102,5 +102,37 @@ describe("request --operation guest subscription parity", () => {
     ]);
 
     expect(stdout.join("")).toContain("event: ping");
+  });
+
+  it("preserves the structured guest denial returned by the API", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error_code: "FORBIDDEN",
+            message: "guest subscriptions require entity_ids within the token grant",
+          }),
+          { status: 403, headers: { "content-type": "application/json" } }
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { runCli } = await loadCli();
+    await expect(
+      runCli([
+        "node",
+        "neotoma",
+        "--base-url",
+        "http://127.0.0.1:39999",
+        "request",
+        "--operation",
+        "subscribe",
+        "--guest-access-token",
+        "guest-token",
+        "--body",
+        JSON.stringify({ entity_ids: [], delivery_method: "sse" }),
+      ])
+    ).rejects.toThrow(/FORBIDDEN.*token grant/);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

@@ -12689,6 +12689,19 @@ app.get("/events/stream", async (req, res) => {
       );
     }
 
+    const guestAccessToken = principal.kind === "guest" ? principal.guestId.accessToken : undefined;
+    const authorize = guestAccessToken
+      ? async (): Promise<boolean> => {
+          const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
+          const grant = await validateGuestAccessToken(guestAccessToken);
+          return (
+            grant !== null &&
+            grant.entity_ids.length > 0 &&
+            subscriptionWithinGuestScope(grant.entity_ids, sub.watch_entity_ids)
+          );
+        }
+      : undefined;
+
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
@@ -12770,16 +12783,26 @@ app.get("/events/stream", async (req, res) => {
       subscription: sub,
       res,
       lastEventId: lastEventId ?? undefined,
+      ...(authorize ? { authorize } : {}),
     };
     const unregister = registerSseClient(client);
 
     const heartbeat = setInterval(() => {
-      try {
-        res.write(`event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
-      } catch {
-        clearInterval(heartbeat);
-        unregister();
-      }
+      void (async () => {
+        try {
+          if (authorize && !(await authorize())) {
+            clearInterval(heartbeat);
+            unregister();
+            res.end();
+            return;
+          }
+          res.write(`event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
+        } catch {
+          clearInterval(heartbeat);
+          unregister();
+          res.end();
+        }
+      })();
     }, 25_000);
 
     req.on("close", () => {

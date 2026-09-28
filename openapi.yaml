@@ -8050,6 +8050,12 @@ paths:
   /subscribe:
     post:
       summary: Create a substrate event subscription (webhook or SSE)
+      description: |
+        Authenticated owners may subscribe to filters within their own graph.
+        Entity-scoped guests must authenticate with their guest bearer token,
+        provide a non-empty `entity_ids` filter, and keep every requested entity
+        inside that token's current grant. Empty, mixed, or out-of-grant guest
+        filters are rejected without creating a subscription.
       operationId: subscribe
       requestBody:
         required: true
@@ -8105,10 +8111,26 @@ paths:
                     type: string
                   webhook_secret:
                     type: string
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Guest entity filter is empty or extends outside the token grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /unsubscribe:
     post:
       summary: Deactivate a subscription
+      description: |
+        Owners may deactivate their own subscriptions. Guests may deactivate only
+        subscriptions whose complete `watch_entity_ids` set remains inside the
+        guest token's current entity grant; denial leaves the subscription active.
       operationId: unsubscribe
       requestBody:
         required: true
@@ -8130,10 +8152,26 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Subscription is not wholly inside the guest entity grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /list_subscriptions:
     post:
       summary: List active subscriptions for the current user
+      description: |
+        Owners receive their active subscriptions. Guests receive only subscriptions
+        whose complete `watch_entity_ids` set is inside the token's current entity
+        grant; subscriptions outside or spanning the grant are omitted.
       operationId: listSubscriptions
       requestBody:
         required: false
@@ -8150,10 +8188,20 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /get_subscription_status:
     post:
       summary: Get subscription delivery status
+      description: |
+        Owners may inspect their subscriptions. A guest receives the status only
+        when the subscription's complete `watch_entity_ids` set is inside its
+        current grant; an inaccessible subscription is returned as `null`.
       operationId: getSubscriptionStatus
       requestBody:
         required: true
@@ -8175,10 +8223,22 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /events/stream:
     get:
       summary: Server-sent events stream for a subscription
+      description: |
+        Opens the SSE stream for an active SSE subscription. Owners retain their
+        normal authenticated access. Guests may connect only when the subscription's
+        complete entity filter is inside the token grant. Guest credentials are
+        revalidated while the connection is established: expiry, revocation, or
+        grant narrowing closes the stream before another event is delivered.
       operationId: eventsStream
       parameters:
         - in: query
@@ -8189,6 +8249,22 @@ paths:
       responses:
         "200":
           description: text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Subscription does not exist or is outside the guest entity grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /peers:
     get:

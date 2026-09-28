@@ -82,12 +82,12 @@ function client(sub: SubscriptionRecord, res: ReturnType<typeof fakeRes>): SseCl
 }
 
 describe("broadcastSubstrateEventToSse dead-client eviction", () => {
-  it("delivers to a live client and leaves it registered", () => {
+  it("delivers to a live client and leaves it registered", async () => {
     const res = fakeRes();
     const unregister = registerSseClient(client(issueSub("live-1"), res));
     try {
-      broadcastSubstrateEventToSse(issueEvent(), "1");
-      broadcastSubstrateEventToSse(issueEvent(), "2");
+      await broadcastSubstrateEventToSse(issueEvent(), "1");
+      await broadcastSubstrateEventToSse(issueEvent(), "2");
       // A healthy client receives both broadcasts (3 writes each: id/event/data).
       expect(res.writes.length).toBe(6);
     } finally {
@@ -95,28 +95,28 @@ describe("broadcastSubstrateEventToSse dead-client eviction", () => {
     }
   });
 
-  it("evicts a client whose socket has ended (no write attempted)", () => {
+  it("evicts a client whose socket has ended (no write attempted)", async () => {
     const res = fakeRes({ ended: true });
     registerSseClient(client(issueSub("ended-1"), res));
-    broadcastSubstrateEventToSse(issueEvent(), "1");
+    await broadcastSubstrateEventToSse(issueEvent(), "1");
     // Ended socket: skipped and evicted, never written to.
     expect(res.writes.length).toBe(0);
     // Second broadcast must not find it (already evicted) — still zero.
-    broadcastSubstrateEventToSse(issueEvent(), "2");
+    await broadcastSubstrateEventToSse(issueEvent(), "2");
     expect(res.writes.length).toBe(0);
   });
 
-  it("evicts a client whose write throws, sparing the rest", () => {
+  it("evicts a client whose write throws, sparing the rest", async () => {
     const bad = fakeRes({ throwOnWrite: true });
     const good = fakeRes();
     registerSseClient(client(issueSub("bad-1"), bad));
     const unregisterGood = registerSseClient(client(issueSub("good-1"), good));
     try {
-      broadcastSubstrateEventToSse(issueEvent(), "1");
+      await broadcastSubstrateEventToSse(issueEvent(), "1");
       // Good client still delivered despite the bad client throwing.
       expect(good.writes.length).toBe(3);
       // Second pass: bad client already evicted, good client keeps working.
-      broadcastSubstrateEventToSse(issueEvent(), "2");
+      await broadcastSubstrateEventToSse(issueEvent(), "2");
       expect(good.writes.length).toBe(6);
     } finally {
       unregisterGood();
@@ -127,35 +127,35 @@ describe("broadcastSubstrateEventToSse dead-client eviction", () => {
   // socket records no writes whether it was removed from `clients` or merely
   // skipped again on every later pass. These two lock the splice itself.
 
-  it("REMOVES an ended client from the fan-out set, not just skips it", () => {
+  it("REMOVES an ended client from the fan-out set, not just skips it", async () => {
     const res = fakeRes({ ended: true });
     registerSseClient(client(issueSub("ended-revived"), res));
 
     // Pass 1 sees a dead socket: no write, and the client must be spliced out.
-    broadcastSubstrateEventToSse(issueEvent(), "1");
+    await broadcastSubstrateEventToSse(issueEvent(), "1");
     expect(res.writes.length).toBe(0);
 
     // The socket comes back to life. If it is still registered, the hub will
     // now happily write to it — which is exactly the leak #1749 describes.
     res.revive();
-    broadcastSubstrateEventToSse(issueEvent(), "2");
+    await broadcastSubstrateEventToSse(issueEvent(), "2");
     expect(res.writes.length).toBe(0);
   });
 
-  it("REMOVES a client whose write threw, even after that socket recovers", () => {
+  it("REMOVES a client whose write threw, even after that socket recovers", async () => {
     const bad = fakeRes({ throwOnWrite: true });
     const good = fakeRes();
     registerSseClient(client(issueSub("threw-revived"), bad));
     const unregisterGood = registerSseClient(client(issueSub("good-2"), good));
     try {
       // Pass 1: bad throws and is evicted; good is delivered to.
-      broadcastSubstrateEventToSse(issueEvent(), "1");
+      await broadcastSubstrateEventToSse(issueEvent(), "1");
       expect(good.writes.length).toBe(3);
 
       // Bad socket recovers. Having been evicted, it must receive nothing —
       // a client that threw is gone until it re-registers.
       bad.revive();
-      broadcastSubstrateEventToSse(issueEvent(), "2");
+      await broadcastSubstrateEventToSse(issueEvent(), "2");
       expect(bad.writes.length).toBe(0);
       expect(good.writes.length).toBe(6);
     } finally {

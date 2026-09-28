@@ -56,6 +56,11 @@ interface ToolResponse {
   content: Array<{ text: string }>;
 }
 
+interface ErrorEnvelope {
+  error_code: string;
+  message: string;
+}
+
 interface SubscriptionToolSurface {
   handleSubscribe(args: unknown, userId: string): Promise<ToolResponse>;
   handleUnsubscribe(args: unknown, userId: string): Promise<ToolResponse>;
@@ -143,6 +148,66 @@ describe("guest subscription routes must not escalate to the token owner's whole
     await tracker.cleanup();
   });
 
+  it("agent-facing evaluation preserves the full in-grant lifecycle and denies empty or mixed scopes without effects", async () => {
+    await withHttpServer(async (baseUrl) => {
+      const ownerId = `test-owner-scope-${randomUUID()}`;
+      const grantedEntity = await seedOwnedEntity(ownerId, "evaluation-granted");
+      const ungrantedEntity = await seedOwnedEntity(ownerId, "evaluation-ungranted");
+      const guestToken = await guestTokenScopedTo(ownerId, [grantedEntity]);
+
+      const created = await subscribeAs(baseUrl, guestToken, ownerId, {
+        entity_ids: [grantedEntity],
+        delivery_method: "sse",
+      });
+      const listed = await postJson<ListSubscriptionsResponse>(
+        baseUrl,
+        "/list_subscriptions",
+        guestToken,
+        {}
+      );
+      expect(listed.body.subscriptions.map((row) => row.subscription_id)).toContain(
+        created.subscription_id
+      );
+      const status = await postJson<{ subscription: ListedSubscription | null }>(
+        baseUrl,
+        "/get_subscription_status",
+        guestToken,
+        { subscription_id: created.subscription_id }
+      );
+      expect(status.body.subscription?.subscription_id).toBe(created.subscription_id);
+
+      for (const entity_ids of [[], [ungrantedEntity], [grantedEntity, ungrantedEntity]]) {
+        const denied = await postJson<ErrorEnvelope & Partial<SubscribeResponse>>(
+          baseUrl,
+          "/subscribe",
+          guestToken,
+          { entity_ids, delivery_method: "sse" }
+        );
+        expect(denied.response.status).toBe(403);
+        expect(denied.body).toMatchObject({ error_code: "FORBIDDEN" });
+      }
+
+      const afterDenials = await postJson<ListSubscriptionsResponse>(
+        baseUrl,
+        "/list_subscriptions",
+        guestToken,
+        {}
+      );
+      expect(afterDenials.body.subscriptions.map((row) => row.subscription_id)).toEqual([
+        created.subscription_id,
+      ]);
+
+      const unsubscribed = await postJson<{ success: boolean }>(
+        baseUrl,
+        "/unsubscribe",
+        guestToken,
+        { subscription_id: created.subscription_id }
+      );
+      expect(unsubscribed.response.status).toBe(200);
+      expect(unsubscribed.body.success).toBe(true);
+    });
+  });
+
   it("a guest scoped to one entity cannot list subscriptions outside its entity grant", async () => {
     await withHttpServer(async (baseUrl) => {
       const ownerId = `test-owner-scope-${randomUUID()}`;
@@ -187,7 +252,7 @@ describe("guest subscription routes must not escalate to the token owner's whole
 
       // The guest's token names only `scopedEntity`, so a subscribe request
       // naming a DIFFERENT entity_id it was never granted should be refused.
-      const result = await postJson<{ error?: unknown } & Partial<SubscribeResponse>>(
+      const result = await postJson<ErrorEnvelope & Partial<SubscribeResponse>>(
         baseUrl,
         "/subscribe",
         guestToken,
@@ -202,7 +267,16 @@ describe("guest subscription routes must not escalate to the token owner's whole
       }
       // Regression target: same-owner membership is insufficient when the
       // guest token itself does not name the requested entity.
-      expect(result.response.status).toBeGreaterThanOrEqual(400);
+      expect(result.response.status).toBe(403);
+      expect(result.body).toMatchObject({ error_code: "FORBIDDEN" });
+
+      const listed = await postJson<ListSubscriptionsResponse>(
+        baseUrl,
+        "/list_subscriptions",
+        guestToken,
+        {}
+      );
+      expect(listed.body.subscriptions).toHaveLength(0);
     });
   });
 
@@ -219,13 +293,28 @@ describe("guest subscription routes must not escalate to the token owner's whole
       });
 
       const guestToken = await guestTokenScopedTo(ownerId, [scopedEntity]);
-      const result = await postJson<{ success?: boolean }>(baseUrl, "/unsubscribe", guestToken, {
-        subscription_id: ownerOnlySub.subscription_id,
-      });
+      const result = await postJson<ErrorEnvelope & { success?: boolean }>(
+        baseUrl,
+        "/unsubscribe",
+        guestToken,
+        { subscription_id: ownerOnlySub.subscription_id }
+      );
 
       // Regression target: matching the subscription's owning user_id must
       // not replace the guest token's narrower entity grant.
-      expect(result.response.status).toBeGreaterThanOrEqual(400);
+      expect(result.response.status).toBe(403);
+      expect(result.body).toMatchObject({ error_code: "FORBIDDEN" });
+
+      const preserved = await postJson<{ subscription: ListedSubscription | null }>(
+        baseUrl,
+        "/get_subscription_status",
+        ownerOnlyToken,
+        { subscription_id: ownerOnlySub.subscription_id }
+      );
+      expect(preserved.body.subscription).toMatchObject({
+        subscription_id: ownerOnlySub.subscription_id,
+        active: true,
+      });
     });
   });
 
@@ -283,13 +372,25 @@ describe("guest subscription routes must not escalate to the token owner's whole
       expect(status.response.status).toBe(200);
       expect(status.body.subscription).toBeNull();
 
-      const unsubscribe = await postJson<{ success?: boolean }>(
+      const unsubscribe = await postJson<ErrorEnvelope & { success?: boolean }>(
         baseUrl,
         "/unsubscribe",
         guestToken,
         { subscription_id: created.subscription_id }
       );
       expect(unsubscribe.response.status).toBe(403);
+      expect(unsubscribe.body).toMatchObject({ error_code: "FORBIDDEN" });
+
+      const preservedStatus = parseToolResponse<{ subscription: ListedSubscription | null }>(
+        await tools.handleGetSubscriptionStatus(
+          { subscription_id: created.subscription_id },
+          ownerId
+        )
+      );
+      expect(preservedStatus.subscription).toMatchObject({
+        subscription_id: created.subscription_id,
+        active: true,
+      });
 
       const stream = await fetch(
         `${baseUrl}/events/stream?subscription_id=${encodeURIComponent(created.subscription_id)}`,
