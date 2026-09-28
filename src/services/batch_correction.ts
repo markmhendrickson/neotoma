@@ -201,19 +201,31 @@ export async function applyBatchCorrection(
     idempotency_prefix,
   } = options;
 
+  // Ownership precheck (neotoma#2229): this is a by-id write entrance —
+  // getEntityWithProvenance's userId param is OPTIONAL, so a caller that
+  // forgets to pass it gets an unscoped-by-id read/write. Both current
+  // production callers (POST /entities/:id/batch_correct and `neotoma edit`,
+  // via that same route) already precheck ownership before calling in, but
+  // this function must not depend on that — it is a library entrance, not a
+  // route, and must fail closed on its own. Passing user_id here scopes both
+  // the read (no cross-owner snapshot/entity_type leak on the changes.length
+  // === 0 early return below) and every write that follows.
   if (changes.length === 0) {
-    const current = await getEntityWithProvenance(entity_id);
+    const current = await getEntityWithProvenance(entity_id, false, user_id);
+    if (!current) {
+      throw new Error(`Entity not found: ${entity_id}`);
+    }
     return {
       status: "applied",
       entity_id,
-      entity_type: current?.entity_type ?? options.entity_type ?? "",
+      entity_type: current.entity_type ?? options.entity_type ?? "",
       applied: [],
-      snapshot: (current?.snapshot as Record<string, unknown>) ?? null,
-      last_observation_at: current?.last_observation_at ?? null,
+      snapshot: (current.snapshot as Record<string, unknown>) ?? null,
+      last_observation_at: current.last_observation_at ?? null,
     };
   }
 
-  const current = await getEntityWithProvenance(entity_id);
+  const current = await getEntityWithProvenance(entity_id, false, user_id);
   if (!current) {
     throw new Error(`Entity not found: ${entity_id}`);
   }
@@ -285,7 +297,7 @@ export async function applyBatchCorrection(
     });
   }
 
-  const refreshed = await getEntityWithProvenance(entity_id);
+  const refreshed = await getEntityWithProvenance(entity_id, false, user_id);
   return {
     status: "applied",
     entity_id,
@@ -300,15 +312,24 @@ export async function applyBatchCorrection(
  * Lightweight helper used by both surfaces to fetch the current snapshot
  * plus its `last_observation_at` marker for concurrency tracking. Avoids
  * callers pulling in `getEntityWithProvenance` directly.
+ *
+ * `user_id` is required (neotoma#2229): this is a by-id read that a batch
+ * write is built on top of, so — like `applyBatchCorrection` above — it must
+ * fail closed on its own rather than trust that every future caller
+ * prechecks ownership before calling in. A missing-or-not-owned entity_id
+ * returns `null`, identically to a genuinely missing one.
  */
-export async function loadEntityForEdit(entity_id: string): Promise<{
+export async function loadEntityForEdit(
+  entity_id: string,
+  user_id: string
+): Promise<{
   entity_id: string;
   entity_type: string;
   schema_version: string;
   snapshot: Record<string, unknown>;
   last_observation_at: string | null;
 } | null> {
-  const current = await getEntityWithProvenance(entity_id);
+  const current = await getEntityWithProvenance(entity_id, false, user_id);
   if (!current) return null;
   return {
     entity_id: current.entity_id ?? entity_id,

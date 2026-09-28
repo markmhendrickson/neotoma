@@ -38,6 +38,7 @@ import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { EntityOwnerConflictError } from "./services/entity_resolution.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
 import {
@@ -61,6 +62,7 @@ import {
   type GuestIdentity,
 } from "./services/access_policy.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
+import { subscriptionWithinGuestScope } from "./services/subscriptions/guest_scope.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
 import { externalActorFromCallerInput } from "./services/issues/external_actor_builder.js";
 import {
@@ -3351,9 +3353,8 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       logger.warn("[MCP OAuth] Authorize rejected: missing state");
       return sendAuthorizeRefusal(res, 400, "state is required");
     }
-    const isOpenAiCustomGptRedirect =
-      redirect_uri &&
-      (redirect_uri.includes("chatgpt.com") || redirect_uri.includes("chat.openai.com"));
+    const { isOpenAiCustomGptRedirectUri } = await import("./services/mcp_oauth.js");
+    const isOpenAiCustomGptRedirect = isOpenAiCustomGptRedirectUri(redirect_uri);
     const hasPkce = code_challenge && code_challenge_method === "S256";
 
     if (!hasPkce && !isOpenAiCustomGptRedirect) {
@@ -3365,10 +3366,6 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         400,
         "code_challenge and code_challenge_method=S256 are required"
       );
-    }
-    if (!hasPkce && isOpenAiCustomGptRedirect) {
-      // Allow OAuth without client PKCE for OpenAI Custom GPT only (weaker security; see docs).
-      // Server generates PKCE for state storage; OpenAI does not send code_verifier at token exchange.
     }
     if (config.requireKeyForOauth && !hasValidOAuthKeySession(req)) {
       const nextPath = normalizeOauthNextPath(req.originalUrl);
@@ -3424,8 +3421,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
 
       const { randomUUID } = await import("node:crypto");
       const connectionId = randomUUID();
-      const { createLocalAuthorizationRequest, generatePKCE: generatePKCEFromService } =
-        await import("./services/mcp_oauth.js");
+      const {
+        createLocalAuthorizationRequest,
+        generatePKCE: generatePKCEFromService,
+        OAUTH_CODE_PROVENANCE,
+      } = await import("./services/mcp_oauth.js");
 
       const pkce = hasPkce
         ? undefined
@@ -3440,6 +3440,9 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         clientState: state,
         codeChallenge: pkce ? pkce.codeChallenge : (code_challenge as string),
         codeVerifier: pkce?.codeVerifier,
+        authorizationCodeProvenance: hasPkce
+          ? OAUTH_CODE_PROVENANCE.CLIENT_PKCE
+          : OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE,
       });
       // Keep local OAuth redirects on the current origin (tunnel or localhost) even if
       // authRequest.authUrl was built from a different absolute base URL.
@@ -3549,6 +3552,30 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
   }
 
   try {
+    // Defense in depth, independent of config.requireKeyForOauth: on a
+    // non-loopback request, the dev-user fallback below must never complete
+    // without EITHER a verified identity (Google sign-in) OR a valid key
+    // session. The requireKeyForOauth check above already refuses this when
+    // that config is true (the default) — but it is a config default, not a
+    // hard requirement, and this instance's own security_finding
+    // (neotoma-2229-oauth-key-gate-posture-hosted) records that an explicit
+    // `NEOTOMA_REQUIRE_KEY_FOR_OAUTH=false` on such a deployment would remove
+    // the only other gate in front of dev-user completion. This check does
+    // not depend on that variable's value at all, so it holds even if the
+    // config regresses. isLocalRequest / hasValidOAuthKeySession are the same
+    // primitives the requireKeyForOauth branch above already uses.
+    const googleIdentityForGate = getGoogleVerifiedIdentity(req);
+    if (!isLocalRequest(req) && !googleIdentityForGate && !hasValidOAuthKeySession(req)) {
+      logger.warn(
+        "[MCP OAuth] local-login refused: non-loopback request with no verified session",
+        {
+          host: req.header("host") ?? null,
+        }
+      );
+      const nextPath = normalizeOauthNextPath(req.originalUrl);
+      return res.redirect(`/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`);
+    }
+
     // If this browser session was admitted via Google sign-in (see
     // /mcp/oauth/google/callback), complete authorization as THAT verified
     // user's own user_id instead of the shared dev user. Every other path
@@ -3560,10 +3587,10 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     // what every read and write continues to use. The identity rides alongside
     // it onto the row so `/me` can report who is signed in without changing
     // whose graph is operated on.
-    const googleIdentity = getGoogleVerifiedIdentity(req);
+    const googleIdentity = googleIdentityForGate;
     const resolvedUserId = googleIdentity?.graphUserId ?? (await ensureLocalDevUser()).id;
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
-    const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
+    const { connectionId, code, redirectUri, clientState } = await completeLocalAuthorization(
       state,
       resolvedUserId,
       undefined,
@@ -3577,11 +3604,16 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     const frontendOauth = `${frontendBase}/oauth`;
     if (redirectUri) {
       if (!clientState && redirectUri.startsWith(frontendOauth)) {
+        // The bundled web frontend's own success page — not an OAuth `code`
+        // redemption target, so the stable connection_id (for display) is
+        // fine here and intentionally different from the `code` param below.
         const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
         return res.redirect(successUrl);
       }
+      // `code` is the single-use authorization code (see completeLocalAuthorization);
+      // it must never be connectionId, which is a stable, reusable handle.
       const params = new URLSearchParams({
-        code: connectionId,
+        code,
         state: clientState ?? "",
       });
       return res.redirect(`${redirectUri}?${params.toString()}`);
@@ -3615,11 +3647,13 @@ app.post(
     try {
       const grant_type = req.body?.grant_type;
       const code = req.body?.code;
+      const code_verifier = req.body?.code_verifier;
       const refresh_token = req.body?.refresh_token;
       logger.info("[MCP OAuth] Token request received", {
         grant_type: grant_type ?? null,
         has_code: typeof code === "string" && code.length > 0,
         code_hint: typeof code === "string" ? code.slice(0, 8) : null,
+        has_code_verifier: typeof code_verifier === "string" && code_verifier.length > 0,
         has_refresh_token: typeof refresh_token === "string" && refresh_token.length > 0,
         host: req.header("host") ?? null,
       });
@@ -3656,9 +3690,11 @@ app.post(
           .status(400)
           .json({ error: "invalid_request", error_description: "code is required" });
       }
-
       const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
-      const token = await getTokenResponseForConnection(code);
+      const token = await getTokenResponseForConnection(
+        code,
+        typeof code_verifier === "string" && code_verifier.length > 0 ? code_verifier : undefined
+      );
       logger.info("[MCP OAuth] Token issued", {
         code_hint: code.slice(0, 8),
         has_refresh_token: Boolean((token as { refresh_token?: string }).refresh_token),
@@ -4272,25 +4308,6 @@ async function resolveGuestSubscriptionScope(
   throw new Error(
     "Not authenticated - guest principal cannot resolve a subscription scope: no valid token grant and not a local request"
   );
-}
-
-/**
- * True when `entityIds` (a guest's granted scope, or `null` for an
- * unscoped/local caller) permits touching a subscription that watches
- * `subEntityIds`. `null` means "no narrowing required" (non-guest or local
- * trust). An empty or undefined `subEntityIds` means the subscription is not
- * entity-scoped (e.g. a type- or event-only filter) — a scoped guest can
- * never be shown or allowed to manage that, since it has no entity-list
- * intersection to prove against.
- */
-function subscriptionWithinGuestScope(
-  entityIds: string[] | null,
-  subEntityIds: string[] | undefined
-): boolean {
-  if (entityIds === null) return true;
-  if (!subEntityIds || subEntityIds.length === 0) return false;
-  const granted = new Set(entityIds);
-  return subEntityIds.some((id) => granted.has(id));
 }
 
 async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
@@ -4908,6 +4925,15 @@ function handleApiError(
     logWarn(logContext || "OverridePolicyRejection", req, error.toErrorEnvelope());
     return res
       .status(403)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (error instanceof EntityOwnerConflictError) {
+    // Writes resolve only to entities the writer owns (tenant isolation).
+    // Never leaks the other owner's identity or fields — see the error's
+    // own doc comment.
+    logWarn(logContext || "EntityOwnerConflictRejection", req, error.toErrorEnvelope());
+    return res
+      .status(error.statusCode)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
   if (error instanceof CursorError) {
@@ -8064,7 +8090,8 @@ export async function storeStructuredForApi(params: {
     code:
       | "ERR_CANONICAL_NAME_UNRESOLVED"
       | "ERR_MERGE_REFUSED"
-      | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT";
+      | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
+      | "entity_owner_conflict";
     message: string;
     details: Record<string, unknown>;
     /**
@@ -8262,6 +8289,25 @@ export async function storeStructuredForApi(params: {
             ...(err.policy ? { policy: err.policy } : {}),
           },
           ...(hint ? { hint } : {}),
+        });
+      } else if (err instanceof EntityOwnerConflictError) {
+        // Tenant-isolation refusal: surfaced as a structured per-observation
+        // issue like its siblings above, never silently downgraded to a 500
+        // and never mixed into `resolved` as if the write had happened. This
+        // batch's aggregate wrapper (ERR_STORE_RESOLUTION_FAILED, below)
+        // answers with a flat 400 for every issue code including this one —
+        // consistent with every sibling resolution refusal on this endpoint.
+        // The single-target, non-batch entrance (`/correct`, via
+        // handleApiError) answers this same `entity_owner_conflict` code with
+        // a true top-level 409, matching the ruled REST contract there.
+        issues.push({
+          observation_index,
+          entity_type,
+          code: err.code,
+          message: err.message,
+          details: {
+            entity_id: err.entityId,
+          },
         });
       } else {
         throw err;
@@ -10065,6 +10111,12 @@ app.post("/entities/split", async (req, res) => {
     }
     if (error instanceof IdempotencyMismatchError) {
       return sendError(res, 400, "ERR_IDEMPOTENCY_MISMATCH", error.message);
+    }
+    if (error instanceof EntityOwnerConflictError) {
+      logWarn("EntityOwnerConflictRejection", req, error.toErrorEnvelope());
+      return res
+        .status(error.statusCode)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
     }
     logError("APIError:entities_split", req, error);
     const message = error instanceof Error ? error.message : "Failed to split entity";

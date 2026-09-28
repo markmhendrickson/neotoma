@@ -3,6 +3,7 @@
  * prefer_local is a no-op with guidance to use correct for field-level overrides.
  */
 
+import { guardedFetch, isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import { createHash } from "node:crypto";
 import { db } from "../../db.js";
 import { createCorrection } from "../correction.js";
@@ -22,10 +23,19 @@ export async function resolveSyncConflict(params: {
   guest_access_token?: string;
 }): Promise<{ ok: boolean; message: string }> {
   if (params.strategy === "manual") {
+    // Ownership precheck (neotoma#2229): a by-id write must confirm the
+    // caller owns entity_id BEFORE writing under the caller's own user_id —
+    // scoping the lookup by id AND user_id, mirroring GET /entities/:id and
+    // MCP correct(). Without the user_id filter here, any authenticated
+    // caller could flip `sync_conflict: true` on another user's entity by
+    // guessing/observing its id. A miss (missing OR owned by someone else)
+    // returns the same "not found" message either way, so the response
+    // itself cannot be used to probe for another user's entity ids.
     const { data: entity, error } = await db
       .from("entities")
       .select("entity_type")
       .eq("id", params.entity_id)
+      .eq("user_id", params.userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     const entityType = (entity as { entity_type?: string } | null)?.entity_type;
@@ -79,11 +89,35 @@ export async function resolveSyncConflict(params: {
     : "";
   const url = `${base}/entities/${encodeURIComponent(params.entity_id)}${tokenQ}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
-  });
+  // SSRF: this is the sharpest sink of the class. The fetched JSON is ingested
+  // into the caller's entities, so an internal target would be semi-reflected
+  // back to them rather than merely probed blind.
+  if (!isPublicFetchUrlAllowed(url)) {
+    return {
+      ok: false,
+      message: "prefer_remote: `sender_peer_url` must be a public host.",
+    };
+  }
+
+  // guardedFetch: url already passed isPublicFetchUrlAllowed above, but that
+  // only checked the URL the caller supplied — an otherwise-public peer
+  // could redirect this fetch to an internal target, which would then be
+  // ingested into the caller's entities. Re-check every hop; a refusal
+  // throws, so catch it into the same {ok:false, message} shape this
+  // function already uses for the pre-fetch guard rejection above.
+  let res: Response;
+  try {
+    res = await guardedFetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      message: `prefer_remote: ${err instanceof Error ? err.message : "remote fetch failed"}`,
+    };
+  }
   if (!res.ok) {
     return {
       ok: false,

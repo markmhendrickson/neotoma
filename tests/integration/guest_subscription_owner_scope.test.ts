@@ -24,6 +24,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/actions.js";
+import { NeotomaServer } from "../../src/server.js";
 import {
   generateGuestAccessToken,
   hashGuestAccessToken,
@@ -49,6 +50,25 @@ interface ListedSubscription {
 
 interface ListSubscriptionsResponse {
   subscriptions: ListedSubscription[];
+}
+
+interface ToolResponse {
+  content: Array<{ text: string }>;
+}
+
+interface SubscriptionToolSurface {
+  handleSubscribe(args: unknown, userId: string): Promise<ToolResponse>;
+  handleUnsubscribe(args: unknown, userId: string): Promise<ToolResponse>;
+  handleListSubscriptions(userId: string): Promise<ToolResponse>;
+  handleGetSubscriptionStatus(args: unknown, userId: string): Promise<ToolResponse>;
+}
+
+function subscriptionTools(server: NeotomaServer): SubscriptionToolSurface {
+  return server as unknown as SubscriptionToolSurface;
+}
+
+function parseToolResponse<T>(response: ToolResponse): T {
+  return JSON.parse(response.content[0]!.text) as T;
 }
 
 async function withHttpServer<T>(callback: (baseUrl: string) => Promise<T>): Promise<T> {
@@ -123,7 +143,7 @@ describe("guest subscription routes must not escalate to the token owner's whole
     await tracker.cleanup();
   });
 
-  it("a guest scoped to one entity can still list every subscription the account owns (defect)", async () => {
+  it("a guest scoped to one entity cannot list subscriptions outside its entity grant", async () => {
     await withHttpServer(async (baseUrl) => {
       const ownerId = `test-owner-scope-${randomUUID()}`;
       const scopedEntity = await seedOwnedEntity(ownerId, "scoped");
@@ -151,14 +171,13 @@ describe("guest subscription routes must not escalate to the token owner's whole
       expect(response.status).toBe(200);
 
       const visibleIds = body.subscriptions.map((s) => s.subscription_id);
-      // FIX TARGET: today this includes ownerOnlySub because both tokens
-      // resolve to the same account's user_id and the route never narrows to
-      // the guest's own entity_ids scope.
+      // Regression target: resolving both tokens to the same account user_id
+      // must not widen the guest's own entity_ids scope.
       expect(visibleIds).not.toContain(ownerOnlySub.subscription_id);
     });
   });
 
-  it("a guest scoped to one entity cannot create a subscription over unrelated entity_ids (defect)", async () => {
+  it("a guest scoped to one entity cannot create a subscription over unrelated entity_ids", async () => {
     await withHttpServer(async (baseUrl) => {
       const ownerId = `test-owner-scope-${randomUUID()}`;
       const scopedEntity = await seedOwnedEntity(ownerId, "scoped2");
@@ -181,14 +200,13 @@ describe("guest subscription routes must not escalate to the token owner's whole
       if (result.response.ok && result.body.entity_id) {
         tracker.trackEntity(result.body.entity_id);
       }
-      // FIX TARGET: today this succeeds (200) because the route only checks
-      // that `unrelatedEntity` belongs to the SAME owner as the token, not
-      // that the token itself names it.
+      // Regression target: same-owner membership is insufficient when the
+      // guest token itself does not name the requested entity.
       expect(result.response.status).toBeGreaterThanOrEqual(400);
     });
   });
 
-  it("a guest scoped to one entity cannot cancel a subscription outside that scope (defect)", async () => {
+  it("a guest scoped to one entity cannot cancel a subscription outside that scope", async () => {
     await withHttpServer(async (baseUrl) => {
       const ownerId = `test-owner-scope-${randomUUID()}`;
       const scopedEntity = await seedOwnedEntity(ownerId, "scoped3");
@@ -205,11 +223,91 @@ describe("guest subscription routes must not escalate to the token owner's whole
         subscription_id: ownerOnlySub.subscription_id,
       });
 
-      // FIX TARGET: today this succeeds because `unsubscribeUser` only checks
-      // that the subscription's owning `user_id` matches the resolved
-      // account, and the resolved account is the whole owner, not the
-      // guest's own narrower grant.
+      // Regression target: matching the subscription's owning user_id must
+      // not replace the guest token's narrower entity grant.
       expect(result.response.status).toBeGreaterThanOrEqual(400);
+    });
+  });
+
+  it("refuses a mixed subscription on every guest HTTP read/write surface while its MCP owner retains access", async () => {
+    await withHttpServer(async (baseUrl) => {
+      const ownerId = `test-owner-scope-${randomUUID()}`;
+      const grantedEntity = await seedOwnedEntity(ownerId, "mixed-granted");
+      const ungrantedEntity = await seedOwnedEntity(ownerId, "mixed-ungranted");
+
+      // The authenticated MCP owner may create a subscription spanning both
+      // of its entities. This is the natural MCP call shape and protects the
+      // owner-level contract while the guest HTTP surfaces are narrowed.
+      const server = new NeotomaServer();
+      const tools = subscriptionTools(server);
+      const created = parseToolResponse<SubscribeResponse>(
+        await tools.handleSubscribe(
+          {
+            entity_ids: [grantedEntity, ungrantedEntity],
+            delivery_method: "sse",
+          },
+          ownerId
+        )
+      );
+      tracker.trackEntity(created.entity_id);
+
+      const ownerStatus = parseToolResponse<{ subscription: ListedSubscription | null }>(
+        await tools.handleGetSubscriptionStatus(
+          { subscription_id: created.subscription_id },
+          ownerId
+        )
+      );
+      expect(ownerStatus.subscription?.subscription_id).toBe(created.subscription_id);
+
+      // A token that names only one member of a mixed subscription must not
+      // gain authority over the other member by set intersection.
+      const guestToken = await guestTokenScopedTo(ownerId, [grantedEntity]);
+
+      const listed = await postJson<ListSubscriptionsResponse>(
+        baseUrl,
+        "/list_subscriptions",
+        guestToken,
+        {}
+      );
+      expect(listed.response.status).toBe(200);
+      expect(listed.body.subscriptions.map((row) => row.subscription_id)).not.toContain(
+        created.subscription_id
+      );
+
+      const status = await postJson<{ subscription: ListedSubscription | null }>(
+        baseUrl,
+        "/get_subscription_status",
+        guestToken,
+        { subscription_id: created.subscription_id }
+      );
+      expect(status.response.status).toBe(200);
+      expect(status.body.subscription).toBeNull();
+
+      const unsubscribe = await postJson<{ success?: boolean }>(
+        baseUrl,
+        "/unsubscribe",
+        guestToken,
+        { subscription_id: created.subscription_id }
+      );
+      expect(unsubscribe.response.status).toBe(403);
+
+      const stream = await fetch(
+        `${baseUrl}/events/stream?subscription_id=${encodeURIComponent(created.subscription_id)}`,
+        { headers: { Authorization: `Bearer ${guestToken}` } }
+      );
+      expect(stream.status).toBe(404);
+
+      const ownerList = parseToolResponse<ListSubscriptionsResponse>(
+        await tools.handleListSubscriptions(ownerId)
+      );
+      expect(ownerList.subscriptions.map((row) => row.subscription_id)).toContain(
+        created.subscription_id
+      );
+
+      const ownerUnsubscribe = parseToolResponse<{ success: boolean }>(
+        await tools.handleUnsubscribe({ subscription_id: created.subscription_id }, ownerId)
+      );
+      expect(ownerUnsubscribe.success).toBe(true);
     });
   });
 });

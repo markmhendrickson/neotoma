@@ -113,6 +113,7 @@ import {
 import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { EntityOwnerConflictError } from "./services/entity_resolution.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
@@ -2408,6 +2409,13 @@ export class NeotomaServer {
           // field (see src/services/override_validation.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
+        if (error instanceof EntityOwnerConflictError) {
+          // Writes resolve only to entities the writer owns (tenant
+          // isolation). Same structured-envelope contract: clients branch on
+          // `entity_owner_conflict` via the MCP `data` field (see
+          // src/services/entity_resolution.ts).
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
         if (
           error instanceof Error &&
           (error as { code?: unknown }).code === "agent_grant_pin_conflict"
@@ -3524,7 +3532,7 @@ export class NeotomaServer {
         // time-sensitive (fragment content doesn't change) so we reuse the current
         // value just as the previous inlined implementation did.
         const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-        const currentEntity = await getEntityWithProvenance(entity.entity_id);
+        const currentEntity = await getEntityWithProvenance(entity.entity_id, false, userId);
 
         return renderEntitySnapshotResponse({
           ...historicalResult,
@@ -6126,7 +6134,11 @@ export class NeotomaServer {
             action: result.trace.action,
           });
         } catch (err) {
-          if (err instanceof CanonicalNameUnresolvedError || err instanceof MergeRefusedError) {
+          if (
+            err instanceof CanonicalNameUnresolvedError ||
+            err instanceof MergeRefusedError ||
+            err instanceof EntityOwnerConflictError
+          ) {
             issues.push({
               observation_index: i,
               entity_type: entityType,
@@ -6500,7 +6512,11 @@ export class NeotomaServer {
           targetId: preTargetId,
         });
       } catch (err) {
-        if (err instanceof CanonicalNameUnresolvedError || err instanceof MergeRefusedError) {
+        if (
+          err instanceof CanonicalNameUnresolvedError ||
+          err instanceof MergeRefusedError ||
+          err instanceof EntityOwnerConflictError
+        ) {
           preResolutionIssues.push({
             index: preIdx,
             entityType: preEntityType,
@@ -6857,6 +6873,11 @@ export class NeotomaServer {
             `Observation ${createdEntities.length} (${entityType}): ${err.message}`
           );
         }
+        // EntityOwnerConflictError (and anything else) falls through here
+        // un-wrapped. Should already have been caught by the pre-resolution
+        // pass above (same fields, same userId, commit:false) — this is
+        // defense in depth. Re-thrown as-is so the outer MCP dispatcher's
+        // EntityOwnerConflictError branch runs `error.toErrorEnvelope()`.
         throw err;
       }
 
@@ -7850,6 +7871,15 @@ export class NeotomaServer {
         })
       );
     } catch (corrErr) {
+      if (corrErr instanceof EntityOwnerConflictError) {
+        // Re-throw as-is (not wrapped in McpError) so the outer MCP
+        // dispatcher's EntityOwnerConflictError branch runs
+        // `error.toErrorEnvelope()` and reports `entity_owner_conflict`
+        // rather than a generic InternalError. In practice this entity was
+        // already proven same-owner above before createCorrection ran; this
+        // is defense in depth against a future call site skipping that check.
+        throw corrErr;
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
@@ -8020,6 +8050,9 @@ export class NeotomaServer {
         err instanceof IdempotencyMismatchError
       ) {
         throw new McpError(ErrorCode.InvalidParams, err.message);
+      }
+      if (err instanceof EntityOwnerConflictError) {
+        throw new McpError(ErrorCode.InvalidRequest, err.message, err.toErrorEnvelope());
       }
       throw new McpError(
         ErrorCode.InternalError,
