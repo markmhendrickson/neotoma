@@ -9,6 +9,8 @@
 import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
+import { getEntityWithProvenance } from "./entity_queries.js";
+import { getDb } from "../repositories/db/connection.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
@@ -40,6 +42,30 @@ export interface CorrectionResult {
   field: string;
   value: unknown;
   snapshot?: Record<string, unknown> | null;
+}
+
+/**
+ * Refuses a correction whose caller-supplied entity type does not match the
+ * target entity's authoritative stored type. The shared service boundary must
+ * enforce this because transport-level capability and protected-type checks
+ * necessarily run before the correction is created.
+ */
+export class CorrectionEntityTypeMismatchError extends Error {
+  readonly code = "ERR_ENTITY_TYPE_MISMATCH";
+  readonly entityId: string;
+  readonly suppliedEntityType: string;
+  readonly storedEntityType: string;
+
+  constructor(params: { entityId: string; suppliedEntityType: string; storedEntityType: string }) {
+    super(
+      `Entity type mismatch for ${params.entityId}: supplied ` +
+        `"${params.suppliedEntityType}", stored "${params.storedEntityType}".`
+    );
+    this.name = "CorrectionEntityTypeMismatchError";
+    this.entityId = params.entityId;
+    this.suppliedEntityType = params.suppliedEntityType;
+    this.storedEntityType = params.storedEntityType;
+  }
 }
 
 export async function createCorrection(params: CreateCorrectionParams): Promise<CorrectionResult> {
@@ -87,16 +113,27 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
   {
     const { data: targetEntity } = await db
       .from("entities")
-      .select("user_id")
+      .select("user_id, entity_type")
       .eq("id", params.entity_id)
       .maybeSingle();
     if (targetEntity) {
+      const storedEntity = targetEntity as {
+        user_id: string | null;
+        entity_type: string;
+      };
       assertNoOwnerConflict({
         entityId: params.entity_id,
         entityType: params.entity_type,
-        existingOwnerUserId: (targetEntity as { user_id: string | null }).user_id,
+        existingOwnerUserId: storedEntity.user_id,
         writerUserId: params.user_id,
       });
+      if (storedEntity.entity_type !== params.entity_type) {
+        throw new CorrectionEntityTypeMismatchError({
+          entityId: params.entity_id,
+          suppliedEntityType: params.entity_type,
+          storedEntityType: storedEntity.entity_type,
+        });
+      }
     }
   }
 
@@ -238,6 +275,125 @@ export class CorrectionSchemaNotFoundError extends Error {
     this.name = "CorrectionSchemaNotFoundError";
     this.entityType = entityType;
   }
+}
+
+/**
+ * Error thrown when `/correct` is called with an `expected_version`
+ * precondition that no longer matches the entity's current
+ * `last_observation_at` (Waxwing ADR, ent_4b41bb83a4faf4428a73bfc8).
+ * Entity-level CAS: coarser than `array_item_patch.ts`'s per-item version
+ * (ANY field changing since the caller's read trips this), by design — it is
+ * the backstop for non-keyed-array fields, not a replacement for keyed
+ * per-row patching. Distinct from the existing 409 `entity_owner_conflict`
+ * (different-user write refusal); this is same-owner, stale-read refusal.
+ */
+export class FieldVersionConflictError extends Error {
+  readonly code = "ERR_FIELD_VERSION_CONFLICT";
+  readonly statusCode = 409;
+  readonly entityId: string;
+  readonly field: string;
+  readonly storedVersion: string | null;
+  readonly expectedVersion: string;
+
+  constructor(params: {
+    entityId: string;
+    field: string;
+    storedVersion: string | null;
+    expectedVersion: string;
+  }) {
+    super(
+      `Refusing correction on ${params.entityId}.${params.field}: ` +
+        `expected_version "${params.expectedVersion}" is stale ` +
+        `(current: ${params.storedVersion ?? "null"}).`
+    );
+    this.name = "FieldVersionConflictError";
+    this.entityId = params.entityId;
+    this.field = params.field;
+    this.storedVersion = params.storedVersion;
+    this.expectedVersion = params.expectedVersion;
+  }
+
+  toErrorEnvelope(): {
+    code: string;
+    message: string;
+    entity_id: string;
+    field: string;
+    stored_version: string | null;
+    expected_version: string;
+  } {
+    return {
+      code: this.code,
+      message: this.message,
+      entity_id: this.entityId,
+      field: this.field,
+      stored_version: this.storedVersion,
+      expected_version: this.expectedVersion,
+    };
+  }
+}
+
+/**
+ * Shared entity-level CAS precondition check for `/correct` (Waxwing ADR).
+ * Reuses `last_observation_at` as the version token — no new column, same
+ * primitive `batch_correction.ts` already established for whole-entity
+ * optimistic concurrency. Called by both the HTTP `/correct` handler and the
+ * MCP `correct()` tool BEFORE `createCorrection` runs, so a stale-version
+ * refusal writes nothing. No-op (never throws) when `expectedVersion` is
+ * omitted — legacy callers see zero behavior change.
+ */
+export async function assertCorrectionVersionPrecondition(params: {
+  entityId: string;
+  field: string;
+  userId: string;
+  expectedVersion?: string;
+  overwrite?: boolean;
+}): Promise<void> {
+  const { entityId, field, userId, expectedVersion, overwrite = false } = params;
+  if (typeof expectedVersion !== "string") return;
+  if (overwrite) return;
+
+  const current = await getEntityWithProvenance(entityId, false, userId);
+  const storedVersion = current?.last_observation_at ?? null;
+  // Mirrors applyBatchCorrection's storedLast !== null guard
+  // (batch_correction.ts): a null storedVersion means the entity was not
+  // found under this userId (never yet observed, or owned by a different
+  // user — getEntityWithProvenance is userId-scoped). That is a distinct
+  // failure from "the version moved" and must fall through to
+  // createCorrection's own not-found/ownership checks rather than being
+  // misreported as a stale-version conflict here.
+  if (storedVersion !== null && storedVersion !== expectedVersion) {
+    throw new FieldVersionConflictError({
+      entityId,
+      field,
+      storedVersion,
+      expectedVersion,
+    });
+  }
+}
+
+/**
+ * Atomically compare the entity version and write a correction. The database
+ * transaction is the binding control: concurrent CAS writers cannot both
+ * observe the same version and then both insert. Shared-handle queries inside
+ * the callback join the transaction through the driver context.
+ */
+export async function createCorrectionWithVersionPrecondition(
+  params: CreateCorrectionParams & {
+    expected_version: string;
+    overwrite?: boolean;
+  }
+): Promise<CorrectionResult> {
+  const database = await getDb();
+  return database.transaction(async () => {
+    await assertCorrectionVersionPrecondition({
+      entityId: params.entity_id,
+      field: params.field,
+      userId: params.user_id,
+      expectedVersion: params.expected_version,
+      overwrite: params.overwrite,
+    });
+    return createCorrection(params);
+  });
 }
 
 /** Result of resolving the schema for a correction target. */

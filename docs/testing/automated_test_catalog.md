@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **655**
-- Backend and repo Vitest files: **619**
+- Total automated test files: **666**
+- Backend and repo Vitest files: **630**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 180 |
-| Vitest service tests | 46 |
+| Vitest unit tests | 183 |
+| Vitest service tests | 51 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 195 |
-| Vitest CLI tests | 79 |
-| Vitest contract tests | 20 |
+| Vitest integration tests | 196 |
+| Vitest CLI tests | 80 |
+| Vitest contract tests | 21 |
 | Vitest security tests | 17 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (180):**
+**Files (183):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -133,6 +133,7 @@ flowchart TD
 - `tests/unit/agent_identity.test.ts`
 - `tests/unit/agent_memory.test.ts`
 - `tests/unit/agents_grants_import.test.ts`
+- `tests/unit/array_item_patch_atomic.test.ts`
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/backfill_canonical_names_field_guard.test.ts`
@@ -228,6 +229,7 @@ flowchart TD
 - `tests/unit/null_cleared_field_warning.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_highest_priority_tiebreak.test.ts`
+- `tests/unit/observation_reducer_merge_array_by_key.test.ts`
 - `tests/unit/observation_reducer_merge_array_correction.test.ts`
 - `tests/unit/observation_reducer_merge_array_stringified.test.ts`
 - `tests/unit/observation_reducer_observation_source.test.ts`
@@ -235,6 +237,7 @@ flowchart TD
 - `tests/unit/observation_reducer_provenance.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
+- `tests/unit/patch_array_item_store_policy_envelope.test.ts`
 - `tests/unit/plan_schema_body_field.test.ts`
 - `tests/unit/preference_schema.test.ts`
 - `tests/unit/product_feedback_schema.test.ts`
@@ -296,9 +299,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (46):**
+**Files (51):**
+- `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
+- `tests/services/by_id_write_ownership_conflict.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
@@ -306,8 +311,11 @@ flowchart TD
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
+- `tests/services/entity_resolution_cross_owner_conflict.test.ts`
+- `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
+- `tests/services/entity_split_cross_owner_conflict.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
 - `tests/services/entity_submission_validation.test.ts`
 - `tests/services/entity_type_equivalence.test.ts`
@@ -422,7 +430,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (195):**
+**Files (196):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -440,6 +448,7 @@ flowchart TD
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`
 - `tests/integration/anonymous_write_policy.test.ts`
+- `tests/integration/array_item_patch_conflict.test.ts`
 - `tests/integration/attachment_resolution_equivalence.test.ts`
 - `tests/integration/attribution_parity.test.ts`
 - `tests/integration/auto_link_retraction_organization_change.test.ts`
@@ -624,7 +633,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (79):**
+**Files (80):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -632,6 +641,7 @@ flowchart TD
 - `tests/cli/cli_api_commands.test.ts`
 - `tests/cli/cli_api_start_prod_advisory.test.ts`
 - `tests/cli/cli_api_start_watch_flag.test.ts`
+- `tests/cli/cli_array_item_patch_commands.test.ts`
 - `tests/cli/cli_auth_commands.test.ts`
 - `tests/cli/cli_command_coverage_guard.test.ts`
 - `tests/cli/cli_correction_commands.test.ts`
@@ -710,7 +720,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (20):**
+**Files (21):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -729,6 +739,7 @@ flowchart TD
 - `tests/contract/relationship_type_enum_parity.test.ts`
 - `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
+- `tests/contract/security_gates_ci_wiring.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
 

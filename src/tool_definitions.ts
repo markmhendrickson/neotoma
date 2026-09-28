@@ -563,6 +563,14 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "patch_array_item",
+      description: desc(
+        "patch_array_item",
+        "Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write. Loads the current array fresh, finds/replaces the item matching key_field/key_value, and writes the reconciled array as one new observation. Concurrent patches to DIFFERENT keys both survive. Pass expected_item_version (from a prior patch's response) to detect a same-key race; a stale version returns a structured ERR_ARRAY_ITEM_CONFLICT with the current item instead of overwriting — re-apply your change against it and retry with a fresh version."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("patch_array_item"),
+    },
+    {
       name: "merge_entities",
       description: desc(
         "merge_entities",
@@ -1597,6 +1605,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "store",
   "parse_file",
   "correct",
+  "patch_array_item",
   "merge_entities",
   "split_entity",
   "list_potential_duplicates",

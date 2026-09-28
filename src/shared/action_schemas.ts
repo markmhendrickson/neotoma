@@ -851,6 +851,35 @@ export const CorrectEntityRequestSchema = z.object({
   value: z.unknown(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
+  /**
+   * Optional entity-level optimistic-concurrency precondition (Waxwing ADR,
+   * ent_4b41bb83a4faf4428a73bfc8). When supplied, the correction is refused
+   * with `ERR_FIELD_VERSION_CONFLICT` if the entity's current
+   * `last_observation_at` no longer matches — unless `overwrite` is also
+   * true. Omitted (the default): zero behavior change from the legacy
+   * unconditional-insert path.
+   */
+  expected_version: z.string().optional(),
+  /**
+   * When true, proceed even if `expected_version` is stale. Mirrors
+   * `batch_correction.ts`'s `overwrite` flag. Ignored when
+   * `expected_version` is not supplied.
+   */
+  overwrite: z.boolean().optional(),
+});
+
+export const PatchArrayItemRequestSchema = z.object({
+  entity_id: z.string().min(1),
+  entity_type: z.string().min(1),
+  field: z.string().min(1),
+  key_field: z.string().min(1),
+  // Keyed reduction treats null/missing as an unkeyed legacy item, so the
+  // write surface accepts only non-null JSON scalars as stable identities.
+  key_value: z.union([z.string(), z.number(), z.boolean()]),
+  item: z.record(z.unknown()),
+  expected_item_version: z.string().optional(),
+  idempotency_key: z.string().min(1),
+  user_id: z.string().optional(),
 });
 
 export const ListEntityTypesRequestSchema = z.object({
@@ -954,8 +983,15 @@ export const UpdateSchemaIncrementalRequestSchema = z
           field_type: z.enum(["string", "number", "date", "boolean", "array", "object"]),
           required: z.boolean().default(false),
           reducer_strategy: z
-            .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
+            .enum([
+              "last_write",
+              "highest_priority",
+              "most_specific",
+              "merge_array",
+              "merge_array_by_key",
+            ])
             .optional(),
+          reducer_key_field: z.string().min(1).optional(),
         })
       )
       .optional(),
@@ -982,7 +1018,18 @@ export const UpdateSchemaIncrementalRequestSchema = z
       message:
         "At least one of fields_to_add, fields_to_remove, or canonical_name_fields must be provided",
     }
-  );
+  )
+  .superRefine((data, ctx) => {
+    for (const [index, field] of (data.fields_to_add ?? []).entries()) {
+      if (field.reducer_strategy === "merge_array_by_key" && !field.reducer_key_field) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["fields_to_add", index, "reducer_key_field"],
+          message: "reducer_key_field is required for merge_array_by_key",
+        });
+      }
+    }
+  });
 
 export const RegisterSchemaRequestSchema = z.object({
   entity_type: z.string(),

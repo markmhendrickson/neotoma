@@ -213,6 +213,7 @@ import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
+  PatchArrayItemRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
@@ -12040,7 +12041,8 @@ app.post("/correct", async (req, res) => {
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const { entity_id, entity_type, field, value, idempotency_key } = parsed.data;
+    const { entity_id, entity_type, field, value, idempotency_key, expected_version, overwrite } =
+      parsed.data;
 
     const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
     if (correctCtx) {
@@ -12059,13 +12061,17 @@ app.post("/correct", async (req, res) => {
     // propagates (it is NOT coerced to "declared field" — product principle
     // 10.2); a missing schema throws CorrectionSchemaNotFoundError, surfaced as
     // ERR_NO_SCHEMA_FOR_ENTITY_TYPE. Both reach the catch below.
-    const { createCorrection, resolveCorrectionSchema, buildCorrectionResponse } =
-      await import("./services/correction.js");
+    const {
+      createCorrection,
+      createCorrectionWithVersionPrecondition,
+      resolveCorrectionSchema,
+      buildCorrectionResponse,
+    } = await import("./services/correction.js");
 
     const { schemaVersion: correctionSchemaVersion, isUnknownField } =
       await resolveCorrectionSchema(entity_type, field, userId);
 
-    const result = await createCorrection({
+    const correctionParams = {
       entity_id,
       entity_type,
       field,
@@ -12073,7 +12079,15 @@ app.post("/correct", async (req, res) => {
       schema_version: correctionSchemaVersion,
       user_id: userId,
       idempotency_key,
-    });
+    };
+    const result =
+      typeof expected_version === "string"
+        ? await createCorrectionWithVersionPrecondition({
+            ...correctionParams,
+            expected_version,
+            overwrite,
+          })
+        : await createCorrection(correctionParams);
 
     if (isUnknownField) {
       try {
@@ -12118,12 +12132,44 @@ app.post("/correct", async (req, res) => {
     // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
     // IO failure is NOT swallowed here — it falls through to the generic 500
     // handler below instead of being coerced into a "declared field" outcome.
-    const { CorrectionSchemaNotFoundError } = await import("./services/correction.js");
+    const {
+      CorrectionSchemaNotFoundError,
+      CorrectionEntityTypeMismatchError,
+      FieldVersionConflictError,
+    } = await import("./services/correction.js");
     if (error instanceof CorrectionSchemaNotFoundError) {
       logWarn("ValidationError:correct", req, { code: error.code });
       return res
         .status(400)
         .json(buildErrorEnvelope(error.code, error.message, { entity_type: error.entityType }));
+    }
+    if (error instanceof CorrectionEntityTypeMismatchError) {
+      logWarn("ValidationError:correct", req, { code: error.code });
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          entity_id: error.entityId,
+          supplied_entity_type: error.suppliedEntityType,
+          stored_entity_type: error.storedEntityType,
+        })
+      );
+    }
+    // Waxwing ADR: stale expected_version on /correct. Nothing was written —
+    // the precondition check runs before createCorrection. Flat standard
+    // envelope (error_code/message/details), matching the OpenAPI contract
+    // and the sibling ERR_ARRAY_ITEM_CONFLICT 409 on /patch_array_item — NOT
+    // wrapped under an `error` key (that shape is reserved for envelopes
+    // like entity_owner_conflict that predate the standard envelope).
+    if (error instanceof FieldVersionConflictError) {
+      logWarn("VersionConflict:correct", req, { code: error.code, field: error.field });
+      return res.status(409).json(
+        buildErrorEnvelope(error.code, error.message, {
+          entity_id: error.entityId,
+          field: error.field,
+          stored_version: error.storedVersion,
+          expected_version: error.expectedVersion,
+          hint: "Re-read the entity snapshot and retry with its current last_observation_at as expected_version.",
+        })
+      );
     }
     // Instance store-policy denial (#1975) — same envelope as /store, so a
     // caller handling one handles both.
@@ -12142,6 +12188,146 @@ app.post("/correct", async (req, res) => {
       "Failed to create correction",
       "DB_QUERY_FAILED",
       "APIError:correct"
+    );
+  }
+});
+
+// POST /patch_array_item - Atomically patch one item of a structured array
+// field by key (Waxwing ADR, ent_4b41bb83a4faf4428a73bfc8). Sibling of
+// /correct; see openapi.yaml for the full contract.
+app.post("/patch_array_item", async (req, res) => {
+  const parsed = PatchArrayItemRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:patch_array_item", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { entity_id, entity_type, field, key_field, key_value, item, expected_item_version } =
+      parsed.data;
+
+    // Resolve the authoritative entity type under the authenticated user
+    // before capability/protected-type checks. The request's entity_type is a
+    // consistency assertion, never an authorization input.
+    const { loadArrayItemPatchTarget } = await import("./services/array_item_patch.js");
+    const target = await loadArrayItemPatchTarget({
+      entityId: entity_id,
+      userId,
+      suppliedEntityType: entity_type,
+    });
+
+    const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+    if (correctCtx) {
+      enforceAgentCapability("correct", [target.entity_type], correctCtx);
+    }
+    assertCanWriteProtectedBatch({
+      entity_types: [target.entity_type],
+      op: "correct",
+      identity: getCurrentAgentIdentity(),
+      admission: getCurrentAAuthAdmission(),
+    });
+
+    const { patchArrayItem } = await import("./services/array_item_patch.js");
+    const result = await patchArrayItem({
+      entity_id,
+      entity_type,
+      user_id: userId,
+      field,
+      key_field,
+      key_value,
+      item,
+      expected_item_version,
+      idempotency_key: parsed.data.idempotency_key,
+    });
+
+    if (result.status === "conflict") {
+      logWarn("VersionConflict:patch_array_item", req, { entity_id, field, key_field });
+      return res.status(409).json(
+        buildErrorEnvelope(
+          "ERR_ARRAY_ITEM_CONFLICT",
+          `Stale expected_item_version for ${entity_type}.${field}[${key_field}=${JSON.stringify(key_value)}]`,
+          {
+            entity_id,
+            entity_type,
+            field,
+            key_field,
+            key_value,
+            current_item: result.conflict?.current_item ?? null,
+            current_item_version: result.conflict?.current_item_version ?? null,
+            expected_item_version: result.conflict?.expected_item_version ?? null,
+            hint: "Re-apply the intended change to current_item and retry with current_item_version as expected_item_version.",
+          }
+        )
+      );
+    }
+
+    return res.json({
+      success: true,
+      entity_id: result.entity_id,
+      entity_type: result.entity_type,
+      field: result.field,
+      key_field: result.key_field,
+      key_value: result.key_value,
+      observation_id: result.observation_id,
+      item: result.item,
+      item_version: result.item_version,
+      array_length: result.array_length,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Entity not found")) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
+    }
+    if (error instanceof EntityOwnerConflictError) {
+      return res.status(409).json({ error: error.toErrorEnvelope() });
+    }
+    {
+      const {
+        ArrayItemKeyFieldMismatchError,
+        ArrayItemPolicyRequiredError,
+        ArrayItemEntityTypeMismatchError,
+      } = await import("./services/array_item_patch.js");
+      if (
+        error instanceof ArrayItemKeyFieldMismatchError ||
+        error instanceof ArrayItemPolicyRequiredError ||
+        error instanceof ArrayItemEntityTypeMismatchError
+      ) {
+        logWarn("KeyFieldMismatch:patch_array_item", req, {
+          code: error.code,
+        });
+        return res
+          .status(error.statusCode)
+          .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+      }
+    }
+    // Instance store-policy denial (#1975) — patchArrayItem() writes through
+    // createCorrection exactly like /correct, so it can be refused by the
+    // same instance-level write policy. Same envelope shape as /correct and
+    // /store, so a caller handling one handles all three.
+    const { StorePolicyDeniedError } = await import("./services/instance_policy.js");
+    if (error instanceof StorePolicyDeniedError) {
+      logWarn("StorePolicyDenied:patch_array_item", req, {
+        denied_count: error.denied.length,
+        reason_codes: [...new Set(error.denied.map((d) => d.reason_code))].sort(),
+      });
+      return res.status(400).json({ error: error.toErrorEnvelope() });
+    }
+    if (error instanceof StorePolicyUnavailableError) {
+      logError("StorePolicyUnavailable:patch_array_item", req, error, {
+        code: error.code,
+        cause: error.cause_message,
+      });
+      return res
+        .status(503)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to patch array item",
+      "DB_QUERY_FAILED",
+      "APIError:patch_array_item"
     );
   }
 });

@@ -14340,6 +14340,7 @@ schemasCommand
             field_type: def.type ?? "string",
             required: def.required ?? false,
             reducer_strategy: def.reducer,
+            reducer_key_field: def.reducer_key_field,
           }));
         }
       }
@@ -15911,6 +15912,143 @@ correctionsCommand
         { correction_id: correctionId, entity_id: entityId, success: result?.success ?? true },
         outputMode
       );
+    }
+  );
+
+// ---------------------------------------------------------------------------
+// neotoma array-item patch
+//
+// Atomic keyed-item patch for structured array fields (Waxwing ADR,
+// ent_4b41bb83a4faf4428a73bfc8). Replaces the read-modify-full-array-write
+// anti-pattern: instead of fetching the entity, editing one row of an array
+// field locally, and writing the whole array back (which can silently
+// discard a concurrent writer's disjoint row), this patches one row
+// server-side atomically.
+// ---------------------------------------------------------------------------
+const arrayItemCommand = program
+  .command("array-item")
+  .description("Structured array field commands");
+
+arrayItemCommand
+  .command("patch")
+  .description(
+    "Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write"
+  )
+  .argument("<entityId>", "Entity ID to patch")
+  .argument("<entityType>", "Entity type")
+  .argument("<field>", "Name of the array field to patch")
+  .argument("<keyField>", "Name of the field on each item that identifies it")
+  .argument("<keyValue>", "Value of keyField identifying the item to patch")
+  .option(
+    "--item-json <json>",
+    "JSON object of fields to set on the item (merged onto the existing item, or used to create it)"
+  )
+  .option(
+    "--expected-item-version <version>",
+    "Content-hash version of the item as last observed (from a prior patch's item_version). Stale value refuses with a conflict instead of overwriting."
+  )
+  .option("--user-id <userId>", "User ID")
+  .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
+  .action(
+    async (
+      entityId: string,
+      entityType: string,
+      field: string,
+      keyField: string,
+      keyValueArg: string,
+      opts: {
+        itemJson?: string;
+        expectedItemVersion?: string;
+        userId?: string;
+        idempotencyKey?: string;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const parsedKeyValue = parseCliCorrectedValue(keyValueArg);
+      if (
+        typeof parsedKeyValue !== "string" &&
+        typeof parsedKeyValue !== "number" &&
+        typeof parsedKeyValue !== "boolean"
+      ) {
+        throw new Error("keyValue must be a non-null JSON scalar (string, number, or boolean)");
+      }
+      const keyValue = parsedKeyValue;
+      let item: Record<string, unknown> = {};
+      if (opts.itemJson) {
+        try {
+          const parsed = JSON.parse(opts.itemJson);
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("must be a JSON object");
+          }
+          item = parsed as Record<string, unknown>;
+        } catch (err) {
+          throw new Error(
+            `Invalid --item-json: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const idempotencyKey =
+        opts.idempotencyKey || createIdempotencyKey({ entityId, field, keyField, keyValue, item });
+
+      const { data, error, response } = await api.POST("/patch_array_item", {
+        body: {
+          entity_id: entityId,
+          entity_type: entityType,
+          field,
+          key_field: keyField,
+          key_value: keyValue,
+          item,
+          expected_item_version: opts.expectedItemVersion,
+          idempotency_key: idempotencyKey,
+          user_id: opts.userId,
+        },
+      });
+
+      if (error) {
+        const status = response?.status;
+        if (status === 409) {
+          // Standard envelope shape (buildErrorEnvelope): { error_code,
+          // message, details, trace_id, timestamp } at the top level — NOT
+          // nested under an `error` key. See docs/subsystems/errors.md
+          // "Standard envelope".
+          const body = error as unknown as { details?: Record<string, unknown> };
+          const details = body?.details ?? {};
+          writeOutput(
+            {
+              success: false,
+              status: "conflict",
+              entity_id: entityId,
+              field,
+              key_field: keyField,
+              key_value: keyValue,
+              current_item: details.current_item ?? null,
+              current_item_version: details.current_item_version ?? null,
+              expected_item_version: details.expected_item_version ?? null,
+            },
+            outputMode
+          );
+          if (outputMode !== "json") {
+            process.stderr.write(
+              warn(
+                `Conflict: item ${keyField}=${JSON.stringify(keyValue)} changed since expected_item_version was read. ` +
+                  `Re-read current_item, re-apply your change, and retry with the new item_version.\n`
+              )
+            );
+          }
+          process.exitCode = 1;
+          return;
+        }
+        throw new Error(`Failed to patch array item: ${status ?? ""} ${formatApiError(error)}`);
+      }
+
+      writeOutput({ success: true, status: "applied", ...data }, outputMode);
     }
   );
 

@@ -14,6 +14,7 @@ import { promisify } from "util";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { resolveBaseUrl } from "../../src/cli/config.js";
 
 const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
@@ -77,5 +78,71 @@ describe("CLI edit command", () => {
       exitCode = typeof e.code === "number" ? e.code : 1;
     }
     expect(exitCode).toBeGreaterThan(0);
+  });
+
+  // Waxwing ADR (ent_4b41bb83a4faf4428a73bfc8) planted test #7: the conflict
+  // branch of applyBatchCorrection (stale expected_last_observation_at
+  // without overwrite=true) had no dedicated coverage. `neotoma edit` is a
+  // thin wrapper around POST /entities/:id/batch_correct; drive that
+  // endpoint directly with a deliberately stale expected_last_observation_at
+  // to assert the documented contract deterministically: nothing is written.
+  //
+  // Uses its OWN freshly created entity (not the shared testEntityId) with a
+  // unique canonical_name so this test is immune to entity-resolution reuse
+  // across repeated local runs against a persistent dev database.
+  it("POST /entities/:id/batch_correct aborts with nothing written when expected_last_observation_at is stale and overwrite is not set", async () => {
+    const conflictEntityFile = join(testDir, "conflict-entity.json");
+    const uniqueName = `Conflict Test Company ${Date.now()}`;
+    await writeFile(
+      conflictEntityFile,
+      JSON.stringify({
+        entities: [
+          { entity_type: "company", canonical_name: uniqueName, properties: { name: uniqueName } },
+        ],
+      })
+    );
+    const { stdout: seedStdout } = await execAsync(
+      `${CLI_PATH} store --file "${conflictEntityFile}" --json`
+    );
+    const conflictEntityId = JSON.parse(seedStdout).entities?.[0]?.entity_id;
+    expect(conflictEntityId, "conflict test entity should be created").toBeTruthy();
+
+    const { stdout: entityJson } = await execAsync(
+      `${CLI_PATH} entities get "${conflictEntityId}" --json`
+    );
+    const before = JSON.parse(entityJson);
+    const staleTimestamp = before.last_observation_at;
+
+    // Advance the entity so the snapshot's last_observation_at moves past
+    // staleTimestamp.
+    await execAsync(
+      `${CLI_PATH} corrections create "${conflictEntityId}" --entity-type company --field-name name --corrected-value "Advanced Before Conflict" --json`
+    );
+
+    const baseUrl = await resolveBaseUrl(undefined, {});
+    const res = await fetch(`${baseUrl}/entities/${conflictEntityId}/batch_correct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        changes: [{ field: "name", value: "Should Not Land" }],
+        expected_last_observation_at: staleTimestamp,
+        overwrite: false,
+      }),
+    });
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { status: string; conflict?: Record<string, unknown> };
+    expect(body.status).toBe("conflict");
+    expect(body.conflict?.conflicting_fields).toEqual(["name"]);
+
+    // Confirm nothing was written by the stale (aborted) attempt: the
+    // advancing correction's value is still current, not the aborted
+    // "Should Not Land" value.
+    const { stdout: afterJson } = await execAsync(
+      `${CLI_PATH} entities get "${conflictEntityId}" --json`
+    );
+    const after = JSON.parse(afterJson);
+    expect(after.snapshot?.name).toBe("Advanced Before Conflict");
+    expect(after.snapshot?.name).not.toBe("Should Not Land");
   });
 });
