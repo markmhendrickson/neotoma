@@ -266,7 +266,13 @@ export function mirrorPerSkill(
   const linked: string[] = [];
   const errors: Array<{ skill: string; reason: string }> = [];
 
-  // Prune stale links pointing into our source for skills that were removed.
+  // Prune stale links pointing into our source for skills that were removed
+  // from the source entirely. A skill that merely became deprecated (absent
+  // from `skillNames` but its directory still exists in `sourceDir`) is left
+  // alone: an existing per-skill link a prior sync already created is kept
+  // resolving for compatibility (existing symlinks, SkillHub listings, GitHub
+  // blob links) — only fresh links to it are withheld, by the "ensure each
+  // current skill is linked" loop below never adding one in the first place.
   for (const name of (() => {
     try {
       return readdirSync(targetDir);
@@ -279,7 +285,7 @@ export function mirrorPerSkill(
     if (!isSymlink(entry)) continue;
     try {
       const resolved = resolve(targetDir, readlinkSync(entry));
-      if (resolved.startsWith(resolve(sourceDir))) {
+      if (resolved.startsWith(resolve(sourceDir)) && !existsSync(join(sourceDir, name))) {
         unlinkSync(entry);
         changed = true;
       }
@@ -408,13 +414,27 @@ export function mirrorToHarness(
     // Unexpected non-symlink entry encountered: preserve it via per-skill mode.
   }
 
+  // A pre-existing whole-dir symlink (from an install made before this source
+  // gained a deprecated skill) must be torn down before `mirrorPerSkill` runs:
+  // `mkdirSync` on an existing symlink-to-directory is a silent no-op, so
+  // without this the symlink would survive untouched and every skill —
+  // including the ones we're trying to withhold — would stay resolvable
+  // through it. Unlinking just the symlink itself (never its target) is safe;
+  // `mirrorPerSkill` immediately recreates a real directory in its place.
+  let convertedFromWholeDir = false;
+  if (alreadyWholeDir) {
+    unlinkSync(targetDir);
+    convertedFromWholeDir = true;
+    opts.onLog?.(`Converted ${targetDir} from a whole-dir symlink to per-skill links.`);
+  }
+
   const { changed, linked, errors } = mirrorPerSkill(targetDir, sourceDir, installableSkillNames);
   return {
     tool,
     target: targetDir,
     base_present: true,
     mode: "per-skill-symlink",
-    changed,
+    changed: convertedFromWholeDir || changed,
     linked,
     ...(errors.length > 0 ? { errors } : {}),
   };

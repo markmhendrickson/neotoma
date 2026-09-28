@@ -34,7 +34,7 @@ function makeSource(names: string[]): void {
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "skmirror-"));
   sourceDir = path.join(root, "src-skills");
-  makeSource(["end", "status", "query-memory"]);
+  makeSource(["end", "status", "query-memory", "store-data", "remember-codebase"]);
 });
 
 afterEach(() => {
@@ -216,10 +216,17 @@ describe("deprecated skills", () => {
   });
 
   it("does not unlink a deprecated skill an existing install had already linked", () => {
-    // First sync happens before the skill is marked deprecated.
-    fs.mkdirSync(path.join(root, ".codex"), { recursive: true });
+    // First sync happens before the skill is marked deprecated, and must land
+    // in per-skill mode (not whole-dir) so this test actually exercises
+    // mirrorPerSkill's prune logic rather than an untouched whole-dir
+    // symlink. Foreign content in the target forces that mode, exactly like
+    // "falls back to per-skill symlinks and preserves foreign content" above.
+    const codexSkills = path.join(root, ".codex", "skills", "vendor-skill");
+    fs.mkdirSync(codexSkills, { recursive: true });
+    fs.writeFileSync(path.join(codexSkills, "SKILL.md"), "foreign");
     makeSource(["to-be-retired"]);
-    mirrorToHarness("codex", { cwd: root, scope: "project", sourceDir });
+    const first = mirrorToHarness("codex", { cwd: root, scope: "project", sourceDir });
+    expect(first.mode).toBe("per-skill-symlink");
     const linkPath = path.join(root, ".codex", "skills", "to-be-retired");
     expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
 
@@ -229,8 +236,46 @@ describe("deprecated skills", () => {
       path.join(sourceDir, "to-be-retired", "SKILL.md"),
       "---\nname: to-be-retired\ndeprecated: true\n---\n"
     );
-    mirrorToHarness("codex", { cwd: root, scope: "project", sourceDir });
+    const second = mirrorToHarness("codex", { cwd: root, scope: "project", sourceDir });
+    expect(second.mode).toBe("per-skill-symlink");
     expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
+  });
+
+  it("removes both retired wrappers from a pre-existing whole-dir install while preserving workflows", () => {
+    // First sync happens before any skill is deprecated, into an empty target:
+    // this is the whole-dir-symlink mode every real install made before this
+    // change shipped. Confirm that precondition explicitly.
+    fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+    const first = mirrorToHarness("claude-code", { cwd: root, scope: "project", sourceDir });
+    expect(first.mode).toBe("whole-dir-symlink");
+    const skillsDir = path.join(root, ".claude", "skills");
+    expect(fs.lstatSync(skillsDir).isSymbolicLink()).toBe(true);
+    // The whole-dir symlink resolves every skill, including both wrappers
+    // about to be retired — proves they are loadable before the upgrade.
+    expect(fs.existsSync(path.join(skillsDir, "query-memory", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(skillsDir, "store-data", "SKILL.md"))).toBe(true);
+
+    // Both primitive wrappers become deprecated (mirrors this PR's own
+    // change) and the harness re-syncs (`neotoma doctor` / `neotoma skills
+    // sync` / the LaunchAgent watcher) against the same, still-live whole-dir
+    // symlink.
+    writeDeprecatedSkill("query-memory");
+    writeDeprecatedSkill("store-data");
+    const second = mirrorToHarness("claude-code", { cwd: root, scope: "project", sourceDir });
+
+    expect(second.mode).toBe("per-skill-symlink");
+    expect(second.changed).toBe(true);
+    // The whole-dir symlink must actually be replaced by a real directory —
+    // not just reported as converted while the old symlink survives.
+    expect(fs.lstatSync(skillsDir).isSymbolicLink()).toBe(false);
+    // Neither retired wrapper may remain loadable through the harness target.
+    expect(fs.existsSync(path.join(skillsDir, "query-memory"))).toBe(false);
+    expect(fs.existsSync(path.join(skillsDir, "store-data"))).toBe(false);
+    // Workflow-specific and recovery/setup skills remain linked and loadable.
+    for (const activeSkill of ["end", "remember-codebase"]) {
+      expect(fs.lstatSync(path.join(skillsDir, activeSkill)).isSymbolicLink()).toBe(true);
+      expect(fs.existsSync(path.join(skillsDir, activeSkill, "SKILL.md"))).toBe(true);
+    }
   });
 });
 
