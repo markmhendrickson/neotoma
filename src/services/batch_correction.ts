@@ -29,7 +29,11 @@
  */
 import { db } from "../db.js";
 import { getDb } from "../repositories/db/connection.js";
-import { createCorrection } from "./correction.js";
+import {
+  createCorrection,
+  emitCommittedCorrection,
+  type DeferredCorrectionEvent,
+} from "./correction.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { stableSerialize } from "./stable_serialize.js";
@@ -65,6 +69,8 @@ export interface BatchCorrectionOptions {
   changes: BatchCorrectionFieldChange[];
   /** Optional base key used to build deterministic idempotency keys. */
   idempotency_prefix?: string;
+  /** @internal rollback fault injection for transaction publication tests. */
+  before_commit?: () => void | Promise<void>;
 }
 
 export type BatchCorrectionStatus = "applied" | "conflict" | "validation_error";
@@ -184,11 +190,19 @@ export async function applyBatchCorrection(
   options: BatchCorrectionOptions
 ): Promise<BatchCorrectionResult> {
   const database = await getDb();
-  return database.transaction(async () => applyBatchCorrectionInTransaction(options));
+  const deferredEvents: DeferredCorrectionEvent[] = [];
+  const result = await database.transaction(async () => {
+    const applied = await applyBatchCorrectionInTransaction(options, deferredEvents);
+    await options.before_commit?.();
+    return applied;
+  });
+  for (const event of deferredEvents) emitCommittedCorrection(event);
+  return result;
 }
 
 async function applyBatchCorrectionInTransaction(
-  options: BatchCorrectionOptions
+  options: BatchCorrectionOptions,
+  deferredEvents: DeferredCorrectionEvent[]
 ): Promise<BatchCorrectionResult> {
   const {
     entity_id,
@@ -287,7 +301,10 @@ async function applyBatchCorrectionInTransaction(
       schema_version: schema?.schema_version ?? "1.0",
       user_id,
       idempotency_key,
+      defer_substrate_events: true,
+      in_transaction: true,
     });
+    if (res.deferred_substrate_event) deferredEvents.push(res.deferred_substrate_event);
     applied.push({
       observation_id: res.observation_id,
       field: res.field,

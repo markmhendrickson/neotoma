@@ -3462,6 +3462,8 @@ export interface components {
       observation_count?: number;
       /** Format: date-time */
       last_observation_at?: string;
+      /** @description Opaque CAS token that changes for every committed observation. */
+      entity_version?: string;
       canonical_name?: string | null;
       merged_to_entity_id?: string | null;
       /** Format: date-time */
@@ -8446,7 +8448,7 @@ export interface operations {
            * @description Optional entity-level optimistic-concurrency precondition.
            *     When supplied, the correction is refused with
            *     `409 ERR_FIELD_VERSION_CONFLICT` if the entity's current
-           *     `last_observation_at` no longer matches this value (unless
+           *     collision-safe `entity_version` no longer matches this value (unless
            *     `overwrite` is also true). Omitted: zero behavior change
            *     from the legacy unconditional-insert path. Entity-scoped
            *     (any field changing trips it) — use `/patch_array_item`
@@ -8474,6 +8476,10 @@ export interface operations {
             field?: string;
             value?: unknown;
             message?: string;
+            /** @description True when this is the exact result of an earlier committed request with the same idempotency key. */
+            replayed?: boolean;
+            /** @description Fresh entity-level CAS token after the committed correction. */
+            entity_version?: string;
             /**
              * @description HTTP-only. Always `true` on a 2xx correction. Absent on the
              *     MCP transport.
@@ -8526,6 +8532,9 @@ export interface operations {
        *     the caller-supplied `entity_type` differs from the target entity's
        *     authoritative stored type; no observation is written. Other
        *     validation errors use the generic `ErrorEnvelope`.
+       *     `ERR_IDEMPOTENCY_MISMATCH` means the key already committed a
+       *     different canonical correction payload; the original result is
+       *     unchanged and no new observation is written.
        */
       400: {
         headers: {
@@ -8564,8 +8573,8 @@ export interface operations {
        *     the other owner's identity or fields.
        *
        *     `ERR_FIELD_VERSION_CONFLICT` — the caller supplied
-       *     `expected_version` and the entity's current `last_observation_at`
-       *     no longer matches. No observation is written. The envelope
+       *     `expected_version` and it no longer matches the entity's current
+       *     collision-safe `entity_version`. No observation is written. The envelope
        *     details carry `entity_id`, `field`, `stored_version`, and
        *     `expected_version` so the caller can re-read and retry. Entity-
        *     scoped (any field changing trips it); use `/patch_array_item` for
@@ -8623,7 +8632,12 @@ export interface operations {
            *     snapshot's reducer output.
            */
           key_field: string;
-          /** @description Non-null JSON scalar identifying the row. */
+          /**
+           * @description Portable non-null JSON scalar identifying the row. Numbers
+           *     must be finite safe integers. The reducer preserves older
+           *     rows with non-scalar or unsafe-number keys as unkeyed legacy
+           *     rows, but new patches cannot create them.
+           */
           key_value: string | number | boolean;
           /**
            * @description Fields to set on the item identified by `key_value`.
@@ -8637,13 +8651,21 @@ export interface operations {
           /**
            * @description Content-hash version of the item as last observed by the
            *     caller (returned as `item_version` by a prior patch, or
-           *     computable client-side by the same stable-serialization
-           *     rule). When supplied and stale, the patch is refused with
+           *     computable client-side as SHA-256 over UTF-8 stable
+           *     serialization: object keys sort lexicographically, arrays
+           *     preserve order, and scalar values use JSON spellings).
+           *     When supplied and stale, the patch is refused with
            *     `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
            *     Omit to always last-write-win on this one row (still
            *     scoped — never touches other keys).
            */
           expected_item_version?: string;
+          /**
+           * @description When true, create only if no item with `key_value` exists.
+           *     Concurrent creators for the same key produce one success
+           *     and one `409 ERR_ARRAY_ITEM_CONFLICT` with the committed item.
+           */
+          expected_item_absent?: boolean;
           idempotency_key: string;
           user_id?: string;
         };
@@ -8670,6 +8692,8 @@ export interface operations {
             /** @description Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races. */
             item_version?: string;
             array_length?: number;
+            /** @description True when this response replays the exact prior committed result for the idempotency key. */
+            replayed?: boolean;
           };
         };
       };
@@ -8677,7 +8701,9 @@ export interface operations {
        * @description Validation failed, the supplied entity type or key field does not
        *     match the stored/schema-declared value, the field is not an array
        *     with an active `merge_array_by_key` policy, or the instance store
-       *     policy denied the write. No observation is written.
+       *     policy denied the write. `ERR_IDEMPOTENCY_MISMATCH` means the key
+       *     already committed a different canonical request payload. No
+       *     observation is written.
        */
       400: {
         headers: {
@@ -8714,6 +8740,19 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description Shared authenticated write-rate limit exceeded. Keyed-item patches
+       *     use the same bounded write bucket as `/store` so
+       *     repeated full-array observations cannot grow without a time bound.
+       */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
         };
       };
       /**

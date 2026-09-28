@@ -24,6 +24,7 @@ import { app } from "../../src/actions.js";
 import { NeotomaServer } from "../../src/server.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
 import { cleanupEntityType, cleanupTestSchema } from "../helpers/cleanup_helpers.js";
 
 const USER_ID = LOCAL_DEV_USER_ID;
@@ -47,6 +48,14 @@ function callPatchArrayItem(server: NeotomaServer, params: Record<string, unknow
       patchArrayItem: (p: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
     }
   ).patchArrayItem(params);
+}
+
+function callCorrect(server: NeotomaServer, params: Record<string, unknown>) {
+  return (
+    server as unknown as {
+      correct: (p: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
+    }
+  ).correct(params);
 }
 
 async function httpPatch(
@@ -128,7 +137,7 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     await cleanupTestSchema(TYPE, null);
   });
 
-  it("preserves BOTH rows when two writers patch DIFFERENT keys concurrently (the reported bug)", async () => {
+  it("agent-facing eval: two sessions refresh one workboard without losing either task", async () => {
     const [resA, resB] = await Promise.all([
       httpPatch({
         entity_id: entityId,
@@ -347,6 +356,60 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     expect(rows.some((r) => r.claim_id === key)).toBe(true);
   });
 
+  it("HTTP and MCP replay the committed patch result and reject changed-payload key reuse", async () => {
+    for (const surface of ["http", "mcp"] as const) {
+      const rowKey = `${surface}-replay-row-${Date.now()}`;
+      const idempotencyKey = `${surface}-replay-key-${Date.now()}`;
+      const payload = {
+        entity_id: entityId,
+        entity_type: TYPE,
+        field: "tasks_claimed",
+        key_field: "claim_id",
+        key_value: rowKey,
+        item: { status: "committed" },
+        expected_item_absent: true,
+        idempotency_key: idempotencyKey,
+        user_id: USER_ID,
+      };
+      if (surface === "http") {
+        const first = await httpPatch(payload);
+        const replay = await httpPatch(payload);
+        expect(first.status).toBe(200);
+        expect(replay.status).toBe(200);
+        expect(replay.body.replayed).toBe(true);
+        expect(replay.body.observation_id).toBe(first.body.observation_id);
+        expect(replay.body.item).toEqual(first.body.item);
+        const mismatch = await httpPatch({
+          ...payload,
+          item: { status: "never-stored" },
+        });
+        expect(mismatch.status).toBe(400);
+        expect(mismatch.body.error_code).toBe("ERR_IDEMPOTENCY_MISMATCH");
+      } else {
+        const firstResult = await callPatchArrayItem(server, payload);
+        const replayResult = await callPatchArrayItem(server, payload);
+        const first = JSON.parse(firstResult.content[0].text) as PatchBody;
+        const replay = JSON.parse(replayResult.content[0].text) as PatchBody;
+        expect(replay.replayed).toBe(true);
+        expect(replay.observation_id).toBe(first.observation_id);
+        expect(replay.item).toEqual(first.item);
+        let mismatch: unknown;
+        try {
+          await callPatchArrayItem(server, { ...payload, item: { status: "never-stored" } });
+        } catch (error) {
+          mismatch = error;
+        }
+        expect((mismatch as { data?: { code?: string } }).data?.code).toBe(
+          "ERR_IDEMPOTENCY_MISMATCH"
+        );
+      }
+
+      const snapshot = await fetchSnapshot(entityId);
+      const rows = snapshot.tasks_claimed as Array<Record<string, unknown>>;
+      expect(rows.find((row) => row.claim_id === rowKey)?.status).toBe("committed");
+    }
+  });
+
   it("entity-level CAS on /correct rejects a stale expected_version without writing", async () => {
     const stored = await callStore(server, {
       user_id: USER_ID,
@@ -357,15 +420,14 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     const body = JSON.parse(stored.content[0].text) as {
       entities: Array<{
         entity_id: string;
-        entity_snapshot_after?: { last_observation_at?: string };
+        entity_snapshot_after?: { entity_version?: string };
       }>;
     };
     const casEntityId = body.entities[0].entity_id;
-    const { getEntityWithProvenance } = await import("../../src/services/entity_queries.js");
     const loaded = await getEntityWithProvenance(casEntityId, false, USER_ID);
-    const staleVersion = loaded!.last_observation_at;
+    const staleVersion = loaded!.entity_version;
 
-    // Advance the entity (a DIFFERENT field) so last_observation_at moves.
+    // Advance the entity (a DIFFERENT field) so the collision-safe token moves.
     const bump = await httpCorrect({
       entity_id: casEntityId,
       entity_type: TYPE,
@@ -409,9 +471,8 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     });
     const body = JSON.parse(stored.content[0].text) as { entities: Array<{ entity_id: string }> };
     const targetId = body.entities[0].entity_id;
-    const { getEntityWithProvenance } = await import("../../src/services/entity_queries.js");
     const before = await getEntityWithProvenance(targetId, false, USER_ID);
-    const expectedVersion = before!.last_observation_at;
+    const expectedVersion = before!.entity_version;
 
     const [writerA, writerB] = await Promise.all([
       httpCorrect({
@@ -437,6 +498,42 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     expect([writerA.status, writerB.status].sort()).toEqual([200, 409]);
     const conflict = writerA.status === 409 ? writerA : writerB;
     expect(conflict.body.error_code).toBe("ERR_FIELD_VERSION_CONFLICT");
+  });
+
+  it("MCP correct exposes entity CAS success, stale conflict, retry guidance, and no write", async () => {
+    const before = await getEntityWithProvenance(entityId, false, USER_ID);
+    const expectedVersion = before!.entity_version;
+    const first = await callCorrect(server, {
+      entity_id: entityId,
+      entity_type: TYPE,
+      field: "title",
+      value: "mcp-cas-winner",
+      expected_version: expectedVersion,
+      idempotency_key: `mcp-cas-first-${Date.now()}`,
+      user_id: USER_ID,
+    });
+    const firstBody = JSON.parse(first.content[0].text) as PatchBody;
+    expect(firstBody.entity_version).toMatch(/^[a-f0-9]{64}$/);
+
+    let conflict: unknown;
+    try {
+      await callCorrect(server, {
+        entity_id: entityId,
+        entity_type: TYPE,
+        field: "title",
+        value: "mcp-cas-must-not-land",
+        expected_version: expectedVersion,
+        idempotency_key: `mcp-cas-stale-${Date.now()}`,
+        user_id: USER_ID,
+      });
+    } catch (error) {
+      conflict = error;
+    }
+    const conflictData = (conflict as { data?: Record<string, unknown> }).data;
+    expect(conflictData?.code).toBe("ERR_FIELD_VERSION_CONFLICT");
+    expect(conflictData?.hint).toMatch(/retry/i);
+    const after = await getEntityWithProvenance(entityId, false, USER_ID);
+    expect((after!.snapshot as Record<string, unknown>).title).toBe("mcp-cas-winner");
   });
 
   it("refuses a patch whose key_field does not match the schema's declared merge_array_by_key key_field", async () => {
@@ -541,15 +638,18 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
   });
 
   it("rejects /correct when the supplied entity_type differs from the stored type", async () => {
-    const stored = await request(app)
-      .post("/store")
-      .send({
-        entities: [{ entity_type: TYPE, title: "correct-type-target", tasks_claimed: [] }],
-      })
-      .expect(200);
-    const entityId = stored.body.entities[0].entity_id as string;
+    const stored = await callStore(server, {
+      user_id: USER_ID,
+      idempotency_key: `correct-type-target-${Date.now()}`,
+      commit: true,
+      entities: [{ entity_type: TYPE, title: "correct-type-target", tasks_claimed: [] }],
+    });
+    const storedBody = JSON.parse(stored.content[0].text) as {
+      entities: Array<{ entity_id: string }>;
+    };
+    const entityId = storedBody.entities[0].entity_id;
 
-    const response = await request(app).post("/correct").send({
+    const response = await httpCorrect({
       entity_id: entityId,
       entity_type: "unprotected_decoy_type",
       field: "title",

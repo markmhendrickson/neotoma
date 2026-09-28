@@ -15,7 +15,21 @@ import {
 import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
 import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
-import { stableSerialize } from "../services/stable_serialize.js";
+import { canonicalizePortableScalarKey, stableSerialize } from "../services/stable_serialize.js";
+
+/** Per-observation bound that prevents one full-array write from exploding reducer work. */
+export const MAX_MERGE_ARRAY_BY_KEY_ITEMS = 10_000;
+
+export class MergeArrayByKeyLimitError extends Error {
+  readonly code = "ERR_MERGE_ARRAY_BY_KEY_LIMIT";
+  constructor(field: string) {
+    super(
+      `merge_array_by_key field "${field}" exceeds the ${MAX_MERGE_ARRAY_BY_KEY_ITEMS}-item ` +
+        "per-observation limit. Use patch_array_item instead of full-array writes."
+    );
+    this.name = "MergeArrayByKeyLimitError";
+  }
+}
 
 export interface Observation {
   id: string;
@@ -560,11 +574,13 @@ export class ObservationReducer {
     const byKey = new Map<string, { item: unknown; observedAt: string; observationId: string }>();
     const unkeyed = new Map<string, { item: unknown; observedAt: string; observationId: string }>();
     const contributingObservationIds = new Set<string>();
-
     for (const obs of topPriorityObservations) {
       const rawValue = recoverJsonArrayString(obs.fields[field]) ?? obs.fields[field];
       if (rawValue === undefined || rawValue === null) continue;
       const items = Array.isArray(rawValue) ? rawValue : [rawValue];
+      if (items.length > MAX_MERGE_ARRAY_BY_KEY_ITEMS) {
+        throw new MergeArrayByKeyLimitError(field);
+      }
       let contributed = false;
 
       for (const item of items) {
@@ -573,7 +589,8 @@ export class ObservationReducer {
             ? (item as Record<string, unknown>)[keyField]
             : undefined;
 
-        if (keyValue === undefined || keyValue === null) {
+        const key = canonicalizePortableScalarKey(keyValue);
+        if (key === null) {
           const serialized = stableSerialize(item);
           if (!unkeyed.has(serialized)) {
             unkeyed.set(serialized, {
@@ -586,13 +603,9 @@ export class ObservationReducer {
           continue;
         }
 
-        // stableSerialize (not plain JSON.stringify) so object-typed key
-        // values compare structurally regardless of property insertion
-        // order — must match array_item_patch.ts's keyMatches() exactly, or
-        // patch_array_item can locate/update a row that this reducer then
-        // treats as a distinct key, producing a duplicate instead of an
-        // in-place update.
-        const key = stableSerialize(keyValue);
+        // The portable scalar canonicalizer is shared with patch_array_item;
+        // historical object/array or unsafe-number keys stay preserved as
+        // unkeyed legacy rows instead of creating a public/reducer mismatch.
         const existing = byKey.get(key);
         if (!existing) {
           byKey.set(key, { item, observedAt: obs.observed_at, observationId: obs.id });

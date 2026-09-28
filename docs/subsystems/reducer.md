@@ -334,9 +334,13 @@ reconciled row).
 ```
 
 `key_field` is required; a policy declaring `merge_array_by_key` without it throws at
-schema-registration time (`validateReducerConfig`). An item missing `key_field` is carried
-through unkeyed (not dropped), so a malformed row is preserved rather than silently lost;
-identical unkeyed historical values are deduplicated by stable serialization.
+schema-registration time (`validateReducerConfig`). New keys are limited to portable JSON
+scalars: strings, booleans, and finite numbers within the inclusive safe-integer range.
+Historical rows with a missing, non-scalar, or unsafe-number key are carried through unkeyed
+(not dropped), so malformed legacy data is preserved rather than silently lost; identical
+unkeyed historical values are deduplicated by stable serialization. A single full-array
+observation is capped at 10,000 items; callers should use `patch_array_item`, whose HTTP route
+also uses the shared write-rate limiter, instead of repeatedly writing whole arrays.
 
 **Relationship to `patch_array_item`:** the natural write surface for a `merge_array_by_key`
 field is `patch_array_item` (MCP tool / `POST /patch_array_item` / `neotoma array-item
@@ -346,7 +350,10 @@ array as a single new observation inside one write transaction — closing the T
 caller-side read-modify-write leaves open. Concurrent `patch_array_item` calls against
 _different_ keys both succeed under this reducer strategy; concurrent calls against the
 _same_ key resolve by latest-`observed_at`-wins, or exactly one succeeds when both callers
-present the same `expected_item_version` and the other receives a structured conflict. See
+present the same `expected_item_version` and the other receives a structured conflict. Pass
+`expected_item_absent` for create-if-absent semantics; exactly one concurrent creator
+succeeds. `item_version` is SHA-256 over UTF-8 stable serialization (sorted object keys,
+order-preserving arrays, JSON scalar spellings), so callers can reproduce it portably. See
 `docs/developer/mcp/instructions.md`
 `[ENTITY & RELATIONSHIP LIFECYCLE]` and the `array_item_patch.ts` service for the full
 contract. Originating ADR: `ent_4b41bb83a4faf4428a73bfc8` (Neotoma task entity) — the

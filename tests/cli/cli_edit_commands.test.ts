@@ -41,9 +41,7 @@ describe("CLI edit command", () => {
       })
     );
 
-    const { stdout } = await execAsync(
-      `${CLI_PATH} store --file "${entityFile}" --json`
-    );
+    const { stdout } = await execAsync(`${CLI_PATH} store --file "${entityFile}" --json`);
     const result = JSON.parse(stdout);
     testEntityId = result.entities?.[0]?.entity_id;
     expect(testEntityId, "test entity should be created").toBeTruthy();
@@ -58,9 +56,7 @@ describe("CLI edit command", () => {
     // `true` exits 0 without touching the file, so the buffer is unchanged
     // and `edit` should short-circuit to no_changes without contacting the
     // batch_correct endpoint.
-    const { stdout } = await execAsync(
-      `${CLI_PATH} edit "${testEntityId}" --editor true --json`
-    );
+    const { stdout } = await execAsync(`${CLI_PATH} edit "${testEntityId}" --editor true --json`);
     const result = JSON.parse(stdout);
     expect(result).toMatchObject({
       success: true,
@@ -78,6 +74,67 @@ describe("CLI edit command", () => {
       exitCode = typeof e.code === "number" ? e.code : 1;
     }
     expect(exitCode).toBeGreaterThan(0);
+  });
+
+  it("corrections create resolves entity_type and exposes CAS success, conflict, retry, and replay", async () => {
+    const { stdout: beforeOut } = await execAsync(
+      `${CLI_PATH} entities get "${testEntityId}" --json`
+    );
+    const before = JSON.parse(beforeOut);
+    const originalVersion = before.entity_version as string;
+    expect(originalVersion).toMatch(/^[a-f0-9]{64}$/);
+
+    const idempotencyKey = `cli-correct-replay-${Date.now()}`;
+    const base = `${CLI_PATH} corrections create "${testEntityId}" --field-name name --corrected-value "CLI CAS Winner" --idempotency-key "${idempotencyKey}"`;
+    const { stdout: firstOut } = await execAsync(
+      `${base} --expected-version "${originalVersion}" --json`
+    );
+    const first = JSON.parse(firstOut);
+    expect(first.status).toBe("applied");
+    expect(first.entity_type).toBe("company");
+    expect(first.entity_version).toMatch(/^[a-f0-9]{64}$/);
+
+    const { stdout: replayOut } = await execAsync(
+      `${base} --expected-version "stale-on-purpose" --json`
+    );
+    const replay = JSON.parse(replayOut);
+    expect(replay.replayed).toBe(true);
+    expect(replay.observation_id).toBe(first.observation_id);
+    expect(replay.value).toBe("CLI CAS Winner");
+
+    let conflictOut = "";
+    try {
+      await execAsync(
+        `${CLI_PATH} corrections create "${testEntityId}" --field-name name --corrected-value "Must Not Land" --expected-version "${originalVersion}" --idempotency-key "cli-correct-stale-${Date.now()}" --json`
+      );
+    } catch (error) {
+      conflictOut = (error as { stdout?: string }).stdout ?? "";
+    }
+    const conflict = JSON.parse(conflictOut);
+    expect(conflict.status).toBe("conflict");
+    expect(conflict.error_code).toBe("ERR_FIELD_VERSION_CONFLICT");
+    expect(conflict.hint).toMatch(/retry/i);
+
+    const { stdout: afterConflictOut } = await execAsync(
+      `${CLI_PATH} entities get "${testEntityId}" --json`
+    );
+    const afterConflict = JSON.parse(afterConflictOut);
+    expect(afterConflict.snapshot?.name).toBe("CLI CAS Winner");
+
+    const { stdout: retryOut } = await execAsync(
+      `${CLI_PATH} corrections create "${testEntityId}" --field-name name --corrected-value "CLI CAS Retry" --expected-version "${afterConflict.entity_version}" --idempotency-key "cli-correct-retry-${Date.now()}" --json`
+    );
+    expect(JSON.parse(retryOut).status).toBe("applied");
+
+    let mismatchOut = "";
+    try {
+      await execAsync(
+        `${CLI_PATH} corrections create "${testEntityId}" --field-name name --corrected-value "Different Payload" --idempotency-key "${idempotencyKey}" --json`
+      );
+    } catch (error) {
+      mismatchOut = (error as { stdout?: string }).stdout ?? "";
+    }
+    expect(JSON.parse(mismatchOut).error_code).toBe("ERR_IDEMPOTENCY_MISMATCH");
   });
 
   // Waxwing ADR (ent_4b41bb83a4faf4428a73bfc8) planted test #7: the conflict

@@ -7736,46 +7736,6 @@ export class NeotomaServer {
       });
     }
 
-    const { data: existingObservation, error: existingObservationError } = await db
-      .from("observations")
-      .select("id, entity_id, entity_type, fields")
-      .eq("user_id", userId)
-      .eq("idempotency_key", parsed.idempotency_key)
-      .maybeSingle();
-
-    if (existingObservationError) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to check idempotency key: ${existingObservationError.message}`
-      );
-    }
-
-    if (existingObservation) {
-      const existingFields = existingObservation.fields as Record<string, unknown> | null;
-      const existingValue = existingFields ? existingFields[parsed.field] : undefined;
-      const existingValueJson = JSON.stringify(existingValue);
-      const incomingValueJson = JSON.stringify(parsed.value);
-
-      if (
-        existingObservation.entity_id !== parsed.entity_id ||
-        existingObservation.entity_type !== parsed.entity_type ||
-        existingValueJson !== incomingValueJson
-      ) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Idempotency key reuse detected with different correction payload."
-        );
-      }
-
-      return this.buildTextResponse({
-        observation_id: existingObservation.id,
-        entity_id: parsed.entity_id,
-        field: parsed.field,
-        value: parsed.value,
-        message: "Correction already applied for this idempotency key",
-      });
-    }
-
     // Validate entity ownership
     const { data: entity, error: entityError } = await db
       .from("entities")
@@ -7797,6 +7757,7 @@ export class NeotomaServer {
       buildCorrectionResponse,
       CorrectionSchemaNotFoundError,
       CorrectionEntityTypeMismatchError,
+      CorrectionIdempotencyMismatchError,
       FieldVersionConflictError,
       createCorrectionWithVersionPrecondition,
     } = await import("./services/correction.js");
@@ -7880,15 +7841,24 @@ export class NeotomaServer {
           entity_id: parsed.entity_id,
           entity_type: parsed.entity_type,
           field: parsed.field,
-          value: parsed.value,
+          value: result.value,
           isUnknownField,
+          replayed: result.replayed,
+          entity_version: result.entity_version,
         })
       );
     } catch (corrErr) {
       if (corrErr instanceof FieldVersionConflictError) {
         throw new McpError(ErrorCode.InvalidRequest, corrErr.message, {
           ...corrErr.toErrorEnvelope(),
-          hint: "Re-read the entity snapshot and retry with its current last_observation_at as expected_version.",
+          hint: "Re-read the entity snapshot and retry with its current entity_version as expected_version.",
+        });
+      }
+      if (corrErr instanceof CorrectionIdempotencyMismatchError) {
+        throw new McpError(ErrorCode.InvalidParams, corrErr.message, {
+          code: corrErr.code,
+          idempotency_key: corrErr.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct correction payload.",
         });
       }
       if (corrErr instanceof CorrectionEntityTypeMismatchError) {
@@ -7959,6 +7929,7 @@ export class NeotomaServer {
         key_value: parsed.key_value,
         item: parsed.item as Record<string, unknown>,
         expected_item_version: parsed.expected_item_version,
+        expected_item_absent: parsed.expected_item_absent,
         idempotency_key: parsed.idempotency_key,
       });
 
@@ -7976,6 +7947,7 @@ export class NeotomaServer {
             current_item: result.conflict?.current_item ?? null,
             current_item_version: result.conflict?.current_item_version ?? null,
             expected_item_version: result.conflict?.expected_item_version ?? null,
+            expected_item_absent: parsed.expected_item_absent ?? false,
             hint: "Re-apply the intended change to current_item and retry with current_item_version as expected_item_version.",
           }
         );
@@ -7991,6 +7963,7 @@ export class NeotomaServer {
         item: result.item,
         item_version: result.item_version,
         array_length: result.array_length,
+        replayed: result.replayed ?? false,
       });
     } catch (patchErr) {
       if (patchErr instanceof McpError) throw patchErr;
@@ -8003,6 +7976,16 @@ export class NeotomaServer {
       // correct(), so it can be refused by the same instance-level policy.
       if (patchErr instanceof StorePolicyDeniedError) throw patchErr;
       if (patchErr instanceof StorePolicyUnavailableError) throw patchErr;
+      {
+        const { CorrectionIdempotencyMismatchError } = await import("./services/correction.js");
+        if (patchErr instanceof CorrectionIdempotencyMismatchError) {
+          throw new McpError(ErrorCode.InvalidParams, patchErr.message, {
+            code: patchErr.code,
+            idempotency_key: patchErr.idempotencyKey,
+            hint: "Use a new idempotency_key for a distinct patch payload.",
+          });
+        }
+      }
       {
         const {
           ArrayItemKeyFieldMismatchError,

@@ -69,7 +69,7 @@ Separate diff landing in the same in-progress release train.
 
 - New reducer merge strategy `merge_array_by_key` (`src/reducers/observation_reducer.ts`, `src/services/schema_registry.ts`): a sibling of `merge_array` for array fields whose items carry a stable `key_field`. Same priority-gating as `merge_array`; within the top-priority tier, items reconcile by key instead of Set-union.
 - New service `src/services/array_item_patch.ts` (`patchArrayItem`): atomic keyed read-modify-write against one row of a structured array field, replacing the caller-side read-modify-full-array-write anti-pattern.
-- `/correct` (HTTP and MCP) gained an optional entity-level CAS precondition (`expected_version` + `overwrite`), reusing `last_observation_at` as the version token — no new column. The precondition read and correction insert share one write transaction; omitted by default, it makes no behavior change for existing callers.
+- `/correct` (HTTP and MCP) gained an optional entity-level CAS precondition (`expected_version` + `overwrite`) using the opaque `entity_version` returned by entity reads. The token incorporates the append-only observation count, so it changes for every committed observation even under a fixed millisecond clock. The precondition read and correction insert share one write transaction; omitted by default, it makes no behavior change for existing callers.
 - New shared helper `src/services/stable_serialize.ts`, extracted from `batch_correction.ts` (no behavior change) and reused by the new item-version content-hash.
 
 **New API surface**
@@ -79,7 +79,7 @@ Separate diff landing in the same in-progress release train.
 
 ## API surface & contracts
 
-- `npm run openapi:bc-diff` against `origin/main`: no breaking changes. Four additive changes: new operation `POST /patch_array_item`, newly-documented pre-existing operation `POST /entities/{id}/batch_correct`, and two new optional request fields on `POST /correct` (`expected_version`, `overwrite`).
+- `npm run openapi:bc-diff` against `origin/main`: no breaking changes. Nine additive changes: two operations, two optional `/correct` request fields, three response fields exposing `entity_version`/replay state, and `EntitySnapshot.entity_version`.
 - New MCP tool: `patch_array_item`. New CLI command: `neotoma array-item patch`.
 
 ## Behavior changes
@@ -87,6 +87,8 @@ Separate diff landing in the same in-progress release train.
 - `/correct` and `patch_array_item` calls that never supply a version precondition see no behavior change.
 - Callers using `expected_version` (on `/correct`) or `expected_item_version` (on `patch_array_item`) now receive a structured `409` (`ERR_FIELD_VERSION_CONFLICT` / `ERR_ARRAY_ITEM_CONFLICT`) instead of a silent overwrite when the value is stale.
 - Two concurrent same-key writers presenting the same valid version token cannot both pass: the write transaction admits exactly one and returns a conflict to the other. Disjoint keyed patches both survive.
+- `expected_item_absent` provides race-safe creation; identical idempotency replays return the committed observation/value before CAS, while same-key/different-payload reuse fails with `ERR_IDEMPOTENCY_MISMATCH` and writes nothing.
+- Correction, batch-correction, and keyed-patch substrate events are published only after their database transaction commits; rollback cannot publish a phantom event or snapshot.
 - `patch_array_item` fails closed unless the active schema declares the target as an array using `merge_array_by_key` with the same `key_field`; a caller-supplied entity type cannot influence authorization and must match the stored type.
 - A schema field declaring `merge_policies.<field>.strategy: "merge_array_by_key"` reconciles top-priority-tier items by key instead of Set-union. No existing schema declares this strategy yet, so no live reducer output changes; adopting it for a field (e.g. `session_digest.tasks_claimed`) is a follow-up schema-migration task, out of scope for this diff.
 

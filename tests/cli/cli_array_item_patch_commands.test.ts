@@ -128,6 +128,59 @@ describe("CLI array-item patch command", () => {
     expect(row).toMatchObject({ status: "in_review" });
   });
 
+  it("replays an identical idempotency key and structurally rejects changed payload reuse", async () => {
+    const rowKey = `cli-replay-${Date.now()}`;
+    const idempotencyKey = `cli-replay-key-${Date.now()}`;
+    const base = `${CLI_PATH} array-item patch "${testEntityId}" "${entityType}" tasks_claimed claim_id "${rowKey}" --expected-item-absent --idempotency-key "${idempotencyKey}"`;
+    const { stdout: firstOut } = await execAsync(
+      `${base} --item-json '${JSON.stringify({ status: "committed" })}' --json`
+    );
+    const first = JSON.parse(firstOut);
+    const { stdout: replayOut } = await execAsync(
+      `${base} --item-json '${JSON.stringify({ status: "committed" })}' --json`
+    );
+    const replay = JSON.parse(replayOut);
+    expect(replay.replayed).toBe(true);
+    expect(replay.observation_id).toBe(first.observation_id);
+    expect(replay.item).toEqual(first.item);
+
+    let mismatchOut = "";
+    let mismatchExitCode = 0;
+    try {
+      await execAsync(`${base} --item-json '${JSON.stringify({ status: "never-stored" })}' --json`);
+    } catch (error) {
+      const commandError = error as { code?: number; stdout?: string };
+      mismatchExitCode = commandError.code ?? 1;
+      mismatchOut = commandError.stdout ?? "";
+    }
+    expect(mismatchExitCode).toBeGreaterThan(0);
+    expect(JSON.parse(mismatchOut).error_code).toBe("ERR_IDEMPOTENCY_MISMATCH");
+
+    const { stdout: afterOut } = await execAsync(
+      `${CLI_PATH} entities get "${testEntityId}" --json`
+    );
+    const rows = JSON.parse(afterOut).snapshot?.tasks_claimed as Array<Record<string, unknown>>;
+    expect(rows.find((row) => row.claim_id === rowKey)?.status).toBe("committed");
+  });
+
+  it("allows exactly one concurrent --expected-item-absent creator", async () => {
+    const rowKey = `cli-create-${Date.now()}`;
+    const command = (writer: string) =>
+      `${CLI_PATH} array-item patch "${testEntityId}" "${entityType}" tasks_claimed claim_id "${rowKey}" --item-json '${JSON.stringify({ status: writer })}' --expected-item-absent --idempotency-key "${rowKey}-${writer}" --json`;
+    const settled = await Promise.allSettled([
+      execAsync(command("writer-a")),
+      execAsync(command("writer-b")),
+    ]);
+    expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = settled.find(
+      (result) => result.status === "rejected"
+    ) as PromiseRejectedResult;
+    expect((rejected.reason as { code?: number }).code).toBe(1);
+    expect(JSON.parse((rejected.reason as { stdout?: string }).stdout ?? "{}").status).toBe(
+      "conflict"
+    );
+  });
+
   it("fails without required positional arguments", async () => {
     let exitCode = 0;
     try {
