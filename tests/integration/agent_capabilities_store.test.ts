@@ -77,13 +77,9 @@ describe("agent capabilities (integration: admission → action boundary)", () =
         expect(ctx).not.toBeNull();
         expect(ctx!.admitted).toBe(true);
         expect(() =>
-          enforceAgentCapability(
-            "store_structured",
-            ["neotoma_feedback"],
-            ctx!,
-          ),
+          enforceAgentCapability("store_structured", ["neotoma_feedback"], ctx!)
         ).not.toThrow();
-      },
+      }
     );
   });
 
@@ -108,7 +104,7 @@ describe("agent capabilities (integration: admission → action boundary)", () =
           expect((err as AgentCapabilityError).code).toBe("capability_denied");
           expect((err as AgentCapabilityError).entityType).toBe("task");
         }
-      },
+      }
     );
   });
 
@@ -142,27 +138,15 @@ describe("agent capabilities (integration: admission → action boundary)", () =
       async () => {
         const ctx = contextFromAgentIdentity(getCurrentAgentIdentity())!;
         expect(() =>
-          enforceAgentRelationshipCapability(
-            "REFERS_TO",
-            ["checkpoint_brief", "task"],
-            ctx,
-          ),
+          enforceAgentRelationshipCapability("REFERS_TO", ["checkpoint_brief", "task"], ctx)
         ).not.toThrow();
         expect(() =>
-          enforceAgentRelationshipCapability(
-            "PART_OF",
-            ["checkpoint_brief", "task"],
-            ctx,
-          ),
+          enforceAgentRelationshipCapability("PART_OF", ["checkpoint_brief", "task"], ctx)
         ).toThrow(AgentCapabilityError);
         expect(() =>
-          enforceAgentRelationshipCapability(
-            "REFERS_TO",
-            ["checkpoint_brief", "issue"],
-            ctx,
-          ),
+          enforceAgentRelationshipCapability("REFERS_TO", ["checkpoint_brief", "issue"], ctx)
         ).toThrow(AgentCapabilityError);
-      },
+      }
     );
   });
 
@@ -178,9 +162,7 @@ describe("agent capabilities (integration: admission → action boundary)", () =
     await runWithRequestContext({ agentIdentity: identity }, async () => {
       const ctx = contextFromAgentIdentity(getCurrentAgentIdentity())!;
       expect(ctx.admitted).toBe(false);
-      expect(() =>
-        enforceAgentCapability("store_structured", ["task"], ctx),
-      ).not.toThrow();
+      expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).not.toThrow();
     });
   });
 
@@ -201,9 +183,7 @@ describe("agent capabilities (integration: admission → action boundary)", () =
         throw new Error("expected capability_denied");
       } catch (err) {
         expect(err).toBeInstanceOf(AgentCapabilityError);
-        expect((err as AgentCapabilityError).hint).toContain(
-          "No active agent_grant matches",
-        );
+        expect((err as AgentCapabilityError).hint).toContain("No active agent_grant matches");
       }
     });
   });

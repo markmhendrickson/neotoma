@@ -43,7 +43,7 @@ function admittedCtx(
   caps: AgentCapabilityContext["capabilities"] = [
     { op: "store_structured", entity_types: ["neotoma_feedback"] },
     { op: "correct", entity_types: ["neotoma_feedback"] },
-  ],
+  ]
 ): AgentCapabilityContext {
   return {
     sub: "agent-site@neotoma.io",
@@ -56,9 +56,7 @@ function admittedCtx(
   };
 }
 
-function unadmittedCtx(
-  overrides: Partial<AgentCapabilityContext> = {},
-): AgentCapabilityContext {
+function unadmittedCtx(overrides: Partial<AgentCapabilityContext> = {}): AgentCapabilityContext {
   return {
     sub: "unknown@example.com",
     tier: "software",
@@ -107,9 +105,7 @@ describe("agent_capabilities", () => {
         const legacy = err as LegacyAgentCapabilityEnvError;
         expect(legacy.code).toBe("legacy_agent_capabilities_env");
         expect(legacy.variables).toEqual(["NEOTOMA_AGENT_CAPABILITIES_JSON"]);
-        expect(legacy.migrationCommand).toContain(
-          "neotoma agents grants import",
-        );
+        expect(legacy.migrationCommand).toContain("neotoma agents grants import");
       }
     });
 
@@ -173,9 +169,7 @@ describe("agent_capabilities", () => {
         thumbprint: "thumb-xyz",
         tier: "software",
       } as AgentIdentity;
-      const caps = [
-        { op: "store_structured" as const, entity_types: ["task"] },
-      ];
+      const caps = [{ op: "store_structured" as const, entity_types: ["task"] }];
       const ctx = runWithRequestContext(
         {
           agentIdentity: ident,
@@ -188,7 +182,7 @@ describe("agent_capabilities", () => {
             reason: "admitted",
           },
         },
-        () => contextFromAgentIdentity(ident),
+        () => contextFromAgentIdentity(ident)
       ) as AgentCapabilityContext | null;
       expect(ctx).not.toBeNull();
       expect(ctx!.admitted).toBe(true);
@@ -212,21 +206,13 @@ describe("agent_capabilities", () => {
   describe("enforceAgentCapability (admitted)", () => {
     it("allows in-scope (op, entity_type) pairs", () => {
       expect(() =>
-        enforceAgentCapability(
-          "store_structured",
-          ["neotoma_feedback"],
-          admittedCtx(),
-        ),
+        enforceAgentCapability("store_structured", ["neotoma_feedback"], admittedCtx())
       ).not.toThrow();
     });
 
     it("rejects out-of-scope entity types", () => {
       try {
-        enforceAgentCapability(
-          "store_structured",
-          ["task"],
-          admittedCtx(),
-        );
+        enforceAgentCapability("store_structured", ["task"], admittedCtx());
         throw new Error("expected throw");
       } catch (err) {
         expect(err).toBeInstanceOf(AgentCapabilityError);
@@ -240,21 +226,13 @@ describe("agent_capabilities", () => {
 
     it("rejects an op that the grant does not include", () => {
       expect(() =>
-        enforceAgentCapability(
-          "create_relationship",
-          ["neotoma_feedback"],
-          admittedCtx(),
-        ),
+        enforceAgentCapability("create_relationship", ["neotoma_feedback"], admittedCtx())
       ).toThrow(AgentCapabilityError);
     });
 
     it("supports wildcard entity_types in the grant", () => {
-      const ctx = admittedCtx([
-        { op: "retrieve", entity_types: ["*"] },
-      ]);
-      expect(() =>
-        enforceAgentCapability("retrieve", ["any", "thing"], ctx),
-      ).not.toThrow();
+      const ctx = admittedCtx([{ op: "retrieve", entity_types: ["*"] }]);
+      expect(() => enforceAgentCapability("retrieve", ["any", "thing"], ctx)).not.toThrow();
     });
 
     it("dedupes entity_types before checking", () => {
@@ -262,15 +240,13 @@ describe("agent_capabilities", () => {
         enforceAgentCapability(
           "store_structured",
           ["neotoma_feedback", "neotoma_feedback"],
-          admittedCtx(),
-        ),
+          admittedCtx()
+        )
       ).not.toThrow();
     });
 
     it("no-ops on empty entity_types", () => {
-      expect(() =>
-        enforceAgentCapability("store_structured", [], admittedCtx()),
-      ).not.toThrow();
+      expect(() => enforceAgentCapability("store_structured", [], admittedCtx())).not.toThrow();
     });
   });
 
@@ -289,18 +265,14 @@ describe("agent_capabilities", () => {
         enforceAgentRelationshipCapability(
           "REFERS_TO",
           ["checkpoint_brief", "task"],
-          checkpointCtx(),
-        ),
+          checkpointCtx()
+        )
       ).not.toThrow();
     });
 
     it("denies an unrelated relationship type", () => {
       expect(() =>
-        enforceAgentRelationshipCapability(
-          "PART_OF",
-          ["checkpoint_brief", "task"],
-          checkpointCtx(),
-        ),
+        enforceAgentRelationshipCapability("PART_OF", ["checkpoint_brief", "task"], checkpointCtx())
       ).toThrow(AgentCapabilityError);
     });
 
@@ -309,8 +281,8 @@ describe("agent_capabilities", () => {
         enforceAgentRelationshipCapability(
           "REFERS_TO",
           ["checkpoint_brief", "issue"],
-          checkpointCtx(),
-        ),
+          checkpointCtx()
+        )
       ).toThrow(AgentCapabilityError);
     });
 
@@ -328,10 +300,10 @@ describe("agent_capabilities", () => {
           enforceAgentRelationshipCapability(
             "REFERS_TO",
             ["checkpoint_brief", "task"],
-            admittedCtx([capability]),
-          ),
+            admittedCtx([capability])
+          )
         ).toThrow(AgentCapabilityError);
-      },
+      }
     );
 
     it("denies a malformed runtime relationship_types value", () => {
@@ -344,11 +316,7 @@ describe("agent_capabilities", () => {
       ]);
 
       expect(() =>
-        enforceAgentRelationshipCapability(
-          "REFERS_TO",
-          ["checkpoint_brief", "task"],
-          ctx,
-        ),
+        enforceAgentRelationshipCapability("REFERS_TO", ["checkpoint_brief", "task"], ctx)
       ).toThrow(AgentCapabilityError);
     });
 
@@ -367,11 +335,7 @@ describe("agent_capabilities", () => {
       ]);
 
       expect(() =>
-        enforceAgentRelationshipCapability(
-          "REFERS_TO",
-          ["checkpoint_brief", "task"],
-          ctx,
-        ),
+        enforceAgentRelationshipCapability("REFERS_TO", ["checkpoint_brief", "task"], ctx)
       ).toThrow(AgentCapabilityError);
     });
   });
@@ -381,37 +345,25 @@ describe("agent_capabilities", () => {
       // Mirrors the v0.7 behaviour: unknown agents fall through to
       // attribution policy unless default_deny is set.
       expect(() =>
-        enforceAgentCapability(
-          "store_structured",
-          ["task"],
-          unadmittedCtx(),
-        ),
+        enforceAgentCapability("store_structured", ["task"], unadmittedCtx())
       ).not.toThrow();
     });
 
     it("denies when NEOTOMA_AGENT_DEFAULT_DENY is enabled and tier is verifying", () => {
       process.env.NEOTOMA_AGENT_DEFAULT_DENY = "1";
       try {
-        enforceAgentCapability(
-          "store_structured",
-          ["task"],
-          unadmittedCtx(),
-        );
+        enforceAgentCapability("store_structured", ["task"], unadmittedCtx());
         throw new Error("expected throw");
       } catch (err) {
         expect(err).toBeInstanceOf(AgentCapabilityError);
-        expect((err as AgentCapabilityError).hint).toContain(
-          "No active agent_grant matches",
-        );
+        expect((err as AgentCapabilityError).hint).toContain("No active agent_grant matches");
       }
     });
 
     it("does NOT deny anonymous tier even with default_deny enabled", () => {
       process.env.NEOTOMA_AGENT_DEFAULT_DENY = "1";
       const ctx = unadmittedCtx({ tier: "anonymous" });
-      expect(() =>
-        enforceAgentCapability("store_structured", ["task"], ctx),
-      ).not.toThrow();
+      expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).not.toThrow();
     });
   });
 
@@ -424,7 +376,7 @@ describe("agent_capabilities", () => {
           admitted: true,
           reason: "admitted",
           capabilities: [{ op: "store_structured", entity_types: ["a"] }],
-        }),
+        })
       ).toEqual({
         kind: "grant",
         capabilities: [{ op: "store_structured", entity_types: ["a"] }],
@@ -465,13 +417,13 @@ describe("agent_capabilities", () => {
             }
             expect(caught).toBeInstanceOf(AgentCapabilityError);
             expect((caught as AgentCapabilityError).hint).toContain(
-              "pin-a-key-to-an-existing-grant",
+              "pin-a-key-to-an-existing-grant"
             );
           }
           expect(() => enforceRelationshipTypeCapability("LEASE", "user", ctx)).toThrow(
-            AgentCapabilityError,
+            AgentCapabilityError
           );
-        },
+        }
       );
     });
 
@@ -481,19 +433,19 @@ describe("agent_capabilities", () => {
         ceiling: { kind: "deny", reason: "grant_key_unbound" },
       });
       expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).toThrow(
-        AgentCapabilityError,
+        AgentCapabilityError
       );
     });
 
     it("hand-built contexts without a ceiling keep their previous behaviour", () => {
       expect(() =>
-        enforceAgentCapability("store_structured", ["neotoma_feedback"], admittedCtx()),
+        enforceAgentCapability("store_structured", ["neotoma_feedback"], admittedCtx())
       ).not.toThrow();
       expect(() => enforceAgentCapability("store_structured", ["task"], admittedCtx())).toThrow(
-        AgentCapabilityError,
+        AgentCapabilityError
       );
       expect(() =>
-        enforceAgentCapability("store_structured", ["task"], unadmittedCtx()),
+        enforceAgentCapability("store_structured", ["task"], unadmittedCtx())
       ).not.toThrow();
     });
   });
@@ -508,11 +460,12 @@ describe("agent_capabilities", () => {
    */
   describe("revoked/suspended key-bound grant (fail-closed, not fail-open)", () => {
     it("maps grant_revoked and grant_suspended to the deny ceiling", () => {
+      expect(capabilityCeilingFromAdmission({ admitted: false, reason: "grant_revoked" })).toEqual({
+        kind: "deny",
+        reason: "grant_revoked",
+      });
       expect(
-        capabilityCeilingFromAdmission({ admitted: false, reason: "grant_revoked" }),
-      ).toEqual({ kind: "deny", reason: "grant_revoked" });
-      expect(
-        capabilityCeilingFromAdmission({ admitted: false, reason: "grant_suspended" }),
+        capabilityCeilingFromAdmission({ admitted: false, reason: "grant_suspended" })
       ).toEqual({ kind: "deny", reason: "grant_suspended" });
     });
 
@@ -544,11 +497,11 @@ describe("agent_capabilities", () => {
               expect((caught as AgentCapabilityError).code).toBe("capability_denied");
             }
             expect(() => enforceRelationshipTypeCapability("LEASE", "user", ctx)).toThrow(
-              AgentCapabilityError,
+              AgentCapabilityError
             );
-          },
+          }
         );
-      },
+      }
     );
 
     it("denies whatever the signature's tier, same as grant_key_unbound", () => {
@@ -558,7 +511,7 @@ describe("agent_capabilities", () => {
           ceiling: { kind: "deny", reason },
         });
         expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).toThrow(
-          AgentCapabilityError,
+          AgentCapabilityError
         );
       }
     });
@@ -568,7 +521,7 @@ describe("agent_capabilities", () => {
       for (const reason of ["grant_revoked", "grant_suspended"] as const) {
         const ctx = unadmittedCtx({ ceiling: { kind: "deny", reason } });
         expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).toThrow(
-          AgentCapabilityError,
+          AgentCapabilityError
         );
       }
     });
