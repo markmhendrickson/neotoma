@@ -257,7 +257,7 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 
 ### Instance Policy
 
-Inspect and configure this instance's data policy (#1974/#1975) — what the instance is *for*, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
+Inspect and configure this instance's data policy (#1974/#1975) — what the instance is _for_, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
 
 - `neotoma instance-policy show`: Show the instance data policy, or report that none is configured (`{"policy": null}` — unrestricted, not deny-all).
 - `neotoma instance-policy set --file <path> [--enforce | --advisory] [--dry-run]`: Create or update the instance policy from a JSON file (fields: `purpose`, `out_of_scope_entity_types`, `require_lawful_basis`, `require_provenance`, `max_sensitivity_class`). `--enforce` sets `enforcement: "enforced"` (reject violating writes); `--advisory` sets `enforcement: "advisory"` (declare only, do not reject — the default when unset on a new policy). `--enforce` and `--advisory` are mutually exclusive. `--dry-run` prints what would be written without persisting it.
@@ -872,6 +872,18 @@ For continuous mirroring, install the `com.neotoma.skills-sync` LaunchAgent with
   - On validation failure, the draft file is preserved under `~/.config/neotoma/edit-drafts/<entity_id>-<ts>.yaml` and the path is printed so the user can rerun `neotoma edit <id>`.
 
 The CLI and the Inspector share one `applyBatchCorrection` backend (`src/services/batch_correction.ts`), so both surfaces have identical semantics.
+
+### Array item patch
+
+- `neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue>`: Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write.
+  - `keyValue` must parse as a portable non-null JSON scalar (string, boolean, or finite number within the inclusive safe-integer range); objects, arrays, null, and unsafe numbers are rejected.
+  - `--item-json <json>`: JSON object of fields to set on the item (merged onto the existing item, or used to create it if the key is not yet present).
+  - `--expected-item-version <version>`: Content-hash version of the item as last observed (from a prior patch's `item_version`). A stale value refuses with a structured conflict (`status: "conflict"`, `current_item` / `current_item_version` in the output, non-zero exit code) instead of overwriting; nothing is written.
+  - `--expected-item-absent`: Create only if the keyed item is absent. Two concurrent creators produce exactly one success and one structured conflict.
+  - Two patches against DIFFERENT keys on the same field both succeed regardless of ordering. This is the fix for the lost-update pattern where a caller reads the whole array, edits one row locally, and writes the full array back — which can silently discard a concurrent writer's disjoint row.
+  - Only applies to array fields whose active schema declares `merge_policies.<field>.strategy: "merge_array_by_key"` with the same `key_field` (see `docs/subsystems/reducer.md` §3.5); missing or mismatched policy fails closed before any write.
+
+For non-array fields, `neotoma corrections create <entityId> --field-name <field> --corrected-value <value> --expected-version <entity_version>` provides entity-level CAS. The CLI resolves the stored entity type when `--entity-type` is omitted. A stale token exits non-zero with `ERR_FIELD_VERSION_CONFLICT`, the stored token, and retry guidance; an identical idempotency replay returns the original observation and value before evaluating the now-stale CAS token.
 
 ### Memory export
 

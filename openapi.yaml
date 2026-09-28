@@ -1417,6 +1417,10 @@ components:
         last_observation_at:
           type: string
           format: date-time
+        entity_version:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: Opaque CAS token that changes for every committed observation.
         canonical_name:
           type: string
           nullable: true
@@ -7268,7 +7272,17 @@ paths:
                         default: false
                       reducer_strategy:
                         type: string
-                        enum: [last_write, highest_priority, most_specific, merge_array]
+                        enum:
+                          [
+                            last_write,
+                            highest_priority,
+                            most_specific,
+                            merge_array,
+                            merge_array_by_key,
+                          ]
+                      reducer_key_field:
+                        type: string
+                        description: Required when reducer_strategy is merge_array_by_key; stable identity field on each array item.
                 fields_to_remove:
                   type: array
                   items:
@@ -7690,6 +7704,22 @@ paths:
                   type: string
                 user_id:
                   type: string
+                expected_version:
+                  type: string
+                  description: |
+                    Optional entity-level optimistic-concurrency precondition.
+                    When supplied, the correction is refused with
+                    `409 ERR_FIELD_VERSION_CONFLICT` if the entity's current
+                    collision-safe `entity_version` no longer matches this value (unless
+                    `overwrite` is also true). Omitted: zero behavior change
+                    from the legacy unconditional-insert path. Entity-scoped
+                    (any field changing trips it) — use `/patch_array_item`
+                    for per-row concurrency on structured array fields.
+                overwrite:
+                  type: boolean
+                  description: |
+                    When true, proceed even if `expected_version` is stale.
+                    Ignored when `expected_version` is not supplied.
       responses:
         "200":
           description: Correction created
@@ -7714,6 +7744,13 @@ paths:
                   value: {}
                   message:
                     type: string
+                  replayed:
+                    type: boolean
+                    description: True when this is the exact result of an earlier committed request with the same idempotency key.
+                  entity_version:
+                    type: string
+                    pattern: "^[a-f0-9]{64}$"
+                    description: Fresh entity-level CAS token after the committed correction.
                   success:
                     type: boolean
                     description: |
@@ -7763,8 +7800,13 @@ paths:
             data policy — for example correcting a field whose schema-declared
             `sensitivity_class` exceeds the instance's configured maximum. No
             observation is written. Call `describe_instance_policy` to read the
-            policy before retrying. Other validation errors use the generic
-            `ErrorEnvelope`.
+            policy before retrying. `ERR_ENTITY_TYPE_MISMATCH` is returned when
+            the caller-supplied `entity_type` differs from the target entity's
+            authoritative stored type; no observation is written. Other
+            validation errors use the generic `ErrorEnvelope`.
+            `ERR_IDEMPOTENCY_MISMATCH` means the key already committed a
+            different canonical correction payload; the original result is
+            unchanged and no new observation is written.
           content:
             application/json:
               schema:
@@ -7782,6 +7824,8 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "409":
           description: |
+            Two distinct conflict causes share this status:
+
             `entity_owner_conflict` — `entity_id` resolves to an existing
             entity owned by a different, non-null user than the writer. No
             observation is written. `correct()` is the raw entity-store
@@ -7790,6 +7834,15 @@ paths:
             correction that would otherwise land on another user's entity.
             The envelope details carry `entity_id` and `entity_type`; never
             the other owner's identity or fields.
+
+            `ERR_FIELD_VERSION_CONFLICT` — the caller supplied
+            `expected_version` and it no longer matches the entity's current
+            collision-safe `entity_version`. No observation is written. The envelope
+            details carry `entity_id`, `field`, `stored_version`, and
+            `expected_version` so the caller can re-read and retry. Entity-
+            scoped (any field changing trips it); use `/patch_array_item` for
+            per-row concurrency on structured array fields instead of
+            widening `expected_version` retries.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -7808,6 +7861,284 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StorePolicyUnavailableErrorEnvelope" }
+
+  /patch_array_item:
+    post:
+      summary: Atomically patch one item of a structured array field by key
+      description: |
+        Sibling of `/correct` for structured collection fields whose items
+        carry a stable identity (e.g. a `session_digest.tasks_claimed` row
+        keyed by `claim_id`). Loads the current array fresh, finds the item
+        matching `key_field`/`key_value`, merges `item` onto it (or appends a
+        new item when the key is not yet present), and writes the whole
+        reconciled array as one new priority-1000 observation.
+
+        This exists to prevent the lost-update failure mode of full-array
+        read-modify-write: two callers patching DIFFERENT keys both succeed,
+        because each patch reads fresh state immediately before writing —
+        neither has to guess whether the other's row is still there. A caller
+        that instead reads the whole array, edits one row locally, and writes
+        the full array back can silently discard a concurrent writer's
+        disjoint row; `patch_array_item` is the replacement for that pattern.
+
+        Same-key races are resolved by the field's `merge_array_by_key`
+        reducer policy (latest `observed_at` wins per key) unless the caller
+        supplies `expected_item_version`, in which case a stale version is
+        refused with `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+      operationId: patchArrayItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_id
+                - entity_type
+                - field
+                - key_field
+                - key_value
+                - item
+                - idempotency_key
+              properties:
+                entity_id:
+                  type: string
+                entity_type:
+                  type: string
+                field:
+                  type: string
+                  description: Name of the array field to patch.
+                key_field:
+                  type: string
+                  description: |
+                    Name of the field on each array item that identifies it.
+                    Must match the field's declared `merge_array_by_key`
+                    `key_field` for the write to be reflected in the
+                    snapshot's reducer output.
+                key_value:
+                  description: |
+                    Portable non-null JSON scalar identifying the row. Numbers
+                    must be finite safe integers. The reducer preserves older
+                    rows with non-scalar or unsafe-number keys as unkeyed legacy
+                    rows, but new patches cannot create them.
+                  oneOf:
+                    - type: string
+                    - type: number
+                      minimum: -9007199254740991
+                      maximum: 9007199254740991
+                    - type: boolean
+                item:
+                  type: object
+                  additionalProperties: true
+                  description: |
+                    Fields to set on the item identified by `key_value`.
+                    Merged onto the existing item (shallow) when the key
+                    already exists; `key_field` is always set to `key_value`
+                    on the written item regardless of what `item` contains.
+                expected_item_version:
+                  type: string
+                  description: |
+                    Content-hash version of the item as last observed by the
+                    caller (returned as `item_version` by a prior patch, or
+                    computable client-side as SHA-256 over UTF-8 stable
+                    serialization: object keys sort lexicographically, arrays
+                    preserve order, and scalar values use JSON spellings).
+                    When supplied and stale, the patch is refused with
+                    `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+                    Omit to always last-write-win on this one row (still
+                    scoped — never touches other keys).
+                expected_item_absent:
+                  type: boolean
+                  description: |
+                    When true, create only if no item with `key_value` exists.
+                    Concurrent creators for the same key produce one success
+                    and one `409 ERR_ARRAY_ITEM_CONFLICT` with the committed item.
+                idempotency_key:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Patch applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  success:
+                    type: boolean
+                  entity_id:
+                    type: string
+                  entity_type:
+                    type: string
+                  field:
+                    type: string
+                  key_field:
+                    type: string
+                  key_value:
+                    oneOf:
+                      - type: string
+                      - type: number
+                      - type: boolean
+                  observation_id:
+                    type: string
+                  item:
+                    type: object
+                    additionalProperties: true
+                  item_version:
+                    type: string
+                    pattern: "^[a-f0-9]{64}$"
+                    description: Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races.
+                  array_length:
+                    type: integer
+                  replayed:
+                    type: boolean
+                    description: True when this response replays the exact prior committed result for the idempotency key.
+        "400":
+          description: |
+            Validation failed, the supplied entity type or key field does not
+            match the stored/schema-declared value, the field is not an array
+            with an active `merge_array_by_key` policy, or the instance store
+            policy denied the write. `ERR_IDEMPOTENCY_MISMATCH` means the key
+            already committed a different canonical request payload. No
+            observation is written.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope" }
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: Entity not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: |
+            `ERR_ARRAY_ITEM_CONFLICT` — the caller supplied
+            `expected_item_version` and the stored item's current content
+            hash no longer matches (or the item does not exist yet, when the
+            caller expected it to). No observation is written. The envelope
+            details carry `current_item`, `current_item_version`, and
+            `expected_item_version` so the caller can re-apply its change
+            against the current item and retry with a fresh version — no
+            second round-trip needed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429":
+          description: |
+            Shared authenticated write-rate limit exceeded. Keyed-item patches
+            use the same bounded write bucket as `/store` so
+            repeated full-array observations cannot grow without a time bound.
+          content:
+            text/plain:
+              schema:
+                type: string
+        "503":
+          description: |
+            `ERR_STORE_POLICY_UNAVAILABLE` — the instance could not read its
+            write policy and failed closed. No observation is written; retry
+            the unchanged request after the service recovers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorePolicyUnavailableErrorEnvelope" }
+
+  /entities/{id}/batch_correct:
+    post:
+      summary: Apply an atomic multi-field correction with optimistic concurrency
+      description: |
+        Atomic batch of single-field corrections against one entity, gated by
+        a whole-entity optimistic-concurrency check. Backs both the Inspector
+        Edit tab and the `neotoma edit` CLI one-shot editor; both surfaces
+        compute a field diff against a loaded snapshot and apply it through
+        this endpoint so the concurrency check and schema validation are
+        atomic across every field in the diff (unlike issuing one `/correct`
+        call per changed field).
+
+        Pre-existing endpoint being documented here for the first time
+        (contract gap identified alongside the Waxwing lost-update ADR,
+        ent_4b41bb83a4faf4428a73bfc8) — no behavior change.
+      operationId: batchCorrectEntity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - changes
+              properties:
+                changes:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [field, value]
+                    properties:
+                      field: { type: string }
+                      value: {}
+                expected_last_observation_at:
+                  type: string
+                  nullable: true
+                  description: |
+                    `last_observation_at` the caller saw when it loaded the
+                    snapshot. When supplied and stale (and `overwrite` is not
+                    true), the batch is refused as a conflict and nothing is
+                    written.
+                overwrite:
+                  type: boolean
+                  description: Proceed even if the snapshot has moved since `expected_last_observation_at` was read.
+                idempotency_prefix:
+                  type: string
+                  description: Base key used to build a deterministic per-field idempotency key for each applied change.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: |
+            Batch applied. Body shape matches `BatchCorrectionResult` with
+            `status: "applied"` (see `src/services/batch_correction.ts`).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: |
+            `status: "validation_error"` — one or more changes failed
+            schema validation. Nothing was written; `validation_errors[]`
+            carries `{ field, message }` per failing change.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "404":
+          description: Entity not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: |
+            `status: "conflict"` — `expected_last_observation_at` no longer
+            matches the stored value and `overwrite` was not set. Nothing was
+            written; the body carries `conflict.stored_last_observation_at`,
+            `conflict.expected_last_observation_at`, and
+            `conflict.conflicting_fields`.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 
   /conversations/{conversation_id}/turn-index:
     get:

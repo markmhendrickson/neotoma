@@ -114,8 +114,11 @@ interface ReducerConfig {
   merge_policies: Record<string, MergePolicy>;
 }
 interface MergePolicy {
-  strategy: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+  strategy: "last_write" | "highest_priority" | "most_specific" | "merge_array" | "merge_array_by_key";
   tie_breaker?: "observed_at" | "source_priority";
+  /** Required when strategy is "merge_array_by_key". Field on each array item
+   * that identifies it across observations. See docs/subsystems/reducer.md §3.5. */
+  key_field?: string;
 }
 ```
 **Example:**
