@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -29,6 +29,29 @@ describe("published digest skill identity", () => {
       expect(result.mode).toBe("whole-dir-symlink");
       expect(existsSync(join(harnessRoot, ".codex", "skills", "digest", "SKILL.md"))).toBe(true);
       expect(existsSync(join(harnessRoot, ".codex", "skills", "status", "SKILL.md"))).toBe(false);
+    } finally {
+      rmSync(harnessRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prunes a package-managed stale status link without deleting foreign skills", () => {
+    const harnessRoot = mkdtempSync(join(tmpdir(), "digest-migration-"));
+
+    try {
+      const target = join(harnessRoot, ".codex", "skills");
+      mkdirSync(join(target, "foreign-skill"), { recursive: true });
+      symlinkSync(join(repoRoot, "skills", "status"), join(target, "status"), "junction");
+
+      const result = mirrorToHarness("codex", {
+        cwd: harnessRoot,
+        scope: "project",
+        sourceDir: join(repoRoot, "skills"),
+      });
+
+      expect(result.mode).toBe("per-skill-symlink");
+      expect(existsSync(join(target, "status"))).toBe(false);
+      expect(existsSync(join(target, "digest", "SKILL.md"))).toBe(true);
+      expect(existsSync(join(target, "foreign-skill"))).toBe(true);
     } finally {
       rmSync(harnessRoot, { recursive: true, force: true });
     }

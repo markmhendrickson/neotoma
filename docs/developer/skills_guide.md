@@ -125,5 +125,6 @@ For the full schema, see [`src/services/skills/seed_schema.ts`](../../src/servic
 
 ## Related
 
+- [`docs/developer/status_to_digest_migration.md`](status_to_digest_migration.md) for the breaking `/status` rename and harness-mirror migration contract.
 - [`docs/developer/mirror_guide.md`](mirror_guide.md) for the mirror profile system.
 - [`docs/developer/cli_reference.md`](cli_reference.md) for the `neotoma` CLI reference.

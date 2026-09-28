@@ -6,13 +6,7 @@ import * as yaml from "yaml";
 const repoRoot = process.env.NEOTOMA_SKILL_ROOT ?? process.cwd();
 const skillsRoot = join(repoRoot, "skills");
 const migrationPath = join(repoRoot, "docs", "developer", "status_to_digest_migration.md");
-const evalPath = join(
-  repoRoot,
-  "tests",
-  "fixtures",
-  "skill_eval",
-  "session_status_behavior.json"
-);
+const evalPath = join(repoRoot, "tests", "fixtures", "skill_eval", "session_status_behavior.json");
 
 type SideEffectClass = "read_only" | "state_changing";
 
@@ -38,9 +32,7 @@ function loadPublishedSkills(): PublishedSkill[] {
       return {
         name: String(frontmatter.name),
         body: match![2],
-        triggers: Array.isArray(frontmatter.triggers)
-          ? frontmatter.triggers.map(String)
-          : [],
+        triggers: Array.isArray(frontmatter.triggers) ? frontmatter.triggers.map(String) : [],
         supportedHarnesses: Array.isArray(frontmatter.supported_harnesses)
           ? frontmatter.supported_harnesses.map(String)
           : [],
@@ -63,6 +55,26 @@ function routesFor(prompt: string, skills: PublishedSkill[]): PublishedSkill[] {
   );
 }
 
+function unsafeTriggerCollisions(skills: PublishedSkill[]): Array<{
+  trigger: string;
+  owners: string[];
+}> {
+  const owners = new Map<string, PublishedSkill[]>();
+  for (const skill of skills) {
+    for (const trigger of skill.triggers) {
+      const key = trigger.trim().toLowerCase();
+      owners.set(key, [...(owners.get(key) ?? []), skill]);
+    }
+  }
+
+  return [...owners.entries()]
+    .filter(([, triggerOwners]) => new Set(triggerOwners.map((s) => s.sideEffectClass)).size > 1)
+    .map(([trigger, triggerOwners]) => ({
+      trigger,
+      owners: triggerOwners.map((skill) => `${skill.name}:${skill.sideEffectClass}`).sort(),
+    }));
+}
+
 describe("session status skills behavior contract", () => {
   const skills = loadPublishedSkills();
   const byName = new Map(skills.map((skill) => [skill.name, skill]));
@@ -74,22 +86,20 @@ describe("session status skills behavior contract", () => {
   });
 
   it("rejects repository-wide trigger collisions across side-effect classes", () => {
-    const owners = new Map<string, PublishedSkill[]>();
-    for (const skill of skills) {
-      for (const trigger of skill.triggers) {
-        const key = trigger.trim().toLowerCase();
-        owners.set(key, [...(owners.get(key) ?? []), skill]);
-      }
-    }
+    expect(unsafeTriggerCollisions(skills)).toEqual([]);
+  });
 
-    const unsafe = [...owners.entries()]
-      .filter(([, triggerOwners]) => new Set(triggerOwners.map((s) => s.sideEffectClass)).size > 1)
-      .map(([trigger, triggerOwners]) => ({
-        trigger,
-        owners: triggerOwners.map((skill) => `${skill.name}:${skill.sideEffectClass}`).sort(),
-      }));
+  it("detects a planted read-only/state-changing trigger collision", () => {
+    const where = byName.get("where")!;
+    const digest = byName.get("digest")!;
+    const planted = [where, { ...digest, triggers: [...digest.triggers, "where are we"] }];
 
-    expect(unsafe).toEqual([]);
+    expect(unsafeTriggerCollisions(planted)).toEqual([
+      {
+        trigger: "where are we",
+        owners: ["digest:state_changing", "where:read_only"],
+      },
+    ]);
   });
 
   it("makes the side-effect class explicit on every user-invocable skill", () => {
@@ -116,7 +126,9 @@ describe("session status skills behavior contract", () => {
     expect(end).toContain("session_meta.payload.id");
     expect(end).toContain("transcript-derived writes");
     expect(end).toContain("suppressed");
-    expect(end).not.toMatch(/most recently modified|newest transcript|choose[^.]*modification time/i);
+    expect(end).not.toMatch(
+      /most recently modified|newest transcript|choose[^.]*modification time/i
+    );
   });
 
   it("keeps digest master-plan-first and production-store semantics harness-neutral", () => {
@@ -142,7 +154,15 @@ describe("session status skills behavior contract", () => {
   it("ships agent-facing scenarios for dispatch, suppression, routing, lineage, and parity", () => {
     expect(existsSync(evalPath)).toBe(true);
     const fixture = JSON.parse(readFileSync(evalPath, "utf8")) as {
-      cases: Array<{ id: string }>;
+      cases: Array<{
+        id: string;
+        prompt: string;
+        expected_skill?: string;
+        expected_actions?: string[];
+        forbidden_actions?: string[];
+        harnesses?: string[];
+        expected_skills?: string[];
+      }>;
     };
     expect(fixture.cases.map((scenario) => scenario.id).sort()).toEqual([
       "default_proactive_dispatch",
@@ -151,5 +171,44 @@ describe("session status skills behavior contract", () => {
       "natural_language_routing",
       "report_only_suppression",
     ]);
+
+    const cases = new Map(fixture.cases.map((scenario) => [scenario.id, scenario]));
+    const defaultDigest = cases.get("default_proactive_dispatch")!;
+    expect(routesFor(defaultDigest.prompt, skills).map((skill) => skill.name)).toEqual([
+      defaultDigest.expected_skill,
+    ]);
+    expect(defaultDigest.expected_actions).toEqual(
+      expect.arrayContaining(["dispatch_agent_movable", "write_session_digest"])
+    );
+    expect(byName.get("digest")?.body).toContain("MUST act on every agent-movable recommendation");
+
+    const reportOnly = cases.get("report_only_suppression")!;
+    expect(routesFor(reportOnly.prompt, skills).map((skill) => skill.name)).toEqual([
+      reportOnly.expected_skill,
+    ]);
+    expect(reportOnly.forbidden_actions).toEqual(
+      expect.arrayContaining(["dispatch", "store", "state_changing_question"])
+    );
+    expect(byName.get("digest")?.body).toContain("no action and no writes of any kind");
+
+    const routing = cases.get("natural_language_routing")!;
+    expect(routesFor(routing.prompt, skills).map((skill) => skill.name)).toEqual([
+      routing.expected_skill,
+    ]);
+    expect(byName.get(routing.expected_skill!)?.sideEffectClass).toBe("read_only");
+
+    const lineage = cases.get("exact_lineage_fail_closed")!;
+    expect(lineage.harnesses?.sort()).toEqual(["claude-code", "codex", "cursor"]);
+    expect(lineage.forbidden_actions).toEqual(
+      expect.arrayContaining(["select_newest", "transcript_derived_write"])
+    );
+    expect(byName.get("end")?.body).toContain("keep all transcript-derived writes suppressed");
+
+    const parity = cases.get("harness_parity")!;
+    expect(parity.harnesses?.sort()).toEqual(["claude-code", "codex", "cursor"]);
+    expect(parity.expected_skills?.sort()).toEqual(["digest", "end", "where"]);
+    for (const name of parity.expected_skills ?? []) {
+      expect(byName.get(name)?.supportedHarnesses.sort(), name).toEqual(parity.harnesses);
+    }
   });
 });

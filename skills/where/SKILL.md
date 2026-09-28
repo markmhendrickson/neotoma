@@ -1,6 +1,6 @@
 ---
 name: where
-description: Present-tense orientation — where everything stands right now, answered from what is already in context plus one scoped read of this session's Neotoma tasks, so work that aged out of the window is still reported. What is running, what just landed, what is waiting on the operator and why it is theirs, and one recommended next step per workstream with an explicit stop-or-continue call. Verifies nothing and writes nothing; stored task state is reported as stored, and every perishable claim is marked as-of and unverified. The cheap sibling of /digest, for the "where are we" asked several times an hour. User-level (~/.claude/skills/where/), available in every repo.
+description: Present-tense orientation — where everything stands right now, answered from what is already in context plus one scoped read of this session's Neotoma tasks, so work that aged out of the window is still reported. What is running, what just landed, what is waiting on the operator and why it is theirs, and one recommended next step per workstream with an explicit stop-or-continue call. Verifies nothing and writes nothing; stored task state is reported as stored, and every perishable claim is marked as-of and unverified. The cheap sibling of /digest, for the "where are we" asked several times an hour. User-level skill mirrored into every supported harness, available in every repo.
 triggers:
   - /where
   - where are we
