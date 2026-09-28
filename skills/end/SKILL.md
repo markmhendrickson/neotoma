@@ -5,10 +5,12 @@ triggers:
   - /end
   - end session
   - wrap up session
+side_effect_class: state_changing
 user_invocable: true
 supported_harnesses:
   - claude-code
   - cursor
+  - codex
 entity_id: ent_af748d985b7bfa4f636eea70
 slug: end
 ---
@@ -34,6 +36,20 @@ Applies once per session, at user request. Does not modify code. Files Neotoma e
 - The only thing it never auto-executes is `do-now` code work unless the user explicitly asked for it in-session; those are filed as tasks like any other `track` item.
 - PII MUST still be stripped from any filed issues per the `feedback_issue_pii` memory, and standing constraints (Neotoma prod, never mark yoga/therapy done, etc.) still apply.
 
+## Harness and exact lineage binding
+
+Derive the active harness from the host context or its native session/thread tools and normalize it to exactly `claude-code`, `cursor`, or `codex`. Bind the transcript through the exact active session identity before any whole-session audit:
+
+| Harness | Transcript roots | Exact session identity |
+| --- | --- | --- |
+| `claude-code` | `~/.claude/projects/*/<session-id>.jsonl` | Host session id or an explicit current-transcript path carrying that same id |
+| `cursor` | `~/.cursor/projects/*/agent-transcripts/<session-id>/<session-id>.jsonl` | The active `agent-transcripts` directory/file UUID |
+| `codex` | `${CODEX_HOME:-~/.codex}/sessions/**/rollout-*.jsonl`; archived files under `${CODEX_HOME:-~/.codex}/archived_sessions/rollout-*.jsonl` | `session_meta.payload.id` from the active rollout JSONL |
+
+Use project/cwd only to validate an exact-id match, never to choose among candidates. Never select by modification time, directory ordering, or a broad project glob. Follow only explicit fork, parent, compaction, and existing `lineage_files` references whose native session ids connect to the active root.
+
+If the host does not expose an exact session id or current-transcript path, inspect only explicit session metadata already present in context. Proceed only when that metadata identifies exactly one transcript in the active harness's roots. Zero or multiple matches are an ambiguous lineage: state the ambiguity visibly, report from the visible context only, and keep all transcript-derived writes suppressed. Do not file tasks, persist entities, repair records, update guidance, or refresh relationship hubs from a guessed transcript. Independently verified writes derived entirely from the visible context may proceed, but they must not claim whole-session coverage.
+
 ## Phase 0: Whole-session coverage (read the transcript when context is partial)
 
 `/end` must audit the **whole session**, not just the portion currently in context. This matters more here than for `/digest`: a partial scan silently *fails to file* trackable work, *misses storage gaps*, and *misses HITL patterns* from the earlier session, defeating the skill's purpose.
@@ -46,11 +62,11 @@ Before Phase 1, decide whether context is whole-session or partial. Treat it as 
 
 When partial, reconstruct the full arc from the transcript **before** auditing:
 
-1. **Locate the transcript JSONL.** It lives under `~/.claude/projects/<project-slug>/<session-id>.jsonl`. The compaction summary names the exact path; otherwise pick the most recently modified `.jsonl` in that project dir.
+1. **Locate the exact transcript lineage.** Start from the active harness and exact session identity above. Add only files connected by explicit fork, parent, compaction, or stored `lineage_files` references. Validate every file's native session id before including it.
 2. **Do not read the whole file into context** — it can be multiple MB. Extract a skeleton with a small script: pull genuine user messages (filter out `tool_result` payloads, `<system-reminder>` / `<command-*>` / `<local-command-*>` blocks, and "Continue from where you left off."), plus the assistant's short summary lines, any entity IDs / PR numbers mentioned, and markers of HITL moments — operator approvals/confirmations, manual steps the user performed, corrections the user issued (needed by Phase 3), and **operator edits to agent-drafted writing OR rendered pages** — places where the agent produced prose (an email, post, message, doc) or a `rendered_page` and the operator rewrote, retoned, restructured, restyled, or replaced any of it before it shipped (needed by Phase 3b). This recovers the full request arc, the entities surfaced, the HITL pattern set, and the writing/page-edit set, cheaply.
 3. **Feed that whole-session skeleton into Phases 1–3b** — the remaining-work audit, the storage audit, the automation-opportunity audit, and the voice-loop audit must all cover the entire session, not just the in-context tail.
 
-If the transcript can't be found or read, proceed from context but state in the final report that coverage may be tail-only, so the user knows earlier work might be unaudited. When context is already whole-session (short, no compaction boundary), skip the transcript read.
+If the exact transcript can't be found or read, or the lineage is ambiguous, proceed from visible context only, state that coverage is tail-only, and keep transcript-derived writes suppressed as specified above. When context is already whole-session (short, no compaction boundary), skip the transcript read.
 
 ## Phase 1: Remaining-work audit
 

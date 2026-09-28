@@ -4,9 +4,9 @@ description: "Mid-session status report. Summarizes what's been achieved so far 
 triggers:
   - /digest
   - session status
-  - where are we
   - what's done so far
   - status report
+side_effect_class: state_changing
 user_invocable: true
 supported_harnesses:
   - claude-code
@@ -208,7 +208,7 @@ Under `--report-only`, stop after the report and the "what would be dispatched" 
 
 ## Session digest (default mode only)
 
-Skip this entire section under `--report-only`: that mode MUST NOT write or update a `session_digest`. In default mode, after composing the prose report, store or update exactly ONE `session_digest` entity on the personal Neotoma instance via `mcp__mcpsrv_neotoma__store`. This is bookkeeping about the session itself — never domain data — and it is the skill's one dedicated bookkeeping write (dispatched tasks and their `PART_OF` links, filed per "Act on it" above, are the skill's domain-facing writes; both coexist now that `/digest` is no longer purely read-only). It derives from the SAME whole-session skeleton the prose report uses, never from the in-context tail alone: a digest built from the tail silently drops early-session claims, which is exactly what the downstream sweep exists to catch.
+Skip this entire section under `--report-only`: that mode MUST NOT write or update a `session_digest`. In default mode, after composing the prose report, store or update exactly ONE `session_digest` entity on the personal production Neotoma instance through the production Neotoma `store` capability; resolve its harness-specific tool name at runtime. `store` is the semantic capability, not a fixed MCP namespace. This is bookkeeping about the session itself — never domain data — and it is the skill's one dedicated bookkeeping write (dispatched tasks and their `PART_OF` links, filed per "Act on it" above, are the skill's domain-facing writes; both coexist now that `/digest` is no longer purely read-only). It derives from the SAME whole-session skeleton the prose report uses, never from the in-context tail alone: a digest built from the tail silently drops early-session claims, which is exactly what the downstream sweep exists to catch.
 
 Schema v1.1.0 (registered; canonical_name derives from `session_key`):
 
@@ -336,3 +336,9 @@ When the session is tied to a tracked plan, cross-reference it so Remaining refl
 - The closing MUST state what was dispatched or done directly (one line per item, by task entity id or action) and MUST NOT ask whether to proceed with that work — it has already proceeded. The closing MUST separately surface only the operator-gated remainder, through `AskUserQuestion` for decisions and a runnable-command block for operator-only actions.
 - `--report-only` MUST stop after the report and a one-line-per-item statement of what would have been dispatched; it MUST NOT file, dispatch, act, call a state-changing question tool, or write/update a `session_digest`, and MUST say plainly that action and bookkeeping were held back by request. Operator-gated items are still described in this mode, but only as report content.
 - MUST distinguish items the agent can move from items requiring an operator decision, human sign-off, or an external party — never invent a next step for something that is genuinely the user's call, and never invent operator-gating for something the agent could in fact move.
+
+## Master-plan-first reporting
+
+Display the selected master plan first, before workstreams or task mechanics. Use the master plan record's own canonical phase names and show each canonical phase's exit-gate state. Place serial/parallel task execution underneath the phase-level view.
+
+Map each active workstream to a canonical phase only through a structural phase binding in the planning graph. If no such binding exists, label it a cross-phase prerequisite whose canonical phase is not structurally derivable. Never infer a phase from a task title or other prose. A subordinate workstream label is not a canonical master-plan phase unless the plan record explicitly defines it as one.

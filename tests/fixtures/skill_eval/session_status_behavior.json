@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "id": "session_status_behavior",
+    "description": "Agent-facing behavior cases for the digest, where, and end session skills."
+  },
+  "cases": [
+    {
+      "id": "default_proactive_dispatch",
+      "prompt": "/digest",
+      "expected_skill": "digest",
+      "expected_actions": ["verify_claims", "dispatch_agent_movable", "write_session_digest"],
+      "forbidden_actions": ["ask_permission_for_agent_movable_work"]
+    },
+    {
+      "id": "report_only_suppression",
+      "prompt": "/digest --report-only",
+      "expected_skill": "digest",
+      "expected_actions": ["render_report"],
+      "forbidden_actions": ["dispatch", "store", "state_changing_question"]
+    },
+    {
+      "id": "natural_language_routing",
+      "prompt": "where are we",
+      "expected_skill": "where",
+      "expected_actions": ["read_context", "read_scoped_tasks"],
+      "forbidden_actions": ["verify_all", "write", "dispatch"]
+    },
+    {
+      "id": "exact_lineage_fail_closed",
+      "prompt": "/end",
+      "harnesses": ["claude-code", "cursor", "codex"],
+      "given": {
+        "active_session_id": null,
+        "candidate_transcripts": ["session-a", "session-b"],
+        "candidate_mtimes": [100, 200]
+      },
+      "expected_result": "ambiguous_lineage",
+      "expected_actions": ["report_visible_context_only"],
+      "forbidden_actions": ["select_newest", "transcript_derived_write"]
+    },
+    {
+      "id": "harness_parity",
+      "prompt": "Inspect the published session skills",
+      "harnesses": ["claude-code", "cursor", "codex"],
+      "expected_skills": ["digest", "where", "end"],
+      "expected_store_capability": "production Neotoma store resolved by the active harness"
+    }
+  ]
+}

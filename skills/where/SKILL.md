@@ -6,10 +6,12 @@ triggers:
   - where are we
   - where do things stand
   - what's running
+side_effect_class: read_only
 user_invocable: true
 supported_harnesses:
   - claude-code
   - cursor
+  - codex
 ---
 
 # where
