@@ -54,6 +54,9 @@ jobs:
       - name: Validate site export
         run: npm run validate:site-export
 
+      - name: Validate public claim sources
+        run: npm run validate:site-claims
+
       - name: Rewrite asset paths for subdirectory deploy
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}

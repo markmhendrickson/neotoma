@@ -35,13 +35,31 @@ Keep a **single, reviewable source** for site copy and structure that:
 
 ## Definitions
 
-| Term | Meaning |
-|------|--------|
-| **MDX site page** | A compiled MDX module registered via `*.meta.json` into `mdx_site_registry` for a canonical path (for example `/install`). |
-| **Hybrid page** | MDX holds prose and layout hooks; **heavy UI or tables** live in React (`*_page_body.tsx` or named exports) imported from MDX. |
-| **`shell="bare"`** | `MdxSitePage` renders SEO + MDX only (no `DetailPage` chrome). Used for full-bleed marketing shells; inner components may use `omitSeoHead` so `SeoHead` is not duplicated. |
-| **`shell="detail"`** (default) | MDX body is wrapped in `DetailPage` using `page_title` from meta (or an override such as `detailTitle`). |
-| **Site doc manifest** | `docs/site/site_doc_manifest.yaml` maps longer repo docs to canonical site paths and roles (`canonical_site_page` vs `supporting_source`). |
+| Term                           | Meaning                                                                                                                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **MDX site page**              | A compiled MDX module registered via `*.meta.json` into `mdx_site_registry` for a canonical path (for example `/install`).                                                  |
+| **Hybrid page**                | MDX holds prose and layout hooks; **heavy UI or tables** live in React (`*_page_body.tsx` or named exports) imported from MDX.                                              |
+| **`shell="bare"`**             | `MdxSitePage` renders SEO + MDX only (no `DetailPage` chrome). Used for full-bleed marketing shells; inner components may use `omitSeoHead` so `SeoHead` is not duplicated. |
+| **`shell="detail"`** (default) | MDX body is wrapped in `DetailPage` using `page_title` from meta (or an override such as `detailTitle`).                                                                    |
+| **Site doc manifest**          | `docs/site/site_doc_manifest.yaml` maps longer repo docs to canonical site paths and roles (`canonical_site_page` vs `supporting_source`).                                  |
+
+### Claim-level public-source contract
+
+`docs/site/site_doc_manifest.yaml` also carries `claim_source_contract` and
+`claims`. These rows bind current public claims to immutable GitHub source
+revisions without creating a second manifest. Every required row declares its
+public routes and section, claim class, repository-relative source, immutable
+commit SHA, SHA-256 digest, deterministic transform, fail-closed fallback,
+review owner, freshness policy, repository license, provenance, and public data
+classification.
+
+`npm run validate:site-claims` checks the contract locally and in CI. It fails
+when a required row is incomplete, a source is absent or non-public, source
+bytes drift from the approved digest, the immutable GitHub link is inconsistent,
+a current claim exceeds its freshness period, or a row lacks its fail-closed
+privacy and provenance fields. The validator does not fetch network content;
+the pinned public URL remains review evidence while the repository checkout is
+the deterministic validation input.
 
 ## Architecture
 
@@ -88,12 +106,13 @@ docs/site/pages/
 
 ## Testing requirements
 
-| Check | Command or location |
-|--------|----------------------|
-| Meta + sibling MDX | `npm run validate:mdx-site` (`scripts/validate_mdx_site_pages.ts`) |
-| Registry smoke | `frontend/src/site/mdx_site_registry.test.ts` |
-| UI compile | `npm run build:ui` |
-| Route vs metadata parity | `npm run validate:routes` (`scripts/validate_site_route_parity.ts`) |
+| Check                    | Command or location                                                       |
+| ------------------------ | ------------------------------------------------------------------------- |
+| Meta + sibling MDX       | `npm run validate:mdx-site` (`scripts/validate_mdx_site_pages.ts`)        |
+| Registry smoke           | `frontend/src/site/mdx_site_registry.test.ts`                             |
+| UI compile               | `npm run build:ui`                                                        |
+| Route vs metadata parity | `npm run validate:routes` (`scripts/validate_site_route_parity.ts`)       |
+| Public claim sources     | `npm run validate:site-claims` (`scripts/validate_site_claim_sources.ts`) |
 
 ## Related documents
 
@@ -107,5 +126,5 @@ docs/site/pages/
 
 - Prefer **editing MDX** under `docs/site/pages/` for user-visible site copy when a route is already MDX-backed.
 - When adding a **new** public path, add **en** MDX + meta, **`ROUTE_METADATA`**, route element, and validation scripts in the same change.
-- Do not import arbitrary **`docs/**/*.md`** files into the SPA bundle; use the manifest and MDX allowlist described here.
+- Do not import arbitrary **`docs/**/\*.md`\*\* files into the SPA bundle; use the manifest and MDX allowlist described here.
 - After substantive site doc edits, run **`validate:mdx-site`** and **`build:ui`** before merging.

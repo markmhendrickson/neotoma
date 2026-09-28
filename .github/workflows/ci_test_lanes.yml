@@ -71,6 +71,9 @@ jobs:
       - name: Lint site copy
         run: npm run lint:site-copy
 
+      - name: Validate public claim sources
+        run: npm run validate:site-claims
+
       - name: Build server (required by CLI tests)
         run: npm run build:server
 
@@ -305,6 +308,9 @@ jobs:
 
       - name: Validate route parity
         run: npm run validate:routes
+
+      - name: Validate public claim sources
+        run: npm run validate:site-claims
 
       - name: Build UI
         run: npm run build:ui

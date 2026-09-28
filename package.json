@@ -216,6 +216,7 @@
     "mdx:inventory": "tsx scripts/mdx_site_route_inventory.ts",
     "mdx:docs-audit": "tsx scripts/mdx_site_docs_audit.ts",
     "mdx:translation-audit": "tsx scripts/mdx_site_translation_audit.ts",
+    "validate:site-claims": "tsx scripts/validate_site_claim_sources.ts",
     "validate:site-export": "tsx scripts/validate_site_export.ts",
     "release-notes:render": "tsx scripts/render_github_release_notes.ts",
     "illustrations:generate": "tsx scripts/generate_illustrations.ts",

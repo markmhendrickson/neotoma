@@ -657,3 +657,164 @@ featured:
   - docs/developer/mcp/instructions.md
   - docs/foundation/core_identity.md
   - docs/NEOTOMA_MANIFEST.md
+
+# Claim-level extension of this manifest. The page/source reconciliation above
+# answers where documentation appears; these rows answer which immutable public
+# evidence supports claims rendered across one or more routes.
+claim_source_contract:
+  schema_version: 1
+  manifest_revision: neotoma-public-claims-v1
+  source_repository: markmhendrickson/neotoma
+
+claims:
+  - claim_id: home.category
+    routes: [/, /architecture, /compare]
+    section_id: product-category
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: README.md
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 6e054251c8338f22a763f0b0f8b31bec9b37966a6f1531bb87a864f4b0f74ebb
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/README.md
+    reviewer: product-review
+    last_verified: "2026-09-28"
+    freshness_days: 30
+    license: repository-license
+    provenance: canonical-product-readme
+    public_classification: public
+
+  - claim_id: home.buyer-problem
+    routes: [/, /evaluate, /compare]
+    section_id: buyer-situation
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: docs/foundation/problem_statement.md
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 57fa7f54afdd061a3bfdcba6308e536e6ff6e905f50d1bd3ec03f0edfb85ec45
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/docs/foundation/problem_statement.md
+    reviewer: product-review
+    last_verified: "2026-09-28"
+    freshness_days: 30
+    license: repository-license
+    provenance: canonical-foundation-document
+    public_classification: public
+
+  - claim_id: architecture.source-observation-model
+    routes: [/, /architecture, /memory-guarantees]
+    section_id: mechanism
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: docs/architecture/source_material_model.md
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 355b2e4d09a74481d37494759f374c801a65297d42c948f94be6bdc45e6d70d0
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/docs/architecture/source_material_model.md
+    reviewer: architecture-review
+    last_verified: "2026-09-28"
+    freshness_days: 30
+    license: repository-license
+    provenance: canonical-architecture-document
+    public_classification: public
+
+  - claim_id: architecture.deterministic-reduction
+    routes: [/architecture, /memory-guarantees, /compare]
+    section_id: determinism
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: docs/architecture/determinism.md
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 9d8a0aad02a8e03ee994d8594462e8800c3106a50cdf7d8bff6c8f125f976bac
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/docs/architecture/determinism.md
+    reviewer: architecture-review
+    last_verified: "2026-09-28"
+    freshness_days: 30
+    license: repository-license
+    provenance: canonical-architecture-document
+    public_classification: public
+
+  - claim_id: install.getting-started
+    routes: [/install, /evaluate]
+    section_id: installation-path
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: docs/getting_started/getting_started.md
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 54e698f769a1308e5e996caeba3fa2710237efd89cb019a62c3beb5eb6dd087b
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/docs/getting_started/getting_started.md
+    reviewer: documentation-review
+    last_verified: "2026-09-28"
+    freshness_days: 14
+    license: repository-license
+    provenance: canonical-getting-started-guide
+    public_classification: public
+
+  - claim_id: interface.openapi-contract
+    routes: [/install, /architecture, /docs]
+    section_id: interface-contract
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: openapi.yaml
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 0cc2850c4049da3cbf1ed71d22e6bf97f7e0aa556370c844e611e387e6d21765
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/openapi.yaml
+    reviewer: interface-review
+    last_verified: "2026-09-28"
+    freshness_days: 14
+    license: repository-license
+    provenance: generated-openapi-contract
+    public_classification: public
+
+  - claim_id: compare.memory-models
+    routes: [/compare, /memory-guarantees, /faq]
+    section_id: alternatives
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: docs/foundation/mmry_comparison.md
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 3f9ad3a8c7ec1e924c63dcf8fcf9a46e1c71e6ee25257d70d056f89c0f84896a
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/docs/foundation/mmry_comparison.md
+    reviewer: product-review
+    last_verified: "2026-09-28"
+    freshness_days: 30
+    license: repository-license
+    provenance: canonical-comparison-document
+    public_classification: public
+
+  - claim_id: trust.aauth
+    routes: [/aauth, /memory-guarantees]
+    section_id: authentication
+    required: true
+    claim_class: current
+    source_repository: markmhendrickson/neotoma
+    source_path: docs/developer/aauth_overview.md
+    source_commit: 4578f8e2e6d8defe288ab807afebe4f043bb180f
+    source_digest: 5ea6851fe8a6932c669e2de4985582182f5e605894723a6e87f089521832a659
+    transform: whole_file_sha256_v1
+    fallback: fail_closed
+    public_url: https://github.com/markmhendrickson/neotoma/blob/4578f8e2e6d8defe288ab807afebe4f043bb180f/docs/developer/aauth_overview.md
+    reviewer: security-review
+    last_verified: "2026-09-28"
+    freshness_days: 14
+    license: repository-license
+    provenance: canonical-aauth-guide
+    public_classification: public

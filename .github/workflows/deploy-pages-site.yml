@@ -78,6 +78,9 @@ jobs:
       - name: Validate site export
         run: npm run validate:site-export
 
+      - name: Validate public claim sources
+        run: npm run validate:site-claims
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
