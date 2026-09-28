@@ -892,6 +892,15 @@ For continuous mirroring, install the `com.neotoma.skills-sync` LaunchAgent with
 
 The CLI and the Inspector share one `applyBatchCorrection` backend (`src/services/batch_correction.ts`), so both surfaces have identical semantics.
 
+### Array item patch
+
+- `neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue>`: Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write.
+  - `keyValue` must parse as a non-null JSON scalar (string, number, or boolean); objects, arrays, and null are rejected before the request.
+  - `--item-json <json>`: JSON object of fields to set on the item (merged onto the existing item, or used to create it if the key is not yet present).
+  - `--expected-item-version <version>`: Content-hash version of the item as last observed (from a prior patch's `item_version`). A stale value refuses with a structured conflict (`status: "conflict"`, `current_item` / `current_item_version` in the output, non-zero exit code) instead of overwriting; nothing is written.
+  - Two patches against DIFFERENT keys on the same field both succeed regardless of ordering. This is the fix for the lost-update pattern where a caller reads the whole array, edits one row locally, and writes the full array back — which can silently discard a concurrent writer's disjoint row.
+  - Only applies to array fields whose active schema declares `merge_policies.<field>.strategy: "merge_array_by_key"` with the same `key_field` (see `docs/subsystems/reducer.md` §3.5); missing or mismatched policy fails closed before any write.
+
 ### Memory export
 
 - `neotoma memory-export`: Write a single `MEMORY.md` file with bounded, deterministic contents for agent harnesses that consume file-based memory.

@@ -42,6 +42,7 @@ import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
+  PatchArrayItemRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
@@ -2729,6 +2730,8 @@ export class NeotomaServer {
         return await this.correctTransaction(args);
       case "correct":
         return await this.correct(args);
+      case "patch_array_item":
+        return await this.patchArrayItem(args);
       case "merge_entities":
         return await this.mergeEntities(args);
       case "split_entity":
@@ -8062,6 +8065,9 @@ export class NeotomaServer {
       resolveCorrectionSchema,
       buildCorrectionResponse,
       CorrectionSchemaNotFoundError,
+      CorrectionEntityTypeMismatchError,
+      FieldVersionConflictError,
+      createCorrectionWithVersionPrecondition,
     } = await import("./services/correction.js");
 
     // Issue #1540: resolve the schema and determine whether `field` is declared
@@ -8094,7 +8100,7 @@ export class NeotomaServer {
     }
 
     try {
-      const result = await createCorrection({
+      const correctionParams = {
         entity_id: parsed.entity_id,
         entity_type: parsed.entity_type,
         field: parsed.field,
@@ -8102,7 +8108,15 @@ export class NeotomaServer {
         schema_version: schemaVersion,
         user_id: userId,
         idempotency_key: parsed.idempotency_key,
-      });
+      };
+      const result =
+        typeof parsed.expected_version === "string"
+          ? await createCorrectionWithVersionPrecondition({
+              ...correctionParams,
+              expected_version: parsed.expected_version,
+              overwrite: parsed.overwrite,
+            })
+          : await createCorrection(correctionParams);
 
       if (isUnknownField) {
         // Best-effort raw_fragments mirror (parity with the store interpretation
@@ -8140,6 +8154,20 @@ export class NeotomaServer {
         })
       );
     } catch (corrErr) {
+      if (corrErr instanceof FieldVersionConflictError) {
+        throw new McpError(ErrorCode.InvalidRequest, corrErr.message, {
+          ...corrErr.toErrorEnvelope(),
+          hint: "Re-read the entity snapshot and retry with its current last_observation_at as expected_version.",
+        });
+      }
+      if (corrErr instanceof CorrectionEntityTypeMismatchError) {
+        throw new McpError(ErrorCode.InvalidParams, corrErr.message, {
+          code: corrErr.code,
+          entity_id: corrErr.entityId,
+          supplied_entity_type: corrErr.suppliedEntityType,
+          stored_entity_type: corrErr.storedEntityType,
+        });
+      }
       if (corrErr instanceof EntityOwnerConflictError) {
         // Re-throw as-is (not wrapped in McpError) so the outer MCP
         // dispatcher's EntityOwnerConflictError branch runs
@@ -8152,6 +8180,118 @@ export class NeotomaServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
+      );
+    }
+  }
+
+  // Waxwing ADR (ent_4b41bb83a4faf4428a73bfc8): patch_array_item — atomic
+  // keyed-item patch for structured array fields. Sibling of correct(); see
+  // src/services/array_item_patch.ts for the mechanism and openapi.yaml for
+  // the contract shared with the HTTP /patch_array_item handler.
+  private async patchArrayItem(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = PatchArrayItemRequestSchema.parse(args);
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    try {
+      const { loadArrayItemPatchTarget, patchArrayItem } =
+        await import("./services/array_item_patch.js");
+      const target = await loadArrayItemPatchTarget({
+        entityId: parsed.entity_id,
+        userId,
+        suppliedEntityType: parsed.entity_type,
+      });
+
+      const { enforceAgentCapability, contextFromAgentIdentity } =
+        await import("./services/agent_capabilities.js");
+      const { assertCanWriteProtectedBatch } = await import("./services/protected_entity_types.js");
+      const { getCurrentAgentIdentity, getCurrentAAuthAdmission } =
+        await import("./services/request_context.js");
+      const patchCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+      if (patchCtx) {
+        enforceAgentCapability("correct", [target.entity_type], patchCtx);
+      }
+      assertCanWriteProtectedBatch({
+        entity_types: [target.entity_type],
+        op: "correct",
+        identity: getCurrentAgentIdentity(),
+        admission: getCurrentAAuthAdmission(),
+      });
+
+      const result = await patchArrayItem({
+        entity_id: parsed.entity_id,
+        entity_type: parsed.entity_type,
+        user_id: userId,
+        field: parsed.field,
+        key_field: parsed.key_field,
+        key_value: parsed.key_value,
+        item: parsed.item as Record<string, unknown>,
+        expected_item_version: parsed.expected_item_version,
+        idempotency_key: parsed.idempotency_key,
+      });
+
+      if (result.status === "conflict") {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `Stale expected_item_version for ${parsed.entity_type}.${parsed.field}[${parsed.key_field}=${JSON.stringify(parsed.key_value)}]`,
+          {
+            code: "ERR_ARRAY_ITEM_CONFLICT",
+            entity_id: result.entity_id,
+            entity_type: result.entity_type,
+            field: result.field,
+            key_field: result.key_field,
+            key_value: result.key_value,
+            current_item: result.conflict?.current_item ?? null,
+            current_item_version: result.conflict?.current_item_version ?? null,
+            expected_item_version: result.conflict?.expected_item_version ?? null,
+            hint: "Re-apply the intended change to current_item and retry with current_item_version as expected_item_version.",
+          }
+        );
+      }
+
+      return this.buildTextResponse({
+        entity_id: result.entity_id,
+        entity_type: result.entity_type,
+        field: result.field,
+        key_field: result.key_field,
+        key_value: result.key_value,
+        observation_id: result.observation_id,
+        item: result.item,
+        item_version: result.item_version,
+        array_length: result.array_length,
+      });
+    } catch (patchErr) {
+      if (patchErr instanceof McpError) throw patchErr;
+      if (patchErr instanceof EntityOwnerConflictError) throw patchErr;
+      // Instance store-policy denials/unavailability: re-throw as-is (not
+      // wrapped in McpError) so the outer executeTool dispatcher's dedicated
+      // branches run `error.toErrorEnvelope()` and report the structured
+      // denial/unavailable envelope instead of a generic InternalError.
+      // patchArrayItem() writes through createCorrection exactly like
+      // correct(), so it can be refused by the same instance-level policy.
+      if (patchErr instanceof StorePolicyDeniedError) throw patchErr;
+      if (patchErr instanceof StorePolicyUnavailableError) throw patchErr;
+      {
+        const {
+          ArrayItemKeyFieldMismatchError,
+          ArrayItemPolicyRequiredError,
+          ArrayItemEntityTypeMismatchError,
+        } = await import("./services/array_item_patch.js");
+        if (
+          patchErr instanceof ArrayItemKeyFieldMismatchError ||
+          patchErr instanceof ArrayItemPolicyRequiredError ||
+          patchErr instanceof ArrayItemEntityTypeMismatchError
+        ) {
+          throw new McpError(ErrorCode.InvalidParams, patchErr.message, patchErr.toErrorEnvelope());
+        }
+      }
+      if (patchErr instanceof Error && patchErr.message.startsWith("Entity not found")) {
+        throw new McpError(ErrorCode.InvalidParams, patchErr.message);
+      }
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to patch array item: ${patchErr instanceof Error ? patchErr.message : String(patchErr)}`
       );
     }
   }

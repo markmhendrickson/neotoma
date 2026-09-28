@@ -9,6 +9,7 @@ describe("CLI command coverage guard", () => {
     const coveredBehavioral = new Set([
       "api",
       "access",
+      "array-item", // patch subcommand covered by tests/cli/cli_array_item_patch_commands.test.ts
       "auth",
       "backup",
       "cli",

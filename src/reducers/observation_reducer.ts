@@ -15,6 +15,7 @@ import {
 import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
 import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
+import { stableSerialize } from "../services/stable_serialize.js";
 
 export interface Observation {
   id: string;
@@ -138,7 +139,12 @@ export interface EntitySnapshot {
   user_id: string;
 }
 
-type MergeStrategy = "last_write" | "highest_priority" | "most_specific" | "merge_array";
+type MergeStrategy =
+  | "last_write"
+  | "highest_priority"
+  | "most_specific"
+  | "merge_array"
+  | "merge_array_by_key";
 
 export class ObservationReducer {
   /**
@@ -246,7 +252,8 @@ export class ObservationReducer {
         strategy,
         tieBreaker,
         fieldDef,
-        observationSourceRank
+        observationSourceRank,
+        policy?.key_field
       );
 
       if (result && result.value !== undefined && result.value !== null) {
@@ -291,7 +298,8 @@ export class ObservationReducer {
     strategy: MergeStrategy,
     tieBreaker: "observed_at" | "source_priority",
     fieldDef?: FieldDefinition,
-    observationSourceRank: Map<string, number> = buildObservationSourceRank()
+    observationSourceRank: Map<string, number> = buildObservationSourceRank(),
+    keyField?: string
   ): { value: unknown; source_observation_id: string } | null {
     // Treat null as an explicit clear. Only undefined means the observation did
     // not carry this field and should be ignored by the reducer.
@@ -332,6 +340,10 @@ export class ObservationReducer {
 
       case "merge_array":
         mergedResult = this.mergeArray(field, relevantObservations, fieldDef);
+        break;
+
+      case "merge_array_by_key":
+        mergedResult = this.mergeArrayByKey(field, relevantObservations, keyField, fieldDef);
         break;
 
       default:
@@ -535,6 +547,127 @@ export class ObservationReducer {
     return {
       value: Array.from(values),
       source_observation_id: observationIds.join(","), // Multiple sources
+    };
+  }
+
+  /**
+   * Merge Array By Key strategy
+   *
+   * Sibling of `merge_array` for structured collection fields whose items
+   * carry a stable identity (e.g. `session_digest.tasks_claimed` rows keyed
+   * by `claim_id`). Same priority-gating as `merge_array` (a correction, or
+   * any strictly higher-priority write, fully replaces the lower-priority
+   * array — see reducer.md §3.4), but within the top-priority tier, items
+   * reconcile by `keyField` instead of Set-union: the item with the latest
+   * `observed_at` (ties broken by observation id, ASC) wins per key, and
+   * every distinct key present across the top-priority observations
+   * survives. This is what lets two writers patch disjoint rows of the same
+   * array concurrently without one write silently discarding the other's
+   * row (the `session_digest.tasks_claimed` lost-update reproduction this
+   * strategy exists to fix).
+   *
+   * Falls back to `mergeArray`'s Set-union behavior when `keyField` is not
+   * supplied (schema misconfiguration) or an item is not an object carrying
+   * that key, so a malformed row cannot silently vanish from the snapshot.
+   */
+  private mergeArrayByKey(
+    field: string,
+    observations: Observation[],
+    keyField: string | undefined,
+    fieldDef?: FieldDefinition
+  ): { value: unknown; source_observation_id: string } {
+    if (!keyField) {
+      return this.mergeArray(field, observations, fieldDef);
+    }
+
+    const maxPriority = observations.reduce(
+      (max, obs) => (obs.source_priority > max ? obs.source_priority : max),
+      Number.NEGATIVE_INFINITY
+    );
+    const topPriorityObservations = observations.filter(
+      (obs) => obs.source_priority === maxPriority
+    );
+
+    // Per key: track the winning item plus the (observed_at, id) of the
+    // observation that contributed it, so a later top-priority observation
+    // with the same key can be compared and only replace the winner when it
+    // is strictly newer. Items without a usable key are carried through
+    // unkeyed (by array index within their observation) so malformed rows
+    // are preserved rather than silently dropped.
+    const byKey = new Map<string, { item: unknown; observedAt: string; observationId: string }>();
+    const unkeyed = new Map<string, { item: unknown; observedAt: string; observationId: string }>();
+    const contributingObservationIds = new Set<string>();
+
+    for (const obs of topPriorityObservations) {
+      const rawValue = recoverJsonArrayString(obs.fields[field]) ?? obs.fields[field];
+      if (rawValue === undefined || rawValue === null) continue;
+      const items = Array.isArray(rawValue) ? rawValue : [rawValue];
+      let contributed = false;
+
+      for (const item of items) {
+        const keyValue =
+          item !== null && typeof item === "object" && !Array.isArray(item)
+            ? (item as Record<string, unknown>)[keyField]
+            : undefined;
+
+        if (keyValue === undefined || keyValue === null) {
+          const serialized = stableSerialize(item);
+          if (!unkeyed.has(serialized)) {
+            unkeyed.set(serialized, {
+              item,
+              observedAt: obs.observed_at,
+              observationId: obs.id,
+            });
+          }
+          contributed = true;
+          continue;
+        }
+
+        // stableSerialize (not plain JSON.stringify) so object-typed key
+        // values compare structurally regardless of property insertion
+        // order — must match array_item_patch.ts's keyMatches() exactly, or
+        // patch_array_item can locate/update a row that this reducer then
+        // treats as a distinct key, producing a duplicate instead of an
+        // in-place update.
+        const key = stableSerialize(keyValue);
+        const existing = byKey.get(key);
+        if (!existing) {
+          byKey.set(key, { item, observedAt: obs.observed_at, observationId: obs.id });
+          contributed = true;
+          continue;
+        }
+
+        // Latest observed_at wins per key; ties broken by observation id
+        // (ASC) for determinism, matching compareObservationRecencyThenId's
+        // tie-break axis used elsewhere in this reducer.
+        const existingMs = timestampMs(existing.observedAt);
+        const candidateMs = timestampMs(obs.observed_at);
+        const candidateWins =
+          candidateMs > existingMs ||
+          (candidateMs === existingMs && obs.id.localeCompare(existing.observationId) < 0);
+        if (candidateWins) {
+          byKey.set(key, { item, observedAt: obs.observed_at, observationId: obs.id });
+        }
+        contributed = true;
+      }
+
+      if (contributed) contributingObservationIds.add(obs.id);
+    }
+
+    const mergedItems = [...byKey.values(), ...unkeyed.values()]
+      // Deterministic output order: by observed_at ASC then observation id,
+      // so repeated computation over the same observation set is stable
+      // regardless of Map/array insertion order.
+      .sort((a, b) => {
+        const ms = timestampMs(a.observedAt) - timestampMs(b.observedAt);
+        if (ms !== 0) return ms;
+        return a.observationId.localeCompare(b.observationId);
+      })
+      .map((entry) => entry.item);
+
+    return {
+      value: mergedItems,
+      source_observation_id: Array.from(contributingObservationIds).sort().join(","),
     };
   }
 

@@ -87,6 +87,16 @@ For an admitted agent, one `create_relationship` capability entry must cover the
 
 For when and how to link a newly stored entity to existing entities (pre-store candidate discovery, `retrieve_related_entities`, canonical relationship examples, direction convention), see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].
 
+## Structured array patching (CLI backup)
+
+For a field whose schema declares `strategy: "merge_array_by_key"`, patch one item by key instead of reading the whole array and writing it back:
+
+```bash
+neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue> --item-json '{"status":"in_review"}'
+```
+
+`keyValue` must be a non-null JSON scalar (string, number, or boolean). A stale `--expected-item-version` (from a prior patch's `item_version`) returns a structured conflict (exit code non-zero, `status: "conflict"` with `current_item` / `current_item_version` in the JSON output) instead of overwriting; re-apply your change against `current_item` and retry with the fresh version. See `docs/developer/mcp/instructions.md` [ENTITY & RELATIONSHIP LIFECYCLE] "Patching structured array fields" for the full contract (why this exists, same-key vs disjoint-key semantics, and the `correct` `expected_version` sibling for non-array fields).
+
 ## Pre-check before storing (CLI backup)
 
 Before storing a new entity, check for an existing record to avoid duplicates:
@@ -137,7 +147,7 @@ neotoma relationships list --entity-id <entity_id>
 
 Use narrow queries first, then expand only if needed.
 
-**Entity-id identifiers:** when the identifier is a literal entity_id (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
+**Entity-id identifiers:** when the identifier is a literal entity*id (`ent*<hex>`), `entities search`/`retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }`where`hint`points to`retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
 

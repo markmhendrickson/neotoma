@@ -1,42 +1,58 @@
 # Neotoma Reducer Engine — Deterministic Snapshot Computation
+
 ## Scope
+
 This document covers:
+
 - Reducer architecture and patterns
-- Merge strategies (last_write, highest_priority, most_specific, merge_array)
+- Merge strategies (last_write, highest_priority, most_specific, merge_array, merge_array_by_key)
 - Determinism requirements
 - Provenance tracking
 - Testing patterns
-This document does NOT cover:
+  This document does NOT cover:
 - Observation creation (see `docs/subsystems/observation_architecture.md`)
 - Schema registry (see `docs/subsystems/schema_registry.md`)
 - Database schema (see `docs/subsystems/schema.md`)
 - User-facing merge policy configuration, "omit don't zero" semantics, and the LWW-default footgun (see `docs/subsystems/conflict_resolution.md`)
+
 ## 1. Reducer Overview
+
 ### 1.1 What is a Reducer?
+
 A **reducer** is a pure function that computes an entity snapshot from multiple observations:
+
 ```
 Reducer(observations[], schema, merge_policies) → EntitySnapshot
 ```
+
 **Key Properties:**
+
 - **Deterministic:** Same observations + same schema + same merge rules → same snapshot
 - **Pure:** No side effects, no external dependencies
 - **Idempotent:** Can be run multiple times with same result
 - **Provenance-aware:** Tracks which observation contributed each field
 - **Type-consistent:** Applies converters to ensure snapshot values match active schema types
+
 ### 1.2 Four-Layer Model Context
+
 [Reducers](../vocabulary/canonical_terms.md#reducer) operate in the four-layer truth model:
+
 ```
 Source → Interpretation → Observation → [Reducer] → Snapshot → Entity
 ```
+
 - **[Source](../vocabulary/canonical_terms.md#source):** Raw content (files, structured JSON, URLs)
 - **[Interpretation](../vocabulary/canonical_terms.md#interpretation):** Versioned AI extraction attempt
 - **[Observation](../vocabulary/canonical_terms.md#observation):** Granular facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source](../vocabulary/canonical_terms.md#source)
 - **[Reducer](../vocabulary/canonical_terms.md#reducer):** Computes [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) from [observations](../vocabulary/canonical_terms.md#observation)
 - **[Snapshot](../vocabulary/canonical_terms.md#snapshot):** Current truth for [entity](../vocabulary/canonical_terms.md#entity)
 - **[Entity](../vocabulary/canonical_terms.md#entity):** Logical thing in the world
-See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
+  See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
+
 ## 2. Reducer Architecture
+
 ### 2.1 Reducer Execution Flow
+
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
@@ -53,13 +69,15 @@ flowchart TD
     NextField -->|Yes| Loop
     NextField -->|No| CreateSnapshot[Create Snapshot]
     CreateSnapshot --> StoreSnapshot[Store Snapshot]
-    
+
     style Start fill:#e1f5ff
     style StoreSnapshot fill:#e6ffe6
     style ApplyStrategy fill:#fff4e6
     style ApplyConverter fill:#ffe6e6
 ```
+
 ### 2.2 Reducer Interface
+
 ```typescript
 interface Reducer {
   computeSnapshot(entityId: string): Promise<EntitySnapshot>;
@@ -75,11 +93,15 @@ interface EntitySnapshot {
   last_observation_at: Date;
 }
 ```
+
 ## 3. Merge Strategies
+
 ### 3.1 Last Write Wins
+
 **Strategy:** Most recent observation wins.
 **Use When:** Field values change over time, latest is most accurate.
 **Example:**
+
 ```typescript
 function lastWriteWins(
   field: string,
@@ -89,33 +111,39 @@ function lastWriteWins(
   const latest = observations[0];
   return {
     value: latest.fields[field],
-    source_observation_id: latest.id
+    source_observation_id: latest.id,
   };
 }
 ```
+
 **Use Cases:**
+
 - `amount_due` in invoices (latest invoice amount)
 - `balance` in bank accounts (current balance)
 - `status` in contracts (current status)
+
 ### 3.2 Highest Priority
+
 **Strategy:** Observation with highest `source_priority` wins.
 **Use When:** Some sources are more trusted than others.
 **Example:**
+
 ```typescript
 function highestPriority(
   field: string,
   observations: Observation[]
 ): { value: any; source_observation_id: string } {
-  const sorted = observations.sort((a, b) =>
-    b.source_priority - a.source_priority ||
-    observationSourceRank(a) - observationSourceRank(b) ||
-    b.observed_at.getTime() - a.observed_at.getTime() ||
-    b.created_at.getTime() - a.created_at.getTime() ||
-    a.id.localeCompare(b.id)
+  const sorted = observations.sort(
+    (a, b) =>
+      b.source_priority - a.source_priority ||
+      observationSourceRank(a) - observationSourceRank(b) ||
+      b.observed_at.getTime() - a.observed_at.getTime() ||
+      b.created_at.getTime() - a.created_at.getTime() ||
+      a.id.localeCompare(b.id)
   );
   return {
     value: sorted[0].fields[field],
-    source_observation_id: sorted[0].id
+    source_observation_id: sorted[0].id,
   };
 }
 ```
@@ -143,38 +171,47 @@ immutable, so this changes which value is materialized without deleting source
 history.
 
 **Use Cases:**
+
 - `vendor_name` in invoices (official documents > receipts)
 - `merchant_name` in receipts (bank statements > receipts)
 - `counterparty` in transactions (official records > notes)
+
 ### 3.3 Most Specific
+
 **Strategy:** Observation with highest `specificity_score` wins.
 **Use When:** More specific observations are more accurate.
 **Example:**
+
 ```typescript
 function mostSpecific(
   field: string,
   observations: Observation[]
 ): { value: any; source_observation_id: string } {
-  const sorted = observations.sort((a, b) => 
-    b.specificity_score - a.specificity_score ||
-    b.observed_at.getTime() - a.observed_at.getTime()
+  const sorted = observations.sort(
+    (a, b) =>
+      b.specificity_score - a.specificity_score || b.observed_at.getTime() - a.observed_at.getTime()
   );
   return {
     value: sorted[0].fields[field],
-    source_observation_id: sorted[0].id
+    source_observation_id: sorted[0].id,
   };
 }
 ```
+
 **Use Cases:**
+
 - `counterparty` in transactions (explicit name > inferred)
 - `location` in events (specific address > city name)
 - `entity_name` in contacts (full name > nickname)
+
 ### 3.4 Merge Array
+
 **Strategy:** Combine values into a deduplicated array, **from the observations carrying
 the field at the maximum present `source_priority` only** (priority-gated union — see
 "Priority gating for corrections" below).
 **Use When:** Multiple same-priority values are all valid.
 **Example:**
+
 ```typescript
 function mergeArrays(
   field: string,
@@ -206,7 +243,7 @@ function mergeArrays(
 
   return {
     value: Array.from(values),
-    source_observation_id: observationIds.join(',') // top-priority sources only
+    source_observation_id: observationIds.join(","), // top-priority sources only
   };
 }
 ```
@@ -227,7 +264,7 @@ observation IDs, not every observation that ever contributed an element.
 > Neotoma issue `ent_a2ca479ed08abd2bb98a8708` (GitHub mirror pending).
 
 **JSON-array-string recovery (issue #1595):** if an observation carries a JSON-array-shaped
-*string* for a `merge_array` field (e.g. `'["a","b"]'`) — which a transport/client can
+_string_ for a `merge_array` field (e.g. `'["a","b"]'`) — which a transport/client can
 produce by stringifying an array argument — the reducer parses it back into real elements
 before the union, rather than adding the whole blob as one literal-string element. The same
 recovery applies in `canonicalizeArray` (it parses such a string instead of dropping it to
@@ -238,6 +275,7 @@ preserves arrays — this is defensive tolerance of an upstream (client/transpor
 serialization bug, not a server-side cause.
 
 **Use Cases:**
+
 - `aliases` for entities (all known names)
 - `tags` for records (all tags from all sources)
 - `categories` for transactions (all applicable categories)
@@ -263,20 +301,80 @@ To clear a `merge_array` field to `[]`, the simplest path is now a **top-priorit
 correction** (`correct(entity_id, type, field, null)`): the priority gate drops the
 accumulated lower-priority arrays and the result is `[]`. The previous workarounds also
 remain valid:
+
 1. Submit a correction with `strategy: last_write` on the field, set the value to `null`,
    then restore `merge_array` if needed.
 2. Remove and re-add the field via `update_schema_incremental` to drop all accumulated
    observation data.
-## 4. Merge Policy Configuration
-### 4.1 Schema Registry Configuration
-Merge policies are configured per field in the schema registry:
-```typescript
-interface MergePolicy {
-  strategy: 'last_write' | 'highest_priority' | 'most_specific' | 'merge_array';
-  tie_breaker?: 'observed_at' | 'source_priority';
+
+### 3.5 Merge Array By Key
+
+**Strategy:** Sibling of `merge_array` for structured collection fields whose items carry a
+stable identity (e.g. `session_digest.tasks_claimed` rows keyed by `claim_id`). Same
+priority-gating as `merge_array` (§3.4) — a strictly higher-priority write still fully
+replaces lower-priority arrays — but within the top-priority tier, items reconcile by a
+declared `key_field` instead of Set-union: the item with the latest `observed_at` (ties
+broken by observation id, ascending) wins per key, and every distinct key present across
+the top-priority observations survives.
+
+**Use When:** The array is a keyed collection where concurrent writers legitimately touch
+_different_ rows and must not silently clobber each other's disjoint rows — the failure
+mode `merge_array`'s Set-union does not solve when two observations carry an updated
+version of the _same_ logical row (Set-union treats them as two separate elements, not one
+reconciled row).
+
+**Configuration:**
+
+```json
+{
+  "merge_policies": {
+    "tasks_claimed": { "strategy": "merge_array_by_key", "key_field": "claim_id" }
+  }
 }
 ```
+
+`key_field` is required; a policy declaring `merge_array_by_key` without it throws at
+schema-registration time (`validateReducerConfig`). An item missing `key_field` is carried
+through unkeyed (not dropped), so a malformed row is preserved rather than silently lost;
+identical unkeyed historical values are deduplicated by stable serialization.
+
+**Relationship to `patch_array_item`:** the natural write surface for a `merge_array_by_key`
+field is `patch_array_item` (MCP tool / `POST /patch_array_item` / `neotoma array-item
+patch`), not a caller-side read-modify-full-array-write via `correct`. `patch_array_item`
+loads the current array fresh, finds/replaces one item by key, and writes the reconciled
+array as a single new observation inside one write transaction — closing the TOCTOU window a
+caller-side read-modify-write leaves open. Concurrent `patch_array_item` calls against
+_different_ keys both succeed under this reducer strategy; concurrent calls against the
+_same_ key resolve by latest-`observed_at`-wins, or exactly one succeeds when both callers
+present the same `expected_item_version` and the other receives a structured conflict. See
+`docs/developer/mcp/instructions.md`
+`[ENTITY & RELATIONSHIP LIFECYCLE]` and the `array_item_patch.ts` service for the full
+contract. Originating ADR: `ent_4b41bb83a4faf4428a73bfc8` (Neotoma task entity) — the
+`session_digest.tasks_claimed` lost-update reproduction this strategy exists to fix.
+
+## 4. Merge Policy Configuration
+
+### 4.1 Schema Registry Configuration
+
+Merge policies are configured per field in the schema registry:
+
+```typescript
+interface MergePolicy {
+  strategy:
+    | "last_write"
+    | "highest_priority"
+    | "most_specific"
+    | "merge_array"
+    | "merge_array_by_key";
+  tie_breaker?: "observed_at" | "source_priority";
+  /** Required when strategy is 'merge_array_by_key'. Field on each array item
+   * that identifies it across observations (e.g. 'claim_id'). */
+  key_field?: string;
+}
+```
+
 **Example Schema Registry Entry:**
+
 ```json
 {
   "entity_type": "invoice",
@@ -295,7 +393,9 @@ interface MergePolicy {
   }
 }
 ```
+
 ### 4.2 Default Merge Policy
+
 If no merge policy specified for a field, default to `last_write`.
 
 ### 4.3 Null vs Undefined Field Semantics
@@ -307,32 +407,40 @@ Reducer-wide rule, applied uniformly across all entity types and merge strategie
 
 This is a reducer-level invariant, not a per-type declaration. Schemas MUST NOT declare per-type "treat null as absent" overrides; if a type needs that behavior, model it explicitly with a distinct field value (e.g. a sentinel) rather than overloading null.
 
-`merge_array` is the documented exception: array merge filters null entries from contributed arrays (a null entry is not a meaningful array element). A correction that sends `field: null` for an array-typed field does NOT omit the snapshot key — instead `merge_array` writes `[]` (empty array) to the snapshot; only null *inside* an array contribution is dropped.
+`merge_array` is the documented exception: array merge filters null entries from contributed arrays (a null entry is not a meaningful array element). A correction that sends `field: null` for an array-typed field does NOT omit the snapshot key — instead `merge_array` writes `[]` (empty array) to the snapshot; only null _inside_ an array contribution is dropped.
 
 ## 5. Determinism Requirements
+
 ### 5.1 Deterministic Execution
+
 Reducers MUST be deterministic:
+
 - Same observations → same snapshot
 - Same merge policies → same result
 - Order-independent (observations sorted deterministically)
-**Test Pattern:**
+  **Test Pattern:**
+
 ```typescript
-test('reducer is deterministic', async () => {
+test("reducer is deterministic", async () => {
   const observations = [obs1, obs2, obs3];
   const snapshot1 = await reducer.computeSnapshot(entityId);
-  
+
   // Recompute with same observations
   const snapshot2 = await reducer.computeSnapshot(entityId);
-  
+
   expect(snapshot1.snapshot).toEqual(snapshot2.snapshot);
   expect(snapshot1.provenance).toEqual(snapshot2.provenance);
 });
 ```
+
 ### 5.2 Observation Ordering
+
 Observations are sorted deterministically:
+
 1. Primary: `observed_at DESC` (most recent first)
 2. Secondary: `id ASC` (stable tie-breaker)
-**Sorting Function:**
+   **Sorting Function:**
+
 ```typescript
 function sortObservations(observations: Observation[]): Observation[] {
   return observations.sort((a, b) => {
@@ -351,6 +459,7 @@ This order is exported from `src/reducers/observation_reducer.ts` as `compareObs
 The reducer applies converters from the active schema during snapshot computation to ensure snapshot values always conform to the schema's type definitions, even when observations contain values from older schema versions.
 
 **Process:**
+
 1. Apply merge strategy to select value from observations
 2. Check if value matches active schema's field type
 3. If type matches → use value as-is
@@ -358,6 +467,7 @@ The reducer applies converters from the active schema during snapshot computatio
 5. Store converted value in snapshot
 
 **Example:**
+
 ```typescript
 // Schema 1.0.0: amount_due is string
 // Schema 2.0.0: amount_due is number with string_to_number converter
@@ -378,6 +488,7 @@ The reducer applies converters from the active schema during snapshot computatio
 ### 6.2 Determinism with Converters
 
 Converters are deterministic functions, so applying them during snapshot computation maintains determinism:
+
 - Same observations + same schema + same converters → same snapshot
 - Converter functions are pure (no side effects)
 - Conversion results are deterministic (same input → same output)
@@ -390,25 +501,31 @@ Converters are deterministic functions, so applying them during snapshot computa
 4. **Store result**: Use converted value (or original if already correct type)
 
 **Note**: Converters are also applied during observation creation (field validation), but are applied again during snapshot computation to handle cases where:
+
 - Old observations have old types
 - Schema changed after observation creation
 - Multiple observations with different types need reconciliation
 
 ## 7. Provenance Tracking
+
 ### 6.1 Provenance Structure
+
 Snapshots include provenance mapping:
+
 ```typescript
 interface Provenance {
   [field: string]: string; // field → observation_id
 }
 ```
+
 **Example:**
+
 ```json
 {
   "entity_id": "ent_abc123",
   "snapshot": {
     "vendor_name": "Acme Corp",
-    "amount_due": 1500.00,
+    "amount_due": 1500.0,
     "status": "unpaid"
   },
   "provenance": {
@@ -418,17 +535,19 @@ interface Provenance {
   }
 }
 ```
+
 ### 6.2 Provenance Chain
+
 Full [provenance](../vocabulary/canonical_terms.md#provenance) chain:
+
 ```
 Snapshot Field → Observation → Interpretation (if AI) → Source
 ```
+
 **Query Pattern:**
+
 ```typescript
-async function getFieldProvenance(
-  entityId: string,
-  field: string
-): Promise<ProvenanceChain> {
+async function getFieldProvenance(entityId: string, field: string): Promise<ProvenanceChain> {
   const snapshot = await snapshotRepo.findById(entityId);
   const observationId = snapshot.provenance[field];
   const observation = await observationRepo.findById(observationId);
@@ -436,102 +555,130 @@ async function getFieldProvenance(
   const interpretation = observation.interpretation_id
     ? await interpretationRepo.findById(observation.interpretation_id)
     : null;
-  
+
   return {
     field,
     value: snapshot.snapshot[field],
     observation,
     interpretation,
-    sourceMaterial
+    sourceMaterial,
   };
 }
 ```
+
 ## 7. Testing Patterns
+
 ### 7.1 Unit Tests
+
 **Test Determinism:**
+
 ```typescript
-describe('Reducer determinism', () => {
-  it('same observations produce same snapshot', async () => {
+describe("Reducer determinism", () => {
+  it("same observations produce same snapshot", async () => {
     const observations = createTestObservations();
     const snapshot1 = await reducer.computeSnapshot(entityId);
     const snapshot2 = await reducer.computeSnapshot(entityId);
-    
+
     expect(snapshot1).toEqual(snapshot2);
   });
 });
 ```
+
 **Test Merge Strategies:**
+
 ```typescript
-describe('Merge strategies', () => {
-  it('last_write selects most recent observation', async () => {
+describe("Merge strategies", () => {
+  it("last_write selects most recent observation", async () => {
     const observations = [
-      { id: 'obs1', observed_at: new Date('2024-01-01'), fields: { name: 'Old' } },
-      { id: 'obs2', observed_at: new Date('2024-01-02'), fields: { name: 'New' } }
+      { id: "obs1", observed_at: new Date("2024-01-01"), fields: { name: "Old" } },
+      { id: "obs2", observed_at: new Date("2024-01-02"), fields: { name: "New" } },
     ];
-    
-    const result = reducer.mergeField('name', observations, { strategy: 'last_write' });
-    expect(result.value).toBe('New');
-    expect(result.source_observation_id).toBe('obs2');
+
+    const result = reducer.mergeField("name", observations, { strategy: "last_write" });
+    expect(result.value).toBe("New");
+    expect(result.source_observation_id).toBe("obs2");
   });
 });
 ```
+
 ### 7.2 Integration Tests
+
 **Test End-to-End Flow:**
+
 ```typescript
-describe('Observation → Snapshot flow', () => {
-  it('creates snapshot from observations', async () => {
-    const sourceMaterial = await ingest({ file_content: invoiceFileBase64, mime_type: 'application/pdf' });
+describe("Observation → Snapshot flow", () => {
+  it("creates snapshot from observations", async () => {
+    const sourceMaterial = await ingest({
+      file_content: invoiceFileBase64,
+      mime_type: "application/pdf",
+    });
     const observations = await observationRepo.findByEntity(entityId);
     const snapshot = await reducer.computeSnapshot(entityId);
-    
+
     expect(snapshot.observation_count).toBe(observations.length);
     expect(snapshot.provenance).toBeDefined();
   });
 });
 ```
+
 ## 9. Performance Considerations
+
 ### 8.1 Entity Snapshot Caching
+
 Snapshots are cached and recomputed only when:
+
 - New observations arrive
 - Schema version changes
 - Merge policies updated
-**Cache Invalidation:**
+  **Cache Invalidation:**
+
 ```typescript
 async function invalidateSnapshot(entityId: string): Promise<void> {
   await snapshotCache.delete(entityId);
   await reducer.computeSnapshot(entityId); // Recompute
 }
 ```
+
 ### 8.2 Batch Processing
+
 For bulk snapshot recomputation:
+
 ```typescript
 async function recomputeSnapshots(entityIds: string[]): Promise<void> {
-  await Promise.all(
-    entityIds.map(id => reducer.computeSnapshot(id))
-  );
+  await Promise.all(entityIds.map((id) => reducer.computeSnapshot(id)));
 }
 ```
+
 ## Agent Instructions
+
 ### When to Load This Document
+
 Load `docs/subsystems/reducer.md` when:
+
 - Implementing reducer logic
 - Configuring merge policies
 - Testing snapshot computation
 - Debugging provenance issues
 - Understanding four-layer truth model
+
 ### Constraints Agents Must Enforce
+
 1. **Reducers MUST be deterministic** (same observations + same schema → same snapshot)
 2. **Merge policies MUST be configured** in schema registry
 3. **Provenance MUST be tracked** for all snapshot fields
 4. **Observations MUST be sorted** deterministically before merging
 5. **Converters MUST be applied** during snapshot computation to ensure type consistency
 6. **Snapshots MUST conform** to active schema type definitions (via converters if needed)
+
 ### Forbidden Patterns
+
 - ❌ Non-deterministic reducers (randomness, timestamps)
 - ❌ Missing provenance tracking
 - ❌ Ad-hoc merge logic (must use configured policies)
 - ❌ Side effects in reducers (must be pure functions)
+
 ### Validation Checklist
+
 - [ ] Reducer is deterministic (same observations + same schema → same snapshot)
 - [ ] Merge policies configured in schema registry
 - [ ] Provenance tracked for all snapshot fields
